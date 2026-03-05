@@ -14,6 +14,32 @@ class TrackedItemRange {
   final int endOffset;
 }
 
+class CurrentBlockOverlay {
+  const CurrentBlockOverlay({
+    required this.nodeId,
+    required this.pageIdx,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final String nodeId;
+  final int pageIdx;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+}
+
+class RemarkNodeContext {
+  const RemarkNodeContext({required this.nodeType, required this.isTextblock, required this.nodeText});
+
+  final String nodeType;
+  final bool isTextblock;
+  final String nodeText;
+}
+
 class EditorController extends ChangeNotifier {
   EditorController({
     required this.editor,
@@ -154,6 +180,9 @@ class EditorController extends ChangeNotifier {
 
   final ValueNotifier<RemarkOverlayInfo?> remarkScrollTarget = ValueNotifier(null);
   final ValueNotifier<RemarkOverlayInfo?> remarkHighlightTarget = ValueNotifier(null);
+  final ValueNotifier<Map<String, RemarkNodeContext>> remarkNodeContexts = ValueNotifier({});
+  final ValueNotifier<double> sheetBottomInset = ValueNotifier(0);
+  final ValueNotifier<CurrentBlockOverlay?> currentBlockOverlay = ValueNotifier(null);
 
   void scrollToRemark(RemarkOverlayInfo remark) {
     remarkScrollTarget.value = null;
@@ -211,6 +240,9 @@ class EditorController extends ChangeNotifier {
     tableOverlays.dispose();
     remarkScrollTarget.dispose();
     remarkHighlightTarget.dispose();
+    remarkNodeContexts.dispose();
+    sheetBottomInset.dispose();
+    currentBlockOverlay.dispose();
     super.dispose();
   }
 }

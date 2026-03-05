@@ -73,6 +73,31 @@
     }
   });
 
+  $effect(() => {
+    const nodeId = openGroupNodeId;
+    if (!nodeId) {
+      editor.remarkHighlightTarget = null;
+      return;
+    }
+
+    const group = remarkGroups.find((item) => item.nodeId === nodeId);
+    const target =
+      group?.remarks[0] ??
+      (editor.currentBlock?.nodeId === nodeId
+        ? {
+            pageIdx: editor.currentBlock.pageIdx,
+            bounds: editor.currentBlock.bounds,
+          }
+        : null);
+
+    if (target) {
+      editor.highlightRemark(target);
+      return;
+    }
+
+    editor.remarkHighlightTarget = null;
+  });
+
   const displayZoom = $derived(editor.layout?.layoutMode.type === 'paginated' ? editor.displayZoom : 1);
   const pageGap = $derived(editor.layout?.layoutMode.type === 'paginated' ? PAGE_GAP * displayZoom : 0);
   const currentBlockHasRemarks = $derived(editor.currentBlock ? remarkGroups.some((g) => g.nodeId === editor.currentBlock?.nodeId) : false);

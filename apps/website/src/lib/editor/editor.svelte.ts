@@ -273,7 +273,8 @@ export class Editor {
   interactiveOverlays: InteractiveOverlay[] = [];
 
   remarkOverlays = $state<RemarkOverlay[]>([]);
-  remarkFocus = $state<{ nodeId: string; remarkId: string } | null>(null);
+  remarkFocus = $state<{ nodeId: string; remarkId?: string; source?: 'panel-item' | 'panel-group' } | null>(null);
+  remarkHighlightTarget = $state<{ pageIdx: number; bounds: Rect } | null>(null);
   currentBlock = $state<{ nodeId: string; pageIdx: number; bounds: Rect } | null>(null);
 
   repasteAsTextEnabled = $state(false);
@@ -702,6 +703,13 @@ export class Editor {
         scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
       }
     }
+  }
+
+  highlightRemark(remark: Pick<RemarkOverlay, 'pageIdx' | 'bounds'>): void {
+    this.remarkHighlightTarget = {
+      pageIdx: remark.pageIdx,
+      bounds: { ...remark.bounds },
+    };
   }
 
   handleRepasteAsText(): void {

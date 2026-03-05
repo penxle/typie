@@ -18,6 +18,37 @@ import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/widgets/tappable.dart';
 
+const _remarkNodeLabels = {
+  'image': '이미지',
+  'file': '파일',
+  'embed': '임베드',
+  'archived': '보관된 블록',
+  'horizontal_rule': '구분선',
+  'blockquote': '인용구',
+  'callout': '강조',
+  'bullet_list': '순서 없는 목록',
+  'ordered_list': '순서 있는 목록',
+  'fold': '접기',
+  'table': '표',
+};
+
+String _resolveRemarkNodeInfoText({
+  required RemarkOverlayInfo remark,
+  required Map<String, RemarkNodeContext> nodeContexts,
+}) {
+  final context = nodeContexts[remark.nodeId];
+  if (context == null) {
+    return '';
+  }
+
+  if (context.isTextblock) {
+    final normalized = context.nodeText.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return normalized.isNotEmpty ? normalized : '빈 텍스트';
+  }
+
+  return _remarkNodeLabels[context.nodeType] ?? context.nodeType;
+}
+
 class RemarkBottomSheet extends HookWidget {
   const RemarkBottomSheet({required this.controller, required this.client, required this.userId, super.key});
 
@@ -32,6 +63,10 @@ class RemarkBottomSheet extends HookWidget {
     final editingRemarkId = useState<String?>(null);
     final editController = useTextEditingController();
     final inputController = useTextEditingController();
+    final inputFocusNode = useFocusNode();
+    final listScrollController = useScrollController();
+    final pendingScrollToBottomAfterAdd = useState(false);
+    final pendingScrollToCurrentBlock = useState(false);
     final inputText = useState('');
 
     useEffect(() {
@@ -46,8 +81,10 @@ class RemarkBottomSheet extends HookWidget {
     final users = useState<Map<String, GNativeEditor_RemarkUser_QueryData_userView>>({});
 
     final state = useListenableSelector(controller, () => controller.state);
+    final currentBlockOverlay = useValueListenable(controller.currentBlockOverlay);
     final remarks = state.remarks;
     final currentBlockNodeId = state.currentBlockNodeId;
+    final remarkNodeContexts = useValueListenable(controller.remarkNodeContexts);
 
     useEffect(() {
       final uniqueUserIds = remarks.map((r) => r.userId).toSet();
@@ -106,6 +143,8 @@ class RemarkBottomSheet extends HookWidget {
         'createdAt': DateTime.now().millisecondsSinceEpoch,
       });
       inputController.clear();
+      inputFocusNode.requestFocus();
+      pendingScrollToBottomAfterAdd.value = true;
     }
 
     void deleteRemark(RemarkOverlayInfo remark) {
@@ -132,6 +171,104 @@ class RemarkBottomSheet extends HookWidget {
 
     final currentRemarks = isBlockTab.value ? blockRemarks : allRemarks;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
+    RemarkOverlayInfo? currentBlockHighlightTarget() {
+      final nodeId = currentBlockNodeId;
+      if (nodeId == null) {
+        return null;
+      }
+      for (final remark in allRemarks) {
+        if (remark.nodeId == nodeId) {
+          return remark;
+        }
+      }
+      final overlay = controller.currentBlockOverlay.value;
+      if (overlay == null || overlay.nodeId != nodeId || overlay.pageIdx < 0) {
+        return null;
+      }
+      return RemarkOverlayInfo(
+        pageIdx: overlay.pageIdx,
+        nodeId: nodeId,
+        remarkId: '__current_block_$nodeId',
+        userId: userId,
+        text: '',
+        createdAt: 0,
+        boundsX: overlay.x,
+        boundsY: overlay.y,
+        boundsWidth: overlay.width,
+        boundsHeight: overlay.height,
+      );
+    }
+
+    useEffect(() {
+      if (!pendingScrollToBottomAfterAdd.value || !isBlockTab.value) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!listScrollController.hasClients) {
+          return;
+        }
+        unawaited(
+          listScrollController.animateTo(
+            listScrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          ),
+        );
+      });
+      pendingScrollToBottomAfterAdd.value = false;
+      return null;
+    }, [pendingScrollToBottomAfterAdd.value, blockRemarks.length, isBlockTab.value]);
+
+    useEffect(() {
+      pendingScrollToCurrentBlock.value = true;
+      return null;
+    }, const []);
+
+    useEffect(
+      () {
+        if (!pendingScrollToCurrentBlock.value) {
+          return null;
+        }
+        if (!isBlockTab.value) {
+          pendingScrollToCurrentBlock.value = false;
+          return null;
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted || !isBlockTab.value) {
+            pendingScrollToCurrentBlock.value = false;
+            return;
+          }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted || !isBlockTab.value) {
+              pendingScrollToCurrentBlock.value = false;
+              return;
+            }
+            final target = currentBlockHighlightTarget();
+            if (target == null) {
+              if (currentBlockNodeId == null) {
+                controller.remarkHighlightTarget.value = null;
+                controller.scrollIntoView();
+                pendingScrollToCurrentBlock.value = false;
+              }
+              return;
+            }
+            controller.scrollToRemark(target);
+            pendingScrollToCurrentBlock.value = false;
+          });
+        });
+        return null;
+      },
+      [
+        pendingScrollToCurrentBlock.value,
+        isBlockTab.value,
+        currentBlockNodeId,
+        blockRemarks.length,
+        currentBlockOverlay,
+      ],
+    );
 
     return AppBottomSheet(
       includeBottomPadding: false,
@@ -163,8 +300,24 @@ class RemarkBottomSheet extends HookWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _TabPill(label: '전체', isActive: !isBlockTab.value, onTap: () => isBlockTab.value = false),
-                    _TabPill(label: '현재 위치', isActive: isBlockTab.value, onTap: () => isBlockTab.value = true),
+                    _TabPill(
+                      label: '전체',
+                      isActive: !isBlockTab.value,
+                      onTap: () {
+                        isBlockTab.value = false;
+                        pendingScrollToCurrentBlock.value = false;
+                        activeRemarkId.value = null;
+                        controller.remarkHighlightTarget.value = null;
+                      },
+                    ),
+                    _TabPill(
+                      label: '현재 위치',
+                      isActive: isBlockTab.value,
+                      onTap: () {
+                        isBlockTab.value = true;
+                        pendingScrollToCurrentBlock.value = true;
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -189,6 +342,7 @@ class RemarkBottomSheet extends HookWidget {
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
               child: SingleChildScrollView(
+                controller: listScrollController,
                 padding: Pad(bottom: isBlockTab.value ? 0 : bottomPadding + 12),
                 child: Column(
                   children: currentRemarks
@@ -201,6 +355,9 @@ class RemarkBottomSheet extends HookWidget {
                           isEditing: editingRemarkId.value == remark.remarkId,
                           isOwnRemark: remark.userId == userId,
                           editController: editController,
+                          nodeInfoText: isBlockTab.value
+                              ? null
+                              : _resolveRemarkNodeInfoText(remark: remark, nodeContexts: remarkNodeContexts),
                           onTap: () {
                             activeRemarkId.value = remark.remarkId;
                             controller.scrollToRemark(remark);
@@ -233,7 +390,12 @@ class RemarkBottomSheet extends HookWidget {
           if (isBlockTab.value && currentBlockNodeId != null) ...[
             Container(height: 1, color: context.colors.borderSubtle),
             const Gap(12),
-            _RemarkInput(controller: inputController, hasText: inputText.value.trim().isNotEmpty, onSubmit: addRemark),
+            _RemarkInput(
+              controller: inputController,
+              focusNode: inputFocusNode,
+              hasText: inputText.value.trim().isNotEmpty,
+              onSubmit: addRemark,
+            ),
             Gap(bottomPadding + 12),
           ],
         ],
@@ -280,6 +442,7 @@ class _RemarkItem extends StatelessWidget {
     required this.isEditing,
     required this.isOwnRemark,
     required this.editController,
+    this.nodeInfoText,
     required this.onTap,
     required this.onStartEdit,
     required this.onSaveEdit,
@@ -294,6 +457,7 @@ class _RemarkItem extends StatelessWidget {
   final bool isEditing;
   final bool isOwnRemark;
   final TextEditingController editController;
+  final String? nodeInfoText;
   final VoidCallback onTap;
   final VoidCallback onStartEdit;
   final VoidCallback onSaveEdit;
@@ -305,6 +469,7 @@ class _RemarkItem extends StatelessWidget {
     final timeText = Jiffy.parseFromMillisecondsSinceEpoch(remark.createdAt).ago;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final imageSize = pow(2, (log(28 * dpr) / log(2)).ceil()).toInt();
+    final hasNodeInfoText = nodeInfoText != null && nodeInfoText!.isNotEmpty;
 
     return Tappable(
       onTap: onTap,
@@ -339,22 +504,46 @@ class _RemarkItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (user != null)
-                        Flexible(
+                      Expanded(
+                        child: Row(
+                          children: [
+                            if (user != null)
+                              Flexible(
+                                child: Text(
+                                  user!.name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.textDefault,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                            if (user != null) const Gap(6),
+                            Text(timeText, style: TextStyle(fontSize: 12, color: context.colors.textFaint)),
+                          ],
+                        ),
+                      ),
+                      if (hasNodeInfoText) ...[
+                        const Gap(8),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 150),
                           child: Text(
-                            user!.name,
+                            nodeInfoText!,
+                            textAlign: TextAlign.right,
                             style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.textDefault,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: context.colors.textFaint,
                             ),
-                            overflow: TextOverflow.ellipsis,
                             maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      const Gap(6),
-                      Text(timeText, style: TextStyle(fontSize: 12, color: context.colors.textFaint)),
+                      ],
                     ],
                   ),
                   const Gap(4),
@@ -486,9 +675,15 @@ class _RemarkItem extends StatelessWidget {
 }
 
 class _RemarkInput extends StatelessWidget {
-  const _RemarkInput({required this.controller, required this.hasText, required this.onSubmit});
+  const _RemarkInput({
+    required this.controller,
+    required this.focusNode,
+    required this.hasText,
+    required this.onSubmit,
+  });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool hasText;
   final VoidCallback onSubmit;
 
@@ -496,6 +691,7 @@ class _RemarkInput extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      focusNode: focusNode,
       style: TextStyle(fontSize: 14, color: context.colors.textDefault),
       decoration: InputDecoration(
         hintText: '코멘트 입력...',

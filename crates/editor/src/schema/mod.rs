@@ -27,6 +27,12 @@ impl Schema {
     }
 
     pub fn add_node(&mut self, node_type: NodeType, spec: NodeSpec) {
+        assert!(
+            !spec.name.is_empty(),
+            "Node {:?} must define NodeSpec.name",
+            node_type
+        );
+
         if let Some(item_type) = spec.promote_item_type_on_delete {
             assert!(
                 spec.content.repeated_single_type() == Some(item_type),
@@ -73,6 +79,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Root,
             NodeSpec {
+                name: "root",
                 content: content_expr!([((Paragraph | Image | File | Embed | Archived | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold | Table)*), (Paragraph)]),
                 ..Default::default()
             },
@@ -81,6 +88,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Blockquote,
             NodeSpec {
+                name: "blockquote",
                 content: content_expr!((Paragraph | BulletList | OrderedList)+),
                 block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
                 ..Default::default()
@@ -90,6 +98,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Paragraph,
             NodeSpec {
+                name: "paragraph",
                 content: content_expr!([((Text | HardBreak)*), (PageBreak?)]),
                 styles: Some(&[
                     StyleType::BackgroundColor,
@@ -111,6 +120,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Text,
             NodeSpec {
+                name: "text",
                 inline: true,
                 ..Default::default()
             },
@@ -119,6 +129,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Image,
             NodeSpec {
+                name: "image",
                 selectable: true,
                 external: true,
                 ..Default::default()
@@ -128,6 +139,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::File,
             NodeSpec {
+                name: "file",
                 selectable: true,
                 external: true,
                 ..Default::default()
@@ -137,6 +149,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Embed,
             NodeSpec {
+                name: "embed",
                 selectable: true,
                 external: true,
                 ..Default::default()
@@ -146,6 +159,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Archived,
             NodeSpec {
+                name: "archived",
                 selectable: true,
                 external: true,
                 ..Default::default()
@@ -155,6 +169,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::HardBreak,
             NodeSpec {
+                name: "hard_break",
                 inline: true,
                 ..Default::default()
             },
@@ -163,6 +178,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::PageBreak,
             NodeSpec {
+                name: "page_break",
                 inline: true,
                 grandparent_must_be: Some(NodeType::Root),
                 ..Default::default()
@@ -172,6 +188,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::HorizontalRule,
             NodeSpec {
+                name: "horizontal_rule",
                 selectable: true,
                 block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::Both),
                 ..Default::default()
@@ -181,6 +198,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::BulletList,
             NodeSpec {
+                name: "bullet_list",
                 content: content_expr!(ListItem+),
                 promote_item_type_on_delete: Some(NodeType::ListItem),
                 ..Default::default()
@@ -190,6 +208,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::OrderedList,
             NodeSpec {
+                name: "ordered_list",
                 content: content_expr!(ListItem+),
                 promote_item_type_on_delete: Some(NodeType::ListItem),
                 ..Default::default()
@@ -199,6 +218,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::ListItem,
             NodeSpec {
+                name: "list_item",
                 content: content_expr!([(Paragraph), ((BulletList | OrderedList) *)]),
                 structural: true,
                 block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
@@ -209,6 +229,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Fold,
             NodeSpec {
+                name: "fold",
                 content: content_expr!([(FoldTitle), (FoldContent)]),
                 isolating: true,
                 block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOrBack),
@@ -219,6 +240,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::FoldTitle,
             NodeSpec {
+                name: "fold_title",
                 content: content_expr!(Text*),
                 isolating: true,
                 structural: true,
@@ -229,6 +251,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::FoldContent,
             NodeSpec {
+                name: "fold_content",
                 content: content_expr!((Paragraph | Image | File | Embed | Archived | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold | Table)+),
                 isolating: true,
                 structural: true,
@@ -239,6 +262,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Callout,
             NodeSpec {
+                name: "callout",
                 content: content_expr!((Paragraph | BulletList | OrderedList)+),
                 block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOnly),
                 ..Default::default()
@@ -248,6 +272,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::Table,
             NodeSpec {
+                name: "table",
                 content: content_expr!(TableRow+),
                 isolating: true,
                 block_selection_boundary_mode: Some(BlockSelectionBoundaryMode::FrontOrBack),
@@ -259,6 +284,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::TableRow,
             NodeSpec {
+                name: "table_row",
                 content: content_expr!(TableCell+),
                 structural: true,
                 ..Default::default()
@@ -268,6 +294,7 @@ impl Default for Schema {
         schema.add_node(
             NodeType::TableCell,
             NodeSpec {
+                name: "table_cell",
                 content: content_expr!((Paragraph | Image | File | Embed | Archived | Blockquote | Callout | BulletList | OrderedList | HorizontalRule | Fold)+),
                 isolating: true,
                 structural: true,

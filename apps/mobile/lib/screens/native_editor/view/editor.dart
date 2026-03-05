@@ -110,6 +110,7 @@ class EditorView extends HookWidget {
     final currentZoomViewportWidth = useValueListenable(zoomViewportWidth);
     final currentDisplayZoom = useValueListenable(displayZoom);
     final currentRenderZoom = useValueListenable(renderZoom);
+    final sheetBottomInset = useValueListenable(controller.sheetBottomInset);
     final cursorFollowScrollActive = useRef(false);
     final cursorFollowScrollMode = useRef(ScrollMode.auto);
     final typewriterRecoveryPending = useRef(false);
@@ -738,7 +739,13 @@ class EditorView extends HookWidget {
       return null;
     }, [renderedCursorValue, state.state.renderVersion, currentDisplayZoom]);
 
-    void scrollToOverlay({required int pageIdx, required double x, required double y, required double width}) {
+    void scrollToOverlay({
+      required int pageIdx,
+      required double x,
+      required double y,
+      required double width,
+      required double height,
+    }) {
       if (currentLayout == null) {
         return;
       }
@@ -755,13 +762,36 @@ class EditorView extends HookWidget {
         targetX: x,
         targetY: y,
         targetWidth: width,
+        targetHeight: height,
       );
     }
 
     useEffect(() {
+      if (sheetBottomInset <= 0) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = controller.remarkHighlightTarget.value;
+        if (target == null) {
+          return;
+        }
+        scrollToOverlay(
+          pageIdx: target.pageIdx,
+          x: target.boundsX,
+          y: target.boundsY,
+          width: target.boundsWidth,
+          height: target.boundsHeight,
+        );
+      });
+
+      return null;
+    }, [sheetBottomInset]);
+
+    useEffect(() {
       final target = state.state.search.scrollTarget;
       if (target != null) {
-        scrollToOverlay(pageIdx: target.pageIdx, x: target.x, y: target.y, width: target.width);
+        scrollToOverlay(pageIdx: target.pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
       }
       return null;
     }, [state.state.search.scrollTarget]);
@@ -770,7 +800,7 @@ class EditorView extends HookWidget {
       final target = state.state.spellcheck.scrollTarget;
       final pageIdx = state.state.spellcheck.scrollTargetPageIdx;
       if (target != null && pageIdx != null) {
-        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width);
+        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
       }
       return null;
     }, [state.state.spellcheck.scrollTarget, state.state.spellcheck.scrollTargetPageIdx]);
@@ -779,7 +809,7 @@ class EditorView extends HookWidget {
       final target = state.state.aiFeedback.scrollTarget;
       final pageIdx = state.state.aiFeedback.scrollTargetPageIdx;
       if (target != null && pageIdx != null) {
-        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width);
+        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
       }
       return null;
     }, [state.state.aiFeedback.scrollTarget, state.state.aiFeedback.scrollTargetPageIdx]);
@@ -803,6 +833,7 @@ class EditorView extends HookWidget {
               targetX: target.boundsX,
               targetY: target.boundsY,
               targetWidth: target.boundsWidth,
+              targetHeight: target.boundsHeight,
             );
           }
           controller.remarkScrollTarget.value = null;

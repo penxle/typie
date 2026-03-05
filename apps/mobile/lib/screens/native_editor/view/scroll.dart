@@ -165,17 +165,29 @@ void scrollToOverlayTarget({
   required double targetX,
   required double targetY,
   required double targetWidth,
+  double targetHeight = 0,
+  double targetAnchor = 0.5,
+  double viewportAnchor = 0.5,
 }) {
   final offsets = geometry.computeCumulativePageOffsets();
   final absoluteY = geometry.titleAreaHeight + offsets[pageIdx] + geometry.toDisplayY(targetY);
 
   final verticalPosition = resolveScrollPosition(verticalScrollController);
   if (verticalPosition != null && verticalPosition.hasContentDimensions) {
+    final clampedTargetAnchor = targetAnchor.clamp(0.0, 1.0);
+    final clampedViewportAnchor = viewportAnchor.clamp(0.0, 1.0);
     final viewportHeight = verticalPosition.viewportDimension;
-    final targetOffset = (absoluteY - viewportHeight / 3).clamp(0.0, verticalPosition.maxScrollExtent);
-    unawaited(
-      verticalPosition.animateTo(targetOffset, duration: const Duration(milliseconds: 200), curve: Curves.easeOut),
+    final absoluteAnchorY = absoluteY + geometry.toDisplayY(targetHeight) * clampedTargetAnchor;
+    final targetOffset = (absoluteAnchorY - viewportHeight * clampedViewportAnchor).clamp(
+      0.0,
+      verticalPosition.maxScrollExtent,
     );
+    final currentOffset = verticalPosition.pixels;
+    if ((targetOffset - currentOffset).abs() > 1) {
+      unawaited(
+        verticalPosition.animateTo(targetOffset, duration: const Duration(milliseconds: 200), curve: Curves.easeOut),
+      );
+    }
   }
 
   final horizontalMetrics = resolveHorizontalScrollMetrics(
@@ -195,20 +207,18 @@ void scrollToOverlayTarget({
   final viewportWidth = horizontalMetrics.viewportDimension;
 
   if (matchRight > scrollOffset + viewportWidth - scrollMargin) {
-    unawaited(
-      horizontalPosition.animateTo(
-        (matchRight - viewportWidth + scrollMargin).clamp(0.0, horizontalPosition.maxScrollExtent),
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      ),
-    );
+    final target = (matchRight - viewportWidth + scrollMargin).clamp(0.0, horizontalPosition.maxScrollExtent);
+    if ((target - scrollOffset).abs() > 1) {
+      unawaited(
+        horizontalPosition.animateTo(target, duration: const Duration(milliseconds: 200), curve: Curves.easeOut),
+      );
+    }
   } else if (matchX < scrollOffset + scrollMargin) {
-    unawaited(
-      horizontalPosition.animateTo(
-        (matchX - scrollMargin).clamp(0.0, horizontalPosition.maxScrollExtent),
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      ),
-    );
+    final target = (matchX - scrollMargin).clamp(0.0, horizontalPosition.maxScrollExtent);
+    if ((target - scrollOffset).abs() > 1) {
+      unawaited(
+        horizontalPosition.animateTo(target, duration: const Duration(milliseconds: 200), curve: Curves.easeOut),
+      );
+    }
   }
 }

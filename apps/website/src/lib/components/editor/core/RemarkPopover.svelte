@@ -54,6 +54,9 @@
   let textareaEl = $state<HTMLTextAreaElement>();
   let listEl = $state<HTMLDivElement>();
   let headerMenuOpen = $state(false);
+  let activeRemarkId = $state<string | null>(null);
+  let wasOpen = false;
+  let shouldJumpToActiveOnOpen = false;
   const hasText = $derived($state.eager(newRemarkText).trim().length > 0);
   const hasContent = $derived($state.eager(newRemarkText).length > 0);
 
@@ -65,13 +68,23 @@
       tick()
         .then(tick)
         .then(() => {
-          if (listEl) {
+          if (listEl && !activeRemarkId) {
             listEl.scrollTop = listEl.scrollHeight;
           }
           textareaEl?.focus();
         });
     }
   });
+
+  function scrollToActiveRemark(remarkId: string, behavior: ScrollBehavior) {
+    const el = listEl?.querySelector(`[data-remark-id="${remarkId}"]`);
+    if (!(el instanceof HTMLElement) || !listEl) return;
+
+    const listRect = listEl.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const scrollTarget = el.offsetTop - listRect.height / 2 + elRect.height / 2;
+    listEl.scrollTo({ top: Math.max(0, scrollTarget), behavior });
+  }
 
   const { anchor, floating } = createFloatingActions({
     placement: 'bottom-start',
@@ -130,6 +143,7 @@
     if (!open) {
       newRemarkText = '';
       dirtyRemarkIds.clear();
+      activeRemarkId = null;
     }
   });
 
@@ -163,51 +177,46 @@
       });
   }
 
-  let wasOpenBeforeFocus = $state(false);
-  $effect.pre(() => {
-    if (!editor.remarkFocus) {
-      wasOpenBeforeFocus = open;
+  $effect(() => {
+    if (open && !wasOpen) {
+      shouldJumpToActiveOnOpen = true;
+    } else if (!open && wasOpen) {
+      shouldJumpToActiveOnOpen = false;
     }
+    wasOpen = open;
   });
 
   $effect(() => {
     const focus = editor.remarkFocus;
     if (focus && open && focus.nodeId === nodeId) {
-      tick().then(() => {
-        const el = listEl?.querySelector(`[data-remark-id="${focus.remarkId}"]`);
-        if (el instanceof HTMLElement && listEl) {
-          const listRect = listEl.getBoundingClientRect();
-          const elRect = el.getBoundingClientRect();
-          const scrollTarget = el.offsetTop - listRect.height / 2 + elRect.height / 2;
-          listEl.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
-
-          const shake = () => {
-            for (const animation of el.getAnimations()) {
-              animation.cancel();
-            }
-
-            el.animate(
-              [
-                { transform: 'translateX(0)' },
-                { transform: 'translateX(-3px)' },
-                { transform: 'translateX(3px)' },
-                { transform: 'translateX(-2px)' },
-                { transform: 'translateX(2px)' },
-                { transform: 'translateX(0)' },
-              ],
-              { duration: 520, iterations: 1, easing: 'linear' },
-            );
-          };
-
-          if (wasOpenBeforeFocus) {
-            shake();
-          } else {
-            setTimeout(shake, 300);
-          }
-        }
+      if (focus.source === 'panel-group' && !focus.remarkId) {
+        activeRemarkId = null;
+        shouldJumpToActiveOnOpen = false;
         editor.remarkFocus = null;
-      });
+        return;
+      }
+
+      if (focus.source !== 'panel-group' && focus.remarkId && activeRemarkId === focus.remarkId) {
+        editor.remarkFocus = null;
+        tryClose();
+        return;
+      }
+
+      activeRemarkId = focus.remarkId ?? null;
+      editor.remarkFocus = null;
     }
+  });
+
+  $effect(() => {
+    const remarkId = activeRemarkId;
+    if (!open || !remarkId) return;
+
+    tick().then(() => {
+      if (!open || activeRemarkId !== remarkId) return;
+      scrollToActiveRemark(remarkId, shouldJumpToActiveOnOpen ? 'auto' : 'smooth');
+      shouldJumpToActiveOnOpen = false;
+      textareaEl?.focus();
+    });
   });
 </script>
 
@@ -369,17 +378,25 @@
         class={css({
           display: 'flex',
           flexDirection: 'column',
-          gap: '8px',
-          paddingY: '8px',
-          paddingLeft: '10px',
-          paddingRight: '10px',
+          gap: '2px',
           maxHeight: '300px',
           overflowX: 'hidden',
           overflowY: 'auto',
         })}
       >
         {#each remarks as remark (remark.remarkId)}
-          <div class={css({ marginX: '-10px', marginY: '-6px', paddingX: '10px', paddingY: '6px' })} data-remark-id={remark.remarkId}>
+          <div
+            class={css(
+              {
+                paddingX: '10px',
+                paddingY: '8px',
+                borderRadius: '8px',
+                transition: 'colors',
+              },
+              activeRemarkId === remark.remarkId && { backgroundColor: 'surface.muted' },
+            )}
+            data-remark-id={remark.remarkId}
+          >
             <RemarkCard
               createdAt={remark.createdAt}
               {editor}

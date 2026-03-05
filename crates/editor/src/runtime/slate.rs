@@ -921,6 +921,9 @@ impl Slab {
             ]);
             self.write_u32_slice(&[o.page_idx as u32]);
             self.write_f32_slice(&[o.bounds.x, o.bounds.y, o.bounds.width, o.bounds.height]);
+            self.write_str(&o.node_type);
+            self.write_u32_slice(&[o.is_textblock as u32]);
+            self.write_str(&o.node_text);
         }
         slate.remarks_offset = start;
         slate.remarks_count = overlays.len() as u32;
