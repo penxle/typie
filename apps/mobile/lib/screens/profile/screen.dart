@@ -14,6 +14,7 @@ import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
 import 'package:typie/screens/profile/activity_grid.dart';
 import 'package:typie/screens/profile/feedback_bottom_sheet.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -103,67 +104,66 @@ class ProfileScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                Tappable(
-                  onTap: () async {
-                    if (data.me!.subscription == null) {
-                      await context.router.push(const EnrollPlanRoute());
-                    } else {
-                      await context.router.push(const CurrentPlanRoute());
-                    }
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: context.colors.borderStrong),
-                      borderRadius: BorderRadius.circular(8),
-                      color: context.colors.surfaceDefault,
-                    ),
-                    padding: const Pad(all: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      spacing: 4,
-                      children: [
-                        Row(
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: context.colors.borderStrong),
+                    borderRadius: BorderRadius.circular(8),
+                    color: context.colors.surfaceDefault,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Tappable(
+                        padding: const Pad(all: 16),
+                        onTap: () async {
+                          if (data.me!.subscription == null) {
+                            await context.router.push(const EnrollPlanRoute());
+                          } else {
+                            await context.router.push(const CurrentPlanRoute());
+                          }
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          spacing: 4,
                           children: [
-                            Text('현재 이용권', style: TextStyle(color: context.colors.textFaint, fontSize: 14)),
-                            const Spacer(),
-                            if (data.me!.subscription == null) ...[
-                              Text('이용권 구매하기', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-                              Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textSubtle),
-                            ] else ...[
-                              Text('이용권 정보', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
-                              Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textFaint),
-                            ],
+                            Row(
+                              children: [
+                                Text('현재 이용권', style: TextStyle(color: context.colors.textFaint, fontSize: 14)),
+                                const Spacer(),
+                                if (data.me!.subscription == null) ...[
+                                  Text('이용권 구매하기', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                                  Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textSubtle),
+                                ] else ...[
+                                  Text('이용권 정보', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+                                  Icon(LucideLightIcons.chevron_right, size: 14, color: context.colors.textFaint),
+                                ],
+                              ],
+                            ),
+                            Text(
+                              data.me!.subscription == null ? '타이피 BASIC ACCESS' : data.me!.subscription!.plan.name,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
                           ],
                         ),
-                        Text(
-                          data.me!.subscription == null ? '타이피 BASIC ACCESS' : data.me!.subscription!.plan.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      HorizontalDivider(color: context.colors.borderDefault),
+                      Tappable(
+                        padding: const Pad(all: 16),
+                        onTap: () async {
+                          await context.router.push(const ReferralRoute());
+                        },
+                        child: const Row(
+                          spacing: 8,
+                          children: [
+                            Icon(LucideLightIcons.gift, size: 20),
+                            Expanded(
+                              child: Text('초대', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                            ),
+                            Icon(LucideLightIcons.chevron_right, size: 16),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                Tappable(
-                  onTap: () async {
-                    await context.router.push(const ReferralRoute());
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: context.colors.borderStrong),
-                      borderRadius: BorderRadius.circular(8),
-                      color: context.colors.surfaceDefault,
-                    ),
-                    padding: const Pad(all: 16),
-                    child: const Row(
-                      spacing: 8,
-                      children: [
-                        Icon(LucideLightIcons.gift, size: 20),
-                        Expanded(
-                          child: Text('초대', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                        ),
-                        Icon(LucideLightIcons.chevron_right, size: 16),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 Tappable(
@@ -189,110 +189,155 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                IntrinsicHeight(
-                  child: Row(
-                    spacing: 16,
+                Padding(
+                  padding: const Pad(top: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 12,
                     children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: context.colors.borderStrong),
-                            borderRadius: BorderRadius.circular(8),
-                            color: context.colors.surfaceDefault,
-                          ),
-                          padding: const Pad(all: 16),
-                          child: Tappable(
-                            onTap: () async {
-                              final url = Uri.parse('https://penxle.channel.io/home');
-                              await launchUrl(url, mode: LaunchMode.externalApplication);
-                            },
-                            child: const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              spacing: 12,
-                              children: [
-                                Icon(LucideLightIcons.headphones, size: 20),
-                                Text('고객센터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                              ],
+                      Text(
+                        '도움 및 외부 링크',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textFaint),
+                      ),
+                      IntrinsicHeight(
+                        child: Row(
+                          spacing: 16,
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: context.colors.borderStrong),
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: context.colors.surfaceDefault,
+                                ),
+                                padding: const Pad(all: 16),
+                                child: Tappable(
+                                  onTap: () async {
+                                    final url = Uri.parse('https://penxle.channel.io/home');
+                                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                                  },
+                                  child: const Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    spacing: 12,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Icon(LucideLightIcons.headphones, size: 20),
+                                          Icon(LucideLightIcons.external_link, size: 16),
+                                        ],
+                                      ),
+                                      Text('고객센터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: context.colors.borderStrong),
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: context.colors.surfaceDefault,
+                                ),
+                                padding: const Pad(all: 16),
+                                child: Tappable(
+                                  onTap: () async {
+                                    await context.showBottomSheet(
+                                      intercept: true,
+                                      resizeToAvoidBottomInset: true,
+                                      child: FeedbackBottomSheet(client: client),
+                                    );
+                                  },
+                                  child: const Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    spacing: 12,
+                                    children: [
+                                      Icon(LucideLightIcons.message_square, size: 20),
+                                      Text('의견 보내기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: context.colors.borderStrong),
-                            borderRadius: BorderRadius.circular(8),
-                            color: context.colors.surfaceDefault,
-                          ),
-                          padding: const Pad(all: 16),
-                          child: Tappable(
-                            onTap: () async {
-                              final url = Uri.parse('https://x.com/typieofficial');
-                              await launchUrl(url, mode: LaunchMode.externalApplication);
-                            },
-                            child: const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              spacing: 12,
-                              children: [
-                                Icon(LucideLightIcons.twitter, size: 20),
-                                Text('타이피\n공식 트위터', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                              ],
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: context.colors.borderStrong),
+                          borderRadius: BorderRadius.circular(8),
+                          color: context.colors.surfaceDefault,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (data.me!.subscription != null) ...[
+                              Tappable(
+                                padding: const Pad(all: 16),
+                                onTap: () async {
+                                  final url = Uri.parse('https://typie.link/community');
+                                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                                },
+                                child: const Row(
+                                  spacing: 8,
+                                  children: [
+                                    Icon(LucideLightIcons.users, size: 20),
+                                    Expanded(
+                                      child: Text(
+                                        '타이피 유저 커뮤니티',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                    Icon(LucideLightIcons.external_link, size: 16),
+                                  ],
+                                ),
+                              ),
+                              HorizontalDivider(color: context.colors.borderDefault),
+                            ],
+                            Tappable(
+                              padding: const Pad(all: 16),
+                              onTap: () async {
+                                final url = Uri.parse('https://x.com/typieofficial');
+                                await launchUrl(url, mode: LaunchMode.externalApplication);
+                              },
+                              child: const Row(
+                                spacing: 8,
+                                children: [
+                                  Icon(LucideLightIcons.twitter, size: 20),
+                                  Expanded(
+                                    child: Text(
+                                      '타이피 공식 트위터',
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                  Icon(LucideLightIcons.external_link, size: 16),
+                                ],
+                              ),
                             ),
-                          ),
+                            HorizontalDivider(color: context.colors.borderDefault),
+                            Tappable(
+                              padding: const Pad(all: 16),
+                              onTap: () async {
+                                final url = Uri.parse('https://typie.co/changelog');
+                                await launchUrl(url, mode: LaunchMode.externalApplication);
+                              },
+                              child: const Row(
+                                spacing: 8,
+                                children: [
+                                  Icon(LucideLightIcons.newspaper, size: 20),
+                                  Expanded(
+                                    child: Text('업데이트 노트', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                                  ),
+                                  Icon(LucideLightIcons.external_link, size: 16),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
-                ),
-                Tappable(
-                  onTap: () async {
-                    await context.showBottomSheet(
-                      intercept: true,
-                      resizeToAvoidBottomInset: true,
-                      child: FeedbackBottomSheet(client: client),
-                    );
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: context.colors.borderStrong),
-                      borderRadius: BorderRadius.circular(8),
-                      color: context.colors.surfaceDefault,
-                    ),
-                    padding: const Pad(all: 16),
-                    child: const Row(
-                      spacing: 8,
-                      children: [
-                        Icon(LucideLightIcons.message_square, size: 20),
-                        Expanded(
-                          child: Text('의견 보내기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Tappable(
-                  onTap: () async {
-                    final url = Uri.parse('https://typie.co/changelog');
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: context.colors.borderStrong),
-                      borderRadius: BorderRadius.circular(8),
-                      color: context.colors.surfaceDefault,
-                    ),
-                    padding: const Pad(all: 16),
-                    child: const Row(
-                      spacing: 8,
-                      children: [
-                        Icon(LucideLightIcons.newspaper, size: 20),
-                        Expanded(
-                          child: Text('업데이트 노트', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                        ),
-                        Icon(LucideLightIcons.external_link, size: 16),
-                      ],
-                    ),
                   ),
                 ),
               ],
