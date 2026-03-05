@@ -3,7 +3,7 @@
   import { flex } from '@typie/styled-system/patterns';
   import { Icon } from '@typie/ui/components';
   import GithubIcon from '~icons/simple-icons/github';
-  import TwitterIcon from '~icons/simple-icons/twitter';
+  import XIcon from '~icons/simple-icons/x';
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
 </script>
 
@@ -66,10 +66,10 @@
                   color: 'dark.gray.300',
                 },
               })}
-              aria-label="Twitter"
-              href="https://twitter.com/typieofficial"
+              aria-label="X"
+              href="https://x.com/typieofficial"
             >
-              <Icon icon={TwitterIcon} size={14} />
+              <Icon icon={XIcon} size={14} />
             </a>
             <a
               class={css({

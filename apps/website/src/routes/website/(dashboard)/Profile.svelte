@@ -10,6 +10,7 @@
   import LogOutIcon from '~icons/lucide/log-out';
   import SettingsIcon from '~icons/lucide/settings';
   import UsersIcon from '~icons/lucide/users';
+  import XBrandIcon from '~icons/simple-icons/x';
   import { pushState } from '$app/navigation';
   import { env } from '$env/dynamic/public';
   import { Img } from '$lib/components';
@@ -94,6 +95,8 @@
   {#if user.data.subscription}
     <MenuItem external href="https://typie.link/community" icon={UsersIcon} type="link">타이피 커뮤니티</MenuItem>
   {/if}
+
+  <MenuItem external href="https://x.com/typieofficial" icon={XBrandIcon} type="link">타이피 공식 X</MenuItem>
 
   <MenuItem external href="https://typie.link/help" icon={HelpCircleIcon} type="link">고객센터</MenuItem>
 
