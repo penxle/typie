@@ -3,6 +3,7 @@
 query TrashScreen_WithSiteId_Query($siteId: ID!) {
   site(siteId: $siteId) {
     id
+    name
 
     deletedEntities {
       id
