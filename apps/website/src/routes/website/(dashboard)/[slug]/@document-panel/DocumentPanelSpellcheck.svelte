@@ -450,11 +450,11 @@
                 class={css({
                   fontSize: '12px',
                   color: 'text.faint',
+                  whiteSpace: 'pre-line',
                   lineClamp: activeError?.id === error.id ? 'none' : '1',
                 })}
               >
-                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                {@html error.explanation}
+                {error.explanation}
               </div>
             {/if}
 

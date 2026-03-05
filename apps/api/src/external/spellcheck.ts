@@ -61,6 +61,32 @@ const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' 
 const MAX_CHUNK_SIZE = 500;
 const MAX_CONCURRENCY = 100;
 
+const toPlainTextExplanation = (value: string) => {
+  const fragment = DOMPurify.sanitize(value, {
+    ALLOWED_TAGS: ['br'],
+    ALLOWED_ATTR: [],
+    RETURN_DOM_FRAGMENT: true,
+  }) as DocumentFragment;
+
+  let plainText = '';
+
+  for (const node of fragment.childNodes) {
+    if (node.nodeType === 3) {
+      plainText += node.textContent ?? '';
+      continue;
+    }
+
+    if (node.nodeType === 1 && (node as Element).tagName === 'BR') {
+      plainText += '\n';
+      continue;
+    }
+
+    plainText += node.textContent ?? '';
+  }
+
+  return plainText;
+};
+
 const ALLOWED_CHARS = /^[\u{AC00}-\u{D7AF}\u{3131}-\u{318E}A-Za-z0-9\s.,!?:;()[\]"'/\\@#$%&*+=_~`{}<>|^。、「」『』“”‘’！？…·ㆍ-]$/u;
 const SENTENCE_PATTERN = /([.!?。！？]+\s*)/g;
 
@@ -297,7 +323,7 @@ export const check = async (text: string) => {
               error.CandWordList && Number(error.CandWordList.m_nCount) > 0
                 ? [error.CandWordList.CandWord].flat().filter((x) => x !== undefined)
                 : [],
-            explanation: DOMPurify.sanitize(error.Help?.['#text'] ?? '', { ALLOWED_TAGS: ['br'] }),
+            explanation: toPlainTextExplanation(error.Help?.['#text'] ?? ''),
             type: errorTypes[Number(error.Help?.nCorrectMethod)],
           };
         });
