@@ -63,6 +63,9 @@ pub fn perform_search(doc: &Doc, query: &SearchQuery) -> Vec<SearchMatch> {
                         start_offset: char_offset,
                         end_offset: char_offset + query_char_len,
                     });
+
+                    char_offset += query_char_len;
+                    continue;
                 }
             }
 
@@ -81,4 +84,39 @@ fn is_word_boundary(chars: &[char], start: usize, len: usize) -> bool {
 
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn perform_search_is_non_overlapping_for_korean_repeats() {
+        let doc = doc! {
+            paragraph { text { "ㅋㅋㅋㅋ" } }
+        };
+
+        let matches = perform_search(&doc, &SearchQuery::new("ㅋㅋ".to_string(), false));
+
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].start_offset, 0);
+        assert_eq!(matches[0].end_offset, 2);
+        assert_eq!(matches[1].start_offset, 2);
+        assert_eq!(matches[1].end_offset, 4);
+    }
+
+    #[test]
+    fn perform_search_is_non_overlapping_for_ascii_repeats() {
+        let doc = doc! {
+            paragraph { text { "aaaa" } }
+        };
+
+        let matches = perform_search(&doc, &SearchQuery::new("aa".to_string(), false));
+
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].start_offset, 0);
+        assert_eq!(matches[0].end_offset, 2);
+        assert_eq!(matches[1].start_offset, 2);
+        assert_eq!(matches[1].end_offset, 4);
+    }
 }
