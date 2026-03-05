@@ -73,6 +73,7 @@ import {
   Image,
   isTypeOf,
   IUser,
+  PaymentInvoice,
   Post,
   Referral,
   Site,
@@ -383,6 +384,13 @@ User.implement({
       type: [DocumentFontFamily],
       resolve: async (self) => {
         return await getDocumentFontFamilies(self.id);
+      },
+    }),
+
+    paymentInvoices: t.field({
+      type: [PaymentInvoice],
+      resolve: async (self) => {
+        return await db.select().from(PaymentInvoices).where(eq(PaymentInvoices.userId, self.id)).orderBy(desc(PaymentInvoices.createdAt));
       },
     }),
 

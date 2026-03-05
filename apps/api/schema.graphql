@@ -12,6 +12,11 @@ input AdminImpersonateInput {
   userId: String!
 }
 
+input AdminRefundPaymentInput {
+  invoiceId: String!
+  reason: String
+}
+
 type AdminUsersResult {
   totalCount: Int!
   users: [User!]!
@@ -632,6 +637,7 @@ input MoveWidgetInput {
 type Mutation {
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
+  adminRefundPayment(input: AdminRefundPaymentInput!): Boolean!
   adminStopImpersonation: Boolean!
   archiveFont(input: ArchiveFontInput!): Font!
   archiveFontFamily(input: ArchiveFontFamilyInput!): FontFamily!
@@ -733,9 +739,13 @@ enum NoteState {
 }
 
 type PaymentInvoice {
+  amount: Int!
+  createdAt: DateTime!
   dueAt: DateTime!
   id: ID!
+  records: [PaymentRecord!]!
   state: PaymentInvoiceState!
+  subscription: Subscription_!
 }
 
 enum PaymentInvoiceState {
@@ -748,6 +758,15 @@ enum PaymentInvoiceState {
 enum PaymentOutcome {
   FAILURE
   SUCCESS
+}
+
+type PaymentRecord {
+  billingAmount: Int!
+  createdAt: DateTime!
+  creditAmount: Int!
+  data: JSON!
+  id: ID!
+  outcome: PaymentOutcome!
 }
 
 type Permalink {
@@ -1315,6 +1334,7 @@ type User implements IUser {
   marketingConsentAskedAt: DateTime
   name: String!
   nextSubscription: Subscription_
+  paymentInvoices: [PaymentInvoice!]!
   personalIdentity: UserPersonalIdentity
   postCount: Int!
   preferences: JSON!
