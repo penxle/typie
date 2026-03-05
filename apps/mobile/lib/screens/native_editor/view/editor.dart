@@ -544,7 +544,24 @@ class EditorView extends HookWidget {
       };
     }
 
-    void applyCursorScrollAndVisual(CursorInfo nextCursor, {required bool typewriter}) {
+    void applyCursorScrollAndVisual(
+      CursorInfo nextCursor, {
+      required bool typewriter,
+      bool synchronizeWithRender = true,
+    }) {
+      final shouldSynchronizeWithRender =
+          synchronizeWithRender &&
+          typewriter &&
+          !identical(presentedViewport.value.renderVersion, controller.state.renderVersion);
+      if (shouldSynchronizeWithRender) {
+        queueRenderSynchronizedCursorUpdate(
+          nextCursor: nextCursor,
+          typewriter: true,
+          targetPageIdx: nextCursor.pageIdx,
+        );
+        return;
+      }
+
       if (canApplyCursorScrollNow()) {
         pendingScroll.value = null;
         pendingScrollPageIdx.value = null;
@@ -654,9 +671,14 @@ class EditorView extends HookWidget {
 
         if (pendingMode != null) {
           final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
+          final waitForCursorUpdate = controller.pendingScrollWaitForCursorUpdate;
           typewriterRecoveryPending.value = useTypewriter;
           controller.clearPendingScroll();
-          applyCursorScrollAndVisual(nextCursor, typewriter: useTypewriter);
+          applyCursorScrollAndVisual(
+            nextCursor,
+            typewriter: useTypewriter,
+            synchronizeWithRender: !waitForCursorUpdate,
+          );
           return;
         }
 
