@@ -40,6 +40,9 @@ export type RemarkOverlay = {
   createdAt: number;
   pageIdx: number;
   bounds: Rect;
+  nodeType: string;
+  isTextblock: boolean;
+  nodeText: string;
 };
 
 export type InteractiveOverlay = {
@@ -883,7 +886,16 @@ function readRemarkOverlays(view: DataView, offset: number, count: number): Rema
     };
     pos += 16;
 
-    overlays.push({ nodeId, remarkId, userId, text, createdAt, pageIdx, bounds });
+    const { value: nodeType, end: afterNodeType } = readStr(view, pos);
+    pos = afterNodeType;
+
+    const isTextblock = view.getUint32(pos, true) !== 0;
+    pos += 4;
+
+    const { value: nodeText, end: afterNodeText } = readStr(view, pos);
+    pos = afterNodeText;
+
+    overlays.push({ nodeId, remarkId, userId, text, createdAt, pageIdx, bounds, nodeType, isTextblock, nodeText });
   }
   return overlays;
 }

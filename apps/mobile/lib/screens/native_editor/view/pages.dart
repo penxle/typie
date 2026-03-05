@@ -28,6 +28,7 @@ class PageList extends HookWidget {
     final scope = ContentScope.of(context);
     final pref = useService<Pref>();
     final state = useListenable(scope.controller);
+    final sheetBottomInset = useValueListenable(scope.controller.sheetBottomInset);
 
     final pages = state.state.pages;
     final cursor = state.state.cursor;
@@ -229,74 +230,77 @@ class PageList extends HookWidget {
             typewriterPosition: pref.typewriterPosition,
           );
 
-          final listView = ScrollConfiguration(
-            behavior: ScrollConfiguration.of(
-              context,
-            ).copyWith(scrollbars: false, dragDevices: scrollLocked ? {} : null),
-            child: SingleChildScrollView(
-              controller: verticalScrollController,
-              physics: scrollLocked ? const NeverScrollableScrollPhysics() : const NonGestureBouncingScrollPhysics(),
-              child: Builder(
-                builder: (_) {
-                  final content = RawGestureDetector(
-                    gestures: {
-                      ConditionalLongPressGestureRecognizer:
-                          GestureRecognizerFactoryWithHandlers<ConditionalLongPressGestureRecognizer>(
-                            () => ConditionalLongPressGestureRecognizer(
-                              condition: interactionController.shouldRejectLongPress,
-                              duration: const Duration(milliseconds: 500),
+          final listView = Padding(
+            padding: EdgeInsets.only(bottom: sheetBottomInset),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(
+                context,
+              ).copyWith(scrollbars: false, dragDevices: scrollLocked ? {} : null),
+              child: SingleChildScrollView(
+                controller: verticalScrollController,
+                physics: scrollLocked ? const NeverScrollableScrollPhysics() : const NonGestureBouncingScrollPhysics(),
+                child: Builder(
+                  builder: (_) {
+                    final content = RawGestureDetector(
+                      gestures: {
+                        ConditionalLongPressGestureRecognizer:
+                            GestureRecognizerFactoryWithHandlers<ConditionalLongPressGestureRecognizer>(
+                              () => ConditionalLongPressGestureRecognizer(
+                                condition: interactionController.shouldRejectLongPress,
+                                duration: const Duration(milliseconds: 500),
+                              ),
+                              (ConditionalLongPressGestureRecognizer instance) {
+                                instance
+                                  ..onLongPressStart = (details) {
+                                    interactionController.startLongPress(details.globalPosition);
+                                  }
+                                  ..onLongPressEnd = (details) {
+                                    interactionController.endLongPress();
+                                  };
+                              },
                             ),
-                            (ConditionalLongPressGestureRecognizer instance) {
-                              instance
-                                ..onLongPressStart = (details) {
-                                  interactionController.startLongPress(details.globalPosition);
-                                }
-                                ..onLongPressEnd = (details) {
-                                  interactionController.endLongPress();
-                                };
-                            },
-                          ),
-                    },
-                    child: Column(
-                      children: [
-                        MeasuredTitleFields(scope: scope),
-                        TrackedHorizontalScrollView(
-                          controller: horizontalScrollController,
-                          physics: horizontalPhysics,
-                          child: SizedBox(
-                            width: math.max(contentWidth, viewWidth),
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: Container(
-                                width: contentWidth,
-                                padding: EdgeInsets.only(
-                                  left: geo.horizontalPadding,
-                                  right: geo.horizontalPadding,
-                                  bottom: contentBottomPadding,
-                                ),
-                                child: Column(
-                                  children: [
-                                    for (var i = 0; i < pages.length; i++) ...[
-                                      PageSlot(
-                                        key: ValueKey(i),
-                                        pageIndex: i,
-                                        pageTop: geo.titleAreaHeight + offsets[i],
-                                        pageBottom: geo.titleAreaHeight + offsets[i] + geo.pageHeightAt(i),
-                                        activeCursorPageIdx: renderedCursor?.pageIdx,
-                                      ),
+                      },
+                      child: Column(
+                        children: [
+                          MeasuredTitleFields(scope: scope),
+                          TrackedHorizontalScrollView(
+                            controller: horizontalScrollController,
+                            physics: horizontalPhysics,
+                            child: SizedBox(
+                              width: math.max(contentWidth, viewWidth),
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: Container(
+                                  width: contentWidth,
+                                  padding: EdgeInsets.only(
+                                    left: geo.horizontalPadding,
+                                    right: geo.horizontalPadding,
+                                    bottom: contentBottomPadding,
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      for (var i = 0; i < pages.length; i++) ...[
+                                        PageSlot(
+                                          key: ValueKey(i),
+                                          pageIndex: i,
+                                          pageTop: geo.titleAreaHeight + offsets[i],
+                                          pageBottom: geo.titleAreaHeight + offsets[i] + geo.pageHeightAt(i),
+                                          activeCursorPageIdx: renderedCursor?.pageIdx,
+                                        ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
+                        ],
+                      ),
+                    );
 
-                  return EditorDraggable(interactionController: interactionController, child: content);
-                },
+                    return EditorDraggable(interactionController: interactionController, child: content);
+                  },
+                ),
               ),
             ),
           );

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { fade } from 'svelte/transition';
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import ExternalArchived from '../external/ExternalArchived.svelte';
@@ -28,6 +29,7 @@
   const displayZoom = $derived(isPaginated ? editor.displayZoom : 1);
   const slotWidth = $derived(pageWidth * displayZoom);
   const slotHeight = $derived(pageHeight * displayZoom);
+  const remarkHighlightTarget = $derived(editor.remarkHighlightTarget?.pageIdx === page ? editor.remarkHighlightTarget : null);
 
   // NOTE: iOS에서 캔버스 롱프레스 시 텍스트 인식해서 선택되는 동작을 막음
   const disableCanvasPointer = $derived(editor.readOnly); // TODO: 항상 disable 해도 안전한지 확인하기
@@ -226,6 +228,23 @@
           ></div>
         {/each}
       {/each}
+
+      {#if remarkHighlightTarget}
+        <div
+          style:left={`${remarkHighlightTarget.bounds.x - 4}px`}
+          style:top={`${remarkHighlightTarget.bounds.y - 4}px`}
+          style:width={`${remarkHighlightTarget.bounds.width + 8}px`}
+          style:height={`${remarkHighlightTarget.bounds.height + 8}px`}
+          class={css({
+            position: 'absolute',
+            pointerEvents: 'none',
+            borderRadius: '4px',
+            backgroundColor: 'accent.brand.subtle',
+            mixBlendMode: { base: 'multiply', _dark: 'screen' },
+          })}
+          transition:fade={{ duration: 150 }}
+        ></div>
+      {/if}
 
       {#if isPaginated && !editor.isReadOnly()}
         <svg

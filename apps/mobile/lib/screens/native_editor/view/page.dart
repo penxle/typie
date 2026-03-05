@@ -493,17 +493,14 @@ class _RemarkHighlightOverlay extends StatefulWidget {
 
 class _RemarkHighlightOverlayState extends State<_RemarkHighlightOverlay> with SingleTickerProviderStateMixin {
   late final AnimationController _animation;
+  late final Animation<double> _opacity;
   RemarkOverlayInfo? _target;
 
   @override
   void initState() {
     super.initState();
-    _animation = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
-      ..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          setState(() => _target = null);
-        }
-      });
+    _animation = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+    _opacity = CurvedAnimation(parent: _animation, curve: Curves.easeOut);
     widget.controller.remarkHighlightTarget.addListener(_onHighlight);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -522,10 +519,14 @@ class _RemarkHighlightOverlayState extends State<_RemarkHighlightOverlay> with S
 
   void _onHighlight() {
     final target = widget.controller.remarkHighlightTarget.value;
-    if (target != null && target.pageIdx == widget.pageIndex) {
-      setState(() => _target = target);
-      unawaited(_animation.forward(from: 0));
+    if (target == null || target.pageIdx != widget.pageIndex) {
+      if (_target != null) {
+        setState(() => _target = null);
+      }
+      return;
     }
+    setState(() => _target = target);
+    unawaited(_animation.forward(from: 0));
   }
 
   @override
@@ -537,19 +538,8 @@ class _RemarkHighlightOverlayState extends State<_RemarkHighlightOverlay> with S
 
     return IgnorePointer(
       child: AnimatedBuilder(
-        animation: _animation,
+        animation: _opacity,
         builder: (context, _) {
-          final t = _animation.value;
-          // fast fade-in (0~0.15), hold (0.15~0.4), fade-out (0.4~1.0)
-          final double opacity;
-          if (t < 0.15) {
-            opacity = t / 0.15;
-          } else if (t < 0.4) {
-            opacity = 1.0;
-          } else {
-            opacity = 1.0 - (t - 0.4) / 0.6;
-          }
-
           return Stack(
             children: [
               Positioned(
@@ -559,7 +549,7 @@ class _RemarkHighlightOverlayState extends State<_RemarkHighlightOverlay> with S
                 height: target.boundsHeight + 8,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: context.colors.accentBrand.withValues(alpha: 0.12 * opacity),
+                    color: context.colors.accentBrand.withValues(alpha: 0.12 * _opacity.value),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),

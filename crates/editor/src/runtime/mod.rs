@@ -1580,6 +1580,21 @@ impl Runtime {
         let mut overlays = Vec::new();
         for (node_id, remark) in self.doc().all_remarks() {
             if let Some(nb) = find_node_bounds(self.doc(), self.pages(), node_id) {
+                let (node_type, is_textblock, node_text) = self
+                    .doc()
+                    .node(node_id)
+                    .and_then(|node| {
+                        let spec = node.spec()?;
+                        let is_textblock = spec.is_textblock(self.doc().schema());
+                        let node_text = if is_textblock {
+                            self.doc().get_block_text(node_id)
+                        } else {
+                            String::new()
+                        };
+                        Some((spec.name.to_string(), is_textblock, node_text))
+                    })
+                    .unwrap_or_else(|| ("unknown".to_string(), false, String::new()));
+
                 overlays.push(cmd::RemarkOverlay {
                     page_idx: nb.page_idx,
                     node_id,
@@ -1593,6 +1608,9 @@ impl Runtime {
                         width: nb.width,
                         height: nb.height,
                     },
+                    node_type,
+                    is_textblock,
+                    node_text,
                 });
             }
         }

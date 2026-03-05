@@ -64,4 +64,7 @@ pub struct RemarkOverlay {
     pub text: String,
     pub created_at: i64,
     pub bounds: Rect,
+    pub node_type: String,
+    pub is_textblock: bool,
+    pub node_text: String,
 }

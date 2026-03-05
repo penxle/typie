@@ -225,6 +225,7 @@ class _Content extends HookWidget {
                                   intercept: true,
                                   overlayOpacity: 0.05,
                                   dismissKeyboardOnTap: false,
+                                  heightNotifier: controller.sheetBottomInset,
                                   child: FindReplaceSheet(controller: controller),
                                 );
                               },
@@ -233,12 +234,22 @@ class _Content extends HookWidget {
                                 if (controller == null) {
                                   return;
                                 }
-                                await context.showBottomSheet(
-                                  intercept: true,
-                                  overlayOpacity: 0.05,
-                                  resizeToAvoidBottomInset: true,
-                                  child: RemarkBottomSheet(controller: controller, client: client, userId: data.me!.id),
-                                );
+                                try {
+                                  await context.showBottomSheet(
+                                    intercept: true,
+                                    overlayOpacity: 0.05,
+                                    heightNotifier: controller.sheetBottomInset,
+                                    child: RemarkBottomSheet(
+                                      controller: controller,
+                                      client: client,
+                                      userId: data.me!.id,
+                                    ),
+                                  );
+                                } finally {
+                                  if (!controller.isDisposed) {
+                                    controller.remarkHighlightTarget.value = null;
+                                  }
+                                }
                               },
                               onOpenSpellcheck: () async {
                                 final controller = editorContext.controller;
@@ -263,6 +274,7 @@ class _Content extends HookWidget {
                                 await context.showBottomSheet(
                                   intercept: true,
                                   overlayOpacity: 0.05,
+                                  heightNotifier: controller.sheetBottomInset,
                                   child: SpellcheckSheet(
                                     controller: controller,
                                     editor: currentEditor,
@@ -296,6 +308,7 @@ class _Content extends HookWidget {
                                 await context.showBottomSheet(
                                   intercept: true,
                                   overlayOpacity: 0.05,
+                                  heightNotifier: controller.sheetBottomInset,
                                   child: AiFeedbackSheet(
                                     controller: controller,
                                     editor: currentEditor,

@@ -11,6 +11,7 @@ pub enum BlockSelectionBoundaryMode {
 
 #[derive(Debug, Clone)]
 pub struct NodeSpec {
+    pub name: &'static str,
     pub content: ContentExpr,
     pub styles: Option<&'static [StyleType]>,
     pub annotations: Option<&'static [AnnotationType]>,
@@ -52,6 +53,7 @@ impl NodeSpec {
 impl Default for NodeSpec {
     fn default() -> Self {
         Self {
+            name: "",
             content: ContentExpr::Empty,
             styles: None,
             annotations: None,

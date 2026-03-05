@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
@@ -19,13 +20,14 @@ extension BottomSheetExtension on BuildContext {
     required Widget child,
     bool intercept = false,
     double overlayOpacity = 0.5,
-    bool resizeToAvoidBottomInset = false,
     bool dismissKeyboardOnTap = true,
     void Function(double)? onHeightCalculated,
+    ValueNotifier<double>? heightNotifier,
   }) {
     unawaited(HapticFeedback.lightImpact());
+    var isClosed = false;
 
-    return router.root.pushWidget(
+    final result = router.root.pushWidget<T>(
       child,
       opaque: false,
       transitionBuilder: (context, animation, secondaryAnimation, child) {
@@ -63,9 +65,7 @@ extension BottomSheetExtension on BuildContext {
               child: AnimatedPadding(
                 duration: const Duration(milliseconds: 100),
                 curve: Curves.easeOut,
-                padding: EdgeInsets.only(
-                  bottom: resizeToAvoidBottomInset ? MediaQuery.viewInsetsOf(context).bottom : 0,
-                ),
+                padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: ResponsiveContainer(
@@ -73,7 +73,15 @@ extension BottomSheetExtension on BuildContext {
                     child: SlideTransition(
                       position: tweenedSlide,
                       child: _BottomSheet(
-                        onHeightCalculated: onHeightCalculated,
+                        onHeightCalculated: (height) {
+                          if (isClosed) {
+                            return;
+                          }
+                          if (heightNotifier != null) {
+                            _setNotifierValueSafely(heightNotifier, height);
+                          }
+                          onHeightCalculated?.call(height);
+                        },
                         dismissKeyboardOnTap: dismissKeyboardOnTap,
                         child: child,
                       ),
@@ -86,7 +94,20 @@ extension BottomSheetExtension on BuildContext {
         );
       },
     );
+
+    return result.whenComplete(() {
+      isClosed = true;
+      if (heightNotifier != null) {
+        _setNotifierValueSafely(heightNotifier, 0);
+      }
+    });
   }
+}
+
+void _setNotifierValueSafely(ValueNotifier<double> notifier, double value) {
+  try {
+    notifier.value = value;
+  } catch (_) {}
 }
 
 class _BottomSheet extends HookWidget {
@@ -100,16 +121,59 @@ class _BottomSheet extends HookWidget {
   Widget build(BuildContext context) {
     final sheetKey = useMemoized(GlobalKey.new);
     final controller = useAnimationController(upperBound: double.infinity, duration: const Duration(milliseconds: 300));
+    final reportedHeight = useRef<double?>(null);
+
+    void reportHeightIfChanged() {
+      if (onHeightCalculated == null) {
+        return;
+      }
+      final height = sheetKey.currentContext?.size?.height;
+      if (height == null) {
+        return;
+      }
+      if (reportedHeight.value != null && (reportedHeight.value! - height).abs() <= 0.5) {
+        return;
+      }
+      reportedHeight.value = height;
+      onHeightCalculated!(height);
+    }
+
+    Widget sheet = Material(
+      color: AppColors.transparent,
+      child: Container(
+        key: sheetKey,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: context.colors.borderStrong),
+            left: BorderSide(color: context.colors.borderStrong),
+            right: BorderSide(color: context.colors.borderStrong),
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          child: child,
+        ),
+      ),
+    );
 
     useEffect(() {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final renderBox = sheetKey.currentContext?.findRenderObject() as RenderBox?;
-        if (renderBox != null && onHeightCalculated != null) {
-          onHeightCalculated!(renderBox.size.height);
-        }
-      });
+      if (onHeightCalculated != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => reportHeightIfChanged());
+      }
       return null;
-    }, []);
+    }, [onHeightCalculated]);
+
+    if (onHeightCalculated != null) {
+      sheet = NotificationListener<SizeChangedLayoutNotification>(
+        onNotification: (_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => reportHeightIfChanged());
+          return false;
+        },
+        child: SizeChangedLayoutNotifier(child: sheet),
+      );
+    }
 
     return GestureDetector(
       onVerticalDragStart: (details) {
@@ -142,28 +206,7 @@ class _BottomSheet extends HookWidget {
         builder: (context, child) {
           return Transform.translate(offset: Offset(0, controller.value), child: child);
         },
-        child: _maybeDismissKeyboard(
-          dismissKeyboardOnTap: dismissKeyboardOnTap,
-          child: Material(
-            color: AppColors.transparent,
-            child: Container(
-              key: sheetKey,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: context.colors.borderStrong),
-                  left: BorderSide(color: context.colors.borderStrong),
-                  right: BorderSide(color: context.colors.borderStrong),
-                ),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: child,
-              ),
-            ),
-          ),
-        ),
+        child: _maybeDismissKeyboard(dismissKeyboardOnTap: dismissKeyboardOnTap, child: sheet),
       ),
     );
   }
@@ -183,14 +226,19 @@ class AppBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final maxHeight = (mediaQuery.size.height - mediaQuery.padding.top) * 0.9;
+    final keyboardInset = mediaQuery.viewInsets.bottom;
+    final availableWithoutKeyboard = mediaQuery.size.height - mediaQuery.padding.top;
+    final maxHeight = math.max<double>(0, availableWithoutKeyboard * 0.9 - keyboardInset);
     final bottomPadding = mediaQuery.padding.bottom;
+    final containerBottomPadding = includeBottomPadding ? (bottomPadding + 12) : 0.0;
+    final content = padding == null ? child : Padding(padding: padding!, child: child);
+    final contentMaxHeight = math.max<double>(0, maxHeight - 8 - containerBottomPadding - 4 - 16);
 
     return Container(
       constraints: BoxConstraints(maxHeight: maxHeight),
       decoration: BoxDecoration(color: context.colors.surfaceSubtle),
       child: Padding(
-        padding: Pad(top: 8, bottom: includeBottomPadding ? (bottomPadding + 12) : 0),
+        padding: Pad(top: 8, bottom: containerBottomPadding),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           spacing: 16,
@@ -205,7 +253,10 @@ class AppBottomSheet extends StatelessWidget {
                 ),
               ),
             ),
-            if (padding == null) child else Padding(padding: padding!, child: child),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: contentMaxHeight),
+              child: SingleChildScrollView(primary: false, child: content),
+            ),
           ],
         ),
       ),

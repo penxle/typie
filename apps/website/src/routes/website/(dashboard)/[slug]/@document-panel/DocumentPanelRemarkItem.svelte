@@ -33,6 +33,7 @@
 <button
   class={css({
     display: 'flex',
+    width: 'full',
     gap: '8px',
     paddingX: '16px',
     paddingY: '10px',
@@ -110,7 +111,6 @@
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
         lineClamp: 2,
-        minHeight: '[2lh]',
       })}
     >
       {remark.text}

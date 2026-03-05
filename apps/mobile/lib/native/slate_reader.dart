@@ -627,6 +627,13 @@ class SlateReader {
       final boundsHeight = _slabF32(pos + 12);
       pos += 16;
 
+      final nodeType = readStr(pos);
+      pos += _strByteLen(pos);
+      final isTextblock = _slabU32(pos) != 0;
+      pos += 4;
+      final nodeText = readStr(pos);
+      pos += _strByteLen(pos);
+
       result.add(
         _RemarkOverlayRaw(
           pageIdx: pageIdx,
@@ -639,6 +646,9 @@ class SlateReader {
           boundsY: boundsY,
           boundsWidth: boundsWidth,
           boundsHeight: boundsHeight,
+          nodeType: nodeType,
+          isTextblock: isTextblock,
+          nodeText: nodeText,
         ),
       );
     }
@@ -954,6 +964,9 @@ class _RemarkOverlayRaw {
     required this.boundsY,
     required this.boundsWidth,
     required this.boundsHeight,
+    required this.nodeType,
+    required this.isTextblock,
+    required this.nodeText,
   });
 
   final int pageIdx;
@@ -966,4 +979,7 @@ class _RemarkOverlayRaw {
   final double boundsY;
   final double boundsWidth;
   final double boundsHeight;
+  final String nodeType;
+  final bool isTextblock;
+  final String nodeText;
 }

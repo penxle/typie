@@ -252,6 +252,25 @@ class CommandHandler {
     final currentBlockNodeId = reader.readCurrentBlockNodeId();
     final isZero = currentBlockNodeId.replaceAll('0', '').isEmpty;
     controller.updateState((state) => state.copyWith(currentBlockNodeId: isZero ? null : currentBlockNodeId));
+    if (isZero) {
+      controller.currentBlockOverlay.value = null;
+    } else {
+      final pageIdx = reader.getI32('current_block_page_idx');
+      if (pageIdx < 0) {
+        controller.currentBlockOverlay.value = null;
+      } else {
+        final width = reader.getF32('current_block_width');
+        final height = reader.getF32('current_block_height');
+        controller.currentBlockOverlay.value = CurrentBlockOverlay(
+          nodeId: currentBlockNodeId,
+          pageIdx: pageIdx,
+          x: reader.getF32('current_block_x'),
+          y: reader.getF32('current_block_y'),
+          width: width <= 0 ? 1 : width,
+          height: height <= 0 ? 1 : height,
+        );
+      }
+    }
 
     controller.onSelectionChanged?.call(anchor, head);
   }
@@ -527,6 +546,16 @@ class CommandHandler {
 
   static void _handleRemarksChanged(EditorController controller, SlateReader reader) {
     final rawRemarks = reader.readRemarks();
+    final nodeContexts = <String, RemarkNodeContext>{};
+    for (final remark in rawRemarks) {
+      nodeContexts[remark.nodeId] = RemarkNodeContext(
+        nodeType: remark.nodeType,
+        isTextblock: remark.isTextblock,
+        nodeText: remark.nodeText,
+      );
+    }
+    controller.remarkNodeContexts.value = nodeContexts;
+
     final remarks = rawRemarks
         .map(
           (r) => RemarkOverlayInfo(
