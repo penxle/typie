@@ -42,8 +42,8 @@
   );
 
   const copyReferralUrl = async () => {
-    const referralUrl = await issueReferralUrl();
-    await navigator.clipboard.writeText(`📝 타이피 가입하고 한달 무료 혜택 받아가세요! ${referralUrl}`);
+    const resp = await issueReferralUrl();
+    await navigator.clipboard.writeText(`📝 타이피 가입하고 한달 무료 혜택 받아가세요! ${resp.issueReferralUrl}`);
 
     Toast.success('초대 링크가 클립보드에 복사되었어요. 친구들에게 공유해보세요!');
 
