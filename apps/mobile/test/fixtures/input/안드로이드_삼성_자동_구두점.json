@@ -1,0 +1,160 @@
+{
+  "name": "안드로이드 삼성 자동 구두점",
+  "timestamp": "2026-03-06T03:46:03.665542Z",
+  "device": {
+    "os": "Android 16",
+    "model": "samsung SM-A356N (samsung)",
+    "keyboard": {
+      "id": "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME",
+      "version": "16.8.2.867538971-release-arm64-v8a"
+    }
+  },
+  "entries": [
+    {
+      "type": "batch",
+      "before": {
+        "text": "안녕",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "안녕 ",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "안녕",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "안녕 ",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "안녕",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "insertion",
+            "textInserted": " ",
+            "insertionOffset": 2
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "input",
+          "text": " "
+        }
+      ]
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "안녕 ",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "안녕. ",
+        "selection": {
+          "baseOffset": 4,
+          "extentOffset": 4
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "안녕 ",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "안녕. ",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "안녕 ",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "replacement",
+            "replacedRange": {
+              "start": 2,
+              "end": 3
+            },
+            "replacementText": ". "
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "replaceBackward",
+          "length": 1,
+          "text": ". "
+        }
+      ]
+    }
+  ]
+}

@@ -18,6 +18,14 @@ TextRange _parseRange(Map<String, dynamic> json) {
   return TextRange(start: json['start'] as int, end: json['end'] as int);
 }
 
+TextEditingValue _parseValue(Map<String, dynamic> json) {
+  return TextEditingValue(
+    text: json['text'] as String,
+    selection: _parseSelection(json['selection'] as Map<String, dynamic>),
+    composing: _parseRange(json['composing'] as Map<String, dynamic>),
+  );
+}
+
 TextEditingDelta _deserializeDelta(Map<String, dynamic> json) {
   final oldText = json['oldText'] as String;
   final selection = _parseSelection(json['selection'] as Map<String, dynamic>);
@@ -91,17 +99,18 @@ List<TextEditingDelta> _synthesizeKeyEventDeltas(Map<String, dynamic> entry) {
   return [TextEditingDeltaNonTextUpdate(oldText: oldText, selection: selection, composing: composing)];
 }
 
-typedef _Entry = ({List<TextEditingDelta> deltas, List<Map<String, dynamic>> dispatches});
+typedef _Entry = ({TextEditingValue before, List<TextEditingDelta> deltas, List<Map<String, dynamic>> dispatches});
 
 List<_Entry> _loadEntries(File file) {
   final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
   final entries = json['entries'] as List<dynamic>;
   return entries.map((e) {
     final entry = e as Map<String, dynamic>;
+    final before = _parseValue(entry['before'] as Map<String, dynamic>);
     final dispatches = (entry['dispatches'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
 
     if (entry['type'] == 'keyEvent') {
-      return (deltas: _synthesizeKeyEventDeltas(entry), dispatches: dispatches);
+      return (before: before, deltas: _synthesizeKeyEventDeltas(entry), dispatches: dispatches);
     }
 
     final deltas = (entry['deltas'] as List<dynamic>).map((d) {
@@ -109,7 +118,7 @@ List<_Entry> _loadEntries(File file) {
       return _deserializeDelta(map['delta'] as Map<String, dynamic>);
     }).toList();
 
-    return (deltas: deltas, dispatches: dispatches);
+    return (before: before, deltas: deltas, dispatches: dispatches);
   }).toList();
 }
 
@@ -148,6 +157,19 @@ void main() {
     testWidgets('fixture: $name', (tester) async {
       final state = await pumpAndActivate(tester);
       final entries = _loadEntries(file);
+
+      if (entries.isNotEmpty) {
+        final firstBefore = entries.first.before;
+        final selection = firstBefore.selection;
+        final text = firstBefore.text;
+        final splitOffsetRaw = selection.isValid && selection.isCollapsed ? selection.baseOffset : text.length;
+        final splitOffset = splitOffsetRaw < 0
+            ? 0
+            : splitOffsetRaw > text.length
+            ? text.length
+            : splitOffsetRaw;
+        state.reconcile('fixture:$name', text.substring(0, splitOffset), text.substring(splitOffset));
+      }
 
       for (var i = 0; i < entries.length; i++) {
         dispatched.clear();
