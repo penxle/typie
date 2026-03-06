@@ -7,14 +7,16 @@
   import { Toast } from '@typie/ui/notification';
   import { nanoid } from 'nanoid';
   import { getContext, untrack } from 'svelte';
+  import DownloadIcon from '~icons/lucide/download';
   import EllipsisIcon from '~icons/lucide/ellipsis';
+  import ExternalLinkIcon from '~icons/lucide/external-link';
   import ImageIcon from '~icons/lucide/image';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { uploadBlobAsImage } from '$lib/utils/blob.svelte';
   import ExternalElementWrapper from './ExternalElementWrapper.svelte';
   import ExternalImageEnlarge from './ExternalImageEnlarge.svelte';
-  import type { ExternalElement, ExternalElementData } from '$lib/editor/types';
+  import type { ContextMenuItem, ExternalElement, ExternalElementData } from '$lib/editor/types';
 
   type ImageData = Extract<ExternalElementData, { type: 'image' }>;
 
@@ -144,6 +146,7 @@
       editor.imageAssets.set(uploadedImage.id, {
         id: uploadedImage.id,
         url: uploadedImage.url,
+        originalUrl: uploadedImage.originalUrl,
         width: uploadedImage.width,
         height: uploadedImage.height,
         placeholder: uploadedImage.placeholder,
@@ -261,6 +264,60 @@
     });
     editor.focus();
   };
+
+  const handleOpenInNewTab = () => {
+    const url = asset?.originalUrl;
+    if (!url) return;
+    window.open(url, '_blank');
+  };
+
+  const handleSaveAs = async () => {
+    const url = asset?.originalUrl;
+    if (!url) return;
+
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const disposition = resp.headers.get('content-disposition');
+      const starMatch = disposition?.match(/filename\*=UTF-8''(.+?)(?:;|$)/);
+      const quotedMatch = disposition?.match(/filename="(.+?)"/);
+      const rawFilename = starMatch?.[1] ?? quotedMatch?.[1];
+      const filename = rawFilename ? decodeURIComponent(rawFilename) : `image.${blob.type.split('/')[1] ?? 'png'}`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      Toast.error('이미지 저장에 실패했습니다.');
+    }
+  };
+
+  $effect(() => {
+    const el = containerEl;
+    if (!el) return;
+
+    const handler = (e: CustomEvent<{ items: ContextMenuItem[] }>) => {
+      if (!asset) return;
+
+      const detail = e.detail;
+      detail.items.push(
+        {
+          label: '이미지 내려받기',
+          icon: DownloadIcon,
+          onclick: () => void handleSaveAs(),
+        },
+        {
+          label: '새 탭에서 이미지 열기',
+          icon: ExternalLinkIcon,
+          onclick: handleOpenInNewTab,
+        },
+      );
+    };
+
+    el.addEventListener('collectcontextmenuitems', handler);
+    return () => el.removeEventListener('collectcontextmenuitems', handler);
+  });
 </script>
 
 <ExternalElementWrapper {el} minHeight={hasImage ? undefined : '48px'}>

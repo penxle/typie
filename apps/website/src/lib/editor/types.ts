@@ -1,4 +1,5 @@
 import type { ExternalElementData, Position, Rect, TextAlign } from '@typie/editor';
+import type { Component } from 'svelte';
 
 export type {
   Affinity,
@@ -29,6 +30,22 @@ export type ExternalElement = {
   data: ExternalElementData;
   isSelected: boolean;
 };
+
+export type ContextMenuItem = {
+  label: string;
+  icon?: Component;
+  onclick: () => void;
+  variant?: 'default' | 'danger';
+};
+
+export type CollectContextMenuItemsEvent = CustomEvent<{ items: ContextMenuItem[] }>;
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+  interface HTMLElementEventMap {
+    collectcontextmenuitems: CollectContextMenuItemsEvent;
+  }
+}
 
 export type LinkAnnotationValue = { href: string; [key: string]: string };
 export type RubyAnnotationValue = { text: string; [key: string]: string };
@@ -82,6 +99,7 @@ export type SpellcheckError = {
 export type ImageAsset = {
   id: string;
   url: string;
+  originalUrl: string;
   width: number;
   height: number;
   placeholder: string;

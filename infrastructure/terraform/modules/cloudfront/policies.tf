@@ -121,6 +121,10 @@ resource "aws_cloudfront_response_headers_policy" "static" {
     access_control_allow_origins {
       items = ["*"]
     }
+
+    access_control_expose_headers {
+      items = ["Content-Disposition"]
+    }
   }
 
   custom_headers_config {

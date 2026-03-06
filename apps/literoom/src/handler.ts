@@ -1,4 +1,4 @@
-import { S3Client, WriteGetObjectResponseCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, S3Client, WriteGetObjectResponseCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
 type Event = {
@@ -18,6 +18,7 @@ sharp.concurrency(4);
 export const handler = async (event: Event) => {
   const url = new URL(event.userRequest.url);
 
+  const raw = url.searchParams.has('raw');
   const size = Number(url.searchParams.get('s')) || null;
   let format = url.searchParams.get('f') || 'auto';
 
@@ -49,9 +50,55 @@ export const handler = async (event: Event) => {
     return new Response(null, { status: 500 });
   }
 
+  if (raw) {
+    const pathSegments = url.pathname.replace(/^\//, '');
+    const originalKey = pathSegments.replace(/^(images|videos)\//, 'original-images/');
+
+    let body: ArrayBuffer;
+    let contentType: string;
+    let contentDisposition: string | undefined;
+
+    try {
+      const original = await S3.send(
+        new GetObjectCommand({
+          Bucket: 'typie-usercontents',
+          Key: originalKey,
+        }),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      body = await original.Body!.transformToByteArray().then((b) => b.buffer as ArrayBuffer);
+      contentType = original.ContentType ?? 'application/octet-stream';
+      contentDisposition = original.ContentDisposition ?? undefined;
+    } catch (err) {
+      console.warn('Failed to fetch original-images, falling back:', originalKey, err);
+      const fallbackResp = await fetch(event.getObjectContext.inputS3Url);
+      body = await fallbackResp.arrayBuffer();
+      contentType = fallbackResp.headers.get('content-type') ?? 'application/octet-stream';
+      contentDisposition = fallbackResp.headers.get('content-disposition') ?? undefined;
+    }
+
+    await S3.send(
+      new WriteGetObjectResponseCommand({
+        RequestRoute: event.getObjectContext.outputRoute,
+        RequestToken: event.getObjectContext.outputToken,
+        Body: Buffer.from(body),
+        ContentType: contentType,
+        ContentDisposition: contentDisposition,
+        CacheControl: 'public, max-age=31536000, immutable',
+        Metadata: {
+          Bypass: 'true',
+        },
+      }),
+    );
+
+    return new Response(null, { status: 200 });
+  }
+
   const started = performance.now();
 
   const input = await resp.arrayBuffer();
+
   let image = sharp(input, { failOn: 'none', animated: true, limitInputPixels: false });
   const metadata = await image.metadata();
 

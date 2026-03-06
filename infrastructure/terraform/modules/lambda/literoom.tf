@@ -112,10 +112,17 @@ resource "aws_iam_role_policy" "literoom_lambda" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = ["s3-object-lambda:WriteGetObjectResponse"]
-      Resource = [aws_s3control_object_lambda_access_point.usercontents_literoom.arn]
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3-object-lambda:WriteGetObjectResponse"]
+        Resource = [aws_s3control_object_lambda_access_point.usercontents_literoom.arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["arn:aws:s3:::typie-usercontents/original-images/*"]
+      }
+    ]
   })
 }

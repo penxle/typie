@@ -29,6 +29,7 @@
       persistBlobAsImage(input: $input) {
         id
         url
+        originalUrl
         size
         width
         height

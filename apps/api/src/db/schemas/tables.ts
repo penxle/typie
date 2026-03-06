@@ -324,6 +324,7 @@ export const Images = pgTable('images', {
   height: integer('height').notNull(),
   placeholder: text('placeholder').notNull(),
   path: text('path').notNull(),
+  originalPath: text('original_path'),
   createdAt: datetime('created_at')
     .notNull()
     .default(sql`now()`),
