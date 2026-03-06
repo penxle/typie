@@ -215,13 +215,9 @@ class ActivityChart extends HookWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Text(
-              '지난 3개월간의 기록',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textSubtle),
-            ),
-          ],
+        Text(
+          '지난 3개월간의 기록',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textSubtle),
         ),
         const SizedBox(height: 8),
         LayoutBuilder(
@@ -350,444 +346,434 @@ class ActivityChart extends HookWidget {
               tooltipScrollDrag.value?.update(horizontalDragUpdateDetails(event));
             }
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: chartHeight + xAxisAreaHeight,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: SingleChildScrollView(
-                          controller: scrollController,
-                          scrollDirection: Axis.horizontal,
-                          physics: isTooltipVisible || isPinching.value ? const NeverScrollableScrollPhysics() : null,
-                          child: SizedBox(
-                            width: totalChartWidth,
-                            child: Transform.translate(
-                              offset: Offset(visualScrollDelta, 0),
-                              child: Column(
-                                children: [
-                                  SizedBox(
-                                    height: chartHeight,
-                                    child: Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: Stack(
-                                            children: [
-                                              for (var i = 1; i <= 5; i++)
-                                                Positioned(
-                                                  left: 0,
-                                                  right: 0,
-                                                  bottom: i * 20.0,
-                                                  child: Container(
-                                                    height: 1,
-                                                    color: context.theme.brightness == Brightness.dark
-                                                        ? AppColors.dark.gray_700.withValues(alpha: 0.5)
-                                                        : AppColors.gray_200.withValues(alpha: 0.5),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                        Row(
-                                          crossAxisAlignment: CrossAxisAlignment.end,
-                                          children: [
-                                            for (var i = 0; i < daysData.length; i++)
-                                              Expanded(
-                                                child: SizedBox(
-                                                  height: chartHeight,
-                                                  child: Stack(
-                                                    alignment: Alignment.bottomCenter,
-                                                    children: [
-                                                      if (daysData[i].deletions > 0 && showDeletions.value)
-                                                        AnimatedPositioned(
-                                                          duration: barAnimationDuration,
-                                                          curve: Curves.easeOutCubic,
-                                                          left: 1,
-                                                          right: 1,
-                                                          bottom: barHeights[i].additionHeight > 0
-                                                              ? barHeights[i].additionHeight + 1
-                                                              : 0,
-                                                          child: AnimatedContainer(
-                                                            duration: barAnimationDuration,
-                                                            curve: Curves.easeOutCubic,
-                                                            height: math.max(barHeights[i].deletionHeight, 1),
-                                                            decoration: BoxDecoration(
-                                                              color: context.theme.brightness == Brightness.dark
-                                                                  ? AppColors.dark.gray_600
-                                                                  : AppColors.gray_400,
-                                                              borderRadius: BorderRadius.circular(1),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      if (daysData[i].additions > 0 && showAdditions.value)
-                                                        AnimatedPositioned(
-                                                          duration: barAnimationDuration,
-                                                          curve: Curves.easeOutCubic,
-                                                          left: 1,
-                                                          right: 1,
-                                                          bottom: 0,
-                                                          child: AnimatedContainer(
-                                                            duration: barAnimationDuration,
-                                                            curve: Curves.easeOutCubic,
-                                                            height: math.max(barHeights[i].additionHeight, 1),
-                                                            decoration: BoxDecoration(
-                                                              color: context.theme.brightness == Brightness.dark
-                                                                  ? AppColors.dark.green_600
-                                                                  : AppColors.green_400,
-                                                              borderRadius: BorderRadius.circular(1),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      if (barHeights[i].effectiveTotal == 0)
-                                                        Positioned(
-                                                          left: 1,
-                                                          right: 1,
-                                                          bottom: 0,
-                                                          child: Container(
-                                                            height: 1,
-                                                            decoration: BoxDecoration(
-                                                              color: context.theme.brightness == Brightness.dark
-                                                                  ? AppColors.dark.gray_700
-                                                                  : AppColors.gray_200,
-                                                              borderRadius: BorderRadius.circular(1),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      if (selectedIndex.value == i)
-                                                        Positioned(
-                                                          left: 0,
-                                                          right: 0,
-                                                          bottom: 0,
-                                                          top: 0,
-                                                          child: DecoratedBox(
-                                                            decoration: BoxDecoration(
-                                                              border: Border.all(color: context.colors.borderStrong),
-                                                              borderRadius: BorderRadius.circular(2),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
+            return SizedBox(
+              height: chartHeight + xAxisAreaHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      scrollDirection: Axis.horizontal,
+                      physics: isTooltipVisible || isPinching.value ? const NeverScrollableScrollPhysics() : null,
+                      child: SizedBox(
+                        width: totalChartWidth,
+                        child: Transform.translate(
+                          offset: Offset(visualScrollDelta, 0),
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                height: chartHeight,
+                                child: Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: Stack(
+                                        children: [
+                                          for (var i = 1; i <= 5; i++)
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              bottom: i * 20.0,
+                                              child: Container(
+                                                height: 1,
+                                                color: context.theme.brightness == Brightness.dark
+                                                    ? AppColors.dark.gray_700.withValues(alpha: 0.5)
+                                                    : AppColors.gray_200.withValues(alpha: 0.5),
                                               ),
-                                          ],
-                                        ),
-                                      ],
+                                            ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  SizedBox(
-                                    height: 20,
-                                    child: Stack(
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
-                                        for (final label in positionedXAxisLabels)
-                                          Positioned(
-                                            left: label.left,
-                                            child: Text(label.data.text, style: axisLabelStyle),
+                                        for (var i = 0; i < daysData.length; i++)
+                                          Expanded(
+                                            child: SizedBox(
+                                              height: chartHeight,
+                                              child: Stack(
+                                                alignment: Alignment.bottomCenter,
+                                                children: [
+                                                  if (daysData[i].deletions > 0 && showDeletions.value)
+                                                    AnimatedPositioned(
+                                                      duration: barAnimationDuration,
+                                                      curve: Curves.easeOutCubic,
+                                                      left: 1,
+                                                      right: 1,
+                                                      bottom: barHeights[i].additionHeight > 0
+                                                          ? barHeights[i].additionHeight + 1
+                                                          : 0,
+                                                      child: AnimatedContainer(
+                                                        duration: barAnimationDuration,
+                                                        curve: Curves.easeOutCubic,
+                                                        height: math.max(barHeights[i].deletionHeight, 1),
+                                                        decoration: BoxDecoration(
+                                                          color: context.theme.brightness == Brightness.dark
+                                                              ? AppColors.dark.gray_600
+                                                              : AppColors.gray_400,
+                                                          borderRadius: BorderRadius.circular(1),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  if (daysData[i].additions > 0 && showAdditions.value)
+                                                    AnimatedPositioned(
+                                                      duration: barAnimationDuration,
+                                                      curve: Curves.easeOutCubic,
+                                                      left: 1,
+                                                      right: 1,
+                                                      bottom: 0,
+                                                      child: AnimatedContainer(
+                                                        duration: barAnimationDuration,
+                                                        curve: Curves.easeOutCubic,
+                                                        height: math.max(barHeights[i].additionHeight, 1),
+                                                        decoration: BoxDecoration(
+                                                          color: context.theme.brightness == Brightness.dark
+                                                              ? AppColors.dark.green_600
+                                                              : AppColors.green_400,
+                                                          borderRadius: BorderRadius.circular(1),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  if (barHeights[i].effectiveTotal == 0)
+                                                    Positioned(
+                                                      left: 1,
+                                                      right: 1,
+                                                      bottom: 0,
+                                                      child: Container(
+                                                        height: 1,
+                                                        decoration: BoxDecoration(
+                                                          color: context.theme.brightness == Brightness.dark
+                                                              ? AppColors.dark.gray_700
+                                                              : AppColors.gray_200,
+                                                          borderRadius: BorderRadius.circular(1),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  if (selectedIndex.value == i)
+                                                    Positioned(
+                                                      left: 0,
+                                                      right: 0,
+                                                      bottom: 0,
+                                                      top: 0,
+                                                      child: DecoratedBox(
+                                                        decoration: BoxDecoration(
+                                                          border: Border.all(color: context.colors.borderStrong),
+                                                          borderRadius: BorderRadius.circular(2),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
                                           ),
                                       ],
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
+                              const SizedBox(height: 4),
+                              SizedBox(
+                                height: 20,
+                                child: Stack(
+                                  children: [
+                                    for (final label in positionedXAxisLabels)
+                                      Positioned(
+                                        left: label.left,
+                                        child: Text(label.data.text, style: axisLabelStyle),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: chartHeight,
-                        child: Listener(
-                          behavior: HitTestBehavior.translucent,
-                          onPointerDown: (event) {
-                            dragPointers.value.add(event.pointer);
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: chartHeight,
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: (event) {
+                        dragPointers.value.add(event.pointer);
 
-                            if (dragPointers.value.length > 1) {
-                              resetTooltipGesture(cancelScrollDrag: true);
-                              return;
-                            }
+                        if (dragPointers.value.length > 1) {
+                          resetTooltipGesture(cancelScrollDrag: true);
+                          return;
+                        }
 
-                            if (!isPinching.value) {
-                              beginTooltipGestureTracking(event);
-                            }
+                        if (!isPinching.value) {
+                          beginTooltipGestureTracking(event);
+                        }
 
-                            if (tooltipData.value != null && !isPinching.value) {
-                              handleInteraction(event.localPosition, withHaptic: false);
-                            }
-                          },
-                          onPointerMove: (event) {
-                            if (!dragPointers.value.contains(event.pointer)) {
-                              return;
-                            }
+                        if (tooltipData.value != null && !isPinching.value) {
+                          handleInteraction(event.localPosition, withHaptic: false);
+                        }
+                      },
+                      onPointerMove: (event) {
+                        if (!dragPointers.value.contains(event.pointer)) {
+                          return;
+                        }
 
-                            if (tooltipGesturePointer.value != event.pointer) {
-                              return;
-                            }
+                        if (tooltipGesturePointer.value != event.pointer) {
+                          return;
+                        }
 
-                            tooltipGestureVelocityTracker.value?.addPosition(event.timeStamp, event.position);
+                        tooltipGestureVelocityTracker.value?.addPosition(event.timeStamp, event.position);
 
-                            if (dragPointers.value.length != 1 || isPinching.value) {
-                              return;
-                            }
+                        if (dragPointers.value.length != 1 || isPinching.value) {
+                          return;
+                        }
 
-                            if (isTooltipScrollGesture.value) {
-                              tooltipScrollDrag.value?.update(horizontalDragUpdateDetails(event));
+                        if (isTooltipScrollGesture.value) {
+                          tooltipScrollDrag.value?.update(horizontalDragUpdateDetails(event));
+                          tooltipGestureLastTimeStamp.value = event.timeStamp;
+                          return;
+                        }
+
+                        if (tooltipData.value == null) {
+                          return;
+                        }
+
+                        final lastTimeStamp = tooltipGestureLastTimeStamp.value;
+                        final startLocalPosition = tooltipGestureStartLocalPosition.value;
+
+                        if (lastTimeStamp != null && startLocalPosition != null) {
+                          final elapsedMicroseconds = (event.timeStamp - lastTimeStamp).inMicroseconds;
+                          if (elapsedMicroseconds > 0) {
+                            final velocity =
+                                event.delta.dx.abs() * Duration.microsecondsPerSecond / elapsedMicroseconds;
+                            final totalDistance = (event.localPosition.dx - startLocalPosition.dx).abs();
+
+                            if (totalDistance >= tooltipScrollActivationDistance &&
+                                velocity >= tooltipScrollVelocityThreshold) {
+                              startTooltipScroll(event);
                               tooltipGestureLastTimeStamp.value = event.timeStamp;
                               return;
                             }
+                          }
+                        }
 
-                            if (tooltipData.value == null) {
-                              return;
-                            }
+                        if (tooltipData.value != null) {
+                          handleInteraction(event.localPosition, withHaptic: true);
+                        }
 
-                            final lastTimeStamp = tooltipGestureLastTimeStamp.value;
-                            final startLocalPosition = tooltipGestureStartLocalPosition.value;
+                        tooltipGestureLastTimeStamp.value = event.timeStamp;
+                      },
+                      onPointerUp: (event) {
+                        dragPointers.value.remove(event.pointer);
 
-                            if (lastTimeStamp != null && startLocalPosition != null) {
-                              final elapsedMicroseconds = (event.timeStamp - lastTimeStamp).inMicroseconds;
-                              if (elapsedMicroseconds > 0) {
-                                final velocity =
-                                    event.delta.dx.abs() * Duration.microsecondsPerSecond / elapsedMicroseconds;
-                                final totalDistance = (event.localPosition.dx - startLocalPosition.dx).abs();
+                        if (tooltipGesturePointer.value != event.pointer) {
+                          return;
+                        }
 
-                                if (totalDistance >= tooltipScrollActivationDistance &&
-                                    velocity >= tooltipScrollVelocityThreshold) {
-                                  startTooltipScroll(event);
-                                  tooltipGestureLastTimeStamp.value = event.timeStamp;
-                                  return;
-                                }
-                              }
-                            }
+                        tooltipGestureVelocityTracker.value?.addPosition(event.timeStamp, event.position);
 
-                            if (tooltipData.value != null) {
-                              handleInteraction(event.localPosition, withHaptic: true);
-                            }
-
-                            tooltipGestureLastTimeStamp.value = event.timeStamp;
-                          },
-                          onPointerUp: (event) {
-                            dragPointers.value.remove(event.pointer);
-
-                            if (tooltipGesturePointer.value != event.pointer) {
-                              return;
-                            }
-
-                            tooltipGestureVelocityTracker.value?.addPosition(event.timeStamp, event.position);
-
-                            if (isTooltipScrollGesture.value) {
-                              final velocity =
-                                  tooltipGestureVelocityTracker.value?.getVelocity().pixelsPerSecond.dx ?? 0.0;
-                              tooltipScrollDrag.value?.end(
-                                DragEndDetails(
-                                  velocity: Velocity(pixelsPerSecond: Offset(velocity, 0)),
-                                  primaryVelocity: velocity,
-                                ),
-                              );
-                              resetTooltipGesture();
-                              return;
-                            }
-
-                            if (tooltipData.value != null && dragPointers.value.isEmpty && !isPinching.value) {
-                              handleInteractionEnd();
-                            }
-
-                            resetTooltipGesture();
-                          },
-                          onPointerCancel: (event) {
-                            dragPointers.value.remove(event.pointer);
-
-                            if (tooltipGesturePointer.value != event.pointer) {
-                              return;
-                            }
-
-                            if (isTooltipScrollGesture.value) {
-                              resetTooltipGesture(cancelScrollDrag: true);
-                              return;
-                            }
-
-                            if (tooltipData.value != null && dragPointers.value.isEmpty && !isPinching.value) {
-                              handleInteractionEnd();
-                            }
-
-                            resetTooltipGesture();
-                          },
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onScaleStart: (_) {},
-                            onScaleUpdate: (details) {
-                              if (details.pointerCount >= 2) {
-                                if (!isPinching.value) {
-                                  beginPinch(details.localFocalPoint.dx);
-                                }
-                                updatePinch(details.scale);
-                              }
-                            },
-                            onScaleEnd: (_) {
-                              isPinching.value = false;
-                              updateScrollState();
-                            },
-                            onLongPressStart: (details) {
-                              if (isPinching.value || dragPointers.value.length != 1) {
-                                return;
-                              }
-
-                              tooltipGestureStartLocalPosition.value = details.localPosition;
-                              tooltipGestureLastTimeStamp.value = null;
-                              handleInteraction(details.localPosition, withHaptic: true);
-                            },
-                            onTapDown: isTooltipVisible
-                                ? (details) => handleInteraction(details.localPosition, withHaptic: false)
-                                : null,
-                            onTapUp: (details) {
-                              handleInteraction(details.localPosition, withHaptic: false);
-                              handleInteractionEnd();
-                            },
-                          ),
-                        ),
-                      ),
-                      IgnorePointer(
-                        child: SizedBox.expand(
-                          child: Fader(
-                            show: isTooltipShown.value,
-                            duration: tooltipFadeDuration,
-                            child: tooltipData.value == null
-                                ? const SizedBox.shrink()
-                                : CustomSingleChildLayout(
-                                    delegate: _ChartTooltipPositionDelegate(
-                                      chartSize: Size(chartWidth, chartHeight + xAxisAreaHeight),
-                                      anchor: Offset(
-                                        tooltipData.value!.index * barWidth + (barWidth / 2) - scrollOffset.value,
-                                        0,
-                                      ),
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: context.colors.surfaceDark,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: IntrinsicWidth(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              tooltipData.value!.dayData.date.format(pattern: 'yyyy년 M월 d일'),
-                                              style: TextStyle(
-                                                color: context.colors.textBright,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                decoration: TextDecoration.none,
-                                              ),
-                                            ),
-                                            if (tooltipData.value!.dayData.additions > 0)
-                                              Text(
-                                                '입력: ${tooltipData.value!.dayData.additions.comma}자',
-                                                style: TextStyle(
-                                                  color: context.colors.textBright,
-                                                  fontSize: 12,
-                                                  decoration: TextDecoration.none,
-                                                ),
-                                              ),
-                                            if (tooltipData.value!.dayData.deletions > 0)
-                                              Text(
-                                                '지움: ${tooltipData.value!.dayData.deletions.comma}자',
-                                                style: TextStyle(
-                                                  color: context.colors.textBright,
-                                                  fontSize: 12,
-                                                  decoration: TextDecoration.none,
-                                                ),
-                                              ),
-                                            if (tooltipData.value!.dayData.total == 0)
-                                              Text(
-                                                '기록이 없어요',
-                                                style: TextStyle(
-                                                  color: context.colors.textBright,
-                                                  fontSize: 12,
-                                                  decoration: TextDecoration.none,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: IgnorePointer(
-                          ignoring: !canScrollLeft.value,
-                          child: Fader(
-                            show: canScrollLeft.value,
-                            duration: const Duration(milliseconds: 100),
-                            child: Tappable(
-                              onTap: () => scrollByViewport(-1),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      context.theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
-                                      context.theme.scaffoldBackgroundColor.withValues(alpha: 0),
-                                    ],
-                                    stops: const [0.3, 1],
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Icon(Icons.chevron_left, size: 20, color: context.colors.textSubtle),
-                                ),
-                              ),
+                        if (isTooltipScrollGesture.value) {
+                          final velocity = tooltipGestureVelocityTracker.value?.getVelocity().pixelsPerSecond.dx ?? 0.0;
+                          tooltipScrollDrag.value?.end(
+                            DragEndDetails(
+                              velocity: Velocity(pixelsPerSecond: Offset(velocity, 0)),
+                              primaryVelocity: velocity,
                             ),
-                          ),
-                        ),
+                          );
+                          resetTooltipGesture();
+                          return;
+                        }
+
+                        if (tooltipData.value != null && dragPointers.value.isEmpty && !isPinching.value) {
+                          handleInteractionEnd();
+                        }
+
+                        resetTooltipGesture();
+                      },
+                      onPointerCancel: (event) {
+                        dragPointers.value.remove(event.pointer);
+
+                        if (tooltipGesturePointer.value != event.pointer) {
+                          return;
+                        }
+
+                        if (isTooltipScrollGesture.value) {
+                          resetTooltipGesture(cancelScrollDrag: true);
+                          return;
+                        }
+
+                        if (tooltipData.value != null && dragPointers.value.isEmpty && !isPinching.value) {
+                          handleInteractionEnd();
+                        }
+
+                        resetTooltipGesture();
+                      },
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onScaleStart: (_) {},
+                        onScaleUpdate: (details) {
+                          if (details.pointerCount >= 2) {
+                            if (!isPinching.value) {
+                              beginPinch(details.localFocalPoint.dx);
+                            }
+                            updatePinch(details.scale);
+                          }
+                        },
+                        onScaleEnd: (_) {
+                          isPinching.value = false;
+                          updateScrollState();
+                        },
+                        onLongPressStart: (details) {
+                          if (isPinching.value || dragPointers.value.length != 1) {
+                            return;
+                          }
+
+                          tooltipGestureStartLocalPosition.value = details.localPosition;
+                          tooltipGestureLastTimeStamp.value = null;
+                          handleInteraction(details.localPosition, withHaptic: true);
+                        },
+                        onTapDown: isTooltipVisible
+                            ? (details) => handleInteraction(details.localPosition, withHaptic: false)
+                            : null,
+                        onTapUp: (details) {
+                          handleInteraction(details.localPosition, withHaptic: false);
+                          handleInteractionEnd();
+                        },
                       ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        child: IgnorePointer(
-                          ignoring: !canScrollRight.value,
-                          child: Fader(
-                            show: canScrollRight.value,
-                            duration: const Duration(milliseconds: 100),
-                            child: Tappable(
-                              onTap: () => scrollByViewport(1),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      context.theme.scaffoldBackgroundColor.withValues(alpha: 0),
-                                      context.theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
-                                    ],
-                                    stops: const [0, 0.7],
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Icon(Icons.chevron_right, size: 20, color: context.colors.textSubtle),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                  IgnorePointer(
+                    child: SizedBox.expand(
+                      child: Fader(
+                        show: isTooltipShown.value,
+                        duration: tooltipFadeDuration,
+                        child: tooltipData.value == null
+                            ? const SizedBox.shrink()
+                            : CustomSingleChildLayout(
+                                delegate: _ChartTooltipPositionDelegate(
+                                  chartSize: Size(chartWidth, chartHeight + xAxisAreaHeight),
+                                  anchor: Offset(
+                                    tooltipData.value!.index * barWidth + (barWidth / 2) - scrollOffset.value,
+                                    0,
+                                  ),
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: context.colors.surfaceDark,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: IntrinsicWidth(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          tooltipData.value!.dayData.date.format(pattern: 'yyyy년 M월 d일'),
+                                          style: TextStyle(
+                                            color: context.colors.textBright,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            decoration: TextDecoration.none,
+                                          ),
+                                        ),
+                                        if (tooltipData.value!.dayData.additions > 0)
+                                          Text(
+                                            '입력: ${tooltipData.value!.dayData.additions.comma}자',
+                                            style: TextStyle(
+                                              color: context.colors.textBright,
+                                              fontSize: 12,
+                                              decoration: TextDecoration.none,
+                                            ),
+                                          ),
+                                        if (tooltipData.value!.dayData.deletions > 0)
+                                          Text(
+                                            '지움: ${tooltipData.value!.dayData.deletions.comma}자',
+                                            style: TextStyle(
+                                              color: context.colors.textBright,
+                                              fontSize: 12,
+                                              decoration: TextDecoration.none,
+                                            ),
+                                          ),
+                                        if (tooltipData.value!.dayData.total == 0)
+                                          Text(
+                                            '기록이 없어요',
+                                            style: TextStyle(
+                                              color: context.colors.textBright,
+                                              fontSize: 12,
+                                              decoration: TextDecoration.none,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      ignoring: !canScrollLeft.value,
+                      child: Fader(
+                        show: canScrollLeft.value,
+                        duration: const Duration(milliseconds: 100),
+                        child: Tappable(
+                          onTap: () => scrollByViewport(-1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  context.theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
+                                  context.theme.scaffoldBackgroundColor.withValues(alpha: 0),
+                                ],
+                                stops: const [0.3, 1],
+                              ),
+                            ),
+                            child: Center(child: Icon(Icons.chevron_left, size: 20, color: context.colors.textSubtle)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      ignoring: !canScrollRight.value,
+                      child: Fader(
+                        show: canScrollRight.value,
+                        duration: const Duration(milliseconds: 100),
+                        child: Tappable(
+                          onTap: () => scrollByViewport(1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  context.theme.scaffoldBackgroundColor.withValues(alpha: 0),
+                                  context.theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
+                                ],
+                                stops: const [0, 0.7],
+                              ),
+                            ),
+                            child: Center(child: Icon(Icons.chevron_right, size: 20, color: context.colors.textSubtle)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         ),
