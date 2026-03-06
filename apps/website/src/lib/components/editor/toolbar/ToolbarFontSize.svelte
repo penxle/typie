@@ -147,7 +147,6 @@
       display: 'flex',
       alignItems: 'center',
       borderRadius: '4px',
-      paddingX: '4px',
       height: '24px',
       _hover: {
         backgroundColor: 'surface.muted',
@@ -163,8 +162,9 @@
       bind:this={inputElement}
       class={css({
         flexGrow: '1',
-        width: 'full',
-        paddingRight: '16px',
+        size: 'full',
+        paddingLeft: '4px',
+        paddingRight: '20px',
         fontSize: '14px',
         color: 'text.subtle',
         textAlign: 'left',

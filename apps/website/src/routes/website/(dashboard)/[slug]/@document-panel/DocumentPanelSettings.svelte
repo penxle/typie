@@ -440,7 +440,6 @@
             display: 'flex',
             alignItems: 'center',
             borderRadius: '4px',
-            paddingX: '8px',
             width: '140px',
             height: '28px',
             _hover: { backgroundColor: 'surface.muted' },
@@ -451,8 +450,9 @@
             bind:this={fontSizeInputElement}
             class={css({
               flexGrow: '1',
-              width: 'full',
-              paddingRight: '16px',
+              size: 'full',
+              paddingLeft: '8px',
+              paddingRight: '24px',
               fontSize: '12px',
               fontWeight: 'medium',
               color: 'text.subtle',
