@@ -55,6 +55,11 @@
 
           children {
             id
+
+            node {
+              __typename
+            }
+
             ...DashboardLayout_EntityTree_Entity_entity
           }
         }
@@ -91,6 +96,25 @@
       setTimeout(() => {
         inputEl?.select();
       });
+    }
+  });
+
+  $effect(() => {
+    if (!children.data?.entity?.children) return;
+
+    const childEntities = children.data.entity.children.map((child) => ({
+      id: child.id,
+      type: child.node.__typename as 'Document' | 'Folder',
+      parentId: folder.data.entity.id,
+    }));
+
+    const parentEntity = treeState.entityMap.get(folder.data.entity.id);
+    if (parentEntity) {
+      parentEntity.children = childEntities;
+    }
+
+    for (const child of childEntities) {
+      treeState.entityMap.set(child.id, child);
     }
   });
 

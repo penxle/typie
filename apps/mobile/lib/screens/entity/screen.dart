@@ -57,7 +57,7 @@ import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/vertical_divider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const maxDepth = 3;
+const maxDepth = 100;
 
 @RoutePage()
 class EntityRouter extends AutoRouter {

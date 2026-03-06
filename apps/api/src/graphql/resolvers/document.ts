@@ -825,7 +825,12 @@ builder.mutationFields((t) => ({
         return document;
       });
 
-      pubsub.publish('site:update', input.siteId, { scope: 'site' });
+      if (input.parentEntityId) {
+        pubsub.publish('site:update', input.siteId, { scope: 'entity', entityId: input.parentEntityId });
+      } else {
+        pubsub.publish('site:update', input.siteId, { scope: 'site' });
+      }
+
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('document:index', document.id);
@@ -839,7 +844,7 @@ builder.mutationFields((t) => ({
     input: { documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }) },
     resolve: async (_, { input }, ctx) => {
       const entity = await db
-        .select({ id: Entities.id, siteId: Entities.siteId })
+        .select({ id: Entities.id, siteId: Entities.siteId, parentId: Entities.parentId })
         .from(Entities)
         .innerJoin(Documents, eq(Entities.id, Documents.entityId))
         .where(eq(Documents.id, input.documentId))
@@ -865,7 +870,11 @@ builder.mutationFields((t) => ({
           .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)));
       });
 
-      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      if (entity.parentId) {
+        pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentId });
+      } else {
+        pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      }
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
@@ -1044,7 +1053,11 @@ builder.mutationFields((t) => ({
         return newDocument;
       });
 
-      pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      if (entity.parentEntityId) {
+        pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntityId });
+      } else {
+        pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      }
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
       await enqueueJob('document:index', newDocument.id);
@@ -1104,7 +1117,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const document = await db
-        .select({ siteId: Entities.siteId, entityId: Entities.id })
+        .select({ siteId: Entities.siteId, entityId: Entities.id, parentId: Entities.parentId })
         .from(Documents)
         .innerJoin(Entities, eq(Documents.entityId, Entities.id))
         .where(eq(Documents.id, input.documentId))
@@ -1122,7 +1135,6 @@ builder.mutationFields((t) => ({
         .returning()
         .then(firstOrThrow);
 
-      pubsub.publish('site:update', document.siteId, { scope: 'site' });
       pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
 
       return updatedDocument;
@@ -1147,6 +1159,7 @@ builder.mutationFields((t) => ({
           id: Documents.id,
           siteId: Entities.siteId,
           entityId: Entities.id,
+          parentId: Entities.parentId,
         })
         .from(Documents)
         .innerJoin(Entities, eq(Documents.entityId, Entities.id))
@@ -1208,7 +1221,6 @@ builder.mutationFields((t) => ({
         }
       });
 
-      pubsub.publish('site:update', siteId, { scope: 'site' });
       for (const doc of documents) {
         pubsub.publish('site:update', siteId, { scope: 'entity', entityId: doc.entityId });
       }

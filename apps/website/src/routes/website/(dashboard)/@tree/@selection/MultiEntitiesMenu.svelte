@@ -24,10 +24,41 @@
       mutation DashboardLayout_EntityTree_MultiEntitiesMenu_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
         deleteEntities(input: $input) {
           id
+
           site {
             id
             ...DashboardLayout_EntityTree_site
             ...DashboardLayout_TrashModal_site
+          }
+
+          container {
+            ... on Site {
+              id
+
+              entities {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+
+            ... on Entity {
+              id
+
+              children {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
           }
         }
       }

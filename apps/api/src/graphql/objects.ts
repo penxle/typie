@@ -41,7 +41,8 @@ const createInterfaceRef = <T extends TableConfig>(name: string, table: TableWit
 };
 
 export const isTypeOf = (tableCode: string) => (self: unknown) => {
-  return decodeDbId((self as { id: string }).id) === tableCode;
+  const id = typeof self === 'string' ? self : (self as { id: string }).id;
+  return decodeDbId(id) === tableCode;
 };
 
 export const IEntity = createInterfaceRef('IEntity', T.Entities);
@@ -92,6 +93,10 @@ export const UserView = createObjectRef('UserView', T.Users);
 
 type BlobShape = { id: string; size: number; path: string };
 export const Blob = builder.interfaceRef<BlobShape>('Blob');
+
+export const EntityContainer = builder.unionType('EntityContainer', {
+  types: [Site, Entity],
+});
 
 export const EntityNode = builder.unionType('EntityNode', {
   types: [Document, Folder, Post],

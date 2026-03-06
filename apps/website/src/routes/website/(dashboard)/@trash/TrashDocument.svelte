@@ -66,6 +66,36 @@
             id
             ...DashboardLayout_TrashModal_site
           }
+
+          container {
+            ... on Site {
+              id
+
+              entities {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+
+            ... on Entity {
+              id
+
+              children {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+          }
         }
       }
     `),

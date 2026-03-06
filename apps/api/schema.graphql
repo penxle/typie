@@ -338,6 +338,7 @@ type Entity implements IEntity {
   ancestors: [Entity!]!
   availability: EntityAvailability!
   children: [Entity!]!
+  container: EntityContainer!
   deletedChildren: [Entity!]!
   depth: Int!
   descendants: [Entity!]!
@@ -361,6 +362,8 @@ enum EntityAvailability {
   PRIVATE
   UNLISTED
 }
+
+union EntityContainer = Entity | Site
 
 union EntityNode = Document | Folder | Post
 
