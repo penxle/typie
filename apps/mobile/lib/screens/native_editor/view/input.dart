@@ -250,7 +250,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           final committedText = hasNewline ? committed.replaceAll('\n', '') : committed;
 
           if (committedText.isEmpty) {
-            _controller.dispatch({'type': 'compositionEnd'});
+            _controller.compositionEnd();
           } else {
             _controlled = false;
             _controller
@@ -260,7 +260,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
 
           if (hasNewline) {
             _controlled = false;
-            _controller.dispatch({'type': 'insertNewline'});
+            _controller.insertNewline();
             final dispatches = _stopCollectingDispatches();
 
             final revertText = prefix + committedText + suffix;
@@ -315,7 +315,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
 
         if (insertedText.contains('\n')) {
           _controlled = false;
-          _controller.dispatch({'type': 'insertNewline'});
+          _controller.insertNewline();
           final dispatches = _stopCollectingDispatches();
           _setCurrentValue(oldValue);
 
@@ -351,7 +351,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
       if (delta != 0) {
         for (var i = 0; i < delta.abs(); i++) {
           _controlled = false;
-          _controller.dispatch({'type': 'navigate', 'direction': delta > 0 ? 'right' : 'left', 'extend': false});
+          _controller.navigate(delta > 0 ? 'right' : 'left');
         }
 
         if (newValue.selection.baseOffset == 0) {

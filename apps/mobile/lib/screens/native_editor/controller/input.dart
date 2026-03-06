@@ -169,6 +169,7 @@ class InputController {
 
   void commitPreedit() {
     dispatch({'type': 'commitPreedit'});
+    scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void compositionEnd() {
@@ -176,12 +177,15 @@ class InputController {
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
-  void onPerformAction(String action) {
+  void insertNewline() {
     onInputAttempt?.call();
-    if (action == 'newline') {
-      dispatch({'type': 'insertNewline'});
-      scrollIntoView(mode: ScrollMode.typewriter);
-    }
+    dispatch({'type': 'insertNewline'});
+    scrollIntoView(mode: ScrollMode.typewriter);
+  }
+
+  void navigate(String direction) {
+    dispatch({'type': 'navigate', 'direction': direction, 'extend': false});
+    scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onShortcut(String action) {
