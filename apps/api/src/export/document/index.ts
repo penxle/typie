@@ -61,6 +61,9 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
       editor.dispatch({
         type: 'initialize',
         theme: DEFAULT_THEME,
+        viewportWidth: layout.pageWidth,
+        viewportHeight: layout.pageHeight,
+        scaleFactor: SCALE_FACTOR,
       });
 
       editor.dispatch({
