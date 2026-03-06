@@ -110,6 +110,36 @@
           entity {
             id
             slug
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
           }
         }
       }
@@ -121,6 +151,40 @@
       mutation DashboardLayout_Sidebar_CreateFolder_Mutation($input: CreateFolderInput!) {
         createFolder(input: $input) {
           id
+
+          entity {
+            id
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
+          }
         }
       }
     `),

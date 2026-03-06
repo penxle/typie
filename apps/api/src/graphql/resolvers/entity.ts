@@ -25,7 +25,7 @@ import { pubsub } from '@/pubsub';
 import { generateFractionalOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Note, Site, SiteView, User } from '../objects';
+import { Entity, EntityContainer, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Note, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -55,6 +55,10 @@ Entity.implement({
 
     site: t.expose('siteId', { type: Site }),
     parent: t.expose('parentId', { type: Entity, nullable: true }),
+    container: t.field({
+      type: EntityContainer,
+      resolve: (self) => ({ id: self.parentId ?? self.siteId }) as never,
+    }),
     user: t.expose('userId', { type: User }),
 
     node: t.field({
@@ -669,7 +673,7 @@ builder.mutationFields((t) => ({
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      const entities = await db.execute<{ id: string; site_id: string; depth: number }>(sql`
+      const entities = await db.execute<{ id: string; site_id: string; depth: number; parent_id: string | null }>(sql`
         WITH RECURSIVE descendants AS (
           SELECT ${Entities.id}
           FROM ${Entities}
@@ -679,7 +683,7 @@ builder.mutationFields((t) => ({
           FROM ${Entities}
           JOIN descendants ON ${Entities.parentId} = descendants.id
         )
-        SELECT ${Entities.id}, ${Entities.siteId}, ${Entities.depth}
+        SELECT ${Entities.id}, ${Entities.siteId}, ${Entities.depth}, ${Entities.parentId}
         FROM ${Entities}
         WHERE ${inArray(Entities.id, input.entityIds)}
         AND ${eq(Entities.state, EntityState.ACTIVE)}
@@ -796,10 +800,24 @@ builder.mutationFields((t) => ({
           }
         }
 
-        pubsub.publish('site:update', siteId, { scope: 'site' });
-
         if (targetParentId) {
           pubsub.publish('site:update', siteId, { scope: 'entity', entityId: targetParentId });
+        } else {
+          pubsub.publish('site:update', siteId, { scope: 'site' });
+        }
+
+        const hasRootSourceEntity = entities.some((entity) => entity.parent_id === null);
+        if (hasRootSourceEntity && targetParentId) {
+          pubsub.publish('site:update', siteId, { scope: 'site' });
+        }
+
+        const sourceParentIds = new Set(
+          entities.map((entity) => entity.parent_id).filter((id): id is string => id !== null && id !== targetParentId),
+        );
+
+        for (const parentId of sourceParentIds) {
+          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
+          movedEntities.push(parentId);
         }
 
         for (const entity of entities) {
@@ -815,7 +833,7 @@ builder.mutationFields((t) => ({
     type: [Entity],
     input: { entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }) },
     resolve: async (_, { input }, ctx) => {
-      const entities = await db.execute<{ id: string; site_id: string }>(sql`
+      const entities = await db.execute<{ id: string; site_id: string; parent_id: string | null }>(sql`
         WITH RECURSIVE sq AS (
           SELECT ${Entities.id}, ${Entities.parentId}, ${Entities.siteId}
           FROM ${Entities}
@@ -825,7 +843,7 @@ builder.mutationFields((t) => ({
           FROM ${Entities}
           JOIN sq ON ${Entities.parentId} = sq.id
         )
-        SELECT id, site_id
+        SELECT id, site_id, parent_id
         FROM sq
       `);
 
@@ -872,7 +890,15 @@ builder.mutationFields((t) => ({
             ),
           );
 
-        pubsub.publish('site:update', siteId, { scope: 'site' });
+        const inputEntityIdSet = new Set(input.entityIds);
+        const directEntities = entities.filter((e) => inputEntityIdSet.has(e.id));
+        const parentIds = new Set(directEntities.map((e) => e.parent_id).filter((id): id is string => id !== null));
+        for (const parentId of parentIds) {
+          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
+        }
+        if (directEntities.some((e) => e.parent_id === null)) {
+          pubsub.publish('site:update', siteId, { scope: 'site' });
+        }
         pubsub.publish('user:usage:update', ctx.session.userId, null);
 
         for (const entity of deletedEntities) {
@@ -980,7 +1006,11 @@ builder.mutationFields((t) => ({
 
         const recoveredEntity = await tx.select().from(Entities).where(eq(Entities.id, entity.id)).then(firstOrThrow);
 
-        pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+        if (isParentActive && entity.parentEntity?.id) {
+          pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentEntity.id });
+        } else {
+          pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+        }
         pubsub.publish('user:usage:update', ctx.session.userId, null);
 
         return recoveredEntity;

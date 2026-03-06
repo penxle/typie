@@ -304,7 +304,11 @@ builder.mutationFields((t) => ({
         return folder;
       });
 
-      pubsub.publish('site:update', input.siteId, { scope: 'site' });
+      if (input.parentEntityId) {
+        pubsub.publish('site:update', input.siteId, { scope: 'entity', entityId: input.parentEntityId });
+      } else {
+        pubsub.publish('site:update', input.siteId, { scope: 'site' });
+      }
 
       return folder;
     },
@@ -318,7 +322,7 @@ builder.mutationFields((t) => ({
     },
     resolve: async (_, { input }, ctx) => {
       const folder = await db
-        .select({ siteId: Entities.siteId })
+        .select({ siteId: Entities.siteId, parentId: Entities.parentId })
         .from(Folders)
         .innerJoin(Entities, eq(Folders.entityId, Entities.id))
         .where(eq(Folders.id, input.folderId))
@@ -336,7 +340,11 @@ builder.mutationFields((t) => ({
         .returning()
         .then(firstOrThrow);
 
-      pubsub.publish('site:update', folder.siteId, { scope: 'site' });
+      if (folder.parentId) {
+        pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId: folder.parentId });
+      } else {
+        pubsub.publish('site:update', folder.siteId, { scope: 'site' });
+      }
 
       return renamedFolder;
     },
@@ -351,6 +359,7 @@ builder.mutationFields((t) => ({
           id: Folders.id,
           entityId: Entities.id,
           siteId: Entities.siteId,
+          parentId: Entities.parentId,
         })
         .from(Folders)
         .innerJoin(Entities, eq(Folders.entityId, Entities.id))
@@ -385,7 +394,11 @@ builder.mutationFields((t) => ({
           .where(and(inArray(Notes.entityId, entityIds), eq(Notes.state, NoteState.ACTIVE)));
       });
 
-      pubsub.publish('site:update', folder.siteId, { scope: 'site' });
+      if (folder.parentId) {
+        pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId: folder.parentId });
+      } else {
+        pubsub.publish('site:update', folder.siteId, { scope: 'site' });
+      }
       for (const entityId of entityIds) {
         pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId });
       }
@@ -475,6 +488,7 @@ builder.mutationFields((t) => ({
         .select({
           ...getTableColumns(Folders),
           siteId: Entities.siteId,
+          parentId: Entities.parentId,
         })
         .from(Folders)
         .innerJoin(Entities, eq(Folders.entityId, Entities.id))
@@ -547,7 +561,6 @@ builder.mutationFields((t) => ({
         return updatedEntities;
       });
 
-      pubsub.publish('site:update', siteId, { scope: 'site' });
       for (const entity of updatedEntities) {
         pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
       }

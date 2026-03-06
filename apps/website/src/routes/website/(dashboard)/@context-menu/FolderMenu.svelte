@@ -88,6 +88,36 @@
           entity {
             id
             slug
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
           }
         }
       }
@@ -99,6 +129,40 @@
       mutation FolderMenu_CreateFolder_Mutation($input: CreateFolderInput!) {
         createFolder(input: $input) {
           id
+
+          entity {
+            id
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+            }
+          }
         }
       }
     `),
@@ -117,6 +181,36 @@
               id
               ...DashboardLayout_EntityTree_site
               ...DashboardLayout_TrashModal_site
+            }
+
+            container {
+              ... on Site {
+                id
+
+                entities {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
+
+              ... on Entity {
+                id
+
+                children {
+                  id
+
+                  node {
+                    __typename
+                  }
+
+                  ...DashboardLayout_EntityTree_Entity_entity
+                }
+              }
             }
           }
         }

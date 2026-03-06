@@ -22,7 +22,7 @@ import 'package:typie/screens/entity/__generated__/screen_with_site_id_query.req
 import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/tappable.dart';
 
-const maxDepth = 3;
+const maxDepth = 100;
 
 class MoveEntityModal extends HookWidget {
   const MoveEntityModal.single({
