@@ -68,8 +68,8 @@ dependencies:
   sentry: ^9.0.0
   sentry_flutter: ^9.0.0
   share_plus: ^12.0.0
-  super_clipboard: ^0.9.1
   sign_in_with_apple: ^7.0.1
+  super_clipboard: ^0.9.1
   super_drag_and_drop: ^0.9.1
   transparent_image: ^2.0.1
   url_launcher: ^6.3.1
