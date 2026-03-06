@@ -114,6 +114,7 @@
               ... on Image {
                 id
                 url
+                originalUrl
                 width
                 height
                 placeholder
@@ -302,6 +303,7 @@
           editor.imageAssets.set(asset.id, {
             id: asset.id,
             url: asset.url,
+            originalUrl: asset.originalUrl,
             width: asset.width,
             height: asset.height,
             placeholder: asset.placeholder,

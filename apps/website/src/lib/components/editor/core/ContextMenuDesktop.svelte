@@ -36,6 +36,8 @@
   const shortcutStyle = flex.raw({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '12px' });
 
   const shiftKey = IS_MAC ? '⇧' : 'Shift+';
+
+  const extraItems = $derived(editor.contextMenu.extraItems);
 </script>
 
 <Menu {contextMenuPosition} offset={contextMenuOffset} placement={contextMenuPlacement} bind:open>
@@ -115,5 +117,21 @@
       {/snippet}
       전체 선택
     </MenuItem>
+
+    {#if extraItems.length > 0}
+      <HorizontalDivider color="secondary" />
+      {#each extraItems as item, i (i)}
+        <MenuItem
+          icon={item.icon}
+          onclick={() => {
+            item.onclick();
+            close();
+          }}
+          variant={item.variant}
+        >
+          {item.label}
+        </MenuItem>
+      {/each}
+    {/if}
   {/snippet}
 </Menu>

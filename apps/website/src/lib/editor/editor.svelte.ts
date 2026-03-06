@@ -43,6 +43,7 @@ import type {
   AiFeedback,
   ArchivedAsset,
   Attribute,
+  ContextMenuItem,
   EmbedAsset,
   ExternalElement,
   FileAsset,
@@ -258,6 +259,7 @@ export class Editor {
     isOpen: false,
     source: 'mouse' as 'mouse' | 'touch',
     placement: 'bottom-start' as Placement,
+    extraItems: [] as ContextMenuItem[],
   });
 
   isFocused = $state(false);
@@ -973,11 +975,18 @@ export class Editor {
     };
   }
 
-  openContextMenu(options: { x: number; y: number; source: 'mouse' | 'touch'; placement: Placement }): void {
+  openContextMenu(options: {
+    x: number;
+    y: number;
+    source: 'mouse' | 'touch';
+    placement: Placement;
+    extraItems?: ContextMenuItem[];
+  }): void {
     this.contextMenu.x = options.x;
     this.contextMenu.y = options.y;
     this.contextMenu.source = options.source;
     this.contextMenu.placement = options.placement;
+    this.contextMenu.extraItems = options.extraItems ?? [];
     this.contextMenu.isOpen = true;
   }
 
@@ -1205,7 +1214,15 @@ export class Editor {
       this.dispatch({ type: 'selectWord' });
     }
 
-    this.openContextMenu({ x: e.clientX, y: e.clientY, source: 'mouse', placement: 'bottom-start' });
+    const extraItems: ContextMenuItem[] = [];
+    (e.target as HTMLElement).dispatchEvent(
+      new CustomEvent('collectcontextmenuitems', {
+        bubbles: true,
+        detail: { items: extraItems },
+      }),
+    );
+
+    this.openContextMenu({ x: e.clientX, y: e.clientY, source: 'mouse', placement: 'bottom-start', extraItems });
   }
 
   closeContextMenu(): void {

@@ -561,6 +561,7 @@ interface IUser {
 type Image implements Blob {
   height: Int!
   id: ID!
+  originalUrl: String!
   placeholder: String!
   ratio: Float!
   size: BigInt!

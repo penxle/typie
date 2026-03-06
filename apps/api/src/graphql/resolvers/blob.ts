@@ -122,6 +122,15 @@ Image.implement({
         return `https://typie.net/${prefix}/${blob.path}`;
       },
     }),
+    originalUrl: t.string({
+      resolve: (blob) => {
+        if (blob.originalPath) {
+          return `https://typie.net/original-images/${blob.originalPath}`;
+        }
+        const prefix = blob.format === 'video/mp4' ? 'videos' : 'images';
+        return `https://typie.net/${prefix}/${blob.path}?raw`;
+      },
+    }),
   }),
 });
 
@@ -199,7 +208,7 @@ builder.mutationFields((t) => ({
           Key: `files/${input.path}`,
           CopySource: `typie-uploads/${input.path}`,
           ContentType: head.ContentType,
-          ContentDisposition: `attachment; filename="${fileName}"`,
+          ContentDisposition: `attachment; filename*=UTF-8''${fileName}`,
           MetadataDirective: 'REPLACE',
           TaggingDirective: 'REPLACE',
           Tagging: qs.stringify({
@@ -241,6 +250,9 @@ builder.mutationFields((t) => ({
 
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const buffer = await object.Body!.transformToByteArray();
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const fileName = object.Metadata!.name;
+      const contentDisposition = `inline; filename*=UTF-8''${fileName}`;
 
       const animatedInfo = detectAnimatedImage(buffer);
 
@@ -267,18 +279,35 @@ builder.mutationFields((t) => ({
           const basePath = input.path.replace(/\.[^.]+$/, '');
           const mp4Path = `${basePath}.mp4`;
 
-          await aws.s3.send(
-            new PutObjectCommand({
-              Bucket: 'typie-usercontents',
-              Key: `videos/${mp4Path}`,
-              Body: mp4Buffer,
-              ContentType: 'video/mp4',
-              Tagging: qs.stringify({
-                UserId: ctx.session.userId,
-                Environment: stack,
+          const tagging = qs.stringify({
+            UserId: ctx.session.userId,
+            Environment: stack,
+          });
+
+          const originalContentType = object.ContentType ?? 'application/octet-stream';
+
+          await Promise.all([
+            aws.s3.send(
+              new PutObjectCommand({
+                Bucket: 'typie-usercontents',
+                Key: `videos/${mp4Path}`,
+                Body: mp4Buffer,
+                ContentType: 'video/mp4',
+                ContentDisposition: contentDisposition,
+                Tagging: tagging,
               }),
-            }),
-          );
+            ),
+            aws.s3.send(
+              new PutObjectCommand({
+                Bucket: 'typie-usercontents',
+                Key: `original-images/${input.path}`,
+                Body: buffer,
+                ContentType: originalContentType,
+                ContentDisposition: contentDisposition,
+                Tagging: tagging,
+              }),
+            ),
+          ]);
 
           /* eslint-disable @typescript-eslint/no-non-null-assertion */
           return await db
@@ -291,6 +320,7 @@ builder.mutationFields((t) => ({
               width: videoMeta.width,
               height: videoMeta.height,
               path: mp4Path,
+              originalPath: input.path,
               placeholder: placeholder.toBase64(),
             })
             .returning()
@@ -331,18 +361,33 @@ builder.mutationFields((t) => ({
         .toBuffer({ resolveWithObject: true });
       const placeholder = rgbaToThumbHash(raw.info.width, raw.info.height, raw.data);
 
-      await aws.s3.send(
-        new PutObjectCommand({
-          Bucket: 'typie-usercontents',
-          Key: `images/${input.path}`,
-          Body: data,
-          ContentType: mimetype,
-          Tagging: qs.stringify({
-            UserId: ctx.session.userId,
-            Environment: stack,
+      const tagging = qs.stringify({
+        UserId: ctx.session.userId,
+        Environment: stack,
+      });
+
+      await Promise.all([
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `images/${input.path}`,
+            Body: data,
+            ContentType: mimetype,
+            ContentDisposition: contentDisposition,
+            Tagging: tagging,
           }),
-        }),
-      );
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `original-images/${input.path}`,
+            Body: buffer,
+            ContentType: object.ContentType ?? 'application/octet-stream',
+            ContentDisposition: contentDisposition,
+            Tagging: tagging,
+          }),
+        ),
+      ]);
 
       /* eslint-disable @typescript-eslint/no-non-null-assertion */
       return await db
@@ -355,6 +400,7 @@ builder.mutationFields((t) => ({
           width: info.width!,
           height: info.pageHeight || info.height!,
           path: input.path,
+          originalPath: input.path,
           placeholder: placeholder.toBase64(),
         })
         .returning()
