@@ -311,7 +311,17 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
         final newCursor = (newValue.selection.baseOffset - newSentinelLen).clamp(commonPrefix, effectiveNew.length);
 
         final removedLen = oldCursor - commonPrefix;
-        final insertedText = effectiveNew.substring(commonPrefix, newCursor);
+        var insertedText = effectiveNew.substring(commonPrefix, newCursor);
+
+        if (insertedText.isEmpty && removedLen == 0) {
+          final hasComplexTextDelta = deltas.any(
+            (delta) => delta is TextEditingDeltaDeletion || delta is TextEditingDeltaReplacement,
+          );
+          final insertionDeltas = deltas.whereType<TextEditingDeltaInsertion>().toList();
+          if (!hasComplexTextDelta && insertionDeltas.length == 1) {
+            insertedText = insertionDeltas.first.textInserted;
+          }
+        }
 
         if (insertedText.contains('\n')) {
           _controlled = false;
