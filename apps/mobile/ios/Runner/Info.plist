@@ -64,6 +64,8 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow access to your photo library to add post images and update your profile picture.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Allow saving activity images to your photo library.</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>We use your data to show you more relevant ads and improve your experience across apps and websites.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

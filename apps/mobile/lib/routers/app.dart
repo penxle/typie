@@ -53,6 +53,7 @@ class AppRouter extends RootStackRouter {
             AutoRoute(page: DeleteUserRoute.page),
             AutoRoute(page: OssLicensesRoute.page),
             AutoRoute(page: ReferralRoute.page),
+            AutoRoute(page: StatsRoute.page),
             AutoRoute(page: NativeEditorRoute.page, fullscreenDialog: true),
             AutoRoute(page: TrashRoute.page),
             AutoRoute(page: TextReplacementsRoute.page),

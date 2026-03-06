@@ -11,8 +11,8 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
-import 'package:typie/screens/profile/activity_grid.dart';
 import 'package:typie/screens/profile/feedback_bottom_sheet.dart';
+import 'package:typie/widgets/activity_grid.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/screen.dart';
@@ -93,15 +93,37 @@ class ProfileScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     color: context.colors.surfaceDefault,
                   ),
-                  padding: const Pad(top: 16, bottom: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Padding(
-                        padding: Pad(horizontal: 16),
+                        padding: Pad(top: 16, horizontal: 16),
                         child: Text('나의 글쓰기 활동', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
                       ),
-                      ActivityGrid(characterCountChanges: data.me?.characterCountChanges.toList() ?? []),
+                      ActivityGrid(
+                        changes: [
+                          if (data.me != null)
+                            for (final change in data.me!.characterCountChanges)
+                              ActivityGridChange(date: change.date, additions: change.additions),
+                        ],
+                      ),
+                      HorizontalDivider(color: context.colors.borderDefault),
+                      Tappable(
+                        padding: const Pad(all: 16),
+                        onTap: () async {
+                          await context.router.push(const StatsRoute());
+                        },
+                        child: const Row(
+                          spacing: 8,
+                          children: [
+                            Icon(LucideLightIcons.bar_chart_3, size: 20),
+                            Expanded(
+                              child: Text('통계', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                            ),
+                            Icon(LucideLightIcons.chevron_right, size: 16),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),

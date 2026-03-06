@@ -1,0 +1,3 @@
+mutation StatsScreen_GenerateActivityImage_Mutation {
+  generateActivityImage
+}

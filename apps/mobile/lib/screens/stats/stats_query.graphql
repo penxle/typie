@@ -1,0 +1,17 @@
+query StatsScreen_Query {
+  me {
+    id
+    name
+    documentCount
+
+    usage {
+      totalCharacterCount
+    }
+
+    characterCountChanges {
+      date
+      additions
+      deletions
+    }
+  }
+}
