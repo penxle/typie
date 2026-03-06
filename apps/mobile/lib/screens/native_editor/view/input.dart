@@ -310,8 +310,8 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
         final oldCursor = (oldValue.selection.baseOffset - oldSentinelLen).clamp(commonPrefix, effectiveOld.length);
         final newCursor = (newValue.selection.baseOffset - newSentinelLen).clamp(commonPrefix, effectiveNew.length);
 
-        final removedLen = oldCursor - commonPrefix;
         var insertedText = effectiveNew.substring(commonPrefix, newCursor);
+        final removedLen = effectiveOld.substring(commonPrefix, oldCursor).characters.length;
 
         if (insertedText.isEmpty && removedLen == 0) {
           final hasComplexTextDelta = deltas.any(
@@ -506,10 +506,12 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
 
     if (sel.isCollapsed) {
       if (sel.baseOffset > minOffset) {
+        final before = value.text.substring(minOffset, sel.baseOffset);
+        final lastCharLen = before.characters.last.length;
         deleteLength = 1;
         newValue = TextEditingValue(
-          text: value.text.substring(0, sel.baseOffset - 1) + value.text.substring(sel.baseOffset),
-          selection: TextSelection.collapsed(offset: sel.baseOffset - 1),
+          text: value.text.substring(0, sel.baseOffset - lastCharLen) + value.text.substring(sel.baseOffset),
+          selection: TextSelection.collapsed(offset: sel.baseOffset - lastCharLen),
         );
       } else if (minOffset > 0) {
         deleteLength = 1;
@@ -517,7 +519,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     } else {
       final start = sel.start.clamp(minOffset, value.text.length);
       final end = sel.end.clamp(minOffset, value.text.length);
-      deleteLength = end - start;
+      deleteLength = value.text.substring(start, end).characters.length;
       newValue = TextEditingValue(
         text: value.text.substring(0, start) + value.text.substring(end),
         selection: TextSelection.collapsed(offset: start),
