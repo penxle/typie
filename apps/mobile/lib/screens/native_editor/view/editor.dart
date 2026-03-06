@@ -627,18 +627,153 @@ class EditorView extends HookWidget {
     }, []);
 
     useEffect(() {
-      bool onKeyEvent(KeyEvent event) {
+      // Fallback repeat only: used when platform repeat events are not delivered.
+      const repeatInitialDelay = Duration(milliseconds: 460);
+      const repeatInterval = Duration(milliseconds: 80);
+
+      Timer? repeatDelayTimer;
+      Timer? repeatTimer;
+      KeyEvent? repeatingEvent;
+      var repeatThroughKeyboardHandler = false;
+      var nativeRepeatObserved = false;
+
+      bool isRepeatTarget(KeyEvent event) {
+        final key = event.logicalKey;
+        final physical = event.physicalKey;
+        return key == LogicalKeyboardKey.backspace ||
+            key == LogicalKeyboardKey.delete ||
+            key == LogicalKeyboardKey.home ||
+            key == LogicalKeyboardKey.end ||
+            key == LogicalKeyboardKey.pageUp ||
+            key == LogicalKeyboardKey.pageDown ||
+            key == LogicalKeyboardKey.arrowLeft ||
+            key == LogicalKeyboardKey.arrowRight ||
+            key == LogicalKeyboardKey.arrowUp ||
+            key == LogicalKeyboardKey.arrowDown ||
+            physical == PhysicalKeyboardKey.backspace ||
+            physical == PhysicalKeyboardKey.delete ||
+            physical == PhysicalKeyboardKey.home ||
+            physical == PhysicalKeyboardKey.end ||
+            physical == PhysicalKeyboardKey.pageUp ||
+            physical == PhysicalKeyboardKey.pageDown ||
+            physical == PhysicalKeyboardKey.arrowLeft ||
+            physical == PhysicalKeyboardKey.arrowRight ||
+            physical == PhysicalKeyboardKey.arrowUp ||
+            physical == PhysicalKeyboardKey.arrowDown;
+      }
+
+      bool isSameRepeatingKey(KeyEvent event, KeyEvent? active) {
+        if (active == null) {
+          return false;
+        }
+        return event.logicalKey == active.logicalKey || event.physicalKey == active.physicalKey;
+      }
+
+      bool canHandleEditorKey() {
         if (!inputController.isActive) {
           return false;
         }
         if (titleFocusNode.hasFocus || subtitleFocusNode.hasFocus) {
           return false;
         }
-        return keyboardHandler.handleKeyEvent(event);
+        return true;
+      }
+
+      void stopRepeat() {
+        repeatDelayTimer?.cancel();
+        repeatTimer?.cancel();
+        repeatDelayTimer = null;
+        repeatTimer = null;
+        repeatingEvent = null;
+        repeatThroughKeyboardHandler = false;
+        nativeRepeatObserved = false;
+      }
+
+      void runSyntheticRepeat() {
+        final activeEvent = repeatingEvent;
+        if (activeEvent == null || !canHandleEditorKey()) {
+          stopRepeat();
+          return;
+        }
+
+        if (repeatThroughKeyboardHandler) {
+          keyboardHandler.handleKeyEvent(activeEvent);
+          return;
+        }
+
+        if (activeEvent.logicalKey == LogicalKeyboardKey.backspace ||
+            activeEvent.physicalKey == PhysicalKeyboardKey.backspace) {
+          inputKey.currentState?.handleBackspaceRepeat();
+        }
+      }
+
+      void startRepeat(KeyEvent event, {required bool throughKeyboardHandler}) {
+        repeatDelayTimer?.cancel();
+        repeatTimer?.cancel();
+        repeatingEvent = event;
+        repeatThroughKeyboardHandler = throughKeyboardHandler;
+        nativeRepeatObserved = false;
+
+        repeatDelayTimer = Timer(repeatInitialDelay, () {
+          if (nativeRepeatObserved) {
+            return;
+          }
+          runSyntheticRepeat();
+          repeatTimer = Timer.periodic(repeatInterval, (_) => runSyntheticRepeat());
+        });
+      }
+
+      bool onKeyEvent(KeyEvent event) {
+        if (!canHandleEditorKey()) {
+          stopRepeat();
+          return false;
+        }
+
+        final handledByKeyboardHandler = keyboardHandler.handleKeyEvent(event);
+        if (!isRepeatTarget(event)) {
+          return handledByKeyboardHandler;
+        }
+
+        if (event is KeyRepeatEvent) {
+          if (isSameRepeatingKey(event, repeatingEvent)) {
+            nativeRepeatObserved = true;
+            repeatDelayTimer?.cancel();
+            repeatTimer?.cancel();
+            repeatDelayTimer = null;
+            repeatTimer = null;
+          }
+          return handledByKeyboardHandler;
+        }
+
+        if (event is KeyDownEvent) {
+          if (isSameRepeatingKey(event, repeatingEvent)) {
+            nativeRepeatObserved = true;
+            repeatDelayTimer?.cancel();
+            repeatTimer?.cancel();
+            repeatDelayTimer = null;
+            repeatTimer = null;
+            return handledByKeyboardHandler;
+          }
+
+          final throughKeyboardHandler =
+              handledByKeyboardHandler ||
+              (event.logicalKey != LogicalKeyboardKey.backspace && event.physicalKey != PhysicalKeyboardKey.backspace);
+          startRepeat(event, throughKeyboardHandler: throughKeyboardHandler);
+          return handledByKeyboardHandler;
+        }
+
+        if (event is KeyUpEvent && isSameRepeatingKey(event, repeatingEvent)) {
+          stopRepeat();
+        }
+
+        return handledByKeyboardHandler;
       }
 
       HardwareKeyboard.instance.addHandler(onKeyEvent);
-      return () => HardwareKeyboard.instance.removeHandler(onKeyEvent);
+      return () {
+        stopRepeat();
+        HardwareKeyboard.instance.removeHandler(onKeyEvent);
+      };
     }, []);
 
     useEffect(() {

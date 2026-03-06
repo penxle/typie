@@ -445,6 +445,10 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
   @override
   void updateEditingValue(TextEditingValue value) {}
 
+  void handleBackspaceRepeat() {
+    _handleBackspace(logicalKeyLabel: LogicalKeyboardKey.backspace.keyLabel);
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -461,58 +465,12 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
       return KeyEventResult.ignored;
     }
 
-    final value = _currentValue;
-    final sel = value.selection;
-    final minOffset = value.text.startsWith(_sentinel) ? 1 : 0;
-
-    TextEditingValue? newValue;
-
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      var deleteLength = 0;
-
-      if (sel.isCollapsed) {
-        if (sel.baseOffset > minOffset) {
-          deleteLength = 1;
-          newValue = TextEditingValue(
-            text: value.text.substring(0, sel.baseOffset - 1) + value.text.substring(sel.baseOffset),
-            selection: TextSelection.collapsed(offset: sel.baseOffset - 1),
-          );
-        } else if (minOffset > 0) {
-          deleteLength = 1;
-        }
-      } else {
-        final start = sel.start.clamp(minOffset, value.text.length);
-        final end = sel.end.clamp(minOffset, value.text.length);
-        deleteLength = end - start;
-        newValue = TextEditingValue(
-          text: value.text.substring(0, start) + value.text.substring(end),
-          selection: TextSelection.collapsed(offset: start),
-        );
-      }
-
-      if (newValue != null || deleteLength > 0) {
-        _startCollectingDispatches();
-        if (newValue != null) {
-          _setCurrentValue(newValue);
-          if (_connection != null && _connection!.attached) {
-            _connection!.setEditingState(newValue);
-          }
-        }
-        _controlled = false;
-        _controller.onDeleteBackward(length: deleteLength);
-        final dispatches = _stopCollectingDispatches();
-        _addRecordingEntry({
-          'type': 'keyEvent',
-          'key': event.logicalKey.keyLabel,
-          'before': _serializeValue(value),
-          'after': _serializeValue(_currentValue),
-          'dispatches': dispatches,
-        });
-      }
-
+      _handleBackspace(logicalKeyLabel: event.logicalKey.keyLabel);
       return KeyEventResult.handled;
     }
 
+    final value = _currentValue;
     _addRecordingEntry({
       'type': 'keyEvent',
       'key': event.logicalKey.keyLabel,
@@ -522,6 +480,59 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     });
 
     return KeyEventResult.ignored;
+  }
+
+  void _handleBackspace({required String logicalKeyLabel}) {
+    if (_currentValue.composing.isValid && !_currentValue.composing.isCollapsed) {
+      return;
+    }
+
+    final value = _currentValue;
+    final sel = value.selection;
+    final minOffset = value.text.startsWith(_sentinel) ? 1 : 0;
+
+    var deleteLength = 0;
+    TextEditingValue? newValue;
+
+    if (sel.isCollapsed) {
+      if (sel.baseOffset > minOffset) {
+        deleteLength = 1;
+        newValue = TextEditingValue(
+          text: value.text.substring(0, sel.baseOffset - 1) + value.text.substring(sel.baseOffset),
+          selection: TextSelection.collapsed(offset: sel.baseOffset - 1),
+        );
+      } else if (minOffset > 0) {
+        deleteLength = 1;
+      }
+    } else {
+      final start = sel.start.clamp(minOffset, value.text.length);
+      final end = sel.end.clamp(minOffset, value.text.length);
+      deleteLength = end - start;
+      newValue = TextEditingValue(
+        text: value.text.substring(0, start) + value.text.substring(end),
+        selection: TextSelection.collapsed(offset: start),
+      );
+    }
+
+    if (newValue != null || deleteLength > 0) {
+      _startCollectingDispatches();
+      if (newValue != null) {
+        _setCurrentValue(newValue);
+        if (_connection != null && _connection!.attached) {
+          _connection!.setEditingState(newValue);
+        }
+      }
+      _controlled = false;
+      _controller.onDeleteBackward(length: deleteLength);
+      final dispatches = _stopCollectingDispatches();
+      _addRecordingEntry({
+        'type': 'keyEvent',
+        'key': logicalKeyLabel,
+        'before': _serializeValue(value),
+        'after': _serializeValue(_currentValue),
+        'dispatches': dispatches,
+      });
+    }
   }
 
   @override
