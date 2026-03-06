@@ -391,8 +391,7 @@
             style={css.raw({
               width: '160px',
               height: '28px',
-              paddingX: '8px',
-              '& > input': { textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
+              '& > input': { paddingRight: '24px', textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
             })}
             getLabel={(value) => {
               const item = fontFamilyItems.find((f) => f.value === value);
@@ -425,8 +424,7 @@
             style={css.raw({
               width: '120px',
               height: '28px',
-              paddingX: '8px',
-              '& > input': { textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
+              '& > input': { paddingRight: '24px', textAlign: 'right', fontSize: '12px', fontWeight: 'medium' },
             })}
             getLabel={(value) => {
               const item = fontWeightItems.find((w) => w.value === value);
@@ -460,8 +458,6 @@
                 display: 'flex',
                 alignItems: 'center',
                 borderRadius: '6px',
-                paddingX: '8px',
-                paddingY: '4px',
                 height: '28px',
                 _hover: {
                   backgroundColor: 'surface.muted',
@@ -476,7 +472,9 @@
                 bind:this={fontSizeInputElement}
                 class={css({
                   flexGrow: '1',
-                  width: 'full',
+                  size: 'full',
+                  paddingX: '8px',
+                  paddingY: '4px',
                   fontSize: '12px',
                   fontWeight: 'medium',
                   color: 'text.subtle',
