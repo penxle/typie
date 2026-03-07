@@ -66,20 +66,20 @@ const loadFonts = async <T extends string>(names: T[]) => {
 const fonts = await loadFonts(['Paperlogy-4Regular', 'Paperlogy-7Bold', 'DeepMindSans-Regular']);
 
 const gray = {
-  100: '#EBEDF0',
-  200: '#E4E4E7',
-  400: '#A1A1AA',
-  500: '#71717A',
-  700: '#3F3F46',
-  950: '#09090B',
+  100: '#f3f4f9',
+  200: '#e3e4eb',
+  400: '#9e9fa9',
+  500: '#70717b',
+  700: '#3e3f47',
+  950: '#09090c',
 };
 
 const green = {
-  300: '#85E89D',
-  500: '#28A745',
-  600: '#22863A',
-  700: '#176F2C',
-  800: '#165C26',
+  300: '#79e8b1',
+  500: '#00a96d',
+  600: '#008857',
+  700: '#00714a',
+  800: '#005d3e',
 };
 
 const levelColors = {
