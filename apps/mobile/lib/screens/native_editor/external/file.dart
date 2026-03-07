@@ -38,6 +38,7 @@ class FileWidget extends HookWidget {
 
     final hasFile = asset != null || inflight != null;
     final isUploading = inflight != null && asset == null;
+    final isResolvingAsset = fileData.id != null && asset == null && inflight == null;
 
     final displayName = asset?.name ?? inflight?.name ?? '파일';
     final displaySize = _formatFileSize(asset?.size ?? inflight?.size);
@@ -53,7 +54,7 @@ class FileWidget extends HookWidget {
     }, [currentUploadId, inflight, asset]);
 
     if (!hasFile) {
-      return _buildPlaceholder(context);
+      return _buildPlaceholder(context, isResolvingAsset: isResolvingAsset);
     }
 
     return Center(
@@ -115,7 +116,7 @@ class FileWidget extends HookWidget {
     );
   }
 
-  Widget _buildPlaceholder(BuildContext context) {
+  Widget _buildPlaceholder(BuildContext context, {required bool isResolvingAsset}) {
     return Container(
       height: 48,
       decoration: BoxDecoration(color: context.colors.surfaceMuted, borderRadius: BorderRadius.circular(4)),
@@ -127,12 +128,18 @@ class FileWidget extends HookWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                '파일',
+                isResolvingAsset ? '파일을 불러오는 중...' : '파일',
                 style: TextStyle(fontSize: 14, color: context.colors.textDisabled),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (isResolvingAsset)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.textDisabled),
+              ),
           ],
         ),
       ),

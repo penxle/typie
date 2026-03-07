@@ -39,6 +39,7 @@
   const inflight = $derived(currentUploadId ? editor.inflightFiles.get(currentUploadId) : undefined);
   const hasFile = $derived(!!asset || !!inflight);
   const isUploading = $derived(!!inflight && !asset);
+  const isResolvingAsset = $derived(!!fileData.id && !asset && !inflight);
   const displayName = $derived(asset?.name ?? inflight?.name ?? '파일');
   const displaySize = $derived.by(() => {
     const size = Number(asset?.size ?? inflight?.size);
@@ -268,8 +269,14 @@
           })}
         >
           <Icon icon={FileIcon} size={20} />
-          파일
+          {isResolvingAsset ? '파일을 불러오는 중...' : '파일'}
         </div>
+
+        {#if isResolvingAsset}
+          <div class={css({ marginRight: '14px' })}>
+            <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
+          </div>
+        {/if}
 
         {#if isEditable}
           <Menu>
@@ -304,7 +311,7 @@
   </div>
 </ExternalElementWrapper>
 
-{#if pickerOpened && !hasFile && isEditable}
+{#if pickerOpened && !hasFile && !isResolvingAsset && isEditable}
   <div
     class={center({
       flexDirection: 'column',

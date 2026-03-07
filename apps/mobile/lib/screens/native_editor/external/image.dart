@@ -55,6 +55,7 @@ class ImageWidget extends HookWidget {
 
     final hasImage = asset != null || inflight != null;
     final isUploading = inflight != null && asset == null;
+    final isResolvingAsset = imageData.id != null && asset == null && inflight == null;
 
     final proportion = imageData.proportion;
     final boundsWidth = element.bounds.width;
@@ -108,7 +109,7 @@ class ImageWidget extends HookWidget {
     }, const []);
 
     if (!hasImage) {
-      return _buildPlaceholder(context);
+      return _buildPlaceholder(context, isResolvingAsset: isResolvingAsset);
     }
 
     final imageHeight = _calculateHeight(asset, inflight, imageWidth);
@@ -353,7 +354,7 @@ class ImageWidget extends HookWidget {
     return const SizedBox.shrink();
   }
 
-  Widget _buildPlaceholder(BuildContext context) {
+  Widget _buildPlaceholder(BuildContext context, {required bool isResolvingAsset}) {
     return Container(
       height: 48,
       decoration: BoxDecoration(color: context.colors.surfaceMuted, borderRadius: BorderRadius.circular(4)),
@@ -365,12 +366,18 @@ class ImageWidget extends HookWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                '이미지',
+                isResolvingAsset ? '이미지를 불러오는 중...' : '이미지',
                 style: TextStyle(fontSize: 14, color: context.colors.textDisabled),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (isResolvingAsset)
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.textDisabled),
+              ),
           ],
         ),
       ),
