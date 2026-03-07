@@ -46,6 +46,7 @@
   const imageSrc = $derived(asset?.url ?? inflight?.url);
   const hasImage = $derived(!!imageSrc);
   const isUploading = $derived(!!inflight && !asset);
+  const isResolvingAsset = $derived(!!imageData.id && !asset && !inflight);
   const originalWidth = $derived(asset?.width ?? inflight?.width ?? 0);
   const originalHeight = $derived(asset?.height ?? inflight?.height ?? 0);
   const aspectRatio = $derived(originalWidth > 0 ? originalHeight / originalWidth : 0);
@@ -488,8 +489,14 @@
           })}
         >
           <Icon icon={ImageIcon} size={20} />
-          이미지
+          {isResolvingAsset ? '이미지를 불러오는 중...' : '이미지'}
         </div>
+
+        {#if isResolvingAsset}
+          <div class={css({ marginRight: '14px' })}>
+            <RingSpinner style={css.raw({ size: '16px', color: 'text.disabled' })} />
+          </div>
+        {/if}
 
         {#if isEditable}
           <Menu>
@@ -524,7 +531,7 @@
   </div>
 </ExternalElementWrapper>
 
-{#if pickerOpened && !hasImage && isEditable}
+{#if pickerOpened && !hasImage && !isResolvingAsset && isEditable}
   <div
     class={center({
       flexDirection: 'column',
