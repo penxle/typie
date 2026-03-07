@@ -1,9 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import { loadQuery } from '$lib/graphql';
 import { graphql } from '$mearie';
-import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async (event) => {
+export const load = async (event) => {
   const query = await loadQuery(
     event,
     graphql(`
