@@ -87,6 +87,7 @@ class SelectionSyncManager {
         final savedAnchor = selection['anchor'] as Map<String, dynamic>;
         final savedHead = selection['head'] as Map<String, dynamic>;
         controller
+          ..scrollIntoView(mode: ScrollMode.typewriter, waitForCursorUpdate: true)
           ..dispatch({
             'type': 'setSelection',
             'anchorNodeId': savedAnchor['nodeId'],
@@ -96,8 +97,7 @@ class SelectionSyncManager {
             'headOffset': savedHead['offset'],
             'headAffinity': savedHead['affinity'],
           })
-          ..requestFocus()
-          ..scrollIntoView(mode: ScrollMode.typewriter, waitForCursorUpdate: true);
+          ..requestFocus();
       }
     } catch (err) {
       titleFocusNode.requestFocus();
