@@ -21,7 +21,7 @@
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';
-  import { dedupeById, getNextElement, getPreviousElement, maxDepth } from './utils';
+  import { getNextElement, getPreviousElement, maxDepth } from './utils';
   import type { MouseEventHandler, PointerEventHandler } from 'svelte/elements';
   import type { DashboardLayout_EntityTree_site$key } from '$mearie';
 
@@ -264,7 +264,7 @@
         return entities;
       };
 
-      treeState.entities = collect(dedupeById(site.data.entities) as unknown as EntityNode[]);
+      treeState.entities = collect(site.data.entities as unknown as EntityNode[]);
       treeState.entityMap = entityMap;
     }
   });
@@ -889,7 +889,7 @@
   onpointerupcapture={handlePointerUp}
   role="tree"
 >
-  {#each dedupeById(site.data.entities) as entity (entity.id)}
+  {#each site.data.entities as entity (entity.id)}
     <Entity entity$key={entity} />
   {:else}
     <div class={center({ flexGrow: '1' })}>
