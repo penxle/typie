@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
 
@@ -7,6 +6,28 @@ Map<String, dynamic> _nav(String direction, bool extend) => {
   'direction': direction,
   'extend': extend,
 };
+
+class _Modifiers {
+  const _Modifiers({required this.shift, required this.meta, required this.ctrl, required this.alt});
+
+  factory _Modifiers.current() {
+    final keyboard = HardwareKeyboard.instance;
+    return _Modifiers(
+      shift: keyboard.isShiftPressed,
+      meta: keyboard.isMetaPressed,
+      ctrl: keyboard.isControlPressed,
+      alt: keyboard.isAltPressed,
+    );
+  }
+
+  final bool shift;
+  final bool meta;
+  final bool ctrl;
+  final bool alt;
+
+  bool get shortcut => meta || ctrl;
+  bool get word => alt || ctrl;
+}
 
 class KeyboardHandler {
   KeyboardHandler({
@@ -55,64 +76,62 @@ class KeyboardHandler {
 
   bool _handleShortcut(KeyEvent event) {
     final key = event.logicalKey;
-    final shift = HardwareKeyboard.instance.isShiftPressed;
-    final meta = HardwareKeyboard.instance.isMetaPressed;
-    final alt = HardwareKeyboard.instance.isAltPressed;
+    final modifiers = _Modifiers.current();
 
-    if (!meta && !alt) {
+    if (!modifiers.shortcut && !modifiers.alt) {
       if (key == LogicalKeyboardKey.tab) {
-        onShortcut(shift ? 'outdent' : 'indent');
+        onShortcut(modifiers.shift ? 'outdent' : 'indent');
         return true;
       }
-      if (shift && key == LogicalKeyboardKey.enter) {
+      if (modifiers.shift && key == LogicalKeyboardKey.enter) {
         onShortcut('insertHardBreak');
         return true;
       }
       return false;
     }
 
-    if (meta && !alt) {
-      if (key == LogicalKeyboardKey.keyB && !shift) {
+    if (modifiers.shortcut && !modifiers.alt) {
+      if (key == LogicalKeyboardKey.keyB && !modifiers.shift) {
         onShortcut('toggleBold');
         return true;
-      } else if (key == LogicalKeyboardKey.keyI && !shift) {
+      } else if (key == LogicalKeyboardKey.keyI && !modifiers.shift) {
         onShortcut('toggleItalic');
         return true;
-      } else if (key == LogicalKeyboardKey.keyU && !shift) {
+      } else if (key == LogicalKeyboardKey.keyU && !modifiers.shift) {
         onShortcut('toggleUnderline');
         return true;
-      } else if (key == LogicalKeyboardKey.keyS && shift) {
+      } else if (key == LogicalKeyboardKey.keyS && modifiers.shift) {
         onShortcut('toggleStrikethrough');
         return true;
-      } else if (key == LogicalKeyboardKey.backslash && !shift) {
+      } else if (key == LogicalKeyboardKey.backslash && !modifiers.shift) {
         onShortcut('clearFormatting');
         return true;
       } else if (key == LogicalKeyboardKey.keyZ) {
-        onShortcut(shift ? 'redo' : 'undo');
+        onShortcut(modifiers.shift ? 'redo' : 'undo');
         return true;
-      } else if (key == LogicalKeyboardKey.keyC && !shift) {
+      } else if (key == LogicalKeyboardKey.keyC && !modifiers.shift) {
         onShortcut('copy');
         return true;
-      } else if (key == LogicalKeyboardKey.keyX && !shift) {
+      } else if (key == LogicalKeyboardKey.keyX && !modifiers.shift) {
         onShortcut('cut');
         return true;
-      } else if (key == LogicalKeyboardKey.keyV && !shift) {
+      } else if (key == LogicalKeyboardKey.keyV && !modifiers.shift) {
         onShortcut('paste');
         return true;
-      } else if (key == LogicalKeyboardKey.keyA && !shift) {
+      } else if (key == LogicalKeyboardKey.keyA && !modifiers.shift) {
         onShortcut('selectAll');
         return true;
-      } else if (key == LogicalKeyboardKey.enter && !shift) {
+      } else if (key == LogicalKeyboardKey.enter && !modifiers.shift) {
         onShortcut('insertPageBreak');
         return true;
-      } else if (key == LogicalKeyboardKey.backspace && !shift) {
+      } else if (key == LogicalKeyboardKey.backspace && modifiers.meta && !modifiers.shift) {
         onShortcut('deleteToLineStart');
         return true;
       }
     }
 
-    if (alt && !meta) {
-      if (key == LogicalKeyboardKey.backspace && !shift) {
+    if (modifiers.word && !modifiers.meta) {
+      if (key == LogicalKeyboardKey.backspace && !modifiers.shift) {
         onShortcut('deleteWordBackward');
         return true;
       }
@@ -123,64 +142,59 @@ class KeyboardHandler {
 
   Map<String, dynamic>? _getActionFromKeyEvent(KeyEvent event) {
     final key = event.logicalKey;
-    final shift = HardwareKeyboard.instance.isShiftPressed;
-    final meta = HardwareKeyboard.instance.isMetaPressed;
-    final ctrl = HardwareKeyboard.instance.isControlPressed;
-    final alt = HardwareKeyboard.instance.isAltPressed;
-
-    final wordModifier = defaultTargetPlatform == TargetPlatform.iOS ? alt : ctrl;
+    final modifiers = _Modifiers.current();
     final physical = event.physicalKey;
 
     if (key == LogicalKeyboardKey.arrowLeft || physical == PhysicalKeyboardKey.arrowLeft) {
-      if (meta) {
-        return _nav('lineStart', shift);
-      } else if (wordModifier) {
-        return _nav('wordLeft', shift);
+      if (modifiers.meta) {
+        return _nav('lineStart', modifiers.shift);
+      } else if (modifiers.word) {
+        return _nav('wordLeft', modifiers.shift);
       } else {
-        return _nav('left', shift);
+        return _nav('left', modifiers.shift);
       }
     } else if (key == LogicalKeyboardKey.arrowRight || physical == PhysicalKeyboardKey.arrowRight) {
-      if (meta) {
-        return _nav('lineEnd', shift);
-      } else if (wordModifier) {
-        return _nav('wordRight', shift);
+      if (modifiers.meta) {
+        return _nav('lineEnd', modifiers.shift);
+      } else if (modifiers.word) {
+        return _nav('wordRight', modifiers.shift);
       } else {
-        return _nav('right', shift);
+        return _nav('right', modifiers.shift);
       }
     } else if (key == LogicalKeyboardKey.arrowUp || physical == PhysicalKeyboardKey.arrowUp) {
-      if (meta) {
-        return _nav('documentStart', shift);
-      } else if (alt) {
-        return _nav('sentenceUp', shift);
+      if (modifiers.meta) {
+        return _nav('documentStart', modifiers.shift);
+      } else if (modifiers.alt) {
+        return _nav('sentenceUp', modifiers.shift);
       } else {
-        return _nav('up', shift);
+        return _nav('up', modifiers.shift);
       }
     } else if (key == LogicalKeyboardKey.arrowDown || physical == PhysicalKeyboardKey.arrowDown) {
-      if (meta) {
-        return _nav('documentEnd', shift);
-      } else if (alt) {
-        return _nav('sentenceDown', shift);
+      if (modifiers.meta) {
+        return _nav('documentEnd', modifiers.shift);
+      } else if (modifiers.alt) {
+        return _nav('sentenceDown', modifiers.shift);
       } else {
-        return _nav('down', shift);
+        return _nav('down', modifiers.shift);
       }
     } else if (key == LogicalKeyboardKey.home || physical == PhysicalKeyboardKey.home) {
-      if (ctrl) {
-        return _nav('documentStart', shift);
+      if (modifiers.ctrl) {
+        return _nav('documentStart', modifiers.shift);
       } else {
-        return _nav('lineStart', shift);
+        return _nav('lineStart', modifiers.shift);
       }
     } else if (key == LogicalKeyboardKey.end || physical == PhysicalKeyboardKey.end) {
-      if (ctrl) {
-        return _nav('documentEnd', shift);
+      if (modifiers.ctrl) {
+        return _nav('documentEnd', modifiers.shift);
       } else {
-        return _nav('lineEnd', shift);
+        return _nav('lineEnd', modifiers.shift);
       }
     } else if (key == LogicalKeyboardKey.pageUp || physical == PhysicalKeyboardKey.pageUp) {
-      return _nav('pageUp', shift);
+      return _nav('pageUp', modifiers.shift);
     } else if (key == LogicalKeyboardKey.pageDown || physical == PhysicalKeyboardKey.pageDown) {
-      return _nav('pageDown', shift);
+      return _nav('pageDown', modifiers.shift);
     } else if (key == LogicalKeyboardKey.delete || physical == PhysicalKeyboardKey.delete) {
-      if (wordModifier) {
+      if (modifiers.word && !modifiers.meta) {
         return {'type': 'deleteWordForward'};
       } else {
         return {'type': 'deleteForward'};
