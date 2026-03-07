@@ -532,39 +532,29 @@
 </ExternalElementWrapper>
 
 {#if pickerOpened && !hasImage && !isResolvingAsset && isEditable}
-  <div
-    class={center({
-      flexDirection: 'column',
-      gap: '12px',
+  <button
+    class={flex({
+      alignItems: 'center',
+      gap: '6px',
       borderWidth: '1px',
-      borderRadius: '12px',
-      padding: '12px',
-      width: '380px',
+      borderRadius: '8px',
+      paddingX: '12px',
+      paddingY: '6px',
+      fontSize: '13px',
+      color: 'text.muted',
       backgroundColor: 'surface.default',
       boxShadow: 'small',
+      transition: 'common',
       zIndex: 'editor',
+      _hover: { backgroundColor: 'interactive.hover' },
     })}
+    onclick={handleUpload}
+    type="button"
     use:floating
   >
-    <span class={css({ fontSize: '13px', color: 'text.muted' })}>아래 버튼을 클릭해 이미지를 선택하세요</span>
-
-    <button
-      class={css({
-        width: 'full',
-        paddingY: '8px',
-        paddingX: '16px',
-        borderRadius: '6px',
-        backgroundColor: 'surface.muted',
-        fontSize: '14px',
-        transition: 'common',
-        _hover: { backgroundColor: 'interactive.hover' },
-      })}
-      onclick={handleUpload}
-      type="button"
-    >
-      이미지 선택
-    </button>
-  </div>
+    <Icon icon={ImageIcon} size={14} />
+    이미지 선택
+  </button>
 {/if}
 
 {#if enlarged && hasImage && imageSrc}
