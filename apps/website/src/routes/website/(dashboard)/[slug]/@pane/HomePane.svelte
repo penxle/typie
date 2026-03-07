@@ -34,7 +34,7 @@
 
   const query = createQuery(
     graphql(`
-      query HomePane_Query {
+      query HomePane_Query($siteId: ID) {
         me @required {
           id
           name
@@ -50,7 +50,7 @@
             }
           }
 
-          recentlyViewedEntities {
+          recentlyViewedEntities(siteId: $siteId) {
             id
             slug
             type
@@ -69,6 +69,7 @@
         }
       }
     `),
+    () => ({ siteId: app.preference.current.currentSiteId }),
   );
 
   const [createDocument] = createMutation(
@@ -117,6 +118,7 @@
   );
 
   const app = getAppContext();
+  const currentSite = $derived(query.data?.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data?.me.sites[0]);
   const paneGroup = getPaneGroup();
 
   const focused = $derived(pane.id === paneGroup.state.current.focusedPaneId);
@@ -186,14 +188,14 @@
   })}
   data-pane-id={pane.id}
   onclick={() => {
-    paneGroup.state.current.focusedPaneId = pane.id;
+    paneGroup.focusPane(pane.id);
   }}
   onfocusin={() => {
-    paneGroup.state.current.focusedPaneId = pane.id;
+    paneGroup.focusPane(pane.id);
   }}
   onkeydown={(e) => {
     if (e.key === 'Enter' || e.key === ' ') {
-      paneGroup.state.current.focusedPaneId = pane.id;
+      paneGroup.focusPane(pane.id);
     }
   }}
   role="tabpanel"
@@ -236,7 +238,7 @@
           {/if}
         </div>
 
-        {#if query.data.me.sites[0].firstEntity}
+        {#if currentSite?.firstEntity}
           {#if query.data.me.recentlyViewedEntities.length > 0}
             <div class={flex({ flexDirection: 'column', gap: '16px', width: '800px', maxWidth: 'full' })}>
               <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', color: 'text.default' })}>최근 본 항목</h2>
@@ -299,11 +301,11 @@
 
             <Button
               onclick={async () => {
-                if (!query.data) return;
+                if (!query.data || !currentSite) return;
 
                 const resp = await createDocument({
                   input: {
-                    siteId: query.data.me.sites[0].id,
+                    siteId: currentSite.id,
                   },
                 });
 

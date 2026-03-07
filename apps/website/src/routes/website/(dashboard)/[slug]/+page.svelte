@@ -1,26 +1,14 @@
 <script lang="ts">
-  import { createQuery } from '@mearie/svelte';
   import { getAppContext } from '@typie/ui/context';
-  import { nanoid } from 'nanoid';
-  import { untrack } from 'svelte';
-  import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { graphql } from '$mearie';
+  import { hydrateQuery } from '$lib/graphql';
   import WidgetGroup from '../@widgets/WidgetGroup.svelte';
   import { getPaneGroup } from './@pane/context.svelte';
   import Panes from './@pane/Panes.svelte';
 
-  const query = createQuery(
-    graphql(`
-      query DashboardSlugPage_Query {
-        me @required {
-          id
-        }
+  let { data } = $props();
 
-        ...WidgetGroup_query
-      }
-    `),
-  );
+  const query = $derived(hydrateQuery(() => data.query));
 
   const app = getAppContext();
   const paneGroup = getPaneGroup();
@@ -28,76 +16,28 @@
   const slug = $derived(page.params.slug);
 
   const root = $derived.by(() => paneGroup.state.current.root);
-  const panes = $derived(paneGroup.panes);
 
-  // Case 1: 외부 네비게이션 (URL → pane tree)
+  // URL → PaneGroup 동기화 (single source of truth: PaneGroup)
+  // hydrateQuery이므로 data는 항상 현재 slug에 대한 최신 데이터
   $effect(() => {
-    if (!slug) return;
+    if (!slug || !query.data) return;
 
-    untrack(() => {
-      const isHome = slug === 'home';
+    if (slug === 'home') {
+      paneGroup.handleNavigation('home');
+      return;
+    }
 
-      if (isHome) {
-        app.state.current = undefined;
-        app.state.ancestors = [];
-      } else {
-        app.state.current = slug;
-      }
-
-      if (paneGroup.state.current.root) {
-        if (isHome) {
-          const focusedPaneId = paneGroup.state.current.focusedPaneId;
-          const focusedPane = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : null;
-          if (focusedPane?.kind === 'home') {
-            // 이미 focused pane이 home → skip
-          } else if (focusedPaneId) {
-            paneGroup.replacePane(focusedPaneId, { kind: 'home' });
-          }
-        } else {
-          const focusedPaneId = paneGroup.state.current.focusedPaneId;
-          const focusedPane = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : null;
-          if (focusedPane?.kind === 'entity' && focusedPane.slug === slug) {
-            // 이미 focused pane이 해당 slug → skip
-          } else if (focusedPaneId) {
-            paneGroup.replacePane(focusedPaneId, { kind: 'entity', slug });
-          } else {
-            const paneId = nanoid();
-            paneGroup.state.current.root = {
-              id: nanoid(),
-              type: 'axis',
-              direction: 'horizontal',
-              children: [{ id: paneId, type: 'pane', kind: 'entity', slug }],
-              flexes: [1],
-            };
-            paneGroup.state.current.focusedPaneId = paneId;
-          }
-        }
-      } else {
-        const paneId = nanoid();
-        paneGroup.state.current.root = {
-          id: nanoid(),
-          type: 'axis',
-          direction: 'horizontal',
-          children: [
-            isHome ? { id: paneId, type: 'pane', kind: 'home' as const } : { id: paneId, type: 'pane', kind: 'entity' as const, slug },
-          ],
-          flexes: [1],
-        };
-        paneGroup.state.current.focusedPaneId = paneId;
-      }
-    });
+    const siteId = query.data.entity?.site?.id;
+    paneGroup.handleNavigation(slug, siteId);
   });
 
-  // Case 2: URL 파생 동기화 (pane tree → URL)
+  // app.state 동기화 (sidebar 하이라이트 등)
   $effect(() => {
-    const focusedPaneId = paneGroup.state.current.focusedPaneId;
-    if (!focusedPaneId) return;
-
-    const focusedPane = panes.find((p) => p.id === focusedPaneId);
-    if (focusedPane?.kind === 'entity' && focusedPane.slug !== page.params.slug) {
-      goto(`/${focusedPane.slug}`, { replaceState: true, keepFocus: true });
-    } else if (focusedPane?.kind === 'home' && page.params.slug !== 'home') {
-      goto('/home', { replaceState: true, keepFocus: true });
+    if (slug === 'home') {
+      app.state.current = undefined;
+      app.state.ancestors = [];
+    } else if (slug) {
+      app.state.current = slug;
     }
   });
 

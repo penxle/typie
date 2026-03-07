@@ -13,6 +13,7 @@
   import { onMount } from 'svelte';
   import { defaultPlanRules } from '@/const';
   import { browser } from '$app/environment';
+  import { goto } from '$app/navigation';
   import { updated } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
@@ -34,6 +35,7 @@
   import MarketingConsentModal from './MarketingConsentModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
+  import ShortcutsModal from './ShortcutsModal.svelte';
   import Sidebar from './Sidebar.svelte';
   import TrialExpiredModal from './TrialExpiredModal.svelte';
   import UserSurveyModal from './UserSurveyModal.svelte';
@@ -46,7 +48,10 @@
 
   const query = $derived(hydrateQuery(() => data.query));
 
-  let siteId = $derived(query.data.me.sites[0].id);
+  const app = setupAppContext(query.data.me.id);
+
+  let currentSite = $derived(query.data.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data.me.sites[0]);
+  let siteId = $derived(currentSite.id);
   let userId = $derived(query.data.me.id);
 
   createSubscription(
@@ -112,10 +117,29 @@
     () => ({ userId }),
   );
 
-  const app = setupAppContext(query.data.me.id);
-
-  setupPaneGroup(app);
+  const paneGroup = setupPaneGroup(siteId, {
+    userId,
+    navigate: (path, opts) => goto(path, opts),
+    onSiteChange: (id) => {
+      app.preference.current.currentSiteId = id;
+    },
+  });
   setupEditorRegistry();
+
+  $effect(() => {
+    if (app.state.nextCurrentSiteId && query.data.me.sites.some((s) => s.id === app.state.nextCurrentSiteId)) {
+      paneGroup.switchToSite(app.state.nextCurrentSiteId);
+      app.state.nextCurrentSiteId = undefined;
+    }
+  });
+
+  // currentSiteId가 유효하지 않으면 (사이트 삭제 등) 첫 번째 사이트로 전환
+  $effect(() => {
+    const sites = query.data.me.sites;
+    if (sites.length > 0 && !sites.some((s) => s.id === app.preference.current.currentSiteId)) {
+      paneGroup.switchToSite(sites[0].id);
+    }
+  });
 
   $effect(() => {
     app.state.usage.current.totalCharacterCount = query.data.me.usage.totalCharacterCount;
@@ -312,7 +336,7 @@
         overflow: 'hidden',
       })}
     >
-      <Sidebar site$key={query.data.me.sites[0]} user$key={query.data.me} />
+      <Sidebar user$key={query.data.me} />
 
       <div
         class={cx(
@@ -330,13 +354,14 @@
 {/if}
 
 <CommandPalette user$key={query.data.me} />
-<Notes query$key={query.data} />
+<Notes />
 <PreferenceModal user$key={query.data.me} />
-<SiteSettingsModal site$key={query.data.me.sites[0]} user$key={query.data.me} />
+<SiteSettingsModal site$key={currentSite} user$key={query.data.me} />
 <ShareModal />
 <StatsModal />
-<TrashModal site$key={query.data.me.sites[0]} />
+<TrashModal site$key={currentSite} />
 <Shortcuts query$key={query.data} />
+<ShortcutsModal />
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <MarketingConsentModal bind:open={marketingConsentModalOpen} />

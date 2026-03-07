@@ -31,7 +31,6 @@ export const load: LayoutLoad = async (event) => {
             id
             name
 
-            ...DashboardLayout_Sidebar_site
             ...DashboardLayout_SiteSettingsModal_site
             ...DashboardLayout_TrashModal_site
           }
@@ -105,7 +104,6 @@ export const load: LayoutLoad = async (event) => {
 
         ...AdminImpersonateBanner_query
         ...DashboardLayout_Shortcuts_query
-        ...DashboardLayout_Notes_query
       }
     `),
   );

@@ -255,6 +255,7 @@
   `);
 
   const app = getAppContext();
+  const currentSite = $derived(query.data?.me.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? query.data?.me.sites[0]);
   const paneGroup = getPaneGroup();
   const pane = getPane();
   const editorRegistry = getEditorRegistry();
@@ -1480,7 +1481,7 @@
     폰트 업로드 기능은 FULL ACCESS에서 사용할 수 있어요.
   </PlanUpgradeModal>
 
-  {#if query.data.me.sites[0]}
-    <DocumentTemplateModal {editor} {focused} site$key={query.data.me.sites[0]} />
+  {#if currentSite}
+    <DocumentTemplateModal {editor} {focused} site$key={currentSite} />
   {/if}
 {/if}

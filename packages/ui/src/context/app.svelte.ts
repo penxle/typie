@@ -37,6 +37,8 @@ export type AppPreference = {
   initialPage: 'blank' | 'last';
 
   widgetHidden: boolean;
+
+  currentSiteId?: string;
 };
 
 type AppState = {
@@ -48,6 +50,7 @@ type AppState = {
   notesOpen: boolean;
   shareOpen: string[];
   statsOpen: boolean;
+  shortcutsOpen: boolean;
   upgradeOpen: boolean;
 
   usage: {
@@ -56,6 +59,7 @@ type AppState = {
   };
 
   newFolderId?: string;
+  nextCurrentSiteId?: string;
 
   openMenuCount: number;
 };
@@ -88,6 +92,7 @@ export const setupAppContext = (userId: string) => {
     notesOpen: false,
     shareOpen: [],
     statsOpen: false,
+    shortcutsOpen: false,
     upgradeOpen: false,
 
     usage: {

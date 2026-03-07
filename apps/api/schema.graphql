@@ -92,6 +92,10 @@ input CreateNoteInput {
   entityId: ID
 }
 
+input CreateSiteInput {
+  name: String!
+}
+
 input CreateTextReplacementInput {
   lowerOrder: String
   match: String!
@@ -135,6 +139,10 @@ input DeleteFolderInput {
 
 input DeleteNoteInput {
   noteId: ID!
+}
+
+input DeleteSiteInput {
+  siteId: ID!
 }
 
 input DeleteTextReplacementInput {
@@ -339,6 +347,7 @@ type Entity implements IEntity {
   availability: EntityAvailability!
   children: [Entity!]!
   container: EntityContainer!
+  deletedAt: DateTime
   deletedChildren: [Entity!]!
   depth: Int!
   descendants: [Entity!]!
@@ -654,6 +663,7 @@ type Mutation {
   createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
   createFolder(input: CreateFolderInput!): Folder!
   createNote(input: CreateNoteInput!): Note!
+  createSite(input: CreateSiteInput!): Site!
   createTextReplacement(input: CreateTextReplacementInput!): TextReplacementNode!
   createWidget(input: CreateWidgetInput!): Widget!
   createWsSession: String!
@@ -662,6 +672,7 @@ type Mutation {
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
   deleteNote(input: DeleteNoteInput!): Note!
+  deleteSite(input: DeleteSiteInput!): Site!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
   deleteUser: Boolean!
   deleteWidget(input: DeleteWidgetInput!): Widget!
@@ -963,7 +974,7 @@ type Query {
   impersonation: Impersonation
   me: User
   note(noteId: ID!): Note!
-  notes(entityId: ID): [Note!]!
+  notes(entityId: ID, siteId: ID): [Note!]!
   permalink(permalink: String!): Permalink!
   post(slug: String!): Post!
   randomName: String!
@@ -1085,9 +1096,11 @@ enum SingleSignOnProvider {
 type Site implements ISite {
   dateDisplay: SiteDateDisplay!
   deletedEntities: [Entity!]!
+  documentCount: Int!
   documentTemplates: [Document!]!
   entities: [Entity!]!
   firstEntity(type: EntityType!): Entity
+  folderCount: Int!
   id: ID!
   logo: Image!
   name: String!
@@ -1343,7 +1356,7 @@ type User implements IUser {
   postCount: Int!
   preferences: JSON!
   recentPosts: [Post!]!
-  recentlyViewedEntities: [Entity!]!
+  recentlyViewedEntities(siteId: ID): [Entity!]!
   referral: Referral
   referrals: [Referral!]!
   revenue: Int!

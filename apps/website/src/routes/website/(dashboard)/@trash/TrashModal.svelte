@@ -1,11 +1,12 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
-  import { flex } from '@typie/styled-system/patterns';
-  import { Button, Modal } from '@typie/ui/components';
+  import { center, flex } from '@typie/styled-system/patterns';
+  import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
+  import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$mearie';
   import TrashTree from './TrashTree.svelte';
   import type { DashboardLayout_TrashModal_site$key } from '$mearie';
@@ -43,6 +44,8 @@
 
   const app = getAppContext();
 
+  const entityCount = $derived(site.data.deletedEntities.length);
+
   const handleEmptyTrash = async () => {
     const entityIds = site.data.deletedEntities.map((entity) => entity.id);
     if (entityIds.length === 0) {
@@ -70,25 +73,47 @@
 
 <Modal
   style={css.raw({
-    gap: '16px',
-    maxWidth: '400px',
-    padding: '24px',
+    gap: '0',
+    maxWidth: '520px',
+    padding: '0',
   })}
   onclose={() => {
     app.state.trashOpen = false;
   }}
   open={app.state.trashOpen}
 >
-  <div class={flex({ justifyContent: 'space-between', alignItems: 'center' })}>
-    <div class={css({ fontSize: '20px', fontWeight: 'bold', color: 'text.subtle' })}>휴지통</div>
-    <Button onclick={handleEmptyTrash} size="sm" variant="secondary">비우기</Button>
+  <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '24px', paddingY: '20px' })}>
+    <div class={flex({ alignItems: 'center', gap: '10px' })}>
+      <Icon style={css.raw({ color: 'text.subtle' })} icon={Trash2Icon} size={20} />
+      <span class={css({ fontSize: '18px', fontWeight: 'bold', color: 'text.subtle' })}>휴지통</span>
+      {#if entityCount > 0}
+        <span
+          class={center({
+            minWidth: '20px',
+            height: '20px',
+            paddingX: '6px',
+            borderRadius: 'full',
+            backgroundColor: 'surface.muted',
+            fontSize: '12px',
+            fontWeight: 'semibold',
+            color: 'text.muted',
+          })}
+        >
+          {entityCount}
+        </span>
+      {/if}
+    </div>
+    {#if entityCount > 0}
+      <Button onclick={handleEmptyTrash} size="sm" variant="secondary">비우기</Button>
+    {/if}
   </div>
+
+  <HorizontalDivider />
 
   <div
     class={css({
       height: '400px',
       maxHeight: '[60vh]',
-      overflowY: 'auto',
     })}
   >
     <TrashTree site$key={site.data} />

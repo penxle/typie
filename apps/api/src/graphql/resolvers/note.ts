@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, isNull, or } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, Notes, TableCode, validateDbId } from '@/db';
 import { EntityState, NoteState } from '@/enums';
 import { generateFractionalOrder } from '@/utils';
@@ -26,6 +26,7 @@ builder.queryFields((t) => ({
     type: [Note],
     args: {
       entityId: t.arg.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
+      siteId: t.arg.id({ required: false, validate: validateDbId(TableCode.SITES) }),
     },
     resolve: async (_, args, ctx) => {
       const conditions = [eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)];
@@ -38,6 +39,20 @@ builder.queryFields((t) => ({
           .then(firstOrThrow);
 
         conditions.push(eq(Notes.entityId, args.entityId));
+      }
+
+      if (args.siteId) {
+        const siteCondition = or(isNull(Notes.entityId), eq(Entities.siteId, args.siteId));
+        if (siteCondition) {
+          conditions.push(siteCondition);
+        }
+
+        return await db
+          .select(getTableColumns(Notes))
+          .from(Notes)
+          .leftJoin(Entities, eq(Notes.entityId, Entities.id))
+          .where(and(...conditions))
+          .orderBy(asc(Notes.order));
       }
 
       return await db

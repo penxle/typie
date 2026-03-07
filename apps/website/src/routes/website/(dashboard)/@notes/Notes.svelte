@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
+  import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Modal, Select } from '@typie/ui/components';
@@ -18,60 +18,6 @@
   import { graphql } from '$mearie';
   import Masonry from './Masonry.svelte';
   import NoteComponent from './Note.svelte';
-  import type { DashboardLayout_Notes_query$key } from '$mearie';
-
-  type Props = {
-    query$key: DashboardLayout_Notes_query$key;
-  };
-
-  let { query$key }: Props = $props();
-
-  const query = createFragment(
-    graphql(`
-      fragment DashboardLayout_Notes_query on Query {
-        me @required {
-          id
-
-          recentlyViewedEntities {
-            id
-            slug
-
-            node {
-              __typename
-
-              ... on Document {
-                id
-                title
-              }
-            }
-          }
-        }
-
-        notes {
-          id
-          content
-          createdAt
-          updatedAt
-          order
-          color
-          entity {
-            id
-            slug
-
-            node {
-              __typename
-
-              ... on Document {
-                id
-                title
-              }
-            }
-          }
-        }
-      }
-    `),
-    () => query$key,
-  );
 
   const currentEntityQuery = createQuery(
     graphql(`
@@ -157,11 +103,60 @@
 
   const app = getAppContext();
 
+  const siteQuery = createQuery(
+    graphql(`
+      query DashboardLayout_Notes_Site_Query($siteId: ID) {
+        me @required {
+          id
+
+          recentlyViewedEntities(siteId: $siteId) {
+            id
+            slug
+
+            node {
+              __typename
+
+              ... on Document {
+                id
+                title
+              }
+            }
+          }
+        }
+
+        notes(siteId: $siteId) {
+          id
+          content
+          createdAt
+          updatedAt
+          order
+          color
+          entity {
+            id
+            slug
+
+            node {
+              __typename
+
+              ... on Document {
+                id
+                title
+              }
+            }
+          }
+        }
+      }
+    `),
+    () => ({ siteId: app.preference.current.currentSiteId }),
+  );
+
+  const notes = $derived(siteQuery.data?.notes ?? []);
+
   let inputValue = $state('');
   let inputEl = $state<HTMLTextAreaElement>();
   let selectedEntityId = $state<string | null>(null);
   const selectedEntityTitle = $derived.by(() => {
-    const note = query.data.notes.find((note) => note.entity?.id === selectedEntityId);
+    const note = notes.find((note) => note.entity?.id === selectedEntityId);
     if (!note) return null;
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -178,7 +173,7 @@
 
   const currentEntity = $derived(page.params.slug && currentEntityQuery.data ? currentEntityQuery.data.entity : null);
   const recentlyViewedEntities = $derived(
-    query.data.me.recentlyViewedEntities
+    (siteQuery.data?.me.recentlyViewedEntities ?? [])
       .slice(0, 10)
       .map((entity) =>
         match(entity.node)
@@ -201,8 +196,8 @@
   let localNoteOrder = $state<string[]>([]);
 
   const sortedNotes = $derived.by(() => {
-    if (localNoteOrder.length === 0) return query.data.notes;
-    return [...query.data.notes].toSorted((a, b) => {
+    if (localNoteOrder.length === 0) return notes;
+    return [...notes].toSorted((a, b) => {
       const indexA = localNoteOrder.indexOf(a.id);
       const indexB = localNoteOrder.indexOf(b.id);
       if (indexA === -1) return 1;
@@ -244,7 +239,7 @@
           cache.invalidate({ __typename: 'Entity', id: movedNote.entity.id, $field: 'notes' });
         }
       } catch {
-        localNoteOrder = query.data.notes.map((note) => note.id);
+        localNoteOrder = notes.map((note) => note.id);
         Toast.error('노트 순서 변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     }
@@ -269,7 +264,7 @@
 
   let prevNoteIds = $state<string[]>([]);
   $effect(() => {
-    const noteIds = query.data.notes.map((n) => n.id);
+    const noteIds = notes.map((n) => n.id);
     const noteIdsStr = noteIds.join(',');
     const prevNoteIdsStr = prevNoteIds.join(',');
 
@@ -326,14 +321,14 @@
     mixpanel.track('delete_note');
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
 
-    const note = query.data.notes.find((n) => n.id === noteId);
+    const note = notes.find((n) => n.id === noteId);
     if (note?.entity?.id) {
       cache.invalidate({ __typename: 'Entity', id: note.entity.id, $field: 'notes' });
     }
   };
 
   const editNote = (id: string) => {
-    const note = query.data.notes.find((n) => n.id === id);
+    const note = notes.find((n) => n.id === id);
     if (note) {
       editingNoteId = note.id;
       editingValue = note.content;

@@ -2,7 +2,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/bun';
 import argon2 from 'argon2';
 import dayjs from 'dayjs';
-import { and, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql, sum } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
 import * as uuid from 'uuid';
@@ -152,7 +152,8 @@ User.implement({
 
     recentlyViewedEntities: t.field({
       type: [Entity],
-      resolve: async (self) => {
+      args: { siteId: t.arg.id({ required: false }) },
+      resolve: async (self, args) => {
         return await db
           .select()
           .from(Entities)
@@ -162,6 +163,7 @@ User.implement({
               eq(Entities.state, EntityState.ACTIVE),
               isNotNull(Entities.viewedAt),
               ne(Entities.type, EntityType.POST),
+              args.siteId ? eq(Entities.siteId, args.siteId) : undefined,
             ),
           )
           .orderBy(desc(Entities.viewedAt))
@@ -176,7 +178,7 @@ User.implement({
           .select()
           .from(Sites)
           .where(and(eq(Sites.userId, self.id), eq(Sites.state, SiteState.ACTIVE)))
-          .orderBy(desc(Sites.createdAt));
+          .orderBy(asc(Sites.createdAt));
       },
     }),
 

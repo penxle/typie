@@ -1,11 +1,12 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FileIcon from '~icons/lucide/file';
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
@@ -27,6 +28,17 @@
         entity {
           id
           slug
+
+          ancestors {
+            id
+            node {
+              __typename
+              ... on Folder {
+                id
+                name
+              }
+            }
+          }
         }
       }
     `),
@@ -114,39 +126,69 @@
 </script>
 
 <div
-  class={css({
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '6px',
-    paddingX: '8px',
-    paddingY: '2px',
-    borderRadius: '6px',
-    transition: 'common',
-    _hover: { backgroundColor: 'surface.muted' },
-    '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
-  })}
+  class={cx(
+    'group',
+    css({
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '6px',
+      paddingX: '12px',
+      paddingY: '6px',
+      borderRadius: '8px',
+      transition: 'common',
+      _hover: { backgroundColor: 'surface.muted' },
+    }),
+  )}
   aria-selected="false"
   role="treeitem"
 >
-  <div class={css({ display: 'flex', alignItems: 'center', gap: '6px', paddingY: '4px' })}>
-    <Icon style={css.raw({ color: 'text.faint' })} icon={FileIcon} size={14} />
+  <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
+    <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={FileIcon} size={14} />
 
     <span
       class={css({
-        flexGrow: '1',
         fontSize: '14px',
         fontWeight: 'medium',
         color: 'text.muted',
         wordBreak: 'break-all',
         lineClamp: '1',
+        flexShrink: '0',
+        maxWidth: '[60%]',
       })}
     >
       {document.data.title}
     </span>
+
+    {#if document.data.entity.ancestors.length > 0}
+      <div class={css({ display: 'flex', alignItems: 'center', gap: '2px', minWidth: '0' })}>
+        {#each document.data.entity.ancestors as ancestor, i (ancestor.id)}
+          {#if ancestor.node.__typename === 'Folder'}
+            {#if i > 0}
+              <Icon style={css.raw({ color: 'text.disabled', flexShrink: '0' })} icon={ChevronRightIcon} size={10} />
+            {/if}
+            <span
+              class={css({ fontSize: '12px', color: 'text.faint', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })}
+            >
+              {ancestor.node.name}
+            </span>
+          {/if}
+        {/each}
+      </div>
+    {/if}
   </div>
 
-  <div class={css({ display: 'flex', alignItems: 'center', gap: '4px' })}>
+  <div
+    class={css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: '2px',
+      flexShrink: '0',
+      opacity: '0',
+      transition: 'common',
+      _groupHover: { opacity: '100' },
+    })}
+  >
     <button
       class={center({
         borderRadius: '4px',

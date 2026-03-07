@@ -33,6 +33,17 @@
           slug
           order
           depth
+
+          ancestors {
+            id
+            node {
+              __typename
+              ... on Folder {
+                id
+                name
+              }
+            }
+          }
         }
       }
     `),
@@ -149,13 +160,12 @@
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: '6px',
-        paddingX: '8px',
-        paddingY: '2px',
-        borderRadius: '6px',
+        paddingX: '12px',
+        paddingY: '6px',
+        borderRadius: '8px',
         transition: 'common',
         cursor: 'pointer',
         _supportHover: { backgroundColor: 'surface.muted' },
-        '&:has([aria-pressed="true"])': { backgroundColor: 'surface.muted' },
       }),
     )}
     aria-selected="false"
@@ -167,24 +177,52 @@
     }}
     role="treeitem"
   >
-    <div class={css({ display: 'flex', alignItems: 'center', gap: '6px', paddingY: '4px' })}>
-      <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
-      <Icon style={css.raw({ color: 'text.faint' })} icon={FolderIcon} size={14} />
+    <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
+      <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
+      <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={FolderIcon} size={14} />
+
       <span
         class={css({
-          flexGrow: '1',
           fontSize: '14px',
           fontWeight: 'medium',
           color: 'text.muted',
           wordBreak: 'break-all',
           lineClamp: '1',
+          flexShrink: '0',
+          maxWidth: '[60%]',
         })}
       >
         {folder.data.name}
       </span>
+
+      {#if folder.data.entity.ancestors.length > 0}
+        <div class={css({ display: 'flex', alignItems: 'center', gap: '2px', minWidth: '0' })}>
+          {#each folder.data.entity.ancestors as ancestor, i (ancestor.id)}
+            {#if ancestor.node.__typename === 'Folder'}
+              {#if i > 0}
+                <Icon style={css.raw({ color: 'text.disabled', flexShrink: '0' })} icon={ChevronRightIcon} size={10} />
+              {/if}
+              <span
+                class={css({ fontSize: '12px', color: 'text.faint', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })}
+              >
+                {ancestor.node.name}
+              </span>
+            {/if}
+          {/each}
+        </div>
+      {/if}
     </div>
 
-    <div class={css({ display: 'flex', alignItems: 'center', gap: '4px' })}>
+    <div
+      class={css({
+        display: 'flex',
+        alignItems: 'center',
+        gap: '2px',
+        opacity: '0',
+        transition: 'common',
+        _groupHover: { opacity: '100' },
+      })}
+    >
       <button
         class={center({
           borderRadius: '4px',
