@@ -2,7 +2,7 @@
   import { flip, hide } from '@floating-ui/dom';
   import { createMutation } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
-  import { center, flex } from '@typie/styled-system/patterns';
+  import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
   import { Button, Icon, Menu, MenuItem, RingSpinner, TextInput } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
@@ -292,13 +292,13 @@
 
 {#if pickerOpened && !hasEmbed && isEditable}
   <form
-    class={center({
-      flexDirection: 'column',
-      gap: '12px',
+    class={flex({
+      alignItems: 'center',
+      gap: '6px',
       borderWidth: '1px',
-      borderRadius: '12px',
-      padding: '12px',
-      width: '380px',
+      borderRadius: '8px',
+      paddingX: '6px',
+      paddingY: '4px',
       backgroundColor: 'surface.default',
       boxShadow: 'small',
       zIndex: 'editor',
@@ -309,21 +309,15 @@
     }}
     use:floating
   >
-    <span class={css({ fontSize: '13px', color: 'text.muted', textAlign: 'center' })}>
-      Youtube, Google Drive, 일반 링크 등
-      <br />
-      다양한 콘텐츠를 임베드할 수 있어요
-    </span>
-
     <TextInput
       name="url"
-      style={css.raw({ width: 'full' })}
+      style={css.raw({ flex: '1', minWidth: '200px' })}
       placeholder="https://..."
       size="sm"
       bind:element={inputEl}
       bind:value={inflightUrl}
     />
 
-    <Button style={css.raw({ width: 'full' })} size="sm" type="submit">확인</Button>
+    <Button size="sm" type="submit">확인</Button>
   </form>
 {/if}
