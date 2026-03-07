@@ -13,6 +13,7 @@
   import StarIcon from '~icons/lucide/star';
   import TagIcon from '~icons/lucide/tag';
   import { pushState } from '$app/navigation';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from './SubscriptionCelebrationModal.svelte';
   import type { Snippet } from 'svelte';
@@ -166,8 +167,8 @@
             actionLabel: '시작하기',
             actionHandler: async () => {
               await subscribePlanWithTrial();
-              //               cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
-              //               cache.invalidate({ __typename: 'User', id: user.data.id, field: 'canStartTrial' });
+              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'canStartTrial' });
               mixpanel.track('start_trial');
               open = false;
               trialStartedModalOpen = true;

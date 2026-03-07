@@ -10,6 +10,7 @@
   import { PlanPair } from '@/const';
   import { PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import RedeemCreditCodeModal from './RedeemCreditCodeModal.svelte';
@@ -215,8 +216,8 @@
                       actionLabel: '시작하기',
                       actionHandler: async () => {
                         await subscribePlanWithTrial();
-                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
-                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'canStartTrial' });
+                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'canStartTrial' });
                         mixpanel.track('start_trial');
                         trialStartedModalOpen = true;
                       },
@@ -293,8 +294,8 @@
                     actionLabel: '전환하기',
                     actionHandler: async () => {
                       await schedulePlanChange({ input: { planId: targetPlanId } });
-                      //                       cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
-                      //                       cache.invalidate({ __typename: 'User', id: user.data.id, field: 'nextSubscription' });
+                      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
                       mixpanel.track('change_plan', {
                         from: isMonthly ? 'monthly' : 'yearly',
                         to: isMonthly ? 'yearly' : 'monthly',
@@ -390,8 +391,8 @@
                       actionLabel: '전환 취소',
                       actionHandler: async () => {
                         await cancelPlanChange();
-                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
-                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'nextSubscription' });
+                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'nextSubscription' });
                         mixpanel.track('cancel_plan_change');
                         Toast.success('플랜 전환이 취소되었어요');
                       },
@@ -448,7 +449,7 @@
                     actionLabel: '삭제',
                     actionHandler: async () => {
                       await deleteBillingKey();
-                      //                       cache.invalidate({ __typename: 'User', id: user.data.id, field: 'billingKey' });
+                      cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'billingKey' });
                       mixpanel.track('delete_billing_key');
                       Toast.success('카드가 삭제되었어요');
                     },
