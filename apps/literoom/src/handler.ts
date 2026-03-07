@@ -99,7 +99,7 @@ export const handler = async (event: Event) => {
 
   const input = await resp.arrayBuffer();
 
-  let image = sharp(input, { failOn: 'none', animated: true, limitInputPixels: false });
+  let image = sharp(input, { failOn: 'none', animated: true, limitInputPixels: false }).keepIccProfile();
   const metadata = await image.metadata();
 
   if (metadata.format === 'svg' && format === 'auto') {

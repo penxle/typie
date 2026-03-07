@@ -332,7 +332,7 @@ builder.mutationFields((t) => ({
         }
       }
 
-      let processed = sharp(buffer, { failOn: 'none', limitInputPixels: false }).rotate();
+      let processed = sharp(buffer, { failOn: 'none', limitInputPixels: false }).rotate().keepIccProfile();
 
       if (input.modification) {
         if (input.modification.ensureAlpha) {
