@@ -12,6 +12,7 @@
   import InfoIcon from '~icons/lucide/info';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
@@ -150,6 +151,10 @@
           const entityIds = [...tree.selectedEntityIds];
 
           await deleteEntities({ input: { entityIds } });
+
+          if (app.preference.current.currentSiteId) {
+            cache.invalidate({ __typename: 'Site', id: app.preference.current.currentSiteId, $field: 'deletedEntities' });
+          }
 
           mixpanel.track('delete_entities', {
             totalCount: entityIds.length,

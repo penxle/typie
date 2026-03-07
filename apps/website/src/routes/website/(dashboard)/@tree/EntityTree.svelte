@@ -15,6 +15,7 @@
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
@@ -705,6 +706,8 @@
         try {
           endDragging();
           await deleteEntities({ input: { entityIds: selectedIds } });
+
+          cache.invalidate({ __typename: 'Site', id: site.data.id, $field: 'deletedEntities' });
 
           mixpanel.track('delete_entities', { totalCount: selectedIds.length, via: 'drag_and_drop' });
 
