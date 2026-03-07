@@ -8,6 +8,7 @@
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { values } from '$lib/editor/values';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import FontUploadModal from '../FontUploadModal.svelte';
   import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
@@ -159,9 +160,9 @@
                 actionLabel: '삭제',
                 actionHandler: async () => {
                   await archiveFontFamily({ input: { fontFamilyId: family.id } });
-                  //                   cache.invalidate({ __typename: 'User', id: user.data.id, field: 'fontFamilies' });
-                  //                   cache.invalidate({ __typename: 'User', id: user.data.id, field: 'documentFontFamilies' });
-                  //                   cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
+                  cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'fontFamilies' });
+                  cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'documentFontFamilies' });
+                  cache.invalidate({ __typename: 'Document', $field: 'fontFamilies' });
                 },
               });
             }}
@@ -190,9 +191,9 @@
                       actionLabel: '삭제',
                       actionHandler: async () => {
                         await archiveFont({ input: { fontId: font.id } });
-                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'documentFontFamilies' });
-                        //                         cache.invalidate({ __typename: 'User', id: user.data.id, field: 'fontFamilies' });
-                        //                         cache.invalidate({ __typename: 'Document', field: 'fontFamilies' });
+                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'documentFontFamilies' });
+                        cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'fontFamilies' });
+                        cache.invalidate({ __typename: 'Document', $field: 'fontFamilies' });
                       },
                     });
                   }}

@@ -7,6 +7,7 @@
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { replaceState } from '$app/navigation';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import SubscriptionCelebrationModal from '../SubscriptionCelebrationModal.svelte';
   import type { DashboardLayout_PreferenceModal_PlanTab_user$key } from '$mearie';
@@ -224,8 +225,8 @@
                   actionLabel: '시작하기',
                   actionHandler: async () => {
                     await subscribePlanWithTrial();
-                    //                     cache.invalidate({ __typename: 'User', id: user.data.id, field: 'subscription' });
-                    //                     cache.invalidate({ __typename: 'User', id: user.data.id, field: 'canStartTrial' });
+                    cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                    cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'canStartTrial' });
                     mixpanel.track('start_trial');
                     trialStartedModalOpen = true;
                   },
