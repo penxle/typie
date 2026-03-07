@@ -160,8 +160,6 @@
     `),
   );
 
-  const loaded = $derived(app.state.statsOpen && !!query.data && !query.loading);
-
   const copyActivityImage = async () => {
     const resp = await generateActivityImage();
     const b64 = resp.generateActivityImage;
@@ -195,13 +193,13 @@
     padding: '24px',
     backgroundColor: 'surface.subtle',
   })}
-  loading={!loaded || !query}
+  loading={!query.data}
   onclose={() => {
     app.state.statsOpen = false;
   }}
   open={app.state.statsOpen}
 >
-  {#if loaded && query.data && streakData}
+  {#if query.data && streakData}
     <div class={css({ fontSize: '17px', fontWeight: 'semibold', color: 'text.default' })}>나의 글쓰기 통계</div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
