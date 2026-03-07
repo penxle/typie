@@ -11,6 +11,9 @@ class UploadManager extends ChangeNotifier {
   final Map<String, String> _localImageUploadIds = {};
   final Map<String, String> _localFileUploadIds = {};
   final Map<String, bool> _inflightEmbeds = {};
+  bool _disposed = false;
+
+  bool get isDisposed => _disposed;
 
   Map<String, InflightImage> get inflightImages => Map.unmodifiable(_inflightImages);
   Map<String, InflightFile> get inflightFiles => Map.unmodifiable(_inflightFiles);
@@ -23,109 +26,190 @@ class UploadManager extends ChangeNotifier {
   Map<String, bool> get inflightEmbeds => Map.unmodifiable(_inflightEmbeds);
 
   void addInflightImage(String uploadId, InflightImage image) {
+    if (_disposed) {
+      return;
+    }
     _inflightImages[uploadId] = image;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void removeInflightImage(String uploadId) {
+    if (_disposed) {
+      return;
+    }
     _inflightImages.remove(uploadId);
-    notifyListeners();
+    _notifyListeners();
   }
 
   void addImageAsset(String id, ImageAsset asset) {
+    if (_disposed) {
+      return;
+    }
     _imageAssets[id] = asset;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void setLocalImageUploadId(String nodeId, String uploadId) {
+    if (_disposed) {
+      return;
+    }
     _localImageUploadIds[nodeId] = uploadId;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void removeLocalImageUploadId(String nodeId) {
+    if (_disposed) {
+      return;
+    }
     _localImageUploadIds.remove(nodeId);
-    notifyListeners();
+    _notifyListeners();
   }
 
   void completeImageUpload({required String uploadId, required String nodeId, required ImageAsset asset}) {
+    if (_disposed) {
+      return;
+    }
     _inflightImages.remove(uploadId);
     _localImageUploadIds.remove(nodeId);
     _imageAssets[asset.id] = asset;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void failImageUpload({required String uploadId, required String nodeId}) {
+    if (_disposed) {
+      return;
+    }
     _inflightImages.remove(uploadId);
     _localImageUploadIds.remove(nodeId);
-    notifyListeners();
+    _notifyListeners();
   }
 
   void addInflightFile(String uploadId, InflightFile file) {
+    if (_disposed) {
+      return;
+    }
     _inflightFiles[uploadId] = file;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void removeInflightFile(String uploadId) {
+    if (_disposed) {
+      return;
+    }
     _inflightFiles.remove(uploadId);
-    notifyListeners();
+    _notifyListeners();
   }
 
   void addFileAsset(String id, FileAsset asset) {
+    if (_disposed) {
+      return;
+    }
     _fileAssets[id] = asset;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void setLocalFileUploadId(String nodeId, String uploadId) {
+    if (_disposed) {
+      return;
+    }
     _localFileUploadIds[nodeId] = uploadId;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void removeLocalFileUploadId(String nodeId) {
+    if (_disposed) {
+      return;
+    }
     _localFileUploadIds.remove(nodeId);
-    notifyListeners();
+    _notifyListeners();
   }
 
   void completeFileUpload({required String uploadId, required String nodeId, required FileAsset asset}) {
+    if (_disposed) {
+      return;
+    }
     _inflightFiles.remove(uploadId);
     _localFileUploadIds.remove(nodeId);
     _fileAssets[asset.id] = asset;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void failFileUpload({required String uploadId, required String nodeId}) {
+    if (_disposed) {
+      return;
+    }
     _inflightFiles.remove(uploadId);
     _localFileUploadIds.remove(nodeId);
-    notifyListeners();
+    _notifyListeners();
   }
 
   void setInflightEmbed(String nodeId, {required bool inflight}) {
+    if (_disposed) {
+      return;
+    }
     _inflightEmbeds[nodeId] = inflight;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void removeInflightEmbed(String nodeId) {
+    if (_disposed) {
+      return;
+    }
     _inflightEmbeds.remove(nodeId);
-    notifyListeners();
+    _notifyListeners();
   }
 
   void addEmbedAsset(String id, EmbedAsset asset) {
+    if (_disposed) {
+      return;
+    }
     _embedAssets[id] = asset;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void addArchivedAsset(String id, ArchivedAsset asset) {
+    if (_disposed) {
+      return;
+    }
     _archivedAssets[id] = asset;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void completeEmbedUnfurl({required String nodeId, required EmbedAsset asset}) {
+    if (_disposed) {
+      return;
+    }
     _inflightEmbeds.remove(nodeId);
     _embedAssets[asset.id] = asset;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void failEmbedUnfurl({required String nodeId}) {
+    if (_disposed) {
+      return;
+    }
     _inflightEmbeds.remove(nodeId);
-    notifyListeners();
+    _notifyListeners();
+  }
+
+  void _notifyListeners() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _inflightImages.clear();
+    _inflightFiles.clear();
+    _imageAssets.clear();
+    _fileAssets.clear();
+    _embedAssets.clear();
+    _archivedAssets.clear();
+    _localImageUploadIds.clear();
+    _localFileUploadIds.clear();
+    _inflightEmbeds.clear();
+    super.dispose();
   }
 }
