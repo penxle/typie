@@ -84,7 +84,7 @@
     ></div>
 
     {#if loading}
-      <RingSpinner style={css.raw({ size: '40px', color: 'text.faint' })} />
+      <RingSpinner style={css.raw({ position: 'absolute', size: '40px', color: 'text.faint' })} />
     {:else}
       <div
         class={css(
