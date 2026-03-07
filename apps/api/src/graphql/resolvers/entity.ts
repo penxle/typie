@@ -52,6 +52,7 @@ Entity.implement({
   interfaces: [IEntity],
   fields: (t) => ({
     view: t.expose('id', { type: EntityView }),
+    deletedAt: t.expose('deletedAt', { type: 'DateTime', nullable: true }),
 
     site: t.expose('siteId', { type: Site }),
     parent: t.expose('parentId', { type: Entity, nullable: true }),

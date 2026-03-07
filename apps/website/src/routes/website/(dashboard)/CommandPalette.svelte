@@ -50,21 +50,6 @@
         sites {
           id
         }
-
-        recentlyViewedEntities {
-          id
-          slug
-
-          node {
-            __typename
-
-            ... on Document {
-              id
-              title
-              documentType: type
-            }
-          }
-        }
       }
     `),
     () => user$key,
@@ -101,7 +86,7 @@
         }
       }
     `),
-    () => ({ siteId: user.data.sites[0].id, query: debouncedQuery }),
+    () => ({ siteId: currentSiteId, query: debouncedQuery }),
     () => ({ skip: debouncedQuery.length === 0 }),
   );
 
@@ -151,6 +136,33 @@
   );
 
   const app = getAppContext();
+  const currentSiteId = $derived((user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]).id);
+
+  const recentlyViewedQuery = createQuery(
+    graphql(`
+      query DashboardLayout_CommandPalette_RecentlyViewed_Query($siteId: ID!) {
+        me @required {
+          id
+
+          recentlyViewedEntities(siteId: $siteId) {
+            id
+            slug
+
+            node {
+              __typename
+
+              ... on Document {
+                id
+                title
+                documentType: type
+              }
+            }
+          }
+        }
+      }
+    `),
+    () => ({ siteId: currentSiteId }),
+  );
 
   const commands: Command[] = $derived([
     {
@@ -160,7 +172,7 @@
       action: async () => {
         const resp = await createDocument({
           input: {
-            siteId: user.data.sites[0].id,
+            siteId: currentSiteId,
           },
         });
 
@@ -265,7 +277,7 @@
 
   const recentlyViewedHits = $derived(
     query.length === 0
-      ? user.data.recentlyViewedEntities
+      ? (recentlyViewedQuery.data?.me.recentlyViewedEntities ?? [])
           .slice(0, 5)
           .map((entity) =>
             match(entity.node)

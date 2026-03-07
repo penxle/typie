@@ -24,6 +24,7 @@
     },
     variants: {
       size: {
+        10: { size: '10px' },
         12: { size: '12px' },
         14: { size: '14px' },
         16: { size: '16px' },

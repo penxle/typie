@@ -132,14 +132,14 @@
   })}
   data-pane-id={pane.id}
   onclick={() => {
-    paneGroup.state.current.focusedPaneId = pane.id;
+    paneGroup.focusPane(pane.id);
   }}
   onfocusin={() => {
-    paneGroup.state.current.focusedPaneId = pane.id;
+    paneGroup.focusPane(pane.id);
   }}
   onkeydown={(e) => {
     if (e.key === 'Enter' || e.key === ' ') {
-      paneGroup.state.current.focusedPaneId = pane.id;
+      paneGroup.focusPane(pane.id);
     }
   }}
   role="tabpanel"

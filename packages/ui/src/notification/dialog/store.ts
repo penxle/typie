@@ -11,7 +11,8 @@ type Dialog = {
 
   action?: 'primary' | 'danger';
   actionLabel?: string;
-  actionHandler?: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
+  actionHandler?: () => void | false | Promise<void | false>;
 
   onclose?: () => void;
 };

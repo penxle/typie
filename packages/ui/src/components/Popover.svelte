@@ -13,6 +13,7 @@
     offset?: OffsetOptions;
     style?: SystemStyleObject;
     contentStyle?: SystemStyleObject;
+    matchTriggerWidth?: boolean;
     disabled?: boolean;
     onopen?: () => void;
     onclose?: () => void;
@@ -26,6 +27,7 @@
     offset = 8,
     style,
     contentStyle,
+    matchTriggerWidth = false,
     disabled = false,
     onopen,
     onclose,
@@ -100,6 +102,7 @@
 {#if open}
   <div
     bind:this={contentEl}
+    style:min-width={matchTriggerWidth && triggerEl ? `${triggerEl.offsetWidth}px` : undefined}
     class={css(
       {
         borderWidth: '1px',

@@ -59,8 +59,8 @@
 
       <Button
         data-dialog-primary
-        onclick={() => {
-          dialog.actionHandler?.();
+        onclick={async () => {
+          if ((await dialog.actionHandler?.()) === false) return;
           dialog.onclose?.();
           dismiss();
         }}

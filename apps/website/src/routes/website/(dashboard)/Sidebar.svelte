@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { css, cx } from '@typie/styled-system/css';
+  import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
@@ -12,50 +12,62 @@
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
-  import ExternalLinkIcon from '~icons/lucide/external-link';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
-  import HelpCircleIcon from '~icons/lucide/help-circle';
   import HomeIcon from '~icons/lucide/home';
-  import NewspaperIcon from '~icons/lucide/newspaper';
   import SearchIcon from '~icons/lucide/search';
-  import SettingsIcon from '~icons/lucide/settings';
-  import ShieldUserIcon from '~icons/lucide/shield-user';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
-  import Trash2Icon from '~icons/lucide/trash-2';
-  import { goto, pushState } from '$app/navigation';
-  import { Img } from '$lib/components';
+  import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import EntityTree from './@tree/EntityTree.svelte';
   import PlanUsageWidget from './PlanUsageWidget.svelte';
   import Profile from './Profile.svelte';
-  import ThemeSwitch from './ThemeSwitch.svelte';
-  import TrialWidget from './TrialWidget.svelte';
-  import type { DashboardLayout_Sidebar_site$key, DashboardLayout_Sidebar_user$key } from '$mearie';
+  import SpaceMenu from './SpaceMenu.svelte';
+  import type { DashboardLayout_Sidebar_user$key } from '$mearie';
 
   type Props = {
-    site$key: DashboardLayout_Sidebar_site$key;
     user$key: DashboardLayout_Sidebar_user$key;
   };
 
-  let { site$key, user$key }: Props = $props();
+  let { user$key }: Props = $props();
+
+  const app = getAppContext();
 
   const user = createFragment(
     graphql(`
       fragment DashboardLayout_Sidebar_user on User {
         id
+        name
         role
+
+        avatar {
+          id
+          ...Img_image
+        }
+
+        sites {
+          id
+          name
+          url
+
+          logo {
+            id
+            ...Img_image
+          }
+
+          ...DashboardLayout_EntityTree_site
+        }
 
         characterCountChanges {
           date
           additions
         }
 
+        ...DashboardLayout_SpaceMenu_user
         ...DashboardLayout_Profile_user
         ...DashboardLayout_PlanUsageWidget_user
-        ...DashboardLayout_TrialWidget_user
       }
     `),
     () => user$key,
@@ -82,24 +94,7 @@
     return streak;
   });
 
-  const site = createFragment(
-    graphql(`
-      fragment DashboardLayout_Sidebar_site on Site {
-        id
-        name
-        url
-
-        logo {
-          id
-          ...Img_image
-        }
-
-        ...DashboardLayout_EntityTree_site
-        ...DashboardLayout_TrashModal_site
-      }
-    `),
-    () => site$key,
-  );
+  const site = $derived(user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]);
 
   const [createDocument] = createMutation(
     graphql(`
@@ -190,7 +185,6 @@
     `),
   );
 
-  const app = getAppContext();
   const paneGroup = getPaneGroup();
 
   const getAdjacentOrders = () => {
@@ -216,6 +210,24 @@
     element: HTMLElement;
   };
 
+  let treeScrollEl = $state<HTMLDivElement>();
+  let canScrollUp = $state(false);
+  let canScrollDown = $state(false);
+
+  const updateScrollState = () => {
+    if (!treeScrollEl) return;
+    canScrollUp = treeScrollEl.scrollTop > 0;
+    canScrollDown = treeScrollEl.scrollTop + treeScrollEl.clientHeight < treeScrollEl.scrollHeight - 1;
+  };
+
+  $effect(() => {
+    if (!treeScrollEl) return;
+    updateScrollState();
+    const observer = new ResizeObserver(updateScrollState);
+    observer.observe(treeScrollEl);
+    return () => observer.disconnect();
+  });
+
   let resizer = $state<Resizer | null>(null);
   let newWidth = $derived(clamp((app.preference.current.sidebarWidth ?? 240) + (resizer?.deltaX ?? 0), 240, 480));
 
@@ -228,6 +240,9 @@
 
     resizer = null;
   };
+
+  let spaceMenuOpen = $state(false);
+  let profileOpen = $state(false);
 
   let hideTimeout = $state<NodeJS.Timeout | null>(null);
   let hovered = $state(false);
@@ -273,6 +288,13 @@
     }
   });
 
+  $effect(() => {
+    if (sidebarState === 'hidden') {
+      spaceMenuOpen = false;
+      profileOpen = false;
+    }
+  });
+
   const handleMouseEnter = () => {
     hovered = true;
 
@@ -310,10 +332,12 @@
   <div
     class={css({
       position: 'fixed',
-      top: '128px',
+      top: '0',
+      bottom: '0',
       left: '0',
       width: '40px',
-      height: '[calc(100vh - 256px)]',
+      height: '[clamp(min(480px,100vh), calc(100vh - 192px), 100vh)]',
+      marginBlock: 'auto',
       zIndex: 'sidebar',
     })}
     onmouseenter={() => {
@@ -338,9 +362,11 @@
   style:transform
   class={css({
     position: app.preference.current.sidebarHidden ? 'fixed' : 'relative',
-    top: app.preference.current.sidebarHidden ? '128px' : undefined,
+    top: app.preference.current.sidebarHidden ? '0' : undefined,
+    bottom: app.preference.current.sidebarHidden ? '0' : undefined,
     left: app.preference.current.sidebarHidden ? '0' : undefined,
-    height: app.preference.current.sidebarHidden ? '[calc(100vh - 256px)]' : undefined,
+    marginBlock: app.preference.current.sidebarHidden ? 'auto' : undefined,
+    height: app.preference.current.sidebarHidden ? '[clamp(min(480px,100vh), calc(100vh - 192px), 100vh)]' : undefined,
     flexShrink: app.preference.current.sidebarHidden ? undefined : '0',
     minWidth: app.preference.current.sidebarHidden ? undefined : 'var(--min-width)',
     maxWidth: app.preference.current.sidebarHidden ? undefined : 'var(--max-width)',
@@ -375,50 +401,168 @@
       transitionProperty: '[border, border-radius, box-shadow]',
       transitionDuration: '150ms',
       transitionTimingFunction: 'ease',
-      overflow: 'hidden',
+      overflowY: 'auto',
+      overflowX: 'hidden',
     })}
   >
+    <!-- 사이트 스위쳐 + 사이드바 토글 -->
+    <div
+      class={flex({
+        alignItems: 'center',
+        gap: '2px',
+        paddingX: '12px',
+        paddingTop: '12px',
+        paddingBottom: '4px',
+      })}
+    >
+      <SpaceMenu user$key={user.data} bind:open={spaceMenuOpen} />
+
+      <button
+        class={center({
+          borderRadius: '6px',
+          size: '28px',
+          flexShrink: '0',
+          color: 'text.faint',
+          transition: 'common',
+          _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => {
+          app.preference.current.sidebarHidden = !app.preference.current.sidebarHidden;
+          if (app.preference.current.sidebarHidden) {
+            sidebarState = 'visible';
+            hovered = false;
+            setTimeout(() => {
+              if (!hovered) {
+                sidebarState = 'hidden';
+              }
+            }, 300);
+          }
+          mixpanel.track('toggle_sidebar_auto_hide', { enabled: app.preference.current.sidebarHidden });
+        }}
+        type="button"
+        use:tooltip={{ message: app.preference.current.sidebarHidden ? '사이드바 고정' : '사이드바 자동 숨김' }}
+      >
+        <Icon icon={app.preference.current.sidebarHidden ? ChevronsRightIcon : ChevronsLeftIcon} size={14} />
+      </button>
+    </div>
+
+    <!-- 스페이스 네비게이션 -->
+    <div class={flex({ flexDirection: 'column', gap: '1px', paddingX: '12px', marginTop: '4px' })}>
+      <a
+        class={css({
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          paddingX: '8px',
+          paddingY: '5px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+          '&[aria-current="page"]': {
+            backgroundColor: 'surface.muted',
+          },
+        })}
+        aria-current={paneGroup.panes.find((p) => p.id === paneGroup.state.current.focusedPaneId)?.kind === 'home' ? 'page' : undefined}
+        href="/home"
+      >
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={HomeIcon} size={16} />
+        <span
+          class={css({
+            fontSize: '13px',
+            fontWeight: 'medium',
+            color: 'text.muted',
+            '[aria-current="page"] > &': {
+              fontWeight: 'bold',
+              color: 'text.default',
+            },
+          })}
+        >
+          홈
+        </span>
+      </a>
+
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '8px',
+          paddingX: '8px',
+          paddingY: '5px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => (app.state.commandPaletteOpen = true)}
+        type="button"
+      >
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SearchIcon} size={16} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>검색</span>
+      </button>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '1px', paddingX: '12px', marginTop: '8px' })}>
+      <div class={css({ marginX: '8px', marginBottom: '6px', borderTopWidth: '1px', borderColor: 'border.subtle' })}></div>
+
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '8px',
+          paddingX: '8px',
+          paddingY: '5px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => {
+          app.state.notesOpen = true;
+          mixpanel.track('open_notes_modal');
+        }}
+        type="button"
+      >
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={StickyNoteIcon} size={16} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>노트</span>
+      </button>
+
+      <button
+        class={flex({
+          alignItems: 'center',
+          gap: '8px',
+          paddingX: '8px',
+          paddingY: '5px',
+          borderRadius: '6px',
+          transition: 'common',
+          _supportHover: { backgroundColor: 'surface.muted' },
+        })}
+        onclick={() => {
+          app.state.statsOpen = true;
+          mixpanel.track('open_stats_modal');
+        }}
+        type="button"
+      >
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={BarChart3Icon} size={16} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>통계</span>
+        {#if currentStreak > 0}
+          <span class={css({ marginLeft: 'auto', fontSize: '11px', fontWeight: 'medium', color: 'text.faint' })}>
+            {currentStreak}일 연속
+          </span>
+        {/if}
+      </button>
+    </div>
+
+    <div class={css({ marginX: '20px', marginTop: '8px', borderTopWidth: '1px', borderColor: 'border.subtle' })}></div>
+
+    <!-- 문서 트리 -->
     <div
       class={flex({
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginX: '8px',
+        paddingX: '12px',
         marginTop: '8px',
-        gap: '8px',
+        marginBottom: '4px',
       })}
     >
-      <div class={css({ minWidth: '0', flexShrink: '1', overflow: 'hidden' })}>
-        <Profile user$key={user.data} />
-      </div>
+      <span class={css({ paddingX: '8px', fontSize: '13px', fontWeight: 'semibold', color: 'text.faint' })}>글</span>
 
-      <div class={flex({ alignItems: 'center', gap: '8px', flexShrink: '0' })}>
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '24px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          onclick={() => {
-            app.preference.current.sidebarHidden = !app.preference.current.sidebarHidden;
-            if (app.preference.current.sidebarHidden) {
-              sidebarState = 'visible';
-              hovered = false;
-              setTimeout(() => {
-                if (!hovered) {
-                  sidebarState = 'hidden';
-                }
-              }, 300);
-            }
-            mixpanel.track('toggle_sidebar_auto_hide', { enabled: app.preference.current.sidebarHidden });
-          }}
-          type="button"
-          use:tooltip={{ message: app.preference.current.sidebarHidden ? '사이드바 고정' : '사이드바 자동 숨김' }}
-        >
-          <Icon icon={app.preference.current.sidebarHidden ? ChevronsRightIcon : ChevronsLeftIcon} size={14} />
-        </button>
-
+      <div class={flex({ alignItems: 'center', gap: '2px' })}>
         <button
           class={center({
             borderRadius: '4px',
@@ -431,7 +575,7 @@
             const { lowerOrder, upperOrder } = getAdjacentOrders();
             const resp = await createFolder({
               input: {
-                siteId: site.data.id,
+                siteId: site.id,
                 name: '새 폴더',
                 parentEntityId: app.state.ancestors.at(-1),
                 lowerOrder,
@@ -461,7 +605,7 @@
             const { lowerOrder, upperOrder } = getAdjacentOrders();
             const resp = await createDocument({
               input: {
-                siteId: site.data.id,
+                siteId: site.id,
                 parentEntityId: app.state.ancestors.at(-1),
                 lowerOrder,
                 upperOrder,
@@ -479,322 +623,27 @@
       </div>
     </div>
 
-    <div class={flex({ flexDirection: 'column', marginX: '8px', marginTop: '8px' })}>
-      <a
-        class={css({
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          paddingX: '8px',
-          paddingY: '6px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-          '&[aria-current="page"]': {
-            backgroundColor: 'surface.muted',
-          },
-        })}
-        aria-current={paneGroup.panes.find((p) => p.id === paneGroup.state.current.focusedPaneId)?.kind === 'home' ? 'page' : undefined}
-        href="/home"
-      >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={HomeIcon} size={14} />
-        <span
-          class={css({
-            fontSize: '14px',
-            fontWeight: 'medium',
-            color: 'text.muted',
-            '[aria-current="page"] > &': {
-              fontWeight: 'bold',
-              color: 'text.default',
-            },
-          })}
-        >
-          홈
-        </span>
-      </a>
-
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '6px',
-          paddingX: '8px',
-          paddingY: '6px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => {
-          app.state.notesOpen = true;
-          mixpanel.track('open_notes_modal');
-        }}
-        type="button"
-      >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={StickyNoteIcon} size={14} />
-        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>노트</span>
-      </button>
-
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '6px',
-          paddingX: '8px',
-          paddingY: '6px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => (app.state.commandPaletteOpen = true)}
-        type="button"
-      >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={SearchIcon} size={14} />
-        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>검색</span>
-      </button>
-
-      <button
-        class={flex({
-          alignItems: 'center',
-          gap: '6px',
-          paddingX: '8px',
-          paddingY: '6px',
-          borderRadius: '6px',
-          transition: 'common',
-          _supportHover: { backgroundColor: 'surface.muted' },
-        })}
-        onclick={() => {
-          app.state.statsOpen = true;
-          mixpanel.track('open_stats_modal');
-        }}
-        type="button"
-      >
-        <Icon style={css.raw({ color: 'text.faint' })} icon={BarChart3Icon} size={14} />
-        <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.muted' })}>통계</span>
-        {#if currentStreak > 0}
-          <span class={css({ marginLeft: 'auto', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>
-            연속 {currentStreak}일째 작성중
-          </span>
-        {/if}
-      </button>
-    </div>
-
     <div
-      class={cx(
-        'group',
-        css({
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginX: '8px',
-          paddingX: '8px',
-          marginTop: '8px',
-          paddingTop: '6px',
-        }),
-      )}
-    >
-      <div class={flex({ alignItems: 'center', gap: '6px' })}>
-        <Img style={css.raw({ size: '16px', borderRadius: '4px' })} alt={site.data.name} image$key={site.data.logo} size={32} />
-        <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>{site.data.name}</span>
-      </div>
-      <div class={flex({ alignItems: 'center', gap: '2px', opacity: '0', _groupHover: { opacity: '100' }, transition: 'common' })}>
-        <a
-          class={center({
-            borderRadius: '4px',
-            size: '20px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          href={site.data.url}
-          rel="noopener noreferrer"
-          target="_blank"
-          use:tooltip={{ message: '스페이스 열기' }}
-        >
-          <Icon icon={ExternalLinkIcon} size={12} />
-        </a>
-        <button
-          class={center({
-            borderRadius: '4px',
-            size: '20px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
-          })}
-          onclick={() => {
-            pushState('', { shallowRoute: '/site-settings/general' });
-            mixpanel.track('open_site_settings', { via: 'sidebar' });
-          }}
-          type="button"
-          use:tooltip={{ message: '스페이스 설정' }}
-        >
-          <Icon icon={SettingsIcon} size={12} />
-        </button>
-      </div>
-    </div>
-
-    <div
+      bind:this={treeScrollEl}
       class={css({
-        position: 'relative',
         flexGrow: '1',
-        overflow: 'hidden',
-        _before: {
-          content: '""',
-          position: 'absolute',
-          top: '0',
-          left: '0',
-          right: '0',
-          height: '12px',
-          background: '[linear-gradient(to bottom, token(colors.surface.subtle), transparent)]',
-          pointerEvents: 'none',
-          zIndex: '1',
-        },
-        _after: {
-          content: '""',
-          position: 'absolute',
-          bottom: '0',
-          left: '0',
-          right: '0',
-          height: '12px',
-          background: '[linear-gradient(to top, token(colors.surface.subtle), transparent)]',
-          pointerEvents: 'none',
-          zIndex: '1',
-        },
+        paddingX: '12px',
+        paddingY: '4px',
+        overflowY: 'auto',
+        borderTopWidth: canScrollUp ? '1px' : '0',
+        borderBottomWidth: canScrollDown ? '1px' : '0',
+        borderColor: 'border.subtle',
+        transition: '[border-width 150ms ease]',
       })}
+      onscroll={updateScrollState}
     >
-      <div
-        class={css({
-          position: 'absolute',
-          inset: '0',
-          paddingX: '8px',
-          paddingY: '12px',
-          overflowY: 'auto',
-        })}
-      >
-        <EntityTree site$key={site.data} />
-      </div>
+      <EntityTree site$key={site} />
     </div>
 
     <PlanUsageWidget user$key={user.data} />
-    <TrialWidget user$key={user.data} />
 
-    <div
-      class={flex({
-        justifyContent: 'space-between',
-        paddingY: '4px',
-        paddingX: '8px',
-        borderTopWidth: '1px',
-        borderColor: 'border.default',
-      })}
-    >
-      <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <a
-          class={center({
-            borderRadius: '8px',
-            size: '32px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: {
-              color: 'text.subtle',
-              backgroundColor: 'surface.muted',
-            },
-          })}
-          href="https://typie.link/help"
-          rel="noopener noreferrer"
-          target="_blank"
-          use:tooltip={{ message: '고객센터', placement: 'top', offset: 8, trailingIcon: ExternalLinkIcon }}
-        >
-          <Icon icon={HelpCircleIcon} size={16} />
-        </a>
-
-        <a
-          class={center({
-            borderRadius: '8px',
-            size: '32px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: {
-              color: 'text.subtle',
-              backgroundColor: 'surface.muted',
-            },
-          })}
-          href="/changelog"
-          rel="noopener noreferrer"
-          target="_blank"
-          use:tooltip={{ message: '업데이트 노트', placement: 'top', offset: 8, trailingIcon: ExternalLinkIcon }}
-        >
-          <Icon icon={NewspaperIcon} size={16} />
-        </a>
-
-        {#if user.data.role === 'ADMIN'}
-          <a
-            class={center({
-              borderRadius: '8px',
-              size: '32px',
-              color: 'text.faint',
-              transition: 'common',
-              _hover: {
-                color: 'text.subtle',
-                backgroundColor: 'surface.muted',
-              },
-            })}
-            href="/admin"
-            use:tooltip={{ message: '어드민', placement: 'top', offset: 8 }}
-          >
-            <Icon icon={ShieldUserIcon} size={16} />
-          </a>
-        {/if}
-      </div>
-
-      <div class={flex({ alignItems: 'center', gap: '4px' })}>
-        <button
-          class={center({
-            borderRadius: '8px',
-            size: '32px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: {
-              color: 'text.subtle',
-              backgroundColor: 'surface.muted',
-            },
-            '&[aria-pressed="true"]': {
-              color: 'text.subtle',
-              backgroundColor: 'surface.muted',
-            },
-          })}
-          aria-pressed={app.state.trashOpen}
-          data-type="trash"
-          onclick={() => {
-            app.state.trashOpen = true;
-            mixpanel.track('open_trash_modal', { via: 'sidebar' });
-          }}
-          type="button"
-          use:tooltip={{ message: '휴지통', placement: 'top', offset: 8 }}
-        >
-          <Icon icon={Trash2Icon} size={16} />
-        </button>
-
-        <button
-          class={center({
-            borderRadius: '8px',
-            size: '32px',
-            color: 'text.faint',
-            transition: 'common',
-            _hover: {
-              color: 'text.subtle',
-              backgroundColor: 'surface.muted',
-            },
-          })}
-          onclick={() => {
-            pushState('', { shallowRoute: '/preference/profile' });
-            mixpanel.track('open_preference_modal', { via: 'sidebar' });
-          }}
-          type="button"
-          use:tooltip={{ message: '설정', placement: 'top', offset: 8 }}
-        >
-          <Icon icon={SettingsIcon} size={16} />
-        </button>
-
-        <ThemeSwitch />
-      </div>
-    </div>
+    <!-- 프로필 -->
+    <Profile user$key={user.data} bind:open={profileOpen} />
   </div>
 
   {#if app.preference.current.sidebarHidden}

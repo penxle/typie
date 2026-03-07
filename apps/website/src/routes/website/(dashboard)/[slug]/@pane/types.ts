@@ -59,6 +59,10 @@ export type PaneGroup = {
 
   findReplaceOpenByPaneId: Record<string, boolean>;
 
+  handleNavigation: (slug: string, siteId?: string) => void;
+  switchToSite: (siteId: string, slug?: string) => void;
+  focusPane: (paneId: string) => void;
+
   resizing: boolean;
   activeZone: { paneId: string; dropZone: DropZone } | null;
   draggingPaneId: string | null;

@@ -1,8 +1,9 @@
 import { LocalStore } from '@typie/ui/state';
+import { nanoid } from 'nanoid';
 import { getContext, setContext } from 'svelte';
+import { browser } from '$app/environment';
 import { hitTest, resolveDrop } from './dnd';
 import { addPane, collectPanes, findAdjacentPane, findMemberById, movePane, removePane, replacePane, swapPanes } from './tree';
-import type { AppContext } from '@typie/ui/context';
 import type { DragItem, DragPane, DropZone, Pane, PaneGroup, PaneGroupState, Rect } from './types';
 
 export type {
@@ -27,9 +28,35 @@ export const getPaneGroup = () => {
   return getContext<PaneGroup>(key);
 };
 
-export const setupPaneGroup = (app: AppContext) => {
-  const userId = app.userId;
+const defaultPaneGroupState: PaneGroupState = {
+  root: null,
+  focusedPaneId: null,
+  panelExpandedByPaneId: {},
+  panelTabByPaneId: {},
+};
 
+type PaneGroupOptions = {
+  userId: string;
+  navigate: (path: string, options?: { replaceState?: boolean; keepFocus?: boolean }) => void;
+  onSiteChange: (siteId: string) => void;
+};
+
+const migrateLegacyPaneGroup = (userId: string, siteId: string) => {
+  const oldKey = `typie:panegroup:${userId}`;
+  const newKey = `typie:panegroup:${siteId}`;
+
+  const oldData = localStorage.getItem(oldKey);
+  if (oldData && !localStorage.getItem(newKey)) {
+    localStorage.setItem(newKey, oldData);
+  }
+
+  localStorage.removeItem(oldKey);
+};
+
+export const setupPaneGroup = (initialSiteId: string, options: PaneGroupOptions) => {
+  if (browser) {
+    migrateLegacyPaneGroup(options.userId, initialSiteId);
+  }
   let resizing = $state(false);
   let activeZone = $state<{ paneId: string; dropZone: DropZone } | null>(null);
   let draggingPaneId = $state<string | null>(null);
@@ -37,13 +64,25 @@ export const setupPaneGroup = (app: AppContext) => {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- imperatively read, not reactive state
   const paneRects = new Map<string, Rect>();
 
-  const state = new LocalStore<PaneGroupState>(`typie:panegroup:${userId}`, {
-    root: null,
-    focusedPaneId: null,
-    panelExpandedByPaneId: {},
-    panelTabByPaneId: {},
-  });
+  let currentKey = `typie:panegroup:${initialSiteId}`;
+  let currentSiteId = initialSiteId;
+  let lastNavigatedSlug: string | undefined;
+
+  const state = new LocalStore<PaneGroupState>(currentKey, defaultPaneGroupState);
   const panes = $derived(collectPanes(state.current.root));
+
+  const syncUrl = () => {
+    const focusedPaneId = state.current.focusedPaneId;
+    if (!focusedPaneId) return;
+
+    const focusedPane = panes.find((p) => p.id === focusedPaneId);
+    const targetSlug = focusedPane?.kind === 'entity' ? focusedPane.slug : focusedPane?.kind === 'home' ? 'home' : null;
+
+    if (!targetSlug || targetSlug === lastNavigatedSlug) return;
+
+    lastNavigatedSlug = targetSlug;
+    options.navigate(`/${targetSlug}`, { replaceState: true, keepFocus: true });
+  };
 
   const context: PaneGroup = {
     state,
@@ -62,6 +101,7 @@ export const setupPaneGroup = (app: AppContext) => {
       context.state.current.root = result.root;
       context.state.current.focusedPaneId = result.focusedPaneId;
 
+      syncUrl();
       return true;
     },
     movePane: (paneId, placement) => {
@@ -73,6 +113,7 @@ export const setupPaneGroup = (app: AppContext) => {
       context.state.current.root = result.root;
       context.state.current.focusedPaneId = result.focusedPaneId;
 
+      syncUrl();
       return true;
     },
     swapPane: (firstPaneId, secondPaneId) => {
@@ -84,6 +125,7 @@ export const setupPaneGroup = (app: AppContext) => {
       context.state.current.root = result;
       context.state.current.focusedPaneId = firstPaneId;
 
+      syncUrl();
       return true;
     },
     removePane: (paneId) => {
@@ -114,6 +156,7 @@ export const setupPaneGroup = (app: AppContext) => {
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete findReplaceOpenByPaneId[paneId];
 
+      syncUrl();
       return true;
     },
     replacePane: (paneId, pane) => {
@@ -139,11 +182,108 @@ export const setupPaneGroup = (app: AppContext) => {
         }
       }
 
+      syncUrl();
       return true;
     },
 
     get findReplaceOpenByPaneId() {
       return findReplaceOpenByPaneId;
+    },
+
+    handleNavigation(slug: string, siteId?: string) {
+      if (slug === lastNavigatedSlug) return;
+      lastNavigatedSlug = slug;
+
+      // 크로스사이트 → 사이트 전환 (switchToSite가 pane tree 구성)
+      if (siteId && siteId !== currentSiteId) {
+        context.switchToSite(siteId, slug);
+        return;
+      }
+
+      // 같은 사이트 → pane tree 업데이트
+      const isHome = slug === 'home';
+
+      if (state.current.root) {
+        const focusedPaneId = state.current.focusedPaneId;
+        const focusedPane = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : null;
+
+        if (isHome) {
+          if (focusedPane?.kind !== 'home' && focusedPaneId) {
+            context.replacePane(focusedPaneId, { kind: 'home' });
+          }
+        } else {
+          if (focusedPane?.kind === 'entity' && focusedPane.slug === slug) {
+            // 이미 해당 slug 표시 중 → skip
+          } else if (focusedPaneId) {
+            context.replacePane(focusedPaneId, { kind: 'entity', slug });
+          } else {
+            const paneId = nanoid();
+            state.current.root = {
+              id: nanoid(),
+              type: 'axis',
+              direction: 'horizontal',
+              children: [{ id: paneId, type: 'pane', kind: 'entity', slug }],
+              flexes: [1],
+            };
+            state.current.focusedPaneId = paneId;
+          }
+        }
+      } else {
+        const paneId = nanoid();
+        state.current.root = {
+          id: nanoid(),
+          type: 'axis',
+          direction: 'horizontal',
+          children: [
+            isHome ? { id: paneId, type: 'pane', kind: 'home' as const } : { id: paneId, type: 'pane', kind: 'entity' as const, slug },
+          ],
+          flexes: [1],
+        };
+        state.current.focusedPaneId = paneId;
+      }
+    },
+
+    switchToSite(siteId: string, slug?: string) {
+      const newKey = `typie:panegroup:${siteId}`;
+      if (newKey === currentKey) return;
+      currentKey = newKey;
+      currentSiteId = siteId;
+
+      state.switchKey(newKey, defaultPaneGroupState);
+
+      if (!state.current.root) {
+        const paneId = nanoid();
+        const isHome = !slug;
+        state.current.root = {
+          id: nanoid(),
+          type: 'axis',
+          direction: 'horizontal',
+          children: [
+            isHome ? { id: paneId, type: 'pane', kind: 'home' as const } : { id: paneId, type: 'pane', kind: 'entity' as const, slug },
+          ],
+          flexes: [1],
+        };
+        state.current.focusedPaneId = paneId;
+      } else if (slug) {
+        const currentPanes = collectPanes(state.current.root);
+        const existingPane = currentPanes.find((p) => p.kind === 'entity' && p.slug === slug);
+        if (existingPane) {
+          state.current.focusedPaneId = existingPane.id;
+        } else if (state.current.focusedPaneId) {
+          const result = replacePane(state.current.root, state.current.focusedPaneId, { kind: 'entity', slug });
+          state.current.root = result.root;
+          state.current.focusedPaneId = result.newPaneId;
+        }
+      }
+
+      options.onSiteChange(siteId);
+      syncUrl();
+    },
+
+    focusPane(paneId: string) {
+      if (state.current.focusedPaneId === paneId) return;
+      state.current.focusedPaneId = paneId;
+      syncUrl();
     },
 
     get resizing() {

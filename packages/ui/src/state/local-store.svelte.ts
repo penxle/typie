@@ -23,4 +23,20 @@ export class LocalStore<T> {
       }
     });
   }
+
+  switchKey(newKey: string, defaultValue: T) {
+    if (this.#key === newKey) return;
+
+    this.#key = newKey;
+
+    if (browser) {
+      const item = localStorage.getItem(newKey);
+      if (item) {
+        const value = safeJsonParse<T>(item, defaultValue);
+        this.current = { ...defaultValue, ...value };
+      } else {
+        this.current = defaultValue;
+      }
+    }
+  }
 }

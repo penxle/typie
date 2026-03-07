@@ -1,3 +1,4 @@
+import { faker } from '@faker-js/faker';
 import dayjs from 'dayjs';
 import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -9,6 +10,7 @@ import { DocumentType, EntityState, EntityType, EntityVisibility, SiteDateDispla
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
+import { generateRandomAvatar, persistBlobAsImage } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { siteSchema } from '@/validation';
 import { builder } from '../builder';
@@ -108,6 +110,36 @@ Site.implement({
           .innerJoin(Entities, eq(Documents.entityId, Entities.id))
           .where(and(eq(Entities.siteId, self.id), eq(Documents.type, DocumentType.TEMPLATE), eq(Entities.state, EntityState.ACTIVE)))
           .orderBy(asc(Documents.createdAt));
+      },
+    }),
+
+    folderCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ count: number }>(
+          sql`
+            SELECT COUNT(*) AS count
+            FROM ${Entities}
+            WHERE site_id = ${self.id}
+            AND state = ${EntityState.ACTIVE}
+            AND type = ${EntityType.FOLDER}
+          `,
+        );
+        return Number(rows[0]?.count || 0);
+      },
+    }),
+
+    documentCount: t.int({
+      resolve: async (self) => {
+        const rows = await db.execute<{ count: number }>(
+          sql`
+            SELECT COUNT(*) AS count
+            FROM ${Entities}
+            WHERE site_id = ${self.id}
+            AND state = ${EntityState.ACTIVE}
+            AND type = ${EntityType.DOCUMENT}
+          `,
+        );
+        return Number(rows[0]?.count || 0);
       },
     }),
 
@@ -264,6 +296,63 @@ builder.mutationFields((t) => ({
       }
 
       return await db.update(Sites).set({ slug: input.slug }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+    },
+  }),
+
+  createSite: t.withAuth({ session: true }).fieldWithInput({
+    type: Site,
+    input: {
+      name: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const logoFile = await generateRandomAvatar();
+      const logo = await persistBlobAsImage({ file: logoFile });
+
+      const slug = [
+        faker.word.adjective({ length: { min: 3, max: 5 } }),
+        faker.word.noun({ length: { min: 4, max: 6 } }),
+        faker.string.numeric({ length: { min: 3, max: 4 } }),
+      ].join('-');
+
+      const site = await db
+        .insert(Sites)
+        .values({
+          userId: ctx.session.userId,
+          slug,
+          name: input.name,
+          logoId: logo.id,
+        })
+        .returning()
+        .then(firstOrThrow);
+
+      return site;
+    },
+  }),
+
+  deleteSite: t.withAuth({ session: true }).fieldWithInput({
+    type: Site,
+    input: {
+      siteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.siteId,
+      });
+
+      return await db.transaction(async (tx) => {
+        const activeSites = await tx
+          .select({ id: Sites.id })
+          .from(Sites)
+          .where(and(eq(Sites.userId, ctx.session.userId), eq(Sites.state, SiteState.ACTIVE)))
+          .for('update');
+
+        if (activeSites.length <= 1) {
+          throw new TypieError({ code: 'cannot_delete_last_site' });
+        }
+
+        return await tx.update(Sites).set({ state: SiteState.DELETED }).where(eq(Sites.id, input.siteId)).returning().then(firstOrThrow);
+      });
     },
   }),
 }));
