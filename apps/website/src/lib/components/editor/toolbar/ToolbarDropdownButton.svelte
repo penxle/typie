@@ -46,7 +46,6 @@
     offset: 8,
     onClickOutside: () => {
       close();
-      onEscape?.();
     },
   });
 
