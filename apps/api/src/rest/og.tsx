@@ -57,17 +57,17 @@ const colors = {
   white: '#FFFFFF',
 
   gray: {
-    50: '#FAFAFA',
-    100: '#F4F4F5',
-    200: '#E4E4E7',
-    300: '#D4D4D8',
-    400: '#A1A1AA',
-    500: '#71717A',
-    600: '#52525B',
-    700: '#3F3F46',
-    800: '#27272A',
-    900: '#18181B',
-    950: '#09090B',
+    50: '#f9fafd',
+    100: '#f3f4f9',
+    200: '#e3e4eb',
+    300: '#d3d4dd',
+    400: '#9e9fa9',
+    500: '#70717b',
+    600: '#51525b',
+    700: '#3e3f47',
+    800: '#26272c',
+    900: '#17181c',
+    950: '#09090c',
   },
 };
 
@@ -205,7 +205,7 @@ const renderFolder = async (entityId: string) => {
         backgroundColor: colors.white,
       }}
     >
-      <div style={{ width: '1200px', height: '6px', backgroundColor: '#fd9a00' }} />
+      <div style={{ width: '1200px', height: '6px', backgroundColor: '#6c6fc8' }} />
 
       <div
         style={{
@@ -289,7 +289,7 @@ const renderDocument = async (entityId: string) => {
         backgroundColor: colors.white,
       }}
     >
-      <div style={{ width: '1200px', height: '6px', backgroundColor: '#fd9a00' }} />
+      <div style={{ width: '1200px', height: '6px', backgroundColor: '#6c6fc8' }} />
 
       <div
         style={{
