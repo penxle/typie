@@ -15,7 +15,6 @@
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import Entity from './Entity.svelte';
   import { getTreeContext } from './state.svelte';
-  import { dedupeById } from './utils';
   import type { DashboardLayout_EntityTree_Folder_folder$key } from '$mearie';
 
   type Props = {
@@ -103,7 +102,7 @@
   $effect(() => {
     if (!children.data?.entity?.children) return;
 
-    const childEntities = dedupeById(children.data.entity.children).map((child) => ({
+    const childEntities = children.data.entity.children.map((child) => ({
       id: child.id,
       type: child.node.__typename as 'Document' | 'Folder',
       parentId: folder.data.entity.id,
@@ -314,7 +313,7 @@
         <RingSpinner style={css.raw({ size: '14px' })} />
       </div>
     {:else}
-      {#each dedupeById(children.data.entity.children) as entity (entity.id)}
+      {#each children.data.entity.children as entity (entity.id)}
         <Entity entity$key={entity} />
       {:else}
         <div

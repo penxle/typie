@@ -1,14 +1,5 @@
 export const maxDepth = 100;
 
-export const dedupeById = <T extends { id: string }>(items: readonly T[]): T[] => {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
-};
-
 const HIDDEN_TREE = '[role="tree"][aria-hidden="true"]';
 const VISIBLE_TREE = '[role="tree"]:not([aria-hidden="true"])';
 

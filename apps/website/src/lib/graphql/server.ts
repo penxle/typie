@@ -1,9 +1,10 @@
 import { AggregatedError, cacheExchange, createClient, httpExchange, isExchangeError, isGraphQLError } from '@mearie/svelte';
 import { error, redirect } from '@sveltejs/kit';
 import { TypieError } from '@/errors';
+import { browser } from '$app/environment';
 import { env } from '$env/dynamic/public';
 import { schema } from '$mearie';
-import { scalars } from './client';
+import { mearieClient, scalars } from './client';
 import { errorExchange } from './error';
 import type { Artifact, CacheSnapshot, DataOf, VariablesOf } from '@mearie/svelte';
 
@@ -12,7 +13,7 @@ export type HydratableQuery<T extends Artifact<'query'>> = {
   ' $hydration': {
     artifact: T;
     variables: VariablesOf<T>;
-    cacheSnapshot: CacheSnapshot;
+    cacheSnapshot?: CacheSnapshot;
   };
 };
 
@@ -21,23 +22,25 @@ export async function loadQuery<T extends Artifact<'query'>>(
   query: T,
   variables?: VariablesOf<T>,
 ): Promise<HydratableQuery<T>> {
-  const client = createClient({
-    schema,
-    exchanges: [
-      errorExchange(),
-      cacheExchange(),
-      httpExchange({
-        url: '/graphql',
-        fetch: event.fetch,
-        credentials: 'include',
-      }),
-    ],
-    scalars,
-  });
+  const client = browser
+    ? mearieClient
+    : createClient({
+        schema,
+        exchanges: [
+          errorExchange(),
+          cacheExchange(),
+          httpExchange({
+            url: '/graphql',
+            fetch: event.fetch,
+            credentials: 'include',
+          }),
+        ],
+        scalars,
+      });
 
   try {
     const data: DataOf<T> = await (client.query as (q: T, v?: VariablesOf<T>) => Promise<DataOf<T>>)(query, variables);
-    const cacheSnapshot = client.extension('cache').extract();
+    const cacheSnapshot = browser ? undefined : client.extension('cache').extract();
 
     return {
       data,
