@@ -82,6 +82,11 @@
           backgroundColor: 'transparent!',
         },
       },
+      icon: {
+        _groupDisabled: {
+          color: 'text.disabled!',
+        },
+      },
     },
     variants: {
       variant: {

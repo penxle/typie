@@ -52,6 +52,7 @@
     "dataloader": "^2.2.3",
     "dayjs": "^1.11.19",
     "dedent": "^1.7.2",
+    "docx": "^9.6.0",
     "drizzle-orm": "^0.45.1",
     "escape-string-regexp": "^5.0.0",
     "fast-json-stable-stringify": "^2.1.0",
