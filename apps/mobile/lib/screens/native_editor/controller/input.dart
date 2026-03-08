@@ -101,12 +101,16 @@ class InputController {
   void reconcile() {
     final selection = _getEditorSelection();
     if (selection != null) {
-      final nodeId = (selection.range['anchor'] as Map<String, dynamic>)['nodeId'] as String;
+      final anchor = selection.range['anchor'] as Map<String, dynamic>;
+      final nodeId = anchor['nodeId'] as String;
+      final cursorOffset = anchor['offset'] as int;
       var precedingText = selection.precedingText ?? '';
       var followingText = selection.followingText ?? '';
 
       if (nodeId != lastNodeId) {
-        inputKey.currentState?.invalidate();
+        if (lastNodeId != null) {
+          inputKey.currentState?.invalidate();
+        }
         lastNodeId = nodeId;
       }
 
@@ -116,7 +120,7 @@ class InputController {
         followingText = '';
       }
 
-      final reconciled = inputKey.currentState?.reconcile(nodeId, precedingText, followingText);
+      final reconciled = inputKey.currentState?.reconcile(nodeId, cursorOffset, precedingText, followingText);
       if (reconciled ?? false) {
         dispatch({'type': 'commitPreedit'});
       }

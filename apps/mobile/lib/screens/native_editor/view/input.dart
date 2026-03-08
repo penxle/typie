@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer' as dev;
 import 'dart:io';
 import 'dart:math';
 
@@ -36,11 +35,72 @@ class EditorTextInput extends StatefulWidget {
 class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputClient, WidgetsBindingObserver {
   TextInputConnection? _connection;
   TextEditingValue _currentValue = TextEditingValue.empty;
-  bool _controlled = false;
   bool _sentinelLost = false;
+  bool _hadDeltaSinceReconcile = false;
+  String? _reconcileNodeId;
+  int? _reconcileCursorOffset;
+  bool _wasKeyboardActiveBeforePause = false;
   late final FocusNode _focusNode;
 
   InputController get _controller => widget.controller;
+
+  static const int _markerBase = 0xE000;
+
+  static String _positionMarker(String nodeId, int cursorOffset) {
+    return String.fromCharCode(_markerBase + ((nodeId.hashCode ^ cursorOffset) & 0xFFF));
+  }
+
+  bool _isStaleWindow(String text) {
+    if (text.isEmpty || _reconcileNodeId == null) {
+      return false;
+    }
+
+    final lastCode = text.codeUnitAt(text.length - 1);
+    if (lastCode < _markerBase || lastCode >= _markerBase + 0x1000) {
+      return false;
+    }
+
+    return lastCode != _positionMarker(_reconcileNodeId!, _reconcileCursorOffset!).codeUnitAt(0);
+  }
+
+  bool _effectiveContentDiffers(String precedingText, String followingText) {
+    var text = _currentValue.text;
+    var cursor = _currentValue.selection.isValid ? _currentValue.selection.baseOffset : -1;
+
+    if (cursor < 0) {
+      return true;
+    }
+
+    if (text.startsWith(_sentinel)) {
+      text = text.substring(_sentinel.length);
+      cursor -= _sentinel.length;
+    }
+
+    if (text.isNotEmpty) {
+      final lastCode = text.codeUnitAt(text.length - 1);
+      if (lastCode >= _markerBase && lastCode < _markerBase + 0x1000) {
+        text = text.substring(0, text.length - 1);
+      }
+    }
+
+    cursor = cursor.clamp(0, text.length);
+
+    final kbBefore = text.substring(0, cursor);
+    final kbAfter = text.substring(cursor);
+
+    final beforeOk =
+        (kbBefore.isEmpty && precedingText.isEmpty) ||
+        (kbBefore.isNotEmpty &&
+            precedingText.isNotEmpty &&
+            (kbBefore.endsWith(precedingText) || precedingText.endsWith(kbBefore)));
+    final afterOk =
+        (kbAfter.isEmpty && followingText.isEmpty) ||
+        (kbAfter.isNotEmpty &&
+            followingText.isNotEmpty &&
+            (kbAfter.startsWith(followingText) || followingText.startsWith(kbAfter)));
+
+    return !(beforeOk && afterOk);
+  }
 
   final List<Map<String, dynamic>> _recordingEntries = [];
   List<Map<String, dynamic>>? _collectingDispatches;
@@ -137,9 +197,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
         data: payload,
         options: Options(headers: {'Content-Type': 'application/json'}),
       );
-    } catch (err) {
-      dev.log('[InputRecording] Failed to send: $err');
-    }
+    } catch (_) {}
   }
 
   void showRecordingSheet() {
@@ -189,8 +247,17 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _connection != null && _connection!.attached) {
-      _connection!.show();
+    if (state == AppLifecycleState.inactive) {
+      _wasKeyboardActiveBeforePause = _connection != null && _connection!.attached;
+    } else if (state == AppLifecycleState.resumed) {
+      if (_wasKeyboardActiveBeforePause) {
+        _wasKeyboardActiveBeforePause = false;
+        _connection?.close();
+        _connection = null;
+        _controller.requestFocus();
+      } else if (_connection != null && _connection!.attached) {
+        _connection!.show();
+      }
     }
   }
 
@@ -232,14 +299,47 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
 
     _startCollectingDispatches();
 
+    if (_isStaleWindow(oldValue.text) || (deltas.isNotEmpty && _isStaleWindow(deltas.first.oldText))) {
+      _addRecordingEntry({'type': 'reattach', 'source': 'stale_window', 'currentValue': _serializeValue(oldValue)});
+      _stopCollectingDispatches();
+      if (Platform.isAndroid) {
+        if (_currentValue.composing.isValid && !_currentValue.composing.isCollapsed) {
+          _currentValue = _currentValue.copyWith(composing: TextRange.empty);
+        }
+        _connection = TextInput.attach(this, _configuration);
+        _connection!.show();
+        _connection!.setEditingState(_currentValue);
+      }
+      return;
+    }
+
     final hadComposing = oldValue.composing.isValid && !oldValue.composing.isCollapsed;
     final hasComposing = newValue.composing.isValid && !newValue.composing.isCollapsed;
 
+    TextRange? midComposing;
+    if (!hadComposing && !hasComposing) {
+      var scan = oldValue;
+      for (final delta in deltas) {
+        scan = delta.apply(scan);
+        if (scan.composing.isValid && !scan.composing.isCollapsed) {
+          midComposing = scan.composing;
+          break;
+        }
+      }
+    }
+
     if (hadComposing || hasComposing) {
       if (hasComposing) {
+        if (hadComposing && newValue.composing.start != oldValue.composing.start) {
+          final committedText = newValue.text.substring(oldValue.composing.start, newValue.composing.start);
+          _controller
+            ..compositionUpdate(committedText)
+            ..commitPreedit();
+        }
+
         final text = newValue.text.substring(newValue.composing.start, newValue.composing.end);
         final replaceLength = (!hadComposing && oldValue.text == newValue.text) ? text.length : 0;
-        _controlled = true;
+
         _controller.compositionUpdate(text, replaceLength: replaceLength);
       } else {
         if (oldValue.text != newValue.text) {
@@ -252,14 +352,12 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           if (committedText.isEmpty) {
             _controller.compositionEnd();
           } else {
-            _controlled = false;
             _controller
               ..compositionUpdate(committedText)
               ..commitPreedit();
           }
 
           if (hasNewline) {
-            _controlled = false;
             _controller.insertNewline();
             final dispatches = _stopCollectingDispatches();
 
@@ -272,6 +370,11 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
             );
 
             if (_connection != null && _connection!.attached) {
+              _addRecordingEntry({
+                'type': 'setEditingState',
+                'source': 'newline',
+                'value': _serializeValue(_currentValue),
+              });
               _connection!.setEditingState(_currentValue);
             }
 
@@ -290,9 +393,33 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           _controller.commitPreedit();
         }
       }
+    } else if (midComposing != null && oldValue.text != newValue.text) {
+      var committed = newValue.text.substring(midComposing.start, midComposing.end);
+      final replaceStart = midComposing.start.clamp(0, oldValue.text.length);
+      final replaceEnd = midComposing.end.clamp(replaceStart, oldValue.text.length);
+      var replaceText = oldValue.text.substring(replaceStart, replaceEnd);
+
+      if (committed.isNotEmpty) {
+        final lastCode = committed.codeUnitAt(committed.length - 1);
+        if (lastCode >= _markerBase && lastCode < _markerBase + 0x1000) {
+          committed = committed.substring(0, committed.length - 1);
+        }
+      }
+
+      if (replaceText.isNotEmpty) {
+        final lastCode = replaceText.codeUnitAt(replaceText.length - 1);
+        if (lastCode >= _markerBase && lastCode < _markerBase + 0x1000) {
+          replaceText = replaceText.substring(0, replaceText.length - 1);
+        }
+      }
+
+      final replaceLength = replaceText.characters.length;
+
+      _controller
+        ..compositionUpdate(committed, replaceLength: replaceLength)
+        ..commitPreedit();
     } else if (newValue.text.isEmpty) {
       final removedLen = oldValue.selection.baseOffset;
-      _controlled = false;
       _controller.onDeleteBackward(length: removedLen);
     } else if (!deltas.every((delta) => delta is TextEditingDeltaNonTextUpdate)) {
       final effectiveOld = oldValue.text.startsWith(_sentinel) ? oldValue.text.substring(1) : oldValue.text;
@@ -324,12 +451,16 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
         }
 
         if (insertedText.contains('\n')) {
-          _controlled = false;
           _controller.insertNewline();
           final dispatches = _stopCollectingDispatches();
           _setCurrentValue(oldValue);
 
           if (_connection != null && _connection!.attached) {
+            _addRecordingEntry({
+              'type': 'setEditingState',
+              'source': 'newline',
+              'value': _serializeValue(_currentValue),
+            });
             _connection!.setEditingState(_currentValue);
           }
 
@@ -346,21 +477,19 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
         }
 
         if (removedLen > 0 && insertedText.isNotEmpty) {
-          _controlled = true;
           _controller.onReplaceBackward(removedLen, insertedText);
         } else if (removedLen > 0) {
-          _controlled = false;
           _controller.onDeleteBackward(length: removedLen);
         } else if (insertedText.isNotEmpty) {
-          _controlled = true;
           _controller.onInsertText(insertedText);
         }
+      } else if (oldValue.text.startsWith(_sentinel) && !newValue.text.startsWith(_sentinel)) {
+        _controller.onDeleteBackward();
       }
     } else if (oldValue.selection.isCollapsed && newValue.selection.isCollapsed) {
       final delta = max(newValue.selection.baseOffset, 1) - oldValue.selection.baseOffset;
       if (delta != 0) {
         for (var i = 0; i < delta.abs(); i++) {
-          _controlled = false;
           _controller.navigate(delta > 0 ? 'right' : 'left');
         }
 
@@ -368,6 +497,11 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           final dispatches = _stopCollectingDispatches();
           _setCurrentValue(TextEditingValue(text: newValue.text, selection: const TextSelection.collapsed(offset: 1)));
           if (_connection != null && _connection!.attached) {
+            _addRecordingEntry({
+              'type': 'setEditingState',
+              'source': 'sentinel',
+              'value': _serializeValue(_currentValue),
+            });
             _connection!.setEditingState(_currentValue);
           }
           if (serializedDeltas.isNotEmpty) {
@@ -395,17 +529,13 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
       });
     }
 
-    _setCurrentValue(newValue);
+    _setCurrentValue(newValue, allowSentinel: false);
 
-    if (_currentValue.text != newValue.text && _connection != null && _connection!.attached) {
-      _connection!.setEditingState(_currentValue);
-    }
+    _hadDeltaSinceReconcile = true;
   }
 
   @override
   void updateFloatingCursor(RawFloatingCursorPoint point) {
-    _controlled = false;
-
     switch (point.state) {
       case FloatingCursorDragState.Start:
         _controller.onFloatingCursorBegin();
@@ -513,7 +643,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           text: value.text.substring(0, sel.baseOffset - lastCharLen) + value.text.substring(sel.baseOffset),
           selection: TextSelection.collapsed(offset: sel.baseOffset - lastCharLen),
         );
-      } else if (minOffset > 0) {
+      } else {
         deleteLength = 1;
       }
     } else {
@@ -534,7 +664,6 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           _connection!.setEditingState(newValue);
         }
       }
-      _controlled = false;
       _controller.onDeleteBackward(length: deleteLength);
       final dispatches = _stopCollectingDispatches();
       _addRecordingEntry({
@@ -565,7 +694,6 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
   }
 
   void deactivateInput() {
-    _controlled = false;
     _connection?.close();
     _connection = null;
   }
@@ -577,41 +705,103 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
   }
 
   void invalidate() {
-    _controlled = false;
+    if (_currentValue.composing.isValid && !_currentValue.composing.isCollapsed) {
+      _currentValue = _currentValue.copyWith(composing: TextRange.empty);
+    }
+    if (Platform.isAndroid && _connection != null && _connection!.attached) {
+      _connection = TextInput.attach(this, _configuration);
+      _connection!.setEditingState(_currentValue);
+      _connection!.show();
+    }
   }
 
-  bool reconcile(String nodeId, String precedingText, String followingText) {
+  bool reconcile(String nodeId, int cursorOffset, String precedingText, String followingText) {
+    final marker = _positionMarker(nodeId, cursorOffset);
     final newValue = TextEditingValue(
-      text: precedingText + followingText,
+      text: precedingText + followingText + marker,
       selection: TextSelection.collapsed(offset: precedingText.length),
     );
 
     if (_currentValue != newValue) {
-      if (_controlled) {
-        return false;
+      var forceSync = false;
+
+      if (_currentValue.composing.isValid && !_currentValue.composing.isCollapsed) {
+        final stale = !_hadDeltaSinceReconcile;
+        _hadDeltaSinceReconcile = false;
+        if (!stale) {
+          _addRecordingEntry({
+            'type': 'reconcile',
+            'result': 'skipped',
+            'hadDeltaSinceReconcile': false,
+            'currentValue': _serializeValue(_currentValue),
+          });
+          return false;
+        }
+        _addRecordingEntry({
+          'type': 'reconcile',
+          'result': 'reattached',
+          'currentValue': _serializeValue(_currentValue),
+          'newValue': _serializeValue(newValue),
+        });
+        _currentValue = _currentValue.copyWith(composing: TextRange.empty);
+        _connection = TextInput.attach(this, _configuration);
+        _connection!.show();
+        forceSync = true;
       }
 
-      _setCurrentValue(
-        TextEditingValue(
-          text: precedingText + followingText,
-          selection: TextSelection.collapsed(offset: precedingText.length),
-        ),
+      _hadDeltaSinceReconcile = false;
+
+      final contentChanged = _effectiveContentDiffers(precedingText, followingText);
+      final needsSentinel = precedingText.isEmpty && !_currentValue.text.startsWith(_sentinel);
+
+      if (contentChanged || forceSync || needsSentinel) {
+        _reconcileNodeId = nodeId;
+        _reconcileCursorOffset = cursorOffset;
+        _setCurrentValue(newValue);
+
+        if (_connection != null && _connection!.attached) {
+          _addRecordingEntry({
+            'type': 'reconcile',
+            'result': 'updated',
+            'currentValue': _serializeValue(_currentValue),
+          });
+          _connection!.setEditingState(_currentValue);
+        }
+      } else {
+        _addRecordingEntry({
+          'type': 'reconcile',
+          'result': 'unchanged',
+          'currentValue': _serializeValue(_currentValue),
+        });
+      }
+    } else if (precedingText.isEmpty && !_currentValue.text.startsWith(_sentinel)) {
+      _hadDeltaSinceReconcile = false;
+      _reconcileNodeId = nodeId;
+      _reconcileCursorOffset = cursorOffset;
+      _currentValue = TextEditingValue(
+        text: _sentinel + newValue.text,
+        selection: TextSelection.collapsed(offset: _sentinel.length + newValue.selection.baseOffset),
       );
+      _sentinelLost = false;
 
       if (_connection != null && _connection!.attached) {
+        _addRecordingEntry({'type': 'reconcile', 'result': 'updated', 'currentValue': _serializeValue(_currentValue)});
         _connection!.setEditingState(_currentValue);
       }
+    } else {
+      _addRecordingEntry({'type': 'reconcile', 'result': 'unchanged', 'currentValue': _serializeValue(_currentValue)});
     }
 
     return true;
   }
 
-  void _setCurrentValue(TextEditingValue value) {
+  void _setCurrentValue(TextEditingValue value, {bool allowSentinel = true}) {
     if (_currentValue == value) {
       return;
     }
 
     final needsSentinel =
+        allowSentinel &&
         !value.text.startsWith(_sentinel) &&
         (_sentinelLost && !(value.composing.isValid && !value.composing.isCollapsed) ||
             value.selection == const TextSelection.collapsed(offset: 0));
