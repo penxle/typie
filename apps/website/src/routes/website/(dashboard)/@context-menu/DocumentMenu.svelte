@@ -24,6 +24,7 @@
   import { unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
+  import DocumentDocxExportModal from './DocumentDocxExportModal.svelte';
   import DocumentPdfExportModal from './DocumentPdfExportModal.svelte';
   import type { Snippet } from 'svelte';
 
@@ -54,41 +55,7 @@
   const pane = getPane();
 
   let pdfExportModalOpen = $state(false);
-  let docxExporting = $state(false);
-
-  const [exportDocumentAsDocx] = createMutation(
-    graphql(`
-      mutation DocumentMenu_ExportDocumentAsDocx_Mutation($input: ExportDocumentAsDocxInput!) {
-        exportDocumentAsDocx(input: $input) {
-          data
-          filename
-        }
-      }
-    `),
-  );
-
-  const handleDocxExport = async () => {
-    try {
-      docxExporting = true;
-      const result = await exportDocumentAsDocx({ input: { documentId: document.id } });
-      const blob = new Blob([Uint8Array.fromBase64(result.exportDocumentAsDocx.data)], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // cspell:disable-line
-      });
-      const url = URL.createObjectURL(blob);
-
-      const a = globalThis.document.createElement('a');
-      a.href = url;
-      a.download = result.exportDocumentAsDocx.filename;
-      a.click();
-
-      URL.revokeObjectURL(url);
-      mixpanel.track('export_document_docx', { via });
-    } catch {
-      Toast.error('DOCX 내보내기에 실패했어요. 잠시 후 다시 시도해주세요.');
-    } finally {
-      docxExporting = false;
-    }
-  };
+  let docxExportModalOpen = $state(false);
 
   const [deleteDocument] = createMutation(
     graphql(`
@@ -354,9 +321,16 @@
 {/if}
 
 {#if app.preference.current.experimental_docxExportEnabled}
-  <MenuItem icon={DownloadIcon} loading={docxExporting} noCloseOnClick onclick={handleDocxExport}>DOCX로 내보내기</MenuItem>
+  <MenuItem icon={DownloadIcon} noCloseOnClick onclick={() => (docxExportModalOpen = true)}>DOCX로 내보내기</MenuItem>
 {/if}
 
+<DocumentDocxExportModal
+  documentId={document.id}
+  onClose={() => (docxExportModalOpen = false)}
+  slug={entity.slug}
+  {via}
+  bind:open={docxExportModalOpen}
+/>
 <DocumentPdfExportModal
   documentId={document.id}
   onClose={() => (pdfExportModalOpen = false)}

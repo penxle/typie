@@ -55,6 +55,12 @@ builder.mutationFields((t) => ({
     type: ExportDocumentAsDocxResult,
     input: {
       documentId: t.input.id({ validate: validateDbId(TableCode.DOCUMENTS) }),
+      pageWidth: t.input.int(),
+      pageHeight: t.input.int(),
+      pageMarginTop: t.input.int(),
+      pageMarginBottom: t.input.int(),
+      pageMarginLeft: t.input.int(),
+      pageMarginRight: t.input.int(),
     },
     resolve: async (_, { input }, ctx) => {
       const document = await db
@@ -81,6 +87,12 @@ builder.mutationFields((t) => ({
         snapshot: content.snapshot,
         title: document.title || '(제목 없음)',
         author: user.name,
+        pageWidth: input.pageWidth,
+        pageHeight: input.pageHeight,
+        pageMarginTop: input.pageMarginTop,
+        pageMarginBottom: input.pageMarginBottom,
+        pageMarginLeft: input.pageMarginLeft,
+        pageMarginRight: input.pageMarginRight,
       });
 
       return {

@@ -61,16 +61,23 @@ export type ConvertContext = {
   listStack: { type: 'bullet' | 'ordered'; depth: number }[];
   paragraphIndentTwips: number;
   docDefaults: DocDefaults;
+  contentWidthPx: number;
 };
 
 export type GenerateDocumentDocxParams = {
   snapshot: Uint8Array;
   title: string;
   author: string;
+  pageWidth: number;
+  pageHeight: number;
+  pageMarginTop: number;
+  pageMarginBottom: number;
+  pageMarginLeft: number;
+  pageMarginRight: number;
 };
 
 export async function generateDocumentDocx(params: GenerateDocumentDocxParams): Promise<Uint8Array> {
-  const { snapshot, title, author } = params;
+  const { snapshot, title, author, pageWidth, pageHeight, pageMarginTop, pageMarginBottom, pageMarginLeft, pageMarginRight } = params;
 
   // 1. snapshotToJson으로 시맨틱 데이터 추출
   const json = (await wasm.snapshotToJson(snapshot)) as unknown as DocumentJson;
@@ -110,6 +117,12 @@ export async function generateDocumentDocx(params: GenerateDocumentDocxParams): 
   const blockGapPx = (blockGapRaw / 100) * 16;
   const blockGapTwips = Math.round(blockGapPx * 15);
 
+  // CSS px → twips (1 inch = 96px = 1440 twips, 1px = 15 twips)
+  const PX_TO_TWIPS = 15;
+  const pageWidthTwips = Math.round(pageWidth * PX_TO_TWIPS);
+  const pageHeightTwips = Math.round(pageHeight * PX_TO_TWIPS);
+  const contentWidthPx = pageWidth - pageMarginLeft - pageMarginRight;
+
   const docDefaults: DocDefaults = { fontSizePt: defaultFontSizePt, blockGapTwips };
   const ctx: ConvertContext = {
     nodes: json.nodes,
@@ -120,6 +133,7 @@ export async function generateDocumentDocx(params: GenerateDocumentDocxParams): 
     listStack: [],
     paragraphIndentTwips,
     docDefaults,
+    contentWidthPx,
   };
 
   // 4. root의 children을 순회하며 변환 + Table 뒤에 block_gap spacer 삽입
@@ -169,6 +183,17 @@ export async function generateDocumentDocx(params: GenerateDocumentDocxParams): 
     },
     sections: [
       {
+        properties: {
+          page: {
+            size: { width: pageWidthTwips, height: pageHeightTwips },
+            margin: {
+              top: Math.round(pageMarginTop * PX_TO_TWIPS),
+              bottom: Math.round(pageMarginBottom * PX_TO_TWIPS),
+              left: Math.round(pageMarginLeft * PX_TO_TWIPS),
+              right: Math.round(pageMarginRight * PX_TO_TWIPS),
+            },
+          },
+        },
         children: sections,
       },
     ],
@@ -288,7 +313,7 @@ function convertNode(nodeId: string, ctx: ConvertContext, isRootChild = false): 
     }
 
     case 'image': {
-      return [convertImage(entry as unknown as { type: 'image'; id?: string; proportion: number }, ctx.assets)];
+      return [convertImage(entry as unknown as { type: 'image'; id?: string; proportion: number }, ctx.assets, ctx.contentWidthPx)];
     }
 
     case 'embed': {
