@@ -205,7 +205,7 @@ const renderFolder = async (entityId: string) => {
         backgroundColor: colors.white,
       }}
     >
-      <div style={{ width: '1200px', height: '6px', backgroundColor: '#6c6fc8' }} />
+      <div style={{ width: '1200px', height: '10px', backgroundColor: '#6c6fc8' }} />
 
       <div
         style={{
@@ -289,7 +289,7 @@ const renderDocument = async (entityId: string) => {
         backgroundColor: colors.white,
       }}
     >
-      <div style={{ width: '1200px', height: '6px', backgroundColor: '#6c6fc8' }} />
+      <div style={{ width: '1200px', height: '10px', backgroundColor: '#6c6fc8' }} />
 
       <div
         style={{
