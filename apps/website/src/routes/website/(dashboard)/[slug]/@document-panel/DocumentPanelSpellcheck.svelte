@@ -48,6 +48,7 @@
   let mounted = $state(false);
   let hasChecked = $state(false);
   let checkFailed = $state(false);
+  let abortController: AbortController | undefined;
   let listContainer = $state<HTMLElement>();
 
   const activeError = $derived(editor.spellcheckErrors.find((v) => v.active));
@@ -83,18 +84,24 @@
       return;
     }
 
+    abortController?.abort();
+    abortController = new AbortController();
+
     inflight = true;
     hasChecked = true;
     checkFailed = false;
 
     try {
-      const resp = await checkSpellingDocument({
-        input: {
-          documentId: document.data.id,
-          text: spellcheckData.text,
-          mappings: spellcheckData.mappings,
+      const resp = await checkSpellingDocument(
+        {
+          input: {
+            documentId: document.data.id,
+            text: spellcheckData.text,
+            mappings: spellcheckData.mappings,
+          },
         },
-      });
+        { signal: abortController.signal },
+      );
 
       editor.spellcheckErrors = resp.checkSpellingDocument.map((error) => ({
         id: error.id,
@@ -234,6 +241,7 @@
 
   $effect(() => {
     return () => {
+      abortController?.abort();
       editor?.setTrackedItems(0, []);
     };
   });

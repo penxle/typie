@@ -85,9 +85,15 @@ const ANALYZE_CONCURRENCY = 3;
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 3000;
 
-const withRetry = async <T>(fn: () => Promise<T>, maxRetries = MAX_RETRIES, initialDelay = INITIAL_RETRY_DELAY): Promise<T> => {
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  signal?: AbortSignal,
+  maxRetries = MAX_RETRIES,
+  initialDelay = INITIAL_RETRY_DELAY,
+): Promise<T> => {
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    signal?.throwIfAborted();
     try {
       return await fn();
     } catch (err) {
@@ -167,7 +173,7 @@ const summarizePrompt = dedent`
   300자 이내로 작성하세요.
 `;
 
-const summarizeChunk = async (chunkText: string): Promise<string> => {
+const summarizeChunk = async (chunkText: string, signal?: AbortSignal): Promise<string> => {
   const hash = rapidhash(summarizePrompt + chunkText);
   const cacheKey = `literary:summary:${hash}`;
 
@@ -181,11 +187,12 @@ const summarizeChunk = async (chunkText: string): Promise<string> => {
       model: 'gemini-3-flash-preview',
       config: {
         systemInstruction: summarizePrompt,
+        abortSignal: signal,
       },
       contents: `요약할 텍스트:\n\n${chunkText}`,
     });
     return response.text ?? '';
-  });
+  }, signal);
   await redis.setex(cacheKey, CACHE_TTL, summary);
 
   return summary;
@@ -197,7 +204,11 @@ type ChunkContext = {
   currentText: string;
 };
 
-const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedback: Feedback) => void): Promise<void> => {
+const analyzeChunkWithContext = async (
+  context: ChunkContext,
+  onFeedback: (feedback: Feedback) => void,
+  signal?: AbortSignal,
+): Promise<void> => {
   const hash = rapidhash(systemPrompt + JSON.stringify(context) + '1');
   const cacheKey = `literary:feedback:${hash}`;
 
@@ -226,17 +237,20 @@ const analyzeChunkWithContext = async (context: ChunkContext, onFeedback: (feedb
     </이후 내용>
   `;
 
-  const stream = await withRetry(() =>
-    ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
-      config: {
-        systemInstruction: systemPrompt,
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.HIGH,
+  const stream = await withRetry(
+    () =>
+      ai.models.generateContentStream({
+        model: 'gemini-3-flash-preview',
+        config: {
+          systemInstruction: systemPrompt,
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.HIGH,
+          },
+          abortSignal: signal,
         },
-      },
-      contents: userContent,
-    }),
+        contents: userContent,
+      }),
+    signal,
   );
 
   let buffer = '';
@@ -390,7 +404,11 @@ builder.subscriptionFields((t) => ({
       const mappings = args.mappings;
 
       return new Repeater<DocumentAnalysisPayload>(async (push, stop) => {
+        const abortController = new AbortController();
+        const signal = abortController.signal;
+
         ctx.c.req.raw.signal.addEventListener('abort', () => {
+          abortController.abort();
           stop();
         });
 
@@ -408,7 +426,8 @@ builder.subscriptionFields((t) => ({
           await pMap(
             chunks,
             async (chunk, index) => {
-              const summary = await summarizeChunk(chunk.text);
+              signal.throwIfAborted();
+              const summary = await summarizeChunk(chunk.text, signal);
               summaries[index] = summary;
               push({
                 type: 'progress',
@@ -426,6 +445,7 @@ builder.subscriptionFields((t) => ({
           await pMap(
             chunks,
             async (chunk, i) => {
+              signal.throwIfAborted();
               const precedingSummary = summaries.slice(0, i).join('\n\n');
               const followingSummary = summaries.slice(i + 1).join('\n\n');
 
@@ -452,6 +472,7 @@ builder.subscriptionFields((t) => ({
                     });
                   }
                 },
+                signal,
               );
 
               analyzedCount++;
@@ -465,9 +486,11 @@ builder.subscriptionFields((t) => ({
 
           push({ type: 'complete' });
         } catch (err) {
-          Sentry.captureException(err);
-          console.error(err);
-          push({ type: 'error' });
+          if (!signal.aborted) {
+            Sentry.captureException(err);
+            console.error(err);
+            push({ type: 'error' });
+          }
         }
 
         stop();
