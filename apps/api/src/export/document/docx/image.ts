@@ -3,9 +3,6 @@ import { loadImageAssets } from '../external';
 import { convertPlaceholderTable } from './blocks';
 import type { ImageAsset } from '../external';
 
-// DOCX content width in CSS px (A4 ~= 595pt ≈ 793px, minus ~1 inch margins each side ≈ 601px)
-const CONTENT_WIDTH_PX = 600;
-
 type ImageNode = {
   type: 'image';
   id?: string;
@@ -24,7 +21,11 @@ function mapFormat(format: string): 'jpg' | 'png' | 'gif' | 'bmp' {
   return 'png';
 }
 
-export function convertImage(node: ImageNode, assets: Map<string, ImageAsset>): Paragraph | ReturnType<typeof convertPlaceholderTable> {
+export function convertImage(
+  node: ImageNode,
+  assets: Map<string, ImageAsset>,
+  contentWidthPx: number,
+): Paragraph | ReturnType<typeof convertPlaceholderTable> {
   if (!node.id) {
     return convertPlaceholderTable('[이미지]');
   }
@@ -34,7 +35,7 @@ export function convertImage(node: ImageNode, assets: Map<string, ImageAsset>): 
     return convertPlaceholderTable('[이미지를 불러올 수 없습니다]');
   }
 
-  const displayWidth = CONTENT_WIDTH_PX * Math.min(node.proportion, 1);
+  const displayWidth = contentWidthPx * Math.min(node.proportion, 1);
   const displayHeight = displayWidth * (asset.height / asset.width);
 
   return new Paragraph({

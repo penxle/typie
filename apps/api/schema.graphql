@@ -417,6 +417,12 @@ enum EntityVisibility {
 
 input ExportDocumentAsDocxInput {
   documentId: ID!
+  pageHeight: Int!
+  pageMarginBottom: Int!
+  pageMarginLeft: Int!
+  pageMarginRight: Int!
+  pageMarginTop: Int!
+  pageWidth: Int!
 }
 
 type ExportDocumentAsDocxResult {
