@@ -10,6 +10,7 @@ export type DragScrollOptions = {
   initialPointer?: { clientX: number; clientY: number };
   onScroll?: (clientX: number, clientY: number) => void;
   onScrollThrottleMs?: number;
+  stickyCandidates?: HTMLElement[];
 };
 
 const isWindowTarget = (target: EventTarget): target is Window => {
@@ -124,6 +125,7 @@ export function handleDragScroll(
     initialPointer,
     onScroll,
     onScrollThrottleMs = 50,
+    stickyCandidates: providedStickyCandidates,
   } = options;
 
   if (!isDragging || !viewport) {
@@ -131,7 +133,7 @@ export function handleDragScroll(
   }
 
   const useHorizontalScroll = axis === 'both';
-  const stickyCandidates = collectStickyCandidates(viewport.target);
+  const stickyCandidates = providedStickyCandidates ?? collectStickyCandidates(viewport.target);
   const topAnchorThresholdPx = Math.max(scrollZoneSize * 2, 96);
   const toRect = (rect: { top: number; bottom: number; left: number; right: number }) => ({
     top: rect.top,

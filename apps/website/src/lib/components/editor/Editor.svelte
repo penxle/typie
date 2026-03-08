@@ -162,8 +162,11 @@
       : containerClientWidth - viewPadding * 2,
   );
 
+  const isDragging = $derived(editor.pointerState !== 0);
+
   $effect(() => {
-    return handleDragScroll(editor.scrollViewport, editor.pointerState !== 0, {
+    return handleDragScroll(editor.scrollViewport, isDragging, {
+      stickyCandidates: [],
       onScroll: (clientX, clientY) => {
         editor.handlePointerMoveFromCoordinate(clientX, clientY);
       },
