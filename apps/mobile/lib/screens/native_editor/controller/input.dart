@@ -43,9 +43,6 @@ class InputController {
   bool _pendingFocus = false;
   bool _inputReady = false;
 
-  DateTime? _deleteStartTime;
-  DateTime? _lastDeleteSignal;
-
   String? lastNodeId;
 
   void onInputReady() {
@@ -134,34 +131,13 @@ class InputController {
 
   void onInsertText(String text) {
     onInputAttempt?.call();
-    _deleteStartTime = null;
     dispatch({'type': 'input', 'text': text});
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
   void onDeleteBackward({int length = 1}) {
     onInputAttempt?.call();
-    final now = DateTime.now();
-    final lastSignal = _lastDeleteSignal;
-    _lastDeleteSignal = now;
-
-    final isRepeating = lastSignal != null && now.difference(lastSignal).inMilliseconds < 500;
-
-    if (!isRepeating) {
-      _deleteStartTime = null;
-    }
-
-    _deleteStartTime ??= now;
-    final duration = now.difference(_deleteStartTime!).inMilliseconds / 1000.0;
-
-    if (duration > 3.0) {
-      dispatch({'type': 'deleteSentenceBackward'});
-    } else if (duration > 1.5) {
-      dispatch({'type': 'deleteWordBackward'});
-    } else {
-      dispatch({'type': 'deleteBackward', if (length > 1) 'length': length});
-    }
-
+    dispatch({'type': 'deleteBackward', if (length > 1) 'length': length});
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
