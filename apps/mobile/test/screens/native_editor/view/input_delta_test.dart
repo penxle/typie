@@ -168,7 +168,7 @@ void main() {
             : splitOffsetRaw > text.length
             ? text.length
             : splitOffsetRaw;
-        state.reconcile('fixture:$name', text.substring(0, splitOffset), text.substring(splitOffset));
+        state.reconcile('fixture:$name', splitOffset, text.substring(0, splitOffset), text.substring(splitOffset));
       }
 
       for (var i = 0; i < entries.length; i++) {
