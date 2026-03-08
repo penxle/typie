@@ -71,8 +71,10 @@ class EditorView extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final tickerProvider = useSingleTickerProvider();
-    final verticalScrollController = useScrollController();
-    final horizontalScrollController = useScrollController();
+    final verticalScrollController = useMemoized(OverscrollSafeScrollController.new);
+    useEffect(() => verticalScrollController.dispose, [verticalScrollController]);
+    final horizontalScrollController = useMemoized(OverscrollSafeScrollController.new);
+    useEffect(() => horizontalScrollController.dispose, [horizontalScrollController]);
     final inputKey = useMemoized(GlobalKey<EditorTextInputState>.new);
     EditorScope.of(context).showInputRecordingSheet = () {
       inputKey.currentState?.showRecordingSheet();
@@ -594,27 +596,10 @@ class EditorView extends HookWidget {
           if (!wasVisible) {
             bottomToolbarMode.value = BottomToolbarMode.hidden;
           }
+        } else if (wasVisible && inputController.isActive && bottomToolbarMode.value == BottomToolbarMode.hidden) {
+          inputController.clearFocus();
         }
         isKeyboardVisible.value = nextHeight > 0;
-
-        if (!wasVisible && nextHeight > 0) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            final verticalPosition = resolveScrollPosition(verticalScrollController);
-            if (verticalPosition == null || !verticalPosition.hasContentDimensions) {
-              return;
-            }
-            final cursor = controller.state.cursor;
-            final interaction = interactionState.snapshot();
-            if (controller.state.layout == null ||
-                cursor == null ||
-                !cursor.visible ||
-                interaction.isLongPressing ||
-                !controller.state.isFocused) {
-              return;
-            }
-            scrollToCursorWith(cursor, typewriter: pref.typewriterEnabled);
-          });
-        }
       });
       return subscription.cancel;
     }, []);
@@ -625,6 +610,41 @@ class EditorView extends HookWidget {
       });
       return subscription.cancel;
     }, []);
+
+    // When bottom viewInsets increase (keyboard appearing), the Scaffold
+    // resizes the body and the scroll viewport shrinks. MediaQuery provides
+    // the ground truth — reacting to it is deterministic with no race
+    // conditions against our native EventChannel.
+    final viewInsetsBottom = MediaQuery.viewInsetsOf(context).bottom;
+    final lastViewInsetsBottom = useRef(viewInsetsBottom);
+
+    useEffect(() {
+      final prev = lastViewInsetsBottom.value;
+      lastViewInsetsBottom.value = viewInsetsBottom;
+
+      if (viewInsetsBottom > prev + 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) {
+            return;
+          }
+          final verticalPosition = resolveScrollPosition(verticalScrollController);
+          if (verticalPosition == null || !verticalPosition.hasContentDimensions) {
+            return;
+          }
+          final cursor = controller.state.cursor;
+          final interaction = interactionState.snapshot();
+          if (controller.state.layout == null ||
+              cursor == null ||
+              !cursor.visible ||
+              interaction.isLongPressing ||
+              !controller.state.isFocused) {
+            return;
+          }
+          runCursorScroll(cursor, typewriter: pref.typewriterEnabled);
+        });
+      }
+      return null;
+    }, [viewInsetsBottom]);
 
     useEffect(() {
       // Fallback repeat only: used when platform repeat events are not delivered.

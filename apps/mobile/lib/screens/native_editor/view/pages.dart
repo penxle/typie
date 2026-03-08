@@ -191,6 +191,14 @@ class PageList extends HookWidget {
     }, [dropIndicator, isDropping]);
 
     useEffect(() {
+      if (!isFocused) {
+        interactionController.clearTapHistory();
+        showContextMenu.value = false;
+      }
+      return null;
+    }, [isFocused, interactionController]);
+
+    useEffect(() {
       if (!interactionSnapshot.isAuxiliaryGesture) {
         return null;
       }
@@ -584,6 +592,25 @@ class NonGestureBouncingScrollPhysics extends BouncingScrollPhysics {
 
   @override
   bool shouldAcceptUserOffset(ScrollMetrics position) => false;
+}
+
+class OverscrollSafeScrollController extends ScrollController {
+  @override
+  ScrollPosition createScrollPosition(ScrollPhysics physics, ScrollContext context, ScrollPosition? oldPosition) {
+    return _OverscrollSafeScrollPosition(physics: physics, context: context, oldPosition: oldPosition);
+  }
+}
+
+class _OverscrollSafeScrollPosition extends ScrollPositionWithSingleContext {
+  _OverscrollSafeScrollPosition({required super.physics, required super.context, super.oldPosition});
+
+  @override
+  void correctBy(double correction) {
+    if (correction != 0.0 && activity is BallisticScrollActivity) {
+      return;
+    }
+    super.correctBy(correction);
+  }
 }
 
 class MeasuredTitleFields extends HookWidget {

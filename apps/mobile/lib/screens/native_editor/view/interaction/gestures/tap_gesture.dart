@@ -5,6 +5,7 @@ class TapGesture implements InteractionGesture {
   Offset? lastTapPosition;
   Timer? tapTimer;
   bool tapDispatched = false;
+  bool skipNextContextMenu = false;
 
   bool isConsecutiveTap({
     required Offset localPosition,
@@ -48,6 +49,7 @@ class TapGesture implements InteractionGesture {
     cancelTapTimer();
     clearTapHistory();
     tapDispatched = false;
+    skipNextContextMenu = false;
   }
 }
 
@@ -63,6 +65,9 @@ extension TapGestureMethods on EditorInteractionController {
     }
 
     showContextMenu.value = false;
+
+    final shouldSkipContextMenu = _tapGesture.skipNextContextMenu;
+    _tapGesture.skipNextContextMenu = false;
 
     scope.inputController
       ..invalidate()
@@ -86,7 +91,7 @@ extension TapGestureMethods on EditorInteractionController {
     if (clickCount == 1) {
       final isSelectionHit = scope.editor.isSelectionHit(pageIdx, pointerX, localY);
       if (isSelectionHit) {
-        if (!wasContextMenuOpen.value) {
+        if (!shouldSkipContextMenu && !wasContextMenuOpen.value) {
           showContextMenu.value = true;
         }
         return;
@@ -125,7 +130,7 @@ extension TapGestureMethods on EditorInteractionController {
             isCollapsed && newState.cursor != null && prevCursor != null && newState.cursor!.isSamePosition(prevCursor);
 
         if (isSameCursor) {
-          if (!wasContextMenuOpen.value) {
+          if (!shouldSkipContextMenu && !wasContextMenuOpen.value) {
             showContextMenu.value = true;
           }
           return;

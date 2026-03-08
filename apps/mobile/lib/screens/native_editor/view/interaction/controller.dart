@@ -347,6 +347,12 @@ class EditorInteractionController {
   bool get isTableCellHandleDragging => _isTableCellHandleMode;
   bool get _isAndroid => debugIsAndroidOverride ?? Platform.isAndroid;
 
+  void clearTapHistory() {
+    _tapGesture
+      ..clearTapHistory()
+      ..skipNextContextMenu = true;
+  }
+
   Offset? selectionHandleViewportPosition(SelectionHandleInfo? handle, ContentGeometry geometry) {
     return _selectionHandleSemantic.getHandlePosition(
       handle,
