@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { untrack } from 'svelte';
   import { fade } from 'svelte/transition';
   import { CROP_MARKER_SIZE } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
@@ -44,11 +45,17 @@
 
   $effect(() => {
     const renderVersion = editor.renderVersion;
+    const draggingSelection = editor.pointerState === 4;
     if (!visible || !ctx2d) return;
-    const rendered = render();
-    if (rendered) {
-      editor.notifyPageRendered(page, renderVersion);
-    }
+    untrack(() => {
+      if (draggingSelection && editor.cursor.pageIdx !== page) {
+        return;
+      }
+      const rendered = render();
+      if (rendered) {
+        editor.notifyPageRendered(page, renderVersion);
+      }
+    });
   });
 
   $effect(() => {
