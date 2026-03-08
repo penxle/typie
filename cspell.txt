@@ -30,7 +30,8 @@ dmarc
 dotenv
 dotum
 ebgp
-Edgi
+edgi
+epub
 eulyoo
 ffigen
 ffprobe

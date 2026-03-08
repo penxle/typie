@@ -424,6 +424,15 @@ type ExportDocumentAsDocxResult {
   filename: String!
 }
 
+input ExportDocumentAsEpubInput {
+  documentId: ID!
+}
+
+type ExportDocumentAsEpubResult {
+  data: Binary!
+  filename: String!
+}
+
 input ExportDocumentAsPdfInput {
   documentId: ID!
   pageHeight: Int!
@@ -688,6 +697,7 @@ type Mutation {
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateDocument(input: DuplicateDocumentInput!): Document!
   exportDocumentAsDocx(input: ExportDocumentAsDocxInput!): ExportDocumentAsDocxResult!
+  exportDocumentAsEpub(input: ExportDocumentAsEpubInput!): ExportDocumentAsEpubResult!
   exportDocumentAsPdf(input: ExportDocumentAsPdfInput!): ExportDocumentAsPdfResult!
   generateActivityImage: Binary!
   generateRandomName: String!
