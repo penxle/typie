@@ -1042,7 +1042,11 @@ class EditorView extends HookWidget {
     }
 
     return Listener(
-      onPointerDown: (_) => inputController.invalidate(),
+      onPointerDown: (_) {
+        inputController
+          ..commitPreedit()
+          ..invalidate();
+      },
       child: NativeEditorToolbarScope(
         controller: controller,
         keyboardHeight: keyboardHeight,
