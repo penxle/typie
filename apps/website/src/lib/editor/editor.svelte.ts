@@ -102,6 +102,7 @@ const NON_EDIT_MESSAGE_TYPES = new Set<Message['type']>([
   'addRemark',
   'updateRemark',
   'removeRemark',
+  'commitPreedit',
 ]);
 
 /** 텍스트를 삽입하는 메시지 타입 (restricted 모드에서 차단) */
@@ -114,7 +115,6 @@ const INSERTION_MESSAGE_TYPES = new Set<Message['type']>([
   'repasteAsText',
   'compositionStart',
   'compositionUpdate',
-  'commitPreedit',
   'drop',
 ]);
 
