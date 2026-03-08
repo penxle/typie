@@ -59,6 +59,7 @@ class EditorController extends ChangeNotifier {
 
   bool restrictedText = false;
   bool restrictedBlob = false;
+  bool locked = false;
   void Function(String reason)? onEditBlocked;
 
   ScrollMode? pendingScrollMode;
@@ -141,11 +142,46 @@ class EditorController extends ChangeNotifier {
     'drop',
   };
 
+  static const _nonEditMessageTypes = {
+    'initialize',
+    'pointerDown',
+    'pointerMove',
+    'pointerUp',
+    'dragEnd',
+    'navigate',
+    'selectAll',
+    'selectWord',
+    'selectSentence',
+    'selectParagraph',
+    'resize',
+    'setTheme',
+    'fontsLoaded',
+    'escape',
+    'selectTable',
+    'selectTableRow',
+    'selectTableColumn',
+    'setExternalElementHeight',
+    'setFocused',
+    'setSelection',
+    'collapseSelection',
+    'extendSelectionTo',
+    'toggleFold',
+    'addRemark',
+    'updateRemark',
+    'removeRemark',
+    'commitPreedit',
+  };
+
   void dispatch(Map<String, dynamic> message) {
     if (isDisposed) {
       return;
     }
-    if (restrictedText && _insertionMessageTypes.contains(message['type'])) {
+    final type = message['type'] as String;
+    if (locked && !_nonEditMessageTypes.contains(type)) {
+      onEditBlocked?.call('locked');
+      return;
+    }
+    if (restrictedText && _insertionMessageTypes.contains(type)) {
       onEditBlocked?.call('restrictedText');
       return;
     }

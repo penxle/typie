@@ -160,6 +160,11 @@ class SpellcheckSheet extends HookWidget {
                         (error) => _SpellcheckErrorItem(
                           error: error,
                           onCorrect: (correction) {
+                            if (controller.locked) {
+                              controller.onEditBlocked?.call('locked');
+                              return;
+                            }
+
                             final errorId = error['id'] as String;
                             final range = controller.trackedItemRange(0, errorId);
                             final nodeId = range?.nodeId ?? (error['nodeId'] as String);
