@@ -54,6 +54,41 @@
   const pane = getPane();
 
   let pdfExportModalOpen = $state(false);
+  let docxExporting = $state(false);
+
+  const [exportDocumentAsDocx] = createMutation(
+    graphql(`
+      mutation DocumentMenu_ExportDocumentAsDocx_Mutation($input: ExportDocumentAsDocxInput!) {
+        exportDocumentAsDocx(input: $input) {
+          data
+          filename
+        }
+      }
+    `),
+  );
+
+  const handleDocxExport = async () => {
+    try {
+      docxExporting = true;
+      const result = await exportDocumentAsDocx({ input: { documentId: document.id } });
+      const blob = new Blob([Uint8Array.fromBase64(result.exportDocumentAsDocx.data)], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // cspell:disable-line
+      });
+      const url = URL.createObjectURL(blob);
+
+      const a = globalThis.document.createElement('a');
+      a.href = url;
+      a.download = result.exportDocumentAsDocx.filename;
+      a.click();
+
+      URL.revokeObjectURL(url);
+      mixpanel.track('export_document_docx', { via });
+    } catch {
+      Toast.error('DOCX 내보내기에 실패했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      docxExporting = false;
+    }
+  };
 
   const [deleteDocument] = createMutation(
     graphql(`
@@ -310,12 +345,16 @@
 
 {@render children?.()}
 
-{#if app.preference.current.experimental_pdfExportEnabled}
+{#if app.preference.current.experimental_pdfExportEnabled || app.preference.current.experimental_docxExportEnabled}
   <HorizontalDivider color="secondary" />
 {/if}
 
 {#if app.preference.current.experimental_pdfExportEnabled}
   <MenuItem icon={DownloadIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
+{/if}
+
+{#if app.preference.current.experimental_docxExportEnabled}
+  <MenuItem icon={DownloadIcon} loading={docxExporting} noCloseOnClick onclick={handleDocxExport}>DOCX로 내보내기</MenuItem>
 {/if}
 
 <DocumentPdfExportModal
