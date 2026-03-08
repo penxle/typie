@@ -1364,7 +1364,7 @@ builder.mutationFields((t) => ({
         return [];
       }
 
-      const errors = await spellcheck.check(text);
+      const errors = await spellcheck.check(text, ctx.c.req.raw.signal);
 
       const findMapping = (position: number) => {
         let left = 0;

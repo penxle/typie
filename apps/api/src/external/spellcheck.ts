@@ -147,7 +147,7 @@ const normalize = (text: string) => {
   return { text: normalized, map };
 };
 
-export const check = async (text: string) => {
+export const check = async (text: string, signal?: AbortSignal) => {
   const normalized = normalize(text);
 
   if (!normalized.text.trim()) return [];
@@ -276,6 +276,8 @@ export const check = async (text: string) => {
     chunks,
     async (chunk) => {
       try {
+        signal?.throwIfAborted();
+
         const chunkText = chunk.text;
         const normalized = normalize(chunkText);
 
@@ -288,6 +290,7 @@ export const check = async (text: string) => {
             .post(env.SPELLCHECK_URL, {
               headers: { 'x-api-key': env.SPELLCHECK_API_KEY },
               json: { sentence: normalized.text },
+              signal,
             })
             .text();
 

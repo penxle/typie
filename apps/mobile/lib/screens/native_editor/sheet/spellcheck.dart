@@ -36,6 +36,8 @@ class SpellcheckSheet extends HookWidget {
     final errors = useState<List<Map<String, dynamic>>>([]);
 
     useEffect(() {
+      var cancelled = false;
+
       Future<void> runSpellcheck() async {
         try {
           final spellcheckData = editor.getTextWithMappings();
@@ -67,6 +69,8 @@ class SpellcheckSheet extends HookWidget {
             ),
           );
 
+          if (cancelled) return;
+
           final spellErrors = resp.checkSpellingDocument
               .map(
                 (e) => <String, dynamic>{
@@ -95,12 +99,13 @@ class SpellcheckSheet extends HookWidget {
               .toList();
           editor.setTrackedItems(0, rawErrors);
         } catch (err) {
+          if (cancelled) return;
           unawaited(Sentry.captureException(err));
           if (context.mounted) {
             context.toast(ToastType.error, '맞춤법 검사에 실패했습니다');
           }
         } finally {
-          if (context.mounted) {
+          if (!cancelled && context.mounted) {
             isLoading.value = false;
           }
         }
@@ -109,6 +114,7 @@ class SpellcheckSheet extends HookWidget {
       unawaited(runSpellcheck());
 
       return () {
+        cancelled = true;
         try {
           if (!editor.isDisposed) {
             editor.setTrackedItems(0, []);
