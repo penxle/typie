@@ -4,5 +4,6 @@ mutation NativeEditor_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
     title
     nullableTitle
     subtitle
+    locked
   }
 }

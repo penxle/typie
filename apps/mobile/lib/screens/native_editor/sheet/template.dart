@@ -38,6 +38,10 @@ class TemplateSheet extends HookWidget {
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
     Future<void> loadTemplate(GNativeEditorScreen_QueryData_entity_site_documentTemplates template) async {
+      if (controller.locked) {
+        controller.onEditBlocked?.call('locked');
+        return;
+      }
       if (controller.restrictedText) {
         controller.onEditBlocked?.call('restrictedText');
         return;

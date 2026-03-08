@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/icons/lucide_light.dart';
@@ -14,6 +18,7 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/duplicate_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_document_type_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/sheet/info.dart';
 import 'package:typie/screens/native_editor/sheet/settings.dart';
@@ -91,6 +96,24 @@ class MenuSheet extends StatelessWidget {
             },
           ),
           BottomMenuItem(icon: LucideLightIcons.sticky_note, label: '이 문서 관련 노트', onTap: onOpenRelatedNotes),
+          BottomMenuItem(
+            icon: document.locked ? LucideLightIcons.lock_open : LucideLightIcons.lock,
+            label: document.locked ? '편집 잠금 해제' : '편집 잠금',
+            onTap: () {
+              unawaited(
+                client.request(
+                  GNativeEditor_UpdateDocument_MutationReq(
+                    (b) => b.vars.input
+                      ..documentId = document.id
+                      ..locked = Value.present(!document.locked),
+                  ),
+                ),
+              );
+              if (context.mounted) {
+                context.toast(ToastType.success, document.locked ? '편집 잠금이 해제되었어요.' : '편집 잠금이 설정되었어요.');
+              }
+            },
+          ),
           BottomMenuItem(
             icon: LucideLightIcons.settings,
             label: '본문 설정',

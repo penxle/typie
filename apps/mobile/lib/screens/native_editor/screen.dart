@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
@@ -633,6 +634,10 @@ class _EditorContent extends HookWidget {
         if (!context.mounted) {
           return;
         }
+        if (reason == 'locked') {
+          context.toast(ToastType.notification, '편집이 잠겨있는 문서예요.');
+          return;
+        }
         final type = switch (reason) {
           'restrictedText' => LimitBottomSheetType.restrictedText,
           'restrictedBlob' => LimitBottomSheetType.restrictedBlob,
@@ -735,7 +740,8 @@ class _EditorContent extends HookWidget {
 
         ctrl
           ..restrictedText = maxChar >= 0 && data.me!.usage.totalCharacterCount >= maxChar
-          ..restrictedBlob = maxBlob >= 0 && int.parse(data.me!.usage.totalBlobSize.value) >= maxBlob;
+          ..restrictedBlob = maxBlob >= 0 && int.parse(data.me!.usage.totalBlobSize.value) >= maxBlob
+          ..locked = document?.locked ?? false;
 
         return null;
       },
@@ -745,6 +751,7 @@ class _EditorContent extends HookWidget {
         data.me?.usage.totalBlobSize.value,
         data.me?.subscription?.plan.rule.maxTotalCharacterCount,
         data.me?.subscription?.plan.rule.maxTotalBlobSize,
+        document?.locked,
       ],
     );
 

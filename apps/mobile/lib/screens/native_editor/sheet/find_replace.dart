@@ -171,6 +171,10 @@ class FindReplaceSheet extends HookWidget {
     }
 
     void replace() {
+      if (controller.locked) {
+        controller.onEditBlocked?.call('locked');
+        return;
+      }
       if (controller.restrictedText) {
         controller.onEditBlocked?.call('restrictedText');
         return;
@@ -193,6 +197,10 @@ class FindReplaceSheet extends HookWidget {
     }
 
     void replaceAll() {
+      if (controller.locked) {
+        controller.onEditBlocked?.call('locked');
+        return;
+      }
       if (controller.restrictedText) {
         controller.onEditBlocked?.call('restrictedText');
         return;
