@@ -320,9 +320,12 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     if (!hadComposing && !hasComposing) {
       var scan = oldValue;
       for (final delta in deltas) {
+        final prevText = scan.text;
         scan = delta.apply(scan);
         if (scan.composing.isValid && !scan.composing.isCollapsed) {
-          midComposing = scan.composing;
+          if (prevText != scan.text) {
+            midComposing = scan.composing;
+          }
           break;
         }
       }
