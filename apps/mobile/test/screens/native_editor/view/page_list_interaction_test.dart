@@ -24,7 +24,7 @@ import 'package:typie/styles/theme_data.dart';
 
 class _TestPref implements Pref {
   @override
-  String siteId = 'test-site';
+  String? siteId = 'test-site';
 
   @override
   bool devMode = false;

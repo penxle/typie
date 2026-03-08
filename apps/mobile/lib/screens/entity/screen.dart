@@ -1,13 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
-import 'package:built_value/json_object.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
@@ -37,18 +33,16 @@ import 'package:typie/screens/entity/__generated__/delete_folder_mutation.req.gq
 import 'package:typie/screens/entity/__generated__/duplicate_document_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/entity_fragment.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/move_entity_mutation.req.gql.dart';
-import 'package:typie/screens/entity/__generated__/persist_blob_as_image_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/rename_folder_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_site_id_query.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/site_fragment.data.gql.dart';
-import 'package:typie/screens/entity/__generated__/update_site_mutation.req.gql.dart';
 import 'package:typie/screens/entity/move_entity_modal.dart';
 import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/screens/entity/selected_entities_bar.dart';
-import 'package:typie/services/blob.dart';
-import 'package:typie/services/preference.dart';
+import 'package:typie/screens/entity/space_selector_bottom_sheet.dart';
+import 'package:typie/services/site.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/haptic_reorderable.dart';
@@ -81,14 +75,15 @@ class _WithSiteId extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pref = useService<Pref>();
+    final site = useService<Site>();
+    final siteId = useValueListenable(site);
     final refreshNotifier = useMemoized(RefreshNotifier.new, []);
 
     useRouteResumed(context, refreshNotifier.refresh, tabIndex: RouteTabsIndex.entity);
 
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceSubtle,
-      operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
+      operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = siteId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
         return _EntityList(null, data.site.entities.toList(), site: data.site, siteName: data.site.name);
@@ -133,18 +128,15 @@ class _EntityList extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
-    final pref = useService<Pref>();
+    final siteService = useService<Site>();
     final mixpanel = useService<Mixpanel>();
-    final blob = useService<Blob>();
 
     final animationController = useAnimationController(duration: const Duration(milliseconds: 150));
     final textEditingController = useTextEditingController();
-    final siteNameController = useTextEditingController(text: siteName ?? '');
     final primaryScrollController = PrimaryScrollController.of(context);
 
     final isReordering = useState(false);
     final isRenaming = useState(false);
-    final isSiteRenaming = useState(false);
     final isSelecting = useState(false);
     final selectedItems = useState<Set<String>>({});
     final currentSiteLogoUrl = useState(site?.logo.url);
@@ -174,11 +166,6 @@ class _EntityList extends HookWidget {
 
     useEffect(() {
       currentSiteName.value = siteName;
-
-      if (!isSiteRenaming.value) {
-        siteNameController.text = siteName ?? '';
-      }
-
       return null;
     }, [siteName]);
 
@@ -186,12 +173,9 @@ class _EntityList extends HookWidget {
       if (isRenaming.value) {
         textEditingController.selection = TextSelection(baseOffset: 0, extentOffset: textEditingController.text.length);
       }
-      if (isSiteRenaming.value) {
-        siteNameController.selection = TextSelection(baseOffset: 0, extentOffset: siteNameController.text.length);
-      }
 
       return null;
-    }, [isRenaming.value, isSiteRenaming.value]);
+    }, [isRenaming.value]);
 
     return HookForm(
       schema: l.schema({'name': l.string().min(1).required()}),
@@ -209,7 +193,7 @@ class _EntityList extends HookWidget {
       },
       builder: (context, form) {
         Future<void> showEntityMenu() async {
-          if (isRenaming.value || isSiteRenaming.value || isReordering.value || isSelecting.value) {
+          if (isRenaming.value || isReordering.value || isSelecting.value) {
             return;
           }
 
@@ -273,7 +257,7 @@ class _EntityList extends HookWidget {
                     final resp = await client.request(
                       GEntityScreen_CreateDocument_MutationReq(
                         (b) => b
-                          ..vars.input.siteId = pref.siteId
+                          ..vars.input.siteId = siteService.siteId
                           ..vars.input.parentEntityId = Value.present(entity?.id),
                       ),
                     );
@@ -293,7 +277,7 @@ class _EntityList extends HookWidget {
                       final resp = await client.request(
                         GEntityScreen_CreateFolder_MutationReq(
                           (b) => b
-                            ..vars.input.siteId = pref.siteId
+                            ..vars.input.siteId = siteService.siteId
                             ..vars.input.parentEntityId = Value.present(entity?.id)
                             ..vars.input.name = '새 폴더',
                         ),
@@ -379,58 +363,7 @@ class _EntityList extends HookWidget {
             titleWidget: Row(
               spacing: 8,
               children: [
-                if (entity == null && currentSiteLogoUrl.value != null)
-                  GestureDetector(
-                    onTap: () async {
-                      final result = await FilePicker.platform.pickFiles(type: FileType.image);
-                      if (result == null) {
-                        return;
-                      }
-
-                      final pickedFile = result.files.firstOrNull;
-                      if (pickedFile == null) {
-                        return;
-                      }
-
-                      final file = File(pickedFile.path!);
-                      final path = await blob.upload(file);
-                      final resp = await client.request(
-                        GEntityScreen_PersistBlobAsImage_MutationReq(
-                          (b) => b
-                            ..vars.input.path = path
-                            ..vars.input.modification = Value.present(
-                              JsonObject({
-                                'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
-                                'format': 'png',
-                              }),
-                            ),
-                        ),
-                      );
-
-                      await client.request(
-                        GEntityScreen_UpdateSite_MutationReq(
-                          (b) => b
-                            ..vars.input.siteId = site!.id
-                            ..vars.input.logoId = Value.present(resp.persistBlobAsImage.id),
-                        ),
-                      );
-
-                      currentSiteLogoUrl.value = resp.persistBlobAsImage.url;
-                      unawaited(mixpanel.track('update_site_logo'));
-                    },
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: CachedNetworkImage(
-                        imageUrl:
-                            '${currentSiteLogoUrl.value}?s=${pow(2, (log(24 * MediaQuery.devicePixelRatioOf(context)) / log(2)).ceil()).toInt()}&q=75',
-                        width: 24,
-                        height: 24,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  )
-                else
-                  Icon(entity == null ? LucideLightIcons.folder_open : LucideLightIcons.folder, size: 20),
+                if (entity != null) const Icon(LucideLightIcons.folder, size: 20),
                 Expanded(
                   child: isRenaming.value
                       ? HookFormTextField.collapsed(
@@ -441,51 +374,55 @@ class _EntityList extends HookWidget {
                           placeholder: '폴더 이름',
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                         )
-                      : isSiteRenaming.value
-                      ? TextField(
-                          controller: siteNameController,
-                          autofocus: true,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onSubmitted: (value) async {
-                            if (value.isEmpty) {
-                              isSiteRenaming.value = false;
-                              siteNameController.text = currentSiteName.value ?? '';
-                              return;
-                            }
-
-                            await client.request(
-                              GEntityScreen_UpdateSite_MutationReq(
-                                (b) => b
-                                  ..vars.input.siteId = site!.id
-                                  ..vars.input.name = Value.present(value),
+                      : entity == null
+                      ? GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () async {
+                            await context.showBottomSheet(
+                              child: SpaceSelectorBottomSheet(
+                                onSiteChanged: () {
+                                  final tabsRouter = AutoTabsRouter.of(context);
+                                  final entityRouter = tabsRouter.childControllers.first;
+                                  if (entityRouter is StackRouter) {
+                                    entityRouter.popUntilRoot();
+                                  }
+                                },
                               ),
                             );
-
-                            currentSiteName.value = value;
-                            isSiteRenaming.value = false;
-                            unawaited(mixpanel.track('update_site_name'));
                           },
+                          child: Row(
+                            spacing: 8,
+                            children: [
+                              if (currentSiteLogoUrl.value != null)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: CachedNetworkImage(
+                                    imageUrl:
+                                        '${currentSiteLogoUrl.value}?s=${pow(2, (log(24 * MediaQuery.devicePixelRatioOf(context)) / log(2)).ceil()).toInt()}&q=75',
+                                    width: 24,
+                                    height: 24,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              else
+                                const Icon(LucideLightIcons.folder_open, size: 20),
+                              Expanded(
+                                child: Text(
+                                  currentSiteName.value ?? '내 스페이스',
+                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Icon(LucideLightIcons.chevron_down, size: 14, color: context.colors.textSubtle),
+                            ],
+                          ),
                         )
                       : GestureDetector(
                           onDoubleTap: () {
-                            if (entity != null) {
-                              isRenaming.value = true;
-                            } else if (site != null) {
-                              siteNameController.text = currentSiteName.value ?? '';
-                              isSiteRenaming.value = true;
-                            }
+                            isRenaming.value = true;
                           },
                           child: Text(
-                            entity == null
-                                ? currentSiteName.value ?? '내 스페이스'
-                                : textEditingController.text.isEmpty
-                                ? folder!.name
-                                : textEditingController.text,
+                            textEditingController.text.isEmpty ? folder!.name : textEditingController.text,
                             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -503,7 +440,7 @@ class _EntityList extends HookWidget {
                   )
                 : null,
             actions: [
-              if (!isRenaming.value && !isSiteRenaming.value && !isReordering.value && !isSelecting.value)
+              if (!isRenaming.value && !isReordering.value && !isSelecting.value)
                 HeadingAction(icon: LucideLightIcons.ellipsis, onTap: showEntityMenu)
               else if (isSelecting.value)
                 HeadingAction(
@@ -519,25 +456,6 @@ class _EntityList extends HookWidget {
                   onTap: () async {
                     if (isRenaming.value) {
                       await form.submit();
-                    } else if (isSiteRenaming.value) {
-                      final value = siteNameController.text;
-                      if (value.isEmpty) {
-                        isSiteRenaming.value = false;
-                        siteNameController.text = currentSiteName.value ?? '';
-                        return;
-                      }
-
-                      await client.request(
-                        GEntityScreen_UpdateSite_MutationReq(
-                          (b) => b
-                            ..vars.input.siteId = site!.id
-                            ..vars.input.name = Value.present(value),
-                        ),
-                      );
-
-                      currentSiteName.value = value;
-                      isSiteRenaming.value = false;
-                      unawaited(mixpanel.track('update_site_name'));
                     } else if (isReordering.value) {
                       isReordering.value = false;
                     }
@@ -553,7 +471,7 @@ class _EntityList extends HookWidget {
                 if (entities.isEmpty)
                   Center(
                     child: Text(
-                      '폴더가 비어있어요',
+                      entity == null ? '스페이스가 비어있어요' : '폴더가 비어있어요',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
                     ),
                   )
@@ -674,7 +592,7 @@ class _EntityList extends HookWidget {
                                         final resp = await client.request(
                                           GEntityScreen_CreateDocument_MutationReq(
                                             (b) => b
-                                              ..vars.input.siteId = pref.siteId
+                                              ..vars.input.siteId = siteService.siteId
                                               ..vars.input.parentEntityId = Value.present(entities[index].id),
                                           ),
                                         );
@@ -698,7 +616,7 @@ class _EntityList extends HookWidget {
                                           final resp = await client.request(
                                             GEntityScreen_CreateFolder_MutationReq(
                                               (b) => b
-                                                ..vars.input.siteId = pref.siteId
+                                                ..vars.input.siteId = siteService.siteId
                                                 ..vars.input.parentEntityId = Value.present(entities[index].id)
                                                 ..vars.input.name = '새 폴더',
                                             ),

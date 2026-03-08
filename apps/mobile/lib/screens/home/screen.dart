@@ -15,7 +15,7 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/create_document.req.gql.dart';
 import 'package:typie/screens/home/__generated__/site_update_stream.req.gql.dart';
 import 'package:typie/screens/native_editor/auto_discard.dart';
-import 'package:typie/services/preference.dart';
+import 'package:typie/services/site.dart';
 import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -26,16 +26,17 @@ class HomeScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
-    final pref = useService<Pref>();
+    final site = useService<Site>();
+    final siteId = useValueListenable(site);
     final mixpanel = useService<Mixpanel>();
 
     useEffect(() {
       final subscription = client
-          .subscribe(GHomeScreen_SiteUpdateStream_SubscriptionReq((b) => b..vars.siteId = pref.siteId))
+          .subscribe(GHomeScreen_SiteUpdateStream_SubscriptionReq((b) => b..vars.siteId = siteId))
           .listen((_) {});
 
       return subscription.cancel;
-    }, []);
+    }, [siteId]);
 
     return AutoTabsRouter(
       routes: const [EntityRouter(), NotesRoute(), SearchRoute(), ProfileRoute()],
@@ -91,7 +92,7 @@ class HomeScreen extends HookWidget {
                         final result = await client.request(
                           GHomeScreen_CreateDocument_MutationReq(
                             (b) => b
-                              ..vars.input.siteId = pref.siteId
+                              ..vars.input.siteId = site.siteId
                               ..vars.input.parentEntityId = Value.present(parentEntityId),
                           ),
                         );

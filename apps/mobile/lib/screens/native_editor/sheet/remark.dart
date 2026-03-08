@@ -376,7 +376,9 @@ class RemarkBottomSheet extends HookWidget {
                                 confirmText: '삭제',
                                 confirmTextColor: context.colors.textBright,
                                 confirmBackgroundColor: context.colors.accentDanger,
-                                onConfirm: () => deleteRemark(remark),
+                                onConfirm: () async {
+                                  deleteRemark(remark);
+                                },
                               ),
                             );
                           },

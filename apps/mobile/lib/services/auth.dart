@@ -14,7 +14,7 @@ import 'package:typie/graphql/auth_link.dart';
 import 'package:typie/services/__generated__/auth_query.data.gql.dart';
 import 'package:typie/services/__generated__/auth_query.req.gql.dart';
 import 'package:typie/services/kv.dart';
-import 'package:typie/services/preference.dart';
+import 'package:typie/services/site.dart';
 
 part 'auth.freezed.dart';
 
@@ -37,21 +37,21 @@ sealed class AuthState with _$AuthState {
 
 @singleton
 class Auth extends ValueNotifier<AuthState> {
-  Auth._(this._box, this._dio, this._pref, this._mixpanel) : super(const AuthState.initializing());
+  Auth._(this._box, this._dio, this._site, this._mixpanel) : super(const AuthState.initializing());
 
   final Box<dynamic> _box;
   final Dio _dio;
-  final Pref _pref;
+  final Site _site;
   final Mixpanel _mixpanel;
 
   final _sessionTokenKey = 'session_token';
   final _accessTokenKey = 'access_token';
 
   @FactoryMethod(preResolve: true)
-  static Future<Auth> create(KV hive, Dio dio, Pref pref, Mixpanel mixpanel) async {
+  static Future<Auth> create(KV hive, Dio dio, Site site, Mixpanel mixpanel) async {
     final box = await hive.openBox('auth_box', encrypted: true);
 
-    final auth = Auth._(box, dio, pref, mixpanel);
+    final auth = Auth._(box, dio, site, mixpanel);
     await auth._refreshTokens();
 
     return auth;
@@ -73,7 +73,8 @@ class Auth extends ValueNotifier<AuthState> {
 
       final me = await _validateAccessToken(accessToken);
 
-      _pref.siteId = me.sites.first.id;
+      final siteIds = me.sites.map((s) => s.id).toList();
+      _site.ensureValidSiteId(siteIds);
 
       unawaited(_mixpanel.identify(me.id));
       _mixpanel.getPeople().set(r'$email', me.email);

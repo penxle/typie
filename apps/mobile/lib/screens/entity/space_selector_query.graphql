@@ -1,0 +1,21 @@
+query SpaceSelector_Query {
+  me {
+    id
+
+    subscription {
+      id
+    }
+
+    sites {
+      id
+      name
+      documentCount
+      folderCount
+
+      logo {
+        id
+        url
+      }
+    }
+  }
+}

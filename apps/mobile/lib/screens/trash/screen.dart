@@ -23,7 +23,7 @@ import 'package:typie/screens/trash/__generated__/recover_entity_mutation.req.gq
 import 'package:typie/screens/trash/__generated__/screen_with_entity_id_query.data.gql.dart';
 import 'package:typie/screens/trash/__generated__/screen_with_entity_id_query.req.gql.dart';
 import 'package:typie/screens/trash/__generated__/screen_with_site_id_query.req.gql.dart';
-import 'package:typie/services/preference.dart';
+import 'package:typie/services/site.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 
@@ -44,11 +44,12 @@ class _WithSiteId extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pref = useService<Pref>();
+    final site = useService<Site>();
+    final siteId = useValueListenable(site);
 
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceSubtle,
-      operation: GTrashScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId),
+      operation: GTrashScreen_WithSiteId_QueryReq((b) => b..vars.siteId = siteId),
       builder: (context, client, data) {
         return _TrashList(null, data.site.deletedEntities.toList(), data.site.name);
       },

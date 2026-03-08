@@ -5,6 +5,10 @@ query SiteSettingsScreen_Query($siteId: ID!) {
     subscription {
       id
     }
+
+    sites {
+      id
+    }
   }
 
   site(siteId: $siteId) {
@@ -12,6 +16,8 @@ query SiteSettingsScreen_Query($siteId: ID!) {
     name
     slug
     dateDisplay
+    documentCount
+    folderCount
 
     logo {
       id

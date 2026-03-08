@@ -16,8 +16,8 @@ class Pref {
     return Pref._(box);
   }
 
-  String get siteId => _box.get('site_id') as String;
-  set siteId(String value) => _box.put('site_id', value);
+  String? get siteId => _box.get('site_id') as String?;
+  set siteId(String? value) => _box.put('site_id', value);
 
   bool get devMode => _box.get('dev_mode', defaultValue: false) as bool;
   set devMode(bool value) => _box.put('dev_mode', value);

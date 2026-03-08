@@ -27,6 +27,7 @@ import 'package:typie/screens/notes/__generated__/notes_move_note_mutation.req.g
 import 'package:typie/screens/notes/__generated__/notes_query.data.gql.dart';
 import 'package:typie/screens/notes/__generated__/notes_query.req.gql.dart';
 import 'package:typie/screens/notes/__generated__/notes_update_note_mutation.req.gql.dart';
+import 'package:typie/services/site.dart';
 import 'package:typie/widgets/haptic_reorderable.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/note.dart';
@@ -39,13 +40,15 @@ class NotesScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final site = useService<Site>();
+    final siteId = useValueListenable(site);
     final refreshNotifier = useMemoized(RefreshNotifier.new, []);
 
     useRouteResumed(context, refreshNotifier.refresh, tabIndex: RouteTabsIndex.notes);
 
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceSubtle,
-      operation: GNotesScreen_QueryReq(),
+      operation: GNotesScreen_QueryReq((b) => b..vars.siteId = siteId),
       refreshNotifier: refreshNotifier,
       builder: (context, client, queryData) {
         final notes = queryData.notes.toList();
