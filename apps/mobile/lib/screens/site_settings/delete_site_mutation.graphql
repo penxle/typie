@@ -1,0 +1,5 @@
+mutation SiteSettingsScreen_DeleteSite_Mutation($input: DeleteSiteInput!) {
+  deleteSite(input: $input) {
+    id
+  }
+}

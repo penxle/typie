@@ -1,7 +1,7 @@
-query NotesScreen_Query {
+query NotesScreen_Query($siteId: ID!) {
   me {
     id
-    recentlyViewedEntities {
+    recentlyViewedEntities(siteId: $siteId) {
       id
       slug
       node {
@@ -15,7 +15,7 @@ query NotesScreen_Query {
     }
   }
 
-  notes {
+  notes(siteId: $siteId) {
     id
     content
     createdAt

@@ -20,7 +20,7 @@ import 'package:typie/screens/native_editor/__generated__/subscribe_plan_with_tr
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/tappable.dart';
 
-enum LimitBottomSheetType { limit, restrictedText, restrictedBlob, spellCheck, aiFeedback }
+enum LimitBottomSheetType { limit, restrictedText, restrictedBlob, spellCheck, aiFeedback, multiSite }
 
 class LimitBottomSheet extends HookWidget {
   const LimitBottomSheet({this.type = LimitBottomSheetType.limit, super.key});
@@ -119,9 +119,15 @@ class LimitBottomSheet extends HookWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                 )
-              else
+              else if (type == LimitBottomSheetType.aiFeedback)
                 Text(
                   'AI 피드백은 유료 플랜에서 이용할 수 있어요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                )
+              else
+                Text(
+                  '멀티 스페이스는 유료 플랜에서 이용할 수 있어요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                 ),
@@ -210,7 +216,11 @@ class LimitBottomSheet extends HookWidget {
                 onTap: () async {
                   await context.router.root.maybePop();
                   if (context.mounted) {
-                    await context.router.popAndPush(const EnrollPlanRoute());
+                    if (type == LimitBottomSheetType.multiSite) {
+                      await context.router.push(const EnrollPlanRoute());
+                    } else {
+                      await context.router.popAndPush(const EnrollPlanRoute());
+                    }
                   }
                 },
                 child: Container(

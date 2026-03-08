@@ -22,6 +22,7 @@ import 'package:typie/screens/native_editor/__generated__/document_note_query.re
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/user_usage_update_stream.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/view_entity_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/screens/native_editor/context.dart';
 import 'package:typie/screens/native_editor/init.dart';
@@ -102,6 +103,13 @@ class _Content extends HookWidget {
       }
       return null;
     }, [document?.snapshot.value, document?.version.value]);
+
+    useEffect(() {
+      unawaited(
+        client.request(GNativeEditorScreen_ViewEntity_MutationReq((b) => b..vars.input.entityId = data.entity.id)),
+      );
+      return null;
+    }, [data.entity.id]);
 
     useEffect(() {
       return editorContext.dispose;
@@ -634,6 +642,7 @@ class _EditorContent extends HookWidget {
         if (!context.mounted) {
           return;
         }
+        editorController.value?.clearFocus();
         if (reason == 'locked') {
           context.toast(ToastType.notification, '편집이 잠겨있는 문서예요.');
           return;

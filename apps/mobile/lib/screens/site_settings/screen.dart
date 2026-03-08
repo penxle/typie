@@ -12,6 +12,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/env.dart';
@@ -22,13 +24,14 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
+import 'package:typie/screens/site_settings/__generated__/delete_site_mutation.req.gql.dart';
 import 'package:typie/screens/site_settings/__generated__/persist_blob_as_image_mutation.req.gql.dart';
 import 'package:typie/screens/site_settings/__generated__/screen_query.data.gql.dart';
 import 'package:typie/screens/site_settings/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/site_settings/__generated__/update_site_mutation.req.gql.dart';
 import 'package:typie/screens/site_settings/__generated__/update_site_slug_mutation.req.gql.dart';
 import 'package:typie/services/blob.dart';
-import 'package:typie/services/preference.dart';
+import 'package:typie/services/site.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/text_field.dart';
@@ -49,14 +52,18 @@ class SiteSettingsScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pref = useService<Pref>();
+    final site = useService<Site>();
+    final siteId = useValueListenable(site);
 
     return Screen(
       heading: const Heading(title: '스페이스 설정'),
       resizeToAvoidBottomInset: true,
       child: GraphQLOperation(
-        operation: GSiteSettingsScreen_QueryReq((b) => b..vars.siteId = pref.siteId),
+        operation: GSiteSettingsScreen_QueryReq((b) => b..vars.siteId = siteId),
         builder: (context, client, data) {
+          final sites = data.me?.sites.toList() ?? [];
+          final isLastSite = sites.length <= 1;
+
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
@@ -66,6 +73,13 @@ class SiteSettingsScreen extends HookWidget {
               children: [
                 _GeneralTab(client: client, site: data.site, hasSubscription: data.me?.subscription != null),
                 _DesignTab(client: client, site: data.site),
+                _DangerZone(
+                  client: client,
+                  site: data.site,
+                  siteService: site,
+                  isLastSite: isLastSite,
+                  remainingSiteIds: sites.map((s) => s.id).where((id) => id != data.site.id).toList(),
+                ),
               ],
             ),
           );
@@ -453,6 +467,141 @@ class _DesignTab extends HookWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _DangerZone extends HookWidget {
+  const _DangerZone({
+    required this.client,
+    required this.site,
+    required this.siteService,
+    required this.isLastSite,
+    required this.remainingSiteIds,
+  });
+
+  final GraphQLClient client;
+  final GSiteSettingsScreen_QueryData_site site;
+  final Site siteService;
+  final bool isLastSite;
+  final List<String> remainingSiteIds;
+
+  @override
+  Widget build(BuildContext context) {
+    final mixpanel = useService<Mixpanel>();
+    final totalCount = site.documentCount + site.folderCount;
+
+    return Padding(
+      padding: const Pad(top: 16),
+      child: Center(
+        child: GestureDetector(
+          onTap: () async {
+            if (isLastSite) {
+              await context.showModal(
+                child: const AlertModal(
+                  title: '스페이스를 삭제할 수 없어요',
+                  message: '최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.',
+                ),
+              );
+              return;
+            }
+
+            final deleted = await context.showBottomSheet<bool>(
+              child: _DeleteSiteConfirmSheet(
+                client: client,
+                site: site,
+                siteService: siteService,
+                mixpanel: mixpanel,
+                totalCount: totalCount,
+                remainingSiteIds: remainingSiteIds,
+              ),
+            );
+
+            if ((deleted ?? false) && context.mounted) {
+              await context.router.maybePop();
+            }
+          },
+          child: Text('스페이스 삭제', style: TextStyle(fontSize: 14, color: context.colors.textDanger)),
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteSiteConfirmSheet extends HookWidget {
+  const _DeleteSiteConfirmSheet({
+    required this.client,
+    required this.site,
+    required this.siteService,
+    required this.mixpanel,
+    required this.totalCount,
+    required this.remainingSiteIds,
+  });
+
+  final GraphQLClient client;
+  final GSiteSettingsScreen_QueryData_site site;
+  final Site siteService;
+  final Mixpanel mixpanel;
+  final int totalCount;
+  final List<String> remainingSiteIds;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = useTextEditingController();
+    final inputValue = useValueListenable(controller);
+    final confirmText = '$totalCount';
+    final isConfirmed = totalCount == 0 || inputValue.text == confirmText;
+
+    return ConfirmBottomSheet(
+      title: '스페이스 삭제',
+      message: '이 스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.',
+      confirmText: '삭제',
+      shouldDismissOnConfirm: false,
+      confirmTextColor: isConfirmed ? context.colors.textBright : context.colors.textFaint,
+      confirmBackgroundColor: isConfirmed ? context.colors.accentDanger : context.colors.surfaceMuted,
+      child: totalCount > 0
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 8,
+              children: [
+                Text(
+                  '삭제를 확인하려면 이 스페이스의 항목 수($totalCount)를 입력해주세요.',
+                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
+                ),
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: confirmText,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const Pad(horizontal: 12, vertical: 8),
+                  ),
+                ),
+              ],
+            )
+          : null,
+      onConfirm: () async {
+        if (!isConfirmed) {
+          return;
+        }
+
+        try {
+          await client.request(GSiteSettingsScreen_DeleteSite_MutationReq((b) => b..vars.input.siteId = site.id));
+
+          unawaited(mixpanel.track('delete_site'));
+
+          siteService.setSiteId(remainingSiteIds.first);
+
+          if (context.mounted) {
+            context.toast(ToastType.success, '스페이스가 삭제되었어요.');
+            context.router.pop(true);
+          }
+        } catch (_) {
+          if (context.mounted) {
+            context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.');
+          }
+        }
+      },
     );
   }
 }

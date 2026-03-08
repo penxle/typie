@@ -363,7 +363,7 @@ class BottomMenu extends StatelessWidget {
             Padding(padding: const Pad(horizontal: 24), child: header),
             const Gap(16),
             HorizontalDivider(color: context.colors.borderDefault),
-            const Gap(16),
+            const Gap(8),
           ],
           ...items,
         ],
@@ -433,6 +433,7 @@ class ConfirmBottomSheet extends StatelessWidget {
     this.child,
     required this.onConfirm,
     this.onCancel,
+    this.shouldDismissOnConfirm = true,
     this.confirmText = '확인',
     this.cancelText = '취소',
     this.confirmTextColor,
@@ -450,7 +451,8 @@ class ConfirmBottomSheet extends StatelessWidget {
   final Color? confirmTextColor;
   final Color? confirmBackgroundColor;
 
-  final void Function() onConfirm;
+  final Future<void> Function() onConfirm;
+  final bool shouldDismissOnConfirm;
   final void Function()? onCancel;
 
   @override
@@ -493,8 +495,8 @@ class ConfirmBottomSheet extends StatelessWidget {
               Expanded(
                 child: Tappable(
                   onTap: () async {
-                    onConfirm();
-                    if (context.mounted) {
+                    await onConfirm();
+                    if (shouldDismissOnConfirm && context.mounted) {
                       await context.router.maybePop();
                     }
                   },

@@ -1,0 +1,5 @@
+mutation NativeEditorScreen_ViewEntity_Mutation($input: ViewEntityInput!) {
+  viewEntity(input: $input) {
+    id
+  }
+}

@@ -19,7 +19,7 @@ import 'package:typie/screens/entity/__generated__/move_entity_mutation.req.gql.
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.data.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_entity_id_query.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/screen_with_site_id_query.req.gql.dart';
-import 'package:typie/services/preference.dart';
+import 'package:typie/services/site.dart';
 import 'package:typie/widgets/tappable.dart';
 
 const maxDepth = 100;
@@ -49,7 +49,7 @@ class MoveEntityModal extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pref = useService<Pref>();
+    final site = useService<Site>();
     final client = useService<GraphQLClient>();
     final mixpanel = useService<Mixpanel>();
     final scrollController = useScrollController();
@@ -98,7 +98,7 @@ class MoveEntityModal extends HookWidget {
         currentEntity.value = res.entity;
         folderEntities.value = res.entity.children.toList();
       } else {
-        final res = await client.request(GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = pref.siteId));
+        final res = await client.request(GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = site.siteId));
         currentEntity.value = null;
         currentSiteName.value = res.site.name;
         folderEntities.value = res.site.entities.toList();

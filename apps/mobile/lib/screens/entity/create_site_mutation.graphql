@@ -1,0 +1,11 @@
+mutation SpaceSelector_CreateSite_Mutation($input: CreateSiteInput!) {
+  createSite(input: $input) {
+    id
+    name
+
+    logo {
+      id
+      url
+    }
+  }
+}

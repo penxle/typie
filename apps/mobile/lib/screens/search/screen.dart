@@ -16,7 +16,7 @@ import 'package:typie/screens/search/__generated__/recently_viewed_query.data.gq
 import 'package:typie/screens/search/__generated__/recently_viewed_query.req.gql.dart';
 import 'package:typie/screens/search/__generated__/search_query.data.gql.dart';
 import 'package:typie/screens/search/__generated__/search_query.req.gql.dart';
-import 'package:typie/services/preference.dart';
+import 'package:typie/services/site.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -27,7 +27,8 @@ class SearchScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pref = useService<Pref>();
+    final site = useService<Site>();
+    final siteId = useValueListenable(site);
     final controller = useTextEditingController();
 
     final value = useValueListenable(controller);
@@ -72,7 +73,7 @@ class SearchScreen extends HookWidget {
       ),
       child: value.text.isEmpty
           ? GraphQLOperation(
-              operation: GSearchScreen_RecentlyViewed_QueryReq(),
+              operation: GSearchScreen_RecentlyViewed_QueryReq((b) => b..vars.siteId = siteId),
               refreshNotifier: recentlyViewedRefreshNotifier,
               builder: (context, client, data) {
                 if (data.me?.recentlyViewedEntities.isEmpty ?? true) {
@@ -104,7 +105,7 @@ class SearchScreen extends HookWidget {
           : GraphQLOperation(
               operation: GSearchScreen_QueryReq(
                 (b) => b
-                  ..vars.siteId = pref.siteId
+                  ..vars.siteId = siteId
                   ..vars.query = value.text,
               ),
               builder: (context, client, data) {

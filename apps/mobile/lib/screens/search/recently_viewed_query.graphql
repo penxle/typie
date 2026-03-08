@@ -1,7 +1,7 @@
-query SearchScreen_RecentlyViewed_Query {
+query SearchScreen_RecentlyViewed_Query($siteId: ID!) {
   me {
     id
-    recentlyViewedEntities {
+    recentlyViewedEntities(siteId: $siteId) {
       id
       slug
       type
