@@ -4,7 +4,7 @@ import DataLoader from 'dataloader';
 import { inArray } from 'drizzle-orm';
 import { db, decodeDbId, Images, TableCode } from '@/db';
 import * as aws from '@/external/aws';
-import type { ExternalElement } from './slate';
+import type { ExternalElement } from './pdf/slate';
 
 export type ImageAsset = {
   type: 'image';
@@ -42,7 +42,7 @@ export const computeDesiredSize = (external: ExternalElement, asset: Asset | und
   }
 };
 
-async function loadImageAssets(ids: readonly string[]): Promise<Map<string, ImageAsset>> {
+export async function loadImageAssets(ids: readonly string[]): Promise<Map<string, ImageAsset>> {
   const images = await db
     .select({
       id: Images.id,

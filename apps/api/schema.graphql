@@ -415,6 +415,15 @@ enum EntityVisibility {
   UNLISTED
 }
 
+input ExportDocumentAsDocxInput {
+  documentId: ID!
+}
+
+type ExportDocumentAsDocxResult {
+  data: Binary!
+  filename: String!
+}
+
 input ExportDocumentAsPdfInput {
   documentId: ID!
   pageHeight: Int!
@@ -678,6 +687,7 @@ type Mutation {
   deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateDocument(input: DuplicateDocumentInput!): Document!
+  exportDocumentAsDocx(input: ExportDocumentAsDocxInput!): ExportDocumentAsDocxResult!
   exportDocumentAsPdf(input: ExportDocumentAsPdfInput!): ExportDocumentAsPdfResult!
   generateActivityImage: Binary!
   generateRandomName: String!

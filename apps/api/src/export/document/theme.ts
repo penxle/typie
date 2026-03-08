@@ -91,6 +91,12 @@ const COLORS: Record<string, string> = {
   selection: '#99ccff',
 };
 
+/** 테마 색상 키를 hex 문자열(# 없이)로 변환. 매칭 실패 시 undefined 반환. */
+export const resolveColorToHex = (colorKey: string): string | undefined => {
+  const hex = COLORS[colorKey];
+  return hex ? hex.replace('#', '') : undefined;
+};
+
 export const DEFAULT_THEME: Theme = {
   colors: new Map(Object.entries(COLORS).map(([key, value]) => [key, colorToU32(value)])),
 };

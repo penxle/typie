@@ -1,14 +1,17 @@
 import { readFile } from 'node:fs/promises';
 import { wasm } from '@/utils/wasm';
-import { parseVectorPageBinary } from './codec';
 import { computeDesiredSize, resolveAssets } from './external';
-import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts } from './fonts';
 import { createPdfFromVectorPages } from './pdf';
-import { SlateReader } from './slate';
+import { parseVectorPageBinary } from './pdf/codec';
+import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts } from './pdf/fonts';
+import { SlateReader } from './pdf/slate';
 import { DEFAULT_THEME } from './theme';
 import type { Application } from '@typie/editor';
 import type { Asset } from './external';
-import type { FontFamily } from './fonts';
+import type { FontFamily } from './pdf/fonts';
+
+export type { GenerateDocumentDocxParams } from './docx';
+export { generateDocumentDocx } from './docx';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const ICU_DATA_PATH = new URL(import.meta.resolve!('@typie/editor/icu/data.postcard')).pathname;
