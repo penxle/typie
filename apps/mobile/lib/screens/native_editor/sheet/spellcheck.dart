@@ -69,7 +69,9 @@ class SpellcheckSheet extends HookWidget {
             ),
           );
 
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
 
           final spellErrors = resp.checkSpellingDocument
               .map(
@@ -99,7 +101,9 @@ class SpellcheckSheet extends HookWidget {
               .toList();
           editor.setTrackedItems(0, rawErrors);
         } catch (err) {
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           unawaited(Sentry.captureException(err));
           if (context.mounted) {
             context.toast(ToastType.error, '맞춤법 검사에 실패했습니다');

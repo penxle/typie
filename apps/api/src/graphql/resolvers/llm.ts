@@ -97,6 +97,7 @@ const withRetry = async <T>(
     try {
       return await fn();
     } catch (err) {
+      if (signal?.aborted) throw err;
       lastError = err;
       if (attempt < maxRetries) {
         const delay = initialDelay * 2 ** attempt;
