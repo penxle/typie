@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct LetterSpacingStyle {
+    /// em × 100 (e.g. 0.05em → 5)
     pub spacing: i32,
 }
 

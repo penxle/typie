@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
 pub struct FontSizeStyle {
+    /// pt × 100 (e.g. 16pt → 1600)
     pub size: u32,
 }
 

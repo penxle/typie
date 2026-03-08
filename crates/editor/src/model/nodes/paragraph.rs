@@ -350,6 +350,7 @@ fn snap_line_height(v: u32) -> u32 {
 pub struct ParagraphNode {
     #[serde(default)]
     pub align: TextAlign,
+    /// × 100 (e.g. 160% → 160)
     #[serde(default = "default_line_height")]
     pub line_height: u32,
 }

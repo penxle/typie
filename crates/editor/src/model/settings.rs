@@ -55,7 +55,9 @@ impl Hash for LayoutMode {
 
 #[derive(Debug, Clone, PartialEq, Codec)]
 pub struct DocumentSettings {
+    /// × 100 (e.g. 100% → 100)
     pub block_gap: u32,
+    /// × 100 (e.g. 100% → 100)
     pub paragraph_indent: u32,
     pub layout_mode: LayoutMode,
 }
