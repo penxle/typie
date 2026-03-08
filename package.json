@@ -21,7 +21,6 @@
     "test": "turbo run test"
   },
   "overrides": {
-    "canvas": "npm:-",
     "ioredis": "^5.10.0"
   },
   "devDependencies": {

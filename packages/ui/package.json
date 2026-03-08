@@ -36,7 +36,7 @@
     "focus-trap": "^8.0.0",
     "query-string": "^9.3.1",
     "remeda": "^2.33.6",
-    "svelte": "^5.53.7",
+    "svelte": "5.53.6",
     "svelte-check": "^4.4.5",
     "svelte-sonner": "^1.0.8",
     "textarea-caret": "^3.1.0",
