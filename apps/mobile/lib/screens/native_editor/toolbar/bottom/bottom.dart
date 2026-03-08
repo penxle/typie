@@ -24,7 +24,7 @@ class NativeEditorBottomToolbar extends HookWidget {
 
     final mediaQuery = MediaQuery.of(context);
     final expandedHeightFallback = mediaQuery.viewPadding.bottom + mediaQuery.size.height * 0.2;
-    if (keyboardType == KeyboardType.software && keyboardHeight > 0) {
+    if (keyboardType == KeyboardType.software && keyboardHeight > lastSoftwareKeyboardHeight.value) {
       lastSoftwareKeyboardHeight.value = keyboardHeight;
     }
     // 소프트 키보드에서만 마지막 높이를 재사용하고, 확장 높이는 fallback 이상으로 보장한다.
@@ -42,7 +42,10 @@ class NativeEditorBottomToolbar extends HookWidget {
       curve: Curves.ease,
       height: isKeyboardVisible
           ? switch (keyboardType) {
-              KeyboardType.software => keyboardHeight,
+              KeyboardType.software => switch (bottomToolbarMode) {
+                BottomToolbarMode.hidden => keyboardHeight,
+                _ => softwareExpandedHeight,
+              },
               KeyboardType.hardware => hardwareVisibleHeight,
             }
           : switch (keyboardType) {
