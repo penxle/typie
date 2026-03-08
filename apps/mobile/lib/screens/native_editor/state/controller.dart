@@ -138,7 +138,6 @@ class EditorController extends ChangeNotifier {
     'repasteAsText',
     'compositionStart',
     'compositionUpdate',
-    'commitPreedit',
     'drop',
   };
 
