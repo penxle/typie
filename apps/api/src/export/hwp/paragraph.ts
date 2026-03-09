@@ -1,7 +1,8 @@
 // spell-checker:words HWPTAG HWPUNIT secd cold tdut tudt
 import { allocate, ctrlId, HWPTAG, makeRecord, pxToHwpunit } from './records';
 import { resolveCharShape, resolveRubyCharShape } from './styles';
-import type { Annotation, HwpConvertContext, InlineSegment, NodeEntry, TextSegment } from './types';
+import type { Annotation, NodeEntry, TextSegment } from '../core/types';
+import type { HwpConvertContext, InlineSegment } from './types';
 
 /** PARA_LINE_SEG (36바이트) 기본값 — 한/글이 재계산하지만 초기 힌트 필요 */
 function makeDefaultParaLineSeg(level: number): Uint8Array {

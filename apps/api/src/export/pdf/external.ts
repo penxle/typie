@@ -1,19 +1,8 @@
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-import * as Sentry from '@sentry/bun';
 import DataLoader from 'dataloader';
-import { inArray } from 'drizzle-orm';
-import { db, decodeDbId, Images, TableCode } from '@/db';
-import * as aws from '@/external/aws';
-import type { ExternalElement } from './pdf/slate';
-
-export type ImageAsset = {
-  type: 'image';
-  id: string;
-  format: string;
-  width: number;
-  height: number;
-  bytes: Uint8Array;
-};
+import { decodeDbId, TableCode } from '@/db';
+import { loadImageAssets } from '../core/assets';
+import type { ImageAsset } from '../core/types';
+import type { ExternalElement } from './slate';
 
 export type Asset = ImageAsset;
 
@@ -41,53 +30,6 @@ export const computeDesiredSize = (external: ExternalElement, asset: Asset | und
     }
   }
 };
-
-export async function loadImageAssets(ids: readonly string[]): Promise<Map<string, ImageAsset>> {
-  const images = await db
-    .select({
-      id: Images.id,
-      format: Images.format,
-      width: Images.width,
-      height: Images.height,
-      path: Images.path,
-    })
-    .from(Images)
-    .where(inArray(Images.id, [...ids]));
-
-  const assets = new Map<string, ImageAsset>();
-
-  await Promise.all(
-    images.map(async (image) => {
-      try {
-        const object = await aws.s3.send(
-          new GetObjectCommand({
-            Bucket: 'typie-usercontents',
-            Key: `images/${image.path}`,
-          }),
-        );
-
-        if (!object.Body) {
-          return;
-        }
-
-        const bytes = await object.Body.transformToByteArray();
-
-        assets.set(image.id, {
-          type: 'image',
-          id: image.id,
-          format: image.format,
-          width: image.width,
-          height: image.height,
-          bytes,
-        });
-      } catch (err) {
-        Sentry.captureException(err);
-      }
-    }),
-  );
-
-  return assets;
-}
 
 function createAssetLoader(): DataLoader<string, Asset | null> {
   return new DataLoader<string, Asset | null>(async (ids) => {

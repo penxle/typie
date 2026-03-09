@@ -1,11 +1,12 @@
 // spell-checker:words HWPTAG HWPUNIT DBEAFE DCFCE
-import { resolveColorToHex } from '../theme';
+import { resolveColorToHex } from '../core/theme';
 import { buildSectionDef, collectInlineSegments, collectParagraphsFromChildren, makeParagraph } from './paragraph';
 import { allocate, ctrlId, hexToColorref, HWPTAG, makeRecord, pxToHwpunit } from './records';
 import { estimateTextWidthHwp, resolveParaShape } from './styles';
 import { makeSimpleTableFromParagraphs, makeTwoRowTable } from './table';
+import type { NodeEntry } from '../core/types';
 import type { BorderFillEntry, CharShapeEntry } from './doc-info';
-import type { HwpConvertContext, InlineSegment, NodeEntry } from './types';
+import type { HwpConvertContext, InlineSegment } from './types';
 
 export type ConvertNodeFn = (nodeId: string, ctx: HwpConvertContext, isFirst: boolean) => Uint8Array[];
 

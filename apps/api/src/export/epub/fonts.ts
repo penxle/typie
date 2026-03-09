@@ -2,8 +2,8 @@ import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { decompressZstd } from '@/utils/compression';
-import type { DocumentFontFamily } from '@/utils/document';
-import type { NodeEntry, TextSegment } from './types';
+import { nearestWeight } from '../core/fonts';
+import type { ExportFontFamily, NodeEntry, TextSegment } from '../core/types';
 
 export type FontFile = {
   familyName: string;
@@ -57,7 +57,7 @@ export function collectUsedFonts(nodes: Record<string, NodeEntry>, defaultFontFa
   return used;
 }
 
-export async function loadFontFiles(usedFonts: Set<string>, fontFamilies: DocumentFontFamily[]): Promise<Map<string, FontFile>> {
+export async function loadFontFiles(usedFonts: Set<string>, fonts: ExportFontFamily[]): Promise<Map<string, FontFile>> {
   const result = new Map<string, FontFile>();
 
   const tasks: Promise<void>[] = [];
@@ -66,20 +66,10 @@ export async function loadFontFiles(usedFonts: Set<string>, fontFamilies: Docume
     const [familyName, weightStr] = key.split(':');
     const weight = Number(weightStr);
 
-    const family = fontFamilies.find((f) => f.familyName === familyName);
+    const family = fonts.find((f) => f.family === familyName);
     if (!family) continue;
 
-    // see: Rust nearest_weight()
-    const font =
-      family.fonts.find((f) => f.weight === weight) ??
-      family.fonts.reduce<(typeof family.fonts)[number] | null>((prev, curr) => {
-        if (!prev) return curr;
-        const prevDiff = Math.abs(prev.weight - weight);
-        const currDiff = Math.abs(curr.weight - weight);
-        if (currDiff < prevDiff) return curr;
-        if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
-        return prev;
-      }, null);
+    const font = nearestWeight(family.weights, weight);
     if (!font) continue;
 
     tasks.push(

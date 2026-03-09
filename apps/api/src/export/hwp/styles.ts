@@ -1,9 +1,10 @@
 // spell-checker:words HWPUNIT
-import { resolveFontEntry } from '../font';
-import { resolveColorToHex } from '../theme';
+import { findFontFamily, nearestWeight } from '../core/fonts';
+import { resolveColorToHex } from '../core/theme';
 import { hexToColorref } from './records';
+import type { Style } from '../core/types';
 import type { CharShapeEntry, ParaShapeEntry } from './doc-info';
-import type { HwpConvertContext, InlineSegment, Style } from './types';
+import type { HwpConvertContext, InlineSegment } from './types';
 
 const BLACK_COLORREF = 0x00_00_00_00;
 
@@ -72,10 +73,11 @@ export function resolveCharShape(styles: Style[], ctx: HwpConvertContext): numbe
   }
 
   const family = familyName ?? ctx.defaultFamilyName;
-  const resolved = resolveFontEntry(ctx.fontNameMap, family, weight);
+  const fam = findFontFamily(ctx.fonts, family);
+  const font = fam ? nearestWeight(fam.weights, weight) : undefined;
   const fontId = ctx.tables.fonts.intern(
-    { name: resolved?.faceName ?? family, postScriptName: resolved?.faceDefault ?? family },
-    resolved?.postScriptName ?? family,
+    { name: font?.localizedName ?? font?.name ?? family, postScriptName: font?.name ?? family },
+    font?.postScriptName ?? family,
   );
 
   const entry: CharShapeEntry = {

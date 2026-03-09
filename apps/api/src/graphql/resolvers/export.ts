@@ -16,10 +16,9 @@ import {
 } from '@/db';
 import { DocumentExportFormat, EntityVisibility } from '@/enums';
 import { NotFoundError, TypieError } from '@/errors';
-import { generateDocumentDocx, generateDocumentEpub, generateDocumentHwp, generateDocumentPdf } from '@/export';
-import { getDocumentFontFamilies } from '@/utils/document';
+import { generateDocument } from '@/export';
 import { builder } from '../builder';
-import type { FontNameMap } from '@/export/font';
+import type { ExportFontFamily, ExportFormat } from '@/export';
 
 /**
  * * Types
@@ -54,6 +53,14 @@ ExportDocumentResult.implement({
  * * Mutations
  */
 
+// cspell:ignore wordprocessingml
+const FORMAT_META: Record<ExportFormat, { ext: string; mimeType: string }> = {
+  hwp: { ext: 'hwp', mimeType: 'application/x-hwp' },
+  docx: { ext: 'docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  epub: { ext: 'epub', mimeType: 'application/epub+zip' },
+  pdf: { ext: 'pdf', mimeType: 'application/pdf' },
+};
+
 builder.mutationFields((t) => ({
   exportDocument: t.withAuth({ session: true }).fieldWithInput({
     type: ExportDocumentResult,
@@ -84,113 +91,47 @@ builder.mutationFields((t) => ({
       const title = document.title || '(제목 없음)';
       const filename = `${title}${document.subtitle ? ` - ${document.subtitle}` : ''}`;
 
-      const needsFonts = input.format === 'EPUB' || input.format === 'PDF';
-      const [user, fontFamilies] = await Promise.all([
-        db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow),
-        needsFonts ? getDocumentFontFamilies(entity.userId) : undefined,
-      ]);
+      const format = input.format.toLowerCase() as ExportFormat;
+      const meta = FORMAT_META[format];
 
-      if (input.format !== 'EPUB' && !input.layout) {
+      if (format !== 'epub' && !input.layout) {
         throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
       }
 
-      switch (input.format) {
-        case 'DOCX': {
-          if (!input.layout) throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
-          const fontNameMap = await buildFontNameMap(entity.userId);
-          const data = await generateDocumentDocx({
-            snapshot: content.snapshot,
-            title,
-            author: user.name,
-            pageWidth: input.layout.pageWidth,
-            pageHeight: input.layout.pageHeight,
-            pageMarginTop: input.layout.pageMarginTop,
-            pageMarginBottom: input.layout.pageMarginBottom,
-            pageMarginLeft: input.layout.pageMarginLeft,
-            pageMarginRight: input.layout.pageMarginRight,
-            fontNameMap,
-          });
-          return {
-            data,
-            filename: `${filename}.docx`,
-            // spell-checker:disable-next-line
-            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          };
-        }
+      const [user, fonts] = await Promise.all([
+        db.select({ name: Users.name }).from(Users).where(eq(Users.id, entity.userId)).then(firstOrThrow),
+        buildExportFonts(entity.userId),
+      ]);
 
-        case 'EPUB': {
-          if (!fontFamilies) throw new TypieError({ code: 'invalid_input', message: 'fontFamilies is required for this format' });
-          const data = await generateDocumentEpub({
-            snapshot: content.snapshot,
-            title,
-            author: user.name,
-            fontFamilies,
-          });
-          return { data, filename: `${filename}.epub`, mimeType: 'application/epub+zip' };
-        }
+      const data = await generateDocument(format, {
+        snapshot: content.snapshot,
+        title,
+        author: user.name,
+        fonts,
+        layout: input.layout ?? undefined,
+      });
 
-        case 'HWP': {
-          if (!input.layout) throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
-          const fontNameMap = await buildFontNameMap(entity.userId);
-          const data = await generateDocumentHwp({
-            snapshot: content.snapshot,
-            title,
-            author: user.name,
-            pageWidth: input.layout.pageWidth,
-            pageHeight: input.layout.pageHeight,
-            pageMarginTop: input.layout.pageMarginTop,
-            pageMarginBottom: input.layout.pageMarginBottom,
-            pageMarginLeft: input.layout.pageMarginLeft,
-            pageMarginRight: input.layout.pageMarginRight,
-            fontNameMap,
-          });
-          return { data, filename: `${filename}.hwp`, mimeType: 'application/x-hwp' };
-        }
-
-        case 'PDF': {
-          if (!input.layout) throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
-          if (!fontFamilies) throw new TypieError({ code: 'invalid_input', message: 'fontFamilies is required for this format' });
-          const data = await generateDocumentPdf({
-            snapshot: content.snapshot,
-            title,
-            author: user.name,
-            fonts: fontFamilies,
-            layout: {
-              pageWidth: input.layout.pageWidth,
-              pageHeight: input.layout.pageHeight,
-              pageMarginTop: input.layout.pageMarginTop,
-              pageMarginBottom: input.layout.pageMarginBottom,
-              pageMarginLeft: input.layout.pageMarginLeft,
-              pageMarginRight: input.layout.pageMarginRight,
-            },
-          });
-          return { data, filename: `${filename}.pdf`, mimeType: 'application/pdf' };
-        }
-      }
+      return { data, filename: `${filename}.${meta.ext}`, mimeType: meta.mimeType };
     },
   }),
 }));
 
-/** familyName → FontNameEntry[] 매핑을 빌드한다 (기본 폰트 + 유저 업로드 폰트) */
-async function buildFontNameMap(userId: string): Promise<FontNameMap> {
-  const map: FontNameMap = new Map();
+/** ExportFontFamily[] 빌드 (기본 폰트 + 유저 업로드 폰트) */
+async function buildExportFonts(userId: string): Promise<ExportFontFamily[]> {
+  const families: ExportFontFamily[] = [];
 
   // 기본 폰트
   for (const family of defaultFontFamilies) {
-    map.set(
-      family.familyName,
-      family.fonts.map((f) => {
-        return {
-          weight: f.weight,
-          postScriptName: f.postScriptName,
-          faceName:
-            f.names.find((n) => n.nameId === 1 && n.languageId === 0x04_12)?.value ??
-            f.names.find((n) => n.nameId === 1)?.value ??
-            f.postScriptName,
-          faceDefault: f.names.find((n) => n.nameId === 4)?.value ?? f.postScriptName,
-        };
-      }),
-    );
+    families.push({
+      family: family.familyName,
+      weights: family.fonts.map((f) => ({
+        weight: f.weight,
+        url: `https://cdn.typie.net/editor/fonts/${f.path}`,
+        name: f.names.find((n) => n.nameId === 4)?.value ?? f.postScriptName,
+        localizedName: f.names.find((n) => n.nameId === 1 && n.languageId === 0x04_12)?.value ?? f.names.find((n) => n.nameId === 1)?.value,
+        postScriptName: f.postScriptName,
+      })),
+    });
   }
 
   // 유저 업로드 폰트
@@ -199,6 +140,7 @@ async function buildFontNameMap(userId: string): Promise<FontNameMap> {
       id: Fonts.id,
       familyName: FontFamilies.familyName,
       weight: Fonts.weight,
+      path: Fonts.path,
       postScriptName: Fonts.postScriptName,
     })
     .from(Fonts)
@@ -207,7 +149,6 @@ async function buildFontNameMap(userId: string): Promise<FontNameMap> {
     .orderBy(asc(Fonts.weight));
 
   if (rows.length > 0) {
-    // FontNames에서 nameID=1 (Family Name), nameID=4 (Full Name) 조회
     const fontIds = rows.map((r) => r.id);
     const nameRecords = await db
       .select({
@@ -219,7 +160,6 @@ async function buildFontNameMap(userId: string): Promise<FontNameMap> {
       .from(FontNames)
       .where(and(inArray(FontNames.fontId, fontIds), inArray(FontNames.nameId, [1, 4])));
 
-    // fontId → { faceName, faceDefault } 매핑
     const faceMap = new Map<string, { faceName?: string; faceDefault?: string }>();
     for (const rec of nameRecords) {
       let entry = faceMap.get(rec.fontId);
@@ -227,9 +167,7 @@ async function buildFontNameMap(userId: string): Promise<FontNameMap> {
         entry = {};
         faceMap.set(rec.fontId, entry);
       }
-
       if (rec.nameId === 1) {
-        // 한국어(0x0412) 우선, 없으면 아무 locale
         if (rec.languageId === 0x04_12 || !entry.faceName) {
           entry.faceName = rec.value;
         }
@@ -238,21 +176,25 @@ async function buildFontNameMap(userId: string): Promise<FontNameMap> {
       }
     }
 
+    // familyName별로 그룹화
+    const grouped = new Map<string, ExportFontFamily>();
     for (const row of rows) {
-      let entries = map.get(row.familyName);
-      if (!entries) {
-        entries = [];
-        map.set(row.familyName, entries);
+      let fam = grouped.get(row.familyName);
+      if (!fam) {
+        fam = { family: row.familyName, weights: [] };
+        grouped.set(row.familyName, fam);
       }
       const face = faceMap.get(row.id);
-      entries.push({
+      fam.weights.push({
         weight: row.weight,
+        url: `https://typie.net/fonts/${row.path}`,
+        name: face?.faceDefault ?? row.postScriptName,
+        localizedName: face?.faceName,
         postScriptName: row.postScriptName,
-        faceName: face?.faceName ?? row.postScriptName,
-        faceDefault: face?.faceDefault ?? row.postScriptName,
       });
     }
+    families.push(...grouped.values());
   }
 
-  return map;
+  return families;
 }

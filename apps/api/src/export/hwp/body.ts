@@ -1,136 +1,167 @@
+// cspell:ignore Hwpunit Segs
+import { traverse } from '../core/traverse';
 import {
   convertBlockquoteNode,
   convertCalloutNode,
   convertEmbedNode,
   convertFoldNode,
-  convertListItem,
   convertPlaceholderNode,
   makeHorizontalRule,
 } from './blocks';
 import { convertImageNode } from './image';
-import { buildSectionDef, collectInlineSegments, makePageBreakParagraph, makeParagraph, setLastParagraphFlag } from './paragraph';
-import { concat } from './records';
+import { buildSectionDef, collectInlineSegments, makeParagraph, setLastParagraphFlag } from './paragraph';
+import { concat, pxToHwpunit } from './records';
 import { resolveParaShape } from './styles';
 import { convertTableNode } from './table';
-import type { HwpConvertContext, NodeEntry } from './types';
+import type { ParsedDocument } from '../core/document';
+import type { NodeVisitor } from '../core/traverse';
+import type { NodeEntry } from '../core/types';
+import type { HwpConvertContext } from './types';
 
-function convertNode(nodeId: string, ctx: HwpConvertContext, isFirst: boolean): Uint8Array[] {
-  const entry = ctx.nodes[nodeId];
-  if (!entry) return [];
+function consumeSectionDef(ctx: HwpConvertContext): Uint8Array[] | undefined {
+  if (!ctx.sectionDefEmitted) {
+    ctx.sectionDefEmitted = true;
+    return buildSectionDef(ctx);
+  }
+  return undefined;
+}
 
-  switch (entry.type) {
-    case 'paragraph': {
-      const segments = collectInlineSegments(entry, ctx);
-      const indent = ctx.paragraphIndentHwp;
+function getBulletChar(level: number): number {
+  const bullets = [0x25_cf, 0x25_cb, 0x25_a0, 0x25_c6, 0x25_b6, 0x20_22]; // ●○■◆▶‣
+  return bullets[level % bullets.length];
+}
+
+const hwpVisitor: NodeVisitor<HwpConvertContext, Uint8Array[]> = {
+  paragraph: (node, ctx) => {
+    const hwpSegs = collectInlineSegments(node.attrs as NodeEntry, ctx);
+    const sectionRecords = consumeSectionDef(ctx);
+    const listCtx = ctx.listStack.at(-1);
+
+    if (listCtx) {
+      const listType = listCtx.type;
+      const level = listCtx.depth;
+
+      let numberingId = 0;
+      let headType = 0;
+      if (listType === 'ordered') {
+        numberingId = ctx.tables.numberings.intern({ format: 'decimal' }, 'decimal');
+        headType = 2;
+      } else {
+        const bulletChar = getBulletChar(level);
+        numberingId = ctx.tables.bullets.intern({ char: bulletChar }, `bullet-${bulletChar}`);
+        headType = 3;
+      }
+
       const paraShapeId = resolveParaShape(ctx, {
-        align: entry.align as string | undefined,
-        lineHeight: entry.line_height as number | undefined,
-        indent,
+        align: node.attrs.align as string | undefined,
+        lineHeight: node.attrs.line_height as number | undefined,
+        indent: pxToHwpunit(20 * (level + 1)),
+        headType,
+        headLevel: Math.min(level, 6),
+        numberingId,
       });
 
-      if (isFirst) {
-        return makeParagraph(segments, paraShapeId, ctx.defaultCharShapeId, 0, buildSectionDef(ctx));
-      }
-      return makeParagraph(segments, paraShapeId, ctx.defaultCharShapeId, 0);
+      return makeParagraph(hwpSegs, paraShapeId, ctx.defaultCharShapeId, 0, sectionRecords);
     }
 
-    case 'blockquote': {
-      return convertBlockquoteNode(entry, ctx, isFirst);
+    const paraShapeId = resolveParaShape(ctx, {
+      align: node.attrs.align as string | undefined,
+      lineHeight: node.attrs.line_height as number | undefined,
+      indent: ctx.paragraphIndentHwp,
+    });
+
+    return makeParagraph(hwpSegs, paraShapeId, ctx.defaultCharShapeId, 0, sectionRecords);
+  },
+
+  table: (entry, _convertChildren, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    const result = convertTableNode(entry, ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
+
+  image: (node, _asset, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    const result = convertImageNode(node.attrs as NodeEntry, ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
+
+  file: (_node, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    const result = convertPlaceholderNode('[파일]', ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
+
+  embed: (id, data, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    // Reconstruct a minimal NodeEntry for the existing handler
+    const entry = { type: 'embed', id } as NodeEntry;
+    const result = convertEmbedNode(entry, ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
+
+  archived: (_node, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    const result = convertPlaceholderNode('[보관된 블록]', ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
+
+  horizontalRule: (ctx) => {
+    const sectionRecords = consumeSectionDef(ctx);
+    if (sectionRecords) {
+      const emptyPara = makeParagraph([], ctx.defaultParaShapeId, ctx.defaultCharShapeId, 0, sectionRecords);
+      return [...emptyPara, ...makeHorizontalRule(ctx)];
     }
+    return makeHorizontalRule(ctx);
+  },
 
-    case 'callout': {
-      return convertCalloutNode(entry, ctx, isFirst);
-    }
+  // eslint-disable-next-line unicorn/no-magic-array-flat-depth
+  bulletList: (items) => items.flat(2),
+  // eslint-disable-next-line unicorn/no-magic-array-flat-depth
+  orderedList: (items) => items.flat(2),
 
-    case 'horizontal_rule': {
-      if (isFirst) {
-        const emptyPara = makeParagraph([], ctx.defaultParaShapeId, ctx.defaultCharShapeId, 0, buildSectionDef(ctx));
-        return [...emptyPara, ...makeHorizontalRule(ctx)];
-      }
-      return makeHorizontalRule(ctx);
-    }
+  blockquote: (entry, _variant, _convertChildren, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    const result = convertBlockquoteNode(entry, ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
 
-    case 'page_break': {
-      if (isFirst) {
-        return makeParagraph([], ctx.defaultParaShapeId, ctx.defaultCharShapeId, 0, buildSectionDef(ctx));
-      }
-      return makePageBreakParagraph(ctx.defaultParaShapeId, ctx.defaultCharShapeId, 0);
-    }
+  callout: (entry, _variant, _convertChildren, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    const result = convertCalloutNode(entry, ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
 
-    case 'bullet_list': {
-      ctx.listStack.push({ type: 'bullet', depth: ctx.listStack.length });
-      const items = convertChildren(entry, ctx, isFirst);
-      ctx.listStack.pop();
-      return items;
-    }
+  fold: (entry, _convertChildren, ctx) => {
+    const isFirst = !ctx.sectionDefEmitted;
+    const result = convertFoldNode(entry, ctx, isFirst);
+    if (isFirst) ctx.sectionDefEmitted = true;
+    return result;
+  },
 
-    case 'ordered_list': {
-      ctx.listStack.push({ type: 'ordered', depth: ctx.listStack.length });
-      const items = convertChildren(entry, ctx, isFirst);
-      ctx.listStack.pop();
-      return items;
-    }
+  onEnterList: (type, depth, ctx) => {
+    ctx.listStack.push({ type, depth });
+  },
 
-    case 'list_item': {
-      return convertListItem(entry, ctx, isFirst, convertNode);
-    }
+  onExitList: (ctx) => {
+    ctx.listStack.pop();
+  },
+};
 
-    case 'table': {
-      return convertTableNode(entry, ctx, isFirst);
-    }
+export function buildBodyStream(doc: ParsedDocument, ctx: HwpConvertContext): Uint8Array {
+  const bodyChunks = traverse(doc, hwpVisitor, ctx);
+  const allRecords = bodyChunks.flat();
 
-    case 'fold': {
-      return convertFoldNode(entry, ctx, isFirst);
-    }
-
-    case 'image': {
-      return convertImageNode(entry, ctx, isFirst);
-    }
-
-    case 'embed': {
-      return convertEmbedNode(entry, ctx, isFirst);
-    }
-
-    case 'file':
-    case 'archived': {
-      const label = entry.type === 'file' ? '[파일]' : '[보관된 블록]';
-      return convertPlaceholderNode(label, ctx, isFirst);
-    }
-
-    default: {
-      return [];
-    }
-  }
-}
-
-function convertChildren(entry: NodeEntry, ctx: HwpConvertContext, isFirst: boolean): Uint8Array[] {
-  const results: Uint8Array[] = [];
-  let first = isFirst;
-  for (const childId of entry.children ?? []) {
-    results.push(...convertNode(childId, ctx, first));
-    first = false;
-  }
-  return results;
-}
-
-export function buildBodyStream(ctx: HwpConvertContext): Uint8Array {
-  const rootId = Object.keys(ctx.nodes).find((id) => ctx.nodes[id].type === 'root');
-  if (!rootId) throw new Error('Root node not found');
-
-  const rootEntry = ctx.nodes[rootId];
-  const children = rootEntry.children ?? [];
-  const records: Uint8Array[] = [];
-
-  if (children.length === 0) {
-    records.push(...makeParagraph([], ctx.defaultParaShapeId, ctx.defaultCharShapeId, 0, buildSectionDef(ctx)));
-  } else {
-    let isFirst = true;
-    for (const childId of children) {
-      records.push(...convertNode(childId, ctx, isFirst));
-      isFirst = false;
-    }
+  if (allRecords.length === 0) {
+    allRecords.push(...makeParagraph([], ctx.defaultParaShapeId, ctx.defaultCharShapeId, 0, buildSectionDef(ctx)));
   }
 
-  setLastParagraphFlag(records);
-  return concat(...records);
+  setLastParagraphFlag(allRecords);
+  return concat(...allRecords);
 }

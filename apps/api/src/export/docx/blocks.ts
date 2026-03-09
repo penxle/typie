@@ -13,7 +13,7 @@ import {
   TextRun,
   WidthType,
 } from 'docx';
-import { resolveColorToHex } from '../theme';
+import { resolveColorToHex } from '../core/theme';
 import type { IParagraphOptions, ISpacingProperties } from 'docx';
 import type { FileChild } from './index';
 
