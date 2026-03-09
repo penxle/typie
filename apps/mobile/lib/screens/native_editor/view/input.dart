@@ -303,6 +303,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     if (_isStaleWindow(oldValue.text) || (deltas.isNotEmpty && _isStaleWindow(deltas.first.oldText))) {
       _addRecordingEntry({'type': 'reattach', 'source': 'stale_window', 'currentValue': _serializeValue(oldValue)});
       _stopCollectingDispatches();
+      _extendedComposingStart = null;
       if (Platform.isAndroid) {
         if (_currentValue.composing.isValid && !_currentValue.composing.isCollapsed) {
           _currentValue = _currentValue.copyWith(composing: TextRange.empty);
@@ -338,14 +339,22 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           _extendedComposingStart ??= oldValue.composing.start;
         }
 
-        final start = _extendedComposingStart ?? newValue.composing.start;
+        var start = _extendedComposingStart ?? newValue.composing.start;
+        if (start > newValue.text.length || start > newValue.composing.end) {
+          _extendedComposingStart = null;
+          start = newValue.composing.start;
+        }
         final text = newValue.text.substring(start, newValue.composing.end);
         final replaceLength = (!hadComposing && oldValue.text == newValue.text) ? text.length : 0;
 
         _controller.compositionUpdate(text, replaceLength: replaceLength);
       } else {
         if (oldValue.text != newValue.text) {
-          final composingStart = _extendedComposingStart ?? oldValue.composing.start;
+          var composingStart = _extendedComposingStart ?? oldValue.composing.start;
+          if (composingStart > oldValue.text.length || composingStart > oldValue.composing.end) {
+            _extendedComposingStart = null;
+            composingStart = oldValue.composing.start;
+          }
           final prefix = oldValue.text.substring(0, composingStart);
           final suffix = oldValue.text.substring(oldValue.composing.end);
           final committed = newValue.text.substring(prefix.length, newValue.text.length - suffix.length);
@@ -713,6 +722,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
   void invalidate() {
     if (_currentValue.composing.isValid && !_currentValue.composing.isCollapsed) {
       _currentValue = _currentValue.copyWith(composing: TextRange.empty);
+      _extendedComposingStart = null;
     }
     if (Platform.isAndroid && _connection != null && _connection!.attached) {
       _connection = TextInput.attach(this, _configuration);
@@ -750,6 +760,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           'newValue': _serializeValue(newValue),
         });
         _currentValue = _currentValue.copyWith(composing: TextRange.empty);
+        _extendedComposingStart = null;
         _connection = TextInput.attach(this, _configuration);
         _connection!.show();
         forceSync = true;
