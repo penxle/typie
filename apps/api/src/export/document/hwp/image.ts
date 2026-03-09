@@ -1,10 +1,13 @@
-// spell-checker:words HWPTAG
-import { allocate, ctrlId, HWPTAG, makeRecord } from './records';
+// spell-checker:words HWPTAG Hwpunit
+import { convertPlaceholderNode } from './blocks';
+import { buildSectionDef, makeInlineObjectParagraph } from './paragraph';
+import { allocate, ctrlId, HWPTAG, makeRecord, pxToHwpunit } from './records';
+import { resolveParaShape } from './styles';
 import type { ImageAsset } from '../external';
 import type { DocInfoTables } from './doc-info';
+import type { HwpConvertContext, NodeEntry } from './types';
 
-/** 이미지 포맷 매핑 */
-export function mapFormat(format: string): string {
+function mapFormat(format: string): string {
   if (format === 'image/jpeg' || format === 'image/jpg') return 'jpg';
   if (format === 'image/gif') return 'gif';
   if (format === 'image/bmp') return 'bmp';
@@ -12,7 +15,7 @@ export function mapFormat(format: string): string {
 }
 
 /** 이미지용 gso 컨트롤 헤더 (46바이트, 글자처럼 취급) */
-export function buildImageCtrlHeader(width: number, height: number, instanceId: number): Uint8Array {
+function buildImageCtrlHeader(width: number, height: number, instanceId: number): Uint8Array {
   const { buf, view } = allocate(46);
   view.setUint32(0, ctrlId('gso '), true);
   // like_char=1, wrap_type=2, vRelTo=3(paragraph), hRelTo=1, hAlign=4, allowOverlap=1, textFlowMethod=2
@@ -22,19 +25,6 @@ export function buildImageCtrlHeader(width: number, height: number, instanceId: 
   view.setUint32(24, 1, true);
   view.setUint32(36, instanceId, true);
   view.setUint16(44, 0, true); // desc_len
-  return buf;
-}
-
-/** gso 컨트롤 헤더 + 개체 공통 속성 (46바이트, 글자처럼 취급) */
-export function buildGsoCtrlHeader(width: number, height: number, instanceId: number): Uint8Array {
-  const { buf, view } = allocate(46);
-  view.setUint32(0, ctrlId('gso '), true);
-  const attr = 0x01 | (2 << 3) | (2 << 8) | (3 << 21) | (4 << 15) | (2 << 18);
-  view.setUint32(4, attr, true);
-  view.setUint32(16, width, true);
-  view.setUint32(20, height, true);
-  view.setUint32(36, instanceId, true);
-  view.setUint16(44, 0, true);
   return buf;
 }
 
@@ -55,7 +45,7 @@ function buildPictureRenderingInfo(scaleX: number, scaleY: number): Uint8Array {
 }
 
 /** SHAPE_COMPONENT for picture (표 82 + 83) */
-export function buildPictureShapeComponent(origWidth: number, origHeight: number, displayWidth: number, displayHeight: number): Uint8Array {
+function buildPictureShapeComponent(origWidth: number, origHeight: number, displayWidth: number, displayHeight: number): Uint8Array {
   const scaleX = displayWidth / origWidth;
   const scaleY = displayHeight / origHeight;
   const renderingInfo = buildPictureRenderingInfo(scaleX, scaleY);
@@ -93,7 +83,7 @@ export function buildPictureShapeComponent(origWidth: number, origHeight: number
 }
 
 /** SHAPE_COMPONENT_PICTURE 데이터 (91바이트) — vertex/crop은 원본 크기 사용 */
-export function buildPictureData(origWidth: number, origHeight: number, binDataId: number): Uint8Array {
+function buildPictureData(origWidth: number, origHeight: number, binDataId: number): Uint8Array {
   const { buf, view } = allocate(91);
   let offset = 0;
 
@@ -134,8 +124,7 @@ export function buildPictureData(origWidth: number, origHeight: number, binDataI
   return buf;
 }
 
-/** 이미지 삽입용 레코드 생성 (CTRL_HEADER + SHAPE_COMPONENT + SHAPE_COMPONENT_PICTURE) */
-export function makeImageRecords(
+function makeImageRecords(
   origWidth: number,
   origHeight: number,
   displayWidth: number,
@@ -150,6 +139,40 @@ export function makeImageRecords(
   ];
 
   return records;
+}
+
+export function convertImageNode(entry: NodeEntry, ctx: HwpConvertContext, isFirst: boolean): Uint8Array[] {
+  const nodeId = entry.id as string | undefined;
+  if (!nodeId) return convertPlaceholderNode('[이미지]', ctx, isFirst);
+
+  const asset = ctx.assets.get(nodeId);
+  if (!asset || asset.width <= 0 || asset.height <= 0) {
+    return convertPlaceholderNode('[이미지를 불러올 수 없습니다]', ctx, isFirst);
+  }
+
+  const proportion = (entry as { proportion?: number }).proportion ?? 1;
+  const contentWidthPx = ctx.pageLayout.pageWidth - ctx.pageLayout.pageMarginLeft - ctx.pageLayout.pageMarginRight;
+  const displayWidthPx = contentWidthPx * Math.min(proportion, 1);
+  const displayHeightPx = displayWidthPx * (asset.height / asset.width);
+
+  const origWidth = pxToHwpunit(asset.width);
+  const origHeight = pxToHwpunit(asset.height);
+  const displayWidth = pxToHwpunit(displayWidthPx);
+  const displayHeight = pxToHwpunit(displayHeightPx);
+
+  const ext = mapFormat(asset.format);
+  const binDataId = ctx.tables.binData.intern({ extension: ext }, nodeId);
+
+  const instanceId = ++ctx.instanceCounter;
+  const centerParaShapeId = resolveParaShape(ctx, { align: 'center' });
+
+  return [
+    ...makeInlineObjectParagraph(ctx, 0, 'gso ', {
+      sectionRecords: isFirst ? buildSectionDef(ctx) : undefined,
+      paraShapeId: centerParaShapeId,
+    }),
+    ...makeImageRecords(origWidth, origHeight, displayWidth, displayHeight, binDataId, instanceId),
+  ];
 }
 
 /** BinData 스트림 수집: cfb에 추가할 스트림 목록 반환 */

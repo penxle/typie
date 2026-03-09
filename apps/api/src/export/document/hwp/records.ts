@@ -78,8 +78,6 @@ export function encodeUTF16LE(str: string): Uint8Array {
   return buf;
 }
 
-// --- 단위 변환 ---
-
 /** px → HWPUNIT (1px = 75 HWPUNIT = 75/7200 inch) */
 export const pxToHwpunit = (px: number): number => Math.round(px * 75);
 
@@ -99,11 +97,36 @@ export function ctrlId(str: string): number {
   );
 }
 
-// --- 바이너리 빌더 헬퍼 ---
-
 /** 고정 크기 버퍼를 할당하고 DataView와 함께 반환 */
 export function allocate(size: number): { buf: Uint8Array; view: DataView } {
   const buf = new Uint8Array(size);
   const view = new DataView(buf.buffer);
   return { buf, view };
+}
+
+/** 중복 제거하며 0-based ID를 부여하는 테이블 */
+export class IdTable<T> {
+  private map = new Map<string, number>();
+  private items: T[] = [];
+
+  intern(item: T, key: string): number {
+    const existing = this.map.get(key);
+    if (existing !== undefined) return existing;
+    const id = this.items.length;
+    this.map.set(key, id);
+    this.items.push(item);
+    return id;
+  }
+
+  getId(key: string): number | undefined {
+    return this.map.get(key);
+  }
+
+  get count(): number {
+    return this.items.length;
+  }
+
+  getAll(): T[] {
+    return this.items;
+  }
 }

@@ -5,14 +5,14 @@ import { wasm } from '@/utils/wasm';
 import { loadImageAssets } from '../external';
 import { resolveFontEntry } from '../font';
 import { buildBodyStream } from './body';
-import { buildDocInfoStream, IdTable } from './doc-info';
+import { buildDocInfoStream } from './doc-info';
 import { collectBinDataStreams } from './image';
 import { buildOle2 } from './ole2';
-import { allocate, compressStream, pxToHwpunit } from './records';
+import { allocate, compressStream, IdTable, pxToHwpunit } from './records';
 import type { ImageAsset } from '../external';
 import type { FontNameMap } from '../font';
-import type { HwpConvertContext, NodeEntry } from './body';
 import type { CharShapeEntry, DocInfoTables, ParaShapeEntry } from './doc-info';
+import type { HwpConvertContext, NodeEntry } from './types';
 
 type DocumentJson = {
   settings: Record<string, unknown>;
