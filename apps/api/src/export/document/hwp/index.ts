@@ -1,5 +1,4 @@
-// spell-checker:words HWPUNIT ENDOFCHAIN
-import CFB from 'cfb';
+// spell-checker:words HWPUNIT
 import { inArray } from 'drizzle-orm';
 import { db, Embeds } from '@/db';
 import { wasm } from '@/utils/wasm';
@@ -7,6 +6,7 @@ import { loadImageAssets } from '../external';
 import { buildBodyStream } from './body';
 import { buildDocInfoStream, IdTable } from './doc-info';
 import { collectBinDataStreams } from './image';
+import { buildOle2 } from './ole2';
 import { allocate, compressStream, pxToHwpunit } from './records';
 import type { ImageAsset } from '../external';
 import type { FontNameEntry, FontNameMap, HwpConvertContext } from './body';
@@ -180,33 +180,13 @@ export async function generateDocumentHwp(params: GenerateDocumentHwpParams): Pr
   // 9. BinData 스트림 수집
   const binDataStreams = collectBinDataStreams(tables, assets);
 
-  // 10. cfb로 OLE2 패키징
-  const cfbContainer = CFB.utils.cfb_new();
-  CFB.utils.cfb_del(cfbContainer, '/\u0001Sh33tJ5');
-  CFB.utils.cfb_add(cfbContainer, '/FileHeader', fileHeader);
-  CFB.utils.cfb_add(cfbContainer, '/DocInfo', compressStream(docInfoStream));
-  CFB.utils.cfb_add(cfbContainer, '/BodyText/Section0', compressStream(bodyStream));
-  for (const [path, data] of binDataStreams) {
-    CFB.utils.cfb_add(cfbContainer, `/${path}`, compressStream(data));
-  }
-
-  const cfbBytes = new Uint8Array(CFB.write(cfbContainer, { type: 'array' }) as ArrayBuffer);
-  fixCfbFat(cfbBytes);
-  return cfbBytes;
-}
-
-/** cfb 패키지가 미사용 FAT 엔트리를 ENDOFCHAIN(0xFFFFFFFE)으로 기록하는 문제를 수정 → FREESECT(0xFFFFFFFF) */
-function fixCfbFat(data: Uint8Array): void {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const sectorSize = 1 << view.getUint16(0x1e, true);
-  const totalSectors = (data.byteLength - 512) / sectorSize;
-  const fatSectorIndex = view.getUint32(0x4c, true);
-  const fatOffset = 512 + fatSectorIndex * sectorSize;
-  const entriesPerFat = sectorSize / 4;
-
-  for (let i = totalSectors; i < entriesPerFat; i++) {
-    view.setUint32(fatOffset + i * 4, 0xff_ff_ff_ff, true); // FREESECT
-  }
+  // 10. OLE2 패키징
+  return buildOle2([
+    { path: 'FileHeader', data: fileHeader },
+    { path: 'DocInfo', data: compressStream(docInfoStream) },
+    { path: 'BodyText/Section0', data: compressStream(bodyStream) },
+    ...[...binDataStreams].map(([path, data]) => ({ path, data: compressStream(data) })),
+  ]);
 }
 
 function buildFileHeader(): Uint8Array {
