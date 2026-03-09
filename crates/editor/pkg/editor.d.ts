@@ -46,11 +46,14 @@ export interface FontFamilyStyle {
 export interface FontMetadata {
     weight: number;
     style: string;
-    familyName: string | undefined;
-    displayName: string | undefined;
-    fullName: string | undefined;
-    postScriptName: string;
-    subfamilyDisplayName: string | undefined;
+    names: FontName[];
+}
+
+export interface FontName {
+    nameId: number;
+    platformId: number;
+    languageId: number;
+    value: string;
 }
 
 export interface FontSizeStyle {

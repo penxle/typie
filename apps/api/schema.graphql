@@ -477,7 +477,6 @@ type Font implements Blob {
   family: FontFamily!
   fullName: String
   id: ID!
-  name: String! @deprecated(reason: "Replaced by `fullName`")
   size: BigInt!
   subfamilyDisplayName: String
   url: String!
@@ -489,7 +488,6 @@ type FontFamily {
   familyName: String!
   fonts: [Font!]!
   id: ID!
-  name: String! @deprecated(reason: "Replaced by `displayName`")
 }
 
 enum FontFamilySource {

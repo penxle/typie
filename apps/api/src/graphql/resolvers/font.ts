@@ -1,17 +1,78 @@
-import { and, asc, eq } from 'drizzle-orm';
-import { db, first, firstOrThrow, FontFamilies, Fonts, TableCode, validateDbId } from '@/db';
+import { and, asc, eq, inArray } from 'drizzle-orm';
+import { db, first, firstOrThrow, FontFamilies, FontNames, Fonts, TableCode, validateDbId } from '@/db';
 import { FontFamilyState, FontState } from '@/enums';
 import { builder } from '../builder';
 import { Blob, Font, FontFamily, isTypeOf } from '../objects';
+
+const LANG_KO_KR = 0x04_12;
+const LANG_EN_US = 0x04_09;
+const PLATFORM_WINDOWS = 3;
+
+type NameRecord = { nameId: number; platformId: number; languageId: number; value: string };
+
+const findNameEn = (records: NameRecord[], nameId: number) =>
+  records.find((n) => n.nameId === nameId && n.platformId === PLATFORM_WINDOWS && n.languageId === LANG_EN_US)?.value ??
+  records.find((n) => n.nameId === nameId)?.value;
+
+const findNameKo = (records: NameRecord[], nameId: number) =>
+  records.find((n) => n.nameId === nameId && n.platformId === PLATFORM_WINDOWS && n.languageId === LANG_KO_KR)?.value ??
+  records.find((n) => n.nameId === nameId && n.platformId === PLATFORM_WINDOWS && n.languageId === LANG_EN_US)?.value ??
+  records.find((n) => n.nameId === nameId)?.value;
 
 Font.implement({
   isTypeOf: isTypeOf(TableCode.FONTS),
   interfaces: [Blob],
   fields: (t) => ({
-    name: t.string({ resolve: (font) => font.fullName ?? '', deprecationReason: 'Replaced by `fullName`' }),
+    fullName: t.string({
+      nullable: true,
+      resolve: async (font, _, ctx) => {
+        const records = await ctx
+          .loader({
+            name: 'Font.nameRecords',
+            many: true,
+            load: (ids: string[]) =>
+              db
+                .select({
+                  fontId: FontNames.fontId,
+                  nameId: FontNames.nameId,
+                  platformId: FontNames.platformId,
+                  languageId: FontNames.languageId,
+                  value: FontNames.value,
+                })
+                .from(FontNames)
+                .where(inArray(FontNames.fontId, ids)),
+            key: (row) => row.fontId,
+          })
+          .load(font.id);
+        return findNameEn(records, 4) ?? null;
+      },
+    }),
 
-    fullName: t.exposeString('fullName', { nullable: true }),
-    subfamilyDisplayName: t.exposeString('subfamilyDisplayName', { nullable: true }),
+    subfamilyDisplayName: t.string({
+      nullable: true,
+      resolve: async (font, _, ctx) => {
+        const records = await ctx
+          .loader({
+            name: 'Font.nameRecords',
+            many: true,
+            load: (ids: string[]) =>
+              db
+                .select({
+                  fontId: FontNames.fontId,
+                  nameId: FontNames.nameId,
+                  platformId: FontNames.platformId,
+                  languageId: FontNames.languageId,
+                  value: FontNames.value,
+                })
+                .from(FontNames)
+                .where(inArray(FontNames.fontId, ids)),
+            key: (row) => row.fontId,
+          })
+          .load(font.id);
+        return findNameKo(records, 17) ?? findNameKo(records, 2) ?? null;
+      },
+    }),
+
     weight: t.exposeInt('weight'),
 
     family: t.expose('familyId', { type: FontFamily }),
@@ -25,10 +86,32 @@ FontFamily.implement({
   fields: (t) => ({
     id: t.exposeID('id'),
 
-    name: t.exposeString('displayName', { deprecationReason: 'Replaced by `displayName`' }),
-
     familyName: t.exposeString('familyName'),
-    displayName: t.exposeString('displayName'),
+
+    displayName: t.string({
+      resolve: async (self, _, ctx) => {
+        const records = await ctx
+          .loader({
+            name: 'FontFamily.nameRecords',
+            many: true,
+            load: (ids: string[]) =>
+              db
+                .select({
+                  familyId: Fonts.familyId,
+                  nameId: FontNames.nameId,
+                  platformId: FontNames.platformId,
+                  languageId: FontNames.languageId,
+                  value: FontNames.value,
+                })
+                .from(FontNames)
+                .innerJoin(Fonts, eq(Fonts.id, FontNames.fontId))
+                .where(inArray(Fonts.familyId, ids)),
+            key: (row) => row.familyId,
+          })
+          .load(self.id);
+        return findNameKo(records, 16) ?? findNameKo(records, 1) ?? self.familyName;
+      },
+    }),
 
     fonts: t.field({
       type: [Font],

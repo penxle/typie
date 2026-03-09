@@ -1,5 +1,5 @@
-import { asc, eq } from 'drizzle-orm';
-import { DEFAULT_FONT_FAMILIES } from '@/const';
+import defaultFontFamilies from '@typie/editor/font/defaults.json' with { type: 'json' };
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import {
   db,
   DocumentContents,
@@ -8,6 +8,7 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   FontFamilies,
+  FontNames,
   Fonts,
   TableCode,
   Users,
@@ -18,6 +19,7 @@ import { NotFoundError, TypieError } from '@/errors';
 import { generateDocumentDocx, generateDocumentEpub, generateDocumentHwp, generateDocumentPdf } from '@/export/document';
 import { getDocumentFontFamilies } from '@/utils/document';
 import { builder } from '../builder';
+import type { FontNameMap } from '@/export/document/hwp/body';
 
 /**
  * * Types
@@ -167,28 +169,34 @@ builder.mutationFields((t) => ({
   }),
 }));
 
-/** familyName → [{ weight, fullName, bucket, key }] 매핑을 빌드한다 (기본 폰트 + 유저 업로드 폰트) */
-async function buildFontNameMap(userId: string): Promise<Map<string, { weight: number; fullName: string; postScriptName: string }[]>> {
-  const map = new Map<string, { weight: number; fullName: string; postScriptName: string }[]>();
+/** familyName → FontNameEntry[] 매핑을 빌드한다 (기본 폰트 + 유저 업로드 폰트) */
+async function buildFontNameMap(userId: string): Promise<FontNameMap> {
+  const map: FontNameMap = new Map();
 
   // 기본 폰트
-  for (const family of DEFAULT_FONT_FAMILIES) {
+  for (const family of defaultFontFamilies) {
     map.set(
       family.familyName,
-      family.fonts.map((f) => ({
-        weight: f.weight,
-        fullName: f.name,
-        postScriptName: f.postScriptName,
-      })),
+      family.fonts.map((f) => {
+        return {
+          weight: f.weight,
+          postScriptName: f.postScriptName,
+          faceName:
+            f.names.find((n) => n.nameId === 1 && n.languageId === 0x04_12)?.value ??
+            f.names.find((n) => n.nameId === 1)?.value ??
+            f.postScriptName,
+          faceDefault: f.names.find((n) => n.nameId === 4)?.value ?? f.postScriptName,
+        };
+      }),
     );
   }
 
   // 유저 업로드 폰트
   const rows = await db
     .select({
+      id: Fonts.id,
       familyName: FontFamilies.familyName,
       weight: Fonts.weight,
-      fullName: Fonts.fullName,
       postScriptName: Fonts.postScriptName,
     })
     .from(Fonts)
@@ -196,18 +204,52 @@ async function buildFontNameMap(userId: string): Promise<Map<string, { weight: n
     .where(eq(FontFamilies.userId, userId))
     .orderBy(asc(Fonts.weight));
 
-  for (const row of rows) {
-    if (!row.postScriptName) continue;
-    let entries = map.get(row.familyName);
-    if (!entries) {
-      entries = [];
-      map.set(row.familyName, entries);
+  if (rows.length > 0) {
+    // FontNames에서 nameID=1 (Family Name), nameID=4 (Full Name) 조회
+    const fontIds = rows.map((r) => r.id);
+    const nameRecords = await db
+      .select({
+        fontId: FontNames.fontId,
+        nameId: FontNames.nameId,
+        languageId: FontNames.languageId,
+        value: FontNames.value,
+      })
+      .from(FontNames)
+      .where(and(inArray(FontNames.fontId, fontIds), inArray(FontNames.nameId, [1, 4])));
+
+    // fontId → { faceName, faceDefault } 매핑
+    const faceMap = new Map<string, { faceName?: string; faceDefault?: string }>();
+    for (const rec of nameRecords) {
+      let entry = faceMap.get(rec.fontId);
+      if (!entry) {
+        entry = {};
+        faceMap.set(rec.fontId, entry);
+      }
+
+      if (rec.nameId === 1) {
+        // 한국어(0x0412) 우선, 없으면 아무 locale
+        if (rec.languageId === 0x04_12 || !entry.faceName) {
+          entry.faceName = rec.value;
+        }
+      } else if (rec.nameId === 4 && !entry.faceDefault) {
+        entry.faceDefault = rec.value;
+      }
     }
-    entries.push({
-      weight: row.weight,
-      fullName: row.fullName ?? row.postScriptName,
-      postScriptName: row.postScriptName,
-    });
+
+    for (const row of rows) {
+      let entries = map.get(row.familyName);
+      if (!entries) {
+        entries = [];
+        map.set(row.familyName, entries);
+      }
+      const face = faceMap.get(row.id);
+      entries.push({
+        weight: row.weight,
+        postScriptName: row.postScriptName,
+        faceName: face?.faceName ?? row.postScriptName,
+        faceDefault: face?.faceDefault ?? row.postScriptName,
+      });
+    }
   }
 
   return map;

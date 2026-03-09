@@ -42,7 +42,12 @@ type PageLayout = {
   pageMarginRight: number;
 };
 
-export type FontNameEntry = { weight: number; fullName: string; postScriptName: string };
+export type FontNameEntry = {
+  weight: number;
+  postScriptName: string;
+  faceName: string;
+  faceDefault: string;
+};
 export type FontNameMap = Map<string, FontNameEntry[]>;
 
 export type HwpConvertContext = {
@@ -132,11 +137,13 @@ function resolveCharShape(styles: Style[], ctx: HwpConvertContext): number {
     }
   }
 
-  // family + weight → fullName 조회 (한/글은 폰트 이름으로 weight를 매칭)
+  // family + weight → font entry 조회 (한/글은 폰트 이름으로 weight를 매칭)
   const family = familyName ?? ctx.defaultFamilyName;
   const resolved = resolveFontEntry(ctx.fontNameMap, family, weight);
-  const fontName = resolved?.fullName ?? family;
-  const fontId = ctx.tables.fonts.intern({ name: fontName, postScriptName: resolved?.postScriptName }, fontName);
+  const fontId = ctx.tables.fonts.intern(
+    { name: resolved?.faceName ?? family, postScriptName: resolved?.faceDefault ?? family },
+    resolved?.postScriptName ?? family,
+  );
 
   const entry: CharShapeEntry = {
     fontId,
@@ -156,7 +163,7 @@ function resolveCharShape(styles: Style[], ctx: HwpConvertContext): number {
   return ctx.tables.charShapes.intern(entry, key);
 }
 
-/** fontNameMap에서 familyName + weight에 가장 가까운 fullName을 찾는다 */
+/** fontNameMap에서 familyName + weight에 가장 가까운 엔트리를 찾는다 */
 function resolveFontEntry(map: FontNameMap, familyName: string, weight: number): FontNameEntry | undefined {
   const entries = map.get(familyName);
   if (!entries || entries.length === 0) return undefined;

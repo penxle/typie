@@ -8,6 +8,7 @@
       "types": "./pkg/editor.d.ts",
       "default": "./pkg/editor.js"
     },
+    "./font/defaults.json": "./assets/defaults.json",
     "./font/fallbacks.json": "./assets/fallbacks.json",
     "./font/Noto-Phantom.bin": "./assets/Noto-Phantom.bin",
     "./font/Noto-Phantom-Emoji.bin": "./assets/Noto-Phantom-Emoji.bin",
