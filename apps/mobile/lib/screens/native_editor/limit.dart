@@ -20,7 +20,7 @@ import 'package:typie/screens/native_editor/__generated__/subscribe_plan_with_tr
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/tappable.dart';
 
-enum LimitBottomSheetType { limit, restrictedText, restrictedBlob, spellCheck, aiFeedback, multiSite }
+enum LimitBottomSheetType { limit, restrictedText, restrictedBlob, spellCheck, aiFeedback, multiSite, export }
 
 class LimitBottomSheet extends HookWidget {
   const LimitBottomSheet({this.type = LimitBottomSheetType.limit, super.key});
@@ -122,6 +122,12 @@ class LimitBottomSheet extends HookWidget {
               else if (type == LimitBottomSheetType.aiFeedback)
                 Text(
                   'AI 피드백은 유료 플랜에서 이용할 수 있어요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+                )
+              else if (type == LimitBottomSheetType.export)
+                Text(
+                  '파일 내보내기는 유료 플랜에서 이용할 수 있어요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                 )

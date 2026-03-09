@@ -20,6 +20,7 @@ import 'package:typie/screens/native_editor/__generated__/duplicate_document_mut
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/update_document_type_mutation.req.gql.dart';
+import 'package:typie/screens/native_editor/sheet/export.dart';
 import 'package:typie/screens/native_editor/sheet/info.dart';
 import 'package:typie/screens/native_editor/sheet/settings.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
@@ -133,6 +134,9 @@ class MenuSheet extends StatelessWidget {
               await launchUrl(url, mode: LaunchMode.externalApplication);
             },
           ),
+          const Gap(16),
+          HorizontalDivider(color: context.colors.borderDefault),
+          const Gap(16),
           BottomMenuItem(
             icon: LucideLightIcons.blend,
             label: '공유하기',
@@ -153,6 +157,18 @@ class MenuSheet extends StatelessWidget {
                 : null,
             onTap: () async {
               await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: [data.entity.id]));
+            },
+          ),
+          BottomMenuItem(
+            icon: LucideLightIcons.copy,
+            label: '복제하기',
+            onTap: () async {
+              final res = await client.request(
+                GNativeEditor_DuplicateDocument_MutationReq((b) => b..vars.input.documentId = document.id),
+              );
+              if (context.mounted) {
+                await context.router.popAndPush(NativeEditorRoute(slug: res.duplicateDocument.entity.slug));
+              }
             },
           ),
           BottomMenuItem(
@@ -184,18 +200,27 @@ class MenuSheet extends StatelessWidget {
               );
             },
           ),
+          const Gap(16),
+          HorizontalDivider(color: context.colors.borderDefault),
+          const Gap(16),
           BottomMenuItem(
-            icon: LucideLightIcons.copy,
-            label: '복제하기',
+            icon: LucideLightIcons.file_down,
+            label: '파일로 내보내기',
             onTap: () async {
-              final res = await client.request(
-                GNativeEditor_DuplicateDocument_MutationReq((b) => b..vars.input.documentId = document.id),
+              await context.showBottomSheet(
+                intercept: true,
+                child: ExportSheet(
+                  documentId: document.id,
+                  client: client,
+                  layout: editorController?.state.layout,
+                  hasSubscription: data.me?.subscription != null,
+                ),
               );
-              if (context.mounted) {
-                await context.router.popAndPush(NativeEditorRoute(slug: res.duplicateDocument.entity.slug));
-              }
             },
           ),
+          const Gap(16),
+          HorizontalDivider(color: context.colors.borderDefault),
+          const Gap(16),
           BottomMenuItem(
             icon: LucideLightIcons.trash_2,
             label: '삭제하기',

@@ -110,6 +110,9 @@ const createIconFont = async (name, dir) => {
     .reverse()
     .map(([name, codepoint]) => {
       let n = Case.snake(name);
+      if (/^\d/.test(n)) {
+        n = `n${n}`;
+      }
       if (dartKeywords.has(n)) {
         n = `${n}_`;
       }
