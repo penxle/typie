@@ -1,6 +1,8 @@
 import { ExternalHyperlink, TextRun } from 'docx';
+import { resolveFontEntry } from '../font';
 import { resolveColorToHex } from '../theme';
 import type { XmlComponent } from 'docx';
+import type { FontNameMap } from '../font';
 import type { createRubyRun } from './ruby';
 
 type Style =
@@ -28,6 +30,8 @@ type RubyRunFactory = typeof createRubyRun;
 export type TextConvertContext = {
   createRubyRun: RubyRunFactory;
   defaultColor?: string;
+  fontNameMap: FontNameMap;
+  defaultFamilyName: string;
 };
 
 /** Rust font_size (pt × 100) → docx half-points (1pt = 2hp) */
@@ -41,16 +45,23 @@ const letterSpacingToTwips = (spacing: number, fontSizePt100: number): number =>
   return Math.round((spacing / 100) * fontSizePt * 20);
 };
 
-function buildRunOptions(styles: Style[]) {
+function buildRunOptions(styles: Style[], ctx: TextConvertContext) {
   const opts: Record<string, unknown> = {};
 
   // font_size를 먼저 찾아서 letter_spacing 변환에 사용
   const fontSizePt100 = styles.find((s): s is Extract<Style, { type: 'font_size' }> => s.type === 'font_size')?.size ?? DEFAULT_FONT_SIZE;
 
+  let familyName: string | undefined;
+  let weight = 400;
+  let hasExplicitWeight = false;
+  let hasFontStyle = false;
+
   for (const style of styles) {
     switch (style.type) {
       case 'bold': {
         opts.bold = true;
+        if (!hasExplicitWeight) weight = 700;
+        hasFontStyle = true;
         break;
       }
       case 'italic': {
@@ -70,11 +81,15 @@ function buildRunOptions(styles: Style[]) {
         break;
       }
       case 'font_family': {
-        opts.font = style.family;
+        familyName = style.family;
+        hasFontStyle = true;
         break;
       }
       case 'font_weight': {
+        weight = style.weight;
+        hasExplicitWeight = true;
         opts.bold = style.weight >= 600;
+        hasFontStyle = true;
         break;
       }
       case 'text_color': {
@@ -94,6 +109,12 @@ function buildRunOptions(styles: Style[]) {
     }
   }
 
+  if (hasFontStyle) {
+    const family = familyName ?? ctx.defaultFamilyName;
+    const resolved = resolveFontEntry(ctx.fontNameMap, family, weight);
+    opts.font = resolved?.postScriptName ?? family;
+  }
+
   return opts;
 }
 
@@ -101,7 +122,7 @@ export function convertTextSegments(segments: TextSegment[], ctx: TextConvertCon
   const result: (TextRun | ExternalHyperlink | XmlComponent)[] = [];
 
   for (const seg of segments) {
-    const runOpts = buildRunOptions(seg.styles ?? []);
+    const runOpts = buildRunOptions(seg.styles ?? [], ctx);
     if (ctx.defaultColor) {
       runOpts.color = ctx.defaultColor;
     }
