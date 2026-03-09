@@ -24,6 +24,12 @@ const PLATFORM_WINDOWS = 3;
 
 type NameEntry = { nameId: number; platformId: number; languageId: number; value: string };
 
+const DISPLAY_NAME_OVERRIDES: Record<string, string> = {
+  Pretendard: '프리텐다드',
+  KoPubWorldDotum: '코펍월드돋움',
+  KoPubWorldBatang: '코펍월드바탕',
+};
+
 const findNameKo = (records: NameEntry[], nameId: number) =>
   records.find((n) => n.nameId === nameId && n.platformId === PLATFORM_WINDOWS && n.languageId === LANG_KO_KR)?.value ??
   records.find((n) => n.nameId === nameId && n.platformId === PLATFORM_WINDOWS && n.languageId === LANG_EN_US)?.value ??
@@ -49,7 +55,7 @@ export async function getDocumentFontFamilies(userId: string): Promise<DocumentF
     const firstNames = f.fonts[0]?.names ?? [];
     return {
       id: f.id,
-      displayName: findNameKo(firstNames, 16) ?? findNameKo(firstNames, 1) ?? f.familyName,
+      displayName: DISPLAY_NAME_OVERRIDES[f.familyName] ?? findNameKo(firstNames, 16) ?? findNameKo(firstNames, 1) ?? f.familyName,
       familyName: f.familyName,
       source: FontFamilySource.DEFAULT,
       state: FontFamilyState.ACTIVE,
