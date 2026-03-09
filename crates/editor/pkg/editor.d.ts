@@ -54,6 +54,9 @@ export interface FontMetadata {
 }
 
 export interface FontSizeStyle {
+    /**
+     * pt × 100 (e.g. 16pt → 1600)
+     */
     size: number;
 }
 
@@ -75,6 +78,9 @@ export interface ImageNode {
 export interface ItalicStyle {}
 
 export interface LetterSpacingStyle {
+    /**
+     * em × 100 (e.g. 0.05em → 5)
+     */
     spacing: number;
 }
 
@@ -97,6 +103,9 @@ export interface PageBreakNode {}
 
 export interface ParagraphNode {
     align?: TextAlign;
+    /**
+     * × 100 (e.g. 160% → 160)
+     */
     line_height?: number;
 }
 

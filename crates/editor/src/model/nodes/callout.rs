@@ -133,13 +133,28 @@ impl Layout for CalloutNode {
 
         let mut bg_children = Vec::new();
 
+        let icon_height = positioned_children
+            .first()
+            .and_then(|first_child| {
+                first_child.node.children.as_ref().and_then(|lines| {
+                    lines.first().and_then(|first_line| {
+                        if let Some(Element::Line(line)) = &first_line.node.element {
+                            Some(line.size.height)
+                        } else {
+                            None
+                        }
+                    })
+                })
+            })
+            .unwrap_or(ICON_HEIGHT);
+
         let icon_element =
-            CalloutIconElement::new(Size::new(ICON_WIDTH, ICON_HEIGHT), self.variant, node_id);
+            CalloutIconElement::new(Size::new(ICON_WIDTH, icon_height), self.variant, node_id);
 
         let icon_wrapper = PositionedNode {
             position: Point::new(PADDING_X, PADDING_Y),
             node: Rc::new(LayoutNode {
-                size: Size::new(ICON_WIDTH, ICON_HEIGHT),
+                size: Size::new(ICON_WIDTH, icon_height),
                 element: Some(Element::CalloutIcon(icon_element)),
                 children: None,
                 page_break_policy: PageBreakPolicy::Avoid,
