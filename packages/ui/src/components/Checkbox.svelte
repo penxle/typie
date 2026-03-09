@@ -108,14 +108,22 @@
     },
   });
 
-  const wrapperStyle = css(
-    {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      cursor: 'pointer',
-    },
-    style,
+  const disabled = $derived(rest.disabled ?? false);
+
+  const wrapperStyle = $derived(
+    css(
+      {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        cursor: 'pointer',
+      },
+      disabled && {
+        cursor: 'not-allowed',
+        opacity: '50',
+      },
+      style,
+    ),
   );
 
   const labelRecipe = cva({

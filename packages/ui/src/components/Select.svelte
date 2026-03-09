@@ -43,7 +43,7 @@
   );
 </script>
 
-<Menu disableAutoUpdate {disabled} listStyle={css.raw({ minWidth: '[initial]', maxWidth: '240px' })} offset={4} placement="bottom-end">
+<Menu disableAutoUpdate {disabled} listStyle={css.raw({ minWidth: '[initial]', maxWidth: '280px' })} offset={4} placement="bottom-end">
   {#snippet button({ open }: { open: boolean })}
     <button
       class={cx(
