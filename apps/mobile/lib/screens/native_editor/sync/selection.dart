@@ -14,6 +14,7 @@ class SelectionSyncManager {
   final String slug;
 
   Timer? _debounceTimer;
+  String? _pendingData;
   VoidCallback? _titleFocusListener;
   VoidCallback? _subtitleFocusListener;
 
@@ -30,6 +31,7 @@ class SelectionSyncManager {
 
   void saveElementFocus(String element) {
     _debounceTimer?.cancel();
+    _pendingData = null;
     save(jsonEncode({'type': 'element', 'element': element}));
   }
 
@@ -43,18 +45,18 @@ class SelectionSyncManager {
       return;
     }
     _debounceTimer?.cancel();
+    _pendingData = jsonEncode({
+      'selection': {
+        'anchor': {'nodeId': anchor['nodeId'], 'offset': anchor['offset'], 'affinity': anchor['affinity']},
+        'head': {'nodeId': head['nodeId'], 'offset': head['offset'], 'affinity': head['affinity']},
+      },
+    });
     _debounceTimer = Timer(const Duration(milliseconds: 150), () {
       if (!editorReady() || !isFocused()) {
         return;
       }
-      save(
-        jsonEncode({
-          'selection': {
-            'anchor': {'nodeId': anchor['nodeId'], 'offset': anchor['offset'], 'affinity': anchor['affinity']},
-            'head': {'nodeId': head['nodeId'], 'offset': head['offset'], 'affinity': head['affinity']},
-          },
-        }),
-      );
+      save(_pendingData!);
+      _pendingData = null;
     });
   }
 
@@ -132,7 +134,13 @@ class SelectionSyncManager {
       subtitleFocusNode.removeListener(_subtitleFocusListener!);
       _subtitleFocusListener = null;
     }
-    _debounceTimer?.cancel();
+    if (_debounceTimer?.isActive ?? false) {
+      _debounceTimer!.cancel();
+      if (_pendingData != null) {
+        save(_pendingData!);
+      }
+    }
+    _pendingData = null;
     _debounceTimer = null;
   }
 }
