@@ -33,6 +33,7 @@
   import TrashModal from './@trash/TrashModal.svelte';
   import CommandPalette from './CommandPalette.svelte';
   import MarketingConsentModal from './MarketingConsentModal.svelte';
+  import PlanUpgradeModal from './PlanUpgradeModal.svelte';
   import ReferralWelcomeModal from './ReferralWelcomeModal.svelte';
   import Shortcuts from './Shortcuts.svelte';
   import ShortcutsModal from './ShortcutsModal.svelte';
@@ -362,6 +363,8 @@
 <TrashModal site$key={currentSite} />
 <Shortcuts query$key={query.data} />
 <ShortcutsModal />
+
+<PlanUpgradeModal user$key={query.data.me} />
 
 <ReferralWelcomeModal bind:open={referralWelcomeModalOpen} />
 <MarketingConsentModal bind:open={marketingConsentModalOpen} />

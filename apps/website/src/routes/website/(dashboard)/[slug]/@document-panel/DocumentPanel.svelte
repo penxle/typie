@@ -2,11 +2,14 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Icon } from '@typie/ui/components';
+  import { Button, FullAccessBadge, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { clamp } from '@typie/ui/utils';
   import ConstructionIcon from '~icons/lucide/construction';
+  import LightbulbIcon from '~icons/lucide/lightbulb';
+  import SpellCheckIcon from '~icons/lucide/spell-check';
   import { graphql } from '$mearie';
+  import { PlanUpgradeDialog } from '../../plan-upgrade-dialog.svelte';
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
@@ -15,6 +18,7 @@
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import DocumentPanelSpellcheck from './DocumentPanelSpellcheck.svelte';
   import DocumentPanelTimeline from './DocumentPanelTimeline.svelte';
+  import type { Component } from 'svelte';
   import type { Editor } from '$lib/editor/editor.svelte';
   import type { DocumentPanel_document$key, DocumentPanel_user$key } from '$mearie';
 
@@ -52,6 +56,11 @@
     graphql(`
       fragment DocumentPanel_user on User {
         id
+
+        subscription {
+          id
+        }
+
         ...DocumentPanel_Ai_user
         ...DocumentPanel_Info_user
         ...DocumentPanel_Spellcheck_user
@@ -79,6 +88,66 @@
   let resizer = $state<Resizer | null>(null);
   let newWidth = $derived(clamp((app.preference.current.panelWidth ?? minWidth) + (resizer?.deltaX ?? 0), minWidth, maxWidth));
 </script>
+
+{#snippet planUpgradePrompt(featureIcon: Component, featureName: string, description: string)}
+  <div
+    class={flex({
+      flexDirection: 'column',
+      minWidth: 'var(--min-width)',
+      width: 'var(--width)',
+      maxWidth: 'var(--max-width)',
+      height: 'full',
+    })}
+  >
+    <div
+      class={flex({
+        flexShrink: '0',
+        alignItems: 'center',
+        gap: '6px',
+        height: '41px',
+        paddingX: '20px',
+        fontSize: '13px',
+        fontWeight: 'semibold',
+        color: 'text.subtle',
+        borderBottomWidth: '1px',
+        borderColor: 'surface.muted',
+      })}
+    >
+      {featureName}
+      <FullAccessBadge />
+    </div>
+
+    <div
+      class={flex({
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '20px',
+        flexGrow: '1',
+        paddingX: '24px',
+        textAlign: 'center',
+      })}
+    >
+      <Icon style={css.raw({ color: 'text.faint' })} icon={featureIcon} size={32} />
+
+      <p class={css({ fontSize: '13px', color: 'text.faint', whiteSpace: 'pre-line' })}>
+        {description}
+      </p>
+
+      <Button
+        gradient
+        onclick={() => {
+          PlanUpgradeDialog.show({
+            message: `${featureName} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.`,
+          });
+        }}
+        size="sm"
+      >
+        지금 업그레이드하기
+      </Button>
+    </div>
+  </div>
+{/snippet}
 
 <aside
   style:--min-width={`${minWidth}px`}
@@ -163,9 +232,17 @@
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
       <DocumentPanelTimeline document$key={document.data} {editor} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}
-      <DocumentPanelSpellcheck document$key={document.data} {editor} user$key={user.data} />
+      {#if user.data.subscription}
+        <DocumentPanelSpellcheck document$key={document.data} {editor} user$key={user.data} />
+      {:else}
+        {@render planUpgradePrompt(SpellCheckIcon, '맞춤법 검사', '글의 맞춤법과 띄어쓰기를\n자동으로 검사하고 수정할 수 있어요.')}
+      {/if}
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'ai'}
-      <DocumentPanelAi document$key={document.data} {editor} user$key={user.data} />
+      {#if user.data.subscription}
+        <DocumentPanelAi document$key={document.data} {editor} user$key={user.data} />
+      {:else}
+        {@render planUpgradePrompt(LightbulbIcon, 'AI 피드백', '글의 구조, 표현, 흐름에 대한\nAI 분석과 피드백을 받아볼 수 있어요.')}
+      {/if}
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'remarks'}
       <DocumentPanelRemark {editor} />
     {:else}

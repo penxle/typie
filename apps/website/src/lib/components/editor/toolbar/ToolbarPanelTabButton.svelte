@@ -1,17 +1,13 @@
 <script lang="ts">
-  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
-  import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
-  import PlanUpgradeModal from '../../../../routes/website/(dashboard)/PlanUpgradeModal.svelte';
   import type { TooltipParameter } from '@typie/ui/actions';
   import type { Component } from 'svelte';
-  import type { DocumentEditor_TopToolbar_PanelTabButton_user$key } from '$mearie';
   import type { PanelTab } from '../../../../routes/website/(dashboard)/[slug]/@pane/context.svelte';
 
   type Props = {
@@ -19,29 +15,9 @@
     label: string;
     icon: Component;
     keys?: TooltipParameter['keys'];
-    user$key: DocumentEditor_TopToolbar_PanelTabButton_user$key;
-    needSubscription?: boolean;
   };
 
-  let { tab, label, icon, keys, user$key, needSubscription }: Props = $props();
-
-  const user = createFragment(
-    graphql(`
-      fragment DocumentEditor_TopToolbar_PanelTabButton_user on User {
-        id
-        ...DashboardLayout_PlanUpgradeModal_user
-
-        subscription {
-          id
-        }
-      }
-    `),
-    () => user$key,
-  );
-
-  const needPlanUpgrade = $derived(needSubscription && !user.data.subscription);
-
-  let planUpgradeModalOpen = $state(false);
+  let { tab, label, icon, keys }: Props = $props();
 
   const app = getAppContext();
 
@@ -70,12 +46,6 @@
   })}
   aria-expanded={isExpanded && isTab}
   onclick={() => {
-    if (needPlanUpgrade) {
-      planUpgradeModalOpen = true;
-      mixpanel.track('open_plan_upgrade_modal', { via: 'panel_tab_button', tab });
-      return;
-    }
-
     if (isExpanded) {
       if (isTab) {
         paneGroup.state.current.panelExpandedByPaneId = {
@@ -120,9 +90,3 @@
     <span class={css({ fontSize: '11px', whiteSpace: 'nowrap' })}>{label}</span>
   {/if}
 </button>
-
-{#if user.data}
-  <PlanUpgradeModal user$key={user.data} bind:open={planUpgradeModalOpen}>
-    {label} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
-  </PlanUpgradeModal>
-{/if}

@@ -8,7 +8,7 @@
   import { PlanAvailability } from '@/enums';
   import { pushState } from '$app/navigation';
   import { graphql } from '$mearie';
-  import PlanUpgradeModal from './PlanUpgradeModal.svelte';
+  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
   import type { DashboardLayout_PlanUsageWidget_user$key } from '$mearie';
 
   type Props = {
@@ -17,15 +17,11 @@
 
   let { user$key }: Props = $props();
 
-  let planUpgradeModalOpen = $state(false);
-
   const user = createFragment(
     graphql(`
       fragment DashboardLayout_PlanUsageWidget_user on User {
         id
         canStartTrial
-        ...DashboardLayout_PlanUpgradeModal_user
-
         usage {
           totalCharacterCount
           totalBlobSize
@@ -151,7 +147,11 @@
             pushState('', { shallowRoute: '/preference/billing' });
             mixpanel.track('open_billing_from_trial_widget');
           } else {
-            planUpgradeModalOpen = true;
+            PlanUpgradeDialog.show(
+              canStartTrial
+                ? { title: '2주 무료 체험을 시작해보세요', message: '결제 수단 등록 없이 타이피의 모든 기능을\n무료로 이용할 수 있어요.' }
+                : { message: 'FULL ACCESS로 업그레이드하면\n무제한으로 글을 작성하고 파일을 업로드할 수 있어요.' },
+            );
             mixpanel.track('open_plan_upgrade_modal', { via: 'usage_widget' });
           }
         }}
@@ -161,18 +161,4 @@
       </button>
     </div>
   </div>
-
-  {#if canStartTrial}
-    <PlanUpgradeModal title="2주 무료 체험을 시작해보세요" user$key={user.data} bind:open={planUpgradeModalOpen}>
-      결제 수단 등록 없이 타이피의 모든 기능을
-      <br />
-      무료로 이용할 수 있어요.
-    </PlanUpgradeModal>
-  {:else if !isTrial}
-    <PlanUpgradeModal user$key={user.data} bind:open={planUpgradeModalOpen}>
-      FULL ACCESS로 업그레이드하면
-      <br />
-      무제한으로 글을 작성하고 파일을 업로드할 수 있어요.
-    </PlanUpgradeModal>
-  {/if}
 {/if}

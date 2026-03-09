@@ -18,7 +18,7 @@
   import { cache } from '$lib/graphql';
   import { uploadBlobAsImage } from '$lib/utils';
   import { graphql } from '$mearie';
-  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
+  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import type {
     DashboardLayout_SiteSettingsModal_GeneralTab_site$key,
     DashboardLayout_SiteSettingsModal_GeneralTab_user$key,
@@ -51,8 +51,6 @@
     graphql(`
       fragment DashboardLayout_SiteSettingsModal_GeneralTab_user on User {
         id
-        ...DashboardLayout_PlanUpgradeModal_user
-
         subscription {
           id
         }
@@ -160,7 +158,6 @@
     void slugForm;
   });
 
-  let planUpgradeModalOpen = $state(false);
   let deleteConfirmInput = $state('');
   let deleteConfirmError = $state('');
 </script>
@@ -287,7 +284,9 @@
                 })}
                 aria-label="스페이스 주소 기능 업그레이드"
                 onclick={() => {
-                  planUpgradeModalOpen = true;
+                  PlanUpgradeDialog.show({
+                    message: '스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.',
+                  });
                   mixpanel.track('open_plan_upgrade_modal', { via: 'site_address' });
                 }}
                 type="button"
@@ -438,7 +437,3 @@
     {/if}
   {/if}
 {/snippet}
-
-<PlanUpgradeModal user$key={user.data} bind:open={planUpgradeModalOpen}>
-  스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
-</PlanUpgradeModal>

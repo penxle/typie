@@ -15,18 +15,15 @@
   import { pushState } from '$app/navigation';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
   import SubscriptionCelebrationModal from './SubscriptionCelebrationModal.svelte';
-  import type { Snippet } from 'svelte';
   import type { DashboardLayout_PlanUpgradeModal_user$key } from '$mearie';
 
   type Props = {
-    open: boolean;
     user$key: DashboardLayout_PlanUpgradeModal_user$key;
-    title?: string;
-    children?: Snippet;
   };
 
-  let { open = $bindable(false), user$key, title = '플랜 업그레이드가 필요해요', children }: Props = $props();
+  let { user$key }: Props = $props();
 
   const user = createFragment(
     graphql(`
@@ -63,147 +60,153 @@
 
   const canStartTrial = $derived(user.data.canStartTrial);
 
+  const title = $derived(PlanUpgradeDialog.current?.title ?? '플랜 업그레이드가 필요해요');
+  const message = $derived(PlanUpgradeDialog.current?.message ?? '');
+
   let trialStartedModalOpen = $state(false);
 </script>
 
-<Modal
-  style={css.raw({
-    alignItems: 'center',
-    padding: '32px',
-    maxWidth: '400px',
-  })}
-  bind:open
->
-  <div
-    class={flex({
+{#if PlanUpgradeDialog.current}
+  <Modal
+    style={css.raw({
       alignItems: 'center',
-      '& > div': {
-        display: 'flex',
-        justifyContent: 'center',
+      padding: '32px',
+      maxWidth: '400px',
+    })}
+    onclose={() => PlanUpgradeDialog.close()}
+    open={true}
+  >
+    <div
+      class={flex({
         alignItems: 'center',
-        borderWidth: '2px',
-        borderColor: 'surface.default',
-        borderRadius: 'full',
-        marginRight: '-8px',
-        size: '32px',
-        color: 'text.bright',
-        backgroundColor: 'surface.dark',
-      },
-    })}
-  >
-    <div>
-      <Icon icon={CrownIcon} size={16} />
-    </div>
+        '& > div': {
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderWidth: '2px',
+          borderColor: 'surface.default',
+          borderRadius: 'full',
+          marginRight: '-8px',
+          size: '32px',
+          color: 'text.bright',
+          backgroundColor: 'surface.dark',
+        },
+      })}
+    >
+      <div>
+        <Icon icon={CrownIcon} size={16} />
+      </div>
 
-    <div>
-      <Icon icon={TagIcon} size={16} />
-    </div>
+      <div>
+        <Icon icon={TagIcon} size={16} />
+      </div>
 
-    <div>
-      <Icon icon={StarIcon} size={16} />
-    </div>
+      <div>
+        <Icon icon={StarIcon} size={16} />
+      </div>
 
-    <div>
-      <Icon icon={KeyIcon} size={16} />
-    </div>
+      <div>
+        <Icon icon={KeyIcon} size={16} />
+      </div>
 
-    <div>
-      <Icon icon={GiftIcon} size={16} />
-    </div>
-  </div>
-
-  <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
-    <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>{title}</div>
-
-    <div class={css({ fontSize: '13px', color: 'text.faint' })}>
-      {@render children?.()}
-    </div>
-  </div>
-
-  <div
-    class={flex({
-      flexDirection: 'column',
-      marginTop: '24px',
-      borderWidth: '1px',
-      borderRadius: '8px',
-      paddingX: '16px',
-      paddingTop: '16px',
-      paddingBottom: '32px',
-      width: 'full',
-      backgroundColor: 'surface.default',
-    })}
-  >
-    <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '8px' })}>
-      <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>타이피 FULL ACCESS</div>
-
-      <div class={css({ color: 'text.brand' })}>
-        <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>4,900</span>
-        <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>원</span>
-        <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>/ 월</span>
+      <div>
+        <Icon icon={GiftIcon} size={16} />
       </div>
     </div>
 
-    <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
+    <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
+      <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>{title}</div>
 
-    <ul class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>
-      {#each PLAN_FEATURES.full as feature, index (index)}
-        <li class={flex({ alignItems: 'center', gap: '6px' })}>
-          <Icon style={css.raw({ color: 'text.faint' })} icon={feature.icon} size={14} />
-          <span>{feature.label}</span>
-        </li>
-      {/each}
-    </ul>
-  </div>
+      <div class={css({ fontSize: '13px', color: 'text.faint', whiteSpace: 'pre-line' })}>
+        {message}
+      </div>
+    </div>
 
-  <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '32px', width: 'full' })}>
-    {#if canStartTrial}
+    <div
+      class={flex({
+        flexDirection: 'column',
+        marginTop: '24px',
+        borderWidth: '1px',
+        borderRadius: '8px',
+        paddingX: '16px',
+        paddingTop: '16px',
+        paddingBottom: '32px',
+        width: 'full',
+        backgroundColor: 'surface.default',
+      })}
+    >
+      <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '8px' })}>
+        <div class={css({ fontSize: '15px', fontWeight: 'bold', color: 'text.default' })}>타이피 FULL ACCESS</div>
+
+        <div class={css({ color: 'text.brand' })}>
+          <span class={css({ fontSize: '15px', fontWeight: 'bold' })}>4,900</span>
+          <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>원</span>
+          <span class={css({ fontSize: '13px', fontWeight: 'medium' })}>/ 월</span>
+        </div>
+      </div>
+
+      <HorizontalDivider style={css.raw({ marginY: '12px' })} color="secondary" />
+
+      <ul class={flex({ flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 'medium', color: 'text.subtle' })}>
+        {#each PLAN_FEATURES.full as feature, index (index)}
+          <li class={flex({ alignItems: 'center', gap: '6px' })}>
+            <Icon style={css.raw({ color: 'text.faint' })} icon={feature.icon} size={14} />
+            <span>{feature.label}</span>
+          </li>
+        {/each}
+      </ul>
+    </div>
+
+    <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '32px', width: 'full' })}>
+      {#if canStartTrial}
+        <Button
+          style={css.raw({ width: 'full', height: '40px' })}
+          gradient
+          onclick={() => {
+            Dialog.confirm({
+              title: '무료 체험을 시작하시겠어요?',
+              message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
+              actionLabel: '시작하기',
+              actionHandler: async () => {
+                await subscribePlanWithTrial();
+                cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
+                cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'canStartTrial' });
+                mixpanel.track('start_trial');
+                PlanUpgradeDialog.close();
+                trialStartedModalOpen = true;
+              },
+            });
+          }}
+        >
+          <div class={flex({ alignItems: 'center', gap: '4px' })}>
+            <span>2주 무료 체험하기</span>
+
+            <Icon
+              style={css.raw({
+                transition: 'transform',
+                _groupHover: { transform: 'translateX(2px)' },
+              })}
+              icon={ArrowRightIcon}
+              size={16}
+            />
+          </div>
+        </Button>
+      {/if}
+
       <Button
         style={css.raw({ width: 'full', height: '40px' })}
-        gradient
+        gradient={!canStartTrial}
         onclick={() => {
-          Dialog.confirm({
-            title: '무료 체험을 시작하시겠어요?',
-            message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
-            actionLabel: '시작하기',
-            actionHandler: async () => {
-              await subscribePlanWithTrial();
-              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'subscription' });
-              cache.invalidate({ __typename: 'User', id: user.data.id, $field: 'canStartTrial' });
-              mixpanel.track('start_trial');
-              open = false;
-              trialStartedModalOpen = true;
-            },
-          });
+          PlanUpgradeDialog.close();
+          pushState('', { shallowRoute: '/preference/billing' });
         }}
+        variant={canStartTrial ? 'secondary' : undefined}
       >
-        <div class={flex({ alignItems: 'center', gap: '4px' })}>
-          <span>2주 무료 체험하기</span>
-
-          <Icon
-            style={css.raw({
-              transition: 'transform',
-              _groupHover: { transform: 'translateX(2px)' },
-            })}
-            icon={ArrowRightIcon}
-            size={16}
-          />
-        </div>
+        업그레이드
       </Button>
-    {/if}
-
-    <Button
-      style={css.raw({ width: 'full', height: '40px' })}
-      gradient={!canStartTrial}
-      onclick={() => {
-        open = false;
-        pushState('', { shallowRoute: '/preference/billing' });
-      }}
-      variant={canStartTrial ? 'secondary' : undefined}
-    >
-      업그레이드
-    </Button>
-  </div>
-</Modal>
+    </div>
+  </Modal>
+{/if}
 
 <SubscriptionCelebrationModal
   message="2주간 타이피의 모든 기능을 자유롭게 이용해보세요."
