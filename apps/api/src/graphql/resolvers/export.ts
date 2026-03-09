@@ -16,10 +16,10 @@ import {
 } from '@/db';
 import { DocumentExportFormat, EntityVisibility } from '@/enums';
 import { NotFoundError, TypieError } from '@/errors';
-import { generateDocumentDocx, generateDocumentEpub, generateDocumentHwp, generateDocumentPdf } from '@/export/document';
+import { generateDocumentDocx, generateDocumentEpub, generateDocumentHwp, generateDocumentPdf } from '@/export';
 import { getDocumentFontFamilies } from '@/utils/document';
 import { builder } from '../builder';
-import type { FontNameMap } from '@/export/document/font';
+import type { FontNameMap } from '@/export/font';
 
 /**
  * * Types
