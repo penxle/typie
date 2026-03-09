@@ -32,7 +32,7 @@
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
   import FontUploadModal from '../FontUploadModal.svelte';
-  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
+  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import DocumentPanel from './@document-panel/DocumentPanel.svelte';
   import CloseButton from './@pane/CloseButton.svelte';
   import { getPane, getPaneGroup } from './@pane/context.svelte';
@@ -68,8 +68,6 @@
           role
           ...EditorContext_user
           ...DocumentPanel_user
-          ...DashboardLayout_PlanUpgradeModal_user
-
           sites {
             id
             ...DocumentTemplateModal_site
@@ -109,8 +107,6 @@
 
           user {
             id
-            ...DocumentEditor_TopToolbar_user
-
             subscription {
               id
             }
@@ -357,12 +353,7 @@
     return () => clearTimeout(timer);
   });
 
-  let totalCharacterCountPlanUpgradeModalOpen = $state(false);
-  let totalBlobSizePlanUpgradeModalOpen = $state(false);
-
-  let planUpgradeModalOpen = $state(false);
   let fontUploadModalOpen = $state(false);
-  let fontPlanUpgradeModalOpen = $state(false);
   let showFindReplace = $state(false);
   const debugStore = new LocalStore<{
     renderDebugEnabled: boolean;
@@ -376,7 +367,9 @@
   const showRenderDebugToggle = $derived(dev || query.data.me.role === 'ADMIN' || query.data.impersonation?.admin.role === 'ADMIN');
 
   setContext('setTotalBlobSizePlanUpgradeModalOpen', () => {
-    totalBlobSizePlanUpgradeModalOpen = true;
+    PlanUpgradeDialog.show({
+      message: '현재 플랜의 최대 업로드 가능 용량을 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 업로드하세요.',
+    });
   });
 
   const selectionsStore = new LocalStore<Record<string, { selection?: unknown; type?: string; element?: string; timestamp: number }>>(
@@ -490,9 +483,13 @@
         showEditLockedToast = false;
       }, 5000);
     } else if (reason === 'restrictedText') {
-      totalCharacterCountPlanUpgradeModalOpen = true;
+      PlanUpgradeDialog.show({
+        message: '현재 플랜의 최대 입력 가능 글자 수를 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 작성하세요.',
+      });
     } else if (reason === 'restrictedBlob') {
-      totalBlobSizePlanUpgradeModalOpen = true;
+      PlanUpgradeDialog.show({
+        message: '현재 플랜의 최대 업로드 가능 용량을 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 업로드하세요.',
+      });
     }
   });
 
@@ -969,7 +966,9 @@
                 _hover: { backgroundColor: 'accent.brand.subtle' },
               })}
               onclick={() => {
-                planUpgradeModalOpen = true;
+                PlanUpgradeDialog.show({
+                  message: 'FULL ACCESS로 업그레이드하면\n모든 프리미엄 기능을 무제한으로 사용할 수 있어요.',
+                });
                 mixpanel.track('open_plan_upgrade_modal', { via: 'document_header' });
               }}
               type="button"
@@ -1128,7 +1127,7 @@
 
       <HorizontalDivider color="secondary" />
 
-      <TopToolbar user$key={entity.user} />
+      <TopToolbar />
 
       <div class={flex({ position: 'relative', flexGrow: '1', overflowY: 'hidden' })}>
         <div class={flex({ position: 'relative', flexDirection: 'column', flexGrow: '1', overflowX: 'auto' })}>
@@ -1137,7 +1136,9 @@
               if (entity.user.subscription) {
                 fontUploadModalOpen = true;
               } else {
-                fontPlanUpgradeModalOpen = true;
+                PlanUpgradeDialog.show({
+                  message: '폰트 업로드 기능은 FULL ACCESS에서 사용할 수 있어요.',
+                });
                 mixpanel.track('open_plan_upgrade_modal', { via: 'font_family_upload' });
               }
             }}
@@ -1418,7 +1419,9 @@
                 _hover: { backgroundColor: 'accent.brand.subtle' },
               })}
               onclick={() => {
-                planUpgradeModalOpen = true;
+                PlanUpgradeDialog.show({
+                  message: 'FULL ACCESS로 업그레이드하면\n모든 프리미엄 기능을 무제한으로 사용할 수 있어요.',
+                });
                 mixpanel.track('open_plan_upgrade_modal', { via: 'document_zen_mode' });
               }}
               type="button"
@@ -1456,30 +1459,9 @@
     </div>
   </div>
 
-  <PlanUpgradeModal user$key={query.data.me} bind:open={totalCharacterCountPlanUpgradeModalOpen}>
-    현재 플랜의 최대 입력 가능 글자 수를 초과했어요.
-    <br />
-    FULL ACCESS로 업그레이드하고 이어서 작성하세요.
-  </PlanUpgradeModal>
-
-  <PlanUpgradeModal user$key={query.data.me} bind:open={totalBlobSizePlanUpgradeModalOpen}>
-    현재 플랜의 최대 업로드 가능 용량을 초과했어요.
-    <br />
-    FULL ACCESS로 업그레이드하고 이어서 업로드하세요.
-  </PlanUpgradeModal>
-
-  <PlanUpgradeModal user$key={query.data.me} bind:open={planUpgradeModalOpen}>
-    FULL ACCESS로 업그레이드하면
-    <br />
-    모든 프리미엄 기능을 무제한으로 사용할 수 있어요.
-  </PlanUpgradeModal>
-
   <EditorV2NoticeModal {focused} />
 
   <FontUploadModal userId={query.data.me.id} bind:open={fontUploadModalOpen} />
-  <PlanUpgradeModal user$key={query.data.me} bind:open={fontPlanUpgradeModalOpen}>
-    폰트 업로드 기능은 FULL ACCESS에서 사용할 수 있어요.
-  </PlanUpgradeModal>
 
   {#if currentSite}
     <DocumentTemplateModal {editor} {focused} site$key={currentSite} />

@@ -11,7 +11,7 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import FontUploadModal from '../FontUploadModal.svelte';
-  import PlanUpgradeModal from '../PlanUpgradeModal.svelte';
+  import { PlanUpgradeDialog } from '../plan-upgrade-dialog.svelte';
   import type { DashboardLayout_PreferenceModal_FontTab_user$key } from '$mearie';
 
   type Props = {
@@ -24,8 +24,6 @@
     graphql(`
       fragment DashboardLayout_PreferenceModal_FontTab_user on User {
         id
-        ...DashboardLayout_PlanUpgradeModal_user
-
         documentFontFamilies {
           id
           familyName
@@ -70,7 +68,6 @@
   );
 
   let uploadModalOpen = $state(false);
-  let planUpgradeOpen = $state(false);
 
   const [archiveFontFamily] = createMutation(
     graphql(`
@@ -120,7 +117,9 @@
         if (user.data?.subscription) {
           uploadModalOpen = true;
         } else {
-          planUpgradeOpen = true;
+          PlanUpgradeDialog.show({
+            message: '폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.',
+          });
         }
       }}
       type="button"
@@ -221,7 +220,4 @@
 
 {#if user.data}
   <FontUploadModal userId={user.data.id} bind:open={uploadModalOpen} />
-  <PlanUpgradeModal user$key={user.data} bind:open={planUpgradeOpen}>
-    폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.
-  </PlanUpgradeModal>
 {/if}

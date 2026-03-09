@@ -21,7 +21,7 @@
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
   import CreateSiteModal from './CreateSiteModal.svelte';
-  import PlanUpgradeModal from './PlanUpgradeModal.svelte';
+  import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';
   import type { DashboardLayout_SpaceMenu_user$key } from '$mearie';
 
   type Props = {
@@ -43,8 +43,6 @@
           id
         }
 
-        ...DashboardLayout_PlanUpgradeModal_user
-
         sites {
           id
           name
@@ -65,7 +63,6 @@
   const site = $derived(user.data.sites.find((s) => s.id === app.preference.current.currentSiteId) ?? user.data.sites[0]);
 
   let panelEl = $state<HTMLDivElement>();
-  let planUpgradeModalOpen = $state(false);
   let createSiteModalOpen = $state(false);
 
   const close = () => {
@@ -463,7 +460,9 @@
       onclick={() => {
         if (!user.data.subscription) {
           close();
-          planUpgradeModalOpen = true;
+          PlanUpgradeDialog.show({
+            message: 'FULL ACCESS로 업그레이드하면\n여러 스페이스를 만들어 관리할 수 있어요.',
+          });
           return;
         }
 
@@ -479,11 +478,3 @@
 {/if}
 
 <CreateSiteModal userId={user.data.id} bind:open={createSiteModalOpen} />
-
-{#if !user.data.subscription}
-  <PlanUpgradeModal user$key={user.data} bind:open={planUpgradeModalOpen}>
-    FULL ACCESS로 업그레이드하면
-    <br />
-    여러 스페이스를 만들어 관리할 수 있어요.
-  </PlanUpgradeModal>
-{/if}

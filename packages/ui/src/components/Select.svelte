@@ -17,10 +17,12 @@
       icon?: Component;
       label: string;
       description?: string;
+      trailing?: Component;
       value: T;
     }[];
     disabled?: boolean;
-    onselect?: (value: T) => void;
+    // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
+    onselect?: (value: T) => void | Promise<void> | boolean | Promise<boolean>;
     chevron?: boolean;
   };
 
@@ -101,9 +103,12 @@
 
   {#each items as item (item.value)}
     <MenuItem
-      onclick={() => {
+      onclick={async () => {
+        const ret = await onselect?.(item.value);
+        if (ret === false) {
+          return;
+        }
         value = item.value;
-        onselect?.(item.value);
       }}
     >
       <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '20px', flexGrow: '1' })}>
@@ -115,8 +120,11 @@
           {/if}
 
           <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-            <span class={css({ fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
+            <span class={flex({ alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>
               {item.label}
+              {#if item.trailing}
+                <item.trailing />
+              {/if}
             </span>
 
             {#if item.description}
