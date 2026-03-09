@@ -97,6 +97,10 @@ export function createFloatingActions(options?: CreateFloatingActionsOptions): C
   };
 
   const handleClick = (event: Event) => {
+    if (event.target instanceof Node && !event.target.isConnected) {
+      return;
+    }
+
     if (event.target instanceof Element && event.target.closest('[data-floating-keep-open]')) {
       return;
     }
