@@ -1,32 +1,6 @@
 // spell-checker:words HWPTAG
 import { allocate, concat, encodeUTF16LE, HWPTAG, makeRecord } from './records';
-
-/** 중복 제거하며 0-based ID를 부여하는 테이블 */
-export class IdTable<T> {
-  private map = new Map<string, number>();
-  private items: T[] = [];
-
-  intern(item: T, key: string): number {
-    const existing = this.map.get(key);
-    if (existing !== undefined) return existing;
-    const id = this.items.length;
-    this.map.set(key, id);
-    this.items.push(item);
-    return id;
-  }
-
-  getId(key: string): number | undefined {
-    return this.map.get(key);
-  }
-
-  get count(): number {
-    return this.items.length;
-  }
-
-  getAll(): T[] {
-    return this.items;
-  }
-}
+import type { IdTable } from './records';
 
 export type FontEntry = { name: string; postScriptName: string };
 
@@ -88,9 +62,7 @@ export type DocInfoTables = {
   bullets: IdTable<{ char: number }>;
 };
 
-// --- 각 레코드 직렬화 ---
-
-/** DOCUMENT_PROPERTIES (26바이트): section_count=1, 나머지 0 */
+/** DOCUMENT_PROPERTIES (26바이트): section_count=1 */
 function buildDocumentProperties(): Uint8Array {
   const { buf, view } = allocate(26);
   view.setUint16(0, 1, true); // section_count = 1
