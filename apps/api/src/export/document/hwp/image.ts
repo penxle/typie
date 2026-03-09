@@ -162,10 +162,9 @@ export function collectBinDataStreams(tables: DocInfoTables, assets: Map<string,
     const id = (i + 1).toString(16).toUpperCase().padStart(4, '0');
     const streamName = `BinData/BIN${id}.${entry.extension}`;
 
-    // assets에서 이미지 바이트 찾기
+    // assets에서 이미지 바이트 찾기 (intern이 아닌 getId로 조회하여 부작용 방지)
     for (const [nodeId, asset] of assets) {
-      const registeredId = tables.binData.intern({ extension: entry.extension }, nodeId);
-      if (registeredId === i) {
+      if (tables.binData.getId(nodeId) === i) {
         streams.set(streamName, asset.bytes);
         break;
       }

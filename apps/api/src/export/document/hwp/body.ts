@@ -1,9 +1,11 @@
 // spell-checker:words HWPTAG HWPUNIT secd pbfv tdut tudt DBEAFE DCFCE
+import { resolveFontEntry } from '../font';
 import { resolveColorToHex } from '../theme';
 import { buildGsoCtrlHeader, makeImageRecords, mapFormat } from './image';
 import { allocate, concat, ctrlId, hexToColorref, HWPTAG, makeRecord, pxToHwpunit } from './records';
 import { makeTableRecords as buildTableCoreRecords } from './table';
 import type { ImageAsset } from '../external';
+import type { FontNameMap } from '../font';
 import type { BorderFillEntry, CharShapeEntry, DocInfoTables, ParaShapeEntry } from './doc-info';
 import type { CellMargins } from './table';
 
@@ -27,7 +29,7 @@ type TextSegment = {
   annotations: Annotation[];
 };
 
-type NodeEntry = Record<string, unknown> & {
+export type NodeEntry = Record<string, unknown> & {
   type: string;
   children?: string[];
   parent?: string;
@@ -41,14 +43,6 @@ type PageLayout = {
   pageMarginLeft: number;
   pageMarginRight: number;
 };
-
-export type FontNameEntry = {
-  weight: number;
-  postScriptName: string;
-  faceName: string;
-  faceDefault: string;
-};
-export type FontNameMap = Map<string, FontNameEntry[]>;
 
 export type HwpConvertContext = {
   nodes: Record<string, NodeEntry>;
@@ -70,6 +64,37 @@ export type HwpConvertContext = {
 };
 
 const BLACK_COLORREF = 0x00_00_00_00;
+
+// --- 공통 헬퍼 ---
+
+/** PARA_LINE_SEG (36바이트) 기본값 생성 — 한/글이 재계산하지만 초기 힌트 필요 */
+function makeDefaultParaLineSeg(level: number): Uint8Array {
+  const { buf, view } = allocate(36);
+  view.setInt32(8, 1000, true); // 줄의 높이
+  view.setInt32(12, 1000, true); // 텍스트 부분의 높이
+  view.setInt32(16, 850, true); // 베이스라인까지 거리
+  view.setInt32(20, 600, true); // 줄간격
+  view.setUint32(32, 0x00_06_00_00, true); // 태그: 첫+마지막 세그먼트
+  return makeRecord(HWPTAG.PARA_LINE_SEG, level, buf);
+}
+
+/** 노드의 자식 중 paragraph 타입만 수집하여 인라인 세그먼트로 변환 */
+function collectParagraphsFromChildren(
+  entry: NodeEntry,
+  ctx: HwpConvertContext,
+): { segments: InlineSegment[]; align?: string; lineHeight?: number }[] {
+  const paragraphs: { segments: InlineSegment[]; align?: string; lineHeight?: number }[] = [];
+  for (const childId of entry.children ?? []) {
+    const childEntry = ctx.nodes[childId];
+    if (!childEntry || childEntry.type !== 'paragraph') continue;
+    paragraphs.push({
+      segments: collectInlineSegments(childEntry, ctx),
+      align: childEntry.align as string | undefined,
+      lineHeight: childEntry.line_height as number | undefined,
+    });
+  }
+  return paragraphs;
+}
 
 // --- 텍스트 세그먼트 → CharShape ID ---
 
@@ -161,22 +186,6 @@ function resolveCharShape(styles: Style[], ctx: HwpConvertContext): number {
   };
   const key = `${fontId}:${baseSize}:${bold}:${italic}:${underline}:${strikethrough}:${textColor}:${shadeColor}:${letterSpacing}`;
   return ctx.tables.charShapes.intern(entry, key);
-}
-
-/** fontNameMap에서 familyName + weight에 가장 가까운 엔트리를 찾는다 */
-function resolveFontEntry(map: FontNameMap, familyName: string, weight: number): FontNameEntry | undefined {
-  const entries = map.get(familyName);
-  if (!entries || entries.length === 0) return undefined;
-  let best = entries[0];
-  let bestDist = Math.abs(best.weight - weight);
-  for (let i = 1; i < entries.length; i++) {
-    const dist = Math.abs(entries[i].weight - weight);
-    if (dist < bestDist) {
-      best = entries[i];
-      bestDist = dist;
-    }
-  }
-  return best;
 }
 
 function mapAlignment(align: string): number {
@@ -501,16 +510,7 @@ function makeParagraph(
     csView.setUint32(i * 8, mergedPair.pos, true);
     csView.setUint32(i * 8 + 4, mergedPair.id, true);
   }
-  records.push(makeRecord(HWPTAG.PARA_CHAR_SHAPE, level + 1, csBuf));
-
-  // PARA_LINE_SEG (36바이트) — 한/글이 요구하는 레이아웃 캐시
-  const { buf: lsBuf, view: lsView } = allocate(36);
-  lsView.setInt32(8, 1000, true); // 줄의 높이
-  lsView.setInt32(12, 1000, true); // 텍스트 부분의 높이
-  lsView.setInt32(16, 850, true); // 베이스라인까지 거리
-  lsView.setInt32(20, 600, true); // 줄간격
-  lsView.setUint32(32, 0x00_06_00_00, true); // 태그: 첫+마지막 세그먼트
-  records.push(makeRecord(HWPTAG.PARA_LINE_SEG, level + 1, lsBuf));
+  records.push(makeRecord(HWPTAG.PARA_CHAR_SHAPE, level + 1, csBuf), makeDefaultParaLineSeg(level + 1));
 
   // 확장 컨트롤 레코드 (구역 정의 등)
   if (extraCtrlRecords) {
@@ -648,16 +648,7 @@ function makePageBreakParagraph(paraShapeId: number, charShapeId: number, level:
   const { buf: csBuf, view: csView } = allocate(8);
   csView.setUint32(0, 0, true);
   csView.setUint32(4, charShapeId, true);
-  records.push(makeRecord(HWPTAG.PARA_CHAR_SHAPE, level + 1, csBuf));
-
-  // PARA_LINE_SEG (36바이트)
-  const { buf: lsBuf, view: lsView } = allocate(36);
-  lsView.setInt32(8, 1000, true);
-  lsView.setInt32(12, 1000, true);
-  lsView.setInt32(16, 850, true);
-  lsView.setInt32(20, 600, true);
-  lsView.setUint32(32, 0x00_06_00_00, true);
-  records.push(makeRecord(HWPTAG.PARA_LINE_SEG, level + 1, lsBuf));
+  records.push(makeRecord(HWPTAG.PARA_CHAR_SHAPE, level + 1, csBuf), makeDefaultParaLineSeg(level + 1));
 
   return records;
 }
@@ -708,16 +699,7 @@ function makeInlineObjectParagraph(
 
   const { buf: csBuf, view: csView } = allocate(8);
   csView.setUint32(4, ctx.defaultCharShapeId, true);
-  records.push(makeRecord(HWPTAG.PARA_CHAR_SHAPE, level + 1, csBuf));
-
-  // PARA_LINE_SEG (36바이트)
-  const { buf: lsBuf, view: lsView } = allocate(36);
-  lsView.setInt32(8, 1000, true);
-  lsView.setInt32(12, 1000, true);
-  lsView.setInt32(16, 850, true);
-  lsView.setInt32(20, 600, true);
-  lsView.setUint32(32, 0x00_06_00_00, true);
-  records.push(makeRecord(HWPTAG.PARA_LINE_SEG, level + 1, lsBuf));
+  records.push(makeRecord(HWPTAG.PARA_CHAR_SHAPE, level + 1, csBuf), makeDefaultParaLineSeg(level + 1));
 
   // 구역/단 정의 레코드 추가
   if (hasSectionDef) {
@@ -1024,17 +1006,7 @@ function getBulletChar(level: number): number {
 function convertBlockquoteNode(entry: NodeEntry, ctx: HwpConvertContext, isFirst: boolean): Uint8Array[] {
   const variant = (entry as { variant?: string }).variant ?? 'left_line';
 
-  // blockquote 내부의 문단 텍스트 수집
-  const paragraphs: { segments: InlineSegment[]; align?: string; lineHeight?: number }[] = [];
-  for (const childId of entry.children ?? []) {
-    const childEntry = ctx.nodes[childId];
-    if (!childEntry || childEntry.type !== 'paragraph') continue;
-    paragraphs.push({
-      segments: collectInlineSegments(childEntry, ctx),
-      align: childEntry.align as string | undefined,
-      lineHeight: childEntry.line_height as number | undefined,
-    });
-  }
+  const paragraphs = collectParagraphsFromChildren(entry, ctx);
 
   if (variant === 'message_sent' || variant === 'message_received') {
     const isSent = variant === 'message_sent';
@@ -1140,16 +1112,7 @@ function convertCalloutNode(entry: NodeEntry, ctx: HwpConvertContext, isFirst: b
   };
   const bgFill = hexToColorref(bgColors[variant] ?? 'F3F4F6');
 
-  const paragraphs: { segments: InlineSegment[]; align?: string; lineHeight?: number }[] = [];
-  for (const childId of entry.children ?? []) {
-    const childEntry = ctx.nodes[childId];
-    if (!childEntry || childEntry.type !== 'paragraph') continue;
-    paragraphs.push({
-      segments: collectInlineSegments(childEntry, ctx),
-      align: childEntry.align as string | undefined,
-      lineHeight: childEntry.line_height as number | undefined,
-    });
-  }
+  const paragraphs = collectParagraphsFromChildren(entry, ctx);
 
   return makeSimpleTableFromParagraphs(
     paragraphs,
@@ -1399,11 +1362,16 @@ function convertTableNode(entry: NodeEntry, ctx: HwpConvertContext, isFirst: boo
   const tableBorderFillId = ctx.tables.borderFills.intern(bfEntry, 'table-default');
   const cellBorderFillId = tableBorderFillId;
 
-  return makeTableRecords(rows, rowCount, colCount, tableWidth, tableBorderFillId, cellBorderFillId, ctx, isFirst, {
-    left: 800,
-    right: 800,
-    top: 400,
-    bottom: 400,
+  return makeTableRecords({
+    rows,
+    rowCount,
+    colCount,
+    tableWidth,
+    tableBorderFillId,
+    cellBorderFillId,
+    ctx,
+    isFirst,
+    cellMargins: { left: 800, right: 800, top: 400, bottom: 400 },
   });
 }
 
@@ -1497,7 +1465,18 @@ function makeSimpleTableFromParagraphs(
   }
 
   const rows = [{ cells: [{ paraRecords: cellRecords, colWidth: tableWidth }] }];
-  return makeTableRecords(rows, 1, 1, tableWidth, borderFillId, borderFillId, ctx, isFirst, cellMargins, opts?.tableAlign);
+  return makeTableRecords({
+    rows,
+    rowCount: 1,
+    colCount: 1,
+    tableWidth,
+    tableBorderFillId: borderFillId,
+    cellBorderFillId: borderFillId,
+    ctx,
+    isFirst,
+    cellMargins,
+    tableAlign: opts?.tableAlign,
+  });
 }
 
 function makeTwoRowTable(
@@ -1550,32 +1529,54 @@ function makeTwoRowTable(
     'table-no-fill',
   );
 
-  return makeTableRecords(rows, 2, 1, tableWidth, emptyBfId, emptyBfId, ctx, isFirst, cellMargins, undefined, [
-    titleBorderFillId,
-    contentBorderFillId,
-  ]);
+  return makeTableRecords({
+    rows,
+    rowCount: 2,
+    colCount: 1,
+    tableWidth,
+    tableBorderFillId: emptyBfId,
+    cellBorderFillId: emptyBfId,
+    ctx,
+    isFirst,
+    cellMargins,
+    perRowBorderFillIds: [titleBorderFillId, contentBorderFillId],
+  });
 }
 
-function makeTableRecords(
-  rows: { cells: { paraRecords: Uint8Array[]; colWidth: number }[] }[],
-  rowCount: number,
-  colCount: number,
-  tableWidth: number,
-  tableBorderFillId: number,
-  cellBorderFillId: number,
-  ctx: HwpConvertContext,
-  isFirst: boolean,
-  cellMargins?: CellMargins,
-  tableAlign?: string,
-  perRowBorderFillIds?: number[],
-): Uint8Array[] {
+type TableRecordsOpts = {
+  rows: { cells: { paraRecords: Uint8Array[]; colWidth: number }[] }[];
+  rowCount: number;
+  colCount: number;
+  tableWidth: number;
+  tableBorderFillId: number;
+  cellBorderFillId: number;
+  ctx: HwpConvertContext;
+  isFirst: boolean;
+  cellMargins?: CellMargins;
+  tableAlign?: string;
+  perRowBorderFillIds?: number[];
+};
+
+function makeTableRecords(opts: TableRecordsOpts): Uint8Array[] {
+  const {
+    rows,
+    rowCount,
+    colCount,
+    tableWidth,
+    tableBorderFillId,
+    cellBorderFillId,
+    ctx,
+    isFirst,
+    cellMargins,
+    tableAlign,
+    perRowBorderFillIds,
+  } = opts;
   const instanceId = ++ctx.instanceCounter;
-  const allRecords: Uint8Array[] = [];
 
   // 표 삽입 문단 (첫 번째면 섹션 정의도 같은 문단에 합침)
   const sectionRecords = isFirst ? buildSectionDef(ctx) : undefined;
   const paraShapeId = tableAlign ? resolveParaShape(ctx, { align: tableAlign }) : undefined;
-  allRecords.push(
+  return [
     ...makeInlineObjectParagraph(ctx, 0, 'tbl ', { sectionRecords, paraShapeId }),
     ...buildTableCoreRecords(
       rows,
@@ -1588,9 +1589,7 @@ function makeTableRecords(
       cellMargins,
       perRowBorderFillIds,
     ),
-  );
-
-  return allRecords;
+  ];
 }
 
 // --- 전체 BodyText 스트림 ---

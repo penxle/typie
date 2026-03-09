@@ -17,6 +17,7 @@ import {
 import { inArray } from 'drizzle-orm';
 import { db, Embeds } from '@/db';
 import { wasm } from '@/utils/wasm';
+import { resolveFontEntry } from '../font';
 import {
   convertBlockquote,
   convertCallout,
@@ -35,6 +36,7 @@ import { createRubyRun } from './ruby';
 import { convertTable, convertTableCell, convertTableRow } from './table';
 import { convertTextSegments } from './text';
 import type { ImageAsset } from '../external';
+import type { FontNameMap } from '../font';
 import type { BlockquoteParagraph, DocDefaults } from './blocks';
 import type { TextConvertContext, TextSegment } from './text';
 
@@ -74,6 +76,7 @@ export type GenerateDocumentDocxParams = {
   pageMarginBottom: number;
   pageMarginLeft: number;
   pageMarginRight: number;
+  fontNameMap: FontNameMap;
 };
 
 export async function generateDocumentDocx(params: GenerateDocumentDocxParams): Promise<Uint8Array> {
@@ -98,6 +101,8 @@ export async function generateDocumentDocx(params: GenerateDocumentDocxParams): 
   const rootEntry = json.nodes[rootId];
   const cascadeAttrs = rootEntry.cascade_attrs as Record<string, unknown> | undefined;
   const defaultFont = (cascadeAttrs?.['style:font_family'] as string) ?? 'Pretendard';
+  const defaultResolved = resolveFontEntry(params.fontNameMap, defaultFont, 400);
+  const resolvedDefaultFont = defaultResolved?.postScriptName ?? defaultFont;
   const defaultFontSizePt100 = (cascadeAttrs?.['style:font_size'] as number) ?? 1200;
   const defaultFontSizeHp = Math.round((defaultFontSizePt100 / 100) * 2);
   // line_height: × 100 (e.g. 160 = 160%). AT_LEAST 모드에서는 twips 절대값 사용 (fontSizePt × ratio × 20)
@@ -128,7 +133,7 @@ export async function generateDocumentDocx(params: GenerateDocumentDocxParams): 
     nodes: json.nodes,
     assets,
     embeds,
-    textCtx: { createRubyRun },
+    textCtx: { createRubyRun, fontNameMap: params.fontNameMap, defaultFamilyName: defaultFont },
     numberingRef,
     listStack: [],
     paragraphIndentTwips,
@@ -151,7 +156,7 @@ export async function generateDocumentDocx(params: GenerateDocumentDocxParams): 
       default: {
         document: {
           run: {
-            font: defaultFont,
+            font: resolvedDefaultFont,
             size: defaultFontSizeHp,
           },
           paragraph: {

@@ -1,12 +1,14 @@
 // spell-checker:words ENDOFCHAIN FREESECT FATSECT DIFAT NOSTREAM CLSID
+import { concat } from './records';
 
 const SECTOR_SIZE = 512;
 const MINI_SECTOR_SIZE = 64;
 const MINI_CUTOFF = 4096;
+const FAT_ENTRIES_PER_SECTOR = SECTOR_SIZE / 4; // 128 entries (UINT32) per 512-byte sector
 const ENDOFCHAIN = 0xff_ff_ff_fe;
 const FREESECT = 0xff_ff_ff_ff;
 const FATSECT = 0xff_ff_ff_fd;
-const NOSTREAM = 0xff_ff_ff_ff;
+const NOSTREAM = 0xff_ff_ff_ff; // same value as FREESECT; used in directory entry sibling/child fields
 
 type Node = {
   name: string;
@@ -97,7 +99,7 @@ export function buildOle2(streams: { path: string; data: Uint8Array }[]): Uint8A
     miniParts.push(padded);
   }
 
-  const miniStreamData = concatBytes(miniParts);
+  const miniStreamData = concat(...miniParts);
 
   // --- sector counts ---
   const dirSects = Math.ceil(entries.length / 4);
@@ -109,7 +111,7 @@ export function buildOle2(streams: { path: string; data: Uint8Array }[]): Uint8A
   let fatSects = 1;
   for (;;) {
     const total = fatSects + dirSects + mfSects + msSects + regTotal;
-    if (Math.ceil(total / 128) <= fatSects) break;
+    if (Math.ceil(total / FAT_ENTRIES_PER_SECTOR) <= fatSects) break;
     fatSects++;
   }
   if (fatSects > 109) throw new Error('File too large for single DIFAT');
@@ -138,7 +140,7 @@ export function buildOle2(streams: { path: string; data: Uint8Array }[]): Uint8A
   const totalSects = s;
 
   // --- FAT ---
-  const fat = new Uint32Array(fatSects * 128).fill(FREESECT);
+  const fat = new Uint32Array(fatSects * FAT_ENTRIES_PER_SECTOR).fill(FREESECT);
   for (let i = 0; i < fatSects; i++) fat[fatStart + i] = FATSECT;
   chainFat(fat, dirStart, dirSects);
   chainFat(fat, mfStart, mfSects);
@@ -155,7 +157,7 @@ export function buildOle2(streams: { path: string; data: Uint8Array }[]): Uint8A
   // FAT sectors
   for (let i = 0; i < fatSects; i++) {
     const off = sectOff(fatStart + i);
-    for (let j = 0; j < 128; j++) view.setUint32(off + j * 4, fat[i * 128 + j], true);
+    for (let j = 0; j < FAT_ENTRIES_PER_SECTOR; j++) view.setUint32(off + j * 4, fat[i * FAT_ENTRIES_PER_SECTOR + j], true);
   }
 
   // directory entries
@@ -164,7 +166,7 @@ export function buildOle2(streams: { path: string; data: Uint8Array }[]): Uint8A
   // mini FAT
   if (mfSects > 0) {
     const off = sectOff(mfStart);
-    for (let i = 0; i < mfSects * 128; i++) view.setUint32(off + i * 4, FREESECT, true);
+    for (let i = 0; i < mfSects * FAT_ENTRIES_PER_SECTOR; i++) view.setUint32(off + i * 4, FREESECT, true);
     for (let i = 0; i < miniFat.length; i++) view.setUint32(off + i * 4, miniFat[i], true);
   }
 
@@ -243,15 +245,4 @@ function writeDirEntry(view: DataView, off: number, entry: Node): void {
   // 0x50: CLSID (16 bytes zero), 0x60: state bits (zero), 0x64/0x6C: timestamps (zero)
   view.setUint32(off + 0x74, entry.startSect, true);
   view.setUint32(off + 0x78, entry.size, true);
-}
-
-function concatBytes(parts: Uint8Array[]): Uint8Array {
-  const total = parts.reduce((a, b) => a + b.length, 0);
-  const result = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) {
-    result.set(p, off);
-    off += p.length;
-  }
-  return result;
 }

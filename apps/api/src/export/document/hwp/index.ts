@@ -3,20 +3,16 @@ import { inArray } from 'drizzle-orm';
 import { db, Embeds } from '@/db';
 import { wasm } from '@/utils/wasm';
 import { loadImageAssets } from '../external';
+import { resolveFontEntry } from '../font';
 import { buildBodyStream } from './body';
 import { buildDocInfoStream, IdTable } from './doc-info';
 import { collectBinDataStreams } from './image';
 import { buildOle2 } from './ole2';
 import { allocate, compressStream, pxToHwpunit } from './records';
 import type { ImageAsset } from '../external';
-import type { FontNameEntry, FontNameMap, HwpConvertContext } from './body';
+import type { FontNameMap } from '../font';
+import type { HwpConvertContext, NodeEntry } from './body';
 import type { CharShapeEntry, DocInfoTables, ParaShapeEntry } from './doc-info';
-
-type NodeEntry = Record<string, unknown> & {
-  type: string;
-  children?: string[];
-  parent?: string;
-};
 
 type DocumentJson = {
   settings: Record<string, unknown>;
@@ -77,7 +73,7 @@ export async function generateDocumentHwp(params: GenerateDocumentHwpParams): Pr
     bullets: new IdTable(),
   };
 
-  const defaultFontEntry = resolveEntry(params.fontNameMap, defaultFont, 400);
+  const defaultFontEntry = resolveFontEntry(params.fontNameMap, defaultFont, 400);
   const defaultFontId = tables.fonts.intern(
     {
       name: defaultFontEntry?.faceName ?? defaultFont,
@@ -217,20 +213,4 @@ async function loadEmbeds(ids: string[]): Promise<Map<string, { url: string; tit
   if (ids.length === 0) return new Map();
   const rows = await db.select({ id: Embeds.id, url: Embeds.url, title: Embeds.title }).from(Embeds).where(inArray(Embeds.id, ids));
   return new Map(rows.map((r) => [r.id, { url: r.url, title: r.title }]));
-}
-
-/** fontNameMap에서 familyName + weight에 가장 가까운 엔트리를 찾는다 */
-function resolveEntry(map: FontNameMap, familyName: string, weight: number): FontNameEntry | undefined {
-  const entries = map.get(familyName);
-  if (!entries || entries.length === 0) return undefined;
-  let best = entries[0];
-  let bestDist = Math.abs(best.weight - weight);
-  for (let i = 1; i < entries.length; i++) {
-    const dist = Math.abs(entries[i].weight - weight);
-    if (dist < bestDist) {
-      best = entries[i];
-      bestDist = dist;
-    }
-  }
-  return best;
 }

@@ -15,6 +15,10 @@ export class IdTable<T> {
     return id;
   }
 
+  getId(key: string): number | undefined {
+    return this.map.get(key);
+  }
+
   get count(): number {
     return this.items.length;
   }

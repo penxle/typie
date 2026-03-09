@@ -19,7 +19,7 @@ import { NotFoundError, TypieError } from '@/errors';
 import { generateDocumentDocx, generateDocumentEpub, generateDocumentHwp, generateDocumentPdf } from '@/export/document';
 import { getDocumentFontFamilies } from '@/utils/document';
 import { builder } from '../builder';
-import type { FontNameMap } from '@/export/document/hwp/body';
+import type { FontNameMap } from '@/export/document/font';
 
 /**
  * * Types
@@ -97,6 +97,7 @@ builder.mutationFields((t) => ({
       switch (input.format) {
         case 'DOCX': {
           if (!input.layout) throw new TypieError({ code: 'invalid_input', message: 'layout is required for this format' });
+          const fontNameMap = await buildFontNameMap(entity.userId);
           const data = await generateDocumentDocx({
             snapshot: content.snapshot,
             title,
@@ -107,6 +108,7 @@ builder.mutationFields((t) => ({
             pageMarginBottom: input.layout.pageMarginBottom,
             pageMarginLeft: input.layout.pageMarginLeft,
             pageMarginRight: input.layout.pageMarginRight,
+            fontNameMap,
           });
           return {
             data,
