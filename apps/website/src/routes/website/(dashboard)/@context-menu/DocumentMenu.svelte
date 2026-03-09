@@ -24,8 +24,6 @@
   import { unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
-  import DocumentDocxExportModal from './DocumentDocxExportModal.svelte';
-  import DocumentPdfExportModal from './DocumentPdfExportModal.svelte';
   import type { Snippet } from 'svelte';
 
   type Props = {
@@ -53,9 +51,6 @@
   const app = getAppContext();
   const paneGroup = getPaneGroup();
   const pane = getPane();
-
-  let pdfExportModalOpen = $state(false);
-  let docxExportModalOpen = $state(false);
 
   const [deleteDocument] = createMutation(
     graphql(`
@@ -312,32 +307,9 @@
 
 {@render children?.()}
 
-{#if app.preference.current.experimental_pdfExportEnabled || app.preference.current.experimental_docxExportEnabled}
-  <HorizontalDivider color="secondary" />
-{/if}
+<HorizontalDivider color="secondary" />
 
-{#if app.preference.current.experimental_pdfExportEnabled}
-  <MenuItem icon={DownloadIcon} noCloseOnClick onclick={() => (pdfExportModalOpen = true)}>PDF로 내보내기</MenuItem>
-{/if}
-
-{#if app.preference.current.experimental_docxExportEnabled}
-  <MenuItem icon={DownloadIcon} noCloseOnClick onclick={() => (docxExportModalOpen = true)}>DOCX로 내보내기</MenuItem>
-{/if}
-
-<DocumentDocxExportModal
-  documentId={document.id}
-  onClose={() => (docxExportModalOpen = false)}
-  slug={entity.slug}
-  {via}
-  bind:open={docxExportModalOpen}
-/>
-<DocumentPdfExportModal
-  documentId={document.id}
-  onClose={() => (pdfExportModalOpen = false)}
-  slug={entity.slug}
-  {via}
-  bind:open={pdfExportModalOpen}
-/>
+<MenuItem icon={DownloadIcon} onclick={() => (app.state.exportOpen = entity.slug)}>파일로 내보내기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

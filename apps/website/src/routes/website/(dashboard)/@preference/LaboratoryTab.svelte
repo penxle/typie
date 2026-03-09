@@ -2,10 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
-  import { Switch } from '@typie/ui/components';
-  import { getAppContext } from '@typie/ui/context';
-  import mixpanel from 'mixpanel-browser';
-  import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { SettingsCard } from '$lib/components';
   import { graphql } from '$mearie';
   import type { DashboardLayout_PreferenceModal_LaboratoryTab_user$key } from '$mearie';
 
@@ -24,8 +21,6 @@
     `),
     () => user$key,
   );
-
-  const app = getAppContext();
 </script>
 
 <div class={flex({ direction: 'column', gap: '40px', maxWidth: '640px' })}>
@@ -40,46 +35,6 @@
   </div>
 
   <SettingsCard>
-    <SettingsRow>
-      {#snippet label()}
-        PDF 내보내기
-      {/snippet}
-      {#snippet description()}
-        문서를 PDF 파일로 내보낼 수 있어요.
-      {/snippet}
-      {#snippet value()}
-        <Switch
-          onchange={() => {
-            mixpanel.track('toggle_experimental_feature', {
-              feature: 'pdf_export',
-              enabled: app.preference.current.experimental_pdfExportEnabled,
-            });
-          }}
-          bind:checked={app.preference.current.experimental_pdfExportEnabled}
-        />
-      {/snippet}
-    </SettingsRow>
-
-    <SettingsDivider />
-
-    <SettingsRow>
-      {#snippet label()}
-        DOCX 내보내기
-      {/snippet}
-      {#snippet description()}
-        문서를 워드(DOCX) 파일로 내보낼 수 있어요.
-      {/snippet}
-      {#snippet value()}
-        <Switch
-          onchange={() => {
-            mixpanel.track('toggle_experimental_feature', {
-              feature: 'docx_export',
-              enabled: app.preference.current.experimental_docxExportEnabled,
-            });
-          }}
-          bind:checked={app.preference.current.experimental_docxExportEnabled}
-        />
-      {/snippet}
-    </SettingsRow>
+    <div class={css({ padding: '16px', fontSize: '14px', color: 'text.muted' })}>현재 활성화된 실험실 기능이 없어요.</div>
   </SettingsCard>
 </div>

@@ -243,7 +243,7 @@ export const Fonts = pgTable(
       .notNull()
       .references(() => FontFamilies.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     fullName: text('full_name'),
-    postScriptName: text('post_script_name'),
+    postScriptName: text('post_script_name').notNull(),
     subfamilyDisplayName: text('subfamily_display_name'),
     weight: integer('weight').notNull(),
     size: bigint('size', { mode: 'number' }).notNull(),

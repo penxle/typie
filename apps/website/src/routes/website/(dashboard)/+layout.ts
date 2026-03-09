@@ -96,6 +96,7 @@ export const load: LayoutLoad = async (event) => {
           }
 
           ...DashboardLayout_CommandPalette_user
+          ...DashboardLayout_DocumentExportModal_user
           ...DashboardLayout_PreferenceModal_user
           ...DashboardLayout_Sidebar_user
           ...DashboardLayout_SiteSettingsModal_user

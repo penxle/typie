@@ -200,6 +200,13 @@ enum DocumentContentRating {
   R19
 }
 
+enum DocumentExportFormat {
+  DOCX
+  EPUB
+  HWP
+  PDF
+}
+
 type DocumentFont {
   id: ID!
   state: FontState!
@@ -415,8 +422,13 @@ enum EntityVisibility {
   UNLISTED
 }
 
-input ExportDocumentAsDocxInput {
+input ExportDocumentInput {
   documentId: ID!
+  format: DocumentExportFormat!
+  layout: ExportDocumentPageLayoutInput
+}
+
+input ExportDocumentPageLayoutInput {
   pageHeight: Int!
   pageMarginBottom: Int!
   pageMarginLeft: Int!
@@ -425,33 +437,10 @@ input ExportDocumentAsDocxInput {
   pageWidth: Int!
 }
 
-type ExportDocumentAsDocxResult {
+type ExportDocumentResult {
   data: Binary!
   filename: String!
-}
-
-input ExportDocumentAsEpubInput {
-  documentId: ID!
-}
-
-type ExportDocumentAsEpubResult {
-  data: Binary!
-  filename: String!
-}
-
-input ExportDocumentAsPdfInput {
-  documentId: ID!
-  pageHeight: Int!
-  pageMarginBottom: Int!
-  pageMarginLeft: Int!
-  pageMarginRight: Int!
-  pageMarginTop: Int!
-  pageWidth: Int!
-}
-
-type ExportDocumentAsPdfResult {
-  data: Binary!
-  filename: String!
+  mimeType: String!
 }
 
 type File implements Blob {
@@ -702,9 +691,7 @@ type Mutation {
   deleteWidget(input: DeleteWidgetInput!): Widget!
   dumpLocalStorage(input: DumpLocalStorageInput!): User!
   duplicateDocument(input: DuplicateDocumentInput!): Document!
-  exportDocumentAsDocx(input: ExportDocumentAsDocxInput!): ExportDocumentAsDocxResult!
-  exportDocumentAsEpub(input: ExportDocumentAsEpubInput!): ExportDocumentAsEpubResult!
-  exportDocumentAsPdf(input: ExportDocumentAsPdfInput!): ExportDocumentAsPdfResult!
+  exportDocument(input: ExportDocumentInput!): ExportDocumentResult!
   generateActivityImage: Binary!
   generateRandomName: String!
   generateSingleSignOnAuthorizationUrl(input: GenerateSingleSignOnAuthorizationUrlInput!): String!

@@ -14,6 +14,8 @@ export type { GenerateDocumentDocxParams } from './docx';
 export { generateDocumentDocx } from './docx';
 export type { GenerateDocumentEpubParams } from './epub';
 export { generateDocumentEpub } from './epub';
+export type { GenerateDocumentHwpParams } from './hwp';
+export { generateDocumentHwp } from './hwp';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const ICU_DATA_PATH = new URL(import.meta.resolve!('@typie/editor/icu/data.postcard')).pathname;

@@ -49,6 +49,7 @@
     "apple-signin-auth": "^2.0.0",
     "argon2": "^0.44.0",
     "bullmq": "^5.70.4",
+    "cfb": "^1.2.2",
     "dataloader": "^2.2.3",
     "dayjs": "^1.11.19",
     "dedent": "^1.7.2",
