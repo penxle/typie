@@ -37,6 +37,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
   TextEditingValue _currentValue = TextEditingValue.empty;
   bool _sentinelLost = false;
   bool _hadDeltaSinceReconcile = false;
+  int? _extendedComposingStart;
   String? _reconcileNodeId;
   int? _reconcileCursorOffset;
   bool _wasKeyboardActiveBeforePause = false;
@@ -334,19 +335,18 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     if (hadComposing || hasComposing) {
       if (hasComposing) {
         if (hadComposing && newValue.composing.start != oldValue.composing.start) {
-          final committedText = newValue.text.substring(oldValue.composing.start, newValue.composing.start);
-          _controller
-            ..compositionUpdate(committedText)
-            ..commitPreedit();
+          _extendedComposingStart ??= oldValue.composing.start;
         }
 
-        final text = newValue.text.substring(newValue.composing.start, newValue.composing.end);
+        final start = _extendedComposingStart ?? newValue.composing.start;
+        final text = newValue.text.substring(start, newValue.composing.end);
         final replaceLength = (!hadComposing && oldValue.text == newValue.text) ? text.length : 0;
 
         _controller.compositionUpdate(text, replaceLength: replaceLength);
       } else {
         if (oldValue.text != newValue.text) {
-          final prefix = oldValue.text.substring(0, oldValue.composing.start);
+          final composingStart = _extendedComposingStart ?? oldValue.composing.start;
+          final prefix = oldValue.text.substring(0, composingStart);
           final suffix = oldValue.text.substring(oldValue.composing.end);
           final committed = newValue.text.substring(prefix.length, newValue.text.length - suffix.length);
           final hasNewline = committed.contains('\n');
@@ -381,6 +381,8 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
               _connection!.setEditingState(_currentValue);
             }
 
+            _extendedComposingStart = null;
+
             if (serializedDeltas.isNotEmpty) {
               _addRecordingEntry({
                 'type': 'batch',
@@ -395,6 +397,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
         } else {
           _controller.commitPreedit();
         }
+        _extendedComposingStart = null;
       }
     } else if (midComposing != null && oldValue.text != newValue.text) {
       var committed = newValue.text.substring(midComposing.start, midComposing.end);
