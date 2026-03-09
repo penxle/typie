@@ -9,8 +9,9 @@ import {
 } from './paragraph';
 import { allocate, ctrlId, hexToColorref, HWPTAG, makeRecord, pxToHwpunit } from './records';
 import { resolveParaShape } from './styles';
+import type { NodeEntry } from '../core/types';
 import type { BorderFillEntry } from './doc-info';
-import type { HwpConvertContext, InlineSegment, NodeEntry } from './types';
+import type { HwpConvertContext, InlineSegment } from './types';
 
 export type CellMargins = { left: number; right: number; top: number; bottom: number };
 

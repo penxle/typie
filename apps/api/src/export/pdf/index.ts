@@ -6,10 +6,11 @@ import sharp from 'sharp';
 import * as aws from '@/external/aws';
 import { decompressZstd } from '@/utils/compression';
 import { outlineTextToSvg } from '@/utils/font';
-import { computeDesiredSize } from '../external';
+import { computeDesiredSize } from './external';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
-import type { Asset, ImageAsset } from '../external';
+import type { ImageAsset } from '../core/types';
 import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './codec';
+import type { Asset } from './external';
 import type { ExternalElement } from './slate';
 
 const CSS_PX_TO_PDF_PT = 72 / 96;

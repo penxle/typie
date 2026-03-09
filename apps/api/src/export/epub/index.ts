@@ -1,69 +1,46 @@
 // cspell:ignore OEBPS
-import { inArray } from 'drizzle-orm';
 import JSZip from 'jszip';
-import { db, Embeds } from '@/db';
-import { wasm } from '@/utils/wasm';
-import { loadImageAssets } from '../external';
+import { createElement, Fragment } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { parseDocument } from '../core/document';
+import { traverse } from '../core/traverse';
 import { collectUsedFonts, loadFontFiles } from './fonts';
 import { generateContainerXml, generateContentOpf, generateNavXhtml } from './meta';
-import { renderBodyHtml } from './nodes';
+import { epubVisitor } from './nodes';
 import { generateStylesheet } from './styles';
 import { extFromFormat } from './utils';
-import type { DocumentFontFamily } from '@/utils/document';
-import type { ConvertContext } from './nodes';
-import type { NodeEntry } from './types';
-
-type DocumentJson = {
-  settings: Record<string, unknown>;
-  nodes: Record<string, NodeEntry>;
-};
+import type { ExportFontFamily } from '../core/types';
+import type { EpubConvertContext } from './nodes';
 
 export type GenerateDocumentEpubParams = {
   snapshot: Uint8Array;
   title: string;
   author: string;
-  fontFamilies: DocumentFontFamily[];
+  fonts: ExportFontFamily[];
 };
 
 export async function generateDocumentEpub(params: GenerateDocumentEpubParams): Promise<Uint8Array> {
-  const { snapshot, title, author, fontFamilies } = params;
+  const { title, author, fonts } = params;
 
-  const json = (await wasm.snapshotToJson(snapshot)) as unknown as DocumentJson;
-
-  // 외부 에셋 로딩
-  const imageIds = collectNodeIds(json.nodes, 'image');
-  const embedIds = collectNodeIds(json.nodes, 'embed');
-  const [assets, embeds] = await Promise.all([loadImageAssets(imageIds), loadEmbeds(embedIds)]);
-
-  // 문서 기본 스타일 추출
-  const rootId = Object.keys(json.nodes).find((id) => json.nodes[id].type === 'root');
-  if (!rootId) {
-    throw new Error('Root node not found in document');
-  }
-
-  const rootEntry = json.nodes[rootId];
-  const cascadeAttrs = rootEntry.cascade_attrs as Record<string, unknown> | undefined;
-  const defaultFont = (cascadeAttrs?.['style:font_family'] as string) ?? 'Pretendard';
-  const defaultFontSizePt = ((cascadeAttrs?.['style:font_size'] as number) ?? 1200) / 100;
-  const defaultLineHeight = (cascadeAttrs?.['paragraph:line_height'] as number) ?? 160;
-  const paragraphIndentPx = (((json.settings.paragraph_indent as number) ?? 100) / 100) * 16;
-  const blockGapPx = (((json.settings.block_gap as number) ?? 100) / 100) * 16;
+  const parsed = await parseDocument(params.snapshot);
+  const { defaults } = parsed;
 
   // 폰트 수집 및 로딩
-  const usedFonts = collectUsedFonts(json.nodes, defaultFont);
-  const fontFiles = await loadFontFiles(usedFonts, fontFamilies);
+  const usedFonts = collectUsedFonts(parsed.nodes, defaults.fontFamily);
+  const fontFiles = await loadFontFiles(usedFonts, fonts);
 
-  // HTML 렌더링
-  const ctx: ConvertContext = { nodes: json.nodes, assets, embeds };
-  const bodyHtml = renderBodyHtml(rootEntry.children ?? [], ctx);
+  // Visitor 패턴으로 HTML 렌더링
+  const ctx: EpubConvertContext = { nodes: parsed.nodes };
+  const bodyNodes = traverse(parsed, epubVisitor, ctx);
+  const bodyHtml = renderToStaticMarkup(createElement(Fragment, null, ...bodyNodes));
 
   // CSS 생성
   const stylesheet = generateStylesheet(fontFiles, {
-    fontFamily: defaultFont,
-    fontSizePt: defaultFontSizePt,
-    lineHeight: defaultLineHeight,
-    blockGapPx,
-    paragraphIndentPx,
+    fontFamily: defaults.fontFamily,
+    fontSizePt: defaults.fontSizePt100 / 100,
+    lineHeight: defaults.lineHeight,
+    blockGapPx: defaults.blockGapPx,
+    paragraphIndentPx: defaults.paragraphIndentPx,
   });
 
   // EPUB 아카이브 패킹
@@ -79,7 +56,7 @@ ${bodyHtml}
 </body>
 </html>`;
 
-  const imagesMeta = [...assets.entries()].map(([id, asset]) => {
+  const imagesMeta = [...parsed.images.entries()].map(([id, asset]) => {
     const ext = extFromFormat(asset.format);
     return { id, filename: `${id}.${ext}`, mediaType: asset.format, bytes: asset.bytes };
   });
@@ -103,22 +80,6 @@ ${bodyHtml}
   }
 
   return zip.generateAsync({ type: 'uint8array' });
-}
-
-function collectNodeIds(nodes: Record<string, { type: string; id?: string }>, type: string): string[] {
-  const ids: string[] = [];
-  for (const entry of Object.values(nodes)) {
-    if (entry.type === type && entry.id) {
-      ids.push(entry.id);
-    }
-  }
-  return ids;
-}
-
-async function loadEmbeds(ids: string[]): Promise<Map<string, { url: string; title: string | null }>> {
-  if (ids.length === 0) return new Map();
-  const rows = await db.select({ id: Embeds.id, url: Embeds.url, title: Embeds.title }).from(Embeds).where(inArray(Embeds.id, ids));
-  return new Map(rows.map((r) => [r.id, { url: r.url, title: r.title }]));
 }
 
 function escapeXml(str: string): string {

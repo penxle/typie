@@ -1,36 +1,16 @@
 import { ExternalHyperlink, TextRun } from 'docx';
-import { resolveFontEntry } from '../font';
-import { resolveColorToHex } from '../theme';
+import { findFontFamily, nearestWeight } from '../core/fonts';
+import { resolveColorToHex } from '../core/theme';
 import type { XmlComponent } from 'docx';
-import type { FontNameMap } from '../font';
+import type { Annotation, ExportFontFamily, Style, TextSegment } from '../core/types';
 import type { createRubyRun } from './ruby';
-
-type Style =
-  | { type: 'bold' }
-  | { type: 'italic' }
-  | { type: 'underline' }
-  | { type: 'strikethrough' }
-  | { type: 'font_size'; size: number }
-  | { type: 'font_family'; family: string }
-  | { type: 'font_weight'; weight: number }
-  | { type: 'text_color'; color: string }
-  | { type: 'background_color'; color: string }
-  | { type: 'letter_spacing'; spacing: number };
-
-type Annotation = { type: 'link'; href: string } | { type: 'ruby'; text: string };
-
-export type TextSegment = {
-  text: string;
-  styles: Style[];
-  annotations: Annotation[];
-};
 
 type RubyRunFactory = typeof createRubyRun;
 
 export type TextConvertContext = {
   createRubyRun: RubyRunFactory;
   defaultColor?: string;
-  fontNameMap: FontNameMap;
+  fonts: ExportFontFamily[];
   defaultFamilyName: string;
 };
 
@@ -111,8 +91,9 @@ function buildRunOptions(styles: Style[], ctx: TextConvertContext) {
 
   if (hasFontStyle) {
     const family = familyName ?? ctx.defaultFamilyName;
-    const resolved = resolveFontEntry(ctx.fontNameMap, family, weight);
-    opts.font = resolved?.postScriptName ?? family;
+    const fam = findFontFamily(ctx.fonts, family);
+    const font = fam ? nearestWeight(fam.weights, weight) : undefined;
+    opts.font = font?.postScriptName ?? family;
   }
 
   return opts;

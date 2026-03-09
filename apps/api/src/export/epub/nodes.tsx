@@ -1,10 +1,9 @@
-import { createContext, Fragment, useContext } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { resolveColorToHex } from '../theme';
+import { Fragment } from 'react';
+import { resolveColorToHex } from '../core/theme';
 import { extFromFormat } from './utils';
 import type React from 'react';
-import type { ImageAsset } from '../external';
-import type { Annotation, NodeEntry, TextSegment } from './types';
+import type { NodeVisitor } from '../core/traverse';
+import type { Annotation, InlineSegment, NodeEntry, TextSegment } from '../core/types';
 
 const CALLOUT_ICONS: Record<string, string> = {
   info: '\u2139\uFE0F',
@@ -13,340 +12,13 @@ const CALLOUT_ICONS: Record<string, string> = {
   danger: '\uD83D\uDEA8',
 };
 
-export type ConvertContext = {
+export type EpubConvertContext = {
   nodes: Record<string, NodeEntry>;
-  assets: Map<string, ImageAsset>;
-  embeds: Map<string, { url: string; title: string | null }>;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-const EpubContext = createContext<ConvertContext>(null!);
+// --- Inline rendering helpers ---
 
-function useEntry(id: string): NodeEntry | undefined {
-  return useContext(EpubContext).nodes[id];
-}
-
-function useCtx(): ConvertContext {
-  return useContext(EpubContext);
-}
-
-// --- Node dispatcher ---
-
-function Node({ id }: { id: string }) {
-  const entry = useEntry(id);
-  if (!entry) return null;
-
-  switch (entry.type) {
-    case 'paragraph': {
-      return <Paragraph entry={entry} />;
-    }
-    case 'blockquote': {
-      return <Blockquote entry={entry} />;
-    }
-    case 'callout': {
-      return <Callout entry={entry} />;
-    }
-    case 'bullet_list': {
-      return (
-        <ul>
-          <Children entry={entry} />
-        </ul>
-      );
-    }
-    case 'ordered_list': {
-      return (
-        <ol>
-          <Children entry={entry} />
-        </ol>
-      );
-    }
-    case 'list_item': {
-      return <ListItem entry={entry} />;
-    }
-    case 'table': {
-      return <Table entry={entry} />;
-    }
-    case 'fold': {
-      return <Fold entry={entry} />;
-    }
-    case 'horizontal_rule': {
-      return <hr />;
-    }
-    case 'page_break': {
-      return null;
-    }
-    case 'image': {
-      return <Image entry={entry} />;
-    }
-    case 'embed': {
-      return <Embed entry={entry} />;
-    }
-    case 'file': {
-      return <Placeholder>[파일]</Placeholder>;
-    }
-    case 'archived': {
-      return <Placeholder>[보관된 블록]</Placeholder>;
-    }
-    default: {
-      return null;
-    }
-  }
-}
-
-// --- Block components ---
-
-function Paragraph({ entry, noIndent, prefix }: { entry: NodeEntry; noIndent?: boolean; prefix?: string }) {
-  const align = entry.align as string | undefined;
-  const lineHeight = entry.line_height as number | undefined;
-  const style: React.CSSProperties = {};
-  if (noIndent) style.textIndent = 0;
-  if (align && align !== 'left') style.textAlign = align as React.CSSProperties['textAlign'];
-  if (lineHeight) style.lineHeight = `${lineHeight}%`;
-
-  return (
-    <p style={Object.keys(style).length > 0 ? style : undefined}>
-      {prefix}
-      <InlineContent entry={entry} />
-    </p>
-  );
-}
-
-function Blockquote({ entry }: { entry: NodeEntry }) {
-  const variant = (entry as { variant?: string }).variant ?? 'left_line';
-
-  switch (variant) {
-    case 'left_line': {
-      return (
-        <blockquote className="left-line">
-          <ParagraphChildren entry={entry} />
-        </blockquote>
-      );
-    }
-    case 'left_quote': {
-      return (
-        <blockquote style={{ marginLeft: 0 }}>
-          <PrefixedChildren entry={entry} prefix={'\u275D\u2002'} />
-        </blockquote>
-      );
-    }
-    case 'message_sent': {
-      return (
-        <blockquote className="message-sent">
-          <ParagraphChildren entry={entry} />
-        </blockquote>
-      );
-    }
-    case 'message_received': {
-      return (
-        <blockquote className="message-received">
-          <ParagraphChildren entry={entry} />
-        </blockquote>
-      );
-    }
-    default: {
-      return (
-        <blockquote>
-          <ParagraphChildren entry={entry} />
-        </blockquote>
-      );
-    }
-  }
-}
-
-function Callout({ entry }: { entry: NodeEntry }) {
-  const variant = (entry as { variant?: string }).variant ?? 'info';
-  const icon = CALLOUT_ICONS[variant] ?? CALLOUT_ICONS.info;
-
-  return (
-    <blockquote className="callout">
-      <PrefixedChildren entry={entry} prefix={`${icon} `} />
-    </blockquote>
-  );
-}
-
-function ListItem({ entry }: { entry: NodeEntry }) {
-  const ctx = useCtx();
-  const parts: React.ReactNode[] = [];
-
-  for (const childId of entry.children ?? []) {
-    const childEntry = ctx.nodes[childId];
-    if (!childEntry) continue;
-    if (childEntry.type === 'paragraph') {
-      parts.push(<InlineContent key={childId} entry={childEntry} />);
-    } else {
-      parts.push(<Node key={childId} id={childId} />);
-    }
-  }
-
-  return (
-    <li>
-      {parts.map((part, i) => (
-        <Fragment key={i}>
-          {i > 0 && <br />}
-          {part}
-        </Fragment>
-      ))}
-    </li>
-  );
-}
-
-function Table({ entry }: { entry: NodeEntry }) {
-  const ctx = useCtx();
-  const borderStyle = (entry as { border_style?: string }).border_style;
-  const hasBorder = borderStyle !== 'none';
-
-  return (
-    <table style={hasBorder ? { border: '1px solid #cccccc' } : undefined}>
-      <tbody>
-        {(entry.children ?? []).map((childId) => {
-          const rowEntry = ctx.nodes[childId];
-          if (!rowEntry || rowEntry.type !== 'table_row') return null;
-
-          return (
-            <tr key={childId}>
-              {(rowEntry.children ?? []).map((cellId) => {
-                const cellEntry = ctx.nodes[cellId];
-                if (!cellEntry || cellEntry.type !== 'table_cell') return null;
-
-                const colWidth = (cellEntry as { col_width?: number | null }).col_width;
-                const cellStyle: React.CSSProperties = {};
-                if (hasBorder) cellStyle.border = '1px solid #cccccc';
-                if (colWidth) cellStyle.width = `${colWidth}%`;
-
-                return (
-                  <td key={cellId} style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}>
-                    <Children entry={cellEntry} />
-                  </td>
-                );
-              })}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function Fold({ entry }: { entry: NodeEntry }) {
-  const ctx = useCtx();
-  let titleEntry: NodeEntry | undefined;
-  let contentEntry: NodeEntry | undefined;
-
-  for (const childId of entry.children ?? []) {
-    const childEntry = ctx.nodes[childId];
-    if (!childEntry) continue;
-    if (childEntry.type === 'fold_title') titleEntry = childEntry;
-    else if (childEntry.type === 'fold_content') contentEntry = childEntry;
-  }
-
-  return (
-    <blockquote className="fold">
-      <details>
-        <summary>{titleEntry && <InlineContent entry={titleEntry} />}</summary>
-        {contentEntry && <Children entry={contentEntry} />}
-      </details>
-    </blockquote>
-  );
-}
-
-function Image({ entry }: { entry: NodeEntry }) {
-  const ctx = useCtx();
-  const id = entry.id as string | undefined;
-  const proportion = (entry as { proportion?: number }).proportion ?? 1;
-
-  if (!id) return <Placeholder>[이미지]</Placeholder>;
-
-  const asset = ctx.assets.get(id);
-  if (!asset) return <Placeholder>[이미지를 불러올 수 없습니다]</Placeholder>;
-
-  const ext = extFromFormat(asset.format);
-  const widthPercent = Math.round(proportion * 100);
-
-  return (
-    <p style={{ textAlign: 'center' }}>
-      <img src={`images/${id}.${ext}`} style={{ width: `${widthPercent}%` }} alt="" />
-    </p>
-  );
-}
-
-function Embed({ entry }: { entry: NodeEntry }) {
-  const ctx = useCtx();
-  const embedId = entry.id as string | undefined;
-  const embedData = embedId ? ctx.embeds.get(embedId) : undefined;
-
-  if (!embedData) return <Placeholder>[임베드]</Placeholder>;
-
-  const label = embedData.title || embedData.url;
-  return (
-    <Placeholder>
-      <a href={/^https?:|^mailto:/i.test(embedData.url) ? embedData.url : '#'}>{label}</a>
-    </Placeholder>
-  );
-}
-
-function Placeholder({ children }: { children: React.ReactNode }) {
-  return <p style={{ textAlign: 'center', opacity: 0.5 }}>{children}</p>;
-}
-
-// --- Children renderers ---
-
-function Children({ entry }: { entry: NodeEntry }) {
-  return (entry.children ?? []).map((childId) => <Node key={childId} id={childId} />);
-}
-
-function ParagraphChildren({ entry }: { entry: NodeEntry }) {
-  const ctx = useCtx();
-  return (entry.children ?? []).map((childId) => {
-    const childEntry = ctx.nodes[childId];
-    if (!childEntry || childEntry.type !== 'paragraph') return null;
-    return <Paragraph key={childId} entry={childEntry} noIndent />;
-  });
-}
-
-function PrefixedChildren({ entry, prefix }: { entry: NodeEntry; prefix: string }) {
-  const ctx = useCtx();
-  let prefixUsed = false;
-
-  return (entry.children ?? []).map((childId) => {
-    const childEntry = ctx.nodes[childId];
-    if (!childEntry) return null;
-
-    if (childEntry.type === 'paragraph') {
-      const thisPrefix = prefixUsed ? undefined : prefix;
-      prefixUsed = true;
-      return <Paragraph key={childId} entry={childEntry} noIndent prefix={thisPrefix} />;
-    }
-
-    return <Node key={childId} id={childId} />;
-  });
-}
-
-// --- Inline content ---
-
-function InlineContent({ entry }: { entry: NodeEntry }) {
-  const ctx = useCtx();
-  return (entry.children ?? []).map((childId, i) => {
-    const childEntry = ctx.nodes[childId];
-    if (!childEntry) return null;
-
-    if (childEntry.type === 'text') {
-      const segments = (childEntry.text as TextSegment[]) ?? [];
-      return (
-        <Fragment key={i}>
-          {segments.map((seg, j) => (
-            <Segment key={j} seg={seg} />
-          ))}
-        </Fragment>
-      );
-    } else if (childEntry.type === 'hard_break') {
-      return <br key={i} />;
-    }
-
-    return null;
-  });
-}
-
-function Segment({ seg }: { seg: TextSegment }) {
+function renderSegment(seg: TextSegment, key: number): React.ReactNode {
   let content: React.ReactNode = seg.text;
 
   const style: React.CSSProperties = {};
@@ -430,17 +102,224 @@ function Segment({ seg }: { seg: TextSegment }) {
     content = <a href={/^https?:|^mailto:/i.test(link.href) ? link.href : '#'}>{content}</a>;
   }
 
-  return content;
+  return <Fragment key={key}>{content}</Fragment>;
 }
 
-// --- Public API ---
+function renderSegments(segments: InlineSegment[]): React.ReactNode {
+  return segments.map((seg, i) => {
+    switch (seg.type) {
+      case 'text': {
+        return renderSegment(seg, i);
+      }
+      case 'hard_break': {
+        return <br key={i} />;
+      }
+      case 'page_break': {
+        return null;
+      }
+    }
+  });
+}
 
-export function renderBodyHtml(rootChildren: string[], ctx: ConvertContext): string {
-  return renderToStaticMarkup(
-    <EpubContext value={ctx}>
-      {rootChildren.map((childId) => (
-        <Node key={childId} id={childId} />
-      ))}
-    </EpubContext>,
+/** Render inline content from a raw paragraph entry (for container handlers) */
+function renderInlineContent(entry: NodeEntry, ctx: EpubConvertContext): React.ReactNode {
+  return (entry.children ?? []).map((childId, i) => {
+    const childEntry = ctx.nodes[childId];
+    if (!childEntry) return null;
+
+    if (childEntry.type === 'text') {
+      const segments = (childEntry.text ?? []) as TextSegment[];
+      return <Fragment key={i}>{segments.map((seg, j) => renderSegment(seg, j))}</Fragment>;
+    } else if (childEntry.type === 'hard_break') {
+      return <br key={i} />;
+    }
+
+    return null;
+  });
+}
+
+function renderParagraphEl(entry: NodeEntry, ctx: EpubConvertContext, opts?: { noIndent?: boolean; prefix?: string }): React.ReactNode {
+  const align = entry.align as string | undefined;
+  const lineHeight = entry.line_height as number | undefined;
+  const style: React.CSSProperties = {};
+  if (opts?.noIndent) style.textIndent = 0;
+  if (align && align !== 'left') style.textAlign = align as React.CSSProperties['textAlign'];
+  if (lineHeight) style.lineHeight = `${lineHeight}%`;
+
+  return (
+    <p style={Object.keys(style).length > 0 ? style : undefined}>
+      {opts?.prefix}
+      {renderInlineContent(entry, ctx)}
+    </p>
   );
 }
+
+function renderPlaceholder(children: React.ReactNode): React.ReactNode {
+  return <p style={{ textAlign: 'center', opacity: 0.5 }}>{children}</p>;
+}
+
+// --- Container helper renderers ---
+
+function renderParagraphChildren(entry: NodeEntry, ctx: EpubConvertContext): React.ReactNode {
+  return (entry.children ?? []).map((childId) => {
+    const childEntry = ctx.nodes[childId];
+    if (!childEntry || childEntry.type !== 'paragraph') return null;
+    return <Fragment key={childId}>{renderParagraphEl(childEntry, ctx, { noIndent: true })}</Fragment>;
+  });
+}
+
+function renderPrefixedChildren(entry: NodeEntry, ctx: EpubConvertContext, prefix: string): React.ReactNode {
+  let prefixUsed = false;
+
+  return (entry.children ?? []).map((childId) => {
+    const childEntry = ctx.nodes[childId];
+    if (!childEntry || childEntry.type !== 'paragraph') return null;
+
+    const thisPrefix = prefixUsed ? undefined : prefix;
+    prefixUsed = true;
+    return <Fragment key={childId}>{renderParagraphEl(childEntry, ctx, { noIndent: true, prefix: thisPrefix })}</Fragment>;
+  });
+}
+
+// --- Visitor ---
+
+export const epubVisitor: NodeVisitor<EpubConvertContext, React.ReactNode> = {
+  paragraph: (node) => {
+    const align = node.attrs.align as string | undefined;
+    const lineHeight = node.attrs.line_height as number | undefined;
+    const style: React.CSSProperties = {};
+    if (align && align !== 'left') style.textAlign = align as React.CSSProperties['textAlign'];
+    if (lineHeight) style.lineHeight = `${lineHeight}%`;
+
+    return <p style={Object.keys(style).length > 0 ? style : undefined}>{renderSegments(node.segments)}</p>;
+  },
+
+  table: (entry, convertChildren, ctx) => {
+    const borderStyle = (entry as { border_style?: string }).border_style;
+    const hasBorder = borderStyle !== 'none';
+
+    return (
+      <table style={hasBorder ? { border: '1px solid #cccccc' } : undefined}>
+        <tbody>
+          {(entry.children ?? []).map((childId) => {
+            const rowEntry = ctx.nodes[childId];
+            if (!rowEntry || rowEntry.type !== 'table_row') return null;
+
+            return (
+              <tr key={childId}>
+                {(rowEntry.children ?? []).map((cellId) => {
+                  const cellEntry = ctx.nodes[cellId];
+                  if (!cellEntry || cellEntry.type !== 'table_cell') return null;
+
+                  const colWidth = (cellEntry as { col_width?: number | null }).col_width;
+                  const cellStyle: React.CSSProperties = {};
+                  if (hasBorder) cellStyle.border = '1px solid #cccccc';
+                  if (colWidth) cellStyle.width = `${colWidth}%`;
+
+                  const cellChildren = convertChildren(cellEntry);
+                  return (
+                    <td key={cellId} style={Object.keys(cellStyle).length > 0 ? cellStyle : undefined}>
+                      {cellChildren}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  },
+
+  image: (node, asset) => {
+    if (asset.width <= 0 || asset.height <= 0) {
+      return renderPlaceholder('[이미지를 불러올 수 없습니다]');
+    }
+
+    const proportion = (node.attrs.proportion as number) ?? 1;
+    const ext = extFromFormat(asset.format);
+    const widthPercent = Math.round(proportion * 100);
+
+    return (
+      <p style={{ textAlign: 'center' }}>
+        <img src={`images/${node.id}.${ext}`} style={{ width: `${widthPercent}%` }} alt="" />
+      </p>
+    );
+  },
+
+  file: () => renderPlaceholder('[파일]'),
+
+  embed: (_id, data) => {
+    if (!data) return renderPlaceholder('[임베드]');
+
+    const label = data.title || data.url;
+    return renderPlaceholder(<a href={/^https?:|^mailto:/i.test(data.url) ? data.url : '#'}>{label}</a>);
+  },
+
+  archived: () => renderPlaceholder('[보관된 블록]'),
+
+  horizontalRule: () => <hr />,
+
+  bulletList: (items) => (
+    <ul>
+      {items.map((item, i) => (
+        <li key={i}>{item}</li>
+      ))}
+    </ul>
+  ),
+
+  orderedList: (items) => (
+    <ol>
+      {items.map((item, i) => (
+        <li key={i}>{item}</li>
+      ))}
+    </ol>
+  ),
+
+  blockquote: (entry, variant, _convertChildren, ctx) => {
+    switch (variant) {
+      case 'left_line': {
+        return <blockquote className="left-line">{renderParagraphChildren(entry, ctx)}</blockquote>;
+      }
+      case 'left_quote': {
+        return <blockquote style={{ marginLeft: 0 }}>{renderPrefixedChildren(entry, ctx, '\u275D\u2002')}</blockquote>;
+      }
+      case 'message_sent': {
+        return <blockquote className="message-sent">{renderParagraphChildren(entry, ctx)}</blockquote>;
+      }
+      case 'message_received': {
+        return <blockquote className="message-received">{renderParagraphChildren(entry, ctx)}</blockquote>;
+      }
+      default: {
+        return <blockquote>{renderParagraphChildren(entry, ctx)}</blockquote>;
+      }
+    }
+  },
+
+  callout: (entry, variant, _convertChildren, ctx) => {
+    const icon = CALLOUT_ICONS[variant] ?? CALLOUT_ICONS.info;
+
+    return <blockquote className="callout">{renderPrefixedChildren(entry, ctx, `${icon} `)}</blockquote>;
+  },
+
+  fold: (entry, convertChildren, ctx) => {
+    let titleEntry: NodeEntry | undefined;
+    let contentEntry: NodeEntry | undefined;
+
+    for (const childId of entry.children ?? []) {
+      const childEntry = ctx.nodes[childId];
+      if (!childEntry) continue;
+      if (childEntry.type === 'fold_title') titleEntry = childEntry;
+      else if (childEntry.type === 'fold_content') contentEntry = childEntry;
+    }
+
+    return (
+      <blockquote className="fold">
+        <details>
+          <summary>{titleEntry && renderInlineContent(titleEntry, ctx)}</summary>
+          {contentEntry && convertChildren(contentEntry)}
+        </details>
+      </blockquote>
+    );
+  },
+};
