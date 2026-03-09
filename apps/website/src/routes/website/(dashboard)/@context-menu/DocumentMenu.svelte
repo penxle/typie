@@ -14,7 +14,7 @@
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import DotIcon from '~icons/lucide/dot';
-  import DownloadIcon from '~icons/lucide/download';
+  import FileDownIcon from '~icons/lucide/file-down';
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
@@ -309,7 +309,7 @@
 
 <HorizontalDivider color="secondary" />
 
-<MenuItem icon={DownloadIcon} onclick={() => (app.state.exportOpen = entity.slug)}>파일로 내보내기</MenuItem>
+<MenuItem icon={FileDownIcon} onclick={() => (app.state.exportOpen = entity.slug)}>파일로 내보내기</MenuItem>
 
 <HorizontalDivider color="secondary" />
 

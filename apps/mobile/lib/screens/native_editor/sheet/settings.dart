@@ -15,24 +15,24 @@ import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/tappable.dart';
 
-const double _minContentSizeMm = 50;
-const double _minPageSizeMm = 100;
-const double _maxPageSizeMm = 2000;
+const double minContentSizeMm = 50;
+const double minPageSizeMm = 100;
+const double maxPageSizeMm = 2000;
 
-const double _mmToPxFactor = 96 / 25.4;
-const double _pxToMmFactor = 25.4 / 96;
+const double mmToPxFactor = 96 / 25.4;
+const double pxToMmFactor = 25.4 / 96;
 
-double _mmToPx(double mm) => (mm * _mmToPxFactor).roundToDouble();
-double _pxToMm(double px) => (px * _pxToMmFactor).roundToDouble();
+double mmToPx(double mm) => (mm * mmToPxFactor).roundToDouble();
+double pxToMm(double px) => (px * pxToMmFactor).roundToDouble();
 
-const Map<String, Map<String, double>> _pageSizeMap = {
+const Map<String, Map<String, double>> pageSizeMap = {
   'a4': {'width': 210, 'height': 297},
   'a5': {'width': 148, 'height': 210},
   'b5': {'width': 176, 'height': 250},
   'b6': {'width': 125, 'height': 176},
 };
 
-const Map<String, Map<String, double>> _defaultPageMargins = {
+const Map<String, Map<String, double>> defaultPageMargins = {
   'a4': {'top': 25, 'bottom': 25, 'left': 25, 'right': 25},
   'a5': {'top': 20, 'bottom': 20, 'left': 20, 'right': 20},
   'b5': {'top': 15, 'bottom': 15, 'left': 15, 'right': 15},
@@ -53,18 +53,18 @@ class SettingsSheet extends HookWidget {
 
     void handleLayoutModeChange(String mode) {
       if (mode == 'paginated') {
-        final preset = _pageSizeMap['a4']!;
-        final margins = _defaultPageMargins['a4']!;
+        final preset = pageSizeMap['a4']!;
+        final margins = defaultPageMargins['a4']!;
         controller.dispatch({
           'type': 'setLayoutMode',
           'mode': {
             'type': 'paginated',
-            'pageWidth': _mmToPx(preset['width']!),
-            'pageHeight': _mmToPx(preset['height']!),
-            'pageMarginTop': _mmToPx(margins['top']!),
-            'pageMarginBottom': _mmToPx(margins['bottom']!),
-            'pageMarginLeft': _mmToPx(margins['left']!),
-            'pageMarginRight': _mmToPx(margins['right']!),
+            'pageWidth': mmToPx(preset['width']!),
+            'pageHeight': mmToPx(preset['height']!),
+            'pageMarginTop': mmToPx(margins['top']!),
+            'pageMarginBottom': mmToPx(margins['bottom']!),
+            'pageMarginLeft': mmToPx(margins['left']!),
+            'pageMarginRight': mmToPx(margins['right']!),
           },
         });
       } else {
@@ -213,11 +213,11 @@ class _Option extends StatelessWidget {
   }
 }
 
-String _getPageSizePreset(PaginatedLayout layoutMode) {
-  final widthMm = _pxToMm(layoutMode.pageWidth);
-  final heightMm = _pxToMm(layoutMode.pageHeight);
+String getPageSizePreset(PaginatedLayout layoutMode) {
+  final widthMm = pxToMm(layoutMode.pageWidth);
+  final heightMm = pxToMm(layoutMode.pageHeight);
 
-  for (final entry in _pageSizeMap.entries) {
+  for (final entry in pageSizeMap.entries) {
     if (entry.value['width'] == widthMm && entry.value['height'] == heightMm) {
       return entry.key;
     }
@@ -225,24 +225,24 @@ String _getPageSizePreset(PaginatedLayout layoutMode) {
   return 'custom';
 }
 
-double _getMaxMargin(String side, PaginatedLayout layoutMode) {
-  final widthMm = _pxToMm(layoutMode.pageWidth);
-  final heightMm = _pxToMm(layoutMode.pageHeight);
-  final marginTopMm = _pxToMm(layoutMode.pageMarginTop);
-  final marginBottomMm = _pxToMm(layoutMode.pageMarginBottom);
-  final marginLeftMm = _pxToMm(layoutMode.pageMarginLeft);
-  final marginRightMm = _pxToMm(layoutMode.pageMarginRight);
+double getMaxMargin(String side, PaginatedLayout layoutMode) {
+  final widthMm = pxToMm(layoutMode.pageWidth);
+  final heightMm = pxToMm(layoutMode.pageHeight);
+  final marginTopMm = pxToMm(layoutMode.pageMarginTop);
+  final marginBottomMm = pxToMm(layoutMode.pageMarginBottom);
+  final marginLeftMm = pxToMm(layoutMode.pageMarginLeft);
+  final marginRightMm = pxToMm(layoutMode.pageMarginRight);
 
   return switch (side) {
-    'left' => (widthMm - marginRightMm - _minContentSizeMm).clamp(0, double.infinity),
-    'right' => (widthMm - marginLeftMm - _minContentSizeMm).clamp(0, double.infinity),
-    'top' => (heightMm - marginBottomMm - _minContentSizeMm).clamp(0, double.infinity),
-    'bottom' => (heightMm - marginTopMm - _minContentSizeMm).clamp(0, double.infinity),
+    'left' => (widthMm - marginRightMm - minContentSizeMm).clamp(0, double.infinity),
+    'right' => (widthMm - marginLeftMm - minContentSizeMm).clamp(0, double.infinity),
+    'top' => (heightMm - marginBottomMm - minContentSizeMm).clamp(0, double.infinity),
+    'bottom' => (heightMm - marginTopMm - minContentSizeMm).clamp(0, double.infinity),
     _ => 0,
   };
 }
 
-Map<String, double> _normalizeMarginsForPageSize({
+Map<String, double> normalizeMarginsForPageSize({
   required double pageWidthMm,
   required double pageHeightMm,
   required double marginTopMm,
@@ -257,7 +257,7 @@ Map<String, double> _normalizeMarginsForPageSize({
   }) {
     final start = startMarginMm.clamp(0, double.infinity).toDouble();
     final end = endMarginMm.clamp(0, double.infinity).toDouble();
-    final maxTotalMargin = (pageSizeMm - _minContentSizeMm).clamp(0, double.infinity).toDouble();
+    final maxTotalMargin = (pageSizeMm - minContentSizeMm).clamp(0, double.infinity).toDouble();
     final totalMargin = start + end;
 
     if (totalMargin <= maxTotalMargin) {
@@ -297,24 +297,24 @@ class _PageSizeSection extends StatelessWidget {
         return;
       }
 
-      final size = _pageSizeMap[preset]!;
-      final margins = _defaultPageMargins[preset]!;
+      final size = pageSizeMap[preset]!;
+      final margins = defaultPageMargins[preset]!;
       dispatch({
         'type': 'setLayoutMode',
         'mode': {
           'type': 'paginated',
-          'pageWidth': _mmToPx(size['width']!),
-          'pageHeight': _mmToPx(size['height']!),
-          'pageMarginTop': _mmToPx(margins['top']!),
-          'pageMarginBottom': _mmToPx(margins['bottom']!),
-          'pageMarginLeft': _mmToPx(margins['left']!),
-          'pageMarginRight': _mmToPx(margins['right']!),
+          'pageWidth': mmToPx(size['width']!),
+          'pageHeight': mmToPx(size['height']!),
+          'pageMarginTop': mmToPx(margins['top']!),
+          'pageMarginBottom': mmToPx(margins['bottom']!),
+          'pageMarginLeft': mmToPx(margins['left']!),
+          'pageMarginRight': mmToPx(margins['right']!),
         },
       });
     }
 
-    final widthMm = _pxToMm(layoutMode.pageWidth);
-    final heightMm = _pxToMm(layoutMode.pageHeight);
+    final widthMm = pxToMm(layoutMode.pageWidth);
+    final heightMm = pxToMm(layoutMode.pageHeight);
 
     return HookForm(
       submitMode: HookFormSubmitMode.onChange,
@@ -333,7 +333,7 @@ class _PageSizeSection extends StatelessWidget {
               label: '페이지 크기',
               trailing: HookFormSelect(
                 name: 'pageSize',
-                initialValue: _getPageSizePreset(layoutMode),
+                initialValue: getPageSizePreset(layoutMode),
                 items: const [
                   HookFormSelectItem(label: 'A4 (210×297)', value: 'a4'),
                   HookFormSelectItem(label: 'A5 (148×210)', value: 'a5'),
@@ -384,7 +384,7 @@ class _PageSizeSection extends StatelessWidget {
 
   Future<void> _editPageSize(BuildContext context, String dimension) async {
     final currentValuePx = dimension == 'width' ? layoutMode.pageWidth : layoutMode.pageHeight;
-    final currentValue = _pxToMm(currentValuePx);
+    final currentValue = pxToMm(currentValuePx);
     final label = dimension == 'width' ? '너비' : '높이';
     num? newValue;
 
@@ -396,13 +396,13 @@ class _PageSizeSection extends StatelessWidget {
 
       final value = num.parse(valueStr);
 
-      if (value < _minPageSizeMm) {
-        form.setError('value', '최소 ${_minPageSizeMm.toStringAsFixed(0)} mm 이상이어야 합니다');
+      if (value < minPageSizeMm) {
+        form.setError('value', '최소 ${minPageSizeMm.toStringAsFixed(0)} mm 이상이어야 합니다');
         return false;
       }
 
-      if (value > _maxPageSizeMm) {
-        form.setError('value', '최대 ${_maxPageSizeMm.toStringAsFixed(0)} mm 이하여야 합니다');
+      if (value > maxPageSizeMm) {
+        form.setError('value', '최대 ${maxPageSizeMm.toStringAsFixed(0)} mm 이하여야 합니다');
         return false;
       }
 
@@ -454,26 +454,26 @@ class _PageSizeSection extends StatelessWidget {
     );
 
     if (newValue != null && newValue != currentValue) {
-      final nextWidthMm = dimension == 'width' ? newValue!.toDouble() : _pxToMm(layoutMode.pageWidth);
-      final nextHeightMm = dimension == 'height' ? newValue!.toDouble() : _pxToMm(layoutMode.pageHeight);
-      final normalizedMargins = _normalizeMarginsForPageSize(
+      final nextWidthMm = dimension == 'width' ? newValue!.toDouble() : pxToMm(layoutMode.pageWidth);
+      final nextHeightMm = dimension == 'height' ? newValue!.toDouble() : pxToMm(layoutMode.pageHeight);
+      final normalizedMargins = normalizeMarginsForPageSize(
         pageWidthMm: nextWidthMm,
         pageHeightMm: nextHeightMm,
-        marginTopMm: _pxToMm(layoutMode.pageMarginTop),
-        marginBottomMm: _pxToMm(layoutMode.pageMarginBottom),
-        marginLeftMm: _pxToMm(layoutMode.pageMarginLeft),
-        marginRightMm: _pxToMm(layoutMode.pageMarginRight),
+        marginTopMm: pxToMm(layoutMode.pageMarginTop),
+        marginBottomMm: pxToMm(layoutMode.pageMarginBottom),
+        marginLeftMm: pxToMm(layoutMode.pageMarginLeft),
+        marginRightMm: pxToMm(layoutMode.pageMarginRight),
       );
       dispatch({
         'type': 'setLayoutMode',
         'mode': {
           'type': 'paginated',
-          'pageWidth': _mmToPx(nextWidthMm),
-          'pageHeight': _mmToPx(nextHeightMm),
-          'pageMarginTop': _mmToPx(normalizedMargins['top']!),
-          'pageMarginBottom': _mmToPx(normalizedMargins['bottom']!),
-          'pageMarginLeft': _mmToPx(normalizedMargins['left']!),
-          'pageMarginRight': _mmToPx(normalizedMargins['right']!),
+          'pageWidth': mmToPx(nextWidthMm),
+          'pageHeight': mmToPx(nextHeightMm),
+          'pageMarginTop': mmToPx(normalizedMargins['top']!),
+          'pageMarginBottom': mmToPx(normalizedMargins['bottom']!),
+          'pageMarginLeft': mmToPx(normalizedMargins['left']!),
+          'pageMarginRight': mmToPx(normalizedMargins['right']!),
         },
       });
     }
@@ -513,10 +513,10 @@ class _PageMarginSection extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _marginButton(context, 'top', '위', _pxToMm(layoutMode.pageMarginTop)),
-            _marginButton(context, 'bottom', '아래', _pxToMm(layoutMode.pageMarginBottom)),
-            _marginButton(context, 'left', '왼쪽', _pxToMm(layoutMode.pageMarginLeft)),
-            _marginButton(context, 'right', '오른쪽', _pxToMm(layoutMode.pageMarginRight)),
+            _marginButton(context, 'top', '위', pxToMm(layoutMode.pageMarginTop)),
+            _marginButton(context, 'bottom', '아래', pxToMm(layoutMode.pageMarginBottom)),
+            _marginButton(context, 'left', '왼쪽', pxToMm(layoutMode.pageMarginLeft)),
+            _marginButton(context, 'right', '오른쪽', pxToMm(layoutMode.pageMarginRight)),
           ],
         ),
       ],
@@ -531,7 +531,7 @@ class _PageMarginSection extends StatelessWidget {
       'right' => layoutMode.pageMarginRight,
       _ => 0.0,
     };
-    final currentValue = _pxToMm(currentValuePx);
+    final currentValue = pxToMm(currentValuePx);
 
     final label = switch (side) {
       'top' => '위',
@@ -550,7 +550,7 @@ class _PageMarginSection extends StatelessWidget {
       }
 
       final value = num.parse(valueStr);
-      final maxMargin = _getMaxMargin(side, layoutMode);
+      final maxMargin = getMaxMargin(side, layoutMode);
 
       if (value > maxMargin) {
         form.setError('value', '최대 ${maxMargin.toStringAsFixed(0)}mm까지 가능합니다');
@@ -571,7 +571,7 @@ class _PageMarginSection extends StatelessWidget {
           }
         },
         builder: (context, form) {
-          final maxMargin = _getMaxMargin(side, layoutMode);
+          final maxMargin = getMaxMargin(side, layoutMode);
           return ConfirmModal(
             title: '$label 여백 설정',
             confirmText: '저장',
@@ -615,10 +615,10 @@ class _PageMarginSection extends StatelessWidget {
           'type': 'paginated',
           'pageWidth': layoutMode.pageWidth,
           'pageHeight': layoutMode.pageHeight,
-          'pageMarginTop': side == 'top' ? _mmToPx(newValue!.toDouble()) : layoutMode.pageMarginTop,
-          'pageMarginBottom': side == 'bottom' ? _mmToPx(newValue!.toDouble()) : layoutMode.pageMarginBottom,
-          'pageMarginLeft': side == 'left' ? _mmToPx(newValue!.toDouble()) : layoutMode.pageMarginLeft,
-          'pageMarginRight': side == 'right' ? _mmToPx(newValue!.toDouble()) : layoutMode.pageMarginRight,
+          'pageMarginTop': side == 'top' ? mmToPx(newValue!.toDouble()) : layoutMode.pageMarginTop,
+          'pageMarginBottom': side == 'bottom' ? mmToPx(newValue!.toDouble()) : layoutMode.pageMarginBottom,
+          'pageMarginLeft': side == 'left' ? mmToPx(newValue!.toDouble()) : layoutMode.pageMarginLeft,
+          'pageMarginRight': side == 'right' ? mmToPx(newValue!.toDouble()) : layoutMode.pageMarginRight,
         },
       });
     }
