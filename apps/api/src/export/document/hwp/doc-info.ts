@@ -24,7 +24,7 @@ export class IdTable<T> {
   }
 }
 
-export type FontEntry = { name: string; postScriptName?: string; fullName?: string };
+export type FontEntry = { name: string; postScriptName: string };
 
 export type CharShapeEntry = {
   fontId: number;
@@ -112,25 +112,17 @@ function buildIdMappings(tables: DocInfoTables): Uint8Array {
   return buf;
 }
 
-/** FACE_NAME: flags=0xA1, name=postScriptName, 대체 글꼴=fullName, 기본 글꼴=fullName */
-function buildFaceName(fullName: string, postScriptName: string): Uint8Array {
-  const nameBytes = encodeUTF16LE(postScriptName);
-  const subBytes = encodeUTF16LE(fullName);
-  const defBytes = encodeUTF16LE(fullName);
-  const { buf, view } = allocate(3 + nameBytes.byteLength + 1 + 2 + subBytes.byteLength + 2 + defBytes.byteLength);
-  view.setUint8(0, 0xa1); // 0x80 | 0x20 | 0x01
-  view.setUint16(1, postScriptName.length, true);
+/** FACE_NAME: flags=0x21, name + 기본 글꼴 */
+function buildFaceName(name: string, defaultName: string): Uint8Array {
+  const nameBytes = encodeUTF16LE(name);
+  const defaultBytes = encodeUTF16LE(defaultName);
+  const { buf, view } = allocate(3 + nameBytes.byteLength + 2 + defaultBytes.byteLength);
+  view.setUint8(0, 0x21);
+  view.setUint16(1, name.length, true);
   buf.set(nameBytes, 3);
-  let offset = 3 + nameBytes.byteLength;
-  // 대체 글꼴
-  view.setUint8(offset, 0); // substituteType: 0 (알 수 없음)
-  offset += 1;
-  view.setUint16(offset, fullName.length, true);
-  buf.set(subBytes, offset + 2);
-  offset += 2 + subBytes.byteLength;
-  // 기본 글꼴
-  view.setUint16(offset, fullName.length, true);
-  buf.set(defBytes, offset + 2);
+  const offset = 3 + nameBytes.byteLength;
+  view.setUint16(offset, defaultName.length, true);
+  buf.set(defaultBytes, offset + 2);
   return buf;
 }
 
@@ -474,7 +466,7 @@ export function buildDocInfoStream(tables: DocInfoTables): Uint8Array {
   const fontEntries = tables.fonts.getAll();
   for (let lang = 0; lang < 7; lang++) {
     for (const entry of fontEntries) {
-      const psName = entry.postScriptName ?? entry.name;
+      const psName = entry.postScriptName;
       records.push(makeRecord(HWPTAG.FACE_NAME, 1, buildFaceName(entry.name, psName)));
     }
   }

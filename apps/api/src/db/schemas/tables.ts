@@ -224,13 +224,32 @@ export const FontFamilies = pgTable(
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     familyName: text('family_name').notNull(),
-    displayName: text('display_name').notNull(),
     state: E._FontFamilyState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()
       .default(sql`now()`),
   },
   (t) => [unique().on(t.userId, t.familyName)],
+);
+
+export const FontNames = pgTable(
+  'font_names',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.FONT_NAMES)),
+    fontId: text('font_id')
+      .notNull()
+      .references(() => Fonts.id, { onUpdate: 'cascade', onDelete: 'cascade' }),
+    nameId: integer('name_id').notNull(),
+    platformId: integer('platform_id').notNull(),
+    languageId: integer('language_id').notNull(),
+    value: text('value').notNull(),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.fontId)],
 );
 
 export const Fonts = pgTable(
@@ -242,9 +261,7 @@ export const Fonts = pgTable(
     familyId: text('family_id')
       .notNull()
       .references(() => FontFamilies.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
-    fullName: text('full_name'),
     postScriptName: text('post_script_name').notNull(),
-    subfamilyDisplayName: text('subfamily_display_name'),
     weight: integer('weight').notNull(),
     size: bigint('size', { mode: 'number' }).notNull(),
     path: text('path').notNull(),

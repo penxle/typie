@@ -8,7 +8,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import qs from 'query-string';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { db, Files, first, firstOrThrow, FontFamilies, Fonts, Images, TableCode, validateDbId } from '@/db';
+import { db, Files, first, firstOrThrow, FontFamilies, FontNames, Fonts, Images, TableCode, validateDbId } from '@/db';
 import { FontFamilyState } from '@/enums';
 import { stack } from '@/env';
 import { TypieError } from '@/errors';
@@ -429,7 +429,16 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'invalid_font_style' });
       }
 
-      const familyName = metadata.familyName ?? metadata.fullName ?? metadata.postScriptName;
+      const findName = (nameId: number) =>
+        metadata.names.find((n) => n.nameId === nameId && n.platformId === 3 && n.languageId === 0x04_09)?.value ??
+        metadata.names.find((n) => n.nameId === nameId)?.value;
+
+      const postScriptName = findName(6);
+      if (!postScriptName) {
+        throw new TypieError({ code: 'invalid_font_style' });
+      }
+
+      const familyName = findName(16) ?? findName(1) ?? findName(4) ?? postScriptName;
       const filePath = path.join(path.dirname(input.path), path.basename(input.path, path.extname(input.path)));
 
       const tagging = qs.stringify({
@@ -437,7 +446,7 @@ builder.mutationFields((t) => ({
         Environment: stack,
       });
 
-      const fontName = metadata.postScriptName;
+      const fontName = postScriptName;
       const { manifest, base, chunks } = await processFont(fontName, buffer);
 
       const s3Base = `fonts/${filePath}`;
@@ -505,7 +514,6 @@ builder.mutationFields((t) => ({
             .values({
               userId: ctx.session.userId,
               familyName,
-              displayName: metadata.displayName ?? familyName,
             })
             .returning({ id: FontFamilies.id })
             .then(firstOrThrow);
@@ -516,26 +524,38 @@ builder.mutationFields((t) => ({
         const existingFont = await tx
           .select({ id: Fonts.id })
           .from(Fonts)
-          .where(and(eq(Fonts.familyId, familyId), eq(Fonts.postScriptName, metadata.postScriptName)))
+          .where(and(eq(Fonts.familyId, familyId), eq(Fonts.postScriptName, postScriptName)))
           .then(first);
 
         if (existingFont) {
           await tx.delete(Fonts).where(eq(Fonts.id, existingFont.id));
         }
 
-        return await tx
+        const font = await tx
           .insert(Fonts)
           .values({
             familyId,
-            fullName: metadata.fullName,
-            postScriptName: metadata.postScriptName,
-            subfamilyDisplayName: metadata.subfamilyDisplayName,
+            postScriptName,
             weight: metadata.weight,
             size: buffer.length,
             path: filePath,
           })
           .returning()
           .then(firstOrThrow);
+
+        if (metadata.names.length > 0) {
+          await tx.insert(FontNames).values(
+            metadata.names.map((name) => ({
+              fontId: font.id,
+              nameId: name.nameId,
+              platformId: name.platformId,
+              languageId: name.languageId,
+              value: name.value,
+            })),
+          );
+        }
+
+        return font;
       });
     },
   }),

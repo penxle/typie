@@ -78,10 +78,12 @@ export async function generateDocumentHwp(params: GenerateDocumentHwpParams): Pr
   };
 
   const defaultFontEntry = resolveEntry(params.fontNameMap, defaultFont, 400);
-  const defaultFontFullName = defaultFontEntry?.fullName ?? defaultFont;
   const defaultFontId = tables.fonts.intern(
-    { name: defaultFontFullName, postScriptName: defaultFontEntry?.postScriptName },
-    defaultFontFullName,
+    {
+      name: defaultFontEntry?.faceName ?? defaultFont,
+      postScriptName: defaultFontEntry?.faceDefault ?? defaultFont,
+    },
+    defaultFontEntry?.postScriptName ?? defaultFont,
   );
 
   const defaultCharShape: CharShapeEntry = {

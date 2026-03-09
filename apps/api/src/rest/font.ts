@@ -1,18 +1,18 @@
 import { createHash } from 'node:crypto';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import defaultFontFamilies from '@typie/editor/font/defaults.json' with { type: 'json' };
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { redis } from '@/cache';
-import { DEFAULT_FONT_FAMILIES } from '@/const';
 import { db, first, Fonts } from '@/db';
 import * as aws from '@/external/aws';
 import { decompressZstd } from '@/utils/compression';
 import { outlineTextToSvg } from '@/utils/font';
 import type { Env } from '@/context';
 
-const defaultFontMap = new Map(DEFAULT_FONT_FAMILIES.flatMap((f) => f.fonts.map((v) => [v.id, v.path] as const)));
+const defaultFontMap = new Map(defaultFontFamilies.flatMap((f) => f.fonts.map((v) => [v.id, v.path] as const)));
 
 export const font = new Hono<Env>();
 
