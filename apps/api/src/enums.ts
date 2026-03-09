@@ -125,6 +125,14 @@ export const PostType = {
   TEMPLATE: 'TEMPLATE',
 } as const;
 
+export type DocumentExportFormat = keyof typeof DocumentExportFormat;
+export const DocumentExportFormat = {
+  DOCX: 'DOCX',
+  EPUB: 'EPUB',
+  HWP: 'HWP',
+  PDF: 'PDF',
+} as const;
+
 export type DocumentSyncType = keyof typeof DocumentSyncType;
 export const DocumentSyncType = {
   HEARTBEAT: 'HEARTBEAT',

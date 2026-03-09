@@ -25,6 +25,7 @@
   import { graphql } from '$mearie';
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
+  import DocumentExportModal from './@context-menu/DocumentExportModal.svelte';
   import Notes from './@notes/Notes.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import ShareModal from './@share/ShareModal.svelte';
@@ -358,6 +359,7 @@
 <Notes />
 <PreferenceModal user$key={query.data.me} />
 <SiteSettingsModal site$key={currentSite} user$key={query.data.me} />
+<DocumentExportModal user$key={query.data.me} />
 <ShareModal />
 <StatsModal />
 <TrashModal site$key={currentSite} />

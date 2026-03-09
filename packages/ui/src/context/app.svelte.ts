@@ -29,8 +29,7 @@ export type AppPreference = {
 
   searchMatchWholeWord: boolean;
 
-  experimental_pdfExportEnabled: boolean;
-  experimental_docxExportEnabled: boolean;
+  exportFormat: 'DOCX' | 'EPUB' | 'HWP' | 'PDF';
 
   referralWelcomeModalShown: boolean;
 
@@ -49,6 +48,7 @@ type AppState = {
   commandPaletteOpen: boolean;
   notesOpen: boolean;
   shareOpen: string[];
+  exportOpen: string | null;
   statsOpen: boolean;
   shortcutsOpen: boolean;
   upgradeOpen: boolean;
@@ -91,6 +91,7 @@ export const setupAppContext = (userId: string) => {
     commandPaletteOpen: false,
     notesOpen: false,
     shareOpen: [],
+    exportOpen: null,
     statsOpen: false,
     shortcutsOpen: false,
     upgradeOpen: false,
@@ -137,9 +138,7 @@ export const setupAppContext = (userId: string) => {
 
       searchMatchWholeWord: false,
 
-      experimental_pdfExportEnabled: false,
-
-      experimental_docxExportEnabled: false,
+      exportFormat: 'PDF',
 
       referralWelcomeModalShown: false,
 
