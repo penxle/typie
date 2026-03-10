@@ -62,6 +62,7 @@ class MenuSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           BottomMenuItem(icon: LucideLightIcons.search, label: '찾기', onTap: onOpenFindReplace),
+          BottomMenuItem(icon: LucideLightIcons.sticky_note, label: '노트', onTap: onOpenRelatedNotes),
           BottomMenuItem(
             icon: LucideLightIcons.message_square_text,
             label: '코멘트',
@@ -96,7 +97,17 @@ class MenuSheet extends StatelessWidget {
               );
             },
           ),
-          BottomMenuItem(icon: LucideLightIcons.sticky_note, label: '이 문서 관련 노트', onTap: onOpenRelatedNotes),
+          BottomMenuItem(
+            icon: LucideLightIcons.settings,
+            label: '본문 설정',
+            onTap: () async {
+              final controller = editorController;
+              if (controller == null) {
+                return;
+              }
+              await context.showBottomSheet(intercept: true, child: SettingsSheet(controller: controller));
+            },
+          ),
           BottomMenuItem(
             icon: document.locked ? LucideLightIcons.lock_open : LucideLightIcons.lock,
             label: document.locked ? '편집 잠금 해제' : '편집 잠금',
@@ -116,14 +127,18 @@ class MenuSheet extends StatelessWidget {
             },
           ),
           BottomMenuItem(
-            icon: LucideLightIcons.settings,
-            label: '본문 설정',
+            icon: LucideLightIcons.file_down,
+            label: '파일로 내보내기',
             onTap: () async {
-              final controller = editorController;
-              if (controller == null) {
-                return;
-              }
-              await context.showBottomSheet(intercept: true, child: SettingsSheet(controller: controller));
+              await context.showBottomSheet(
+                intercept: true,
+                child: ExportSheet(
+                  documentId: document.id,
+                  client: client,
+                  layout: editorController?.state.layout,
+                  hasSubscription: data.me?.subscription != null,
+                ),
+              );
             },
           ),
           BottomMenuItem(
@@ -134,9 +149,6 @@ class MenuSheet extends StatelessWidget {
               await launchUrl(url, mode: LaunchMode.externalApplication);
             },
           ),
-          const Gap(16),
-          HorizontalDivider(color: context.colors.borderDefault),
-          const Gap(16),
           BottomMenuItem(
             icon: LucideLightIcons.blend,
             label: '공유하기',
@@ -200,27 +212,6 @@ class MenuSheet extends StatelessWidget {
               );
             },
           ),
-          const Gap(16),
-          HorizontalDivider(color: context.colors.borderDefault),
-          const Gap(16),
-          BottomMenuItem(
-            icon: LucideLightIcons.file_down,
-            label: '파일로 내보내기',
-            onTap: () async {
-              await context.showBottomSheet(
-                intercept: true,
-                child: ExportSheet(
-                  documentId: document.id,
-                  client: client,
-                  layout: editorController?.state.layout,
-                  hasSubscription: data.me?.subscription != null,
-                ),
-              );
-            },
-          ),
-          const Gap(16),
-          HorizontalDivider(color: context.colors.borderDefault),
-          const Gap(16),
           BottomMenuItem(
             icon: LucideLightIcons.trash_2,
             label: '삭제하기',

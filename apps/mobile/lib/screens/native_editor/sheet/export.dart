@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -21,14 +22,15 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
+import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/__generated__/export_document_mutation.req.gql.dart';
-import 'package:typie/screens/native_editor/limit.dart';
 import 'package:typie/screens/native_editor/sheet/settings.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
+import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class ExportSheet extends HookWidget {
@@ -449,12 +451,22 @@ class _FormatSection extends StatelessWidget {
         if (dirtyData.containsKey('format')) {
           final selected = dirtyData['format'] as GDocumentExportFormat;
           if (!hasSubscription && selected != GDocumentExportFormat.PDF) {
-            await context.showBottomSheet(
+            form.setValue('format', GDocumentExportFormat.PDF);
+            format.value = GDocumentExportFormat.PDF;
+
+            final result = await context.showBottomSheet<PlanUpgradeResult>(
               intercept: true,
-              child: const LimitBottomSheet(type: LimitBottomSheetType.export),
+              child: const PlanUpgradeBottomSheet(message: '파일 내보내기는 FULL ACCESS 플랜에서 사용할 수 있어요.'),
             );
+
+            if (result == PlanUpgradeResult.upgrade && context.mounted) {
+              context.router.popUntilRoot();
+              await context.router.popAndPush(const EnrollPlanRoute());
+            }
+
             return;
           }
+
           format.value = selected;
         }
       },

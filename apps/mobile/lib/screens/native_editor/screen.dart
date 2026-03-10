@@ -17,6 +17,7 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart';
+import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/document_note_query.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
@@ -26,7 +27,6 @@ import 'package:typie/screens/native_editor/__generated__/view_entity_mutation.r
 import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/screens/native_editor/context.dart';
 import 'package:typie/screens/native_editor/init.dart';
-import 'package:typie/screens/native_editor/limit.dart';
 import 'package:typie/screens/native_editor/note.dart';
 import 'package:typie/screens/native_editor/sheet/ai_feedback.dart';
 import 'package:typie/screens/native_editor/sheet/find_replace.dart';
@@ -44,6 +44,7 @@ import 'package:typie/screens/native_editor/view/editor.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/services/state.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/screen.dart';
 
 enum NativeEditorMode { editor, note }
@@ -270,13 +271,17 @@ class _Content extends HookWidget {
                                 }
 
                                 if (data.me!.subscription == null) {
-                                  final trialStarted = await context.showBottomSheet<bool>(
+                                  final result = await context.showBottomSheet<PlanUpgradeResult>(
                                     intercept: true,
-                                    child: const LimitBottomSheet(type: LimitBottomSheetType.spellCheck),
+                                    child: const PlanUpgradeBottomSheet(message: '맞춤법 검사는 FULL ACCESS 플랜에서 사용할 수 있어요.'),
                                   );
 
-                                  if (trialStarted ?? false) {
+                                  if (result == PlanUpgradeResult.trialStarted) {
                                     unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
+                                  } else if (result == PlanUpgradeResult.upgrade) {
+                                    if (context.mounted) {
+                                      await context.router.popAndPush(const EnrollPlanRoute());
+                                    }
                                   }
 
                                   return;
@@ -302,13 +307,17 @@ class _Content extends HookWidget {
                                 }
 
                                 if (data.me!.subscription == null) {
-                                  final trialStarted = await context.showBottomSheet<bool>(
+                                  final result = await context.showBottomSheet<PlanUpgradeResult>(
                                     intercept: true,
-                                    child: const LimitBottomSheet(type: LimitBottomSheetType.aiFeedback),
+                                    child: const PlanUpgradeBottomSheet(message: 'AI 피드백은 FULL ACCESS 플랜에서 사용할 수 있어요.'),
                                   );
 
-                                  if (trialStarted ?? false) {
+                                  if (result == PlanUpgradeResult.trialStarted) {
                                     unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
+                                  } else if (result == PlanUpgradeResult.upgrade) {
+                                    if (context.mounted) {
+                                      await context.router.popAndPush(const EnrollPlanRoute());
+                                    }
                                   }
 
                                   return;
@@ -647,12 +656,20 @@ class _EditorContent extends HookWidget {
           context.toast(ToastType.notification, '편집이 잠겨있는 문서예요.');
           return;
         }
-        final type = switch (reason) {
-          'restrictedText' => LimitBottomSheetType.restrictedText,
-          'restrictedBlob' => LimitBottomSheetType.restrictedBlob,
-          _ => LimitBottomSheetType.limit,
+        final message = switch (reason) {
+          'restrictedText' => '현재 플랜의 최대 입력 가능 글자 수를 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 작성하세요.',
+          'restrictedBlob' => '현재 플랜의 최대 업로드 가능 용량을 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 업로드하세요.',
+          _ => '현재 플랜의 최대 사용량을 초과했어요.\nFULL ACCESS로 업그레이드하고 이어서 작성하세요.',
         };
-        unawaited(context.showBottomSheet(intercept: true, child: LimitBottomSheet(type: type)));
+        unawaited(
+          context
+              .showBottomSheet<PlanUpgradeResult>(intercept: true, child: PlanUpgradeBottomSheet(message: message))
+              .then((result) {
+                if (result == PlanUpgradeResult.upgrade && context.mounted) {
+                  unawaited(context.router.popAndPush(const EnrollPlanRoute()));
+                }
+              }),
+        );
       };
       editorControllerReady.value = true;
       editorContext.controller = editorController.value;

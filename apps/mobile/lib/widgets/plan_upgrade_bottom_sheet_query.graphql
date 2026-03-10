@@ -1,4 +1,4 @@
-query LimitBottomSheet_Query {
+query PlanUpgradeBottomSheet_Query {
   me {
     id
 

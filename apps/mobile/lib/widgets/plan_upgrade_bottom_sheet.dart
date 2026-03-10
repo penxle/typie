@@ -13,25 +13,25 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/enroll_plan/subscription_celebration_bottom_sheet.dart';
-import 'package:typie/screens/native_editor/__generated__/limit_query.req.gql.dart';
-import 'package:typie/screens/native_editor/__generated__/subscribe_plan_with_trial_mutation.req.gql.dart';
+import 'package:typie/widgets/__generated__/plan_upgrade_bottom_sheet_query.req.gql.dart';
+import 'package:typie/widgets/__generated__/plan_upgrade_bottom_sheet_subscribe_plan_with_trial_mutation.req.gql.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/tappable.dart';
 
-enum LimitBottomSheetType { limit, restrictedText, restrictedBlob, spellCheck, aiFeedback, multiSite, export }
+enum PlanUpgradeResult { trialStarted, upgrade }
 
-class LimitBottomSheet extends HookWidget {
-  const LimitBottomSheet({this.type = LimitBottomSheetType.limit, super.key});
+class PlanUpgradeBottomSheet extends HookWidget {
+  const PlanUpgradeBottomSheet({this.title = '플랜 업그레이드가 필요해요', required this.message, super.key});
 
-  final LimitBottomSheetType type;
+  final String title;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
 
-    final List<IconData> icons = [
+    const icons = [
       LucideLightIcons.crown,
       LucideLightIcons.tag,
       LucideLightIcons.star,
@@ -40,7 +40,7 @@ class LimitBottomSheet extends HookWidget {
     ];
 
     return GraphQLOperation(
-      operation: GLimitBottomSheet_QueryReq(),
+      operation: GPlanUpgradeBottomSheet_QueryReq(),
       builder: (context, client, data) {
         final canStartTrial = data.me!.canStartTrial;
 
@@ -74,69 +74,17 @@ class LimitBottomSheet extends HookWidget {
                 ),
               ),
               const Gap(16),
-              const Text(
-                '플랜 업그레이드가 필요해요',
+              Text(
+                title,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const Gap(4),
-              if (type == LimitBottomSheetType.limit) ...[
-                Text(
-                  '현재 플랜의 최대 사용량을 초과했어요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                ),
-                Text(
-                  '이어서 작성하려면 플랜을 업그레이드 해주세요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                ),
-              ] else if (type == LimitBottomSheetType.restrictedText) ...[
-                Text(
-                  '현재 플랜의 최대 입력 가능 글자 수를 초과했어요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                ),
-                Text(
-                  '이어서 작성하려면 플랜을 업그레이드 해주세요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                ),
-              ] else if (type == LimitBottomSheetType.restrictedBlob) ...[
-                Text(
-                  '현재 플랜의 최대 업로드 가능 용량을 초과했어요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                ),
-                Text(
-                  '이어서 업로드하려면 플랜을 업그레이드 해주세요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                ),
-              ] else if (type == LimitBottomSheetType.spellCheck)
-                Text(
-                  '맞춤법 검사는 유료 플랜에서 이용할 수 있어요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                )
-              else if (type == LimitBottomSheetType.aiFeedback)
-                Text(
-                  'AI 피드백은 유료 플랜에서 이용할 수 있어요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                )
-              else if (type == LimitBottomSheetType.export)
-                Text(
-                  '파일 내보내기는 유료 플랜에서 이용할 수 있어요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                )
-              else
-                Text(
-                  '멀티 스페이스는 유료 플랜에서 이용할 수 있어요.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                ),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: context.colors.textFaint),
+              ),
               const Gap(16),
               Container(
                 decoration: BoxDecoration(
@@ -173,12 +121,12 @@ class LimitBottomSheet extends HookWidget {
                         confirmText: '시작하기',
                         onConfirm: () async {
                           await context.runWithLoader(() async {
-                            await client.request(GLimitBottomSheet_SubscribePlanWithTrial_MutationReq());
+                            await client.request(GPlanUpgradeBottomSheet_SubscribePlanWithTrial_MutationReq());
                             unawaited(mixpanel.track('start_trial'));
                           });
 
                           if (context.mounted) {
-                            await context.router.root.maybePop(true);
+                            await context.router.root.maybePop(PlanUpgradeResult.trialStarted);
                           }
 
                           if (context.mounted) {
@@ -220,14 +168,7 @@ class LimitBottomSheet extends HookWidget {
               ],
               Tappable(
                 onTap: () async {
-                  await context.router.root.maybePop();
-                  if (context.mounted) {
-                    if (type == LimitBottomSheetType.multiSite) {
-                      await context.router.push(const EnrollPlanRoute());
-                    } else {
-                      await context.router.popAndPush(const EnrollPlanRoute());
-                    }
-                  }
+                  await context.router.root.maybePop(PlanUpgradeResult.upgrade);
                 },
                 child: Container(
                   decoration: BoxDecoration(
