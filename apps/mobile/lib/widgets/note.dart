@@ -2,7 +2,6 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/native_editor/toolbar/values.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class _NoteFoldClipper extends CustomClipper<Path> {
@@ -65,23 +64,27 @@ class NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color getNoteBackgroundColor(String color) {
-      final backgroundColors = editorValues['textBackgroundColor']!;
+    const lightColors = {
+      'gray': Color(0xFFF1F1F2),
+      'red': Color(0xFFFDEBEC),
+      'orange': Color(0xFFFFECD5),
+      'yellow': Color(0xFFFEF3C7),
+      'green': Color(0xFFDFF3E3),
+      'blue': Color(0xFFE7F3F8),
+      'purple': Color(0xFFF0E7FE),
+    };
+    const darkColors = {
+      'gray': Color(0xFF38393B),
+      'red': Color(0xFF532F2B),
+      'orange': Color(0xFF54341A),
+      'yellow': Color(0xFF4E3E1B),
+      'green': Color(0xFF2C4331),
+      'blue': Color(0xFF153B4F),
+      'purple': Color(0xFF3F2E50),
+    };
 
-      final colorMap = backgroundColors.firstWhere(
-        (item) => item['value'] == color,
-        orElse: () => {'color': Colors.transparent},
-      );
-
-      final colorFunc = colorMap['color'] as Color Function(BuildContext)?;
-      if (colorFunc != null) {
-        return colorFunc(context);
-      }
-
-      return context.colors.prosemirrorWhite;
-    }
-
-    final backgroundColor = getNoteBackgroundColor(color);
+    final colors = context.theme.brightness == Brightness.dark ? darkColors : lightColors;
+    final backgroundColor = colors[color] ?? context.colors.surfaceDefault;
 
     return Stack(
       children: [

@@ -477,8 +477,6 @@ class _EditorContent extends HookWidget {
 
       selectionSync.value!.setupFocusListeners(titleFocusNode, subtitleFocusNode, () => editorReady.value);
 
-      final theme = getEditorTheme(brightness);
-
       final rules = data.me!.textReplacements
           .map(
             (item) => item.when(
@@ -516,6 +514,8 @@ class _EditorContent extends HookWidget {
           final (application, manager) = await getOrInitializeApplication();
           app.value = application;
           fontManager.value = manager;
+
+          final theme = getEditorTheme(brightness);
 
           manager.fontFamilies = document.fontFamilies
               .map(

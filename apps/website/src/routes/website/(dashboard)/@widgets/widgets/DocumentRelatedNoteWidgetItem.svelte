@@ -68,7 +68,7 @@
 
   const isDragging = $derived(draggingNoteId === note.data.id);
   const anyDragging = $derived(draggingNoteId !== null);
-  const color = $derived(getNoteColors().find((c) => c.value === note.data.color)?.color ?? token('colors.prosemirror.white'));
+  const color = $derived(getNoteColors().find((c) => c.value === note.data.color)?.color ?? token('colors.surface.default'));
 
   $effect(() => {
     const serverContent = note.data.content;
@@ -111,7 +111,7 @@
 </script>
 
 <div
-  style:background-color={`color-mix(in srgb, ${token('colors.prosemirror.white')}, ${color} 75%)`}
+  style:background-color={`color-mix(in srgb, ${token('colors.surface.default')}, ${color} 75%)`}
   style:opacity={isDragging ? '0.5' : '1'}
   class={flex({
     flexDirection: 'column',

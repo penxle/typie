@@ -64,3 +64,4 @@ copy_if_changed "$ASSETS_DIR/icu_data.postcard" "$MOBILE_ASSETS_DIR/icu_data.pos
 copy_if_changed "$ASSETS_DIR/Noto-Phantom.bin" "$MOBILE_ASSETS_DIR/Noto-Phantom.bin"
 copy_if_changed "$ASSETS_DIR/Noto-Phantom-Emoji.bin" "$MOBILE_ASSETS_DIR/Noto-Phantom-Emoji.bin"
 copy_if_changed "$ASSETS_DIR/fallbacks.json" "$MOBILE_ASSETS_DIR/fallbacks.json"
+copy_if_changed "$ASSETS_DIR/theme.json" "$MOBILE_ASSETS_DIR/theme.json"

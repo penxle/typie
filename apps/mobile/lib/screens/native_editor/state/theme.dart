@@ -1,4 +1,6 @@
-import 'dart:ui';
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
 
 int _colorToU32(String color, [int alpha = 0xff]) {
   final clean = color.replaceAll('#', '');
@@ -11,168 +13,32 @@ int _colorToU32(String color, [int alpha = 0xff]) {
   return ((r << 24) | (g << 16) | (b << 8) | alpha) & 0xffffffff;
 }
 
-const _lightRawColors = <String, String>{
-  'ui.surface.default': '#ffffff',
-  'ui.surface.subtle': '#f9fafd',
-  'ui.surface.muted': '#f3f4f9',
-  'ui.surface.dark': '#3e3f47',
-  'ui.text.default': '#17181c',
-  'ui.text.subtle': '#3e3f47',
-  'ui.text.muted': '#51525b',
-  'ui.text.faint': '#70717b',
-  'ui.text.disabled': '#9e9fa9',
-  'ui.text.bright': '#ffffff',
-  'ui.text.danger': '#f23864',
-  'ui.text.success': '#00714a',
-  'ui.text.link': '#5661f3',
-  'ui.text.brand': '#6c6fc8',
-  'ui.interactive.hover': '#e3e4eb',
-  'ui.interactive.disabled': '#e3e4eb',
-  'ui.accent.brand.default': '#6c6fc8',
-  'ui.accent.brand.hover': '#5055ab',
-  'ui.accent.brand.active': '#3a408c',
-  'ui.accent.brand.subtle': '#e8e7fe',
-  'ui.accent.info.default': '#667aff',
-  'ui.accent.danger.default': '#e0024e',
-  'ui.accent.danger.hover': '#f23864',
-  'ui.accent.danger.active': '#bb0440',
-  'ui.accent.danger.subtle': '#fef2f4',
-  'ui.accent.success.subtle': '#effff6',
-  'ui.border.default': '#e3e4eb',
-  'ui.border.strong': '#d3d4dd',
-  'ui.border.subtle': '#f3f4f9',
-  'ui.border.brand': '#5055ab',
-  'ui.border.danger': '#e0024e',
-  'ui.shadow.default': '#09090c',
-  'ui.control.scrollbar.default': '#e3e4eb',
-  'ui.control.scrollbar.hover': '#d3d4dd',
-  'ui.decoration.grid.default': '#f3f4f9',
-  'ui.decoration.grid.subtle': '#f9fafd',
-  'ui.decoration.grid.brand': '#e8e7fe',
-  'ui.decoration.grid.brand.subtle': '#f5f4ff',
-  'ui.callout.info': '#3b82f6',
-  'ui.callout.success': '#22c55e',
-  'ui.callout.warning': '#f97316',
-  'ui.callout.danger': '#dc2626',
-  'ui.blockquote.message-sent': '#248bf5',
-  'ui.blockquote.message-received': '#e5e5ea',
-  'text.bright': '#ffffff',
-  'text.black': '#17181c',
-  'text.darkgray': '#525254',
-  'text.gray': '#8c8c8d',
-  'text.lightgray': '#c5c5c6',
-  'text.white': '#ffffff',
-  'text.red': '#ef4444',
-  'text.orange': '#f97316',
-  'text.amber': '#f59e0b',
-  'text.yellow': '#eab308',
-  'text.lime': '#84cc16',
-  'text.green': '#22c55e',
-  'text.emerald': '#10b981',
-  'text.teal': '#14b8a6',
-  'text.cyan': '#06b6d4',
-  'text.sky': '#0ea5e9',
-  'text.blue': '#3b82f6',
-  'text.indigo': '#6366f1',
-  'text.violet': '#8b5cf6',
-  'text.purple': '#a855f7',
-  'text.fuchsia': '#d946ef',
-  'text.pink': '#ec4899',
-  'text.rose': '#f43f5e',
-  'bg.gray': '#f1f1f2',
-  'bg.red': '#fdebec',
-  'bg.orange': '#ffecd5',
-  'bg.yellow': '#fef3c7',
-  'bg.green': '#dff3e3',
-  'bg.blue': '#e7f3f8',
-  'bg.purple': '#f0e7fe',
-  'selection': '#99ccff',
-};
-
-const _darkRawColors = <String, String>{
-  'ui.surface.default': '#121212',
-  'ui.surface.subtle': '#1a1a1a',
-  'ui.surface.muted': '#222222',
-  'ui.surface.dark': '#2d2d31',
-  'ui.text.default': '#f1f1f7',
-  'ui.text.subtle': '#d5d5db',
-  'ui.text.muted': '#c3c4c9',
-  'ui.text.faint': '#a3a4a9',
-  'ui.text.disabled': '#7f8084',
-  'ui.text.bright': '#f1f1f7',
-  'ui.text.danger': '#c64961',
-  'ui.text.success': '#00965c',
-  'ui.text.link': '#4455c2',
-  'ui.text.brand': '#6974bb',
-  'ui.interactive.hover': '#414246',
-  'ui.interactive.disabled': '#1e1f23',
-  'ui.accent.brand.default': '#505ca4',
-  'ui.accent.brand.hover': '#3c488e',
-  'ui.accent.brand.active': '#2e3a74',
-  'ui.accent.brand.subtle': '#0d172f',
-  'ui.accent.info.default': '#7a8fe5',
-  'ui.accent.danger.default': '#ae2749',
-  'ui.accent.danger.hover': '#990035',
-  'ui.accent.danger.active': '#810027',
-  'ui.accent.danger.subtle': '#34020e',
-  'ui.accent.success.subtle': '#001f13',
-  'ui.border.default': '#2d2d31',
-  'ui.border.strong': '#414246',
-  'ui.border.subtle': '#1e1f23',
-  'ui.border.brand': '#505ca4',
-  'ui.border.danger': '#ae2749',
-  'ui.shadow.default': '#0a0b0e',
-  'ui.control.scrollbar.default': '#414246',
-  'ui.control.scrollbar.hover': '#5d5d62',
-  'ui.decoration.grid.default': '#2d2d31',
-  'ui.decoration.grid.subtle': '#1e1f23',
-  'ui.decoration.grid.brand': '#2d2d31',
-  'ui.decoration.grid.brand.subtle': '#1e1f23',
-  'ui.callout.info': '#4c6ef5',
-  'ui.callout.success': '#3fc380',
-  'ui.callout.warning': '#f4a934',
-  'ui.callout.danger': '#f04444',
-  'ui.blockquote.message-sent': '#248bf5',
-  'ui.blockquote.message-received': '#37373b',
-  'text.bright': '#f1f1f7',
-  'text.black': '#f1f1f7',
-  'text.darkgray': '#b0b0b1',
-  'text.gray': '#7b7b7c',
-  'text.lightgray': '#474747',
-  'text.white': '#121212',
-  'text.red': '#ef4444',
-  'text.orange': '#f97316',
-  'text.amber': '#f59e0b',
-  'text.yellow': '#eab308',
-  'text.lime': '#84cc16',
-  'text.green': '#22c55e',
-  'text.emerald': '#10b981',
-  'text.teal': '#14b8a6',
-  'text.cyan': '#06b6d4',
-  'text.sky': '#0ea5e9',
-  'text.blue': '#3b82f6',
-  'text.indigo': '#6366f1',
-  'text.violet': '#8b5cf6',
-  'text.purple': '#a855f7',
-  'text.fuchsia': '#d946ef',
-  'text.pink': '#ec4899',
-  'text.rose': '#f43f5e',
-  'bg.gray': '#38393b',
-  'bg.red': '#532f2b',
-  'bg.orange': '#54341a',
-  'bg.yellow': '#4e3e1b',
-  'bg.green': '#2c4331',
-  'bg.blue': '#153b4f',
-  'bg.purple': '#3f2e50',
-  'selection': '#99ccff',
-};
+Map<String, String> _assembleVariant(Map<String, dynamic> data, String variant) {
+  final shared = (data['shared'] as Map<String, dynamic>).cast<String, String>();
+  final isLight = variant.startsWith('light-');
+  final modeShared = (data[isLight ? 'lightShared' : 'darkShared'] as Map<String, dynamic>).cast<String, String>();
+  final unique = ((data['variants'] as Map<String, dynamic>)[variant] as Map<String, dynamic>).cast<String, String>();
+  return {...shared, ...modeShared, ...unique};
+}
 
 Map<String, int> _buildTheme(Map<String, String> rawColors) {
   return rawColors.map((k, v) => MapEntry(k, _colorToU32(v)));
 }
 
-final lightTheme = _buildTheme(_lightRawColors);
-final darkTheme = _buildTheme(_darkRawColors);
+late Map<String, String> _lightRawColors;
+late Map<String, String> _darkRawColors;
+late Map<String, int> lightTheme;
+late Map<String, int> darkTheme;
+
+Future<void> initEditorTheme() async {
+  final raw = await rootBundle.loadString('assets/native/theme.json');
+  final data = jsonDecode(raw) as Map<String, dynamic>;
+
+  _lightRawColors = _assembleVariant(data, 'light-white');
+  _darkRawColors = _assembleVariant(data, 'dark-black');
+  lightTheme = _buildTheme(_lightRawColors);
+  darkTheme = _buildTheme(_darkRawColors);
+}
 
 Map<String, int> getEditorTheme(Brightness brightness) {
   return brightness == Brightness.dark ? darkTheme : lightTheme;
