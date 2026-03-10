@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:typie/context/theme.dart';
 
@@ -6,7 +8,8 @@ class Tappable extends StatelessWidget {
 
   final Widget child;
   final EdgeInsetsGeometry? padding;
-  final void Function() onTap;
+  // ignore: avoid_futureor_void -- to many consumers
+  final FutureOr<void> Function() onTap;
 
   final bool debugTapArea;
 

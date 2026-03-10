@@ -1,5 +1,6 @@
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/responsive_container.dart';
@@ -10,6 +11,7 @@ class Screen extends StatelessWidget {
     required this.child,
     super.key,
     this.heading = const EmptyHeading(),
+    this.loading = false,
     this.expand = true,
     this.safeArea = false,
     this.resizeToAvoidBottomInset = false,
@@ -23,6 +25,7 @@ class Screen extends StatelessWidget {
 
   final PreferredSizeWidget? heading;
   final Widget child;
+  final bool loading;
   final bool expand;
   final bool safeArea;
   final bool resizeToAvoidBottomInset;
@@ -68,6 +71,8 @@ class Screen extends StatelessWidget {
     if (safeArea) {
       body = SafeArea(maintainBottomViewPadding: !resizeToAvoidBottomInset, child: body);
     }
+
+    body = Skeletonizer(enabled: loading, child: body);
 
     return Scaffold(
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,

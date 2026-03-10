@@ -154,7 +154,7 @@ User.implement({
       type: [Entity],
       args: { siteId: t.arg.id({ required: false }) },
       resolve: async (self, args) => {
-        return await db
+        const entities = await db
           .select()
           .from(Entities)
           .where(
@@ -168,6 +168,22 @@ User.implement({
           )
           .orderBy(desc(Entities.viewedAt))
           .limit(10);
+
+        const entityIds = new Set(entities.map((e) => e.id));
+        const folderEntityIds = [
+          ...new Set(entities.map((e) => e.parentId).filter((id): id is string => id !== null && !entityIds.has(id))),
+        ];
+
+        if (folderEntityIds.length === 0) {
+          return entities;
+        }
+
+        const folders = await db
+          .select()
+          .from(Entities)
+          .where(and(inArray(Entities.id, folderEntityIds), eq(Entities.state, EntityState.ACTIVE)));
+
+        return [...entities, ...folders];
       },
     }),
 

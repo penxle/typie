@@ -1,0 +1,51 @@
+# import 'package:typie/widgets/img.graphql'
+
+query HomeScreen_Query($siteId: ID!) {
+  me {
+    id
+
+    recentlyViewedEntities(siteId: $siteId) {
+      id
+      slug
+      type
+
+      node {
+        __typename
+
+        ... on Document {
+          id
+          type
+          title
+          excerpt
+          updatedAt
+
+          entity {
+            id
+            slug
+          }
+        }
+
+        ... on Folder {
+          id
+          name
+          documentCount
+
+          entity {
+            id
+            slug
+          }
+        }
+      }
+    }
+  }
+
+  site(siteId: $siteId) {
+    id
+
+    logo {
+      id
+      url
+      ...Img_image
+    }
+  }
+}

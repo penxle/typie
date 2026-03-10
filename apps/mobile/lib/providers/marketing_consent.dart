@@ -7,7 +7,7 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/providers/__generated__/me_query.req.gql.dart';
 import 'package:typie/routers/app.dart';
-import 'package:typie/screens/home/marketing_consent_modal.dart';
+import 'package:typie/screens/shell/marketing_consent_modal.dart';
 import 'package:typie/services/auth.dart';
 
 class MarketingConsentProvider extends HookWidget {

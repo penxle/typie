@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 extension IterableExtension<T> on Iterable<T> {
+  Iterable<R> ofType<R>(Object? Function(T) selector) => map(selector).whereType<R>();
+
   Iterable<T> intersperseWith(T element) sync* {
     final iterator = this.iterator;
     if (iterator.moveNext()) {

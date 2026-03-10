@@ -9,7 +9,7 @@ import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/home/__generated__/update_marketing_consent_mutation.req.gql.dart';
+import 'package:typie/screens/shell/__generated__/update_marketing_consent_mutation.req.gql.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class MarketingConsentModal extends StatelessWidget {
