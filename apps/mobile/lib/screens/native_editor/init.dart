@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
+import 'package:typie/screens/native_editor/state/theme.dart';
 
 NativeEditorApplication? _sharedApplication;
 FontManager? _sharedFontManager;
@@ -38,7 +39,7 @@ Future<(NativeEditorApplication, FontManager)> _initApplication() async {
 
   final fontManager = FontManager(app);
 
-  await fontManager.initFonts();
+  await Future.wait([fontManager.initFonts(), initEditorTheme()]);
 
   if (_pendingTextReplacementRules != null) {
     app.setTextReplacementRules(_pendingTextReplacementRules!);

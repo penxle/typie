@@ -69,11 +69,11 @@
     }
   });
 
-  const color = $derived(getNoteColor(note.color)?.color ?? token('colors.prosemirror.white'));
+  const color = $derived(getNoteColor(note.color)?.color ?? token('colors.surface.default'));
 </script>
 
 <div
-  style:background-color={`color-mix(in srgb, ${token('colors.prosemirror.white')}, ${color} 75%)`}
+  style:background-color={`color-mix(in srgb, ${token('colors.surface.default')}, ${color} 75%)`}
   style:grid-row-end={`span ${Math.max(noteHeight || 0, draggingNoteMinHeight || 0) || 'auto'}`}
   class={css({
     position: 'relative',

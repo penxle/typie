@@ -1,7 +1,10 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { getThemeContext } from '@typie/ui/context';
   import { getEditorContext } from '$lib/editor/context.svelte';
+  import { THEME_COLORS } from '$lib/editor/theme';
   import type { Snippet } from 'svelte';
+  import type { ThemeVariant } from '$lib/editor/theme';
   import type { ExternalElement } from '$lib/editor/types';
 
   type Props = {
@@ -14,6 +17,12 @@
   let { el, minHeight = '48px', containerEl = $bindable(), children }: Props = $props();
 
   const { editor } = getEditorContext();
+  const theme = getThemeContext();
+
+  const selectionColor = $derived(
+    THEME_COLORS[(theme.effectiveTheme === 'light' ? `light-${theme.lightVariant}` : `dark-${theme.darkVariant}`) as ThemeVariant]
+      .selection,
+  );
 
   let reportedHeight = $state<number>();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -70,6 +79,6 @@
   </div>
 
   {#if el.isSelected}
-    <div class={css({ position: 'absolute', inset: '0', backgroundColor: 'selection', pointerEvents: 'none' })}></div>
+    <div style:background-color={selectionColor} class={css({ position: 'absolute', inset: '0', pointerEvents: 'none' })}></div>
   {/if}
 </div>
