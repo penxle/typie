@@ -211,7 +211,7 @@ class _EntityList extends HookWidget {
                     label: '스페이스 설정',
                     onTap: () async {
                       unawaited(mixpanel.track('open_site_settings', properties: {'via': 'entity_menu'}));
-                      await context.router.push(const SiteSettingsRoute());
+                      await context.router.push(const SiteRoute());
                     },
                   ),
                   const BottomMenuSeparator(),

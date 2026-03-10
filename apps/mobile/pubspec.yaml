@@ -115,22 +115,32 @@ flutter:
     - assets/native/
 
   fonts:
+    - family: LucideIcons
+      fonts:
+        - asset: assets/fonts/LucideIcons.ttf
     - family: LucideLightIcons
       fonts:
         - asset: assets/fonts/LucideLightIcons.ttf
-    - family: LucideLabIcons
-      fonts:
-        - asset: assets/fonts/LucideLabIcons.ttf
     - family: TypieIcons
       fonts:
         - asset: assets/fonts/TypieIcons.ttf
-    - family: Interop
+    - family: SUIT
       fonts:
-        - asset: assets/fonts/Interop-Regular.otf
+        - asset: assets/fonts/SUIT-Thin.woff2
+          weight: 100
+        - asset: assets/fonts/SUIT-ExtraLight.woff2
+          weight: 200
+        - asset: assets/fonts/SUIT-Light.woff2
+          weight: 300
+        - asset: assets/fonts/SUIT-Regular.woff2
           weight: 400
-        - asset: assets/fonts/Interop-Medium.otf
+        - asset: assets/fonts/SUIT-Medium.woff2
           weight: 500
-        - asset: assets/fonts/Interop-SemiBold.otf
+        - asset: assets/fonts/SUIT-SemiBold.woff2
           weight: 600
-        - asset: assets/fonts/Interop-Bold.otf
+        - asset: assets/fonts/SUIT-Bold.woff2
           weight: 700
+        - asset: assets/fonts/SUIT-ExtraBold.woff2
+          weight: 800
+        - asset: assets/fonts/SUIT-Heavy.woff2
+          weight: 900

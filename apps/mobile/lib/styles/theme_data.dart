@@ -5,7 +5,7 @@ import 'package:typie/styles/colors.dart';
 import 'package:typie/styles/semantic_colors.dart';
 
 const _lightDefaultTextStyle = TextStyle(
-  fontFamily: 'Interop',
+  fontFamily: 'SUIT',
   fontSize: 16,
   color: AppColors.gray_950,
   height: 1.4,
@@ -16,7 +16,7 @@ final lightTheme = ThemeData(
   brightness: Brightness.light,
   scaffoldBackgroundColor: AppColors.white,
   primaryColor: AppColors.gray_950,
-  fontFamily: 'Interop',
+  fontFamily: 'SUIT',
   colorScheme: ColorScheme.fromSeed(seedColor: AppColors.brand_600),
   extensions: const [
     SemanticColors.light,
@@ -29,12 +29,7 @@ final lightTheme = ThemeData(
     backgroundColor: AppColors.white,
     foregroundColor: AppColors.gray_950,
     elevation: 0,
-    titleTextStyle: TextStyle(
-      fontFamily: 'Interop',
-      color: AppColors.gray_950,
-      fontSize: 18,
-      fontWeight: FontWeight.w600,
-    ),
+    titleTextStyle: TextStyle(fontFamily: 'SUIT', color: AppColors.gray_950, fontSize: 18, fontWeight: FontWeight.w600),
   ),
   textTheme: const TextTheme(
     displaySmall: _lightDefaultTextStyle,
@@ -65,7 +60,7 @@ final lightTheme = ThemeData(
 );
 
 final _darkDefaultTextStyle = TextStyle(
-  fontFamily: 'Interop',
+  fontFamily: 'SUIT',
   fontSize: 16,
   color: AppColors.dark.gray_50,
   height: 1.4,
@@ -74,9 +69,9 @@ final _darkDefaultTextStyle = TextStyle(
 
 final darkTheme = ThemeData(
   brightness: Brightness.dark,
-  scaffoldBackgroundColor: AppColors.dark.gray_900,
+  scaffoldBackgroundColor: AppColors.dark.gray_950,
   primaryColor: AppColors.dark.gray_50,
-  fontFamily: 'Interop',
+  fontFamily: 'SUIT',
   colorScheme: ColorScheme.fromSeed(seedColor: AppColors.dark.brand_600, brightness: Brightness.dark),
   extensions: [
     SemanticColors.dark,
@@ -90,7 +85,7 @@ final darkTheme = ThemeData(
     foregroundColor: AppColors.dark.gray_50,
     elevation: 0,
     titleTextStyle: TextStyle(
-      fontFamily: 'Interop',
+      fontFamily: 'SUIT',
       color: AppColors.dark.gray_50,
       fontSize: 18,
       fontWeight: FontWeight.w600,

@@ -3,7 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { exportToDirectory, IconSet, SVG } from '@iconify/tools';
 import { icons as lucideIcons } from '@iconify-json/lucide';
-import { icons as lucideLabIcons } from '@iconify-json/lucide-lab';
 import { Case } from 'change-case-all';
 import { FontAssetType, generateFonts } from 'fantasticon';
 import SVGFixer from 'oslllo-svg-fixer';
@@ -137,12 +136,12 @@ ${entries.join('\n')}
   );
 };
 
-const makeIconSetDir = async (name, icons) => {
+const makeIconSetDir = async (name, icons, width) => {
   const iconSet = new IconSet(icons);
   iconSet.forEachSync(
     (name) => {
       const svg = iconSet.toSVG(name);
-      const modified = svg.toString().replace(/stroke-width=["']?2["']?/g, 'stroke-width="1.5"');
+      const modified = svg.toString().replace(/stroke-width=["']?2["']?/g, `stroke-width="${width}"`);
       iconSet.fromSVG(name, new SVG(modified));
     },
     ['icon'],
@@ -158,12 +157,12 @@ const makeIconSetDir = async (name, icons) => {
   return dir;
 };
 
-const lucideLightDir = await makeIconSetDir('lucide', lucideIcons);
-const lucideLabDir = await makeIconSetDir('lucide-lab', lucideLabIcons);
+const lucideDir = await makeIconSetDir('lucide', lucideIcons, 1.75);
+const lucideLightDir = await makeIconSetDir('lucide', lucideIcons, 1.5);
 
 const typieDir = await fs.mkdtemp(path.join(os.tmpdir(), 'icons-typie-'));
 await fs.cp('../website/src/icons', typieDir, { recursive: true });
 
+await createIconFont('lucide', lucideDir);
 await createIconFont('lucide-light', lucideLightDir);
-await createIconFont('lucide-lab', lucideLabDir);
 await createIconFont('typie', typieDir);

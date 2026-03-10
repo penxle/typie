@@ -46,6 +46,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.accentSuccessSubtle,
 
     required this.shadowDefault,
+    required this.shadowAmbient,
     required this.overlayDefault,
   });
 
@@ -91,6 +92,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   final Color accentSuccessSubtle;
 
   final Color shadowDefault;
+  final Color shadowAmbient;
   final Color overlayDefault;
 
   static const light = SemanticColors(
@@ -135,7 +137,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     accentSuccess: AppColors.green_700,
     accentSuccessSubtle: AppColors.green_50,
 
-    shadowDefault: AppColors.gray_950,
+    shadowDefault: Color(0x1409090C),
+    shadowAmbient: Color(0x0509090C),
     overlayDefault: AppColors.black,
   );
 
@@ -181,7 +184,8 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     accentSuccess: AppColors.dark.green_300,
     accentSuccessSubtle: AppColors.dark.green_900,
 
-    shadowDefault: AppColors.dark.gray_950,
+    shadowDefault: const Color(0x660A0B0E),
+    shadowAmbient: const Color(0x1A0A0B0E),
     overlayDefault: AppColors.black,
   );
 
@@ -229,6 +233,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? accentSuccessSubtle,
 
     Color? shadowDefault,
+    Color? shadowAmbient,
     Color? overlayDefault,
   }) {
     return SemanticColors(
@@ -274,6 +279,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       accentSuccessSubtle: accentSuccessSubtle ?? this.accentSuccessSubtle,
 
       shadowDefault: shadowDefault ?? this.shadowDefault,
+      shadowAmbient: shadowAmbient ?? this.shadowAmbient,
       overlayDefault: overlayDefault ?? this.overlayDefault,
     );
   }
@@ -326,6 +332,7 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       accentSuccessSubtle: Color.lerp(accentSuccessSubtle, other.accentSuccessSubtle, t)!,
 
       shadowDefault: Color.lerp(shadowDefault, other.shadowDefault, t)!,
+      shadowAmbient: Color.lerp(shadowAmbient, other.shadowAmbient, t)!,
       overlayDefault: Color.lerp(overlayDefault, other.overlayDefault, t)!,
     );
   }

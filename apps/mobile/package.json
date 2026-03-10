@@ -13,7 +13,6 @@
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.96",
-    "@iconify-json/lucide-lab": "^1.2.3",
     "@iconify/tools": "^5.0.5",
     "change-case-all": "^2.1.0",
     "fantasticon": "^4.1.0",
