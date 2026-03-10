@@ -1,4 +1,4 @@
-mutation LimitBottomSheet_SubscribePlanWithTrial_Mutation {
+mutation PlanUpgradeBottomSheet_SubscribePlanWithTrial_Mutation {
   subscribePlanWithTrial {
     id
     state

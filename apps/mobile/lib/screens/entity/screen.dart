@@ -387,6 +387,9 @@ class _EntityList extends HookWidget {
                                     entityRouter.popUntilRoot();
                                   }
                                 },
+                                onUpgrade: () {
+                                  unawaited(context.router.push(const EnrollPlanRoute()));
+                                },
                               ),
                             );
                           },

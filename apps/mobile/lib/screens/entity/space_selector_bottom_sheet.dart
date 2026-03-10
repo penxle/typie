@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
@@ -15,14 +16,15 @@ import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/entity/__generated__/create_site_mutation.req.gql.dart';
 import 'package:typie/screens/entity/__generated__/space_selector_query.req.gql.dart';
-import 'package:typie/screens/native_editor/limit.dart';
 import 'package:typie/services/site.dart';
+import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class SpaceSelectorBottomSheet extends HookWidget {
-  const SpaceSelectorBottomSheet({super.key, this.onSiteChanged});
+  const SpaceSelectorBottomSheet({super.key, this.onSiteChanged, this.onUpgrade});
 
   final VoidCallback? onSiteChanged;
+  final VoidCallback? onUpgrade;
 
   @override
   Widget build(BuildContext context) {
@@ -93,14 +95,18 @@ class SpaceSelectorBottomSheet extends HookWidget {
               Tappable(
                 padding: const Pad(horizontal: 24, vertical: 10),
                 onTap: () async {
-                  context.router.pop();
-
                   if (!hasSubscription) {
                     if (context.mounted) {
-                      await context.showBottomSheet(
-                        child: const LimitBottomSheet(type: LimitBottomSheetType.multiSite),
+                      final result = await context.showBottomSheet<PlanUpgradeResult>(
+                        child: const PlanUpgradeBottomSheet(message: '멀티 스페이스는 FULL ACCESS 플랜에서 사용할 수 있어요.'),
                       );
+
+                      if (result == PlanUpgradeResult.upgrade && context.mounted) {
+                        onUpgrade?.call();
+                        unawaited(context.router.maybePop());
+                      }
                     }
+
                     return;
                   }
 
@@ -108,6 +114,10 @@ class SpaceSelectorBottomSheet extends HookWidget {
                     await context.showBottomSheet(
                       child: _CreateSiteBottomSheet(client: client, site: site, onSiteChanged: onSiteChanged),
                     );
+
+                    if (context.mounted) {
+                      context.router.pop();
+                    }
                   }
                 },
                 child: Row(
