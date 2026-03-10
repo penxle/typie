@@ -19,6 +19,7 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/query.data.gql.dart';
 import 'package:typie/screens/home/__generated__/query.req.gql.dart';
 import 'package:typie/services/site.dart';
+import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/img.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -34,22 +35,39 @@ class HomeScreen extends HookWidget {
 
     final data = useQuery(GHomeScreen_QueryReq((b) => b.vars.siteId = siteId));
 
+    final scrollController = useScrollController();
+    final showHeadingTitle = useState(false);
+
+    useEffect(() {
+      void onScroll() {
+        showHeadingTitle.value = scrollController.offset > 44;
+      }
+
+      scrollController.addListener(onScroll);
+      return () => scrollController.removeListener(onScroll);
+    }, [scrollController]);
+
     return Screen(
       loading: data == null,
       child: Stack(
         children: [
           SingleChildScrollView(
+            controller: scrollController,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Gap(48),
+                const Gap(72),
+                const Padding(
+                  padding: Pad(horizontal: 20, top: 8, bottom: 4),
+                  child: Text('홈', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                ),
                 _RecentFolders(data: data),
                 _RecentDocuments(data: data),
-                const Gap(40),
+                const Gap(140),
               ],
             ),
           ),
-          _Heading(data: data),
+          _Heading(data: data, showTitle: showHeadingTitle.value),
         ],
       ),
     );
@@ -57,9 +75,10 @@ class HomeScreen extends HookWidget {
 }
 
 class _Heading extends StatelessWidget {
-  const _Heading({required this.data});
+  const _Heading({required this.data, required this.showTitle});
 
   final GHomeScreen_QueryData? data;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -71,28 +90,49 @@ class _Heading extends StatelessWidget {
           height: 48,
           padding: const Pad(horizontal: 20),
           decoration: BoxDecoration(color: context.colors.surfaceSubtle),
-          child: Row(
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              Transform.rotate(
-                angle: -10 * (math.pi / 180),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: context.colors.shadowDefault.withValues(alpha: 0.08),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Tappable(
+                  onTap: () {
+                    unawaited(context.router.push(const SiteRoute()));
+                  },
+                  child: Tappable.scale(
+                    scale: 0.95,
+                    child: Transform.rotate(
+                      angle: -10 * (math.pi / 180),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: context.colors.shadowDefault.withValues(alpha: 0.08),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Img(image: data?.site.logo, size: 36),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Img(image: data?.site.logo, size: 36),
+                    ),
                   ),
                 ),
               ),
-              const Spacer(),
+              AnimatedSlide(
+                offset: Offset(0, showTitle ? 0.0 : 0.4),
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                child: AnimatedOpacity(
+                  opacity: showTitle ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: const Text('홈', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+              ),
             ],
           ),
         ),
@@ -141,11 +181,16 @@ class _RecentFolders extends StatelessWidget {
           padding: const Pad(horizontal: 20, top: 20, bottom: 12),
           child: Text(
             '최근 폴더',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textFaint),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+              color: context.colors.textFaint,
+            ),
           ),
         ),
         SizedBox(
-          height: 100,
+          height: 110,
           child: folders.isEmpty
               ? Container(
                   margin: const Pad(horizontal: 20),
@@ -154,7 +199,7 @@ class _RecentFolders extends StatelessWidget {
                     color: context.colors.surfaceDefault,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text('최근 사용한 폴더가 여기 나타나요', style: TextStyle(fontSize: 14, color: context.colors.textFaint)),
+                  child: Text('최근 사용한 폴더가 여기 나타나요', style: TextStyle(fontSize: 15, color: context.colors.textFaint)),
                 )
               : SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -168,6 +213,7 @@ class _RecentFolders extends StatelessWidget {
                             onTap: () async {
                               await context.router.push(EntityRoute(entityId: folder.id));
                             },
+                            // ignore: avoid_unnecessary_containers -- false positive
                             child: Container(
                               width: 140,
                               padding: const Pad(all: 16),
@@ -175,23 +221,29 @@ class _RecentFolders extends StatelessWidget {
                                 color: context.colors.surfaceDefault,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(LucideLightIcons.folder, size: 18, color: context.colors.accentBrand),
-                                  const Gap(6),
-                                  Text(
-                                    folder.name,
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                  ),
-                                  const Gap(2),
-                                  Text(
-                                    '문서 ${folder.documentCount}개',
-                                    style: TextStyle(fontSize: 11, color: context.colors.textFaint),
-                                  ),
-                                ],
+                              child: Tappable.scale(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(LucideLightIcons.folder, size: 18, color: context.colors.accentBrand),
+                                    const Gap(6),
+                                    Text(
+                                      folder.name,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                    const Gap(2),
+                                    Text(
+                                      '문서 ${folder.documentCount}개',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: context.colors.textFaint,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -205,7 +257,7 @@ class _RecentFolders extends StatelessWidget {
   }
 }
 
-// -- Recent Documents (hybrid: cards + list) ----------------------------------
+// -- Recent Documents ----------------------------------------------------------
 
 typedef _RecentDocument = GHomeScreen_QueryData_me_recentlyViewedEntities_node__asDocument;
 
@@ -232,9 +284,6 @@ class _RecentDocuments extends StatelessWidget {
           ),
         );
 
-    final topDocs = docs.take(2).toList();
-    final restDocs = docs.skip(2).toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -242,39 +291,25 @@ class _RecentDocuments extends StatelessWidget {
           padding: const Pad(horizontal: 20, top: 24, bottom: 12),
           child: Text(
             '최근 문서',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.textFaint),
-          ),
-        ),
-
-        // Top cards
-        Padding(
-          padding: const Pad(horizontal: 20),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < topDocs.length; i++) ...[
-                  if (i > 0) const Gap(12),
-                  Expanded(child: _DocumentCard(doc: topDocs[i])),
-                ],
-                if (topDocs.length == 1) ...[const Gap(12), const Expanded(child: SizedBox.shrink())],
-              ],
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+              color: context.colors.textFaint,
             ),
           ),
         ),
-
-        // Compact list
-        if (restDocs.isNotEmpty)
+        if (docs.isNotEmpty)
           Padding(
-            padding: const Pad(horizontal: 20, top: 12),
+            padding: const Pad(horizontal: 20),
             child: Container(
               decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(12)),
               clipBehavior: Clip.antiAlias,
               child: Column(
-                children: [
-                  for (var i = 0; i < restDocs.length; i++)
-                    _CompactDocumentRow(doc: restDocs[i], isLast: i == restDocs.length - 1),
-                ],
+                children: docs
+                    .map((doc) => _DocumentRow(doc: doc))
+                    .intersperseWith(HorizontalDivider(color: context.colors.borderSubtle))
+                    .toList(),
               ),
             ),
           ),
@@ -283,98 +318,58 @@ class _RecentDocuments extends StatelessWidget {
   }
 }
 
-class _DocumentCard extends StatelessWidget {
-  const _DocumentCard({required this.doc});
+class _DocumentRow extends StatelessWidget {
+  const _DocumentRow({required this.doc});
 
   final _RecentDocument doc;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return Tappable(
       onTap: () {
         unawaited(context.router.push(NativeEditorRoute(slug: doc.entity.slug)));
       },
-      child: Container(
-        padding: const Pad(all: 16),
-        decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              doc.title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-            const Gap(6),
-            Text(
-              doc.excerpt.isEmpty ? '(내용 없음)' : doc.excerpt,
-              style: TextStyle(fontSize: 12, color: context.colors.textFaint, height: 1.4),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-            ),
-            const Gap(10),
-            Text(doc.updatedAt.ago, style: TextStyle(fontSize: 11, color: context.colors.textDisabled)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CompactDocumentRow extends StatelessWidget {
-  const _CompactDocumentRow({required this.doc, required this.isLast});
-
-  final _RecentDocument doc;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        unawaited(context.router.push(NativeEditorRoute(slug: doc.entity.slug)));
-      },
-      child: Container(
+      child: Padding(
         padding: const Pad(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderSubtle, width: 0.5)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  doc.type == GDocumentType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file,
-                  size: 14,
-                  color: context.colors.accentBrand,
-                ),
-                const Gap(12),
-                Expanded(
+        child: Tappable.scale(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    doc.type == GDocumentType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file,
+                    size: 16,
+                    color: context.colors.textFaint,
+                  ),
+                  const Gap(12),
+                  Expanded(
+                    child: Text(
+                      doc.title,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  const Gap(8),
+                  Text(
+                    doc.updatedAt.ago,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: context.colors.textDisabled),
+                  ),
+                ],
+              ),
+              if (doc.excerpt.isNotEmpty)
+                Padding(
+                  padding: const Pad(left: 28),
                   child: Text(
-                    doc.title,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    doc.excerpt,
+                    style: TextStyle(fontSize: 14, color: context.colors.textFaint),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
                 ),
-                const Gap(8),
-                Text(doc.updatedAt.ago, style: TextStyle(fontSize: 11, color: context.colors.textDisabled)),
-              ],
-            ),
-            if (doc.excerpt.isNotEmpty)
-              Padding(
-                padding: const Pad(left: 26),
-                child: Text(
-                  doc.excerpt,
-                  style: TextStyle(fontSize: 12, color: context.colors.textFaint),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

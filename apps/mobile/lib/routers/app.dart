@@ -1,10 +1,15 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:typie/routers/app.gr.dart';
+import 'package:typie/routers/parallax_route.dart';
 
 @AutoRouterConfig()
 class AppRouter extends RootStackRouter {
   @override
-  final defaultRouteType = const RouteType.cupertino();
+  final defaultRouteType = RouteType.custom(
+    customRouteBuilder: <T>(context, child, page) {
+      return ParallaxPageRoute<T>(content: child, settings: page, fullscreenDialog: page.fullscreenDialog);
+    },
+  );
 
   @override
   late final routes = <AutoRoute>[
@@ -34,7 +39,7 @@ class AppRouter extends RootStackRouter {
                 AutoRoute(page: HomeRoute.page, initial: true),
                 AutoRoute(
                   page: EntityRouter.page,
-                  children: [AutoRoute(page: EntityRoute.page)],
+                  children: [AutoRoute(page: EntityRoute.page, initial: true)],
                 ),
                 AutoRoute(page: NotesRoute.page),
                 AutoRoute(page: ProfileRoute.page),
@@ -46,7 +51,7 @@ class AppRouter extends RootStackRouter {
             AutoRoute(page: UpdateProfileRoute.page),
             AutoRoute(page: UpdatePasswordRoute.page),
             AutoRoute(page: UpdateEmailRoute.page),
-            AutoRoute(page: SiteSettingsRoute.page),
+            AutoRoute(page: SiteRoute.page),
             AutoRoute(page: CurrentPlanRoute.page),
             AutoRoute(page: EnrollPlanRoute.page),
             AutoRoute(page: CancelPlanRoute.page),

@@ -24,12 +24,12 @@ import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/site_settings/__generated__/delete_site_mutation.req.gql.dart';
-import 'package:typie/screens/site_settings/__generated__/persist_blob_as_image_mutation.req.gql.dart';
-import 'package:typie/screens/site_settings/__generated__/screen_query.data.gql.dart';
-import 'package:typie/screens/site_settings/__generated__/screen_query.req.gql.dart';
-import 'package:typie/screens/site_settings/__generated__/update_site_mutation.req.gql.dart';
-import 'package:typie/screens/site_settings/__generated__/update_site_slug_mutation.req.gql.dart';
+import 'package:typie/screens/site/__generated__/delete_site_mutation.req.gql.dart';
+import 'package:typie/screens/site/__generated__/persist_blob_as_image_mutation.req.gql.dart';
+import 'package:typie/screens/site/__generated__/screen_query.data.gql.dart';
+import 'package:typie/screens/site/__generated__/screen_query.req.gql.dart';
+import 'package:typie/screens/site/__generated__/update_site_mutation.req.gql.dart';
+import 'package:typie/screens/site/__generated__/update_site_slug_mutation.req.gql.dart';
 import 'package:typie/services/blob.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/forms/form.dart';
@@ -47,8 +47,8 @@ String _usersiteHost() {
 }
 
 @RoutePage()
-class SiteSettingsScreen extends HookWidget {
-  const SiteSettingsScreen({super.key});
+class SiteScreen extends HookWidget {
+  const SiteScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

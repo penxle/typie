@@ -1,22 +1,22 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/icons/typie.dart';
+import 'package:typie/icons/lucide.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/screens/shell/__generated__/create_document.req.gql.dart';
 import 'package:typie/screens/shell/__generated__/site_update_stream.req.gql.dart';
 import 'package:typie/services/site.dart';
-import 'package:typie/widgets/responsive_container.dart';
+import 'package:typie/widgets/animated_toggle.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -29,6 +29,7 @@ class ShellScreen extends HookWidget {
     final site = useService<Site>();
     final siteId = useValueListenable(site);
     final mixpanel = useService<Mixpanel>();
+    final crossFadeKey = useMemoized(GlobalKey<_SnapshotCrossFadeState>.new);
 
     useEffect(() {
       final subscription = client
@@ -38,90 +39,100 @@ class ShellScreen extends HookWidget {
       return subscription.cancel;
     }, [siteId]);
 
-    return AutoTabsRouter(
-      routes: const [HomeRoute(), EntityRouter(), NotesRoute(), ProfileRoute()],
-      duration: Duration.zero,
-      transitionBuilder: (context, child, animation) => child,
-      builder: (context, child) {
-        final mediaQuery = MediaQuery.of(context);
-        final screenMediaQuery = mediaQuery.copyWith(
-          viewInsets: mediaQuery.viewInsets.copyWith(
-            bottom: mediaQuery.viewInsets.bottom - mediaQuery.viewPadding.bottom - 52,
-          ),
-        );
+    final mediaQuery = MediaQuery.of(context);
+    final pillColor = context.theme.brightness == Brightness.dark
+        ? context.colors.surfaceSubtle
+        : context.colors.surfaceDefault;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return AutoTabsRouter.builder(
+      builder: (context, children, tabsRouter) {
+        return Stack(
           children: [
-            Expanded(
-              child: MediaQuery(data: screenMediaQuery, child: child),
-            ),
-            Container(
-              height: mediaQuery.viewPadding.bottom + 52,
-              padding: Pad(horizontal: 24, bottom: mediaQuery.viewPadding.bottom),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: context.colors.borderDefault)),
-                color: context.colors.surfaceDefault,
+            Positioned.fill(
+              child: _SnapshotCrossFade(
+                key: crossFadeKey,
+                child: IndexedStack(index: tabsRouter.activeIndex, children: children),
               ),
-              child: ResponsiveContainer(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Button(
-                      index: 0,
-                      icon: Icon(LucideLightIcons.house, size: 24, color: context.colors.textSubtle),
-                      activeIcon: Icon(LucideLightIcons.house, size: 24, color: context.colors.textDefault),
-                    ),
-                    _Button(
-                      index: 1,
-                      icon: Icon(LucideLightIcons.folder_open, size: 24, color: context.colors.textSubtle),
-                      activeIcon: Icon(TypieIcons.folder_open_filled, size: 24, color: context.colors.textDefault),
-                    ),
-                    Tappable(
-                      padding: const Pad(horizontal: 16),
-                      onTap: () async {
-                        String? parentEntityId;
-
-                        final topRoute = context.topRoute;
-                        if (topRoute.name == EntityRoute.name) {
-                          final args = topRoute.argsAs<EntityRouteArgs>(orElse: EntityRouteArgs.new);
-                          parentEntityId = args.entityId;
-                        }
-
-                        final result = await client.request(
-                          GHomeScreen_CreateDocument_MutationReq(
-                            (b) => b
-                              ..vars.input.siteId = site.siteId
-                              ..vars.input.parentEntityId = Value.present(parentEntityId),
-                          ),
-                        );
-
-                        unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
-
-                        if (context.mounted) {
-                          markAutoDiscardCandidate(result.createDocument.entity.slug);
-                          await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
-                        }
-                      },
-                      child: Icon(LucideLightIcons.square_plus, size: 24, color: context.colors.textSubtle),
-                    ),
-                    _Button(
-                      index: 2,
-                      icon: Icon(LucideLightIcons.sticky_note, size: 24, color: context.colors.textSubtle),
-                      activeIcon: Icon(TypieIcons.sticky_note_filled, size: 24, color: context.colors.textDefault),
-                    ),
-                    _Button(
-                      index: 3,
-                      icon: Icon(LucideLightIcons.circle_user_round, size: 24, color: context.colors.textSubtle),
-                      activeIcon: Icon(
-                        TypieIcons.circle_user_round_filled,
-                        size: 24,
-                        color: context.colors.textDefault,
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: mediaQuery.viewPadding.bottom + 12,
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Container(
+                      height: 60,
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      decoration: BoxDecoration(
+                        color: pillColor,
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: context.colors.borderDefault),
+                        boxShadow: [
+                          BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
+                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 4), blurRadius: 12),
+                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 12), blurRadius: 32),
+                        ],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (int i = 0; i < 4; i++)
+                            Expanded(
+                              child: _Button(
+                                index: i,
+                                activeIndex: tabsRouter.activeIndex,
+                                icon: Icon(
+                                  [
+                                    LucideIcons.house,
+                                    LucideIcons.folder_open,
+                                    LucideIcons.sticky_note,
+                                    LucideIcons.circle_user_round,
+                                  ][i],
+                                  size: 24,
+                                  color: context.colors.textSubtle,
+                                ),
+                                onTap: () {
+                                  crossFadeKey.currentState?.captureAndAnimate();
+                                  tabsRouter.setActiveIndex(i);
+                                },
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  Tappable(
+                    onTap: () async {
+                      final result = await client.request(
+                        GHomeScreen_CreateDocument_MutationReq((b) => b..vars.input.siteId = site.siteId),
+                      );
+
+                      unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
+
+                      if (context.mounted) {
+                        markAutoDiscardCandidate(result.createDocument.entity.slug);
+                        await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
+                      }
+                    },
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: pillColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: context.colors.borderDefault),
+                        boxShadow: [
+                          BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
+                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 4), blurRadius: 12),
+                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 12), blurRadius: 32),
+                        ],
+                      ),
+                      child: Icon(LucideIcons.square_pen, size: 24, color: context.colors.textSubtle),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -131,36 +142,112 @@ class ShellScreen extends HookWidget {
   }
 }
 
-class _Button extends StatelessWidget {
-  const _Button({required this.index, required this.icon, this.activeIcon});
+class _SnapshotCrossFade extends StatefulWidget {
+  const _SnapshotCrossFade({super.key, required this.child});
 
-  final int index;
-  final Widget icon;
-  final Widget? activeIcon;
+  final Widget child;
+
+  @override
+  State<_SnapshotCrossFade> createState() => _SnapshotCrossFadeState();
+}
+
+class _SnapshotCrossFadeState extends State<_SnapshotCrossFade> with SingleTickerProviderStateMixin {
+  final _boundaryKey = GlobalKey();
+  ui.Image? _snapshot;
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 150))
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          setState(() {
+            _snapshot?.dispose();
+            _snapshot = null;
+          });
+        }
+      });
+  }
+
+  void captureAndAnimate() {
+    final boundary = _boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      return;
+    }
+
+    try {
+      _snapshot?.dispose();
+      _snapshot = boundary.toImageSync(pixelRatio: MediaQuery.devicePixelRatioOf(context));
+      unawaited(_controller.forward(from: 0));
+      setState(() {});
+    } catch (_) {
+      // Boundary not ready, skip transition
+    }
+  }
+
+  @override
+  void dispose() {
+    _snapshot?.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final tabsRouter = AutoTabsRouter.of(context, watch: true);
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        RepaintBoundary(key: _boundaryKey, child: widget.child),
+        if (_snapshot != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: FadeTransition(
+                opacity: Tween<double>(
+                  begin: 1,
+                  end: 0,
+                ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut)),
+                child: RawImage(image: _snapshot, fit: BoxFit.cover),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
-    if (tabsRouter.activeIndex == index) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onDoubleTapDown: (_) {
-          final router = context.router.topMostRouter();
-          if (router is StackRouter) {
-            router.popUntilRoot();
-          }
-        },
-        child: Padding(padding: const Pad(horizontal: 16), child: activeIcon ?? icon),
-      );
-    } else {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) {
-          tabsRouter.setActiveIndex(index);
-        },
-        child: Padding(padding: const Pad(horizontal: 16), child: icon),
-      );
-    }
+class _Button extends StatelessWidget {
+  const _Button({required this.index, required this.activeIndex, required this.icon, required this.onTap});
+
+  final int index;
+  final int activeIndex;
+  final Widget icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = activeIndex == index;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: isActive ? null : (_) => onTap(),
+      child: Padding(
+        padding: const Pad(all: 4),
+        child: AnimatedToggle(
+          value: isActive,
+          builder: (context, t, child) {
+            return Container(
+              padding: const Pad(horizontal: 12),
+              decoration: BoxDecoration(
+                color: context.colors.surfaceMuted.withValues(alpha: context.colors.surfaceMuted.a * t),
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: child,
+            );
+          },
+          child: Center(child: icon),
+        ),
+      ),
+    );
   }
 }

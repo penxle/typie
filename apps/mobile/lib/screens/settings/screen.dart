@@ -154,7 +154,7 @@ class SettingsScreen extends HookWidget {
                       label: '현재 스페이스 설정',
                       onTap: () async {
                         unawaited(mixpanel.track('open_site_settings', properties: {'via': 'settings'}));
-                        await context.router.push(const SiteSettingsRoute());
+                        await context.router.push(const SiteRoute());
                       },
                     ),
                   ],
