@@ -844,8 +844,8 @@ class _Option extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 24,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 24),
       child: Row(
         children: [
           Icon(icon, size: 20, color: context.colors.textSubtle),

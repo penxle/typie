@@ -7,7 +7,6 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
 import 'package:super_clipboard/super_clipboard.dart';
-import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/num.dart';
@@ -19,8 +18,9 @@ import 'package:typie/screens/stats/activity_chart.dart';
 import 'package:typie/screens/stats/stats_calculator.dart';
 import 'package:typie/widgets/activity_grid.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/popover/list.dart';
+import 'package:typie/widgets/popover/popover.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
 class StatsScreen extends StatelessWidget {
@@ -103,43 +103,6 @@ class StatsScreen extends StatelessWidget {
             }
           }
 
-          Future<void> showActivityImageActions() async {
-            await context.showBottomSheet(
-              child: BottomMenu(
-                header: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 4,
-                  children: [
-                    Text(
-                      '이미지 받기',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.colors.textDefault),
-                    ),
-                    Text(
-                      '지난 1년간의 기록 이미지를 복사하거나 저장할 수 있어요.',
-                      style: TextStyle(fontSize: 14, color: context.colors.textFaint),
-                    ),
-                  ],
-                ),
-                items: [
-                  BottomMenuItem(
-                    icon: LucideLightIcons.copy,
-                    label: '클립보드에 복사',
-                    onTap: () {
-                      unawaited(copyActivityImage());
-                    },
-                  ),
-                  BottomMenuItem(
-                    icon: LucideLightIcons.download,
-                    label: '기기에 저장',
-                    onTap: () {
-                      unawaited(downloadActivityImage());
-                    },
-                  ),
-                ],
-              ),
-            );
-          }
-
           return SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(20, 20, 20, bottomPadding),
             child: Column(
@@ -182,7 +145,22 @@ class StatsScreen extends StatelessWidget {
                             ),
                           ),
                           const Spacer(),
-                          _ActionButton(label: '이미지 받기', onTap: showActivityImageActions),
+                          Popover(
+                            screenPadding: const EdgeInsets.all(20),
+                            collapsedBorderRadius: BorderRadius.circular(8),
+                            expandedBorderRadius: BorderRadius.circular(16),
+                            backgroundColor: context.colors.surfaceDefault,
+                            borderSide: BorderSide(color: context.colors.borderStrong),
+                            anchor: const _ActionButton(child: _ActionButtonContent(label: '이미지 받기')),
+                            pane: _ActivityImagePane(
+                              onCopy: () {
+                                unawaited(copyActivityImage());
+                              },
+                              onDownload: () {
+                                unawaited(downloadActivityImage());
+                              },
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -384,25 +362,89 @@ class _WeekdayCard extends StatelessWidget {
 }
 
 class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.label, required this.onTap});
+  const _ActionButton({required this.child});
 
-  final String label;
-  final VoidCallback onTap;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Tappable(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: context.colors.borderStrong),
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: context.colors.surfaceDefault,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: context.colors.borderStrong),
         ),
-        child: Text(
-          label,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textSubtle),
+      ),
+      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), child: child),
+    );
+  }
+}
+
+class _ActionButtonContent extends StatelessWidget {
+  const _ActionButtonContent({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textSubtle),
+    );
+  }
+}
+
+class _ActivityImagePane extends StatelessWidget {
+  const _ActivityImagePane({required this.onCopy, required this.onDownload});
+
+  final VoidCallback onCopy;
+  final VoidCallback onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopoverList(
+      items: [
+        PopoverListItem(
+          onSelected: () {
+            Popover.close(context);
+            onCopy();
+          },
+          child: const _ActivityImagePaneItem(icon: LucideLightIcons.copy, label: '클립보드에 복사'),
         ),
+        PopoverListItem(
+          onSelected: () {
+            Popover.close(context);
+            onDownload();
+          },
+          child: const _ActivityImagePaneItem(icon: LucideLightIcons.download, label: '기기에 저장'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityImagePaneItem extends StatelessWidget {
+  const _ActivityImagePaneItem({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        spacing: 12,
+        children: [
+          Icon(icon, size: 18, color: context.colors.textDefault),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.textDefault),
+            ),
+          ),
+        ],
       ),
     );
   }

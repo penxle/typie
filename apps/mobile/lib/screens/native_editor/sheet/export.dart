@@ -31,6 +31,7 @@ import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
+import 'package:typie/widgets/popover/popover.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class ExportSheet extends HookWidget {
@@ -479,6 +480,7 @@ class _FormatSection extends StatelessWidget {
             HookFormSelect(
               name: 'format',
               initialValue: format.value,
+              position: PopoverPosition.bottomLeft,
               items: const [
                 HookFormSelectItem(
                   icon: TypieIcons.file_pdf,
