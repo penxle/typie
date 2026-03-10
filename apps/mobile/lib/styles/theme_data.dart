@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/styles/semantic_colors.dart';
 
@@ -17,7 +18,13 @@ final lightTheme = ThemeData(
   primaryColor: AppColors.gray_950,
   fontFamily: 'Interop',
   colorScheme: ColorScheme.fromSeed(seedColor: AppColors.brand_600),
-  extensions: const [SemanticColors.light],
+  extensions: const [
+    SemanticColors.light,
+    SkeletonizerConfigData(
+      enableSwitchAnimation: true,
+      effect: PulseEffect(from: AppColors.gray_100, to: AppColors.gray_200),
+    ),
+  ],
   appBarTheme: const AppBarTheme(
     backgroundColor: AppColors.white,
     foregroundColor: AppColors.gray_950,
@@ -71,7 +78,13 @@ final darkTheme = ThemeData(
   primaryColor: AppColors.dark.gray_50,
   fontFamily: 'Interop',
   colorScheme: ColorScheme.fromSeed(seedColor: AppColors.dark.brand_600, brightness: Brightness.dark),
-  extensions: [SemanticColors.dark],
+  extensions: [
+    SemanticColors.dark,
+    SkeletonizerConfigData.dark(
+      enableSwitchAnimation: true,
+      effect: PulseEffect(from: AppColors.dark.gray_900, to: AppColors.dark.gray_800),
+    ),
+  ],
   appBarTheme: AppBarTheme(
     backgroundColor: AppColors.dark.gray_800,
     foregroundColor: AppColors.dark.gray_50,

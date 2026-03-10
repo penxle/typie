@@ -28,14 +28,14 @@ class AppRouter extends RootStackRouter {
           transitionsBuilder: TransitionsBuilders.fadeIn,
           children: [
             AutoRoute(
-              page: HomeRoute.page,
+              page: ShellRoute.page,
               initial: true,
               children: [
+                AutoRoute(page: HomeRoute.page, initial: true),
                 AutoRoute(
                   page: EntityRouter.page,
-                  children: [AutoRoute(page: EntityRoute.page, initial: true)],
+                  children: [AutoRoute(page: EntityRoute.page)],
                 ),
-                AutoRoute(page: SearchRoute.page),
                 AutoRoute(page: NotesRoute.page),
                 AutoRoute(page: ProfileRoute.page),
               ],

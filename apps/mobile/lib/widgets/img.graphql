@@ -1,0 +1,5 @@
+fragment Img_image on Image {
+  id
+  url
+  placeholder
+}

@@ -39,6 +39,7 @@ fira
 fntf
 fnts
 fstype
+futureor
 genai
 healthz
 hmget
