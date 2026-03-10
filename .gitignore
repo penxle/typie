@@ -27,3 +27,6 @@ vite.config.ts.timestamp-*
 
 .terraform
 .terraform.lock.hcl
+
+.superpowers/
+docs/superpowers/
