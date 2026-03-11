@@ -14,9 +14,10 @@ import 'package:typie/widgets/fader.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class ActivityChart extends HookWidget {
-  const ActivityChart({super.key, required this.characterCountChanges});
+  const ActivityChart({super.key, required this.characterCountChanges, this.horizontalPadding = 0});
 
   final List<StatsCharacterCountChange> characterCountChanges;
+  final double horizontalPadding;
 
   static const chartHeight = 100.0;
   static const xAxisAreaHeight = 24.0;
@@ -214,24 +215,28 @@ class ActivityChart extends HookWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          '지난 3개월간의 기록',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textSubtle),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: Text(
+            '지난 3개월간의 기록',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textSubtle),
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 24),
         LayoutBuilder(
           builder: (context, constraints) {
             final chartWidth = constraints.maxWidth;
+            final contentViewportWidth = math.max(chartWidth - (horizontalPadding * 2), 0).toDouble();
 
-            if ((viewportWidth.value - chartWidth).abs() > 0.5) {
+            if ((viewportWidth.value - contentViewportWidth).abs() > 0.5) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                viewportWidth.value = chartWidth;
+                viewportWidth.value = contentViewportWidth;
 
                 if (!scrollController.hasClients) {
                   return;
                 }
 
-                final maxOffset = chartWidth * zoom.value - chartWidth;
+                final maxOffset = contentViewportWidth * zoom.value - contentViewportWidth;
                 final double clampedMaxOffset = maxOffset > 0 ? maxOffset : 0;
                 if (scrollController.offset > clampedMaxOffset) {
                   scrollController.jumpTo(clampedMaxOffset);
@@ -241,7 +246,7 @@ class ActivityChart extends HookWidget {
               });
             }
 
-            final totalChartWidth = chartWidth * zoom.value;
+            final totalChartWidth = contentViewportWidth * zoom.value;
             final barWidth = daysData.isEmpty ? 0.0 : totalChartWidth / daysData.length;
             final visualScrollDelta = isPinching.value && scrollController.hasClients
                 ? (scrollController.offset - scrollOffset.value)
@@ -257,7 +262,7 @@ class ActivityChart extends HookWidget {
             final visibleRange = _calculateVisibleRange(
               length: daysData.length,
               barWidth: barWidth,
-              viewportWidth: chartWidth,
+              viewportWidth: contentViewportWidth,
               scrollOffset: scrollOffset.value,
             );
 
@@ -281,7 +286,12 @@ class ActivityChart extends HookWidget {
                 return -1;
               }
 
-              final contentX = scrollOffset.value + localPosition.dx;
+              final localContentX = localPosition.dx - horizontalPadding;
+              if (localContentX < 0 || localContentX > contentViewportWidth) {
+                return -1;
+              }
+
+              final contentX = scrollOffset.value + localContentX;
               final clampedContentX = contentX.clamp(0.0, math.max(totalChartWidth - 0.001, 0.0));
               final index = (clampedContentX / barWidth).floor();
 
@@ -353,6 +363,7 @@ class ActivityChart extends HookWidget {
                       controller: scrollController,
                       scrollDirection: Axis.horizontal,
                       physics: isTooltipVisible || isPinching.value ? const NeverScrollableScrollPhysics() : null,
+                      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                       child: SizedBox(
                         width: totalChartWidth,
                         child: Transform.translate(
@@ -524,7 +535,7 @@ class ActivityChart extends HookWidget {
                         onScaleUpdate: (details) {
                           if (details.pointerCount >= 2) {
                             if (!isPinching.value) {
-                              beginPinch(details.localFocalPoint.dx);
+                              beginPinch(details.localFocalPoint.dx - horizontalPadding);
                             }
                             updatePinch(details.scale);
                           }
@@ -563,7 +574,10 @@ class ActivityChart extends HookWidget {
                                 delegate: _ChartTooltipPositionDelegate(
                                   chartSize: Size(chartWidth, chartHeight + xAxisAreaHeight),
                                   anchor: Offset(
-                                    tooltipData.value!.index * barWidth + (barWidth / 2) - scrollOffset.value,
+                                    horizontalPadding +
+                                        tooltipData.value!.index * barWidth +
+                                        (barWidth / 2) -
+                                        scrollOffset.value,
                                     0,
                                   ),
                                 ),
@@ -684,29 +698,32 @@ class ActivityChart extends HookWidget {
           },
         ),
         const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _LegendToggle(
-                label: '입력한 글자',
-                color: context.theme.brightness == Brightness.dark ? AppColors.dark.green_600 : AppColors.green_400,
-                selected: showAdditions.value,
-                onTap: () {
-                  showAdditions.value = !showAdditions.value;
-                },
-              ),
-              const SizedBox(width: 16),
-              _LegendToggle(
-                label: '지운 글자',
-                color: context.theme.brightness == Brightness.dark ? AppColors.dark.gray_600 : AppColors.gray_400,
-                selected: showDeletions.value,
-                onTap: () {
-                  showDeletions.value = !showDeletions.value;
-                },
-              ),
-            ],
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _LegendToggle(
+                  label: '입력한 글자',
+                  color: context.theme.brightness == Brightness.dark ? AppColors.dark.green_600 : AppColors.green_400,
+                  selected: showAdditions.value,
+                  onTap: () {
+                    showAdditions.value = !showAdditions.value;
+                  },
+                ),
+                const SizedBox(width: 16),
+                _LegendToggle(
+                  label: '지운 글자',
+                  color: context.theme.brightness == Brightness.dark ? AppColors.dark.gray_600 : AppColors.gray_400,
+                  selected: showDeletions.value,
+                  onTap: () {
+                    showDeletions.value = !showDeletions.value;
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ],

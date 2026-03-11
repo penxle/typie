@@ -5,22 +5,30 @@ import 'dart:math';
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gal/gal.dart';
+import 'package:gap/gap.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/extensions/num.dart';
+import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/stats/__generated__/generate_activity_image_mutation.req.gql.dart';
+import 'package:typie/screens/stats/__generated__/stats_query.data.gql.dart';
 import 'package:typie/screens/stats/__generated__/stats_query.req.gql.dart';
 import 'package:typie/screens/stats/activity_chart.dart';
 import 'package:typie/screens/stats/stats_calculator.dart';
 import 'package:typie/widgets/activity_grid.dart';
-import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/popover/list.dart';
 import 'package:typie/widgets/popover/popover.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/tappable.dart';
+
+const _cardRadius = 12.0;
+const _sectionGap = 16.0;
 
 @RoutePage()
 class StatsScreen extends StatelessWidget {
@@ -29,8 +37,8 @@ class StatsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Screen(
-      heading: const Heading(title: '나의 글쓰기 통계'),
       child: GraphQLOperation(
+        initialBackgroundColor: context.colors.surfaceSubtle,
         operation: GStatsScreen_QueryReq(),
         builder: (context, client, data) {
           final user = data.me;
@@ -38,103 +46,130 @@ class StatsScreen extends StatelessWidget {
             return const SizedBox.shrink();
           }
 
-          final changes = [
-            for (final change in user.characterCountChanges)
-              StatsCharacterCountChange(date: change.date, additions: change.additions, deletions: change.deletions),
-          ];
+          return _Content(user: user, client: client);
+        },
+      ),
+    );
+  }
+}
 
-          final totalCharacterCount = user.usage.totalCharacterCount;
-          final streakData = calculateStreakData(changes, totalCharacterCount);
-          final weekdayData = calculateWeekdayPattern(changes);
-          final maxWeekdayAvg = weekdayData.isEmpty ? 0 : weekdayData.map((day) => day.avgAdditions).reduce(max);
-          final bestWeekdayIndex = maxWeekdayAvg > 0
-              ? weekdayData.indexWhere((day) => day.avgAdditions == maxWeekdayAvg)
-              : -1;
-          final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
+class _Content extends HookWidget {
+  const _Content({required this.user, required this.client});
 
-          Future<void> copyActivityImage() async {
-            try {
-              final response = await client.request(GStatsScreen_GenerateActivityImage_MutationReq());
-              final bytes = base64Decode(response.generateActivityImage.value);
-              final clipboard = SystemClipboard.instance;
+  final GStatsScreen_QueryData_me user;
+  final GraphQLClient client;
 
-              if (clipboard == null) {
-                throw StateError('Clipboard is not available');
-              }
+  @override
+  Widget build(BuildContext context) {
+    final scrollController = useScrollController();
+    final changes = [
+      for (final change in user.characterCountChanges)
+        StatsCharacterCountChange(date: change.date, additions: change.additions, deletions: change.deletions),
+    ];
 
-              final item = DataWriterItem(suggestedName: '${user.name}-나의-글쓰기-발자취.png')..add(Formats.png(bytes));
-              await clipboard.write([item]);
+    final totalCharacterCount = user.usage.totalCharacterCount;
+    final streakData = calculateStreakData(changes, totalCharacterCount);
+    final weekdayData = calculateWeekdayPattern(changes);
+    final maxWeekdayAvg = weekdayData.isEmpty ? 0 : weekdayData.map((day) => day.avgAdditions).reduce(max);
+    final bestWeekdayIndex = maxWeekdayAvg > 0
+        ? weekdayData.indexWhere((day) => day.avgAdditions == maxWeekdayAvg)
+        : -1;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
 
-              if (context.mounted) {
-                context.toast(ToastType.success, '이미지가 클립보드에 복사되었어요.');
-              }
-            } catch (_) {
-              if (context.mounted) {
-                context.toast(ToastType.error, '이미지를 복사할 수 없어요.');
-              }
-            }
-          }
+    Future<void> copyActivityImage() async {
+      try {
+        final response = await client.request(GStatsScreen_GenerateActivityImage_MutationReq());
+        final bytes = base64Decode(response.generateActivityImage.value);
+        final clipboard = SystemClipboard.instance;
 
-          Future<void> downloadActivityImage() async {
-            try {
-              final response = await client.request(GStatsScreen_GenerateActivityImage_MutationReq());
-              final bytes = base64Decode(response.generateActivityImage.value);
-              final name = '${user.name}-나의-글쓰기-발자취';
+        if (clipboard == null) {
+          throw StateError('Clipboard is not available');
+        }
 
-              await Gal.putImageBytes(bytes, name: name);
+        final item = DataWriterItem(suggestedName: '${user.name}-나의-글쓰기-발자취.png')..add(Formats.png(bytes));
+        await clipboard.write([item]);
 
-              if (context.mounted) {
-                context.toast(ToastType.success, '이미지가 기기에 저장되었어요.');
-              }
-            } on GalException catch (e) {
-              if (!context.mounted) {
-                return;
-              }
+        if (context.mounted) {
+          context.toast(ToastType.success, '이미지가 클립보드에 복사되었어요.');
+        }
+      } catch (_) {
+        if (context.mounted) {
+          context.toast(ToastType.error, '이미지를 복사할 수 없어요.');
+        }
+      }
+    }
 
-              if (e.type == GalExceptionType.accessDenied) {
-                context.toast(ToastType.error, '사진 접근 권한이 필요해요.');
-              } else {
-                context.toast(ToastType.error, '이미지를 저장할 수 없어요.');
-              }
-            } catch (_) {
-              if (context.mounted) {
-                context.toast(ToastType.error, '이미지를 저장할 수 없어요.');
-              }
-            }
-          }
+    Future<void> downloadActivityImage() async {
+      try {
+        final response = await client.request(GStatsScreen_GenerateActivityImage_MutationReq());
+        final bytes = base64Decode(response.generateActivityImage.value);
+        final name = '${user.name}-나의-글쓰기-발자취';
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(20, 20, 20, bottomPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 16,
-              children: [
-                _SummaryCard(label: '총 글자', value: totalCharacterCount.comma, unit: '자'),
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: _SummaryCard(label: '총 문서', value: user.documentCount.toString(), unit: '개'),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _SummaryCard(label: '활동일', value: streakData.totalDays.toString(), unit: '일'),
-                      ),
-                    ],
-                  ),
+        await Gal.putImageBytes(bytes, name: name);
+
+        if (context.mounted) {
+          context.toast(ToastType.success, '이미지가 기기에 저장되었어요.');
+        }
+      } on GalException catch (e) {
+        if (!context.mounted) {
+          return;
+        }
+
+        if (e.type == GalExceptionType.accessDenied) {
+          context.toast(ToastType.error, '사진 접근 권한이 필요해요.');
+        } else {
+          context.toast(ToastType.error, '이미지를 저장할 수 없어요.');
+        }
+      } catch (_) {
+        if (context.mounted) {
+          context.toast(ToastType.error, '이미지를 저장할 수 없어요.');
+        }
+      }
+    }
+
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          controller: scrollController,
+          padding: EdgeInsets.fromLTRB(20, OverlayHeading.contentTopSpacing + 8, 20, bottomPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: Pad(bottom: 4),
+                child: Text('나의 글쓰기 통계', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              ),
+              const Gap(_sectionGap),
+              _SummaryCard(label: '총 글자', value: totalCharacterCount.comma, unit: '자'),
+              const Gap(_sectionGap),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: _SummaryCard(label: '총 문서', value: user.documentCount.toString(), unit: '개'),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _SummaryCard(label: '활동일', value: streakData.totalDays.toString(), unit: '일'),
+                    ),
+                  ],
                 ),
-                _StreakCard(streakData: streakData),
-                _WeekdayCard(
-                  weekdayData: weekdayData,
-                  maxWeekdayAvg: maxWeekdayAvg,
-                  bestWeekdayIndex: bestWeekdayIndex,
-                ),
-                _SectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
+              ),
+              const Gap(_sectionGap),
+              _StreakCard(streakData: streakData),
+              const Gap(_sectionGap),
+              _WeekdayCard(weekdayData: weekdayData, maxWeekdayAvg: maxWeekdayAvg, bestWeekdayIndex: bestWeekdayIndex),
+              const Gap(_sectionGap),
+              _SectionCard(
+                padding: EdgeInsets.zero,
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const Pad(horizontal: 16, top: 16, bottom: 12),
+                      child: Row(
                         children: [
                           Text(
                             '지난 1년간의 기록',
@@ -147,7 +182,7 @@ class StatsScreen extends StatelessWidget {
                           const Spacer(),
                           Popover(
                             screenPadding: const EdgeInsets.all(20),
-                            collapsedBorderRadius: BorderRadius.circular(8),
+                            collapsedBorderRadius: BorderRadius.circular(10),
                             backgroundColor: context.colors.surfaceDefault,
                             borderSide: BorderSide(color: context.colors.borderStrong),
                             anchor: const _ActionButton(child: _ActionButtonContent(label: '이미지 받기')),
@@ -162,21 +197,58 @@ class StatsScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      ActivityGrid(
-                        changes: [
-                          for (final change in changes)
-                            ActivityGridChange(date: change.date, additions: change.additions),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                    ActivityGrid(
+                      changes: [
+                        for (final change in changes)
+                          ActivityGridChange(date: change.date, additions: change.additions),
+                      ],
+                    ),
+                  ],
                 ),
-                _SectionCard(child: ActivityChart(characterCountChanges: changes)),
-              ],
-            ),
-          );
+              ),
+              const Gap(_sectionGap),
+              _SectionCard(
+                padding: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: ActivityChart(characterCountChanges: changes, horizontalPadding: 16),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _Heading(scrollController: scrollController),
+      ],
+    );
+  }
+}
+
+class _Heading extends StatelessWidget {
+  const _Heading({required this.scrollController});
+
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    return OverlayHeading(
+      title: '나의 글쓰기 통계',
+      scrollController: scrollController,
+      leading: Tappable(
+        onTap: () async {
+          await context.router.maybePop();
         },
+        child: Tappable.scale(
+          scale: 0.95,
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(LucideLightIcons.chevron_left, size: 22, color: context.colors.textDefault),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -257,7 +329,7 @@ class _StreakCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Container(height: 1, color: context.colors.borderDefault),
+          Container(height: 1, color: context.colors.borderSubtle),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -329,7 +401,7 @@ class _WeekdayCard extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: weekdayData[index].dayIndex == bestWeekdayIndex
                                     ? context.colors.textDefault
-                                    : context.colors.borderDefault,
+                                    : context.colors.borderSubtle,
                                 borderRadius: BorderRadius.circular(3),
                               ),
                             ),
@@ -455,19 +527,18 @@ class _ActivityImagePaneItem extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.child});
+  const _SectionCard({required this.child, this.padding = const Pad(all: 16), this.clipBehavior = Clip.none});
 
   final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Clip clipBehavior;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: context.colors.surfaceDefault,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: context.colors.borderStrong),
-      ),
-      padding: const Pad(all: 16),
+      clipBehavior: clipBehavior,
+      decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(_cardRadius)),
+      padding: padding,
       child: child,
     );
   }
