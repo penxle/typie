@@ -1,15 +1,14 @@
 #!/usr/bin/env node
 
-import { count, eq, inArray } from 'drizzle-orm';
+import { count, eq, inArray, sql } from 'drizzle-orm';
 import { db, DocumentContents, Documents, Entities, Folders } from '@/db';
 import { EntityState } from '@/enums';
 import { elasticsearch, esIndex } from '@/search';
-import { getAncestorEntityIds } from '@/utils/entity';
 import { decompose } from '@/utils/text';
 
 process.env.SCRIPT = '1';
 
-const CHUNK_SIZE = 100;
+const CHUNK_SIZE = 500;
 
 const formatEta = (ms: number): string => {
   const seconds = Math.ceil(ms / 1000);
@@ -28,8 +27,40 @@ const logProgress = (label: string, processed: number, total: number, startTime:
   process.stdout.write(`\r${label}: ${processed}/${total} (${percent}%) ETA ${eta}  `);
 };
 
+const getAncestorEntityIdsBatch = async (entityIds: string[]): Promise<Map<string, string[]>> => {
+  if (entityIds.length === 0) return new Map();
+
+  const ids = sql.join(
+    entityIds.map((id) => sql`${id}`),
+    sql`,`,
+  );
+  const rows = await db.execute<{ source_id: string; ancestor_id: string }>(sql`
+    WITH RECURSIVE ancestors AS (
+      SELECT id, parent_id, id AS source_id
+      FROM entities
+      WHERE id IN (${ids})
+      UNION ALL
+      SELECT e.id, e.parent_id, a.source_id
+      FROM entities e
+      INNER JOIN ancestors a ON a.parent_id = e.id
+    )
+    SELECT source_id, id AS ancestor_id
+    FROM ancestors
+    WHERE id != source_id
+  `);
+
+  const map = new Map<string, string[]>();
+  for (const id of entityIds) {
+    map.set(id, []);
+  }
+  for (const row of rows) {
+    map.get(row.source_id)?.push(row.ancestor_id);
+  }
+  return map;
+};
+
 const processDocumentsInChunks = async (total: number): Promise<number> => {
-  let offset = 0;
+  let cursor = '';
   let totalProcessed = 0;
   const startTime = Date.now();
 
@@ -47,16 +78,18 @@ const processDocumentsInChunks = async (total: number): Promise<number> => {
       .from(Documents)
       .innerJoin(Entities, eq(Entities.id, Documents.entityId))
       .innerJoin(DocumentContents, eq(DocumentContents.documentId, Documents.id))
-      .where(eq(Entities.state, EntityState.ACTIVE))
+      .where(
+        cursor ? sql`${Entities.state} = ${EntityState.ACTIVE} AND ${Documents.id} > ${cursor}` : eq(Entities.state, EntityState.ACTIVE),
+      )
       .orderBy(Documents.id)
-      .limit(CHUNK_SIZE)
-      .offset(offset);
+      .limit(CHUNK_SIZE);
 
     if (documents.length === 0) break;
 
+    const ancestorMap = await getAncestorEntityIdsBatch(documents.map((d) => d.entityId));
+
     const operations = [];
     for (const doc of documents) {
-      const ancestorIds = await getAncestorEntityIds(doc.entityId);
       operations.push(
         { index: { _index: esIndex.documents, _id: doc.id } },
         {
@@ -66,7 +99,7 @@ const processDocumentsInChunks = async (total: number): Promise<number> => {
           subtitle: doc.subtitle,
           subtitle_decomposed: decompose(doc.subtitle),
           text: doc.text,
-          ancestor_ids: ancestorIds,
+          ancestor_ids: ancestorMap.get(doc.entityId) ?? [],
           updated_at: doc.updatedAt,
         },
       );
@@ -76,7 +109,8 @@ const processDocumentsInChunks = async (total: number): Promise<number> => {
 
     totalProcessed += documents.length;
     logProgress('Documents indexed', totalProcessed, total, startTime);
-    offset += CHUNK_SIZE;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    cursor = documents.at(-1)!.id;
 
     if (documents.length < CHUNK_SIZE) break;
   }
@@ -86,7 +120,7 @@ const processDocumentsInChunks = async (total: number): Promise<number> => {
 };
 
 const processDeletedDocumentsInChunks = async (total: number): Promise<number> => {
-  let offset = 0;
+  let cursor = '';
   let totalProcessed = 0;
   const startTime = Date.now();
 
@@ -95,10 +129,13 @@ const processDeletedDocumentsInChunks = async (total: number): Promise<number> =
       .select({ id: Documents.id })
       .from(Documents)
       .innerJoin(Entities, eq(Entities.id, Documents.entityId))
-      .where(inArray(Entities.state, [EntityState.DELETED, EntityState.PURGED]))
+      .where(
+        cursor
+          ? sql`${Entities.state} IN (${EntityState.DELETED}, ${EntityState.PURGED}) AND ${Documents.id} > ${cursor}`
+          : inArray(Entities.state, [EntityState.DELETED, EntityState.PURGED]),
+      )
       .orderBy(Documents.id)
-      .limit(CHUNK_SIZE)
-      .offset(offset);
+      .limit(CHUNK_SIZE);
 
     if (deletedDocuments.length === 0) break;
 
@@ -107,7 +144,8 @@ const processDeletedDocumentsInChunks = async (total: number): Promise<number> =
 
     totalProcessed += deletedDocuments.length;
     logProgress('Documents deleted', totalProcessed, total, startTime);
-    offset += CHUNK_SIZE;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    cursor = deletedDocuments.at(-1)!.id;
 
     if (deletedDocuments.length < CHUNK_SIZE) break;
   }
@@ -117,7 +155,7 @@ const processDeletedDocumentsInChunks = async (total: number): Promise<number> =
 };
 
 const processFoldersInChunks = async (total: number): Promise<number> => {
-  let offset = 0;
+  let cursor = '';
   let totalProcessed = 0;
   const startTime = Date.now();
 
@@ -132,23 +170,23 @@ const processFoldersInChunks = async (total: number): Promise<number> => {
       })
       .from(Folders)
       .innerJoin(Entities, eq(Entities.id, Folders.entityId))
-      .where(eq(Entities.state, EntityState.ACTIVE))
+      .where(cursor ? sql`${Entities.state} = ${EntityState.ACTIVE} AND ${Folders.id} > ${cursor}` : eq(Entities.state, EntityState.ACTIVE))
       .orderBy(Folders.id)
-      .limit(CHUNK_SIZE)
-      .offset(offset);
+      .limit(CHUNK_SIZE);
 
     if (folders.length === 0) break;
 
+    const ancestorMap = await getAncestorEntityIdsBatch(folders.map((f) => f.entityId));
+
     const operations = [];
     for (const folder of folders) {
-      const ancestorIds = await getAncestorEntityIds(folder.entityId);
       operations.push(
         { index: { _index: esIndex.folders, _id: folder.id } },
         {
           site_id: folder.siteId,
           name: folder.name,
           name_decomposed: decompose(folder.name),
-          ancestor_ids: ancestorIds,
+          ancestor_ids: ancestorMap.get(folder.entityId) ?? [],
           updated_at: folder.createdAt,
         },
       );
@@ -158,7 +196,8 @@ const processFoldersInChunks = async (total: number): Promise<number> => {
 
     totalProcessed += folders.length;
     logProgress('Folders indexed', totalProcessed, total, startTime);
-    offset += CHUNK_SIZE;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    cursor = folders.at(-1)!.id;
 
     if (folders.length < CHUNK_SIZE) break;
   }
@@ -168,7 +207,7 @@ const processFoldersInChunks = async (total: number): Promise<number> => {
 };
 
 const processDeletedFoldersInChunks = async (total: number): Promise<number> => {
-  let offset = 0;
+  let cursor = '';
   let totalProcessed = 0;
   const startTime = Date.now();
 
@@ -177,10 +216,13 @@ const processDeletedFoldersInChunks = async (total: number): Promise<number> => 
       .select({ id: Folders.id })
       .from(Folders)
       .innerJoin(Entities, eq(Entities.id, Folders.entityId))
-      .where(inArray(Entities.state, [EntityState.DELETED, EntityState.PURGED]))
+      .where(
+        cursor
+          ? sql`${Entities.state} IN (${EntityState.DELETED}, ${EntityState.PURGED}) AND ${Folders.id} > ${cursor}`
+          : inArray(Entities.state, [EntityState.DELETED, EntityState.PURGED]),
+      )
       .orderBy(Folders.id)
-      .limit(CHUNK_SIZE)
-      .offset(offset);
+      .limit(CHUNK_SIZE);
 
     if (deletedFolders.length === 0) break;
 
@@ -189,7 +231,8 @@ const processDeletedFoldersInChunks = async (total: number): Promise<number> => 
 
     totalProcessed += deletedFolders.length;
     logProgress('Folders deleted', totalProcessed, total, startTime);
-    offset += CHUNK_SIZE;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    cursor = deletedFolders.at(-1)!.id;
 
     if (deletedFolders.length < CHUNK_SIZE) break;
   }
@@ -232,9 +275,12 @@ try {
     `Found: ${activeDocCount} active docs, ${deletedDocCount} deleted docs, ${activeFolderCount} active folders, ${deletedFolderCount} deleted folders`,
   );
 
-  const deletedDocs = await processDeletedDocumentsInChunks(deletedDocCount);
+  const [deletedDocs, deletedFolders] = await Promise.all([
+    processDeletedDocumentsInChunks(deletedDocCount),
+    processDeletedFoldersInChunks(deletedFolderCount),
+  ]);
+
   const indexedDocs = await processDocumentsInChunks(activeDocCount);
-  const deletedFolders = await processDeletedFoldersInChunks(deletedFolderCount);
   const indexedFolders = await processFoldersInChunks(activeFolderCount);
 
   console.log(
