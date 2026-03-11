@@ -10,7 +10,7 @@
   import stringify from 'fast-json-stable-stringify';
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { defaultPlanRules } from '@/const';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
@@ -126,7 +126,14 @@
       app.preference.current.currentSiteId = id;
     },
   });
+
   setupEditorRegistry();
+
+  $effect(() => {
+    if (!app.preference.current.currentSiteId) {
+      untrack(() => (app.preference.current.currentSiteId = currentSite.id));
+    }
+  });
 
   $effect(() => {
     if (app.state.nextCurrentSiteId && query.data.me.sites.some((s) => s.id === app.state.nextCurrentSiteId)) {
