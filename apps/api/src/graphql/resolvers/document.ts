@@ -834,7 +834,7 @@ builder.mutationFields((t) => ({
 
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
-      await enqueueJob('document:index', document.id);
+      await enqueueJob('search:index:document', document.id);
 
       return document;
     },
@@ -872,7 +872,7 @@ builder.mutationFields((t) => ({
       pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.id });
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
-      await enqueueJob('document:index', input.documentId);
+      await enqueueJob('search:index:document', input.documentId);
 
       return input.documentId;
     },
@@ -1041,7 +1041,7 @@ builder.mutationFields((t) => ({
       }
       pubsub.publish('user:usage:update', ctx.session.userId, null);
 
-      await enqueueJob('document:index', newDocument.id);
+      await enqueueJob('search:index:document', newDocument.id);
 
       return newDocument;
     },
@@ -1084,7 +1084,7 @@ builder.mutationFields((t) => ({
 
       pubsub.publish('site:update', document.siteId, { scope: 'entity', entityId: document.entityId });
 
-      await enqueueJob('document:index', input.documentId);
+      await enqueueJob('search:index:document', input.documentId);
 
       return updatedDocument;
     },

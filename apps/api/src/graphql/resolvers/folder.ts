@@ -310,7 +310,7 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:update', input.siteId, { scope: 'site' });
       }
 
-      await enqueueJob('folder:index', folder.id);
+      await enqueueJob('search:index:folder', folder.id);
 
       return folder;
     },
@@ -348,7 +348,7 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:update', folder.siteId, { scope: 'site' });
       }
 
-      await enqueueJob('folder:index', input.folderId);
+      await enqueueJob('search:index:folder', input.folderId);
 
       return renamedFolder;
     },
@@ -412,7 +412,7 @@ builder.mutationFields((t) => ({
         );
 
       for (const document of deletedDocuments) {
-        await enqueueJob('document:index', document.id);
+        await enqueueJob('search:index:document', document.id);
       }
 
       const deletedFolderIds = [
@@ -430,7 +430,7 @@ builder.mutationFields((t) => ({
       ];
 
       for (const folderId of deletedFolderIds) {
-        await enqueueJob('folder:index', folderId);
+        await enqueueJob('search:index:folder', folderId);
       }
 
       return folder.id;

@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker';
-import { inArray } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
 import { defaultValues } from '@/const';
 import { db, Files, Images } from '@/db';
@@ -256,4 +256,18 @@ export const extractLoroDocLayoutMode = (snapshot: Uint8Array): LoroLayoutMode =
     pageMarginLeft: (layoutMode.get('page_margin_left') as number) ?? 96,
     pageMarginRight: (layoutMode.get('page_margin_right') as number) ?? 96,
   };
+};
+
+export const getAncestorEntityIds = async (entityId: string): Promise<string[]> => {
+  const result = await db.execute<{ id: string }>(sql`
+    WITH RECURSIVE ancestors AS (
+      SELECT id, parent_id FROM entities WHERE id = ${entityId}
+      UNION ALL
+      SELECT e.id, e.parent_id FROM entities e
+      INNER JOIN ancestors a ON a.parent_id = e.id
+    )
+    SELECT id FROM ancestors WHERE id != ${entityId}
+  `);
+
+  return result.map((row) => row.id);
 };

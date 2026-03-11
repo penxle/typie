@@ -13,12 +13,10 @@ import {
   DocumentVersions,
   Entities,
   firstOrThrow,
-  Folders,
 } from '@/db';
-import { DocumentSyncType, EntityState } from '@/enums';
+import { DocumentSyncType } from '@/enums';
 import { Lock } from '@/lock';
 import { pubsub } from '@/pubsub';
-import { meilisearch } from '@/search';
 import { extractLoroDocContents, garbageCollectLoroDoc } from '@/utils';
 import { compressZstd } from '@/utils/compression';
 import { enqueueJob } from '../index';
@@ -205,7 +203,7 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
     pubsub.publish('site:update', siteId, { scope: 'entity', entityId });
     pubsub.publish('user:usage:update', userId, null);
 
-    await enqueueJob('document:index', documentId, {
+    await enqueueJob('search:index:document', documentId, {
       deduplication: {
         id: documentId,
         ttl: 60 * 1000,
@@ -223,63 +221,6 @@ export const DocumentSyncScanCron = defineCron('document:sync:scan', '* * * * *'
       enqueueJob('document:sync:collect', key.split(':').at(-1)!),
     ),
   );
-});
-
-export const DocumentIndexJob = defineJob('document:index', async (documentId: string) => {
-  const document = await db
-    .select({
-      id: Documents.id,
-      state: Entities.state,
-      siteId: Entities.siteId,
-      title: Documents.title,
-      subtitle: Documents.subtitle,
-      text: DocumentContents.text,
-    })
-    .from(Documents)
-    .innerJoin(DocumentContents, eq(Documents.id, DocumentContents.documentId))
-    .innerJoin(Entities, eq(Documents.entityId, Entities.id))
-    .where(eq(Documents.id, documentId))
-    .then(firstOrThrow);
-
-  if (document.state === EntityState.ACTIVE) {
-    await meilisearch.index('documents').addDocuments([
-      {
-        id: document.id,
-        siteId: document.siteId,
-        title: document.title,
-        subtitle: document.subtitle,
-        text: document.text,
-      },
-    ]);
-  } else {
-    await meilisearch.index('documents').deleteDocument(document.id);
-  }
-});
-
-export const FolderIndexJob = defineJob('folder:index', async (folderId: string) => {
-  const folder = await db
-    .select({
-      id: Folders.id,
-      state: Entities.state,
-      siteId: Entities.siteId,
-      name: Folders.name,
-    })
-    .from(Folders)
-    .innerJoin(Entities, eq(Folders.entityId, Entities.id))
-    .where(eq(Folders.id, folderId))
-    .then(firstOrThrow);
-
-  if (folder.state === EntityState.ACTIVE) {
-    await meilisearch.index('folders').addDocuments([
-      {
-        id: folder.id,
-        siteId: folder.siteId,
-        name: folder.name,
-      },
-    ]);
-  } else {
-    await meilisearch.index('folders').deleteDocument(folder.id);
-  }
 });
 
 export const DocumentGCJob = defineJob('document:gc', async (documentId: string) => {

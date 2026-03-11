@@ -17,6 +17,7 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
   import FileIcon from '~icons/lucide/file';
+  import FolderIcon from '~icons/lucide/folder';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import SearchIcon from '~icons/lucide/search';
@@ -62,6 +63,8 @@
       query DashboardLayout_CommandPalette_Search_Query($siteId: ID!, $query: String!) {
         search(siteId: $siteId, query: $query) {
           totalHits
+          documentCount
+          folderCount
 
           hits {
             __typename
@@ -75,6 +78,20 @@
                 id
                 title
                 type
+
+                entity {
+                  id
+                  slug
+                }
+              }
+            }
+
+            ... on SearchHitFolder {
+              name
+
+              folder {
+                id
+                name
 
                 entity {
                   id
@@ -301,6 +318,7 @@
       action: match(hit)
         .with({ __typename: 'SearchHitCommand' }, (hit) => hit.action)
         .with({ __typename: 'SearchHitDocument' }, (hit) => () => goto(`/${hit.document.entity.slug}`))
+        .with({ __typename: 'SearchHitFolder' }, (hit) => () => goto(`/${hit.folder.entity.slug}`))
         .with({ __typename: 'SearchHitRecent' }, (hit) => () => goto(`/${hit.entity.slug}`))
         .otherwise(() => () => {
           /* noop */
@@ -516,6 +534,7 @@
         {match(type)
           .with('SearchHitCommand', () => '액션')
           .with('SearchHitDocument', () => '문서')
+          .with('SearchHitFolder', () => '폴더')
           .with('SearchHitRecent', () => '최근 본 항목')
           .otherwise(() => '')}
       </div>
@@ -582,6 +601,21 @@
                 {@html hit.text}
               </div>
             {/if}
+          {:else if hit.__typename === 'SearchHitFolder'}
+            <div
+              class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
+            >
+              <Icon icon={FolderIcon} size={16} />
+            </div>
+
+            <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
+              {#if hit.name}
+                <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                {@html hit.name}
+              {:else}
+                {hit.folder.name}
+              {/if}
+            </div>
           {:else if hit.__typename === 'SearchHitRecent'}
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}

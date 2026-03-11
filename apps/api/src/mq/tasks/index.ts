@@ -1,12 +1,6 @@
-import {
-  DocumentGCJob,
-  DocumentGCScanCron,
-  DocumentIndexJob,
-  DocumentSyncCollectJob,
-  DocumentSyncScanCron,
-  FolderIndexJob,
-} from './document';
+import { DocumentGCJob, DocumentGCScanCron, DocumentSyncCollectJob, DocumentSyncScanCron } from './document';
 import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email';
+import { DocumentIndexJob, FolderIndexJob } from './search';
 import {
   SubscriptionRenewalCancelJob,
   SubscriptionRenewalCron,
