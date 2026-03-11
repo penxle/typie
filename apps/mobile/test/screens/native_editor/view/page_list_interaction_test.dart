@@ -249,6 +249,7 @@ class _PageListHarnessDeps {
           displayZoom.value = zoom;
           renderZoom.value = zoom;
         },
+        viewportTopInset: ValueNotifier(0),
         child: const PageList(),
       );
     }

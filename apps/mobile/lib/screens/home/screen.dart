@@ -136,7 +136,7 @@ class _SearchBarPlaceholder extends StatelessWidget {
       child: Tappable(
         onTap: onTap,
         child: Container(
-          height: 36,
+          height: 44,
           padding: const Pad(horizontal: 14),
           decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(10)),
           child: Row(

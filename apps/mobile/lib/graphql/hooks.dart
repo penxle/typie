@@ -26,11 +26,12 @@ TData? useQuery<TData, TVars>(OperationRequest<TData, TVars> operation) {
 void useRefetchOnRouteResumed<TData, TVars>(OperationRequest<TData, TVars> operation) {
   final client = useService<GraphQLClient>();
   final context = useContext();
-  final observer = RouterScope.of(context).firstObserverOfType<AutoRouteObserver>();
-  final routeData = RouteData.of(context);
+  final scope = context.dependOnInheritedWidgetOfExactType<RouteDataScope>();
+  final observer = scope != null ? RouterScope.of(context).firstObserverOfType<AutoRouteObserver>() : null;
+  final routeData = scope?.routeData;
 
   useEffect(() {
-    if (observer == null) {
+    if (observer == null || routeData == null) {
       return null;
     }
 
