@@ -13,6 +13,7 @@ import {
   DocumentVersions,
   Entities,
   firstOrThrow,
+  Folders,
 } from '@/db';
 import { DocumentSyncType, EntityState } from '@/enums';
 import { Lock } from '@/lock';
@@ -252,6 +253,32 @@ export const DocumentIndexJob = defineJob('document:index', async (documentId: s
     ]);
   } else {
     await meilisearch.index('documents').deleteDocument(document.id);
+  }
+});
+
+export const FolderIndexJob = defineJob('folder:index', async (folderId: string) => {
+  const folder = await db
+    .select({
+      id: Folders.id,
+      state: Entities.state,
+      siteId: Entities.siteId,
+      name: Folders.name,
+    })
+    .from(Folders)
+    .innerJoin(Entities, eq(Folders.entityId, Entities.id))
+    .where(eq(Folders.id, folderId))
+    .then(firstOrThrow);
+
+  if (folder.state === EntityState.ACTIVE) {
+    await meilisearch.index('folders').addDocuments([
+      {
+        id: folder.id,
+        siteId: folder.siteId,
+        name: folder.name,
+      },
+    ]);
+  } else {
+    await meilisearch.index('folders').deleteDocument(folder.id);
   }
 });
 

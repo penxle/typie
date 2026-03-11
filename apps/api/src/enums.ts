@@ -210,6 +210,7 @@ export type SearchHitType = keyof typeof SearchHitType;
 export const SearchHitType = {
   POST: 'POST',
   DOCUMENT: 'DOCUMENT',
+  FOLDER: 'FOLDER',
 } as const;
 
 export type SingleSignOnProvider = keyof typeof SingleSignOnProvider;

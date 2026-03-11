@@ -5,7 +5,7 @@ import { SearchHitType } from '@/enums';
 import { meilisearch } from '@/search';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Document, Post } from '../objects';
+import { Document, Folder, Post } from '../objects';
 
 /**
  * * Types
@@ -31,12 +31,21 @@ const SearchHitDocument = builder.simpleObject('SearchHitDocument', {
   }),
 });
 
+const SearchHitFolder = builder.simpleObject('SearchHitFolder', {
+  fields: (t) => ({
+    type: t.field({ type: SearchHitType }),
+    name: t.string({ nullable: true }),
+    folder: t.field({ type: Folder }),
+  }),
+});
+
 const SearchHit = builder.unionType('SearchHit', {
-  types: [SearchHitPost, SearchHitDocument],
+  types: [SearchHitPost, SearchHitDocument, SearchHitFolder],
   resolveType: (self) =>
     match(self.type)
       .with(SearchHitType.DOCUMENT, () => 'SearchHitDocument')
       .with(SearchHitType.POST, () => 'SearchHitPost')
+      .with(SearchHitType.FOLDER, () => 'SearchHitFolder')
       .exhaustive(),
 });
 
@@ -81,6 +90,12 @@ builder.queryFields((t) => ({
             attributesToCrop: ['*'],
             attributesToHighlight: ['title', 'subtitle', 'text'],
           },
+          {
+            indexUid: 'folders',
+            q: args.query.trim(),
+            filter: [`siteId = ${args.siteId}`],
+            attributesToHighlight: ['name'],
+          },
         ],
       });
 
@@ -96,6 +111,14 @@ builder.queryFields((t) => ({
               subtitle: sanitizeHtml(hit._formatted?.subtitle),
               text: sanitizeHtml(hit._formatted?.text),
               document: hit.id,
+            };
+          }
+
+          if (indexUid === 'folders') {
+            return {
+              type: SearchHitType.FOLDER,
+              name: sanitizeHtml(hit._formatted?.name),
+              folder: hit.id,
             };
           }
 
