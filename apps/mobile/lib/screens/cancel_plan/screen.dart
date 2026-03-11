@@ -12,7 +12,6 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/cancel_plan/__generated__/cancel_plan_query.data.gql.dart';
 import 'package:typie/screens/cancel_plan/__generated__/cancel_plan_query.req.gql.dart';
 import 'package:typie/widgets/overlay_heading.dart';
@@ -30,46 +29,48 @@ class CancelPlanScreen extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
-    final scrollController = useScrollController();
 
-    return Screen(
-      child: GraphQLOperation(
-        initialBackgroundColor: context.colors.surfaceSubtle,
-        operation: GCancelPlanScreen_QueryReq(),
-        builder: (context, client, data) {
-          final subscription = data.me?.subscription;
-          if (subscription == null) {
-            return const SizedBox.shrink();
-          }
+    return GraphQLOperation(
+      initialBackgroundColor: context.colors.surfaceSubtle,
+      operation: GCancelPlanScreen_QueryReq(),
+      builder: (context, client, data) {
+        final subscription = data.me?.subscription;
+        if (subscription == null) {
+          return const SizedBox.shrink();
+        }
 
-          return _Content(subscription: subscription, mixpanel: mixpanel, scrollController: scrollController);
-        },
-      ),
+        return _Content(subscription: subscription, mixpanel: mixpanel);
+      },
     );
   }
 }
 
-class _Content extends StatelessWidget {
-  const _Content({required this.subscription, required this.mixpanel, required this.scrollController});
+class _Content extends HookWidget {
+  const _Content({required this.subscription, required this.mixpanel});
 
   final GCancelPlanScreen_QueryData_me_subscription subscription;
   final Mixpanel mixpanel;
-  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
+    final scrollController = useScrollController();
     final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
 
-    return Stack(
-      children: [
-        SingleChildScrollView(
+    return Screen(
+      extendBodyBehindAppBar: true,
+      heading: _Heading(scrollController: scrollController),
+      child: OverlayHeadingLayout(
+        child: SingleChildScrollView(
           controller: scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, OverlayHeading.contentTopSpacing + 8, 20, bottomPadding),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('이용권 해지', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              Padding(
+                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+                child: const Text('이용권 해지', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              ),
               const Gap(_sectionGap),
               DecoratedBox(
                 decoration: _cardDecoration(context),
@@ -130,13 +131,12 @@ class _Content extends StatelessWidget {
             ],
           ),
         ),
-        _Heading(scrollController: scrollController),
-      ],
+      ),
     );
   }
 }
 
-class _Heading extends StatelessWidget {
+class _Heading extends StatelessWidget implements PreferredSizeWidget {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
@@ -146,24 +146,16 @@ class _Heading extends StatelessWidget {
     return OverlayHeading(
       title: '이용권 해지',
       scrollController: scrollController,
-      leading: Tappable(
+      leading: OverlayHeadingBackButton(
         onTap: () async {
           await context.router.maybePop();
         },
-        child: Tappable.scale(
-          scale: 0.95,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Icon(LucideLightIcons.chevron_left, size: 22, color: context.colors.textDefault),
-            ),
-          ),
-        ),
       ),
     );
   }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(OverlayHeading.height);
 }
 
 class _FeatureItem extends StatelessWidget {

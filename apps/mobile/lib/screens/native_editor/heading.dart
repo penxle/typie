@@ -10,6 +10,7 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/context.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/popover/list.dart';
 import 'package:typie/widgets/popover/popover.dart';
 
@@ -59,13 +60,13 @@ class NativeEditorHeading extends StatelessWidget implements PreferredSizeWidget
           borderRadius: Popover.expandedRadius,
         );
 
-        return CapsuleHeading(
-          backgroundColor: Colors.transparent,
+        return OverlayHeadingBar(
           onTap: () => editorContext.controller?.clearFocus(),
           leading: HeadingCircleButton(
             icon: LucideLightIcons.chevron_left,
             backgroundColor: controlBackgroundColor,
             boxShadow: controlShadow,
+            useSlotHeight: false,
             onTap: () async {
               editorContext.controller?.clearFocus();
               await context.router.maybePop();
@@ -99,7 +100,7 @@ class NativeEditorHeading extends StatelessWidget implements PreferredSizeWidget
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(52);
+  Size get preferredSize => const Size.fromHeight(OverlayHeading.height);
 }
 
 class NativeEditorToolsPopoverPane extends StatelessWidget {

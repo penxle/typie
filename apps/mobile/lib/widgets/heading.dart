@@ -11,7 +11,7 @@ import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
 
-SystemUiOverlayStyle _buildHeadingSystemUiOverlayStyle(BuildContext context) {
+SystemUiOverlayStyle buildHeadingSystemUiOverlayStyle(BuildContext context) {
   return SystemUiOverlayStyle(
     statusBarColor: AppColors.transparent,
     statusBarBrightness: switch (context.theme.brightness) {
@@ -72,7 +72,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
 
     return AnnotatedRegion(
       key: context.router.current.key,
-      value: _buildHeadingSystemUiOverlayStyle(context),
+      value: buildHeadingSystemUiOverlayStyle(context),
       child: Listener(
         onPointerDown: (_) => onTap?.call(),
         child: DecoratedBox(
@@ -165,7 +165,7 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
     const child = SafeArea(child: SizedBox.shrink());
 
     return AnnotatedRegion(
-      value: _buildHeadingSystemUiOverlayStyle(context),
+      value: buildHeadingSystemUiOverlayStyle(context),
       child: backgroundColor == null ? child : ColoredBox(color: backgroundColor!, child: child),
     );
   }
@@ -203,7 +203,7 @@ class CapsuleHeading extends StatelessWidget implements PreferredSizeWidget {
           );
 
     return AnnotatedRegion(
-      value: _buildHeadingSystemUiOverlayStyle(context),
+      value: buildHeadingSystemUiOverlayStyle(context),
       child: Listener(
         onPointerDown: (_) => onTap?.call(),
         child: DecoratedBox(

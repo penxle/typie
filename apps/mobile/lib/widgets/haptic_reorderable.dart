@@ -96,6 +96,7 @@ class HapticReorderableList extends HookWidget {
     this.physics,
     this.padding,
     this.proxyDecorator,
+    this.dragBoundaryProvider,
     super.key,
   });
 
@@ -106,6 +107,7 @@ class HapticReorderableList extends HookWidget {
   final ScrollPhysics? physics;
   final EdgeInsets? padding;
   final ReorderItemProxyDecorator? proxyDecorator;
+  final ReorderDragBoundaryProvider? dragBoundaryProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +126,7 @@ class HapticReorderableList extends HookWidget {
         padding: padding,
         itemCount: orderedIds.length,
         proxyDecorator: proxyDecorator,
+        dragBoundaryProvider: dragBoundaryProvider,
         onReorderStart: (index) {
           tracker.startDrag(index);
           unawaited(HapticFeedback.lightImpact());
@@ -152,6 +155,7 @@ class SliverHapticReorderableList extends HookWidget {
     required this.itemBuilder,
     required this.onReorder,
     this.proxyDecorator,
+    this.dragBoundaryProvider,
     super.key,
   });
 
@@ -159,6 +163,7 @@ class SliverHapticReorderableList extends HookWidget {
   final IndexedWidgetBuilder itemBuilder;
   final ReorderCallback onReorder;
   final ReorderItemProxyDecorator? proxyDecorator;
+  final ReorderDragBoundaryProvider? dragBoundaryProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -178,6 +183,7 @@ class SliverHapticReorderableList extends HookWidget {
         unawaited(HapticFeedback.lightImpact());
       },
       proxyDecorator: proxyDecorator,
+      dragBoundaryProvider: dragBoundaryProvider,
       itemBuilder: (context, index) {
         final id = orderedIds[index];
         final child = itemBuilder(context, index);

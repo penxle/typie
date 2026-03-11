@@ -15,23 +15,11 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/screens/shell/__generated__/create_document.req.gql.dart';
 import 'package:typie/screens/shell/__generated__/site_update_stream.req.gql.dart';
+import 'package:typie/screens/shell/nav.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/animated_toggle.dart';
+import 'package:typie/widgets/popover/popover.dart';
 import 'package:typie/widgets/tappable.dart';
-
-class ShellNav extends InheritedWidget {
-  const ShellNav({required this.visible, required super.child, super.key});
-
-  final ValueNotifier<bool> visible;
-
-  static ShellNav of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<ShellNav>()!;
-
-  void hide() => visible.value = false;
-  void show() => visible.value = true;
-
-  @override
-  bool updateShouldNotify(ShellNav oldWidget) => visible != oldWidget.visible;
-}
 
 @RoutePage()
 class ShellScreen extends HookWidget {
@@ -55,15 +43,32 @@ class ShellScreen extends HookWidget {
 
     final navVisible = useMemoized(() => ValueNotifier(true));
     final navVisibleValue = useValueListenable(navVisible);
+    final trailingAction = useMemoized(ShellTrailingActionController.new);
+    final trailingActionValue = useValueListenable(trailingAction);
     final mediaQuery = MediaQuery.of(context);
     final pillColor = context.theme.brightness == Brightness.dark
         ? context.colors.surfaceSubtle
         : context.colors.surfaceDefault;
 
+    Future<void> createDocument() async {
+      final result = await client.request(
+        GHomeScreen_CreateDocument_MutationReq((b) => b..vars.input.siteId = site.siteId),
+      );
+
+      unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
+
+      if (context.mounted) {
+        markAutoDiscardCandidate(result.createDocument.entity.slug);
+        await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
+      }
+    }
+
     return ShellNav(
       visible: navVisible,
+      trailingAction: trailingAction,
       child: AutoTabsRouter.builder(
         builder: (context, children, tabsRouter) {
+          final effectiveTrailingAction = tabsRouter.activeIndex == 1 ? trailingActionValue : null;
           return Stack(
             children: [
               Positioned.fill(
@@ -138,43 +143,29 @@ class ShellScreen extends HookWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Tappable(
-                            onTap: () async {
-                              final result = await client.request(
-                                GHomeScreen_CreateDocument_MutationReq((b) => b..vars.input.siteId = site.siteId),
-                              );
-
-                              unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
-
-                              if (context.mounted) {
-                                markAutoDiscardCandidate(result.createDocument.entity.slug);
-                                await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
-                              }
-                            },
-                            child: Container(
-                              width: 60,
-                              height: 60,
-                              decoration: BoxDecoration(
+                          if (effectiveTrailingAction case ShellTrailingActionConfig(
+                            icon: final icon,
+                            pane: final pane?,
+                          ))
+                            Popover(
+                              position: PopoverPosition.topRight,
+                              screenPadding: const EdgeInsets.fromLTRB(24, 8, 24, 80),
+                              collapsedBorderRadius: BorderRadius.circular(999),
+                              backgroundColor: context.colors.surfaceDefault,
+                              borderSide: BorderSide(color: context.colors.borderDefault),
+                              anchor: _ShellTrailingActionButton(icon: icon, color: pillColor),
+                              pane: pane,
+                            )
+                          else
+                            Tappable(
+                              onTap: () async {
+                                await (effectiveTrailingAction?.onTap?.call() ?? createDocument());
+                              },
+                              child: _ShellTrailingActionButton(
+                                icon: effectiveTrailingAction?.icon ?? LucideIcons.square_pen,
                                 color: pillColor,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: context.colors.borderDefault),
-                                boxShadow: [
-                                  BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
-                                  BoxShadow(
-                                    color: context.colors.shadowDefault,
-                                    offset: const Offset(0, 4),
-                                    blurRadius: 12,
-                                  ),
-                                  BoxShadow(
-                                    color: context.colors.shadowDefault,
-                                    offset: const Offset(0, 12),
-                                    blurRadius: 32,
-                                  ),
-                                ],
                               ),
-                              child: Icon(LucideIcons.square_pen, size: 24, color: context.colors.textSubtle),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -185,6 +176,32 @@ class ShellScreen extends HookWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _ShellTrailingActionButton extends StatelessWidget {
+  const _ShellTrailingActionButton({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: context.colors.borderDefault),
+        boxShadow: [
+          BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
+          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 4), blurRadius: 12),
+          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 12), blurRadius: 32),
+        ],
+      ),
+      child: Icon(icon, size: 24, color: context.colors.textSubtle),
     );
   }
 }
