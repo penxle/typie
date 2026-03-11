@@ -239,7 +239,19 @@ Entity.implement({
           .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
           .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)));
 
-        return rows.map((r) => r.issue);
+        const statusOrder = { OPEN: 0, IN_PROGRESS: 1, RESOLVED: 2, CLOSED: 3 } as const;
+        const priorityOrder = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 } as const;
+        return rows
+          .map((r) => r.issue)
+          .toSorted((a, b) => {
+            const sa = statusOrder[a.status as keyof typeof statusOrder] ?? 0;
+            const sb = statusOrder[b.status as keyof typeof statusOrder] ?? 0;
+            if (sa !== sb) return sa - sb;
+            const pa = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 4;
+            const pb = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 4;
+            if (pa !== pb) return pa - pb;
+            return b.createdAt.valueOf() - a.createdAt.valueOf();
+          });
       },
     }),
 

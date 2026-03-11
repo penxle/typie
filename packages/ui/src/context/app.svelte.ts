@@ -46,7 +46,7 @@ type AppState = {
 
   trashOpen: boolean;
   commandPaletteOpen: boolean;
-  notesOpen: boolean;
+  issuesOpen: boolean;
   shareOpen: string[];
   exportOpen: string | null;
   statsOpen: boolean;
@@ -89,7 +89,7 @@ export const setupAppContext = (userId: string) => {
     ancestors: [],
     trashOpen: false,
     commandPaletteOpen: false,
-    notesOpen: false,
+    issuesOpen: false,
     shareOpen: [],
     exportOpen: null,
     statsOpen: false,
