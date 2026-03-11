@@ -26,7 +26,7 @@
   import { setupPaneGroup } from './[slug]/@pane/context.svelte';
   import { setupEditorRegistry } from './[slug]/@pane/editor-registry.svelte';
   import DocumentExportModal from './@context-menu/DocumentExportModal.svelte';
-  import Notes from './@notes/Notes.svelte';
+  import Issues from './@issues/Issues.svelte';
   import PreferenceModal from './@preference/PreferenceModal.svelte';
   import ShareModal from './@share/ShareModal.svelte';
   import SiteSettingsModal from './@site-settings/SiteSettingsModal.svelte';
@@ -356,7 +356,7 @@
 {/if}
 
 <CommandPalette user$key={query.data.me} />
-<Notes />
+<Issues />
 <PreferenceModal user$key={query.data.me} />
 <SiteSettingsModal site$key={currentSite} user$key={query.data.me} />
 <DocumentExportModal user$key={query.data.me} />

@@ -43,6 +43,7 @@ Issue.implement({
   }),
 });
 
+const issueStatusOrder = { OPEN: 0, IN_PROGRESS: 1, RESOLVED: 2, CLOSED: 3 } as const;
 const issuePriorityOrder = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 } as const;
 
 builder.queryFields((t) => ({
@@ -73,6 +74,9 @@ builder.queryFields((t) => ({
         .orderBy(desc(Issues.priority), desc(Issues.createdAt));
 
       return issues.toSorted((a, b) => {
+        const sa = issueStatusOrder[a.status as keyof typeof issueStatusOrder] ?? 0;
+        const sb = issueStatusOrder[b.status as keyof typeof issueStatusOrder] ?? 0;
+        if (sa !== sb) return sa - sb;
         const pa = issuePriorityOrder[a.priority as keyof typeof issuePriorityOrder] ?? 4;
         const pb = issuePriorityOrder[b.priority as keyof typeof issuePriorityOrder] ?? 4;
         if (pa !== pb) return pa - pb;

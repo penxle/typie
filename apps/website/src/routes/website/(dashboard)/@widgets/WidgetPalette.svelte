@@ -10,14 +10,14 @@
   import type { Editor as NativeEditor } from '$lib/editor/editor.svelte';
   import type {
     Editor_Widget_CharacterCountChangeWidget_document$key,
-    Editor_Widget_DocumentRelatedNoteWidget_document$key,
+    Editor_Widget_DocumentRelatedIssueWidget_document$key,
   } from '$mearie';
   import type { WidgetType } from './widget-context.svelte';
 
   type Props = {
     open: boolean;
     editor?: NativeEditor;
-    document$key?: Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedNoteWidget_document$key;
+    document$key?: Editor_Widget_CharacterCountChangeWidget_document$key & Editor_Widget_DocumentRelatedIssueWidget_document$key;
     addedWidgets?: WidgetType[];
     onDragStart: (e: PointerEvent, widgetType: WidgetType, target: HTMLElement) => void;
     onDragMove: (e: PointerEvent) => void;

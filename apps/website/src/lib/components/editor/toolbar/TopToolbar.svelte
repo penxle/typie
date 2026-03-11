@@ -4,6 +4,7 @@
   import { DropdownMenu, DropdownMenuItem, VerticalDivider } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import ChevronsDownUpIcon from '~icons/lucide/chevrons-down-up';
+  import CircleCheckBigIcon from '~icons/lucide/circle-check-big';
   import ClockFadingIcon from '~icons/lucide/clock-fading';
   import FilePlusIcon from '~icons/lucide/file-plus';
   import FileUpIcon from '~icons/lucide/file-up';
@@ -18,7 +19,6 @@
   import QuoteIcon from '~icons/lucide/quote';
   import SettingsIcon from '~icons/lucide/settings';
   import SpellCheckIcon from '~icons/lucide/spell-check';
-  import StickyNoteIcon from '~icons/lucide/sticky-note';
   import TableIcon from '~icons/lucide/table';
   import HorizontalRuleIcon from '~icons/typie/horizontal-rule';
   import { blockquoteVariants, horizontalRuleVariants } from '$lib/components/editor/values';
@@ -233,7 +233,7 @@
 
   <div class={flex({ alignItems: 'center', gap: '4px' })}>
     <ToolbarPanelTabButton icon={InfoIcon} label="정보" tab="info" />
-    <ToolbarPanelTabButton icon={StickyNoteIcon} label="노트" tab="note" />
+    <ToolbarPanelTabButton icon={CircleCheckBigIcon} label="할 일" tab="issues" />
     <ToolbarPanelTabButton icon={MessageSquareTextIcon} label="코멘트" tab="remarks" />
     <ToolbarPanelTabButton icon={SpellCheckIcon} label="맞춤법" tab="spellcheck" />
     <ToolbarPanelTabButton icon={LightbulbIcon} label="AI 피드백" tab="ai" />
