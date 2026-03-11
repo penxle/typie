@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 
 import 'package:auto_route/auto_route.dart';
 import 'package:ferry/ferry.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
@@ -56,8 +55,6 @@ import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-enum NativeEditorMode { editor, note }
-
 @RoutePage()
 class NativeEditorScreen extends StatelessWidget {
   const NativeEditorScreen({required this.slug, super.key});
@@ -91,10 +88,7 @@ class _Content extends HookWidget {
     final headerKey = useMemoized(GlobalKey.new);
     final pref = useService<Pref>();
     final error = useState<String?>(null);
-    final pageController = usePageController();
-    final drag = useRef<Drag?>(null);
-    final mode = useValueNotifier<NativeEditorMode>(NativeEditorMode.editor);
-    final currentMode = useValueListenable(mode);
+    final noteCount = useState(data.entity.notesCount);
     final autoDiscard = useMemoized(() => AutoDiscardSession.consume(slug), [slug]);
 
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
@@ -124,6 +118,11 @@ class _Content extends HookWidget {
     useEffect(() {
       return editorContext.dispose;
     }, []);
+
+    useEffect(() {
+      noteCount.value = data.entity.notesCount;
+      return null;
+    }, [data.entity.notesCount]);
 
     Widget buildEditorBody() {
       if (document == null) {
@@ -312,8 +311,20 @@ class _Content extends HookWidget {
     }
 
     Future<void> openRelatedNotes() async {
-      editorContext.controller?.clearFocus();
-      await pageController.animateToPage(1, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      final controller = editorContext.controller;
+      controller?.clearFocus();
+
+      await context.showBottomSheet(
+        intercept: true,
+        overlayOpacity: 0.05,
+        heightNotifier: controller?.sheetBottomInset,
+        child: DocumentNote(
+          entityId: data.entity.id,
+          onCountChanged: (count) {
+            noteCount.value = count;
+          },
+        ),
+      );
     }
 
     Future<void> openInfo() async {
@@ -450,7 +461,6 @@ class _Content extends HookWidget {
     }
 
     return PopScope(
-      canPop: currentMode == NativeEditorMode.editor,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           final doc = document;
@@ -466,128 +476,51 @@ class _Content extends HookWidget {
               await client.request(GNativeEditor_DeleteDocument_MutationReq((b) => b..vars.input.documentId = doc.id));
             } catch (_) {}
           }());
-          return;
-        }
-
-        if (currentMode == NativeEditorMode.note) {
-          unawaited(
-            pageController.animateToPage(0, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut),
-          );
-          return;
         }
       },
       child: Material(
         color: context.colors.surfaceDefault,
-        child: Stack(
-          children: [
-            PageView(
-              controller: pageController,
-              physics: const NeverScrollableScrollPhysics(),
-              onPageChanged: (value) {
-                mode.value = switch (value) {
-                  0 => NativeEditorMode.editor,
-                  1 => NativeEditorMode.note,
-                  _ => throw UnimplementedError(),
-                };
-              },
-              children: [
-                Screen(
-                  heading: NativeEditorHeading(
-                    key: headerKey,
+        child: Screen(
+          heading: NativeEditorHeading(
+            key: headerKey,
+            editorContext: editorContext,
+            documentType: document?.type,
+            toolsPane: NativeEditorToolsPopoverPane(
+              editorContext: editorContext,
+              noteCount: noteCount.value,
+              onOpenFindReplace: openFindReplace,
+              onOpenRelatedNotes: openRelatedNotes,
+              onOpenRemark: openRemark,
+              onOpenSpellcheck: openSpellcheck,
+              onOpenAiFeedback: openAiFeedback,
+              onSendInputLog: pref.devMode && editorContext.showInputRecordingSheet != null
+                  ? () async {
+                      editorContext.showInputRecordingSheet?.call();
+                    }
+                  : null,
+            ),
+            documentMenuPane: document == null
+                ? const SizedBox.shrink()
+                : NativeEditorDocumentMenuPopoverPane(
                     editorContext: editorContext,
-                    documentType: document?.type,
-                    toolsPane: NativeEditorToolsPopoverPane(
-                      editorContext: editorContext,
-                      onOpenFindReplace: openFindReplace,
-                      onOpenRelatedNotes: openRelatedNotes,
-                      onOpenRemark: openRemark,
-                      onOpenSpellcheck: openSpellcheck,
-                      onOpenAiFeedback: openAiFeedback,
-                      onSendInputLog: pref.devMode && editorContext.showInputRecordingSheet != null
-                          ? () async {
-                              editorContext.showInputRecordingSheet?.call();
-                            }
-                          : null,
-                    ),
-                    documentMenuPane: document == null
-                        ? const SizedBox.shrink()
-                        : NativeEditorDocumentMenuPopoverPane(
-                            editorContext: editorContext,
-                            data: data,
-                            document: document,
-                            onOpenInfo: openInfo,
-                            onOpenSettings: openSettings,
-                            onToggleLocked: toggleLocked,
-                            onOpenExport: openExport,
-                            onOpenInSpace: openInSpace,
-                            onOpenShare: openShare,
-                            onDuplicate: duplicateDocument,
-                            onToggleDocumentType: toggleDocumentType,
-                            onDelete: deleteDocument,
-                          ),
+                    data: data,
+                    document: document,
+                    onOpenInfo: openInfo,
+                    onOpenSettings: openSettings,
+                    onToggleLocked: toggleLocked,
+                    onOpenExport: openExport,
+                    onOpenInSpace: openInSpace,
+                    onOpenShare: openShare,
+                    onDuplicate: duplicateDocument,
+                    onToggleDocumentType: toggleDocumentType,
+                    onDelete: deleteDocument,
                   ),
-                  backgroundColor: context.colors.surfaceDefault,
-                  keyboardDismiss: false,
-                  responsive: false,
-                  extendBodyBehindAppBar: true,
-                  child: buildEditorBody(),
-                ),
-                DocumentNote(
-                  entityId: data.entity.id,
-                  isActive: currentMode == NativeEditorMode.note,
-                  onBack: () async {
-                    await pageController.animateToPage(
-                      0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-                ),
-              ],
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: MediaQuery.paddingOf(context).top + 52,
-              child: GestureDetector(
-                onHorizontalDragDown: (details) {
-                  drag.value?.cancel();
-                  drag.value = null;
-                },
-                onHorizontalDragStart: (details) {
-                  drag.value = pageController.position.drag(
-                    DragStartDetails(globalPosition: details.globalPosition, localPosition: details.localPosition),
-                    () {},
-                  );
-                },
-                onHorizontalDragUpdate: (details) {
-                  drag.value?.update(
-                    DragUpdateDetails(
-                      globalPosition: details.globalPosition,
-                      localPosition: details.localPosition,
-                      delta: Offset(details.delta.dx, 0),
-                      primaryDelta: details.delta.dx,
-                    ),
-                  );
-                },
-                onHorizontalDragEnd: (details) {
-                  drag.value?.end(
-                    DragEndDetails(
-                      velocity: Velocity(pixelsPerSecond: Offset(details.velocity.pixelsPerSecond.dx, 0)),
-                      primaryVelocity: details.velocity.pixelsPerSecond.dx,
-                    ),
-                  );
-                  drag.value = null;
-                },
-                onHorizontalDragCancel: () {
-                  drag.value?.cancel();
-                  drag.value = null;
-                },
-                behavior: HitTestBehavior.translucent,
-              ),
-            ),
-          ],
+          ),
+          backgroundColor: context.colors.surfaceDefault,
+          keyboardDismiss: false,
+          responsive: false,
+          extendBodyBehindAppBar: true,
+          child: buildEditorBody(),
         ),
       ),
     );

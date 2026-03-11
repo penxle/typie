@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import escape from 'escape-string-regexp';
 import { match } from 'ts-pattern';
@@ -198,6 +198,18 @@ Entity.implement({
           .from(Notes)
           .where(and(eq(Notes.entityId, self.id), eq(Notes.state, NoteState.ACTIVE)))
           .orderBy(asc(Notes.order));
+      },
+    }),
+
+    notesCount: t.int({
+      resolve: async (self) => {
+        const row = await db
+          .select({ count: count() })
+          .from(Notes)
+          .where(and(eq(Notes.entityId, self.id), eq(Notes.state, NoteState.ACTIVE)))
+          .then(firstOrThrow);
+
+        return row.count;
       },
     }),
   }),

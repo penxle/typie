@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:auto_route/auto_route.dart';
 import 'package:ferry/ferry.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/hooks/service.dart';
+import 'package:typie/routers/observer.dart';
 
 TData? useQuery<TData, TVars>(OperationRequest<TData, TVars> operation) {
   final client = useService<GraphQLClient>();
@@ -26,28 +27,44 @@ TData? useQuery<TData, TVars>(OperationRequest<TData, TVars> operation) {
 void useRefetchOnRouteResumed<TData, TVars>(OperationRequest<TData, TVars> operation) {
   final client = useService<GraphQLClient>();
   final context = useContext();
-  final scope = context.dependOnInheritedWidgetOfExactType<RouteDataScope>();
-  final observer = scope != null ? RouterScope.of(context).firstObserverOfType<AutoRouteObserver>() : null;
-  final routeData = scope?.routeData;
+  final routeDataScope = context.dependOnInheritedWidgetOfExactType<RouteDataScope>();
+  final routerScope = RouterScope.of(context);
+  final autoRouteObserver = routeDataScope != null ? routerScope.firstObserverOfType<AutoRouteObserver>() : null;
+  final modalRoute = ModalRoute.of(context);
+  final widgetRouteObserver = routeDataScope == null && modalRoute != null
+      ? routerScope.firstObserverOfType<WidgetRouteObserver>()
+      : null;
+  final routeData = routeDataScope?.routeData;
 
   useEffect(() {
-    if (observer == null || routeData == null) {
-      return null;
+    if (autoRouteObserver != null && routeData != null) {
+      final aware = _RefetchAutoRouteAware(
+        onResume: () {
+          unawaited(client.refetch(operation));
+        },
+      );
+
+      autoRouteObserver.subscribe(aware, routeData);
+      return () => autoRouteObserver.unsubscribe(aware);
     }
 
-    final aware = _RefetchRouteAware(
-      onResume: () {
-        unawaited(client.refetch(operation));
-      },
-    );
+    if (widgetRouteObserver != null && modalRoute != null) {
+      final aware = _RefetchWidgetRouteAware(
+        onResume: () {
+          unawaited(client.refetch(operation));
+        },
+      );
 
-    observer.subscribe(aware, routeData);
-    return () => observer.unsubscribe(aware);
-  }, [observer, routeData, operation]);
+      widgetRouteObserver.subscribe(aware, modalRoute);
+      return () => widgetRouteObserver.unsubscribe(aware);
+    }
+
+    return null;
+  }, [autoRouteObserver, widgetRouteObserver, routeData, modalRoute, operation]);
 }
 
-class _RefetchRouteAware with AutoRouteAware {
-  _RefetchRouteAware({required this.onResume});
+class _RefetchAutoRouteAware with AutoRouteAware {
+  _RefetchAutoRouteAware({required this.onResume});
   final VoidCallback onResume;
 
   @override
@@ -55,4 +72,12 @@ class _RefetchRouteAware with AutoRouteAware {
 
   @override
   void didChangeTabRoute(TabPageRoute previousRoute) => onResume();
+}
+
+class _RefetchWidgetRouteAware with RouteAware {
+  _RefetchWidgetRouteAware({required this.onResume});
+  final VoidCallback onResume;
+
+  @override
+  void didPopNext() => onResume();
 }
