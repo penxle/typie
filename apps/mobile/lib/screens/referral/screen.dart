@@ -26,29 +26,25 @@ class ReferralScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scrollController = useScrollController();
-
-    return Screen(
-      child: GraphQLOperation(
-        initialBackgroundColor: context.colors.surfaceSubtle,
-        operation: GReferralScreen_QueryReq(),
-        builder: (context, client, data) {
-          return _Content(data: data, client: client, scrollController: scrollController);
-        },
-      ),
+    return GraphQLOperation(
+      initialBackgroundColor: context.colors.surfaceSubtle,
+      operation: GReferralScreen_QueryReq(),
+      builder: (context, client, data) {
+        return _Content(data: data, client: client);
+      },
     );
   }
 }
 
-class _Content extends StatelessWidget {
-  const _Content({required this.data, required this.client, required this.scrollController});
+class _Content extends HookWidget {
+  const _Content({required this.data, required this.client});
 
   final GReferralScreen_QueryData data;
   final GraphQLClient client;
-  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
+    final scrollController = useScrollController();
     final referralCount = data.me?.referrals.length ?? 0;
     final compensatedCount = data.me?.referrals.where((r) => r.compensated).length ?? 0;
     final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
@@ -83,16 +79,21 @@ class _Content extends StatelessWidget {
       );
     }
 
-    return Stack(
-      children: [
-        SingleChildScrollView(
+    return Screen(
+      extendBodyBehindAppBar: true,
+      heading: _Heading(scrollController: scrollController),
+      child: OverlayHeadingLayout(
+        child: SingleChildScrollView(
           controller: scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, OverlayHeading.contentTopSpacing + 8, 20, bottomPadding),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('초대', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              Padding(
+                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+                child: const Text('초대', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              ),
               const Gap(_sectionGap),
               DecoratedBox(
                 decoration: _cardDecoration(context),
@@ -172,13 +173,12 @@ class _Content extends StatelessWidget {
             ],
           ),
         ),
-        _Heading(scrollController: scrollController),
-      ],
+      ),
     );
   }
 }
 
-class _Heading extends StatelessWidget {
+class _Heading extends StatelessWidget implements PreferredSizeWidget {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
@@ -188,24 +188,16 @@ class _Heading extends StatelessWidget {
     return OverlayHeading(
       title: '초대',
       scrollController: scrollController,
-      leading: Tappable(
+      leading: OverlayHeadingBackButton(
         onTap: () async {
           await context.router.maybePop();
         },
-        child: Tappable.scale(
-          scale: 0.95,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Icon(LucideLightIcons.chevron_left, size: 22, color: context.colors.textDefault),
-            ),
-          ),
-        ),
       ),
     );
   }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(OverlayHeading.height);
 }
 
 class _ActionButton extends StatelessWidget {

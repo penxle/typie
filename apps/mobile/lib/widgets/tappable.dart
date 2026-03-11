@@ -5,12 +5,21 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 
 class Tappable extends HookWidget {
-  const Tappable({required this.onTap, required this.child, this.padding, this.debugTapArea = false, super.key});
+  const Tappable({
+    required this.onTap,
+    required this.child,
+    this.onLongPress,
+    this.padding,
+    this.debugTapArea = false,
+    super.key,
+  });
 
   final Widget child;
   final EdgeInsetsGeometry? padding;
   // ignore: avoid_futureor_void -- to many consumers
   final FutureOr<void> Function() onTap;
+  // ignore: avoid_futureor_void -- to many consumers
+  final FutureOr<void> Function()? onLongPress;
   final bool debugTapArea;
 
   static Widget scale({required Widget child, double scale = 0.98}) => _TappableScaleWidget(end: scale, child: child);
@@ -35,6 +44,11 @@ class Tappable extends HookWidget {
         await Future<void>.delayed(const Duration(milliseconds: 60));
         await onTap();
       },
+      onLongPress: onLongPress == null
+          ? null
+          : () async {
+              await onLongPress!();
+            },
       child: _TappableProgressData(progress: progress, child: content),
     );
   }

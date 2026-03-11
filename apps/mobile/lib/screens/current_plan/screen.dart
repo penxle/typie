@@ -8,7 +8,6 @@ import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/extensions/num.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/widget.dart';
-import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/current_plan/__generated__/current_plan_query.data.gql.dart';
 import 'package:typie/screens/current_plan/__generated__/current_plan_query.req.gql.dart';
@@ -27,45 +26,46 @@ class CurrentPlanScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scrollController = useScrollController();
+    return GraphQLOperation(
+      initialBackgroundColor: context.colors.surfaceSubtle,
+      operation: GCurrentPlanScreen_QueryReq(),
+      builder: (context, client, data) {
+        final subscription = data.me?.subscription;
+        if (subscription == null) {
+          return const SizedBox.shrink();
+        }
 
-    return Screen(
-      child: GraphQLOperation(
-        initialBackgroundColor: context.colors.surfaceSubtle,
-        operation: GCurrentPlanScreen_QueryReq(),
-        builder: (context, client, data) {
-          final subscription = data.me?.subscription;
-          if (subscription == null) {
-            return const SizedBox.shrink();
-          }
-
-          return _Content(subscription: subscription, scrollController: scrollController);
-        },
-      ),
+        return _Content(subscription: subscription);
+      },
     );
   }
 }
 
-class _Content extends StatelessWidget {
-  const _Content({required this.subscription, required this.scrollController});
+class _Content extends HookWidget {
+  const _Content({required this.subscription});
 
   final GCurrentPlanScreen_QueryData_me_subscription subscription;
-  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
+    final scrollController = useScrollController();
     final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
 
-    return Stack(
-      children: [
-        SingleChildScrollView(
+    return Screen(
+      extendBodyBehindAppBar: true,
+      heading: _Heading(scrollController: scrollController),
+      child: OverlayHeadingLayout(
+        child: SingleChildScrollView(
           controller: scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, OverlayHeading.contentTopSpacing + 8, 20, bottomPadding),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('이용권 정보', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              Padding(
+                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+                child: const Text('이용권 정보', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              ),
               const Gap(_sectionGap),
               DecoratedBox(
                 decoration: _cardDecoration(context),
@@ -95,13 +95,12 @@ class _Content extends StatelessWidget {
             ],
           ),
         ),
-        _Heading(scrollController: scrollController),
-      ],
+      ),
     );
   }
 }
 
-class _Heading extends StatelessWidget {
+class _Heading extends StatelessWidget implements PreferredSizeWidget {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
@@ -111,24 +110,16 @@ class _Heading extends StatelessWidget {
     return OverlayHeading(
       title: '이용권 정보',
       scrollController: scrollController,
-      leading: Tappable(
+      leading: OverlayHeadingBackButton(
         onTap: () async {
           await context.router.maybePop();
         },
-        child: Tappable.scale(
-          scale: 0.95,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Icon(LucideLightIcons.chevron_left, size: 22, color: context.colors.textDefault),
-            ),
-          ),
-        ),
       ),
     );
   }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(OverlayHeading.height);
 }
 
 List<Widget> _detailLines(BuildContext context, GCurrentPlanScreen_QueryData_me_subscription subscription) {

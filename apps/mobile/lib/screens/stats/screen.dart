@@ -25,30 +25,27 @@ import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/popover/list.dart';
 import 'package:typie/widgets/popover/popover.dart';
 import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
 
 const _cardRadius = 12.0;
 const _sectionGap = 16.0;
 
 @RoutePage()
-class StatsScreen extends StatelessWidget {
+class StatsScreen extends HookWidget {
   const StatsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Screen(
-      child: GraphQLOperation(
-        initialBackgroundColor: context.colors.surfaceSubtle,
-        operation: GStatsScreen_QueryReq(),
-        builder: (context, client, data) {
-          final user = data.me;
-          if (user == null) {
-            return const SizedBox.shrink();
-          }
+    return GraphQLOperation(
+      initialBackgroundColor: context.colors.surfaceSubtle,
+      operation: GStatsScreen_QueryReq(),
+      builder: (context, client, data) {
+        final user = data.me;
+        if (user == null) {
+          return const SizedBox.shrink();
+        }
 
-          return _Content(user: user, client: client);
-        },
-      ),
+        return _Content(user: user, client: client);
+      },
     );
   }
 }
@@ -127,17 +124,19 @@ class _Content extends HookWidget {
       }
     }
 
-    return Stack(
-      children: [
-        SingleChildScrollView(
+    return Screen(
+      extendBodyBehindAppBar: true,
+      heading: _Heading(scrollController: scrollController),
+      child: OverlayHeadingLayout(
+        child: SingleChildScrollView(
           controller: scrollController,
-          padding: EdgeInsets.fromLTRB(20, OverlayHeading.contentTopSpacing + 8, 20, bottomPadding),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: Pad(bottom: 4),
-                child: Text('나의 글쓰기 통계', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              Padding(
+                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+                child: const Text('나의 글쓰기 통계', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
               ),
               const Gap(_sectionGap),
               _SummaryCard(label: '총 글자', value: totalCharacterCount.comma, unit: '자'),
@@ -218,13 +217,12 @@ class _Content extends HookWidget {
             ],
           ),
         ),
-        _Heading(scrollController: scrollController),
-      ],
+      ),
     );
   }
 }
 
-class _Heading extends StatelessWidget {
+class _Heading extends StatelessWidget implements PreferredSizeWidget {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
@@ -234,24 +232,16 @@ class _Heading extends StatelessWidget {
     return OverlayHeading(
       title: '나의 글쓰기 통계',
       scrollController: scrollController,
-      leading: Tappable(
+      leading: OverlayHeadingBackButton(
         onTap: () async {
           await context.router.maybePop();
         },
-        child: Tappable.scale(
-          scale: 0.95,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Icon(LucideLightIcons.chevron_left, size: 22, color: context.colors.textDefault),
-            ),
-          ),
-        ),
       ),
     );
   }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(OverlayHeading.height);
 }
 
 class _SummaryCard extends StatelessWidget {

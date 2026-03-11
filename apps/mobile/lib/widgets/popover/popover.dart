@@ -148,6 +148,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _isOverlayVisible = false;
+          _paneSize = null;
         });
       }
     }
@@ -281,6 +282,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
       _lastAnchorRect = null;
       setState(() {
         _isOverlayVisible = false;
+        _paneSize = null;
       });
       return;
     }

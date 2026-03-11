@@ -32,12 +32,10 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Screen(
-      child: GraphQLOperation(
-        initialBackgroundColor: context.colors.surfaceSubtle,
-        operation: GProfileScreen_QueryReq(),
-        builder: (context, client, data) => _Content(data: data, client: client),
-      ),
+    return GraphQLOperation(
+      initialBackgroundColor: context.colors.surfaceSubtle,
+      operation: GProfileScreen_QueryReq(),
+      builder: (context, client, data) => _Content(data: data, client: client),
     );
   }
 }
@@ -53,18 +51,19 @@ class _Content extends HookWidget {
     final me = data.me!;
     final scrollController = useScrollController();
 
-    return Stack(
-      children: [
-        SingleChildScrollView(
+    return Screen(
+      extendBodyBehindAppBar: true,
+      heading: _Heading(scrollController: scrollController),
+      child: OverlayHeadingLayout(
+        child: SingleChildScrollView(
           controller: scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Gap(OverlayHeading.contentTopSpacing),
-              const Padding(
-                padding: Pad(horizontal: 20, top: 8, bottom: 4),
-                child: Text('프로필', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              Padding(
+                padding: EdgeInsets.fromLTRB(20, OverlayHeading.titleTopPadding(context), 20, 4),
+                child: const Text('프로필', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
               ),
               _ProfileHero(me: me),
               _ProfileActivitySection(data: data),
@@ -74,54 +73,23 @@ class _Content extends HookWidget {
             ],
           ),
         ),
-        _Heading(me: me, scrollController: scrollController),
-      ],
+      ),
     );
   }
 }
 
-class _Heading extends StatelessWidget {
-  const _Heading({required this.me, required this.scrollController});
+class _Heading extends StatelessWidget implements PreferredSizeWidget {
+  const _Heading({required this.scrollController});
 
-  final GProfileScreen_QueryData_me me;
   final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
-    return OverlayHeading(
-      title: '프로필',
-      scrollController: scrollController,
-      leading: Tappable(
-        onTap: () async {
-          await context.router.push(const UpdateProfileRoute());
-        },
-        child: Tappable.scale(
-          scale: 0.95,
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: context.colors.shadowDefault.withValues(alpha: 0.08),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: ClipOval(
-              child: CachedNetworkImage(
-                imageUrl: _avatarUrl(context, me.avatar.url, 36),
-                width: 36,
-                height: 36,
-                fit: BoxFit.cover,
-                fadeInDuration: const Duration(milliseconds: 150),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    return OverlayHeading(leading: const SizedBox.shrink(), title: '프로필', scrollController: scrollController);
   }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(OverlayHeading.height);
 }
 
 class _ProfileHero extends StatelessWidget {

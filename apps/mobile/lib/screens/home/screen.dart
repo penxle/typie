@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
-
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -19,16 +17,13 @@ import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/query.data.gql.dart';
 import 'package:typie/screens/home/__generated__/query.req.gql.dart';
 import 'package:typie/screens/home/search_overlay.dart';
-import 'package:typie/screens/shell/screen.dart';
+import 'package:typie/screens/shell/nav.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
-import 'package:typie/widgets/img.dart';
 import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/space_popover_button.dart';
 import 'package:typie/widgets/tappable.dart';
-
-const _animDuration = Duration(milliseconds: 350);
-const _animCurve = Curves.easeOutCubic;
 
 @RoutePage()
 class HomeScreen extends HookWidget {
@@ -55,6 +50,41 @@ class HomeScreen extends HookWidget {
     }
 
     final searching = isSearching.value;
+    final homeContent = Stack(
+      children: [
+        AnimatedOpacity(
+          opacity: searching ? 0 : 1,
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: searching,
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20, OverlayHeading.titleTopPadding(context), 20, 4),
+                    child: const Text('홈', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                  ),
+                  _SearchBarPlaceholder(onTap: enterSearch),
+                  _RecentFolders(data: data),
+                  _RecentDocuments(data: data),
+                  const Gap(140),
+                ],
+              ),
+            ),
+          ),
+        ),
+        AnimatedOpacity(
+          opacity: searching ? 1 : 0,
+          duration: Duration(milliseconds: searching ? 250 : 150),
+          child: IgnorePointer(
+            ignoring: !searching,
+            child: SearchOverlay(active: searching, onExit: exitSearch),
+          ),
+        ),
+      ],
+    );
 
     return PopScope(
       canPop: !searching,
@@ -66,57 +96,9 @@ class HomeScreen extends HookWidget {
       child: Screen(
         loading: data == null,
         resizeToAvoidBottomInset: searching,
-        child: Stack(
-          children: [
-            // -- Home content --
-            AnimatedOpacity(
-              opacity: searching ? 0 : 1,
-              duration: const Duration(milliseconds: 200),
-              child: IgnorePointer(
-                ignoring: searching,
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Gap(OverlayHeading.contentTopSpacing),
-                      const Padding(
-                        padding: Pad(horizontal: 20, top: 8, bottom: 4),
-                        child: Text('홈', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-                      ),
-                      _SearchBarPlaceholder(onTap: enterSearch),
-                      _RecentFolders(data: data),
-                      _RecentDocuments(data: data),
-                      const Gap(140),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // -- Search overlay --
-            AnimatedOpacity(
-              opacity: searching ? 1 : 0,
-              duration: Duration(milliseconds: searching ? 250 : 150),
-              child: IgnorePointer(
-                ignoring: !searching,
-                child: SearchOverlay(active: searching, onExit: exitSearch),
-              ),
-            ),
-
-            // -- Heading (slides out when searching) --
-            AnimatedSlide(
-              offset: Offset(0, searching ? -1.0 : 0),
-              duration: _animDuration,
-              curve: _animCurve,
-              child: AnimatedOpacity(
-                opacity: searching ? 0 : 1,
-                duration: const Duration(milliseconds: 200),
-                child: _Heading(data: data, scrollController: scrollController),
-              ),
-            ),
-          ],
-        ),
+        extendBodyBehindAppBar: true,
+        heading: _Heading(data: data, scrollController: scrollController, visible: !searching),
+        child: data == null ? homeContent : OverlayHeadingLayout(child: homeContent),
       ),
     );
   }
@@ -154,46 +136,33 @@ class _SearchBarPlaceholder extends StatelessWidget {
 
 // -- Heading ------------------------------------------------------------------
 
-class _Heading extends StatelessWidget {
-  const _Heading({required this.data, required this.scrollController});
+class _Heading extends StatelessWidget implements PreferredSizeWidget {
+  const _Heading({required this.data, required this.scrollController, required this.visible});
 
   final GHomeScreen_QueryData? data;
   final ScrollController scrollController;
+  final bool visible;
 
   @override
   Widget build(BuildContext context) {
+    final controlBackgroundColor = OverlayHeading.controlBackgroundColor(context);
+    final controlShadow = OverlayHeading.controlShadow(context);
+
     return OverlayHeading(
+      visible: visible,
       title: '홈',
       scrollController: scrollController,
-      leading: Tappable(
-        onTap: () {
-          unawaited(context.router.push(const SiteRoute()));
-        },
-        child: Tappable.scale(
-          scale: 0.95,
-          child: Transform.rotate(
-            angle: -10 * (math.pi / 180),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                boxShadow: [
-                  BoxShadow(
-                    color: context.colors.shadowDefault.withValues(alpha: 0.08),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Img(image: data?.site.logo, size: 36),
-              ),
-            ),
-          ),
-        ),
+      leading: SpacePopoverButton(
+        siteLogoUrl: data?.site.logo.url,
+        backgroundColor: controlBackgroundColor,
+        boxShadow: controlShadow,
+        via: 'home_heading',
       ),
     );
   }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(OverlayHeading.height);
 }
 
 // -- Recent Folders -----------------------------------------------------------
@@ -385,7 +354,7 @@ class _DocumentRow extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                    doc.type == GDocumentType.TEMPLATE ? LucideLightIcons.shapes : LucideLightIcons.file,
+                    doc.type == GDocumentType.TEMPLATE ? LucideLightIcons.layout_template : LucideLightIcons.file,
                     size: 16,
                     color: context.colors.textFaint,
                   ),

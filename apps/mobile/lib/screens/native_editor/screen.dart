@@ -51,6 +51,7 @@ import 'package:typie/screens/native_editor/sync/title.dart';
 import 'package:typie/screens/native_editor/view/editor.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/services/state.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -172,8 +173,6 @@ class _Content extends HookWidget {
         );
       }
 
-      final topInset = MediaQuery.paddingOf(context).top;
-
       return Stack(
         children: [
           Positioned.fill(child: child),
@@ -181,23 +180,8 @@ class _Content extends HookWidget {
             top: 0,
             left: 0,
             right: 0,
-            height: topInset + 72,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      context.colors.surfaceDefault.withValues(alpha: 0.98),
-                      context.colors.surfaceDefault.withValues(alpha: 0.86),
-                      context.colors.surfaceDefault.withValues(alpha: 0.42),
-                      context.colors.surfaceDefault.withValues(alpha: 0),
-                    ],
-                    stops: const [0, 0.32, 0.72, 1],
-                  ),
-                ),
-              ),
+            child: OverlayHeadingFade(
+              colors: OverlayHeading.buildFadeColors(context, baseColor: context.colors.surfaceDefault),
             ),
           ),
         ],

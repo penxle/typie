@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/screens/native_editor/floating/native_editor_floating_fade.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 
-const _editorFloatingTopInset = 52.0;
+const _editorFloatingTopInset = OverlayHeading.height;
 
 class NativeEditorFloatingWidget extends HookWidget {
   NativeEditorFloatingWidget({
