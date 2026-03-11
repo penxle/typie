@@ -5,6 +5,8 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
 import 'package:typie/service.dart';
 
+class WidgetRouteObserver extends RouteObserver<ModalRoute<dynamic>> {}
+
 class RouterObserver extends AutoRouterObserver {
   final analytics = serviceLocator<FirebaseAnalytics>();
 

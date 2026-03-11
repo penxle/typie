@@ -105,6 +105,7 @@ class NativeEditorHeading extends StatelessWidget implements PreferredSizeWidget
 class NativeEditorToolsPopoverPane extends StatelessWidget {
   const NativeEditorToolsPopoverPane({
     required this.editorContext,
+    required this.noteCount,
     required this.onOpenFindReplace,
     required this.onOpenRelatedNotes,
     required this.onOpenRemark,
@@ -115,6 +116,7 @@ class NativeEditorToolsPopoverPane extends StatelessWidget {
   });
 
   final EditorContext editorContext;
+  final int noteCount;
   final Future<void> Function() onOpenFindReplace;
   final Future<void> Function() onOpenRelatedNotes;
   final Future<void> Function() onOpenRemark;
@@ -127,16 +129,24 @@ class NativeEditorToolsPopoverPane extends StatelessWidget {
     final controller = editorContext.controller;
 
     Widget buildPane(int remarkCount) {
+      final hasNoteBadge = noteCount > 0;
+      final hasRemarkBadge = remarkCount > 0;
+
       return _HeadingPopoverPane(
-        trailingSlotWidth: remarkCount > 0 ? 36 : null,
+        trailingSlotWidth: hasNoteBadge || hasRemarkBadge ? 36 : null,
         entries: [
           _HeadingPopoverEntry(icon: LucideLightIcons.search, label: '찾기', onSelected: onOpenFindReplace),
-          _HeadingPopoverEntry(icon: LucideLightIcons.sticky_note, label: '노트', onSelected: onOpenRelatedNotes),
+          _HeadingPopoverEntry(
+            icon: LucideLightIcons.sticky_note,
+            label: '노트',
+            onSelected: onOpenRelatedNotes,
+            trailing: hasNoteBadge ? _HeadingPopoverBadge(label: '$noteCount') : null,
+          ),
           _HeadingPopoverEntry(
             icon: LucideLightIcons.message_square_text,
             label: '코멘트',
             onSelected: onOpenRemark,
-            trailing: remarkCount > 0 ? _HeadingPopoverBadge(label: '$remarkCount') : null,
+            trailing: hasRemarkBadge ? _HeadingPopoverBadge(label: '$remarkCount') : null,
           ),
           _HeadingPopoverEntry(icon: LucideLightIcons.spell_check, label: '맞춤법 검사', onSelected: onOpenSpellcheck),
           _HeadingPopoverEntry(icon: LucideLightIcons.lightbulb, label: 'AI 피드백', onSelected: onOpenAiFeedback),

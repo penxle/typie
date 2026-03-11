@@ -361,6 +361,7 @@ type Entity implements IEntity {
   id: ID!
   node: EntityNode!
   notes: [Note!]!
+  notesCount: Int!
   order: String!
   parent: Entity
   permalink: String!

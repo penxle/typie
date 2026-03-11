@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
-import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/modal.dart';
@@ -23,17 +23,14 @@ import 'package:typie/screens/native_editor/__generated__/move_note_mutation.req
 import 'package:typie/screens/native_editor/__generated__/update_note_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/toolbar/values.dart';
 import 'package:typie/widgets/haptic_reorderable.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/note.dart';
-import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class DocumentNote extends HookWidget {
-  const DocumentNote({required this.entityId, required this.isActive, required this.onBack, super.key});
+  const DocumentNote({required this.entityId, this.onCountChanged, super.key});
 
   final String entityId;
-  final bool isActive;
-  final Future<void> Function() onBack;
+  final void Function(int count)? onCountChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -54,9 +51,8 @@ class DocumentNote extends HookWidget {
         return _NoteContent(
           sortedNotes: sortedNotes,
           entityId: entityId,
-          onBack: onBack,
           refreshNotifier: refreshNotifier,
-          isActive: isActive,
+          onCountChanged: onCountChanged,
         );
       },
     );
@@ -67,16 +63,14 @@ class _NoteContent extends HookWidget {
   const _NoteContent({
     required this.sortedNotes,
     required this.entityId,
-    required this.onBack,
     required this.refreshNotifier,
-    required this.isActive,
+    this.onCountChanged,
   });
 
   final List<GDocumentNote_QueryData_entity_notes> sortedNotes;
   final String entityId;
-  final Future<void> Function() onBack;
   final RefreshNotifier refreshNotifier;
-  final bool isActive;
+  final void Function(int count)? onCountChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +85,7 @@ class _NoteContent extends HookWidget {
     final focusedNoteId = useRef<String?>(null);
     final focusNodes = useState<Map<String, FocusNode>>({});
     final expandedNotes = useState<Set<String>>({});
+    final reportedCount = useRef<int?>(null);
 
     final focusedNoteIdState = useState<String?>(null);
 
@@ -153,23 +148,6 @@ class _NoteContent extends HookWidget {
 
       return null;
     }, [sortedNotes]);
-
-    useEffect(() {
-      if (!isActive) {
-        return null;
-      }
-
-      bool handler(bool stopDefaultButtonEvent, RouteInfo routeInfo) {
-        unawaited(onBack());
-        return true;
-      }
-
-      BackButtonInterceptor.add(handler);
-
-      return () {
-        BackButtonInterceptor.remove(handler);
-      };
-    }, [isActive]);
 
     useEffect(() {
       return () {
@@ -292,61 +270,31 @@ class _NoteContent extends HookWidget {
       return null;
     }, [focusedNoteId.value, focusNodes.value.keys.toList()]);
 
-    return Screen(
-      resizeToAvoidBottomInset: true,
-      heading: Heading(
-        leadingWidget: Tappable(
-          onTap: () {
-            unawaited(onBack());
-          },
-          padding: const Pad(vertical: 4),
-          child: SizedBox(width: 52, child: Icon(LucideLightIcons.chevron_left, color: context.colors.textDefault)),
-        ),
-        titleIcon: LucideLightIcons.sticky_note,
-        title: '이 문서 관련 노트',
-        backgroundColor: context.colors.surfaceDefault,
-        actions: [HeadingAction(icon: LucideLightIcons.plus, onTap: handleAddNote)],
-      ),
-      backgroundColor: context.colors.surfaceDefault,
+    useEffect(() {
+      if (reportedCount.value == sortedNotes.length) {
+        return null;
+      }
+
+      reportedCount.value = sortedNotes.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) {
+          return;
+        }
+        onCountChanged?.call(sortedNotes.length);
+      });
+
+      return null;
+    }, [sortedNotes.length, onCountChanged]);
+
+    return _DocumentNoteBottomSheet(
+      noteCount: sortedNotes.length,
+      onAddNote: handleAddNote,
       child: sortedNotes.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: context.colors.surfaceMuted,
-                    ),
-                    child: Icon(LucideLightIcons.sticky_note, color: context.colors.textFaint, size: 28),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    '떠오르는 생각이나 아이디어를\n자유롭게 기록해보세요.\n\n글쓰기 중 상단바를 쓸어넘겨서 \n이 문서 관련 노트를 볼 수 있어요.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: context.colors.textFaint),
-                  ),
-                  const SizedBox(height: 20),
-                  Tappable(
-                    onTap: handleAddNote,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: context.colors.borderStrong),
-                      ),
-                      padding: const Pad(vertical: 12, horizontal: 20),
-                      child: Text('노트 추가', style: TextStyle(fontSize: 16, color: context.colors.textDefault)),
-                    ),
-                  ),
-                ],
-              ),
-            )
+          ? _EmptyNoteState(onAddNote: handleAddNote)
           : HapticReorderableListView.builder(
               orderedIds: [for (final note in sortedNotes) note.id],
               scrollController: scrollController,
-              padding: Pad(horizontal: 20, top: 12, bottom: MediaQuery.viewPaddingOf(context).bottom + 20),
+              padding: const Pad(horizontal: 20, top: 4, bottom: 8),
               buildDefaultDragHandles: false,
               proxyDecorator: (child, index, animation) => Material(type: MaterialType.transparency, child: child),
               onReorder: handleMoveNote,
@@ -387,6 +335,138 @@ class _NoteContent extends HookWidget {
                 );
               },
             ),
+    );
+  }
+}
+
+class _DocumentNoteBottomSheet extends StatelessWidget {
+  const _DocumentNoteBottomSheet({required this.noteCount, required this.onAddNote, required this.child});
+
+  final int noteCount;
+  final Future<void> Function() onAddNote;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final reservedTopSpace = mediaQuery.padding.top + 52 + 12;
+    final maxHeight = max<double>(0, mediaQuery.size.height - reservedTopSpace);
+    final bottomPadding = mediaQuery.padding.bottom;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Container(
+        decoration: BoxDecoration(color: context.colors.surfaceSubtle),
+        child: Padding(
+          padding: Pad(top: 8, bottom: bottomPadding + 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: SizedBox(
+                  width: 60,
+                  height: 4,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: context.colors.borderDefault,
+                      borderRadius: const BorderRadius.all(Radius.circular(999)),
+                    ),
+                  ),
+                ),
+              ),
+              const Gap(16),
+              Padding(
+                padding: const Pad(horizontal: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      spacing: 6,
+                      children: [
+                        Text(
+                          '이 문서 관련 노트',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: context.colors.textDefault,
+                          ),
+                        ),
+                        if (noteCount > 0)
+                          Text(
+                            '$noteCount',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: context.colors.textFaint,
+                            ),
+                          ),
+                      ],
+                    ),
+                    Tappable(
+                      onTap: onAddNote,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: context.colors.borderStrong),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(LucideLightIcons.plus, size: 18, color: context.colors.textDefault),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Gap(16),
+              Expanded(child: child),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyNoteState extends StatelessWidget {
+  const _EmptyNoteState({required this.onAddNote});
+
+  final Future<void> Function() onAddNote;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const Pad(horizontal: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), color: context.colors.surfaceMuted),
+              child: Icon(LucideLightIcons.sticky_note, color: context.colors.textFaint, size: 28),
+            ),
+            const Gap(20),
+            Text(
+              '떠오르는 생각이나 아이디어를\n자유롭게 기록해보세요',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: context.colors.textFaint),
+            ),
+            const Gap(20),
+            Tappable(
+              onTap: onAddNote,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: context.colors.borderStrong),
+                ),
+                padding: const Pad(horizontal: 16, vertical: 8),
+                child: Text('노트 추가', style: TextStyle(fontSize: 14, color: context.colors.textDefault)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

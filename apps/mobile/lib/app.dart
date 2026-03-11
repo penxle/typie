@@ -26,7 +26,12 @@ class App extends HookWidget {
     return SentryWidget(
       child: MaterialApp.router(
         routerConfig: router.config(
-          navigatorObservers: () => [AutoRouteObserver(), RouterObserver(), SentryNavigatorObserver()],
+          navigatorObservers: () => [
+            AutoRouteObserver(),
+            WidgetRouteObserver(),
+            RouterObserver(),
+            SentryNavigatorObserver(),
+          ],
         ),
         debugShowCheckedModeBanner: false,
         theme: lightTheme,
