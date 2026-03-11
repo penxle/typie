@@ -48,6 +48,7 @@ class ContentScope extends InheritedWidget {
     required this.longPressPosition,
     required this.handleDragPosition,
     required this.titleAreaHeight,
+    required this.viewportTopInset,
     required this.title,
     required this.subtitle,
     required this.onTitleChanged,
@@ -78,6 +79,7 @@ class ContentScope extends InheritedWidget {
   final ValueNotifier<Offset?> longPressPosition;
   final ValueNotifier<Offset?> handleDragPosition;
   final ValueNotifier<double> titleAreaHeight;
+  final ValueNotifier<double> viewportTopInset;
   final ValueNotifier<String> title;
   final ValueNotifier<String> subtitle;
   final ValueChanged<String> onTitleChanged;

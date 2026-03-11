@@ -98,6 +98,9 @@ class ContentGeometry {
     CursorInfo? cursor,
     bool typewriterEnabled = false,
     double typewriterPosition = 0.5,
+    double viewportTopInset = 0,
+    double viewportBottomInset = 0,
+    double additionalBottomPadding = 0,
   }) {
     final minimumBottomPadding = typewriterEnabled ? typewriterMinBottomPadding : defaultBottomPadding;
 
@@ -106,11 +109,14 @@ class ContentGeometry {
     }
 
     final cursorHeight = toDisplayY(cursor.height);
-    final spaceNeededBelowCursorTop = (1 - typewriterPosition) * (viewportHeight - cursorHeight) + cursorHeight;
-    final spaceAvailableBelowCursorTop = (titleAreaHeight + pagesContentHeight - cursorTopInContent(cursor)).clamp(
-      0.0,
-      double.infinity,
-    );
+    final usableViewportHeight = math.max(0, viewportHeight - viewportTopInset - viewportBottomInset);
+    final availableRange = math.max(0, usableViewportHeight - cursorHeight);
+    final spaceNeededBelowCursorTop = viewportBottomInset + (1 - typewriterPosition) * availableRange + cursorHeight;
+    final spaceAvailableBelowCursorTop =
+        (titleAreaHeight + pagesContentHeight - cursorTopInContent(cursor) + additionalBottomPadding).clamp(
+          0.0,
+          double.infinity,
+        );
 
     final requiredPadding = spaceNeededBelowCursorTop - spaceAvailableBelowCursorTop + typewriterPaddingSafety;
 
@@ -122,14 +128,21 @@ class ContentGeometry {
     CursorInfo? cursor,
     bool typewriterEnabled = false,
     double typewriterPosition = 0.5,
+    double viewportTopInset = 0,
+    double viewportBottomInset = 0,
+    double additionalBottomPadding = 0,
   }) {
     return titleAreaHeight +
         pagesContentHeight +
+        additionalBottomPadding +
         bottomPadding(
           viewportHeight: viewportHeight,
           cursor: cursor,
           typewriterEnabled: typewriterEnabled,
           typewriterPosition: typewriterPosition,
+          viewportTopInset: viewportTopInset,
+          viewportBottomInset: viewportBottomInset,
+          additionalBottomPadding: additionalBottomPadding,
         );
   }
 }

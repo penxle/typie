@@ -1,12 +1,12 @@
 import 'dart:async';
-import 'dart:math' as math;
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/styles/semantic_colors.dart';
 import 'package:typie/widgets/popover/popover.dart';
+
+const _selectionArmDelay = Duration(milliseconds: 150);
 
 class PopoverListItem {
   const PopoverListItem({required this.child, required this.onSelected, this.key});
@@ -20,15 +20,13 @@ class PopoverList extends HookWidget {
   const PopoverList({
     required this.items,
     this.indicatorColor,
-    this.itemBorderRadius = const BorderRadius.all(Radius.circular(12)),
-    this.highlightInsets = const EdgeInsets.all(6),
+    this.itemBorderRadius = const BorderRadius.all(Radius.circular(Popover.expandedRadius - Popover.panePadding)),
     super.key,
   });
 
   final List<PopoverListItem> items;
   final Color? indicatorColor;
   final BorderRadius itemBorderRadius;
-  final EdgeInsets highlightInsets;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +35,8 @@ class PopoverList extends HookWidget {
     final itemKeysRef = useRef(itemKeys);
     final trackingSourceRef = useRef<_TrackingSource?>(null);
     final trackedPointerRef = useRef<int?>(null);
+    final selectionArmTimerRef = useRef<Timer?>(null);
+    final latestTrackedEventRef = useRef<PointerEvent?>(null);
     final isSelectionArmedRef = useRef(false);
     final activeIndex = useState<int?>(null);
     final activeRect = useState<Rect?>(null);
@@ -73,13 +73,7 @@ class PopoverList extends HookWidget {
 
       final itemTopLeft = itemRenderObject.localToGlobal(Offset.zero, ancestor: listRenderObject);
       final itemRect = itemTopLeft & itemRenderObject.size;
-
-      final left = itemRect.left + highlightInsets.left;
-      final top = itemRect.top + highlightInsets.top;
-      final width = math.max<double>(0, itemRect.width - highlightInsets.horizontal);
-      final height = math.max<double>(0, itemRect.height - highlightInsets.vertical);
-
-      return Rect.fromLTWH(left, top, width, height);
+      return Rect.fromLTWH(itemRect.left, itemRect.top, itemRect.width, itemRect.height);
     }
 
     void setActiveIndex(int? index) {
@@ -109,8 +103,11 @@ class PopoverList extends HookWidget {
         GestureBinding.instance.pointerRouter.removeGlobalRoute(handleLocalPointerEvent);
       }
 
+      selectionArmTimerRef.value?.cancel();
+      selectionArmTimerRef.value = null;
       trackingSourceRef.value = null;
       trackedPointerRef.value = null;
+      latestTrackedEventRef.value = null;
       isSelectionArmedRef.value = false;
       setActiveIndex(null);
     }
@@ -123,10 +120,11 @@ class PopoverList extends HookWidget {
 
     void handleTrackedEvent(PointerEvent event) {
       if (event is PointerDownEvent || event is PointerMoveEvent) {
-        final nextIndex = indexAtPosition(event.position);
-        if (event is PointerMoveEvent && nextIndex != null) {
-          isSelectionArmedRef.value = true;
+        latestTrackedEventRef.value = event;
+        if (!isSelectionArmedRef.value) {
+          return;
         }
+        final nextIndex = indexAtPosition(event.position);
         final shouldTriggerHaptic = isSelectionArmedRef.value && nextIndex != null && nextIndex != activeIndex.value;
         setActiveIndex(nextIndex);
         if (shouldTriggerHaptic) {
@@ -137,7 +135,11 @@ class PopoverList extends HookWidget {
 
       if (event is PointerUpEvent) {
         final selectedIndex = indexAtPosition(event.position);
-        final onSelected = !isSelectionArmedRef.value || selectedIndex == null ? null : items[selectedIndex].onSelected;
+        final onSelected = switch ((trackingSourceRef.value, isSelectionArmedRef.value, selectedIndex)) {
+          (_TrackingSource.local, _, final int index) => items[index].onSelected,
+          (_, true, final int index) => items[index].onSelected,
+          _ => null,
+        };
 
         resetTrackingRef.value();
         onSelected?.call();
@@ -158,7 +160,22 @@ class PopoverList extends HookWidget {
 
       trackingSourceRef.value = _TrackingSource.local;
       trackedPointerRef.value = event.pointer;
-      isSelectionArmedRef.value = true;
+      latestTrackedEventRef.value = event;
+      isSelectionArmedRef.value = false;
+      selectionArmTimerRef.value?.cancel();
+      selectionArmTimerRef.value = Timer(_selectionArmDelay, () {
+        if (trackingSourceRef.value != _TrackingSource.local || trackedPointerRef.value != event.pointer) {
+          return;
+        }
+        isSelectionArmedRef.value = true;
+        final latestEvent = latestTrackedEventRef.value;
+        final nextIndex = latestEvent == null ? null : indexAtPosition(latestEvent.position);
+        final shouldTriggerHaptic = nextIndex != null && nextIndex != activeIndex.value;
+        setActiveIndex(nextIndex);
+        if (shouldTriggerHaptic) {
+          triggerHighlightHaptic();
+        }
+      });
       GestureBinding.instance.pointerRouter.addGlobalRoute(handleLocalPointerEvent);
       handleTrackedEvent(event);
     }
@@ -225,6 +242,7 @@ class PopoverList extends HookWidget {
 
     useEffect(() {
       return () {
+        selectionArmTimerRef.value?.cancel();
         if (trackingSourceRef.value == _TrackingSource.local) {
           GestureBinding.instance.pointerRouter.removeGlobalRoute(handleLocalPointerEvent);
         }
@@ -248,7 +266,10 @@ class PopoverList extends HookWidget {
             height: activeRect.value!.height,
             child: IgnorePointer(
               child: DecoratedBox(
-                decoration: BoxDecoration(color: resolvedIndicatorColor, borderRadius: itemBorderRadius),
+                decoration: ShapeDecoration(
+                  color: resolvedIndicatorColor,
+                  shape: RoundedSuperellipseBorder(borderRadius: itemBorderRadius),
+                ),
               ),
             ),
           ),

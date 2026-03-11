@@ -15,6 +15,8 @@ bool scrollToCursor({
   required CursorInfo cursor,
   bool typewriterEnabled = false,
   double typewriterPosition = 0.5,
+  double viewportTopInset = 0,
+  double viewportBottomInset = 0,
 }) {
   final didScrollVertical = _scrollVertical(
     controller: verticalController,
@@ -22,6 +24,8 @@ bool scrollToCursor({
     cursor: cursor,
     typewriterEnabled: typewriterEnabled,
     typewriterPosition: typewriterPosition,
+    viewportTopInset: viewportTopInset,
+    viewportBottomInset: viewportBottomInset,
   );
   final didScrollHorizontal = _scrollHorizontal(
     controller: horizontalController,
@@ -39,6 +43,8 @@ bool _scrollVertical({
   required CursorInfo cursor,
   required bool typewriterEnabled,
   required double typewriterPosition,
+  required double viewportTopInset,
+  required double viewportBottomInset,
 }) {
   final position = resolveScrollPosition(controller);
   if (position == null || !position.hasContentDimensions) {
@@ -50,13 +56,17 @@ bool _scrollVertical({
   final cursorHeight = geometry.toDisplayY(cursor.height);
 
   if (typewriterEnabled) {
-    final availableRange = viewportHeight - cursorHeight;
-    final targetScroll = cursorGlobalY - availableRange * typewriterPosition;
+    final usableViewportHeight = math.max(0, viewportHeight - viewportTopInset - viewportBottomInset);
+    final availableRange = math.max(0, usableViewportHeight - cursorHeight);
+    final targetScroll = cursorGlobalY - viewportTopInset - availableRange * typewriterPosition;
     final totalContentHeight = geometry.totalContentHeight(
       viewportHeight: viewportHeight,
       cursor: cursor,
       typewriterEnabled: true,
       typewriterPosition: typewriterPosition,
+      viewportTopInset: viewportTopInset,
+      viewportBottomInset: viewportBottomInset,
+      additionalBottomPadding: viewportBottomInset,
     );
     final maxScrollExtent = math.max<double>(0, totalContentHeight - viewportHeight);
 
@@ -75,6 +85,8 @@ bool _scrollVertical({
     cursorTop: cursorGlobalY,
     cursorHeight: cursorHeight,
     viewportHeight: viewportHeight,
+    viewportTopInset: viewportTopInset,
+    viewportBottomInset: viewportBottomInset,
     maxScrollExtent: position.maxScrollExtent,
   );
 }
@@ -84,20 +96,24 @@ bool _jumpToKeepCursorInScrollMargin({
   required double cursorTop,
   required double cursorHeight,
   required double viewportHeight,
+  required double viewportTopInset,
+  required double viewportBottomInset,
   required double maxScrollExtent,
 }) {
   final scrollOffset = position.pixels;
   final cursorBottom = cursorTop + cursorHeight;
+  final visibleTop = scrollOffset + viewportTopInset;
+  final visibleBottom = scrollOffset + viewportHeight - viewportBottomInset;
 
-  if (cursorBottom > scrollOffset + viewportHeight - _scrollMargin) {
-    final target = (cursorBottom - viewportHeight + _scrollMargin).clamp(0.0, maxScrollExtent);
+  if (cursorBottom > visibleBottom - _scrollMargin) {
+    final target = (cursorBottom - viewportHeight + viewportBottomInset + _scrollMargin).clamp(0.0, maxScrollExtent);
     if ((target - scrollOffset).abs() <= 1) {
       return false;
     }
     position.jumpTo(target);
     return true;
-  } else if (cursorTop < scrollOffset + _scrollMargin) {
-    final target = (cursorTop - _scrollMargin).clamp(0.0, maxScrollExtent);
+  } else if (cursorTop < visibleTop + _scrollMargin) {
+    final target = (cursorTop - viewportTopInset - _scrollMargin).clamp(0.0, maxScrollExtent);
     if ((target - scrollOffset).abs() <= 1) {
       return false;
     }
@@ -168,6 +184,8 @@ void scrollToOverlayTarget({
   double targetHeight = 0,
   double targetAnchor = 0.5,
   double viewportAnchor = 0.5,
+  double viewportTopInset = 0,
+  double viewportBottomInset = 0,
 }) {
   final offsets = geometry.computeCumulativePageOffsets();
   final absoluteY = geometry.titleAreaHeight + offsets[pageIdx] + geometry.toDisplayY(targetY);
@@ -177,8 +195,9 @@ void scrollToOverlayTarget({
     final clampedTargetAnchor = targetAnchor.clamp(0.0, 1.0);
     final clampedViewportAnchor = viewportAnchor.clamp(0.0, 1.0);
     final viewportHeight = verticalPosition.viewportDimension;
+    final usableViewportHeight = math.max(0, viewportHeight - viewportTopInset - viewportBottomInset);
     final absoluteAnchorY = absoluteY + geometry.toDisplayY(targetHeight) * clampedTargetAnchor;
-    final targetOffset = (absoluteAnchorY - viewportHeight * clampedViewportAnchor).clamp(
+    final targetOffset = (absoluteAnchorY - viewportTopInset - usableViewportHeight * clampedViewportAnchor).clamp(
       0.0,
       verticalPosition.maxScrollExtent,
     );

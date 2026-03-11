@@ -45,10 +45,8 @@ class HookFormSelect<T> extends StatelessWidget {
         return Popover(
           position: position,
           maxWidth: 320,
-          matchAnchorWidth: false,
           screenPadding: const EdgeInsets.all(20),
           collapsedBorderRadius: BorderRadius.circular(8),
-          expandedBorderRadius: BorderRadius.circular(16),
           backgroundColor: context.colors.surfaceDefault,
           borderSide: BorderSide(color: context.colors.borderStrong),
           anchor: _SelectAnchor(item: item),
@@ -179,17 +177,20 @@ class _SelectPane<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IntrinsicWidth(
-      child: PopoverList(
-        items: [
-          for (final item in items)
-            PopoverListItem(
-              onSelected: () {
-                onSelected(item.value);
-                Popover.close(context);
-              },
-              child: _SelectPopoverItem(item: item, isSelected: selectedValues.contains(item.value)),
-            ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(Popover.panePadding),
+        child: PopoverList(
+          items: [
+            for (final item in items)
+              PopoverListItem(
+                onSelected: () {
+                  onSelected(item.value);
+                  Popover.close(context);
+                },
+                child: _SelectPopoverItem(item: item, isSelected: selectedValues.contains(item.value)),
+              ),
+          ],
+        ),
       ),
     );
   }
