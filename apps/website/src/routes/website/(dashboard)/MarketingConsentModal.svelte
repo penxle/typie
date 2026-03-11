@@ -87,16 +87,14 @@
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
     <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>타이피 소식 받아보기</div>
 
-    <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>
+    <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>
       새 기능, 글쓰기 팁, 할인 혜택 등 다양한 소식을 전해드려요.
     </div>
   </div>
 
-  <Button style={css.raw({ marginTop: '24px', width: 'full', height: '40px' })} gradient onclick={() => handleConsent(true)}>
-    받을게요
-  </Button>
+  <Button style={css.raw({ marginTop: '24px', width: 'full' })} onclick={() => handleConsent(true)}>받을게요</Button>
 
-  <Button style={css.raw({ marginTop: '8px', width: 'full', height: '40px' })} onclick={() => handleConsent(false)} variant="secondary">
+  <Button style={css.raw({ marginTop: '10px', width: 'full' })} onclick={() => handleConsent(false)} variant="secondary">
     안 받을게요
   </Button>
 

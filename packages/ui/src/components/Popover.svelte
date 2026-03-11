@@ -105,12 +105,11 @@
     style:min-width={matchTriggerWidth && triggerEl ? `${triggerEl.offsetWidth}px` : undefined}
     class={css(
       {
-        borderWidth: '1px',
         borderRadius: '8px',
         paddingX: '12px',
         paddingY: '8px',
         backgroundColor: 'surface.default',
-        boxShadow: 'small',
+        boxShadow: 'menu',
         zIndex: 'tooltip',
         pointerEvents: 'auto',
       },
@@ -118,7 +117,7 @@
     )}
     role="dialog"
     use:floating={{ appendTo: document.querySelector('.tooltip-container') as Element | null }}
-    transition:scale={{ start: 0.9, duration: 200 }}
+    transition:scale={{ start: 0.95, duration: 150 }}
   >
     {@render children?.({ close })}
   </div>

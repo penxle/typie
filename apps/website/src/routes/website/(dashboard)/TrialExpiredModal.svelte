@@ -122,9 +122,9 @@
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
     <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>무료 체험이 종료됐어요</div>
 
-    <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>무료 체험은 어떠셨나요?</div>
+    <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>무료 체험은 어떠셨나요?</div>
 
-    <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>
+    <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>
       타이피의 모든 기능을 계속 이용하시려면
       <br />
       플랜을 업그레이드해 주세요.
@@ -166,13 +166,13 @@
     </ul>
   </div>
 
-  <Button style={css.raw({ marginTop: '32px', width: 'full', height: '40px' })} onclick={handleClose} variant="secondary">
+  <Button style={css.raw({ marginTop: '24px', width: 'full' })} onclick={handleClose} variant="secondary">
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <span>좀 더 둘러볼게요</span>
     </div>
   </Button>
 
-  <Button style={css.raw({ marginTop: '8px', width: 'full', height: '40px' })} gradient onclick={handleUpgrade}>
+  <Button style={css.raw({ marginTop: '10px', width: 'full' })} onclick={handleUpgrade}>
     <div class={flex({ alignItems: 'center', gap: '4px' })}>
       <span>지금 업그레이드</span>
 

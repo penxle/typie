@@ -10,7 +10,6 @@
   type BaseProps = {
     style?: SystemStyleObject;
     element?: HTMLElement;
-    gradient?: boolean;
     loading?: boolean;
     disabled?: boolean;
     children: Snippet;
@@ -35,7 +34,6 @@
   let {
     type = 'button',
     style,
-    gradient = false,
     disabled = false,
     loading = false,
     variant = 'primary',
@@ -60,7 +58,8 @@
     variants: {
       variant: {
         primary: {
-          fontWeight: 'bold',
+          fontWeight: 'semibold',
+          letterSpacing: '-0.01em',
           color: {
             _enabled: {
               base: 'text.bright',
@@ -78,6 +77,12 @@
               _pressed: 'accent.brand.active',
             },
             _disabled: 'interactive.disabled',
+          },
+          boxShadow: {
+            _enabled: {
+              base: 'buttonDefault',
+              _hover: 'buttonHover',
+            },
           },
         },
         secondary: {
@@ -105,6 +110,9 @@
             _enabled: 'border.subtle',
             _disabled: 'border.subtle',
           },
+          boxShadow: {
+            _enabled: { base: 'buttonSubtle' },
+          },
         },
         ghost: {
           fontWeight: 'medium',
@@ -128,6 +136,8 @@
           },
         },
         danger: {
+          fontWeight: 'semibold',
+          letterSpacing: '-0.01em',
           color: {
             _enabled: {
               base: 'text.bright',
@@ -146,12 +156,18 @@
             },
             _disabled: 'interactive.disabled',
           },
+          boxShadow: {
+            _enabled: {
+              base: 'buttonDefault',
+              _hover: 'buttonHover',
+            },
+          },
         },
       },
       size: {
-        sm: { borderRadius: '4px', paddingX: '12px', height: '32px', fontSize: '13px' },
-        md: { borderRadius: '6px', paddingX: '20px', height: '36px', fontSize: '14px' },
-        lg: { borderRadius: '8px', paddingX: '28px', height: '40px', fontSize: '15px' },
+        sm: { borderRadius: '6px', paddingX: '12px', height: '30px', fontSize: '12px' },
+        md: { borderRadius: '6px', paddingX: '16px', height: '34px', fontSize: '13px' },
+        lg: { borderRadius: '8px', paddingX: '20px', height: '38px', fontSize: '14px' },
       },
     },
   });
@@ -169,30 +185,12 @@
       },
     },
   });
-
-  const gradientRecipe = cva({
-    base: {
-      position: 'absolute',
-      inset: '0',
-      bgGradient: 'to-br',
-      gradientFrom: 'white/20',
-      gradientTo: 'transparent',
-      pointerEvents: 'none',
-    },
-    variants: {
-      size: {
-        sm: { borderRadius: '4px' },
-        md: { borderRadius: '6px' },
-        lg: { borderRadius: '8px' },
-      },
-    },
-  });
 </script>
 
 <svelte:element
   this={type === 'link' ? 'a' : 'button'}
   bind:this={element}
-  class={cx('group', css(recipe.raw({ variant, size }), (loading || gradient) && { position: 'relative' }, style))}
+  class={cx('group', css(recipe.raw({ variant, size }), loading && { position: 'relative' }, style))}
   aria-busy={loading}
   role="button"
   tabindex="0"
@@ -209,8 +207,4 @@
   <div class={css({ display: 'contents' }, loading && { visibility: 'hidden' })}>
     {@render children()}
   </div>
-
-  {#if gradient && !disabled}
-    <div class={gradientRecipe({ size })}></div>
-  {/if}
 </svelte:element>

@@ -15,7 +15,7 @@
 </script>
 
 <Modal
-  style={css.raw({ padding: '24px', maxWidth: '440px' })}
+  style={css.raw({ padding: '24px', maxWidth: '400px' })}
   focusTrapOptions={{ initialFocus: '[data-dialog-primary]' }}
   onclose={() => {
     if (dialog.type === 'confirm') {
@@ -28,12 +28,12 @@
   open={true}
 >
   <div class={flex({ flexDirection: 'column', gap: '24px' })}>
-    <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>
+    <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+      <h2 class={css({ fontSize: '15px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.default' })}>
         {dialog.title}
       </h2>
 
-      <div class={css({ fontSize: '14px', color: 'text.subtle', whiteSpace: 'pre-wrap', lineHeight: '[1.6]' })}>
+      <div class={css({ fontSize: '13px', color: 'text.muted', whiteSpace: 'pre-wrap', lineHeight: '[1.5]' })}>
         {dialog.message}
       </div>
 
@@ -42,7 +42,7 @@
       {/if}
     </div>
 
-    <div class={flex({ gap: '8px', justifyContent: 'flex-end' })}>
+    <div class={flex({ gap: '10px', justifyContent: 'flex-end' })}>
       {#if dialog.type === 'confirm'}
         <Button
           onclick={() => {

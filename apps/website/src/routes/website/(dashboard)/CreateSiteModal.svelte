@@ -65,15 +65,15 @@
   bind:open
 >
   <form
-    class={flex({ flexDirection: 'column', gap: '16px' })}
+    class={flex({ flexDirection: 'column', gap: '24px' })}
     onsubmit={(e) => {
       e.preventDefault();
       handleSubmit();
     }}
   >
-    <div class={flex({ flexDirection: 'column', gap: '4px' })}>
-      <div class={css({ fontSize: '16px', fontWeight: 'bold', color: 'text.default' })}>새 스페이스 생성</div>
-      <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>
+    <div class={flex({ flexDirection: 'column', gap: '8px' })}>
+      <div class={css({ fontSize: '15px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.default' })}>새 스페이스 생성</div>
+      <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>
         스페이스는 독립된 글쓰기 공간이에요.
         <br />
         주제나 목적에 따라 글을 나누어 관리해보세요.
@@ -85,9 +85,9 @@
       <TextInput id="create-site-name" autofocus placeholder="새 스페이스" size="md" bind:value={name} />
     </div>
 
-    <div class={flex({ justifyContent: 'flex-end', gap: '8px' })}>
+    <div class={flex({ justifyContent: 'flex-end', gap: '10px' })}>
       <Button
-        style={css.raw({ height: '36px', paddingX: '16px' })}
+        style={css.raw({ paddingX: '16px' })}
         onclick={() => {
           open = false;
         }}
@@ -96,7 +96,7 @@
       >
         취소
       </Button>
-      <Button style={css.raw({ height: '36px', paddingX: '16px' })} loading={createSiteMutationResult.loading} type="submit">생성</Button>
+      <Button style={css.raw({ paddingX: '16px' })} loading={createSiteMutationResult.loading} type="submit">생성</Button>
     </div>
   </form>
 </Modal>

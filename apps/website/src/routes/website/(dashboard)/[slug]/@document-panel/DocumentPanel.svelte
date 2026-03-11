@@ -135,7 +135,6 @@
       </p>
 
       <Button
-        gradient
         onclick={() => {
           PlanUpgradeDialog.show({
             message: `${featureName} 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.`,

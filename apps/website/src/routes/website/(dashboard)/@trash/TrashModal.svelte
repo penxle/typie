@@ -82,10 +82,10 @@
   }}
   open={app.state.trashOpen}
 >
-  <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '24px', paddingY: '20px' })}>
-    <div class={flex({ alignItems: 'center', gap: '10px' })}>
-      <Icon style={css.raw({ color: 'text.subtle' })} icon={Trash2Icon} size={20} />
-      <span class={css({ fontSize: '18px', fontWeight: 'bold', color: 'text.subtle' })}>휴지통</span>
+  <div class={flex({ justifyContent: 'space-between', alignItems: 'center', paddingX: '20px', paddingY: '16px' })}>
+    <div class={flex({ alignItems: 'center', gap: '8px' })}>
+      <Icon style={css.raw({ color: 'text.subtle' })} icon={Trash2Icon} size={16} />
+      <span class={css({ fontSize: '14px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.subtle' })}>휴지통</span>
       {#if entityCount > 0}
         <span
           class={center({

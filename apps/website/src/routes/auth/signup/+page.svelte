@@ -242,7 +242,7 @@
         </div>
       </div>
 
-      <Button style={css.raw({ height: '40px' })} loading={form.state.isLoading} size="lg" type="submit">가입하기</Button>
+      <Button loading={form.state.isLoading} size="lg" type="submit">가입하기</Button>
     </form>
   {:else}
     <div class={flex({ flexDirection: 'column', gap: '4px' })}>

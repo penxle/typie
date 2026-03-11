@@ -1,8 +1,8 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
-  import { sineOut } from 'svelte/easing';
-  import { fade, fly } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { fade, scale } from 'svelte/transition';
   import { focusTrap, portal } from '../actions';
   import { pushEscapeHandler } from '../utils';
   import RingSpinner from './RingSpinner.svelte';
@@ -74,13 +74,13 @@
         },
         showBackdrop && {
           backgroundColor: 'black/25',
-          backdropFilter: 'auto',
-          backdropBlur: '4px',
+          opacity: '95',
         },
       )}
       onclick={closable ? close : undefined}
       role="none"
-      transition:fade|global={{ duration: 150, easing: sineOut }}
+      in:fade|global={{ duration: 400, easing: cubicOut }}
+      out:fade|global={{ duration: 280, easing: cubicOut }}
     ></div>
 
     {#if loading}
@@ -92,14 +92,13 @@
             position: 'relative',
             display: 'flex',
             flexDirection: 'column',
-            borderWidth: '1px',
-            borderRadius: '12px',
+            borderRadius: '8px',
             width: 'full',
             maxWidth: '720px',
             height: 'fit',
             maxHeight: 'full',
             backgroundColor: 'surface.default',
-            boxShadow: 'large',
+            boxShadow: 'modal',
             overflowY: 'auto',
             userSelect: 'text',
           },
@@ -108,7 +107,8 @@
         aria-modal="true"
         role="dialog"
         tabindex="-1"
-        transition:fly|global={{ y: 5, duration: 150, easing: sineOut }}
+        in:scale|global={{ start: 0.98, duration: 280, easing: cubicOut }}
+        out:scale|global={{ start: 0.98, duration: 150, easing: cubicOut }}
       >
         {@render children()}
       </div>

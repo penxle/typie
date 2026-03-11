@@ -1,4 +1,5 @@
 export { default as Button } from './Button.svelte';
+export { default as Calendar } from './Calendar.svelte';
 export { default as Checkbox } from './Checkbox.svelte';
 export { default as ContentProtect } from './ContentProtect.svelte';
 export { default as DropdownMenu } from './DropdownMenu.svelte';

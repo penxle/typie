@@ -79,9 +79,7 @@
       </div>
 
       <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-        <Button style={css.raw({ height: '40px' })} loading={form.state.isLoading} size="lg" type="submit">
-          비밀번호 재설정 링크 받기
-        </Button>
+        <Button loading={form.state.isLoading} size="lg" type="submit">비밀번호 재설정 링크 받기</Button>
 
         <div class={flex({ justifyContent: 'center' })}>
           <a
