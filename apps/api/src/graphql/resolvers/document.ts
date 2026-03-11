@@ -24,7 +24,8 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   Images,
-  Notes,
+  IssueEntities,
+  Issues,
   TableCode,
   UserPersonalIdentities,
   UserPreferences,
@@ -41,7 +42,7 @@ import {
   EntityState,
   EntityType,
   EntityVisibility,
-  NoteState,
+  IssueState,
 } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
@@ -855,20 +856,13 @@ builder.mutationFields((t) => ({
         siteId: entity.siteId,
       });
 
-      await db.transaction(async (tx) => {
-        await tx
-          .update(Entities)
-          .set({
-            state: EntityState.DELETED,
-            deletedAt: dayjs(),
-          })
-          .where(eq(Entities.id, entity.id));
-
-        await tx
-          .update(Notes)
-          .set({ state: NoteState.DELETED_CASCADED })
-          .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)));
-      });
+      await db
+        .update(Entities)
+        .set({
+          state: EntityState.DELETED,
+          deletedAt: dayjs(),
+        })
+        .where(eq(Entities.id, entity.id));
 
       if (entity.parentId) {
         pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentId });
@@ -945,28 +939,16 @@ builder.mutationFields((t) => ({
 
       // TODO: anchors
 
-      const notes = await db
+      const issueRows = await db
         .select({
-          content: Notes.content,
-          color: Notes.color,
-          order: Notes.order,
+          content: Issues.content,
+          status: Issues.status,
+          priority: Issues.priority,
+          dueAt: Issues.dueAt,
         })
-        .from(Notes)
-        .where(and(eq(Notes.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)))
-        .orderBy(asc(Notes.order));
-
-      let lastOrder: string | null = null;
-      if (notes.length > 0) {
-        const lastUserNote = await db
-          .select({ order: Notes.order })
-          .from(Notes)
-          .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-          .orderBy(desc(Notes.order))
-          .limit(1)
-          .then(first);
-
-        lastOrder = lastUserNote?.order ?? null;
-      }
+        .from(IssueEntities)
+        .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
+        .where(and(eq(IssueEntities.entityId, entity.id), eq(Issues.state, IssueState.ACTIVE)));
 
       const title = `(사본) ${document.title ?? '(제목 없음)'}`;
 
@@ -1028,26 +1010,25 @@ builder.mutationFields((t) => ({
           userId: ctx.session.userId,
         });
 
-        if (notes.length > 0) {
-          const notesWithNewOrder = notes.map((note) => {
-            const newOrder = generateFractionalOrder({
-              lower: lastOrder,
-              upper: null,
-            });
-            lastOrder = newOrder;
+        if (issueRows.length > 0) {
+          for (const row of issueRows) {
+            const newIssue = await tx
+              .insert(Issues)
+              .values({
+                siteId: entity.siteId,
+                content: row.content,
+                status: row.status,
+                priority: row.priority,
+                dueAt: row.dueAt,
+              })
+              .returning({ id: Issues.id })
+              .then(firstOrThrow);
 
-            return {
-              userId: ctx.session.userId,
+            await tx.insert(IssueEntities).values({
+              issueId: newIssue.id,
               entityId: newEntity.id,
-              content: note.content,
-              color: note.color,
-              order: newOrder,
-              createdAt: dayjs(),
-              updatedAt: dayjs(),
-            };
-          });
-
-          await tx.insert(Notes).values(notesWithNewOrder);
+            });
+          }
         }
 
         return newDocument;

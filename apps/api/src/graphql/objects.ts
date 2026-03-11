@@ -62,7 +62,7 @@ export const Folder = createObjectRef('Folder', T.Folders);
 export const Font = createObjectRef('Font', T.Fonts);
 export const FontFamily = createObjectRef('FontFamily', T.FontFamilies);
 export const Image = createObjectRef('Image', T.Images);
-export const Note = createObjectRef('Note', T.Notes);
+export const Issue = createObjectRef('Issue', T.Issues);
 export const PaymentInvoice = createObjectRef('PaymentInvoice', T.PaymentInvoices);
 export const PaymentRecord = createObjectRef('PaymentRecord', T.PaymentRecords);
 export const Plan = createObjectRef('Plan', T.Plans);
@@ -104,6 +104,19 @@ export const EntityNode = builder.unionType('EntityNode', {
 
 export const EntityViewNode = builder.unionType('EntityViewNode', {
   types: [DocumentView, FolderView, PostView],
+});
+
+export const Note = builder.simpleObject('Note', {
+  fields: (t) => ({
+    id: t.id(),
+    order: t.string(),
+    content: t.string(),
+    color: t.string(),
+    createdAt: t.field({ type: 'DateTime' }),
+    updatedAt: t.field({ type: 'DateTime' }),
+    user: t.field({ type: User }),
+    entity: t.field({ type: Entity, nullable: true }),
+  }),
 });
 
 export const CharacterCountChange = builder.simpleObject('CharacterCountChange', {

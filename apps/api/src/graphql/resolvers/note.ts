@@ -1,24 +1,21 @@
 import dayjs from 'dayjs';
-import { and, asc, eq, getTableColumns, isNull, or } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, Notes, TableCode, validateDbId } from '@/db';
-import { EntityState, NoteState } from '@/enums';
-import { generateFractionalOrder } from '@/utils';
+import { and, asc, eq, inArray } from 'drizzle-orm';
+import { db, Entities, first, firstOrThrow, IssueEntities, Issues, Sites, TableCode, validateDbId } from '@/db';
+import { EntityState, IssueState } from '@/enums';
 import { builder } from '../builder';
-import { Entity, isTypeOf, Note, User } from '../objects';
+import { Note } from '../objects';
 
-Note.implement({
-  isTypeOf: isTypeOf(TableCode.NOTES),
-  fields: (t) => ({
-    id: t.exposeID('id'),
-    order: t.exposeString('order'),
-    content: t.exposeString('content'),
-    color: t.exposeString('color'),
-    createdAt: t.expose('createdAt', { type: 'DateTime' }),
-    updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
+const priorityRank: Record<string, number> = { NONE: 0, LOW: 1, MEDIUM: 2, HIGH: 3, URGENT: 4 };
 
-    user: t.expose('userId', { type: User }),
-    entity: t.expose('entityId', { type: Entity, nullable: true }),
-  }),
+const toNoteShape = (issue: typeof Issues.$inferSelect, userId: string, entityId: string | null) => ({
+  id: issue.id,
+  user: userId,
+  entity: entityId,
+  content: issue.content,
+  color: 'gray',
+  order: `${9 - (priorityRank[issue.priority] ?? 0)}_${issue.createdAt.toISOString()}`,
+  createdAt: issue.createdAt,
+  updatedAt: issue.updatedAt,
 });
 
 builder.queryFields((t) => ({
@@ -29,7 +26,48 @@ builder.queryFields((t) => ({
       siteId: t.arg.id({ required: false, validate: validateDbId(TableCode.SITES) }),
     },
     resolve: async (_, args, ctx) => {
-      const conditions = [eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)];
+      let siteId: string | undefined;
+
+      if (args.siteId) {
+        // Verify the user owns this site
+        const site = await db.select({ userId: Sites.userId }).from(Sites).where(eq(Sites.id, args.siteId)).then(firstOrThrow);
+
+        if (site.userId !== ctx.session.userId) {
+          return [];
+        }
+
+        siteId = args.siteId;
+      } else {
+        const fallbackSite = await db
+          .select({ id: Sites.id })
+          .from(Sites)
+          .where(eq(Sites.userId, ctx.session.userId))
+          .orderBy(asc(Sites.createdAt))
+          .limit(1)
+          .then(first);
+        siteId = fallbackSite?.id;
+      }
+
+      if (!siteId) {
+        return [];
+      }
+
+      const issues = await db
+        .select()
+        .from(Issues)
+        .where(and(eq(Issues.siteId, siteId), eq(Issues.state, IssueState.ACTIVE)));
+
+      const issueIds = issues.map((i) => i.id);
+      const entityRows = issueIds.length > 0 ? await db.select().from(IssueEntities).where(inArray(IssueEntities.issueId, issueIds)) : [];
+
+      const firstEntityMap = new Map<string, string>();
+      for (const row of entityRows) {
+        if (!firstEntityMap.has(row.issueId)) {
+          firstEntityMap.set(row.issueId, row.entityId);
+        }
+      }
+
+      let result = issues.map((issue) => toNoteShape(issue, ctx.session.userId, firstEntityMap.get(issue.id) ?? null));
 
       if (args.entityId) {
         await db
@@ -38,42 +76,40 @@ builder.queryFields((t) => ({
           .where(and(eq(Entities.id, args.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
           .then(firstOrThrow);
 
-        conditions.push(eq(Notes.entityId, args.entityId));
+        const issueIdsForEntity = new Set(entityRows.filter((r) => r.entityId === args.entityId).map((r) => r.issueId));
+        result = result.filter((n) => issueIdsForEntity.has(n.id));
       }
 
-      if (args.siteId) {
-        const siteCondition = or(isNull(Notes.entityId), eq(Entities.siteId, args.siteId));
-        if (siteCondition) {
-          conditions.push(siteCondition);
-        }
-
-        return await db
-          .select(getTableColumns(Notes))
-          .from(Notes)
-          .leftJoin(Entities, eq(Notes.entityId, Entities.id))
-          .where(and(...conditions))
-          .orderBy(asc(Notes.order));
-      }
-
-      return await db
-        .select()
-        .from(Notes)
-        .where(and(...conditions))
-        .orderBy(asc(Notes.order));
+      return result.toSorted((a, b) => a.order.localeCompare(b.order));
     },
   }),
 
   note: t.withAuth({ session: true }).field({
     type: Note,
     args: {
-      noteId: t.arg.id({ validate: validateDbId(TableCode.NOTES) }),
+      noteId: t.arg.id({ validate: validateDbId(TableCode.ISSUES) }),
     },
     resolve: async (_, args, ctx) => {
-      return await db
+      const issue = await db
         .select()
-        .from(Notes)
-        .where(and(eq(Notes.id, args.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+        .from(Issues)
+        .where(and(eq(Issues.id, args.noteId), eq(Issues.state, IssueState.ACTIVE)))
         .then(firstOrThrow);
+
+      const site = await db.select({ userId: Sites.userId }).from(Sites).where(eq(Sites.id, issue.siteId)).then(firstOrThrow);
+
+      if (site.userId !== ctx.session.userId) {
+        throw new Error('assertion failed');
+      }
+
+      const entityRow = await db
+        .select({ entityId: IssueEntities.entityId })
+        .from(IssueEntities)
+        .where(eq(IssueEntities.issueId, issue.id))
+        .limit(1)
+        .then(first);
+
+      return toNoteShape(issue, ctx.session.userId, entityRow?.entityId ?? null);
     },
   }),
 }));
@@ -87,114 +123,166 @@ builder.mutationFields((t) => ({
       color: t.input.string(),
     },
     resolve: async (_, { input }, ctx) => {
+      const site = await db
+        .select({ id: Sites.id })
+        .from(Sites)
+        .where(eq(Sites.userId, ctx.session.userId))
+        .orderBy(asc(Sites.createdAt))
+        .limit(1)
+        .then(firstOrThrow);
+
+      let validEntityId: string | null = null;
+
       if (input.entityId) {
         await db
           .select({ id: Entities.id })
           .from(Entities)
-          .where(and(eq(Entities.id, input.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
+          .where(and(eq(Entities.id, input.entityId), eq(Entities.siteId, site.id), eq(Entities.state, EntityState.ACTIVE)))
           .then(firstOrThrow);
+        validEntityId = input.entityId;
       }
 
-      const firstNote = await db
-        .select({ order: Notes.order })
-        .from(Notes)
-        .where(eq(Notes.userId, ctx.session.userId))
-        .orderBy(asc(Notes.order))
-        .limit(1)
-        .then(first);
+      return await db.transaction(async (tx) => {
+        const issue = await tx
+          .insert(Issues)
+          .values({
+            siteId: site.id,
+            content: input.content,
+          })
+          .returning()
+          .then(firstOrThrow);
 
-      return await db
-        .insert(Notes)
-        .values({
-          userId: ctx.session.userId,
-          entityId: input.entityId,
-          content: input.content,
-          color: input.color,
-          order: generateFractionalOrder({ lower: null, upper: firstNote?.order }),
-        })
-        .returning()
-        .then(firstOrThrow);
+        if (validEntityId) {
+          await tx.insert(IssueEntities).values({
+            issueId: issue.id,
+            entityId: validEntityId,
+          });
+        }
+
+        return toNoteShape(issue, ctx.session.userId, validEntityId);
+      });
     },
   }),
 
   updateNote: t.withAuth({ session: true }).fieldWithInput({
     type: Note,
     input: {
-      noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
+      noteId: t.input.id({ validate: validateDbId(TableCode.ISSUES) }),
       entityId: t.input.id({ required: false, validate: validateDbId(TableCode.ENTITIES) }),
       content: t.input.string({ required: false }),
       color: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      await db
-        .select({ id: Notes.id })
-        .from(Notes)
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+      const issue = await db
+        .select()
+        .from(Issues)
+        .where(and(eq(Issues.id, input.noteId), eq(Issues.state, IssueState.ACTIVE)))
         .then(firstOrThrow);
 
-      if (input.entityId) {
-        await db
-          .select({ id: Entities.id })
-          .from(Entities)
-          .where(and(eq(Entities.id, input.entityId), eq(Entities.userId, ctx.session.userId), eq(Entities.state, EntityState.ACTIVE)))
-          .then(firstOrThrow);
+      const site = await db.select({ userId: Sites.userId }).from(Sites).where(eq(Sites.id, issue.siteId)).then(firstOrThrow);
+
+      if (site.userId !== ctx.session.userId) {
+        throw new Error('assertion failed');
       }
 
-      return await db
-        .update(Notes)
-        .set({
-          entityId: input.entityId,
-          content: input.content ?? undefined,
-          color: input.color ?? undefined,
-          updatedAt: dayjs(),
-        })
-        .where(eq(Notes.id, input.noteId))
-        .returning()
-        .then(firstOrThrow);
+      return await db.transaction(async (tx) => {
+        const updated =
+          input.content == null
+            ? issue
+            : await tx
+                .update(Issues)
+                .set({ content: input.content, updatedAt: dayjs() })
+                .where(eq(Issues.id, input.noteId))
+                .returning()
+                .then(firstOrThrow);
+
+        if (input.entityId) {
+          await tx
+            .select({ id: Entities.id })
+            .from(Entities)
+            .where(and(eq(Entities.id, input.entityId), eq(Entities.siteId, issue.siteId), eq(Entities.state, EntityState.ACTIVE)))
+            .then(firstOrThrow);
+
+          await tx.delete(IssueEntities).where(eq(IssueEntities.issueId, input.noteId));
+          await tx.insert(IssueEntities).values({ issueId: input.noteId, entityId: input.entityId });
+        }
+
+        const entityRow = await tx
+          .select({ entityId: IssueEntities.entityId })
+          .from(IssueEntities)
+          .where(eq(IssueEntities.issueId, input.noteId))
+          .limit(1)
+          .then(first);
+
+        return toNoteShape(updated, ctx.session.userId, entityRow?.entityId ?? null);
+      });
     },
   }),
 
   moveNote: t.withAuth({ session: true }).fieldWithInput({
     type: Note,
     input: {
-      noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
+      noteId: t.input.id({ validate: validateDbId(TableCode.ISSUES) }),
       lowerOrder: t.input.string({ required: false }),
       upperOrder: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
-      await db
-        .select({ id: Notes.id })
-        .from(Notes)
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+      const issue = await db
+        .select()
+        .from(Issues)
+        .where(and(eq(Issues.id, input.noteId), eq(Issues.state, IssueState.ACTIVE)))
         .then(firstOrThrow);
 
-      return await db
-        .update(Notes)
-        .set({
-          order: generateFractionalOrder({
-            lower: input.lowerOrder,
-            upper: input.upperOrder,
-          }),
-          updatedAt: dayjs(),
-        })
-        .where(eq(Notes.id, input.noteId))
-        .returning()
-        .then(firstOrThrow);
+      const site = await db.select({ userId: Sites.userId }).from(Sites).where(eq(Sites.id, issue.siteId)).then(firstOrThrow);
+
+      if (site.userId !== ctx.session.userId) {
+        throw new Error('assertion failed');
+      }
+
+      const entityRow = await db
+        .select({ entityId: IssueEntities.entityId })
+        .from(IssueEntities)
+        .where(eq(IssueEntities.issueId, issue.id))
+        .limit(1)
+        .then(first);
+
+      return toNoteShape(issue, ctx.session.userId, entityRow?.entityId ?? null);
     },
   }),
 
   deleteNote: t.withAuth({ session: true }).fieldWithInput({
     type: Note,
     input: {
-      noteId: t.input.id({ validate: validateDbId(TableCode.NOTES) }),
+      noteId: t.input.id({ validate: validateDbId(TableCode.ISSUES) }),
     },
     resolve: async (_, { input }, ctx) => {
-      return await db
-        .update(Notes)
-        .set({ state: NoteState.DELETED })
-        .where(and(eq(Notes.id, input.noteId), eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
+      const issue = await db
+        .select()
+        .from(Issues)
+        .where(and(eq(Issues.id, input.noteId), eq(Issues.state, IssueState.ACTIVE)))
+        .then(firstOrThrow);
+
+      const site = await db.select({ userId: Sites.userId }).from(Sites).where(eq(Sites.id, issue.siteId)).then(firstOrThrow);
+
+      if (site.userId !== ctx.session.userId) {
+        throw new Error('assertion failed');
+      }
+
+      const deleted = await db
+        .update(Issues)
+        .set({ state: IssueState.DELETED })
+        .where(eq(Issues.id, input.noteId))
         .returning()
         .then(firstOrThrow);
+
+      const entityRow = await db
+        .select({ entityId: IssueEntities.entityId })
+        .from(IssueEntities)
+        .where(eq(IssueEntities.issueId, input.noteId))
+        .limit(1)
+        .then(first);
+
+      return toNoteShape(deleted, ctx.session.userId, entityRow?.entityId ?? null);
     },
   }),
 }));
