@@ -20,7 +20,6 @@ class ActivityChart extends HookWidget {
 
   static const chartHeight = 100.0;
   static const xAxisAreaHeight = 24.0;
-  static const barAnimationDuration = Duration(milliseconds: 360);
   static const tooltipFadeDuration = Duration(milliseconds: 140);
   static const tooltipScrollActivationDistance = 12.0;
   static const tooltipScrollVelocityThreshold = 700.0;
@@ -270,18 +269,12 @@ class ActivityChart extends HookWidget {
               endIndex: visibleRange.end,
             );
 
-            final barHeights = [
-              for (final dayData in daysData)
-                _calculateBarHeights(
-                  dayData: dayData,
-                  showAdditions: showAdditions.value,
-                  showDeletions: showDeletions.value,
-                  chartHeight: chartHeight,
-                  maxVal: maxVal,
-                ),
-            ];
-
             final isTooltipVisible = isTooltipShown.value;
+            final isDark = context.theme.brightness == Brightness.dark;
+            final gridLineColor = (isDark ? AppColors.dark.gray_700 : AppColors.gray_200).withValues(alpha: 0.5);
+            final additionColor = isDark ? AppColors.dark.green_600 : AppColors.green_400;
+            final deletionColor = isDark ? AppColors.dark.gray_600 : AppColors.gray_400;
+            final zeroBarColor = isDark ? AppColors.dark.gray_700 : AppColors.gray_200;
 
             int getBarIndexAtPosition(Offset localPosition) {
               if (barWidth <= 0) {
@@ -365,118 +358,31 @@ class ActivityChart extends HookWidget {
                         child: Transform.translate(
                           offset: Offset(visualScrollDelta, 0),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               SizedBox(
+                                width: totalChartWidth,
                                 height: chartHeight,
-                                child: Stack(
-                                  children: [
-                                    Positioned.fill(
-                                      child: Stack(
-                                        children: [
-                                          for (var i = 1; i <= 5; i++)
-                                            Positioned(
-                                              left: 0,
-                                              right: 0,
-                                              bottom: i * 20.0,
-                                              child: Container(
-                                                height: 1,
-                                                color: context.theme.brightness == Brightness.dark
-                                                    ? AppColors.dark.gray_700.withValues(alpha: 0.5)
-                                                    : AppColors.gray_200.withValues(alpha: 0.5),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        for (var i = 0; i < daysData.length; i++)
-                                          Expanded(
-                                            child: SizedBox(
-                                              height: chartHeight,
-                                              child: Stack(
-                                                alignment: Alignment.bottomCenter,
-                                                children: [
-                                                  if (daysData[i].deletions > 0 && showDeletions.value)
-                                                    AnimatedPositioned(
-                                                      duration: barAnimationDuration,
-                                                      curve: Curves.easeOutCubic,
-                                                      left: 1,
-                                                      right: 1,
-                                                      bottom: barHeights[i].additionHeight > 0
-                                                          ? barHeights[i].additionHeight + 1
-                                                          : 0,
-                                                      child: AnimatedContainer(
-                                                        duration: barAnimationDuration,
-                                                        curve: Curves.easeOutCubic,
-                                                        height: math.max(barHeights[i].deletionHeight, 1),
-                                                        decoration: BoxDecoration(
-                                                          color: context.theme.brightness == Brightness.dark
-                                                              ? AppColors.dark.gray_600
-                                                              : AppColors.gray_400,
-                                                          borderRadius: BorderRadius.circular(1),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  if (daysData[i].additions > 0 && showAdditions.value)
-                                                    AnimatedPositioned(
-                                                      duration: barAnimationDuration,
-                                                      curve: Curves.easeOutCubic,
-                                                      left: 1,
-                                                      right: 1,
-                                                      bottom: 0,
-                                                      child: AnimatedContainer(
-                                                        duration: barAnimationDuration,
-                                                        curve: Curves.easeOutCubic,
-                                                        height: math.max(barHeights[i].additionHeight, 1),
-                                                        decoration: BoxDecoration(
-                                                          color: context.theme.brightness == Brightness.dark
-                                                              ? AppColors.dark.green_600
-                                                              : AppColors.green_400,
-                                                          borderRadius: BorderRadius.circular(1),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  if (barHeights[i].effectiveTotal == 0)
-                                                    Positioned(
-                                                      left: 1,
-                                                      right: 1,
-                                                      bottom: 0,
-                                                      child: Container(
-                                                        height: 1,
-                                                        decoration: BoxDecoration(
-                                                          color: context.theme.brightness == Brightness.dark
-                                                              ? AppColors.dark.gray_700
-                                                              : AppColors.gray_200,
-                                                          borderRadius: BorderRadius.circular(1),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  if (selectedIndex.value == i)
-                                                    Positioned(
-                                                      left: 0,
-                                                      right: 0,
-                                                      bottom: 0,
-                                                      top: 0,
-                                                      child: DecoratedBox(
-                                                        decoration: BoxDecoration(
-                                                          border: Border.all(color: context.colors.borderStrong),
-                                                          borderRadius: BorderRadius.circular(2),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ],
+                                child: CustomPaint(
+                                  painter: _ActivityChartPainter(
+                                    daysData: daysData,
+                                    chartHeight: chartHeight,
+                                    chartWidth: totalChartWidth,
+                                    showAdditions: showAdditions.value,
+                                    showDeletions: showDeletions.value,
+                                    maxVal: maxVal,
+                                    selectedIndex: selectedIndex.value,
+                                    gridLineColor: gridLineColor,
+                                    additionColor: additionColor,
+                                    deletionColor: deletionColor,
+                                    zeroBarColor: zeroBarColor,
+                                    selectionBorderColor: context.colors.surfaceDark,
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 4),
                               SizedBox(
+                                width: totalChartWidth,
                                 height: 20,
                                 child: Stack(
                                   children: [
@@ -673,7 +579,7 @@ class ActivityChart extends HookWidget {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          tooltipData.value!.dayData.date.format(pattern: 'yyyy년 M월 d일'),
+                                          _formatDate(tooltipData.value!.dayData.date),
                                           style: TextStyle(
                                             color: context.colors.textBright,
                                             fontSize: 13,
@@ -846,18 +752,10 @@ class _DayData {
   const _DayData({required this.date, required this.additions, required this.deletions})
     : total = additions + deletions;
 
-  final Jiffy date;
+  final DateTime date;
   final int additions;
   final int deletions;
   final int total;
-}
-
-class _BarHeights {
-  const _BarHeights({required this.additionHeight, required this.deletionHeight, required this.effectiveTotal});
-
-  final double additionHeight;
-  final double deletionHeight;
-  final int effectiveTotal;
 }
 
 class _VisibleRange {
@@ -919,26 +817,26 @@ class _ChartTooltipPositionDelegate extends SingleChildLayoutDelegate {
 }
 
 List<_DayData> _generateDaysData(List<StatsCharacterCountChange> characterCountChanges) {
-  final endDate = Jiffy.now();
-  final startDate = endDate.subtract(days: 89);
+  final endDate = _startOfDay(DateTime.now());
+  final startDate = endDate.subtract(const Duration(days: 89));
 
-  final changesByDate = <String, StatsCharacterCountChange>{
-    for (final change in characterCountChanges) change.date.toLocal().format(pattern: 'yyyy-MM-dd'): change,
+  final changesByDate = <int, StatsCharacterCountChange>{
+    for (final change in characterCountChanges) _dateKey(_toLocalDate(change.date)): change,
   };
 
   final data = <_DayData>[];
 
-  var currentDate = startDate.clone();
+  var currentDate = startDate;
   while (!currentDate.isAfter(endDate)) {
-    final key = currentDate.format(pattern: 'yyyy-MM-dd');
+    final key = _dateKey(currentDate);
     final change = changesByDate[key];
 
     final additions = change?.additions ?? 0;
     final deletions = (change?.deletions ?? 0).abs();
 
-    data.add(_DayData(date: currentDate.clone(), additions: additions, deletions: deletions));
+    data.add(_DayData(date: currentDate, additions: additions, deletions: deletions));
 
-    currentDate = currentDate.add(days: 1);
+    currentDate = currentDate.add(const Duration(days: 1));
   }
 
   return data;
@@ -984,23 +882,6 @@ int _maxValue(
   return math.max(maxVal, 1000);
 }
 
-_BarHeights _calculateBarHeights({
-  required _DayData dayData,
-  required bool showAdditions,
-  required bool showDeletions,
-  required double chartHeight,
-  required int maxVal,
-}) {
-  final effectiveAdditions = showAdditions ? dayData.additions : 0;
-  final effectiveDeletions = showDeletions ? dayData.deletions : 0;
-  final totalValue = effectiveAdditions + effectiveDeletions;
-
-  final additionHeight = effectiveAdditions > 0 ? (effectiveAdditions / maxVal) * chartHeight : 0.0;
-  final deletionHeight = effectiveDeletions > 0 ? (effectiveDeletions / maxVal) * chartHeight : 0.0;
-
-  return _BarHeights(additionHeight: additionHeight, deletionHeight: deletionHeight, effectiveTotal: totalValue);
-}
-
 List<_XAxisLabel> _generateXAxisLabels(List<_DayData> daysData, double zoom) {
   final labels = <_XAxisLabel>[];
   final minGap = zoom >= 3
@@ -1017,7 +898,7 @@ List<_XAxisLabel> _generateXAxisLabels(List<_DayData> daysData, double zoom) {
   for (var index = 0; index < daysData.length; index++) {
     final isFirstDay = index == 0;
     final isLastDay = index == daysData.length - 1;
-    final isFirstOfMonth = daysData[index].date.date == 1;
+    final isFirstOfMonth = daysData[index].date.day == 1;
     final isIntervalLabel = showDense ? index % 3 == 0 : showWeekly && index % 7 == 0;
     final shouldShowLabel = isFirstDay || isLastDay || isFirstOfMonth || isIntervalLabel;
 
@@ -1030,12 +911,7 @@ List<_XAxisLabel> _generateXAxisLabels(List<_DayData> daysData, double zoom) {
     }
 
     labels.add(
-      _XAxisLabel(
-        index: index,
-        text: daysData[index].date.format(pattern: 'M/d'),
-        isFirst: isFirstDay,
-        isLast: isLastDay,
-      ),
+      _XAxisLabel(index: index, text: _formatMonthDay(daysData[index].date), isFirst: isFirstDay, isLast: isLastDay),
     );
     lastShownIndex = index;
   }
@@ -1047,12 +923,7 @@ List<_XAxisLabel> _generateXAxisLabels(List<_DayData> daysData, double zoom) {
     }
 
     labels.add(
-      _XAxisLabel(
-        index: lastIndex,
-        text: daysData[lastIndex].date.format(pattern: 'M/d'),
-        isFirst: false,
-        isLast: true,
-      ),
+      _XAxisLabel(index: lastIndex, text: _formatMonthDay(daysData[lastIndex].date), isFirst: false, isLast: true),
     );
   }
 
@@ -1110,4 +981,133 @@ List<_PositionedXAxisLabel> _positionXAxisLabels({
   }
 
   return positioned;
+}
+
+DateTime _startOfDay(DateTime date) => DateTime(date.year, date.month, date.day);
+
+DateTime _toLocalDate(Jiffy jiffyDate) {
+  final local = jiffyDate.toLocal();
+  return DateTime(local.year, local.month, local.date);
+}
+
+int _dateKey(DateTime date) => (date.year * 10000) + (date.month * 100) + date.day;
+
+String _formatDate(DateTime date) => '${date.year}년 ${date.month}월 ${date.day}일';
+
+String _formatMonthDay(DateTime date) => '${date.month}/${date.day}';
+
+class _ActivityChartPainter extends CustomPainter {
+  const _ActivityChartPainter({
+    required this.daysData,
+    required this.chartHeight,
+    required this.chartWidth,
+    required this.showAdditions,
+    required this.showDeletions,
+    required this.maxVal,
+    required this.gridLineColor,
+    required this.additionColor,
+    required this.deletionColor,
+    required this.zeroBarColor,
+    required this.selectionBorderColor,
+    this.selectedIndex,
+  });
+
+  final List<_DayData> daysData;
+  final double chartHeight;
+  final double chartWidth;
+  final bool showAdditions;
+  final bool showDeletions;
+  final int maxVal;
+  final int? selectedIndex;
+  final Color gridLineColor;
+  final Color additionColor;
+  final Color deletionColor;
+  final Color zeroBarColor;
+  final Color selectionBorderColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = gridLineColor;
+    final fillPaint = Paint()..style = PaintingStyle.fill;
+    final selectionPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = selectionBorderColor;
+
+    for (var i = 1; i <= 5; i++) {
+      final y = chartHeight - (i * 20.0);
+      canvas.drawRect(Rect.fromLTWH(0, y, chartWidth, 1), gridPaint);
+    }
+
+    if (daysData.isEmpty || chartWidth <= 0) {
+      return;
+    }
+
+    final barWidth = chartWidth / daysData.length;
+
+    for (var i = 0; i < daysData.length; i++) {
+      final day = daysData[i];
+      final left = i * barWidth + 1;
+      final width = barWidth > 2 ? barWidth - 2 : 0.0;
+      final effectiveAdditions = showAdditions ? day.additions : 0;
+      final effectiveDeletions = showDeletions ? day.deletions : 0;
+      final totalValue = effectiveAdditions + effectiveDeletions;
+      final additionHeight = effectiveAdditions > 0 ? (effectiveAdditions / maxVal) * chartHeight : 0.0;
+      final deletionHeight = effectiveDeletions > 0 ? (effectiveDeletions / maxVal) * chartHeight : 0.0;
+
+      if (effectiveDeletions > 0) {
+        fillPaint.color = deletionColor;
+        final height = deletionHeight > 1 ? deletionHeight : 1.0;
+        final bottom = additionHeight > 0 ? additionHeight + 1 : 0.0;
+        final top = chartHeight - bottom - height;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(left, top, width, height), const Radius.circular(1)),
+          fillPaint,
+        );
+      }
+
+      if (effectiveAdditions > 0) {
+        fillPaint.color = additionColor;
+        final height = additionHeight > 1 ? additionHeight : 1.0;
+        final top = chartHeight - height;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(left, top, width, height), const Radius.circular(1)),
+          fillPaint,
+        );
+      }
+
+      if (totalValue == 0) {
+        fillPaint.color = zeroBarColor;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(left, chartHeight - 1, width, 1), const Radius.circular(1)),
+          fillPaint,
+        );
+      }
+
+      if (selectedIndex == i) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(i * barWidth, 0, barWidth, chartHeight), const Radius.circular(2)),
+          selectionPaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActivityChartPainter oldDelegate) {
+    return daysData != oldDelegate.daysData ||
+        chartHeight != oldDelegate.chartHeight ||
+        chartWidth != oldDelegate.chartWidth ||
+        showAdditions != oldDelegate.showAdditions ||
+        showDeletions != oldDelegate.showDeletions ||
+        maxVal != oldDelegate.maxVal ||
+        selectedIndex != oldDelegate.selectedIndex ||
+        gridLineColor != oldDelegate.gridLineColor ||
+        additionColor != oldDelegate.additionColor ||
+        deletionColor != oldDelegate.deletionColor ||
+        zeroBarColor != oldDelegate.zeroBarColor ||
+        selectionBorderColor != oldDelegate.selectionBorderColor;
+  }
 }
