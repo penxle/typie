@@ -153,14 +153,14 @@ class _SearchHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          height: 48,
+          height: 56,
           padding: const Pad(horizontal: 20),
           decoration: BoxDecoration(color: context.colors.surfaceSubtle),
           child: Row(
             children: [
               Expanded(
                 child: Container(
-                  height: 36,
+                  height: 44,
                   padding: const Pad(horizontal: 14),
                   decoration: BoxDecoration(
                     color: context.colors.surfaceDefault,
@@ -188,12 +188,17 @@ class _SearchHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              const Gap(14),
               Tappable(
                 onTap: onCancel,
-                child: Text(
-                  '취소',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.accentBrand),
+                padding: const Pad(left: 14),
+                child: SizedBox(
+                  height: 44,
+                  child: Center(
+                    child: Text(
+                      '취소',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.accentBrand),
+                    ),
+                  ),
                 ),
               ),
             ],
