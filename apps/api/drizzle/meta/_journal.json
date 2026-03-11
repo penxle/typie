@@ -484,6 +484,13 @@
       "when": 1773119862527,
       "tag": "0068_yielding_thundra",
       "breakpoints": false
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1773224270429,
+      "tag": "0069_tough_black_knight",
+      "breakpoints": false
     }
   ]
 }

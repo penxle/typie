@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { and, desc, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
-import { db, DocumentContents, Documents, Entities, first, firstOrThrow, Folders, Notes, TableCode, validateDbId } from '@/db';
-import { EntityState, EntityType, EntityVisibility, NoteState } from '@/enums';
+import { db, DocumentContents, Documents, Entities, first, firstOrThrow, Folders, TableCode, validateDbId } from '@/db';
+import { EntityState, EntityType, EntityVisibility } from '@/enums';
 import { TypieError } from '@/errors';
 import { enqueueJob } from '@/mq';
 import { pubsub } from '@/pubsub';
@@ -385,14 +385,7 @@ builder.mutationFields((t) => ({
 
       const entityIds = [folder.entityId, ...descendants.map(({ id }) => id)];
 
-      await db.transaction(async (tx) => {
-        await tx.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
-
-        await tx
-          .update(Notes)
-          .set({ state: NoteState.DELETED_CASCADED })
-          .where(and(inArray(Notes.entityId, entityIds), eq(Notes.state, NoteState.ACTIVE)));
-      });
+      await db.update(Entities).set({ state: EntityState.DELETED, deletedAt: dayjs() }).where(inArray(Entities.id, entityIds));
 
       if (folder.parentId) {
         pubsub.publish('site:update', folder.siteId, { scope: 'entity', entityId: folder.parentId });

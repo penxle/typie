@@ -11,21 +11,35 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   Folders,
-  Notes,
+  IssueEntities,
+  Issues,
   Posts,
   Redirects,
   Sites,
   TableCode,
   validateDbId,
 } from '@/db';
-import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, RedirectType, SiteState } from '@/enums';
+import { EntityAvailability, EntityState, EntityType, EntityVisibility, IssueState, RedirectType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
 import { generateFractionalOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import { Entity, EntityContainer, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Note, Site, SiteView, User } from '../objects';
+import {
+  Entity,
+  EntityContainer,
+  EntityNode,
+  EntityView,
+  EntityViewNode,
+  IEntity,
+  Issue,
+  isTypeOf,
+  Note,
+  Site,
+  SiteView,
+  User,
+} from '../objects';
 
 /**
  * * Types
@@ -190,14 +204,42 @@ Entity.implement({
       },
     }),
 
-    notes: t.field({
+    notes: t.withAuth({ session: true }).field({
       type: [Note],
-      resolve: async (self) => {
-        return await db
+      resolve: async (self, _, ctx) => {
+        const rows = await db
           .select()
-          .from(Notes)
-          .where(and(eq(Notes.entityId, self.id), eq(Notes.state, NoteState.ACTIVE)))
-          .orderBy(asc(Notes.order));
+          .from(IssueEntities)
+          .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
+          .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)));
+
+        const priorityRank: Record<string, number> = { NONE: 0, LOW: 1, MEDIUM: 2, HIGH: 3, URGENT: 4 };
+
+        return rows
+          .map(({ issues }) => ({
+            id: issues.id,
+            user: ctx.session.userId,
+            entity: self.id,
+            content: issues.content,
+            color: 'gray',
+            order: `${9 - (priorityRank[issues.priority] ?? 0)}_${issues.createdAt.toISOString()}`,
+            createdAt: issues.createdAt,
+            updatedAt: issues.updatedAt,
+          }))
+          .toSorted((a, b) => a.order.localeCompare(b.order));
+      },
+    }),
+
+    issues: t.withAuth({ session: true }).field({
+      type: [Issue],
+      resolve: async (self) => {
+        const rows = await db
+          .select({ issue: Issues })
+          .from(IssueEntities)
+          .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
+          .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)));
+
+        return rows.map((r) => r.issue);
       },
     }),
 
@@ -205,8 +247,9 @@ Entity.implement({
       resolve: async (self) => {
         const row = await db
           .select({ count: count() })
-          .from(Notes)
-          .where(and(eq(Notes.entityId, self.id), eq(Notes.state, NoteState.ACTIVE)))
+          .from(IssueEntities)
+          .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
+          .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)))
           .then(firstOrThrow);
 
         return row.count;
@@ -890,19 +933,6 @@ builder.mutationFields((t) => ({
           )
           .returning();
 
-        await tx
-          .update(Notes)
-          .set({ state: NoteState.DELETED_CASCADED })
-          .where(
-            and(
-              inArray(
-                Notes.entityId,
-                entities.map(({ id }) => id),
-              ),
-              eq(Notes.state, NoteState.ACTIVE),
-            ),
-          );
-
         const inputEntityIdSet = new Set(input.entityIds);
         const directEntities = entities.filter((e) => inputEntityIdSet.has(e.id));
         const parentIds = new Set(directEntities.map((e) => e.parent_id).filter((id): id is string => id !== null));
@@ -984,7 +1014,7 @@ builder.mutationFields((t) => ({
             .where(eq(Entities.id, entity.id));
         }
 
-        const updatedEntities = await tx.execute<{ id: string; type: EntityType }>(
+        await tx.execute<{ id: string; type: EntityType }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}
@@ -1003,19 +1033,6 @@ builder.mutationFields((t) => ({
             RETURNING ${Entities.id}, ${Entities.type}
           `,
         );
-
-        await tx
-          .update(Notes)
-          .set({ state: NoteState.ACTIVE })
-          .where(
-            and(
-              inArray(
-                Notes.entityId,
-                updatedEntities.map(({ id }) => id),
-              ),
-              eq(Notes.state, NoteState.DELETED_CASCADED),
-            ),
-          );
 
         const recoveredEntity = await tx.select().from(Entities).where(eq(Entities.id, entity.id)).then(firstOrThrow);
 

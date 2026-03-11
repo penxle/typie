@@ -347,6 +347,46 @@ export const Images = pgTable('images', {
     .default(sql`now()`),
 });
 
+export const Issues = pgTable(
+  'issues',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.ISSUES)),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    content: text('content').notNull(),
+    status: E._IssueStatus('status').notNull().default('OPEN'),
+    priority: E._IssuePriority('priority').notNull().default('NONE'),
+    dueAt: datetime('due_at'),
+    state: E._IssueState('state').notNull().default('ACTIVE'),
+    createdAt: datetime('created_at')
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: datetime('updated_at')
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index().on(t.siteId, t.state), index().on(t.siteId, t.state, t.status)],
+);
+
+export const IssueEntities = pgTable(
+  'issue_entities',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.ISSUE_ENTITIES)),
+    issueId: text('issue_id')
+      .notNull()
+      .references(() => Issues.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  },
+  (t) => [unique().on(t.issueId, t.entityId), index().on(t.entityId)],
+);
+
 export const Notes = pgTable(
   'notes',
   {
