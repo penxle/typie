@@ -1,4 +1,6 @@
-query SiteSettingsScreen_Query($siteId: ID!) {
+# import 'package:typie/widgets/img.graphql'
+
+query SiteScreen_Query($siteId: ID!) {
   me {
     id
 
@@ -8,20 +10,22 @@ query SiteSettingsScreen_Query($siteId: ID!) {
 
     sites {
       id
+      name
+
+      logo {
+        id
+        ...Img_image
+      }
     }
   }
 
   site(siteId: $siteId) {
     id
     name
-    slug
-    dateDisplay
-    documentCount
-    folderCount
 
     logo {
       id
-      url
+      ...Img_image
     }
   }
 }

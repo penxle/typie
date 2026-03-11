@@ -10,7 +10,6 @@ import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
-import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
@@ -20,7 +19,6 @@ import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/async_effect.dart';
-import 'package:typie/hooks/route_resumed.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/icons/typie.dart';
@@ -41,7 +39,6 @@ import 'package:typie/screens/entity/__generated__/site_fragment.data.gql.dart';
 import 'package:typie/screens/entity/move_entity_modal.dart';
 import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/screens/entity/selected_entities_bar.dart';
-import 'package:typie/screens/entity/space_selector_bottom_sheet.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
@@ -77,14 +74,9 @@ class _WithSiteId extends HookWidget {
   Widget build(BuildContext context) {
     final site = useService<Site>();
     final siteId = useValueListenable(site);
-    final refreshNotifier = useMemoized(RefreshNotifier.new, []);
-
-    useRouteResumed(context, refreshNotifier.refresh, tabIndex: RouteTabsIndex.entity);
-
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GEntityScreen_WithSiteId_QueryReq((b) => b..vars.siteId = siteId),
-      refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
         return _EntityList(null, data.site.entities.toList(), site: data.site, siteName: data.site.name);
       },
@@ -99,14 +91,9 @@ class _WithEntityId extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final refreshNotifier = useMemoized(RefreshNotifier.new, []);
-
-    useRouteResumed(context, refreshNotifier.refresh, tabIndex: RouteTabsIndex.entity);
-
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceSubtle,
       operation: GEntityScreen_WithEntityId_QueryReq((b) => b..vars.entityId = entityId),
-      refreshNotifier: refreshNotifier,
       builder: (context, client, data) {
         return _EntityList(data.entity, data.entity.children.toList(), siteName: data.entity.site.name);
       },
@@ -378,20 +365,7 @@ class _EntityList extends HookWidget {
                       ? GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () async {
-                            await context.showBottomSheet(
-                              child: SpaceSelectorBottomSheet(
-                                onSiteChanged: () {
-                                  final tabsRouter = AutoTabsRouter.of(context);
-                                  final entityRouter = tabsRouter.childControllers.first;
-                                  if (entityRouter is StackRouter) {
-                                    entityRouter.popUntilRoot();
-                                  }
-                                },
-                                onUpgrade: () {
-                                  unawaited(context.router.push(const EnrollPlanRoute()));
-                                },
-                              ),
-                            );
+                            await context.router.push(const SiteRoute());
                           },
                           child: Row(
                             spacing: 8,

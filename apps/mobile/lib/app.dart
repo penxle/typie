@@ -1,3 +1,4 @@
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -24,7 +25,9 @@ class App extends HookWidget {
 
     return SentryWidget(
       child: MaterialApp.router(
-        routerConfig: router.config(navigatorObservers: () => [RouterObserver(), SentryNavigatorObserver()]),
+        routerConfig: router.config(
+          navigatorObservers: () => [AutoRouteObserver(), RouterObserver(), SentryNavigatorObserver()],
+        ),
         debugShowCheckedModeBanner: false,
         theme: lightTheme,
         darkTheme: darkTheme,

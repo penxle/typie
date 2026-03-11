@@ -1,4 +1,4 @@
-mutation SpaceSelector_CreateSite_Mutation($input: CreateSiteInput!) {
+mutation SiteScreen_CreateSite_Mutation($input: CreateSiteInput!) {
   createSite(input: $input) {
     id
     name

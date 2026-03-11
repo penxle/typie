@@ -1,50 +1,36 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:built_value/json_object.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
-import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
-import 'package:typie/context/modal.dart';
+import 'package:typie/context/loader.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
-import 'package:typie/env.dart';
-import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
-import 'package:typie/graphql/error.dart';
-import 'package:typie/graphql/widget.dart';
+import 'package:typie/graphql/hooks.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
-import 'package:typie/screens/site/__generated__/delete_site_mutation.req.gql.dart';
+import 'package:typie/screens/site/__generated__/create_site_mutation.req.gql.dart';
 import 'package:typie/screens/site/__generated__/persist_blob_as_image_mutation.req.gql.dart';
 import 'package:typie/screens/site/__generated__/screen_query.data.gql.dart';
 import 'package:typie/screens/site/__generated__/screen_query.req.gql.dart';
 import 'package:typie/screens/site/__generated__/update_site_mutation.req.gql.dart';
-import 'package:typie/screens/site/__generated__/update_site_slug_mutation.req.gql.dart';
 import 'package:typie/services/blob.dart';
 import 'package:typie/services/site.dart';
-import 'package:typie/widgets/forms/form.dart';
-import 'package:typie/widgets/forms/select.dart';
-import 'package:typie/widgets/forms/text_field.dart';
-import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/horizontal_divider.dart';
+import 'package:typie/widgets/img.dart';
+import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
-
-const _unavailableSiteSlugs = ['admin', 'app', 'cname', 'dev', 'docs', 'help', 'template', 'www'];
-
-String _usersiteHost() {
-  final host = Env.usersiteHost.trim();
-  return host.replaceFirst(RegExp(r'^\*\.'), '').replaceFirst(RegExp(r'^\.'), '');
-}
 
 @RoutePage()
 class SiteScreen extends HookWidget {
@@ -54,101 +40,161 @@ class SiteScreen extends HookWidget {
   Widget build(BuildContext context) {
     final site = useService<Site>();
     final siteId = useValueListenable(site);
+    final data = useQuery(GSiteScreen_QueryReq((b) => b.vars.siteId = siteId));
+
+    final scrollController = useScrollController();
+    final showHeadingTitle = useState(false);
+
+    useEffect(() {
+      void onScroll() {
+        showHeadingTitle.value = scrollController.offset > 44;
+      }
+
+      scrollController.addListener(onScroll);
+      return () => scrollController.removeListener(onScroll);
+    }, [scrollController]);
 
     return Screen(
-      heading: const Heading(title: '스페이스 설정'),
-      resizeToAvoidBottomInset: true,
-      child: GraphQLOperation(
-        operation: GSiteSettingsScreen_QueryReq((b) => b..vars.siteId = siteId),
-        builder: (context, client, data) {
-          final sites = data.me?.sites.toList() ?? [];
-          final isLastSite = sites.length <= 1;
-
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
+      loading: data == null,
+      child: Stack(
+        children: [
+          SingleChildScrollView(
+            controller: scrollController,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 24,
               children: [
-                _GeneralTab(client: client, site: data.site, hasSubscription: data.me?.subscription != null),
-                _DesignTab(client: client, site: data.site),
-                _DangerZone(
-                  client: client,
-                  site: data.site,
-                  siteService: site,
-                  isLastSite: isLastSite,
-                  remainingSiteIds: sites.map((s) => s.id).where((id) => id != data.site.id).toList(),
+                const Gap(72),
+                const Padding(
+                  padding: Pad(horizontal: 20, top: 8, bottom: 4),
+                  child: Text('스페이스', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
                 ),
+                _CurrentSpaceHero(data: data, site: site),
+                _OtherSpaces(data: data, site: site),
+                Gap(140 + MediaQuery.paddingOf(context).bottom),
               ],
             ),
-          );
-        },
+          ),
+          _Heading(showTitle: showHeadingTitle.value),
+        ],
       ),
     );
   }
 }
 
-class _GeneralTab extends HookWidget {
-  const _GeneralTab({required this.client, required this.site, required this.hasSubscription});
+class _Heading extends StatelessWidget {
+  const _Heading({required this.showTitle});
 
-  final GraphQLClient client;
-  final GSiteSettingsScreen_QueryData_site site;
-  final bool hasSubscription;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: 48,
+          padding: const Pad(horizontal: 20),
+          decoration: BoxDecoration(color: context.colors.surfaceSubtle),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Tappable(
+                  onTap: () => context.router.maybePop(),
+                  child: Icon(LucideLightIcons.chevron_left, size: 20, color: context.colors.textDefault),
+                ),
+              ),
+              AnimatedSlide(
+                offset: Offset(0, showTitle ? 0.0 : 0.4),
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                child: AnimatedOpacity(
+                  opacity: showTitle ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: const Text('스페이스', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          height: 24,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [context.colors.surfaceSubtle, context.colors.surfaceSubtle.withValues(alpha: 0)],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CurrentSpaceHero extends HookWidget {
+  const _CurrentSpaceHero({required this.data, required this.site});
+
+  final GSiteScreen_QueryData? data;
+  final Site site;
+
+  @override
+  Widget build(BuildContext context) {
+    final client = useService<GraphQLClient>();
     final blob = useService<Blob>();
     final mixpanel = useService<Mixpanel>();
 
-    final logoUrl = useState(site.logo.url);
-    final nameValue = useState(site.name);
-    final slugValue = useState(site.slug);
-
-    final nameForm = useHookForm();
-    final slugForm = useHookForm();
+    final nameValue = useState(data?.site.name ?? '');
+    final isEditing = useState(false);
     final nameController = useTextEditingController(text: nameValue.value);
-    final slugController = useTextEditingController(text: slugValue.value);
     final nameFocusNode = useFocusNode();
-    final slugFocusNode = useFocusNode();
+
+    useEffect(() {
+      if (data != null && !isEditing.value) {
+        nameValue.value = data!.site.name;
+        nameController.text = data!.site.name;
+      }
+      return null;
+    }, [data?.site.id]);
 
     useEffect(() {
       void listener() {
-        if (!nameFocusNode.hasFocus) {
-          unawaited(nameForm.submit());
+        if (!nameFocusNode.hasFocus && isEditing.value) {
+          unawaited(
+            _submitName(
+              context: context,
+              client: client,
+              mixpanel: mixpanel,
+              siteId: data?.site.id ?? '',
+              nameController: nameController,
+              nameValue: nameValue,
+              isEditing: isEditing,
+            ),
+          );
         }
       }
 
       nameFocusNode.addListener(listener);
       return () => nameFocusNode.removeListener(listener);
-    }, [nameFocusNode, nameForm]);
-
-    useEffect(() {
-      void listener() {
-        if (hasSubscription && !slugFocusNode.hasFocus) {
-          unawaited(slugForm.submit());
-        }
-      }
-
-      slugFocusNode.addListener(listener);
-      return () => slugFocusNode.removeListener(listener);
-    }, [hasSubscription, slugFocusNode, slugForm]);
+    }, [nameFocusNode, data?.site.id]);
 
     Future<void> updateSiteLogo() async {
+      if (data == null) {
+        return;
+      }
+
       try {
         final result = await FilePicker.platform.pickFiles(type: FileType.image);
-        if (result == null) {
-          return;
-        }
-
-        if (result.files.isEmpty || result.files.first.path == null) {
+        if (result == null || result.files.isEmpty || result.files.first.path == null) {
           return;
         }
 
         final file = File(result.files.first.path!);
         final path = await blob.upload(file);
         final image = await client.request(
-          GSiteSettingsScreen_PersistBlobAsImage_MutationReq(
+          GSiteScreen_PersistBlobAsImage_MutationReq(
             (b) => b
               ..vars.input.path = path
               ..vars.input.modification = Value.present(
@@ -160,16 +206,15 @@ class _GeneralTab extends HookWidget {
           ),
         );
 
-        final updateResult = await client.request(
-          GSiteSettingsScreen_UpdateSite_MutationReq(
+        await client.request(
+          GSiteScreen_UpdateSite_MutationReq(
             (b) => b
-              ..vars.input.siteId = site.id
+              ..vars.input.siteId = data!.site.id
               ..vars.input.logoId = Value.present(image.persistBlobAsImage.id),
           ),
         );
 
-        logoUrl.value = updateResult.updateSite.logo.url;
-        unawaited(mixpanel.track('update_site_logo', properties: {'via': 'site_settings'}));
+        unawaited(mixpanel.track('update_site_logo', properties: {'via': 'space_screen'}));
 
         if (context.mounted) {
           context.toast(ToastType.success, '스페이스 로고가 변경되었어요.');
@@ -181,215 +226,246 @@ class _GeneralTab extends HookWidget {
       }
     }
 
-    const logoSize = 80.0;
-    final imageSize = pow(2, (log(logoSize * MediaQuery.devicePixelRatioOf(context)) / log(2)).ceil()).toInt();
-    final usersiteHost = _usersiteHost();
-
-    return _Section(
-      title: '일반',
+    return Padding(
+      padding: const Pad(top: 24, bottom: 32),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const Pad(top: 24, bottom: 20),
-            child: Center(
-              child: Tappable(
-                onTap: updateSiteLogo,
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: CachedNetworkImage(
-                        imageUrl: '${logoUrl.value}?s=$imageSize&q=75',
-                        width: logoSize,
-                        height: logoSize,
-                        fit: BoxFit.cover,
-                        fadeInDuration: Duration.zero,
-                        fadeOutDuration: Duration.zero,
-                        placeholderFadeInDuration: Duration.zero,
-                      ),
-                    ),
-                    Container(
-                      width: logoSize,
-                      height: logoSize,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        color: context.colors.textDefault.withValues(alpha: 0.15),
-                      ),
-                      child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textBright),
-                    ),
-                  ],
+          Tappable(
+            onTap: updateSiteLogo,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Img(image: data?.site.logo, size: 64),
+            ),
+          ),
+          const Gap(12),
+          if (isEditing.value)
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: nameController,
+                focusNode: nameFocusNode,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                decoration: InputDecoration(
+                  contentPadding: const Pad(horizontal: 12, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: context.colors.accentBrand),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: context.colors.accentBrand, width: 1.5),
+                  ),
+                  filled: true,
+                  fillColor: context.colors.surfaceDefault,
                 ),
+                onSubmitted: (_) {
+                  unawaited(
+                    _submitName(
+                      context: context,
+                      client: client,
+                      mixpanel: mixpanel,
+                      siteId: data?.site.id ?? '',
+                      nameController: nameController,
+                      nameValue: nameValue,
+                      isEditing: isEditing,
+                    ),
+                  );
+                },
+              ),
+            )
+          else
+            Tappable(
+              onTap: () {
+                isEditing.value = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  nameFocusNode.requestFocus();
+                });
+              },
+              child: Text(nameValue.value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            ),
+          const Gap(12),
+          Tappable(
+            onTap: () {
+              unawaited(context.router.push(const SiteSettingsRoute()));
+            },
+            child: Container(
+              padding: const Pad(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 4,
+                children: [
+                  Icon(LucideLightIcons.settings, size: 14, color: context.colors.textSubtle),
+                  Text('스페이스 설정', style: TextStyle(fontSize: 13, color: context.colors.textSubtle)),
+                ],
               ),
             ),
           ),
-          HookForm(
-            form: nameForm,
-            schema: l.schema({
-              'name': l.string().min(1, message: '스페이스 이름을 입력해주세요.').required(message: '스페이스 이름을 입력해주세요.'),
-            }),
-            onSubmit: (form) async {
-              final rawName = (form.data['name'] as String?) ?? '';
-              final nextName = rawName.trim();
+        ],
+      ),
+    );
+  }
 
-              if (nextName == nameValue.value) {
-                if (rawName != nextName) {
-                  nameController.text = nextName;
-                }
-                return;
-              }
+  Future<void> _submitName({
+    required BuildContext context,
+    required GraphQLClient client,
+    required Mixpanel mixpanel,
+    required String siteId,
+    required TextEditingController nameController,
+    required ValueNotifier<String> nameValue,
+    required ValueNotifier<bool> isEditing,
+  }) async {
+    final rawName = nameController.text;
+    final nextName = rawName.trim();
 
-              try {
-                await client.request(
-                  GSiteSettingsScreen_UpdateSite_MutationReq(
-                    (b) => b
-                      ..vars.input.siteId = site.id
-                      ..vars.input.name = Value.present(nextName),
-                  ),
-                );
+    isEditing.value = false;
 
-                nameValue.value = nextName;
-                nameController.text = nextName;
-                unawaited(mixpanel.track('update_site_name', properties: {'via': 'site_settings'}));
+    if (nextName.isEmpty || nextName == nameValue.value) {
+      nameController.text = nameValue.value;
+      return;
+    }
 
-                if (context.mounted) {
-                  context.toast(ToastType.success, '스페이스 이름이 변경되었어요.');
-                }
-              } catch (_) {
-                if (context.mounted) {
-                  context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.');
-                }
-              }
-            },
-            builder: (context, form) {
-              return Padding(
-                padding: const Pad(all: 16),
-                child: HookFormTextField(
-                  name: 'name',
-                  label: '이름',
-                  placeholder: '스페이스 이름',
-                  initialValue: site.name,
-                  controller: nameController,
-                  focusNode: nameFocusNode,
-                  errorBelowField: true,
-                  onChanged: (_) {
-                    form.clearError('name');
-                  },
-                ),
-              );
-            },
+    try {
+      await client.request(
+        GSiteScreen_UpdateSite_MutationReq(
+          (b) => b
+            ..vars.input.siteId = siteId
+            ..vars.input.name = Value.present(nextName),
+        ),
+      );
+
+      nameValue.value = nextName;
+      nameController.text = nextName;
+      unawaited(mixpanel.track('update_site_name', properties: {'via': 'space_screen'}));
+
+      if (context.mounted) {
+        context.toast(ToastType.success, '스페이스 이름이 변경되었어요.');
+      }
+    } catch (_) {
+      nameController.text = nameValue.value;
+      if (context.mounted) {
+        context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.');
+      }
+    }
+  }
+}
+
+class _OtherSpaces extends HookWidget {
+  const _OtherSpaces({required this.data, required this.site});
+
+  final GSiteScreen_QueryData? data;
+  final Site site;
+
+  @override
+  Widget build(BuildContext context) {
+    final client = useService<GraphQLClient>();
+    final mixpanel = useService<Mixpanel>();
+    final hasSubscription = data?.me?.subscription != null;
+
+    final otherSites = data?.me?.sites.where((s) => s.id != data?.site.id).toList() ?? [];
+
+    if (otherSites.isEmpty && !hasSubscription) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const Pad(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const Pad(bottom: 12),
+            child: Text(
+              '다른 스페이스',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+                color: context.colors.textFaint,
+              ),
+            ),
           ),
-          HookForm(
-            form: slugForm,
-            schema: l.schema({
-              'slug': l
-                  .string()
-                  .min(4, message: '스페이스 주소는 4글자 이상이여야 해요')
-                  .max(63, message: '스페이스 주소는 63글자를 넘을 수 없어요')
-                  .regex(r'^[\da-z-]+$', message: '스페이스 주소는 소문자, 숫자, 하이픈만 사용할 수 있어요')
-                  .regex(r'^(?!.*--)[\da-z-]+$', message: '하이픈을 연속으로 사용할 수 없어요')
-                  .regex(r'^[\da-z][\da-z-]*[\da-z]$', message: '스페이스 주소는 하이픈으로 시작하거나 끝날 수 없어요')
-                  .custom((value) => !_unavailableSiteSlugs.contains(value), message: '사용할 수 없는 스페이스 주소에요')
-                  .required(message: '스페이스 주소를 입력해 주세요'),
-            }),
-            onSubmit: (form) async {
-              if (!hasSubscription) {
-                return;
-              }
-
-              final rawSlug = (form.data['slug'] as String?) ?? '';
-              final nextSlug = rawSlug.trim().toLowerCase();
-              if (nextSlug == slugValue.value) {
-                if (rawSlug != nextSlug) {
-                  slugController.text = nextSlug;
-                }
-                return;
-              }
-
-              try {
-                await client.request(
-                  GSiteSettingsScreen_UpdateSiteSlug_MutationReq(
-                    (b) => b
-                      ..vars.input.siteId = site.id
-                      ..vars.input.slug = nextSlug,
-                  ),
-                );
-
-                slugValue.value = nextSlug;
-                slugController.text = nextSlug;
-                unawaited(mixpanel.track('update_site_slug', properties: {'via': 'site_settings'}));
-
-                if (context.mounted) {
-                  context.toast(ToastType.success, '스페이스 주소가 변경되었어요.');
-                }
-              } on TypieError catch (e) {
-                if (e.code == 'site_slug_already_exists') {
-                  form.setError('slug', '이미 존재하는 스페이스 주소예요.');
-                  return;
-                }
-
-                if (context.mounted) {
-                  context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.');
-                }
-              } catch (_) {
-                if (context.mounted) {
-                  context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.');
-                }
-              }
-            },
-            builder: (context, form) {
-              return Padding(
-                padding: const Pad(all: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 8,
-                  children: [
-                    Stack(
-                      children: [
-                        AbsorbPointer(
-                          absorbing: !hasSubscription,
-                          child: HookFormTextField(
-                            name: 'slug',
-                            label: '주소',
-                            placeholder: '스페이스 주소',
-                            keyboardType: TextInputType.url,
-                            initialValue: site.slug,
-                            controller: slugController,
-                            focusNode: slugFocusNode,
-                            errorBelowField: true,
-                            onChanged: (_) {
-                              form.clearError('slug');
-                            },
-                            suffix: Text(
-                              '.$usersiteHost',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: context.colors.textSubtle,
-                              ),
+          Container(
+            decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(12)),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                ...otherSites.map((s) {
+                  return Column(
+                    children: [
+                      Tappable(
+                        onTap: () {
+                          site.setSiteId(s.id);
+                          unawaited(context.router.maybePop());
+                        },
+                        child: Padding(
+                          padding: const Pad(horizontal: 16, vertical: 14),
+                          child: Tappable.scale(
+                            child: Row(
+                              spacing: 12,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Img(image: s.logo, size: 28),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    s.name,
+                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        if (!hasSubscription)
-                          Positioned.fill(
-                            child: Tappable(
-                              onTap: () async {
-                                await context.router.push(const EnrollPlanRoute());
-                              },
-                              child: const SizedBox.expand(),
+                      ),
+                      HorizontalDivider(color: context.colors.borderSubtle),
+                    ],
+                  );
+                }),
+                Tappable(
+                  onTap: () async {
+                    if (!hasSubscription) {
+                      if (context.mounted) {
+                        final result = await context.showBottomSheet<PlanUpgradeResult>(
+                          child: const PlanUpgradeBottomSheet(message: '멀티 스페이스는 FULL ACCESS 플랜에서 사용할 수 있어요.'),
+                        );
+
+                        if (result == PlanUpgradeResult.upgrade && context.mounted) {
+                          unawaited(context.router.push(const EnrollPlanRoute()));
+                        }
+                      }
+                      return;
+                    }
+
+                    if (context.mounted) {
+                      await context.showBottomSheet(
+                        child: _CreateSiteBottomSheet(client: client, site: site, mixpanel: mixpanel),
+                      );
+                    }
+                  },
+                  child: Padding(
+                    padding: const Pad(horizontal: 16, vertical: 14),
+                    child: Tappable.scale(
+                      child: Row(
+                        spacing: 12,
+                        children: [
+                          SizedBox(
+                            width: 28,
+                            child: Center(
+                              child: Icon(LucideLightIcons.plus, size: 18, color: context.colors.textSubtle),
                             ),
                           ),
-                      ],
-                    ),
-                    if (!hasSubscription)
-                      Text(
-                        '스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.',
-                        style: TextStyle(fontSize: 13, color: context.colors.textFaint),
+                          Text('새 스페이스 생성', style: TextStyle(fontSize: 15, color: context.colors.textSubtle)),
+                        ],
                       ),
-                  ],
+                    ),
+                  ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ],
       ),
@@ -397,204 +473,58 @@ class _GeneralTab extends HookWidget {
   }
 }
 
-class _DesignTab extends HookWidget {
-  const _DesignTab({required this.client, required this.site});
+class _CreateSiteBottomSheet extends HookWidget {
+  const _CreateSiteBottomSheet({required this.client, required this.site, required this.mixpanel});
 
   final GraphQLClient client;
-  final GSiteSettingsScreen_QueryData_site site;
-
-  @override
-  Widget build(BuildContext context) {
-    final mixpanel = useService<Mixpanel>();
-    final currentDateDisplay = useState(site.dateDisplay);
-
-    return _Section(
-      title: '디자인',
-      child: HookForm(
-        submitMode: HookFormSubmitMode.onChange,
-        onSubmit: (form) async {
-          final nextDateDisplay = form.data['dateDisplay'] as GSiteDateDisplay;
-          if (nextDateDisplay == currentDateDisplay.value) {
-            return;
-          }
-
-          try {
-            await client.request(
-              GSiteSettingsScreen_UpdateSite_MutationReq(
-                (b) => b
-                  ..vars.input.siteId = site.id
-                  ..vars.input.dateDisplay = Value.present(nextDateDisplay),
-              ),
-            );
-
-            currentDateDisplay.value = nextDateDisplay;
-            unawaited(
-              mixpanel.track(
-                'update_site_date_display',
-                properties: {'value': nextDateDisplay.name, 'via': 'site_settings'},
-              ),
-            );
-
-            if (context.mounted) {
-              context.toast(ToastType.success, '날짜 표시 설정이 변경되었어요.');
-            }
-          } catch (_) {
-            form.setValue('dateDisplay', currentDateDisplay.value, notify: false);
-            if (context.mounted) {
-              context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.');
-            }
-          }
-        },
-        builder: (context, form) {
-          return Padding(
-            padding: const Pad(all: 16),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text('글 목록에 표시할 날짜', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                ),
-                HookFormSelect<GSiteDateDisplay>(
-                  name: 'dateDisplay',
-                  initialValue: currentDateDisplay.value,
-                  items: const [
-                    HookFormSelectItem(label: '최초 생성 시각', value: GSiteDateDisplay.CREATED_AT),
-                    HookFormSelectItem(label: '마지막 수정 시각', value: GSiteDateDisplay.UPDATED_AT),
-                    HookFormSelectItem(label: '미표시', value: GSiteDateDisplay.NONE),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _DangerZone extends HookWidget {
-  const _DangerZone({
-    required this.client,
-    required this.site,
-    required this.siteService,
-    required this.isLastSite,
-    required this.remainingSiteIds,
-  });
-
-  final GraphQLClient client;
-  final GSiteSettingsScreen_QueryData_site site;
-  final Site siteService;
-  final bool isLastSite;
-  final List<String> remainingSiteIds;
-
-  @override
-  Widget build(BuildContext context) {
-    final mixpanel = useService<Mixpanel>();
-    final totalCount = site.documentCount + site.folderCount;
-
-    return Padding(
-      padding: const Pad(top: 16),
-      child: Center(
-        child: GestureDetector(
-          onTap: () async {
-            if (isLastSite) {
-              await context.showModal(
-                child: const AlertModal(
-                  title: '스페이스를 삭제할 수 없어요',
-                  message: '최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.',
-                ),
-              );
-              return;
-            }
-
-            final deleted = await context.showBottomSheet<bool>(
-              child: _DeleteSiteConfirmSheet(
-                client: client,
-                site: site,
-                siteService: siteService,
-                mixpanel: mixpanel,
-                totalCount: totalCount,
-                remainingSiteIds: remainingSiteIds,
-              ),
-            );
-
-            if ((deleted ?? false) && context.mounted) {
-              await context.router.maybePop();
-            }
-          },
-          child: Text('스페이스 삭제', style: TextStyle(fontSize: 14, color: context.colors.textDanger)),
-        ),
-      ),
-    );
-  }
-}
-
-class _DeleteSiteConfirmSheet extends HookWidget {
-  const _DeleteSiteConfirmSheet({
-    required this.client,
-    required this.site,
-    required this.siteService,
-    required this.mixpanel,
-    required this.totalCount,
-    required this.remainingSiteIds,
-  });
-
-  final GraphQLClient client;
-  final GSiteSettingsScreen_QueryData_site site;
-  final Site siteService;
+  final Site site;
   final Mixpanel mixpanel;
-  final int totalCount;
-  final List<String> remainingSiteIds;
 
   @override
   Widget build(BuildContext context) {
     final controller = useTextEditingController();
-    final inputValue = useValueListenable(controller);
-    final confirmText = '$totalCount';
-    final isConfirmed = totalCount == 0 || inputValue.text == confirmText;
 
     return ConfirmBottomSheet(
-      title: '스페이스 삭제',
-      message: '이 스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.',
-      confirmText: '삭제',
-      shouldDismissOnConfirm: false,
-      confirmTextColor: isConfirmed ? context.colors.textBright : context.colors.textFaint,
-      confirmBackgroundColor: isConfirmed ? context.colors.accentDanger : context.colors.surfaceMuted,
-      child: totalCount > 0
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 8,
-              children: [
-                Text(
-                  '삭제를 확인하려면 이 스페이스의 항목 수($totalCount)를 입력해주세요.',
-                  style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
-                ),
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: confirmText,
-                    border: const OutlineInputBorder(),
-                    contentPadding: const Pad(horizontal: 12, vertical: 8),
-                  ),
-                ),
-              ],
-            )
-          : null,
+      title: '새 스페이스 생성',
+      message: '스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.',
+      confirmText: '생성',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 6,
+        children: [
+          Text(
+            '스페이스 이름',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: context.colors.textDefault),
+          ),
+          TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: '새 스페이스',
+              hintStyle: TextStyle(color: context.colors.textDisabled),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const Pad(horizontal: 12, vertical: 10),
+            ),
+            style: const TextStyle(fontSize: 16),
+          ),
+        ],
+      ),
       onConfirm: () async {
-        if (!isConfirmed) {
-          return;
-        }
+        final name = controller.text.trim();
 
         try {
-          await client.request(GSiteSettingsScreen_DeleteSite_MutationReq((b) => b..vars.input.siteId = site.id));
+          await context.runWithLoader(() async {
+            final result = await client.request(
+              GSiteScreen_CreateSite_MutationReq((b) => b..vars.input.name = name.isEmpty ? '새 스페이스' : name),
+            );
 
-          unawaited(mixpanel.track('delete_site'));
+            site.setSiteId(result.createSite.id);
+          });
 
-          siteService.setSiteId(remainingSiteIds.first);
+          unawaited(mixpanel.track('create_site', properties: {'via': 'space_screen'}));
 
           if (context.mounted) {
-            context.toast(ToastType.success, '스페이스가 삭제되었어요.');
-            context.router.pop(true);
+            context.toast(ToastType.success, '새 스페이스가 생성되었어요.');
           }
         } catch (_) {
           if (context.mounted) {
@@ -602,35 +532,6 @@ class _DeleteSiteConfirmSheet extends HookWidget {
           }
         }
       },
-    );
-  }
-}
-
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 8,
-      children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textFaint),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: context.colors.borderStrong),
-            borderRadius: BorderRadius.circular(8),
-            color: context.colors.surfaceDefault,
-          ),
-          child: child,
-        ),
-      ],
     );
   }
 }

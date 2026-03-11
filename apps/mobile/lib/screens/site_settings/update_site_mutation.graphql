@@ -1,4 +1,4 @@
-mutation SiteScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
+mutation SiteSettingsScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
   updateSite(input: $input) {
     id
     name
