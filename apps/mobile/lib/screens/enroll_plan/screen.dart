@@ -26,12 +26,15 @@ import 'package:typie/screens/enroll_plan/__generated__/subscribe_or_change_plan
 import 'package:typie/screens/enroll_plan/__generated__/subscribe_plan_with_trial_mutation.req.gql.dart';
 import 'package:typie/screens/enroll_plan/subscription_celebration_bottom_sheet.dart';
 import 'package:typie/screens/profile/__generated__/profile_query.req.gql.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 enum PlanInterval { monthly, yearly }
+
+const _cardRadius = 12.0;
+const _sectionGap = 16.0;
 
 @RoutePage()
 class EnrollPlanScreen extends HookWidget {
@@ -41,14 +44,14 @@ class EnrollPlanScreen extends HookWidget {
   Widget build(BuildContext context) {
     final mixpanel = useService<Mixpanel>();
     final appsflyer = useService<AppsflyerSdk>();
+    final scrollController = useScrollController();
 
     final future = useMemoized(_fetchProductMap);
     final productDetailsMap = useFuture(future);
 
     return Screen(
-      heading: const Heading(title: '이용권 구매/변경'),
-      padding: const Pad(all: 20),
       child: GraphQLOperation(
+        initialBackgroundColor: context.colors.surfaceSubtle,
         operation: GEnrollPlanScreen_QueryReq(),
         builder: (context, client, data) {
           useEffect(() {
@@ -120,146 +123,158 @@ class EnrollPlanScreen extends HookWidget {
 
           final isOnTrial = data.me!.subscription?.plan.availability == GPlanAvailability.TRIAL;
           final canStartTrial = data.me!.canStartTrial;
+          final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
 
-          return Column(
-            spacing: 12,
+          return Stack(
             children: [
-              if (data.me!.subscription == null)
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: context.colors.borderStrong),
-                    borderRadius: BorderRadius.circular(8),
-                    color: context.colors.surfaceDefault,
-                  ),
-                  padding: const Pad(all: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          const Text('타이피 BASIC ACCESS', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                          const Spacer(),
-                          Text('현재 이용중', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
-                        ],
-                      ),
-                      const Gap(12),
-                      HorizontalDivider(color: context.colors.borderStrong),
-                      const Gap(12),
-                      Column(
-                        spacing: 8,
-                        children: basicPlanFeatures
-                            .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
-                            .toList(),
-                      ),
-                    ],
-                  ),
-                ),
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: context.colors.borderStrong),
-                  borderRadius: BorderRadius.circular(8),
-                  color: context.colors.surfaceDefault,
-                ),
+              SingleChildScrollView(
+                controller: scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(20, OverlayHeading.contentTopSpacing + 8, 20, bottomPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Padding(
-                      padding: const Pad(all: 16),
+                    const Text('이용권 구매/변경', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                    const Gap(_sectionGap),
+                    if (data.me!.subscription == null)
+                      DecoratedBox(
+                        decoration: _cardDecoration(context),
+                        child: Padding(
+                          padding: const Pad(all: 18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    '타이피 BASIC ACCESS',
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                                  ),
+                                  const Spacer(),
+                                  Text('현재 이용중', style: TextStyle(fontSize: 14, color: context.colors.textSubtle)),
+                                ],
+                              ),
+                              const Gap(12),
+                              HorizontalDivider(color: context.colors.borderSubtle),
+                              const Gap(12),
+                              Column(
+                                spacing: 8,
+                                children: basicPlanFeatures
+                                    .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
+                                    .toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (data.me!.subscription == null) const Gap(_sectionGap),
+                    DecoratedBox(
+                      decoration: _cardDecoration(context),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Row(
-                            children: [
-                              const Text(
-                                '타이피 FULL ACCESS',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                              if (isOnTrial) ...[
-                                const Gap(8),
-                                Container(
-                                  padding: const Pad(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: context.colors.accentBrand.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '무료 체험 중',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: context.colors.accentBrand,
+                          Padding(
+                            padding: const Pad(all: 18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      '타이피 FULL ACCESS',
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                                     ),
-                                  ),
+                                    if (isOnTrial) ...[
+                                      const Gap(8),
+                                      Container(
+                                        padding: const Pad(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: context.colors.accentBrand.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '무료 체험 중',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: context.colors.accentBrand,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const Gap(12),
+                                HorizontalDivider(color: context.colors.borderSubtle),
+                                const Gap(12),
+                                Column(
+                                  spacing: 8,
+                                  children: fullPlanFeatures
+                                      .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
+                                      .toList(),
                                 ),
                               ],
-                            ],
+                            ),
                           ),
-                          const Gap(12),
-                          HorizontalDivider(color: context.colors.borderStrong),
-                          const Gap(12),
-                          Column(
-                            spacing: 8,
-                            children: fullPlanFeatures
-                                .map((feature) => _FeatureItem(icon: feature.icon, label: feature.label))
-                                .toList(),
-                          ),
-                        ],
-                      ),
-                    ),
-                    HorizontalDivider(color: context.colors.borderStrong),
-                    Padding(
-                      padding: const Pad(all: 16),
-                      child: Column(
-                        spacing: 12,
-                        children: [
-                          if (canStartTrial)
-                            _TrialButton(
-                              onTap: () async {
-                                await context.showBottomSheet(
-                                  child: ConfirmBottomSheet(
-                                    title: '무료 체험을 시작하시겠어요?',
-                                    message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
-                                    confirmText: '시작하기',
-                                    onConfirm: () async {
-                                      await context.runWithLoader(() async {
-                                        await client.request(GEnrollPlanScreen_SubscribePlanWithTrial_MutationReq());
-                                        await client.refetch(GEnrollPlanScreen_QueryReq());
-                                        await client.refetch(GProfileScreen_QueryReq());
-                                        unawaited(mixpanel.track('start_trial'));
-                                      });
+                          HorizontalDivider(color: context.colors.borderSubtle),
+                          Padding(
+                            padding: const Pad(all: 16),
+                            child: Column(
+                              spacing: 12,
+                              children: [
+                                if (canStartTrial)
+                                  _TrialButton(
+                                    onTap: () async {
+                                      await context.showBottomSheet(
+                                        child: ConfirmBottomSheet(
+                                          title: '무료 체험을 시작하시겠어요?',
+                                          message: '결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.',
+                                          confirmText: '시작하기',
+                                          onConfirm: () async {
+                                            await context.runWithLoader(() async {
+                                              await client.request(
+                                                GEnrollPlanScreen_SubscribePlanWithTrial_MutationReq(),
+                                              );
+                                              await client.refetch(GEnrollPlanScreen_QueryReq());
+                                              await client.refetch(GProfileScreen_QueryReq());
+                                              unawaited(mixpanel.track('start_trial'));
+                                            });
 
-                                      if (context.mounted) {
-                                        await context.showBottomSheet(
-                                          child: const SubscriptionCelebrationBottomSheet(
-                                            title: '무료 체험이 시작됐어요!',
-                                            message: '2주간 타이피의 모든 기능을 자유롭게 이용해보세요.',
-                                          ),
-                                        );
-                                      }
+                                            if (context.mounted) {
+                                              await context.showBottomSheet(
+                                                child: const SubscriptionCelebrationBottomSheet(
+                                                  title: '무료 체험이 시작됐어요!',
+                                                  message: '2주간 타이피의 모든 기능을 자유롭게 이용해보세요.',
+                                                ),
+                                              );
+                                            }
+                                          },
+                                        ),
+                                      );
                                     },
                                   ),
-                                );
-                              },
+                                _PurchaseButton(
+                                  label: '1개월 구독하기',
+                                  product: productDetailsMap.data?[PlanInterval.monthly],
+                                  isActive: data.me!.subscription?.plan.id == 'PL0FL1MAP',
+                                  onTap: (product) async {
+                                    await context.runWithLoader(() async {
+                                      await _purchaseProduct(product, uuid: data.me!.uuid);
+                                    });
+                                  },
+                                ),
+                                _PurchaseButton(
+                                  label: '1년 구독하기',
+                                  product: productDetailsMap.data?[PlanInterval.yearly],
+                                  isActive: data.me!.subscription?.plan.id == 'PL0FL1YAP',
+                                  onTap: (product) async {
+                                    await context.runWithLoader(() async {
+                                      await _purchaseProduct(product, uuid: data.me!.uuid);
+                                    });
+                                  },
+                                ),
+                              ],
                             ),
-                          _PurchaseButton(
-                            label: '1개월 구독하기',
-                            product: productDetailsMap.data?[PlanInterval.monthly],
-                            isActive: data.me!.subscription?.plan.id == 'PL0FL1MAP',
-                            onTap: (product) async {
-                              await context.runWithLoader(() async {
-                                await _purchaseProduct(product, uuid: data.me!.uuid);
-                              });
-                            },
-                          ),
-                          _PurchaseButton(
-                            label: '1년 구독하기',
-                            product: productDetailsMap.data?[PlanInterval.yearly],
-                            isActive: data.me!.subscription?.plan.id == 'PL0FL1YAP',
-                            onTap: (product) async {
-                              await context.runWithLoader(() async {
-                                await _purchaseProduct(product, uuid: data.me!.uuid);
-                              });
-                            },
                           ),
                         ],
                       ),
@@ -267,9 +282,40 @@ class EnrollPlanScreen extends HookWidget {
                   ],
                 ),
               ),
+              _Heading(scrollController: scrollController),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _Heading extends StatelessWidget {
+  const _Heading({required this.scrollController});
+
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    return OverlayHeading(
+      title: '이용권 구매/변경',
+      scrollController: scrollController,
+      leading: Tappable(
+        onTap: () async {
+          await context.router.maybePop();
+        },
+        child: Tappable.scale(
+          scale: 0.95,
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Icon(LucideLightIcons.chevron_left, size: 22, color: context.colors.textDefault),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -284,10 +330,12 @@ class _FeatureItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      spacing: 8,
+      spacing: 10,
       children: [
-        Icon(icon, size: 16),
-        Text(label, style: const TextStyle(fontSize: 14)),
+        Icon(icon, size: 18, color: context.colors.textSubtle),
+        Expanded(
+          child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        ),
       ],
     );
   }
@@ -325,11 +373,8 @@ class _PurchaseButton extends HookWidget {
         onTap(product!);
       },
       child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: context.colors.borderStrong),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        padding: const Pad(all: 12),
+        decoration: BoxDecoration(color: context.colors.surfaceSubtle, borderRadius: BorderRadius.circular(10)),
+        padding: const Pad(all: 13),
         child: Row(
           children: [
             Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
@@ -362,8 +407,8 @@ class _TrialButton extends StatelessWidget {
     return Tappable(
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(color: context.colors.surfaceInverse, borderRadius: BorderRadius.circular(8)),
-        padding: const Pad(all: 12),
+        decoration: BoxDecoration(color: context.colors.surfaceInverse, borderRadius: BorderRadius.circular(10)),
+        padding: const Pad(all: 13),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           spacing: 6,
@@ -379,6 +424,9 @@ class _TrialButton extends StatelessWidget {
     );
   }
 }
+
+BoxDecoration _cardDecoration(BuildContext context) =>
+    BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(_cardRadius));
 
 class _Product {
   const _Product(this.details);
