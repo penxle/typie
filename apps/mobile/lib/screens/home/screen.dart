@@ -23,6 +23,7 @@ import 'package:typie/screens/shell/screen.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/img.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -41,17 +42,7 @@ class HomeScreen extends HookWidget {
     final data = useQuery(GHomeScreen_QueryReq((b) => b.vars.siteId = siteId));
 
     final scrollController = useScrollController();
-    final showHeadingTitle = useState(false);
     final isSearching = useState(false);
-
-    useEffect(() {
-      void onScroll() {
-        showHeadingTitle.value = scrollController.offset > 44;
-      }
-
-      scrollController.addListener(onScroll);
-      return () => scrollController.removeListener(onScroll);
-    }, [scrollController]);
 
     void enterSearch() {
       isSearching.value = true;
@@ -88,7 +79,7 @@ class HomeScreen extends HookWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Gap(72),
+                      const Gap(OverlayHeading.contentTopSpacing),
                       const Padding(
                         padding: Pad(horizontal: 20, top: 8, bottom: 4),
                         child: Text('홈', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
@@ -121,7 +112,7 @@ class HomeScreen extends HookWidget {
               child: AnimatedOpacity(
                 opacity: searching ? 0 : 1,
                 duration: const Duration(milliseconds: 200),
-                child: _Heading(data: data, showTitle: showHeadingTitle.value),
+                child: _Heading(data: data, scrollController: scrollController),
               ),
             ),
           ],
@@ -164,78 +155,43 @@ class _SearchBarPlaceholder extends StatelessWidget {
 // -- Heading ------------------------------------------------------------------
 
 class _Heading extends StatelessWidget {
-  const _Heading({required this.data, required this.showTitle});
+  const _Heading({required this.data, required this.scrollController});
 
   final GHomeScreen_QueryData? data;
-  final bool showTitle;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          height: 48,
-          padding: const Pad(horizontal: 20),
-          decoration: BoxDecoration(color: context.colors.surfaceSubtle),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Tappable(
-                  onTap: () {
-                    unawaited(context.router.push(const SiteRoute()));
-                  },
-                  child: Tappable.scale(
-                    scale: 0.95,
-                    child: Transform.rotate(
-                      angle: -10 * (math.pi / 180),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          boxShadow: [
-                            BoxShadow(
-                              color: context.colors.shadowDefault.withValues(alpha: 0.08),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Img(image: data?.site.logo, size: 36),
-                        ),
-                      ),
-                    ),
+    return OverlayHeading(
+      title: '홈',
+      scrollController: scrollController,
+      leading: Tappable(
+        onTap: () {
+          unawaited(context.router.push(const SiteRoute()));
+        },
+        child: Tappable.scale(
+          scale: 0.95,
+          child: Transform.rotate(
+            angle: -10 * (math.pi / 180),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: [
+                  BoxShadow(
+                    color: context.colors.shadowDefault.withValues(alpha: 0.08),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
                   ),
-                ),
+                ],
               ),
-              AnimatedSlide(
-                offset: Offset(0, showTitle ? 0.0 : 0.4),
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: showTitle ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: const Text('홈', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Img(image: data?.site.logo, size: 36),
               ),
-            ],
-          ),
-        ),
-        Container(
-          height: 24,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [context.colors.surfaceSubtle, context.colors.surfaceSubtle.withValues(alpha: 0)],
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
