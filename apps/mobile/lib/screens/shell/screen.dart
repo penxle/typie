@@ -19,6 +19,20 @@ import 'package:typie/services/site.dart';
 import 'package:typie/widgets/animated_toggle.dart';
 import 'package:typie/widgets/tappable.dart';
 
+class ShellNav extends InheritedWidget {
+  const ShellNav({required this.visible, required super.child, super.key});
+
+  final ValueNotifier<bool> visible;
+
+  static ShellNav of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<ShellNav>()!;
+
+  void hide() => visible.value = false;
+  void show() => visible.value = true;
+
+  @override
+  bool updateShouldNotify(ShellNav oldWidget) => visible != oldWidget.visible;
+}
+
 @RoutePage()
 class ShellScreen extends HookWidget {
   const ShellScreen({super.key});
@@ -39,105 +53,138 @@ class ShellScreen extends HookWidget {
       return subscription.cancel;
     }, [siteId]);
 
+    final navVisible = useMemoized(() => ValueNotifier(true));
+    final navVisibleValue = useValueListenable(navVisible);
     final mediaQuery = MediaQuery.of(context);
     final pillColor = context.theme.brightness == Brightness.dark
         ? context.colors.surfaceSubtle
         : context.colors.surfaceDefault;
 
-    return AutoTabsRouter.builder(
-      builder: (context, children, tabsRouter) {
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: _SnapshotCrossFade(
-                key: crossFadeKey,
-                child: IndexedStack(index: tabsRouter.activeIndex, children: children),
+    return ShellNav(
+      visible: navVisible,
+      child: AutoTabsRouter.builder(
+        builder: (context, children, tabsRouter) {
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: _SnapshotCrossFade(
+                  key: crossFadeKey,
+                  child: IndexedStack(index: tabsRouter.activeIndex, children: children),
+                ),
               ),
-            ),
-            Positioned(
-              left: 24,
-              right: 24,
-              bottom: mediaQuery.viewPadding.bottom + 12,
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Container(
-                      height: 60,
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      decoration: BoxDecoration(
-                        color: pillColor,
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: context.colors.borderDefault),
-                        boxShadow: [
-                          BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
-                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 4), blurRadius: 12),
-                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 12), blurRadius: 32),
-                        ],
-                      ),
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: mediaQuery.viewPadding.bottom + 12,
+                child: AnimatedSlide(
+                  offset: Offset(0, navVisibleValue ? 0 : 2),
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: navVisibleValue ? 1 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: IgnorePointer(
+                      ignoring: !navVisibleValue,
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          for (int i = 0; i < 4; i++)
-                            Expanded(
-                              child: _Button(
-                                index: i,
-                                activeIndex: tabsRouter.activeIndex,
-                                icon: Icon(
-                                  [
-                                    LucideIcons.house,
-                                    LucideIcons.folder_open,
-                                    LucideIcons.sticky_note,
-                                    LucideIcons.circle_user_round,
-                                  ][i],
-                                  size: 24,
-                                  color: context.colors.textSubtle,
-                                ),
-                                onTap: () {
-                                  crossFadeKey.currentState?.captureAndAnimate();
-                                  tabsRouter.setActiveIndex(i);
-                                },
+                          Flexible(
+                            child: Container(
+                              height: 60,
+                              constraints: const BoxConstraints(maxWidth: 420),
+                              decoration: BoxDecoration(
+                                color: pillColor,
+                                borderRadius: BorderRadius.circular(30),
+                                border: Border.all(color: context.colors.borderDefault),
+                                boxShadow: [
+                                  BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
+                                  BoxShadow(
+                                    color: context.colors.shadowDefault,
+                                    offset: const Offset(0, 4),
+                                    blurRadius: 12,
+                                  ),
+                                  BoxShadow(
+                                    color: context.colors.shadowDefault,
+                                    offset: const Offset(0, 12),
+                                    blurRadius: 32,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  for (int i = 0; i < 4; i++)
+                                    Expanded(
+                                      child: _Button(
+                                        index: i,
+                                        activeIndex: tabsRouter.activeIndex,
+                                        icon: Icon(
+                                          [
+                                            LucideIcons.house,
+                                            LucideIcons.folder_open,
+                                            LucideIcons.sticky_note,
+                                            LucideIcons.circle_user_round,
+                                          ][i],
+                                          size: 24,
+                                          color: context.colors.textSubtle,
+                                        ),
+                                        onTap: () {
+                                          crossFadeKey.currentState?.captureAndAnimate();
+                                          tabsRouter.setActiveIndex(i);
+                                        },
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          Tappable(
+                            onTap: () async {
+                              final result = await client.request(
+                                GHomeScreen_CreateDocument_MutationReq((b) => b..vars.input.siteId = site.siteId),
+                              );
+
+                              unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
+
+                              if (context.mounted) {
+                                markAutoDiscardCandidate(result.createDocument.entity.slug);
+                                await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
+                              }
+                            },
+                            child: Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: pillColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: context.colors.borderDefault),
+                                boxShadow: [
+                                  BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
+                                  BoxShadow(
+                                    color: context.colors.shadowDefault,
+                                    offset: const Offset(0, 4),
+                                    blurRadius: 12,
+                                  ),
+                                  BoxShadow(
+                                    color: context.colors.shadowDefault,
+                                    offset: const Offset(0, 12),
+                                    blurRadius: 32,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(LucideIcons.square_pen, size: 24, color: context.colors.textSubtle),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Tappable(
-                    onTap: () async {
-                      final result = await client.request(
-                        GHomeScreen_CreateDocument_MutationReq((b) => b..vars.input.siteId = site.siteId),
-                      );
-
-                      unawaited(mixpanel.track('create_document', properties: {'via': 'home'}));
-
-                      if (context.mounted) {
-                        markAutoDiscardCandidate(result.createDocument.entity.slug);
-                        await context.router.push(NativeEditorRoute(slug: result.createDocument.entity.slug));
-                      }
-                    },
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: pillColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: context.colors.borderDefault),
-                        boxShadow: [
-                          BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
-                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 4), blurRadius: 12),
-                          BoxShadow(color: context.colors.shadowDefault, offset: const Offset(0, 12), blurRadius: 32),
-                        ],
-                      ),
-                      child: Icon(LucideIcons.square_pen, size: 24, color: context.colors.textSubtle),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }

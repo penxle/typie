@@ -9,7 +9,6 @@ import 'package:flutter_sticky_header/flutter_sticky_header.dart';
 import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
-import 'package:typie/constants/router_tab_index.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
@@ -17,7 +16,6 @@ import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/debounce.dart';
-import 'package:typie/hooks/route_resumed.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
@@ -43,8 +41,6 @@ class NotesScreen extends HookWidget {
     final site = useService<Site>();
     final siteId = useValueListenable(site);
     final refreshNotifier = useMemoized(RefreshNotifier.new, []);
-
-    useRouteResumed(context, refreshNotifier.refresh, tabIndex: RouteTabsIndex.notes);
 
     return GraphQLOperation(
       initialBackgroundColor: context.colors.surfaceSubtle,

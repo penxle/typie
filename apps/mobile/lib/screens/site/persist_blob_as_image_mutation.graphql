@@ -1,4 +1,4 @@
-mutation SiteSettingsScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+mutation SiteScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
   persistBlobAsImage(input: $input) {
     id
     url

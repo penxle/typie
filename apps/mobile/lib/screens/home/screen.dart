@@ -12,17 +12,22 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/extensions/iterable.dart';
 import 'package:typie/extensions/jiffy.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
-import 'package:typie/graphql/hook.dart';
+import 'package:typie/graphql/hooks.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/home/__generated__/query.data.gql.dart';
 import 'package:typie/screens/home/__generated__/query.req.gql.dart';
+import 'package:typie/screens/home/search_overlay.dart';
+import 'package:typie/screens/shell/screen.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/img.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:typie/widgets/tappable.dart';
+
+const _animDuration = Duration(milliseconds: 350);
+const _animCurve = Curves.easeOutCubic;
 
 @RoutePage()
 class HomeScreen extends HookWidget {
@@ -37,6 +42,7 @@ class HomeScreen extends HookWidget {
 
     final scrollController = useScrollController();
     final showHeadingTitle = useState(false);
+    final isSearching = useState(false);
 
     useEffect(() {
       void onScroll() {
@@ -47,32 +53,115 @@ class HomeScreen extends HookWidget {
       return () => scrollController.removeListener(onScroll);
     }, [scrollController]);
 
-    return Screen(
-      loading: data == null,
-      child: Stack(
-        children: [
-          SingleChildScrollView(
-            controller: scrollController,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Gap(72),
-                const Padding(
-                  padding: Pad(horizontal: 20, top: 8, bottom: 4),
-                  child: Text('홈', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+    void enterSearch() {
+      isSearching.value = true;
+      ShellNav.of(context).hide();
+    }
+
+    void exitSearch() {
+      isSearching.value = false;
+      ShellNav.of(context).show();
+    }
+
+    final searching = isSearching.value;
+
+    return PopScope(
+      canPop: !searching,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          exitSearch();
+        }
+      },
+      child: Screen(
+        loading: data == null,
+        resizeToAvoidBottomInset: searching,
+        child: Stack(
+          children: [
+            // -- Home content --
+            AnimatedOpacity(
+              opacity: searching ? 0 : 1,
+              duration: const Duration(milliseconds: 200),
+              child: IgnorePointer(
+                ignoring: searching,
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Gap(72),
+                      const Padding(
+                        padding: Pad(horizontal: 20, top: 8, bottom: 4),
+                        child: Text('홈', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                      ),
+                      _SearchBarPlaceholder(onTap: enterSearch),
+                      _RecentFolders(data: data),
+                      _RecentDocuments(data: data),
+                      const Gap(140),
+                    ],
+                  ),
                 ),
-                _RecentFolders(data: data),
-                _RecentDocuments(data: data),
-                const Gap(140),
-              ],
+              ),
             ),
-          ),
-          _Heading(data: data, showTitle: showHeadingTitle.value),
-        ],
+
+            // -- Search overlay --
+            AnimatedOpacity(
+              opacity: searching ? 1 : 0,
+              duration: Duration(milliseconds: searching ? 250 : 150),
+              child: IgnorePointer(
+                ignoring: !searching,
+                child: SearchOverlay(active: searching, onExit: exitSearch),
+              ),
+            ),
+
+            // -- Heading (slides out when searching) --
+            AnimatedSlide(
+              offset: Offset(0, searching ? -1.0 : 0),
+              duration: _animDuration,
+              curve: _animCurve,
+              child: AnimatedOpacity(
+                opacity: searching ? 0 : 1,
+                duration: const Duration(milliseconds: 200),
+                child: _Heading(data: data, showTitle: showHeadingTitle.value),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+// -- Search Bar Placeholder ---------------------------------------------------
+
+class _SearchBarPlaceholder extends StatelessWidget {
+  const _SearchBarPlaceholder({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const Pad(horizontal: 20, top: 12, bottom: 4),
+      child: Tappable(
+        onTap: onTap,
+        child: Container(
+          height: 36,
+          padding: const Pad(horizontal: 14),
+          decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(10)),
+          child: Row(
+            children: [
+              Icon(LucideLightIcons.search, size: 16, color: context.colors.textDisabled),
+              const Gap(10),
+              Text('문서 검색...', style: TextStyle(fontSize: 15, color: context.colors.textDisabled)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// -- Heading ------------------------------------------------------------------
 
 class _Heading extends StatelessWidget {
   const _Heading({required this.data, required this.showTitle});
@@ -150,6 +239,8 @@ class _Heading extends StatelessWidget {
     );
   }
 }
+
+// -- Recent Folders -----------------------------------------------------------
 
 typedef _RecentFolder = GHomeScreen_QueryData_me_recentlyViewedEntities_node__asFolder;
 
@@ -257,7 +348,7 @@ class _RecentFolders extends StatelessWidget {
   }
 }
 
-// -- Recent Documents ----------------------------------------------------------
+// -- Recent Documents ---------------------------------------------------------
 
 typedef _RecentDocument = GHomeScreen_QueryData_me_recentlyViewedEntities_node__asDocument;
 

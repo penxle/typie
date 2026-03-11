@@ -10,6 +10,7 @@ import 'package:gap/gap.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/client.dart';
+import 'package:typie/graphql/hooks.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -38,6 +39,8 @@ class GraphQLOperation<TData, TVars> extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
+
+    useRefetchOnRouteResumed(operation);
 
     useEffect(() {
       void onRefresh() {
