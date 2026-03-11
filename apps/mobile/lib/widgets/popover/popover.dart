@@ -90,7 +90,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
 
   final _anchorKey = GlobalKey();
   final _paneKey = GlobalKey();
-  final _surfaceKey = const ValueKey('popover-surface');
+  final _surfaceKey = GlobalKey();
   final _overlayController = OverlayPortalController();
   final _anchorPointerNotifier = ValueNotifier<Object?>(null);
 
@@ -102,8 +102,10 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
 
   bool _isExpanded = false;
   bool _isOverlayVisible = false;
+  bool _isOutsidePointerRouteRegistered = false;
   bool _isAnchorMeasurementScheduled = false;
   bool _isMeasurementScheduled = false;
+  final Map<int, _PopoverOutsideTapRecognizer> _outsideTapRecognizers = {};
   ScrollHoldController? _anchorScrollHold;
   int? _trackedAnchorPointer;
   Timer? _anchorSelectionArmTimer;
@@ -140,6 +142,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
 
   void _handleAnimationStatusChanged(AnimationStatus status) {
     if (status == AnimationStatus.dismissed && !_isExpanded) {
+      _removeOutsidePointerRoute();
       _overlayController.hide();
       _lastAnchorRect = null;
       if (mounted) {
@@ -250,6 +253,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
       return;
     }
 
+    _addOutsidePointerRoute();
     setState(() {
       _isExpanded = true;
       _isOverlayVisible = true;
@@ -272,6 +276,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
     });
 
     if (_paneSize == null) {
+      _removeOutsidePointerRoute();
       _overlayController.hide();
       _lastAnchorRect = null;
       setState(() {
@@ -359,11 +364,82 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
     });
   }
 
+  void _addOutsidePointerRoute() {
+    if (_isOutsidePointerRouteRegistered) {
+      return;
+    }
+
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_handleOutsidePointerEvent);
+    _isOutsidePointerRouteRegistered = true;
+  }
+
+  void _removeOutsidePointerRoute() {
+    if (!_isOutsidePointerRouteRegistered) {
+      return;
+    }
+
+    GestureBinding.instance.pointerRouter.removeGlobalRoute(_handleOutsidePointerEvent);
+    _isOutsidePointerRouteRegistered = false;
+  }
+
+  Rect? _currentPaneSurfaceRect() {
+    final renderObject = _surfaceKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
+
+    return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+  }
+
+  bool _isEventInsidePaneSurface(PointerEvent event) {
+    final paneRect = _currentPaneSurfaceRect();
+    return paneRect != null && paneRect.contains(event.position);
+  }
+
+  void _trackOutsideTap(PointerDownEvent event) {
+    if (_outsideTapRecognizers.containsKey(event.pointer)) {
+      return;
+    }
+
+    final recognizer = _PopoverOutsideTapRecognizer(
+      onTrackingEnded: () {
+        _outsideTapRecognizers.remove(event.pointer)?.dispose();
+      },
+    );
+    _outsideTapRecognizers[event.pointer] = recognizer;
+    recognizer.addPointer(event);
+  }
+
+  void _handleOutsidePointerEvent(PointerEvent event) {
+    if (!_isExpanded || _isEventInsidePaneSurface(event)) {
+      return;
+    }
+
+    if (event is PointerDownEvent) {
+      if (event.pointer == _trackedAnchorPointer) {
+        return;
+      }
+
+      _trackOutsideTap(event);
+      _close();
+      return;
+    }
+
+    if (event is PointerPanZoomStartEvent || event is PointerSignalEvent) {
+      _close();
+    }
+  }
+
   @override
   void dispose() {
     if (_trackedAnchorPointer != null) {
       GestureBinding.instance.pointerRouter.removeGlobalRoute(_handleAnchorPointerEvent);
     }
+    _removeOutsidePointerRoute();
+    for (final recognizer in _outsideTapRecognizers.values) {
+      recognizer.dispose();
+    }
+    _outsideTapRecognizers.clear();
     _anchorSelectionArmTimer?.cancel();
     _releaseAnchorScrollHold();
     _anchorPointerNotifier.dispose();
@@ -478,7 +554,6 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
     return Positioned.fill(
       child: Stack(
         children: [
-          GestureDetector(behavior: HitTestBehavior.opaque, onTap: _close, child: const SizedBox.expand()),
           CustomSingleChildLayout(
             delegate: _PopoverLayoutDelegate(
               anchorRect: anchorRect,
@@ -612,6 +687,45 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
 
     return math.min(begin, size);
   }
+}
+
+class _PopoverOutsideTapRecognizer extends PrimaryPointerGestureRecognizer {
+  _PopoverOutsideTapRecognizer({required this.onTrackingEnded}) : super(allowedButtonsFilter: _allowAnyButton);
+
+  final VoidCallback onTrackingEnded;
+  bool _didFinishTracking = false;
+
+  static bool _allowAnyButton(int buttons) => true;
+
+  @override
+  void handlePrimaryPointer(PointerEvent event) {
+    if (event is PointerUpEvent) {
+      resolve(GestureDisposition.accepted);
+      return;
+    }
+
+    if (event is PointerCancelEvent) {
+      resolve(GestureDisposition.rejected);
+    }
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    super.didStopTrackingLastPointer(pointer);
+    _finishTracking();
+  }
+
+  void _finishTracking() {
+    if (_didFinishTracking) {
+      return;
+    }
+
+    _didFinishTracking = true;
+    onTrackingEnded();
+  }
+
+  @override
+  String get debugDescription => 'popover outside tap';
 }
 
 class _PopoverCloseScope extends InheritedWidget {
