@@ -7,6 +7,7 @@
 *momentumscroll*
 *outro+
 *start
+aggs
 amazonses
 batang
 bbox
@@ -72,11 +73,13 @@ mediump
 meili
 meilisearch
 metas
+msearch
 monzo
 movflags
 msgpackr
 myeongjo
 nanum
+ngram
 napi
 natgw
 noeviction

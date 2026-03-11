@@ -1049,7 +1049,7 @@ type Query {
   post(slug: String!): Post!
   randomName: String!
   redirect(from: String!, type: RedirectType!): Redirect
-  search(query: String!, siteId: ID!): SearchResult!
+  search(ancestorEntityId: ID, query: String!, siteId: ID!): SearchResult!
   seed: Float!
   site(siteId: ID!): Site!
   siteView(origin: String!): SiteView!
@@ -1116,7 +1116,7 @@ input SchedulePlanChangeInput {
   planId: ID!
 }
 
-union SearchHit = SearchHitDocument | SearchHitFolder | SearchHitPost
+union SearchHit = SearchHitDocument | SearchHitFolder
 
 type SearchHitDocument {
   document: Document!
@@ -1132,21 +1132,14 @@ type SearchHitFolder {
   type: SearchHitType!
 }
 
-type SearchHitPost {
-  post: Post!
-  subtitle: String
-  text: String
-  title: String
-  type: SearchHitType!
-}
-
 enum SearchHitType {
   DOCUMENT
   FOLDER
-  POST
 }
 
 type SearchResult {
+  documentCount: Int!
+  folderCount: Int!
   hits: [SearchHit!]!
   totalHits: Int!
 }

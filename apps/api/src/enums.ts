@@ -208,7 +208,6 @@ export const PreorderPaymentState = {
 
 export type SearchHitType = keyof typeof SearchHitType;
 export const SearchHitType = {
-  POST: 'POST',
   DOCUMENT: 'DOCUMENT',
   FOLDER: 'FOLDER',
 } as const;
