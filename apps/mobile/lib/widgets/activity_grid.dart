@@ -8,7 +8,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:jiffy/jiffy.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/extensions/num.dart';
-import 'package:typie/hooks/async_effect.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/fader.dart';
 import 'package:typie/widgets/tappable.dart';
@@ -27,6 +26,7 @@ class ActivityGrid extends HookWidget {
 
   static const cellSize = 13.0;
   static const cellGap = 3.0;
+  static const gridHeight = (cellSize * 7) + (cellGap * 6);
   static const labelHeight = 16.0;
   static const horizontalPadding = 16.0;
   static const bottomPadding = 8.0;
@@ -35,9 +35,17 @@ class ActivityGrid extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scrollController = useScrollController();
+    final endDate = _startOfDay(DateTime.now());
+    final startDate = endDate.subtract(const Duration(days: 364));
+
+    final activities = useMemoized(() => _generateActivities(changes, startDate, endDate), [changes]);
+    final monthSpans = useMemoized(() => _generateMonthSpans(activities), [activities]);
+    final weeks = useMemoized(() => _generateWeeks(activities), [activities]);
+    final totalWidth = weeks.isEmpty ? 0.0 : (weeks.length * (cellSize + cellGap)) - cellGap;
+
+    final scrollController = useScrollController(initialScrollOffset: totalWidth, keys: [totalWidth]);
     final canScrollLeft = useState(false);
-    final canScrollRight = useState(true);
+    final canScrollRight = useState(false);
     final tooltipData = useState<({ActivityGridActivity activity, int weekIndex, int dayIndex})?>(null);
     final tooltipTimer = useRef<Timer?>(null);
 
@@ -81,12 +89,9 @@ class ActivityGrid extends HookWidget {
         ..addPosition(event.timeStamp, event.position);
     }
 
-    useAsyncEffect(() async {
+    useEffect(() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (scrollController.hasClients) {
-          scrollController.jumpTo(scrollController.position.maxScrollExtent);
-          updateScrollState();
-        }
+        updateScrollState();
       });
 
       void updateScroll() {
@@ -96,7 +101,7 @@ class ActivityGrid extends HookWidget {
       scrollController.addListener(updateScroll);
 
       return () => scrollController.removeListener(updateScroll);
-    }, []);
+    }, [scrollController]);
 
     useEffect(() {
       return () {
@@ -105,14 +110,9 @@ class ActivityGrid extends HookWidget {
       };
     }, []);
 
-    final endDate = Jiffy.now();
-    final startDate = endDate.subtract(days: 364);
-
-    final activities = useMemoized(() => _generateActivities(changes, startDate, endDate), [changes]);
-    final monthSpans = useMemoized(() => _generateMonthSpans(activities), [activities]);
-    final weeks = useMemoized(() => _generateWeeks(activities), [activities]);
-    final totalWidth = weeks.isEmpty ? 0.0 : (weeks.length * (cellSize + cellGap)) - cellGap;
     final isTooltipVisible = tooltipData.value != null;
+    final isDark = context.theme.brightness == Brightness.dark;
+    final levelColors = useMemoized(() => _levelColors(isDark), [isDark]);
 
     void showTooltip(ActivityGridActivity? activity, int weekIndex, int dayIndex, {required bool withHaptic}) {
       if (activity == null) {
@@ -420,56 +420,18 @@ class ActivityGrid extends HookWidget {
                       handleTooltipInteraction(details.localPosition, withHaptic: false);
                       handleInteractionEnd();
                     },
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (int week = 0; week < weeks.length; week++)
-                          Padding(
-                            padding: EdgeInsets.only(right: week < weeks.length - 1 ? cellGap : 0),
-                            child: Column(
-                              children: [
-                                for (int day = 0; day < 7; day++)
-                                  if (day < weeks[week].length)
-                                    Padding(
-                                      padding: EdgeInsets.only(bottom: day < 6 ? cellGap : 0),
-                                      child: weeks[week][day].level == -1
-                                          ? const SizedBox(width: cellSize, height: cellSize)
-                                          : Stack(
-                                              clipBehavior: Clip.none,
-                                              children: [
-                                                Container(
-                                                  width: cellSize,
-                                                  height: cellSize,
-                                                  decoration: BoxDecoration(
-                                                    color: _getColorByLevel(context, weeks[week][day].level),
-                                                    borderRadius: BorderRadius.circular(2),
-                                                  ),
-                                                ),
-                                                if (tooltipData.value != null &&
-                                                    tooltipData.value!.weekIndex == week &&
-                                                    tooltipData.value!.dayIndex == day)
-                                                  Positioned(
-                                                    left: -1.5,
-                                                    top: -1.5,
-                                                    child: Container(
-                                                      width: cellSize + 3,
-                                                      height: cellSize + 3,
-                                                      decoration: BoxDecoration(
-                                                        border: Border.all(
-                                                          color: context.colors.borderStrong,
-                                                          width: 1.5,
-                                                        ),
-                                                        borderRadius: BorderRadius.circular(3.5),
-                                                      ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                    ),
-                              ],
-                            ),
-                          ),
-                      ],
+                    child: SizedBox(
+                      width: totalWidth,
+                      height: gridHeight,
+                      child: CustomPaint(
+                        painter: _ActivityGridPainter(
+                          weeks: weeks,
+                          levelColors: levelColors,
+                          selectedWeekIndex: tooltipData.value?.weekIndex,
+                          selectedDayIndex: tooltipData.value?.dayIndex,
+                          selectionBorderColor: context.colors.surfaceDark,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -563,7 +525,7 @@ class ActivityGrid extends HookWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  tooltipData.value!.activity.date.format(pattern: 'yyyy년 M월 d일'),
+                                  _formatDate(tooltipData.value!.activity.date),
                                   style: TextStyle(
                                     color: context.colors.textBright,
                                     fontSize: 12,
@@ -597,16 +559,15 @@ class ActivityGrid extends HookWidget {
 
   List<ActivityGridActivity> _generateActivities(
     List<ActivityGridChange> characterCountChanges,
-    Jiffy startDate,
-    Jiffy endDate,
+    DateTime startDate,
+    DateTime endDate,
   ) {
     final activities = <ActivityGridActivity>[];
-    final changesMap = <String, ActivityGridChange>{};
+    final changesMap = <int, int>{};
 
     for (final change in characterCountChanges) {
-      final date = change.date.toLocal();
-      final dateKey = date.format(pattern: 'yyyy-MM-dd');
-      changesMap[dateKey] = change;
+      final date = _toLocalDate(change.date);
+      changesMap[_dateKey(date)] = change.additions;
     }
 
     final numbers = characterCountChanges.map((c) => c.additions).where((n) => n > 0).toList();
@@ -618,20 +579,19 @@ class ActivityGrid extends HookWidget {
       p95 = sorted[index.clamp(0, sorted.length - 1)];
     }
 
-    for (var i = 1; i < startDate.dayOfWeek; i++) {
-      activities.add(ActivityGridActivity(date: startDate.subtract(days: i), additions: -1, level: -1));
+    for (var i = 1; i <= startDate.weekday % 7; i++) {
+      activities.add(ActivityGridActivity(date: startDate.subtract(Duration(days: i)), additions: -1, level: -1));
     }
 
-    var currentDate = startDate.clone();
+    var currentDate = startDate;
     while (!currentDate.isAfter(endDate)) {
-      final key = currentDate.format(pattern: 'yyyy-MM-dd');
-      final change = changesMap[key];
+      final additionsFromChange = changesMap[_dateKey(currentDate)];
 
       late final int additions;
       late final int level;
 
-      if (change != null) {
-        additions = change.additions;
+      if (additionsFromChange != null) {
+        additions = additionsFromChange;
         if (additions == 0) {
           level = 0;
         } else if (p95 == 0) {
@@ -648,8 +608,8 @@ class ActivityGrid extends HookWidget {
         level = 0;
       }
 
-      activities.add(ActivityGridActivity(date: currentDate.clone(), additions: additions, level: level));
-      currentDate = currentDate.add(days: 1);
+      activities.add(ActivityGridActivity(date: currentDate, additions: additions, level: level));
+      currentDate = currentDate.add(const Duration(days: 1));
     }
 
     return activities;
@@ -699,7 +659,7 @@ class ActivityGrid extends HookWidget {
           weekMonth = activity.date.month;
         }
 
-        if (activity.date.date == 1) {
+        if (activity.date.day == 1) {
           hasFirstOfMonth = true;
           weekMonth = activity.date.month;
           break;
@@ -723,32 +683,44 @@ class ActivityGrid extends HookWidget {
     return monthSpans;
   }
 
-  Color _getColorByLevel(BuildContext context, int level) {
-    final isDark = context.theme.brightness == Brightness.dark;
-
-    switch (level) {
-      case 0:
-        return isDark ? AppColors.dark.gray_800 : AppColors.gray_200;
-      case 1:
-        return isDark ? AppColors.dark.green_700 : AppColors.green_300;
-      case 2:
-        return isDark ? AppColors.dark.green_500 : AppColors.green_500;
-      case 3:
-        return isDark ? AppColors.dark.green_400 : AppColors.green_600;
-      case 4:
-        return isDark ? AppColors.dark.green_300 : AppColors.green_700;
-      case 5:
-        return isDark ? AppColors.dark.green_200 : AppColors.green_800;
-      default:
-        return isDark ? AppColors.dark.gray_800 : AppColors.gray_200;
+  List<Color> _levelColors(bool isDark) {
+    if (isDark) {
+      return [
+        AppColors.dark.gray_800,
+        AppColors.dark.green_700,
+        AppColors.dark.green_500,
+        AppColors.dark.green_400,
+        AppColors.dark.green_300,
+        AppColors.dark.green_200,
+      ];
     }
+
+    return [
+      AppColors.gray_200,
+      AppColors.green_300,
+      AppColors.green_500,
+      AppColors.green_600,
+      AppColors.green_700,
+      AppColors.green_800,
+    ];
   }
+
+  DateTime _startOfDay(DateTime date) => DateTime(date.year, date.month, date.day);
+
+  DateTime _toLocalDate(Jiffy date) {
+    final local = date.toLocal();
+    return DateTime(local.year, local.month, local.date);
+  }
+
+  int _dateKey(DateTime date) => (date.year * 10000) + (date.month * 100) + date.day;
+
+  String _formatDate(DateTime date) => '${date.year}년 ${date.month}월 ${date.day}일';
 }
 
 class ActivityGridActivity {
   ActivityGridActivity({required this.date, required this.additions, required this.level});
 
-  final Jiffy date;
+  final DateTime date;
   final int additions;
   final int level;
 }
@@ -788,5 +760,60 @@ class _TooltipPositionDelegate extends SingleChildLayoutDelegate {
   @override
   bool shouldRelayout(covariant _TooltipPositionDelegate oldDelegate) {
     return cellPosition != oldDelegate.cellPosition || cellSize != oldDelegate.cellSize;
+  }
+}
+
+class _ActivityGridPainter extends CustomPainter {
+  const _ActivityGridPainter({
+    required this.weeks,
+    required this.levelColors,
+    required this.selectionBorderColor,
+    this.selectedWeekIndex,
+    this.selectedDayIndex,
+  });
+
+  final List<List<ActivityGridActivity>> weeks;
+  final List<Color> levelColors;
+  final Color selectionBorderColor;
+  final int? selectedWeekIndex;
+  final int? selectedDayIndex;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cellPaint = Paint()..style = PaintingStyle.fill;
+    final selectionPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = selectionBorderColor;
+
+    for (var week = 0; week < weeks.length; week++) {
+      for (var day = 0; day < weeks[week].length; day++) {
+        final activity = weeks[week][day];
+        if (activity.level == -1) {
+          continue;
+        }
+
+        final x = week * (ActivityGrid.cellSize + ActivityGrid.cellGap);
+        final y = day * (ActivityGrid.cellSize + ActivityGrid.cellGap);
+        final cellRect = Rect.fromLTWH(x, y, ActivityGrid.cellSize, ActivityGrid.cellSize);
+
+        cellPaint.color = levelColors[activity.level.clamp(0, levelColors.length - 1)];
+        canvas.drawRRect(RRect.fromRectAndRadius(cellRect, const Radius.circular(2)), cellPaint);
+
+        if (selectedWeekIndex == week && selectedDayIndex == day) {
+          final selectionRect = Rect.fromLTWH(x - 1.5, y - 1.5, ActivityGrid.cellSize + 3, ActivityGrid.cellSize + 3);
+          canvas.drawRRect(RRect.fromRectAndRadius(selectionRect, const Radius.circular(3.5)), selectionPaint);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ActivityGridPainter oldDelegate) {
+    return weeks != oldDelegate.weeks ||
+        levelColors != oldDelegate.levelColors ||
+        selectionBorderColor != oldDelegate.selectionBorderColor ||
+        selectedWeekIndex != oldDelegate.selectedWeekIndex ||
+        selectedDayIndex != oldDelegate.selectedDayIndex;
   }
 }
