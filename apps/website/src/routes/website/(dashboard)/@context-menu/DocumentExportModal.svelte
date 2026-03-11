@@ -191,10 +191,10 @@
     {@const layoutMode = documentQuery.data.document.layoutMode as LayoutMode}
     {@const currentPageEnabled = layoutMode.type === 'paginated'}
 
-    <div class={css({ padding: '20px' })}>
-      <h2 class={css({ fontSize: '18px', fontWeight: 'semibold', marginBottom: '16px' })}>파일로 내보내기</h2>
+    <div class={css({ padding: '24px' })}>
+      <h2 class={css({ fontSize: '15px', fontWeight: 'bold', letterSpacing: '-0.01em', marginBottom: '16px' })}>파일로 내보내기</h2>
 
-      <div class={flex({ flexDirection: 'column', gap: '16px', paddingY: '8px' })}>
+      <div class={flex({ flexDirection: 'column', gap: '16px' })}>
         <div class={flex({ justifyContent: 'space-between', alignItems: 'center', gap: '32px' })}>
           <div class={css({ fontSize: '13px', color: 'text.subtle' })}>파일 형식</div>
           <Select
@@ -394,7 +394,7 @@
         </div>
       </div>
 
-      <div class={flex({ gap: '8px', justifyContent: 'flex-end', marginTop: '20px' })}>
+      <div class={flex({ gap: '10px', justifyContent: 'flex-end', marginTop: '24px' })}>
         <Button onclick={close} variant="secondary">취소</Button>
         <Button loading={exportDocumentResult.loading} onclick={handleConfirm}>내보내기</Button>
       </div>

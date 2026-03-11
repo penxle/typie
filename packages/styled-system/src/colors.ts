@@ -448,6 +448,8 @@ export const semanticColors = defineSemanticTokens.colors({
   'accent.danger.hover': { value: { base: '{colors.red.500}', _dark: '{colors.dark.red.500}' } },
   'accent.danger.active': { value: { base: '{colors.red.700}', _dark: '{colors.dark.red.600}' } },
   'accent.danger.subtle': { value: { base: '{colors.red.50}', _dark: '{colors.dark.red.900}' } },
+  'accent.warning.default': { value: { base: '{colors.amber.600}', _dark: '{colors.dark.amber.300}' } },
+  'accent.warning.subtle': { value: { base: '{colors.amber.50}', _dark: '{colors.dark.amber.900}' } },
   'accent.success.default': { value: { base: '{colors.green.700}', _dark: '{colors.dark.green.300}' } },
   'accent.success.subtle': { value: { base: '{colors.green.50}', _dark: '{colors.dark.green.900}' } },
 

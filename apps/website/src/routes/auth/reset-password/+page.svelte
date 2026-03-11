@@ -103,6 +103,6 @@
       </div>
     </div>
 
-    <Button style={css.raw({ height: '40px' })} loading={form.state.isLoading} size="lg" type="submit">비밀번호 변경하기</Button>
+    <Button loading={form.state.isLoading} size="lg" type="submit">비밀번호 변경하기</Button>
   </form>
 </div>

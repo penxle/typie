@@ -123,7 +123,9 @@
   open={app.state.shortcutsOpen}
 >
   <div class={css({ padding: '24px' })}>
-    <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default', marginBottom: '20px' })}>단축키</h2>
+    <h2 class={css({ fontSize: '15px', fontWeight: 'bold', letterSpacing: '-0.01em', color: 'text.default', marginBottom: '24px' })}>
+      단축키
+    </h2>
 
     <div class={flex({ gap: '32px' })}>
       <div class={flex({ direction: 'column', gap: '20px', flex: '1' })}>

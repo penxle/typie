@@ -67,7 +67,7 @@
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
     <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>{title}</div>
 
-    <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>
+    <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>
       {message}
     </div>
   </div>
@@ -102,8 +102,7 @@
   </div>
 
   <Button
-    style={css.raw({ marginTop: '32px', width: 'full', height: '40px' })}
-    gradient
+    style={css.raw({ marginTop: '24px', width: 'full' })}
     onclick={() => {
       open = false;
     }}

@@ -170,7 +170,7 @@
     </div>
 
     <div class={flex({ flexDirection: 'column', gap: '12px' })}>
-      <Button style={css.raw({ height: '40px' })} loading={form.state.isLoading} size="lg" type="submit">로그인</Button>
+      <Button loading={form.state.isLoading} size="lg" type="submit">로그인</Button>
 
       <div class={center()}>
         <a

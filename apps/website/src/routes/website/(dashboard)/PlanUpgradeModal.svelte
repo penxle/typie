@@ -117,7 +117,7 @@
     <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
       <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>{title}</div>
 
-      <div class={css({ fontSize: '13px', color: 'text.faint', whiteSpace: 'pre-line' })}>
+      <div class={css({ fontSize: '13px', color: 'text.muted', whiteSpace: 'pre-line' })}>
         {message}
       </div>
     </div>
@@ -157,11 +157,10 @@
       </ul>
     </div>
 
-    <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '32px', width: 'full' })}>
+    <div class={flex({ flexDirection: 'column', gap: '10px', marginTop: '24px', width: 'full' })}>
       {#if canStartTrial}
         <Button
-          style={css.raw({ width: 'full', height: '40px' })}
-          gradient
+          style={css.raw({ width: 'full' })}
           onclick={() => {
             Dialog.confirm({
               title: '무료 체험을 시작하시겠어요?',
@@ -194,8 +193,7 @@
       {/if}
 
       <Button
-        style={css.raw({ width: 'full', height: '40px' })}
-        gradient={!canStartTrial}
+        style={css.raw({ width: 'full' })}
         onclick={() => {
           PlanUpgradeDialog.close();
           pushState('', { shallowRoute: '/preference/billing' });

@@ -67,7 +67,7 @@
   <div class={flex({ flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '16px', textAlign: 'center' })}>
     <div class={css({ fontSize: '18px', fontWeight: 'bold' })}>친구 초대로 가입하셨네요!</div>
 
-    <div class={css({ fontSize: '13px', color: 'text.faint', wordBreak: 'keep-all' })}>
+    <div class={css({ fontSize: '13px', color: 'text.muted', wordBreak: 'keep-all' })}>
       타이피 FULL ACCESS 플랜을 체험해볼 수 있는 4,900원 크레딧 혜택을 받았어요. 플랜을 업그레이드하면 나를 초대한 친구도 1달 무료 혜택을
       받아요.
     </div>
@@ -109,7 +109,7 @@
   </div>
 
   <Button
-    style={css.raw({ marginTop: '32px', width: 'full', height: '40px' })}
+    style={css.raw({ marginTop: '24px', width: 'full' })}
     onclick={() => {
       open = false;
     }}
@@ -121,8 +121,7 @@
   </Button>
 
   <Button
-    style={css.raw({ marginTop: '8px', width: 'full', height: '40px' })}
-    gradient
+    style={css.raw({ marginTop: '10px', width: 'full' })}
     onclick={() => {
       open = false;
       pushState('', { shallowRoute: '/preference/billing' });

@@ -89,7 +89,7 @@
       </div>
 
       {#if typeof window !== 'undefined' && !window.__webview__}
-        <Button style={css.raw({ width: 'full', height: '40px' })} href="/" size="lg" type="link">홈으로 돌아가기</Button>
+        <Button style={css.raw({ width: 'full' })} href="/" size="lg" type="link">홈으로 돌아가기</Button>
       {/if}
 
       {#if error?.eventId}

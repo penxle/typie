@@ -302,7 +302,7 @@
       <HorizontalDivider color="secondary" />
 
       <div class={flex({ flexDirection: 'column', gap: '8px' })}>
-        <Button style={css.raw({ width: 'full' })} external gradient href="https://typie.link" size="lg" type="link" variant="primary">
+        <Button style={css.raw({ width: 'full' })} external href="https://typie.link" size="lg" type="link" variant="primary">
           타이피 앱 바로가기
         </Button>
 
