@@ -47,6 +47,7 @@ class EditorView extends HookWidget {
     required this.controller,
     required this.title,
     required this.subtitle,
+    required this.headerKey,
     required this.onTitleChanged,
     required this.onSubtitleChanged,
     required this.titleFocusNode,
@@ -60,6 +61,7 @@ class EditorView extends HookWidget {
   final EditorController controller;
   final String title;
   final String subtitle;
+  final GlobalKey headerKey;
   final ValueChanged<String> onTitleChanged;
   final ValueChanged<String> onSubtitleChanged;
   final FocusNode titleFocusNode;
@@ -96,8 +98,10 @@ class EditorView extends HookWidget {
     final suppressScrollbarShow = useValueNotifier(false);
     final suppressScrollbarTimer = useRef<Timer?>(null);
     final titleAreaHeight = useValueNotifier<double>(0);
+    final viewportTopInset = useValueNotifier<double>(0);
     final scrollMetricsRevision = useValueNotifier(0);
-    useValueListenable(titleAreaHeight);
+    final currentTitleAreaHeight = useValueListenable(titleAreaHeight);
+    final currentViewportTopInset = useValueListenable(viewportTopInset);
     final longPressPosition = useValueNotifier<Offset?>(null);
     final handleDragPosition = useValueNotifier<Offset?>(null);
     final interactionState = useMemoized(EditorInteractionState.new);
@@ -121,6 +125,7 @@ class EditorView extends HookWidget {
     final cursorFollowScrollMode = useRef(ScrollMode.auto);
     final typewriterRecoveryPending = useRef(false);
     final previousExternalElements = useRef<List<ExternalElement>?>(controller.state.externalElements);
+    final floatingContainerKey = useMemoized(GlobalKey.new);
 
     final lastSize = useRef<(double, double, double)>((0, 0, 0));
 
@@ -149,6 +154,25 @@ class EditorView extends HookWidget {
         return;
       }
       suppressScrollbarShow.value = visible;
+    }
+
+    void syncViewportTopInset() {
+      final headerRenderBox = headerKey.currentContext?.findRenderObject() as RenderBox?;
+      final containerRenderBox = floatingContainerKey.currentContext?.findRenderObject() as RenderBox?;
+      if (headerRenderBox == null ||
+          containerRenderBox == null ||
+          !headerRenderBox.hasSize ||
+          !containerRenderBox.hasSize) {
+        return;
+      }
+
+      final headerBottom = headerRenderBox.localToGlobal(Offset(0, headerRenderBox.size.height)).dy;
+      final containerTop = containerRenderBox.localToGlobal(Offset.zero).dy;
+      final nextViewportTopInset = (headerBottom - containerTop).clamp(0.0, containerRenderBox.size.height);
+
+      if ((viewportTopInset.value - nextViewportTopInset).abs() > 0.5) {
+        viewportTopInset.value = nextViewportTopInset;
+      }
     }
 
     void setZoom(double zoom, {bool commitRender = false}) {
@@ -422,6 +446,7 @@ class EditorView extends HookWidget {
         cursor: c,
         typewriterEnabled: typewriter,
         typewriterPosition: typewriter ? pref.typewriterPosition : 0.5,
+        viewportTopInset: currentViewportTopInset,
       );
     }
 
@@ -505,13 +530,16 @@ class EditorView extends HookWidget {
       );
       final viewportHeight = verticalPosition.viewportDimension;
       final cursorHeight = geo.toDisplayY(cursor.height);
-      final availableRange = viewportHeight - cursorHeight;
-      final targetScroll = geo.cursorTopInContent(cursor) - availableRange * pref.typewriterPosition;
+      final usableViewportHeight = (viewportHeight - currentViewportTopInset).clamp(0.0, double.infinity);
+      final availableRange = (usableViewportHeight - cursorHeight).clamp(0.0, double.infinity);
+      final targetScroll =
+          geo.cursorTopInContent(cursor) - currentViewportTopInset - availableRange * pref.typewriterPosition;
       final totalContentHeight = geo.totalContentHeight(
         viewportHeight: viewportHeight,
         cursor: cursor,
         typewriterEnabled: true,
         typewriterPosition: pref.typewriterPosition,
+        viewportTopInset: currentViewportTopInset,
       );
       final maxScrollExtent = (totalContentHeight - viewportHeight).clamp(0.0, double.infinity);
       final scrollOffset = targetScroll.clamp(0.0, maxScrollExtent);
@@ -615,6 +643,8 @@ class EditorView extends HookWidget {
     // resizes the body and the scroll viewport shrinks. MediaQuery provides
     // the ground truth — reacting to it is deterministic with no race
     // conditions against our native EventChannel.
+    final mediaQuerySize = MediaQuery.sizeOf(context);
+    final mediaQueryPaddingTop = MediaQuery.paddingOf(context).top;
     final viewInsetsBottom = MediaQuery.viewInsetsOf(context).bottom;
     final lastViewInsetsBottom = useRef(viewInsetsBottom);
 
@@ -645,6 +675,16 @@ class EditorView extends HookWidget {
       }
       return null;
     }, [viewInsetsBottom]);
+
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) {
+          return;
+        }
+        syncViewportTopInset();
+      });
+      return null;
+    }, [mediaQuerySize, mediaQueryPaddingTop, currentTitleAreaHeight]);
 
     useEffect(() {
       // Fallback repeat only: used when platform repeat events are not delivered.
@@ -796,86 +836,96 @@ class EditorView extends HookWidget {
       };
     }, []);
 
-    useEffect(() {
-      void applyPendingCursorScroll() {
-        final pendingMode = controller.pendingScrollMode;
-        final nextLayout = controller.state.layout;
-        final nextCursor = controller.state.cursor;
-        final nextSelection = controller.state.selection;
-        final nextScrollTargetCursor = resolveScrollTargetCursor(cursor: nextCursor, selection: nextSelection);
-        final nextExternalElements = controller.state.externalElements;
-        final externalElementsChanged = !identical(previousExternalElements.value, nextExternalElements);
-        previousExternalElements.value = nextExternalElements;
+    useEffect(
+      () {
+        void applyPendingCursorScroll() {
+          final pendingMode = controller.pendingScrollMode;
+          final nextLayout = controller.state.layout;
+          final nextCursor = controller.state.cursor;
+          final nextSelection = controller.state.selection;
+          final nextScrollTargetCursor = resolveScrollTargetCursor(cursor: nextCursor, selection: nextSelection);
+          final nextExternalElements = controller.state.externalElements;
+          final externalElementsChanged = !identical(previousExternalElements.value, nextExternalElements);
+          previousExternalElements.value = nextExternalElements;
 
-        if (nextCursor == null && nextScrollTargetCursor == null) {
-          typewriterRecoveryPending.value = false;
-          cursorFollowScrollActive.value = false;
-          if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
-            controller.clearPendingScroll();
-          }
-          pendingScroll.value = null;
-          pendingScrollPageIdx.value = null;
-          setRenderedCursorSnapshot(null);
-          return;
-        }
-
-        final focused = controller.state.isFocused;
-        final interaction = interactionState.snapshot();
-        final blockedByInteraction = interaction.isLongPressing || interaction.isDndActive || !focused;
-        if (blockedByInteraction || nextLayout == null || nextScrollTargetCursor == null) {
-          if (blockedByInteraction) {
+          if (nextCursor == null && nextScrollTargetCursor == null) {
             typewriterRecoveryPending.value = false;
-          }
-          if (!focused || nextScrollTargetCursor == null) {
             cursorFollowScrollActive.value = false;
+            if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
+              controller.clearPendingScroll();
+            }
+            pendingScroll.value = null;
+            pendingScrollPageIdx.value = null;
+            setRenderedCursorSnapshot(null);
+            return;
           }
-          if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
+
+          final focused = controller.state.isFocused;
+          final interaction = interactionState.snapshot();
+          final blockedByInteraction = interaction.isLongPressing || interaction.isDndActive || !focused;
+          if (blockedByInteraction || nextLayout == null || nextScrollTargetCursor == null) {
+            if (blockedByInteraction) {
+              typewriterRecoveryPending.value = false;
+            }
+            if (!focused || nextScrollTargetCursor == null) {
+              cursorFollowScrollActive.value = false;
+            }
+            if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
+              controller.clearPendingScroll();
+            }
+            pendingScroll.value = null;
+            pendingScrollPageIdx.value = null;
+            setRenderedCursorSnapshot(nextCursor);
+            return;
+          }
+
+          if (pendingMode != null) {
+            final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
+            final waitForCursorUpdate = controller.pendingScrollWaitForCursorUpdate;
+            typewriterRecoveryPending.value = useTypewriter;
             controller.clearPendingScroll();
-          }
-          pendingScroll.value = null;
-          pendingScrollPageIdx.value = null;
-          setRenderedCursorSnapshot(nextCursor);
-          return;
-        }
-
-        if (pendingMode != null) {
-          final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
-          final waitForCursorUpdate = controller.pendingScrollWaitForCursorUpdate;
-          typewriterRecoveryPending.value = useTypewriter;
-          controller.clearPendingScroll();
-          applyCursorScrollAndVisual(
-            nextScrollTargetCursor,
-            typewriter: useTypewriter,
-            synchronizeWithRender: !waitForCursorUpdate,
-          );
-          return;
-        }
-
-        if (externalElementsChanged) {
-          if (cursorFollowScrollActive.value) {
-            final followTypewriter = cursorFollowScrollMode.value == ScrollMode.typewriter && pref.typewriterEnabled;
-            typewriterRecoveryPending.value = false;
-            applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: followTypewriter);
+            applyCursorScrollAndVisual(
+              nextScrollTargetCursor,
+              typewriter: useTypewriter,
+              synchronizeWithRender: !waitForCursorUpdate,
+            );
             return;
           }
 
-          if (typewriterRecoveryPending.value && pref.typewriterEnabled) {
+          if (externalElementsChanged) {
+            if (cursorFollowScrollActive.value) {
+              final followTypewriter = cursorFollowScrollMode.value == ScrollMode.typewriter && pref.typewriterEnabled;
+              typewriterRecoveryPending.value = false;
+              applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: followTypewriter);
+              return;
+            }
+
+            if (typewriterRecoveryPending.value && pref.typewriterEnabled) {
+              typewriterRecoveryPending.value = false;
+              applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: true);
+              return;
+            }
+
             typewriterRecoveryPending.value = false;
-            applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: true);
+            setRenderedCursorSnapshot(nextCursor);
             return;
           }
 
-          typewriterRecoveryPending.value = false;
-          setRenderedCursorSnapshot(nextCursor);
-          return;
+          applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: pref.typewriterEnabled);
         }
 
-        applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: pref.typewriterEnabled);
-      }
-
-      controller.addListener(applyPendingCursorScroll);
-      return () => controller.removeListener(applyPendingCursorScroll);
-    }, [controller, dndController, currentDisplayZoom, pref.typewriterEnabled]);
+        controller.addListener(applyPendingCursorScroll);
+        return () => controller.removeListener(applyPendingCursorScroll);
+      },
+      [
+        controller,
+        dndController,
+        currentDisplayZoom,
+        currentViewportTopInset,
+        sheetBottomInset,
+        pref.typewriterEnabled,
+      ],
+    );
 
     useEffect(() {
       void onScroll() {
@@ -956,6 +1006,7 @@ class EditorView extends HookWidget {
         targetY: y,
         targetWidth: width,
         targetHeight: height,
+        viewportTopInset: currentViewportTopInset,
       );
     }
 
@@ -979,7 +1030,7 @@ class EditorView extends HookWidget {
       });
 
       return null;
-    }, [sheetBottomInset]);
+    }, [sheetBottomInset, currentViewportTopInset]);
 
     useEffect(() {
       final target = state.state.search.scrollTarget;
@@ -1027,6 +1078,7 @@ class EditorView extends HookWidget {
               targetY: target.boundsY,
               targetWidth: target.boundsWidth,
               targetHeight: target.boundsHeight,
+              viewportTopInset: currentViewportTopInset,
             );
           }
           controller.remarkScrollTarget.value = null;
@@ -1035,7 +1087,7 @@ class EditorView extends HookWidget {
 
       controller.remarkScrollTarget.addListener(onRemarkScroll);
       return () => controller.remarkScrollTarget.removeListener(onRemarkScroll);
-    }, []);
+    }, [controller, currentDisplayZoom, currentViewportTopInset, sheetBottomInset]);
 
     if (currentLayout == null) {
       return const SizedBox.shrink();
@@ -1078,6 +1130,7 @@ class EditorView extends HookWidget {
           longPressPosition: longPressPosition,
           handleDragPosition: handleDragPosition,
           titleAreaHeight: titleAreaHeight,
+          viewportTopInset: viewportTopInset,
           title: titleNotifier,
           subtitle: subtitleNotifier,
           onTitleChanged: onTitleChanged,
@@ -1113,6 +1166,7 @@ class EditorView extends HookWidget {
                 children: [
                   Expanded(
                     child: Stack(
+                      key: floatingContainerKey,
                       fit: StackFit.expand,
                       children: [
                         if (isPaginatedLayout) Positioned.fill(child: ColoredBox(color: context.colors.surfaceSubtle)),
@@ -1166,7 +1220,8 @@ class EditorView extends HookWidget {
                           brightness: context.theme.brightness,
                           controller: inputController,
                         ),
-                        if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
+                        if (pref.characterCountFloatingEnabled)
+                          NativeCharacterCountFloating(containerKey: floatingContainerKey, headerKey: headerKey),
                         const NativeEditorZoomOverlay(),
                         const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
                         if (state.state.repasteAsTextEnabled)

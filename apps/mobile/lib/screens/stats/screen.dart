@@ -148,7 +148,6 @@ class StatsScreen extends StatelessWidget {
                           Popover(
                             screenPadding: const EdgeInsets.all(20),
                             collapsedBorderRadius: BorderRadius.circular(8),
-                            expandedBorderRadius: BorderRadius.circular(16),
                             backgroundColor: context.colors.surfaceDefault,
                             borderSide: BorderSide(color: context.colors.borderStrong),
                             anchor: const _ActionButton(child: _ActionButtonContent(label: '이미지 받기')),
@@ -403,23 +402,28 @@ class _ActivityImagePane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopoverList(
-      items: [
-        PopoverListItem(
-          onSelected: () {
-            Popover.close(context);
-            onCopy();
-          },
-          child: const _ActivityImagePaneItem(icon: LucideLightIcons.copy, label: '클립보드에 복사'),
+    return IntrinsicWidth(
+      child: Padding(
+        padding: const EdgeInsets.all(Popover.panePadding),
+        child: PopoverList(
+          items: [
+            PopoverListItem(
+              onSelected: () {
+                Popover.close(context);
+                onCopy();
+              },
+              child: const _ActivityImagePaneItem(icon: LucideLightIcons.copy, label: '클립보드에 복사'),
+            ),
+            PopoverListItem(
+              onSelected: () {
+                Popover.close(context);
+                onDownload();
+              },
+              child: const _ActivityImagePaneItem(icon: LucideLightIcons.download, label: '기기에 저장'),
+            ),
+          ],
         ),
-        PopoverListItem(
-          onSelected: () {
-            Popover.close(context);
-            onDownload();
-          },
-          child: const _ActivityImagePaneItem(icon: LucideLightIcons.download, label: '기기에 저장'),
-        ),
-      ],
+      ),
     );
   }
 }

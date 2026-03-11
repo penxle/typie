@@ -124,6 +124,7 @@ srem
 sslmode
 stakater
 stibee
+squircle
 talosctl
 tauri
 tini

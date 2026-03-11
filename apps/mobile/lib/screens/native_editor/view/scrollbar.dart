@@ -45,6 +45,8 @@ class EditorScrollbar extends HookWidget {
     final horizontalScrollController = scope.horizontalScrollController;
     final isKeyboardVisible = useValueListenable(toolbarScope.isKeyboardVisible);
     final isEditorFocused = useValueListenable(toolbarScope.isEditorFocused);
+    final viewportTopInset = useValueListenable(scope.viewportTopInset);
+    final sheetBottomInset = useValueListenable(scope.controller.sheetBottomInset);
     final layout = state.state.layout!;
     final pages = state.state.pages;
     final currentStateCursor = state.state.cursor;
@@ -157,12 +159,15 @@ class EditorScrollbar extends HookWidget {
     );
 
     double calculateFallbackTotalContentHeight() {
-      final viewportHeight = hasVerticalClients ? verticalPosition.viewportDimension : viewHeight;
+      final viewportHeight = hasVerticalClients
+          ? verticalPosition.viewportDimension
+          : math.max<double>(0, viewHeight - sheetBottomInset);
       return geometry.totalContentHeight(
         viewportHeight: viewportHeight,
         cursor: cursor,
         typewriterEnabled: typewriterEnabled,
         typewriterPosition: typewriterPosition,
+        viewportTopInset: viewportTopInset,
       );
     }
 

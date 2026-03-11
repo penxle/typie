@@ -8,7 +8,9 @@ import 'package:ferry/ferry.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:typie/context/bottom_sheet.dart';
+import 'package:typie/context/modal.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
@@ -16,22 +18,29 @@ import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
 import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
+import 'package:typie/modals/share.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/routers/app.gr.dart';
 import 'package:typie/screens/native_editor/__generated__/delete_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/document_note_query.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/duplicate_document_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.data.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/native_editor_query.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/update_document_mutation.req.gql.dart';
+import 'package:typie/screens/native_editor/__generated__/update_document_type_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/user_usage_update_stream.req.gql.dart';
 import 'package:typie/screens/native_editor/__generated__/view_entity_mutation.req.gql.dart';
 import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/screens/native_editor/context.dart';
+import 'package:typie/screens/native_editor/heading.dart';
 import 'package:typie/screens/native_editor/init.dart';
 import 'package:typie/screens/native_editor/note.dart';
 import 'package:typie/screens/native_editor/sheet/ai_feedback.dart';
+import 'package:typie/screens/native_editor/sheet/export.dart';
 import 'package:typie/screens/native_editor/sheet/find_replace.dart';
-import 'package:typie/screens/native_editor/sheet/menu.dart';
+import 'package:typie/screens/native_editor/sheet/info.dart';
 import 'package:typie/screens/native_editor/sheet/remark.dart';
+import 'package:typie/screens/native_editor/sheet/settings.dart';
 import 'package:typie/screens/native_editor/sheet/spellcheck.dart';
 import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/fonts.dart';
@@ -43,9 +52,9 @@ import 'package:typie/screens/native_editor/sync/title.dart';
 import 'package:typie/screens/native_editor/view/editor.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/services/state.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum NativeEditorMode { editor, note }
 
@@ -79,6 +88,7 @@ class _Content extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final editorContext = useMemoized(EditorContext.new);
+    final headerKey = useMemoized(GlobalKey.new);
     final pref = useService<Pref>();
     final error = useState<String?>(null);
     final pageController = usePageController();
@@ -88,7 +98,6 @@ class _Content extends HookWidget {
     final autoDiscard = useMemoized(() => AutoDiscardSession.consume(slug), [slug]);
 
     final document = data.entity.node.when(document: (doc) => doc, orElse: () => null);
-    final headingTitle = document?.title ?? '(제목 없음)';
 
     void markEdited() {
       autoDiscard.markEdited();
@@ -121,8 +130,10 @@ class _Content extends HookWidget {
         return const SizedBox.shrink();
       }
 
+      Widget child;
+
       if (error.value != null) {
-        return Center(
+        child = Center(
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -144,20 +155,296 @@ class _Content extends HookWidget {
             ),
           ),
         );
+      } else {
+        child = EditorScope(
+          editorContext: editorContext,
+          child: ValueListenableBuilder<int>(
+            valueListenable: editorContext.resetKey,
+            builder: (context, resetKey, _) => _EditorContent(
+              key: ValueKey(resetKey),
+              slug: slug,
+              data: data,
+              client: client,
+              error: error,
+              onEdited: markEdited,
+              headerKey: headerKey,
+            ),
+          ),
+        );
       }
 
-      return EditorScope(
-        editorContext: editorContext,
-        child: ValueListenableBuilder<int>(
-          valueListenable: editorContext.resetKey,
-          builder: (context, resetKey, _) => _EditorContent(
-            key: ValueKey(resetKey),
-            slug: slug,
-            data: data,
-            client: client,
-            error: error,
-            onEdited: markEdited,
+      final topInset = MediaQuery.paddingOf(context).top;
+
+      return Stack(
+        children: [
+          Positioned.fill(child: child),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: topInset + 72,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      context.colors.surfaceDefault.withValues(alpha: 0.98),
+                      context.colors.surfaceDefault.withValues(alpha: 0.86),
+                      context.colors.surfaceDefault.withValues(alpha: 0.42),
+                      context.colors.surfaceDefault.withValues(alpha: 0),
+                    ],
+                    stops: const [0, 0.32, 0.72, 1],
+                  ),
+                ),
+              ),
+            ),
           ),
+        ],
+      );
+    }
+
+    Future<bool> ensureFullAccess(String message) async {
+      if (data.me!.subscription != null) {
+        return true;
+      }
+
+      final result = await context.showBottomSheet<PlanUpgradeResult>(
+        intercept: true,
+        child: PlanUpgradeBottomSheet(message: message),
+      );
+
+      if (result == PlanUpgradeResult.trialStarted) {
+        unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
+      } else if (result == PlanUpgradeResult.upgrade) {
+        if (context.mounted) {
+          await context.router.popAndPush(const EnrollPlanRoute());
+        }
+      }
+
+      return false;
+    }
+
+    Future<void> openFindReplace() async {
+      final controller = editorContext.controller;
+      if (controller == null) {
+        return;
+      }
+
+      await context.showBottomSheet(
+        intercept: true,
+        overlayOpacity: 0.05,
+        dismissKeyboardOnTap: false,
+        heightNotifier: controller.sheetBottomInset,
+        child: FindReplaceSheet(controller: controller),
+      );
+    }
+
+    Future<void> openRemark() async {
+      final controller = editorContext.controller;
+      if (controller == null) {
+        return;
+      }
+
+      try {
+        await context.showBottomSheet(
+          intercept: true,
+          overlayOpacity: 0.05,
+          heightNotifier: controller.sheetBottomInset,
+          child: RemarkBottomSheet(controller: controller, client: client, userId: data.me!.id),
+        );
+      } finally {
+        if (!controller.isDisposed) {
+          controller.remarkHighlightTarget.value = null;
+        }
+      }
+    }
+
+    Future<void> openSpellcheck() async {
+      final controller = editorContext.controller;
+      final currentEditor = editorContext.editor;
+      final doc = document;
+      if (controller == null || currentEditor == null || doc == null) {
+        return;
+      }
+
+      final hasAccess = await ensureFullAccess('맞춤법 검사는 FULL ACCESS 플랜에서 사용할 수 있어요.');
+      if (!hasAccess || !context.mounted) {
+        return;
+      }
+
+      await context.showBottomSheet(
+        intercept: true,
+        overlayOpacity: 0.05,
+        heightNotifier: controller.sheetBottomInset,
+        child: SpellcheckSheet(controller: controller, editor: currentEditor, documentId: doc.id, client: client),
+      );
+    }
+
+    Future<void> openAiFeedback() async {
+      final controller = editorContext.controller;
+      final currentEditor = editorContext.editor;
+      final doc = document;
+      if (controller == null || currentEditor == null || doc == null) {
+        return;
+      }
+
+      final hasAccess = await ensureFullAccess('AI 피드백은 FULL ACCESS 플랜에서 사용할 수 있어요.');
+      if (!hasAccess || !context.mounted) {
+        return;
+      }
+
+      final aiOptIn = (data.me!.preferences.asMap['aiOptIn'] as bool?) ?? false;
+
+      await context.showBottomSheet(
+        intercept: true,
+        overlayOpacity: 0.05,
+        heightNotifier: controller.sheetBottomInset,
+        child: AiFeedbackSheet(
+          controller: controller,
+          editor: currentEditor,
+          documentId: doc.id,
+          client: client,
+          aiOptIn: aiOptIn,
+        ),
+      );
+    }
+
+    Future<void> openRelatedNotes() async {
+      editorContext.controller?.clearFocus();
+      await pageController.animateToPage(1, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    }
+
+    Future<void> openInfo() async {
+      final characterCounts = editorContext.editor?.getCharacterCounts();
+      await context.showBottomSheet(
+        intercept: true,
+        child: InfoSheet(slug: data.entity.slug, client: client, characterCounts: characterCounts),
+      );
+    }
+
+    Future<void> openSettings() async {
+      final controller = editorContext.controller;
+      if (controller == null) {
+        return;
+      }
+
+      await context.showBottomSheet(intercept: true, child: SettingsSheet(controller: controller));
+    }
+
+    Future<void> toggleLocked() async {
+      final doc = document;
+      if (doc == null) {
+        return;
+      }
+
+      unawaited(
+        client.request(
+          GNativeEditor_UpdateDocument_MutationReq(
+            (b) => b.vars.input
+              ..documentId = doc.id
+              ..locked = Value.present(!doc.locked),
+          ),
+        ),
+      );
+
+      if (context.mounted) {
+        context.toast(ToastType.success, doc.locked ? '편집 잠금이 해제되었어요.' : '편집 잠금이 설정되었어요.');
+      }
+    }
+
+    Future<void> openExport() async {
+      final doc = document;
+      if (doc == null) {
+        return;
+      }
+
+      await context.showBottomSheet(
+        intercept: true,
+        child: ExportSheet(
+          documentId: doc.id,
+          client: client,
+          layout: editorContext.controller?.state.layout,
+          hasSubscription: data.me?.subscription != null,
+        ),
+      );
+    }
+
+    Future<void> openInSpace() async {
+      await launchUrl(Uri.parse(data.entity.url), mode: LaunchMode.externalApplication);
+    }
+
+    Future<void> openShare() async {
+      await context.showBottomSheet(intercept: true, child: ShareBottomSheet(entityIds: [data.entity.id]));
+    }
+
+    Future<void> duplicateDocument() async {
+      final doc = document;
+      if (doc == null) {
+        return;
+      }
+
+      final res = await client.request(
+        GNativeEditor_DuplicateDocument_MutationReq((b) => b..vars.input.documentId = doc.id),
+      );
+      if (context.mounted) {
+        await context.router.popAndPush(NativeEditorRoute(slug: res.duplicateDocument.entity.slug));
+      }
+    }
+
+    Future<void> toggleDocumentType() async {
+      final doc = document;
+      if (doc == null) {
+        return;
+      }
+
+      final isToTemplate = doc.type != GDocumentType.TEMPLATE;
+
+      await context.showModal(
+        intercept: true,
+        child: ConfirmModal(
+          title: isToTemplate ? '템플릿으로 전환' : '문서로 전환',
+          message: isToTemplate
+              ? '이 문서를 템플릿으로 전환하시겠어요?\n앞으로 새 문서를 생성할 때 이 문서의 내용을 쉽게 이용할 수 있어요.'
+              : '이 템플릿을 다시 일반 문서로 전환하시겠어요?',
+          confirmText: '전환',
+          onConfirm: () async {
+            await client.request(
+              GNativeEditor_UpdateDocumentType_MutationReq(
+                (b) => b
+                  ..vars.input.documentId = doc.id
+                  ..vars.input.type = isToTemplate ? GDocumentType.TEMPLATE : GDocumentType.NORMAL,
+              ),
+            );
+            if (context.mounted) {
+              await context.router.maybePop();
+            }
+          },
+        ),
+      );
+    }
+
+    Future<void> deleteDocument() async {
+      final doc = document;
+      if (doc == null) {
+        return;
+      }
+
+      await context.showModal(
+        intercept: true,
+        child: ConfirmModal(
+          title: '문서 삭제',
+          message: '"${doc.title}" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.',
+          confirmText: '삭제하기',
+          confirmTextColor: context.colors.textBright,
+          confirmBackgroundColor: context.colors.accentDanger,
+          onConfirm: () async {
+            await client.request(GNativeEditor_DeleteDocument_MutationReq((b) => b..vars.input.documentId = doc.id));
+            if (context.mounted) {
+              await context.router.maybePop();
+            }
+          },
         ),
       );
     }
@@ -205,157 +492,44 @@ class _Content extends HookWidget {
               },
               children: [
                 Screen(
-                  heading: Heading(
-                    titleIcon: document?.type == GDocumentType.TEMPLATE
-                        ? LucideLightIcons.layout_template
-                        : LucideLightIcons.file,
-                    title: headingTitle,
-                    backgroundColor: context.colors.surfaceDefault,
-                    onTap: () => editorContext.controller?.clearFocus(),
-                    actions: [
-                      HeadingAction(
-                        icon: LucideLightIcons.ellipsis,
-                        onTap: () async {
-                          editorContext.controller?.clearFocus();
-                          if (document == null) {
-                            return;
-                          }
-                          await context.showBottomSheet(
-                            intercept: true,
-                            child: MenuSheet(
-                              data: data,
-                              document: document,
-                              client: client,
-                              editor: editorContext.editor,
-                              editorController: editorContext.controller,
-                              onOpenFindReplace: () async {
-                                final controller = editorContext.controller;
-                                if (controller == null) {
-                                  return;
-                                }
-                                await context.showBottomSheet(
-                                  intercept: true,
-                                  overlayOpacity: 0.05,
-                                  dismissKeyboardOnTap: false,
-                                  heightNotifier: controller.sheetBottomInset,
-                                  child: FindReplaceSheet(controller: controller),
-                                );
-                              },
-                              onOpenRemark: () async {
-                                final controller = editorContext.controller;
-                                if (controller == null) {
-                                  return;
-                                }
-                                try {
-                                  await context.showBottomSheet(
-                                    intercept: true,
-                                    overlayOpacity: 0.05,
-                                    heightNotifier: controller.sheetBottomInset,
-                                    child: RemarkBottomSheet(
-                                      controller: controller,
-                                      client: client,
-                                      userId: data.me!.id,
-                                    ),
-                                  );
-                                } finally {
-                                  if (!controller.isDisposed) {
-                                    controller.remarkHighlightTarget.value = null;
-                                  }
-                                }
-                              },
-                              onOpenSpellcheck: () async {
-                                final controller = editorContext.controller;
-                                final currentEditor = editorContext.editor;
-                                if (controller == null || currentEditor == null) {
-                                  return;
-                                }
-
-                                if (data.me!.subscription == null) {
-                                  final result = await context.showBottomSheet<PlanUpgradeResult>(
-                                    intercept: true,
-                                    child: const PlanUpgradeBottomSheet(message: '맞춤법 검사는 FULL ACCESS 플랜에서 사용할 수 있어요.'),
-                                  );
-
-                                  if (result == PlanUpgradeResult.trialStarted) {
-                                    unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
-                                  } else if (result == PlanUpgradeResult.upgrade) {
-                                    if (context.mounted) {
-                                      await context.router.popAndPush(const EnrollPlanRoute());
-                                    }
-                                  }
-
-                                  return;
-                                }
-
-                                await context.showBottomSheet(
-                                  intercept: true,
-                                  overlayOpacity: 0.05,
-                                  heightNotifier: controller.sheetBottomInset,
-                                  child: SpellcheckSheet(
-                                    controller: controller,
-                                    editor: currentEditor,
-                                    documentId: document.id,
-                                    client: client,
-                                  ),
-                                );
-                              },
-                              onOpenAiFeedback: () async {
-                                final controller = editorContext.controller;
-                                final currentEditor = editorContext.editor;
-                                if (controller == null || currentEditor == null) {
-                                  return;
-                                }
-
-                                if (data.me!.subscription == null) {
-                                  final result = await context.showBottomSheet<PlanUpgradeResult>(
-                                    intercept: true,
-                                    child: const PlanUpgradeBottomSheet(message: 'AI 피드백은 FULL ACCESS 플랜에서 사용할 수 있어요.'),
-                                  );
-
-                                  if (result == PlanUpgradeResult.trialStarted) {
-                                    unawaited(client.refetch(GNativeEditorScreen_QueryReq((b) => b.vars.slug = slug)));
-                                  } else if (result == PlanUpgradeResult.upgrade) {
-                                    if (context.mounted) {
-                                      await context.router.popAndPush(const EnrollPlanRoute());
-                                    }
-                                  }
-
-                                  return;
-                                }
-
-                                final aiOptIn = (data.me!.preferences.asMap['aiOptIn'] as bool?) ?? false;
-
-                                await context.showBottomSheet(
-                                  intercept: true,
-                                  overlayOpacity: 0.05,
-                                  heightNotifier: controller.sheetBottomInset,
-                                  child: AiFeedbackSheet(
-                                    controller: controller,
-                                    editor: currentEditor,
-                                    documentId: document.id,
-                                    client: client,
-                                    aiOptIn: aiOptIn,
-                                  ),
-                                );
-                              },
-                              onOpenRelatedNotes: () async {
-                                editorContext.controller?.clearFocus();
-                                await pageController.animateToPage(
-                                  1,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
-                                );
-                              },
-                              onSendInputLog: pref.devMode ? editorContext.showInputRecordingSheet : null,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                  heading: NativeEditorHeading(
+                    key: headerKey,
+                    editorContext: editorContext,
+                    documentType: document?.type,
+                    toolsPane: NativeEditorToolsPopoverPane(
+                      editorContext: editorContext,
+                      onOpenFindReplace: openFindReplace,
+                      onOpenRelatedNotes: openRelatedNotes,
+                      onOpenRemark: openRemark,
+                      onOpenSpellcheck: openSpellcheck,
+                      onOpenAiFeedback: openAiFeedback,
+                      onSendInputLog: pref.devMode && editorContext.showInputRecordingSheet != null
+                          ? () async {
+                              editorContext.showInputRecordingSheet?.call();
+                            }
+                          : null,
+                    ),
+                    documentMenuPane: document == null
+                        ? const SizedBox.shrink()
+                        : NativeEditorDocumentMenuPopoverPane(
+                            editorContext: editorContext,
+                            data: data,
+                            document: document,
+                            onOpenInfo: openInfo,
+                            onOpenSettings: openSettings,
+                            onToggleLocked: toggleLocked,
+                            onOpenExport: openExport,
+                            onOpenInSpace: openInSpace,
+                            onOpenShare: openShare,
+                            onDuplicate: duplicateDocument,
+                            onToggleDocumentType: toggleDocumentType,
+                            onDelete: deleteDocument,
+                          ),
                   ),
                   backgroundColor: context.colors.surfaceDefault,
                   keyboardDismiss: false,
                   responsive: false,
+                  extendBodyBehindAppBar: true,
                   child: buildEditorBody(),
                 ),
                 DocumentNote(
@@ -427,6 +601,7 @@ class _EditorContent extends HookWidget {
     required this.client,
     required this.error,
     required this.onEdited,
+    required this.headerKey,
     super.key,
   });
 
@@ -435,6 +610,7 @@ class _EditorContent extends HookWidget {
   final GraphQLClient client;
   final ValueNotifier<String?> error;
   final VoidCallback onEdited;
+  final GlobalKey headerKey;
 
   @override
   Widget build(BuildContext context) {
@@ -789,6 +965,15 @@ class _EditorContent extends HookWidget {
       return subscription.cancel;
     }, []);
 
+    void syncHeading({String? title, String? subtitle}) {
+      if (title != null && editorContext.headingTitle.value != title) {
+        editorContext.headingTitle.value = title;
+      }
+      if (subtitle != null && editorContext.headingSubtitle.value != subtitle) {
+        editorContext.headingSubtitle.value = subtitle;
+      }
+    }
+
     useEffect(() {
       final ts = titleSync.value;
       if (ts == null) {
@@ -798,6 +983,14 @@ class _EditorContent extends HookWidget {
       ts.updateFromServer(document?.nullableTitle, document?.subtitle);
       localTitle.value = ts.title;
       localSubtitle.value = ts.subtitle;
+      final nextTitle = ts.title;
+      final nextSubtitle = ts.subtitle;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) {
+          return;
+        }
+        syncHeading(title: nextTitle, subtitle: nextSubtitle);
+      });
       return null;
     }, [document?.nullableTitle, document?.subtitle]);
 
@@ -805,12 +998,14 @@ class _EditorContent extends HookWidget {
       onEdited();
       titleSync.value?.handleTitleChanged(value);
       localTitle.value = value;
+      syncHeading(title: value);
     }
 
     void handleSubtitleChanged(String value) {
       onEdited();
       titleSync.value?.handleSubtitleChanged(value);
       localSubtitle.value = value;
+      syncHeading(subtitle: value);
     }
 
     final isLoading = editor.value == null && error.value == null && document != null;
@@ -827,6 +1022,7 @@ class _EditorContent extends HookWidget {
       controller: editorController.value!,
       title: localTitle.value,
       subtitle: localSubtitle.value,
+      headerKey: headerKey,
       onTitleChanged: handleTitleChanged,
       onSubtitleChanged: handleSubtitleChanged,
       titleFocusNode: titleFocusNode,

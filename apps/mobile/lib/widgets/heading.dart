@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +10,30 @@ import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/styles/colors.dart';
 import 'package:typie/widgets/tappable.dart';
 import 'package:typie/widgets/vertical_divider.dart';
+
+SystemUiOverlayStyle _buildHeadingSystemUiOverlayStyle(BuildContext context) {
+  return SystemUiOverlayStyle(
+    statusBarColor: AppColors.transparent,
+    statusBarBrightness: switch (context.theme.brightness) {
+      Brightness.light => Brightness.light,
+      Brightness.dark => Brightness.dark,
+    },
+    statusBarIconBrightness: switch (context.theme.brightness) {
+      Brightness.light => Brightness.dark,
+      Brightness.dark => Brightness.light,
+    },
+    systemNavigationBarColor: AppColors.transparent,
+    systemNavigationBarDividerColor: AppColors.transparent,
+    systemNavigationBarIconBrightness: switch (context.theme.brightness) {
+      Brightness.light => Brightness.dark,
+      Brightness.dark => Brightness.light,
+    },
+    systemNavigationBarContrastEnforced: false,
+    systemStatusBarContrastEnforced: false,
+  );
+}
+
+Color _headingControlBorderColor(BuildContext context) => context.colors.borderStrong;
 
 class Heading extends StatelessWidget implements PreferredSizeWidget {
   const Heading({
@@ -46,25 +72,7 @@ class Heading extends StatelessWidget implements PreferredSizeWidget {
 
     return AnnotatedRegion(
       key: context.router.current.key,
-      value: SystemUiOverlayStyle(
-        statusBarColor: AppColors.transparent,
-        statusBarBrightness: switch (context.theme.brightness) {
-          Brightness.light => Brightness.light,
-          Brightness.dark => Brightness.dark,
-        },
-        statusBarIconBrightness: switch (context.theme.brightness) {
-          Brightness.light => Brightness.dark,
-          Brightness.dark => Brightness.light,
-        },
-        systemNavigationBarColor: AppColors.transparent,
-        systemNavigationBarDividerColor: AppColors.transparent,
-        systemNavigationBarIconBrightness: switch (context.theme.brightness) {
-          Brightness.light => Brightness.dark,
-          Brightness.dark => Brightness.light,
-        },
-        systemNavigationBarContrastEnforced: false,
-        systemStatusBarContrastEnforced: false,
-      ),
+      value: _buildHeadingSystemUiOverlayStyle(context),
       child: Listener(
         onPointerDown: (_) => onTap?.call(),
         child: DecoratedBox(
@@ -157,26 +165,227 @@ class EmptyHeading extends StatelessWidget implements PreferredSizeWidget {
     const child = SafeArea(child: SizedBox.shrink());
 
     return AnnotatedRegion(
-      value: SystemUiOverlayStyle(
-        statusBarColor: AppColors.transparent,
-        statusBarBrightness: switch (context.theme.brightness) {
-          Brightness.light => Brightness.light,
-          Brightness.dark => Brightness.dark,
-        },
-        statusBarIconBrightness: switch (context.theme.brightness) {
-          Brightness.light => Brightness.dark,
-          Brightness.dark => Brightness.light,
-        },
-        systemNavigationBarColor: AppColors.transparent,
-        systemNavigationBarDividerColor: AppColors.transparent,
-        systemNavigationBarIconBrightness: switch (context.theme.brightness) {
-          Brightness.light => Brightness.dark,
-          Brightness.dark => Brightness.light,
-        },
-        systemNavigationBarContrastEnforced: false,
-        systemStatusBarContrastEnforced: false,
-      ),
+      value: _buildHeadingSystemUiOverlayStyle(context),
       child: backgroundColor == null ? child : ColoredBox(color: backgroundColor!, child: child),
+    );
+  }
+}
+
+class CapsuleHeading extends StatelessWidget implements PreferredSizeWidget {
+  const CapsuleHeading({
+    required this.center,
+    this.leading,
+    this.trailing,
+    this.backgroundColor,
+    this.leadingWidth = HeadingCircleButton.slotWidth,
+    this.trailingWidth = HeadingCircleButton.slotWidth,
+    this.maxCenterWidth = 420,
+    this.onTap,
+    super.key,
+  });
+
+  final Widget center;
+  final Widget? leading;
+  final Widget? trailing;
+  final Color? backgroundColor;
+  final double leadingWidth;
+  final double trailingWidth;
+  final double? maxCenterWidth;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final constrainedCenter = maxCenterWidth == null
+        ? center
+        : ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxCenterWidth!),
+            child: center,
+          );
+
+    return AnnotatedRegion(
+      value: _buildHeadingSystemUiOverlayStyle(context),
+      child: Listener(
+        onPointerDown: (_) => onTap?.call(),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: backgroundColor ?? context.colors.surfaceDefault),
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: Heading._headingHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: leadingWidth,
+                      child: Align(alignment: Alignment.centerLeft, child: leading ?? const SizedBox.shrink()),
+                    ),
+                    const Gap(12),
+                    Expanded(child: Center(child: constrainedCenter)),
+                    const Gap(12),
+                    SizedBox(
+                      width: trailingWidth,
+                      child: Align(alignment: Alignment.centerRight, child: trailing ?? const SizedBox.shrink()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(Heading._headingHeight);
+}
+
+class HeadingCircleButton extends StatelessWidget {
+  const HeadingCircleButton({
+    required this.icon,
+    this.onTap,
+    this.backgroundColor,
+    this.borderColor,
+    this.boxShadow,
+    this.iconColor,
+    this.size = controlSize,
+    this.useSlotHeight = true,
+    super.key,
+  });
+
+  static const controlSize = 44.0;
+  static const slotWidth = controlSize;
+
+  final IconData icon;
+  // ignore: avoid_futureor_void -- matches Tappable and allows sync/async handlers
+  final FutureOr<void> Function()? onTap;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final List<BoxShadow>? boxShadow;
+  final Color? iconColor;
+  final double size;
+  final bool useSlotHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final control = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? context.colors.surfaceMuted,
+        shape: BoxShape.circle,
+        border: Border.all(color: borderColor ?? _headingControlBorderColor(context)),
+        boxShadow: boxShadow,
+      ),
+      child: Center(child: Icon(icon, size: 18, color: iconColor ?? context.colors.textDefault)),
+    );
+
+    final child = useSlotHeight
+        ? SizedBox(
+            width: slotWidth,
+            height: Heading._headingHeight,
+            child: Center(child: control),
+          )
+        : SizedBox(width: size, height: size, child: control);
+
+    if (onTap == null) {
+      return child;
+    }
+
+    return Tappable(onTap: onTap!, child: child);
+  }
+}
+
+class HeadingCapsuleLabel extends StatelessWidget {
+  const HeadingCapsuleLabel({
+    required this.title,
+    this.subtitle,
+    this.icon,
+    this.backgroundColor,
+    this.borderColor,
+    this.boxShadow,
+    this.iconColor,
+    this.height = HeadingCircleButton.controlSize,
+    this.borderRadius = 999,
+    super.key,
+  });
+
+  final String title;
+  final String? subtitle;
+  final IconData? icon;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final List<BoxShadow>? boxShadow;
+  final Color? iconColor;
+  final double height;
+  final double borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSubtitle = subtitle != null && subtitle!.isNotEmpty;
+    final squircleBorderRadius = BorderRadius.circular(borderRadius);
+
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          color: backgroundColor ?? context.colors.surfaceMuted,
+          shadows: boxShadow,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: squircleBorderRadius,
+            side: BorderSide(color: borderColor ?? _headingControlBorderColor(context)),
+          ),
+        ),
+        child: ClipRSuperellipse(
+          borderRadius: squircleBorderRadius,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: iconColor ?? context.colors.textSubtle),
+                  const Gap(10),
+                ],
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: hasSubtitle ? 14 : 15,
+                          fontWeight: FontWeight.w600,
+                          height: 1,
+                          color: context.colors.textDefault,
+                        ),
+                      ),
+                      if (hasSubtitle) ...[
+                        const Gap(1),
+                        Text(
+                          subtitle!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            height: 1,
+                            color: context.colors.textFaint,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

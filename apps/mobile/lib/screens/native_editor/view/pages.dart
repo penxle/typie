@@ -29,6 +29,7 @@ class PageList extends HookWidget {
     final pref = useService<Pref>();
     final state = useListenable(scope.controller);
     final sheetBottomInset = useValueListenable(scope.controller.sheetBottomInset);
+    final viewportTopInset = useValueListenable(scope.viewportTopInset);
 
     final pages = state.state.pages;
     final cursor = state.state.cursor;
@@ -246,12 +247,14 @@ class PageList extends HookWidget {
           final horizontalPhysics = scrollLocked || !allowHorizontalPan
               ? const NeverScrollableScrollPhysics()
               : const NonGestureBouncingScrollPhysics();
+          final effectiveViewportHeight = math.max<double>(0, viewHeight - sheetBottomInset);
 
           final contentBottomPadding = geo.bottomPadding(
-            viewportHeight: viewHeight,
+            viewportHeight: effectiveViewportHeight,
             cursor: cursor,
             typewriterEnabled: pref.typewriterEnabled,
             typewriterPosition: pref.typewriterPosition,
+            viewportTopInset: viewportTopInset,
           );
 
           final listView = Padding(

@@ -12,9 +12,13 @@ class EditorContext {
   VoidCallback? showInputRecordingSheet;
 
   final ValueNotifier<int> resetKey = ValueNotifier(0);
+  final ValueNotifier<String> headingTitle = ValueNotifier('');
+  final ValueNotifier<String> headingSubtitle = ValueNotifier('');
 
   void dispose() {
     resetKey.dispose();
+    headingTitle.dispose();
+    headingSubtitle.dispose();
   }
 }
 

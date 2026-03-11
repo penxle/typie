@@ -33,6 +33,7 @@ class TitleFields extends HookWidget {
 
     final titleController = useTextEditingController(text: title);
     final subtitleController = useTextEditingController(text: subtitle);
+    final topPadding = ContentGeometry.pagePadding + MediaQuery.paddingOf(context).top + 12;
 
     useEffect(() {
       if (titleController.text != title && !titleFocusNode.hasFocus) {
@@ -86,8 +87,9 @@ class TitleFields extends HookWidget {
       descendantsAreTraversable: false,
       child: Container(
         width: pageWidth,
-        padding: const EdgeInsets.only(top: ContentGeometry.pagePadding, left: 20, right: 20),
+        padding: EdgeInsets.only(top: topPadding, left: 20, right: 20),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             GestureDetector(
               onTapDown: (_) {
@@ -100,7 +102,7 @@ class TitleFields extends HookWidget {
                   controller: titleController,
                   focusNode: titleFocusNode,
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.colors.textDefault),
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                   decoration: InputDecoration(
                     hintText: '제목',
                     hintStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.colors.textDisabled),
@@ -131,7 +133,7 @@ class TitleFields extends HookWidget {
                   controller: subtitleController,
                   focusNode: subtitleFocusNode,
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDefault),
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                   decoration: InputDecoration(
                     hintText: '부제목',
                     hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDisabled),

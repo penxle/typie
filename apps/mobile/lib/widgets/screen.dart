@@ -21,6 +21,7 @@ class Screen extends StatelessWidget {
     this.responsive = true,
     this.maxWidth,
     this.bottomAction,
+    this.extendBodyBehindAppBar = false,
   });
 
   final PreferredSizeWidget? heading;
@@ -35,6 +36,7 @@ class Screen extends StatelessWidget {
   final bool responsive;
   final double? maxWidth;
   final BottomAction? bottomAction;
+  final bool extendBodyBehindAppBar;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +78,7 @@ class Screen extends StatelessWidget {
 
     return Scaffold(
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+      extendBodyBehindAppBar: extendBodyBehindAppBar,
       backgroundColor: backgroundColor ?? context.colors.surfaceSubtle,
       appBar: heading,
       body: body,

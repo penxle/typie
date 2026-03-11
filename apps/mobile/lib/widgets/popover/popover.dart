@@ -4,8 +4,16 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:typie/context/theme.dart';
 
 enum PopoverPosition { bottomLeft, bottomCenter, bottomRight, topLeft, topCenter, topRight }
+
+class PopoverPaneTransition {
+  const PopoverPaneTransition({required this.progress, required this.anchorContentRect});
+
+  final double progress;
+  final Rect anchorContentRect;
+}
 
 class PopoverPointerState {
   const PopoverPointerState({required this.event, required this.isSelectionArmed});
@@ -23,26 +31,43 @@ class PopoverPointerScope extends InheritedNotifier<ValueNotifier<Object?>> {
   }
 }
 
+class PopoverPaneTransitionScope extends InheritedWidget {
+  const PopoverPaneTransitionScope({required this.transition, required super.child, super.key});
+
+  final PopoverPaneTransition transition;
+
+  static PopoverPaneTransition? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<PopoverPaneTransitionScope>()?.transition;
+  }
+
+  @override
+  bool updateShouldNotify(covariant PopoverPaneTransitionScope oldWidget) {
+    return transition.progress != oldWidget.transition.progress ||
+        transition.anchorContentRect != oldWidget.transition.anchorContentRect;
+  }
+}
+
 class Popover extends StatefulWidget {
   const Popover({
     required this.anchor,
     required this.pane,
     this.position = PopoverPosition.bottomRight,
     this.maxWidth,
-    this.matchAnchorWidth = true,
     this.screenPadding = const EdgeInsets.all(16),
     this.collapsedBorderRadius = BorderRadius.zero,
-    this.expandedBorderRadius = const BorderRadius.all(Radius.circular(16)),
+    this.expandedBorderRadius = defaultExpandedBorderRadius,
     this.backgroundColor,
     this.borderSide,
     super.key,
   });
+  static const expandedRadius = 22.0;
+  static const panePadding = 6.0;
+  static const defaultExpandedBorderRadius = BorderRadius.all(Radius.circular(expandedRadius));
 
   final Widget anchor;
   final Widget pane;
   final PopoverPosition position;
   final double? maxWidth;
-  final bool matchAnchorWidth;
   final EdgeInsets screenPadding;
   final BorderRadius collapsedBorderRadius;
   final BorderRadius expandedBorderRadius;
@@ -58,9 +83,10 @@ class Popover extends StatefulWidget {
 }
 
 class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
+  static const _selectionArmDelay = Duration(milliseconds: 150);
   static const _samePressSelectionDistance = 9.0;
-  static const _popoverCurve = _BackEaseInOutCurve(overshoot: 0.9);
-  static const _fadeCurve = Curves.easeInOut;
+  static const _popoverCurve = Curves.easeOutExpo;
+  static const _fadeCurve = Curves.easeOutExpo;
 
   final _anchorKey = GlobalKey();
   final _paneKey = GlobalKey();
@@ -70,8 +96,8 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
 
   late final AnimationController _animationController = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 340),
-    reverseDuration: const Duration(milliseconds: 260),
+    duration: const Duration(milliseconds: 320),
+    reverseDuration: const Duration(milliseconds: 240),
   )..addStatusListener(_handleAnimationStatusChanged);
 
   bool _isExpanded = false;
@@ -80,9 +106,11 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
   bool _isMeasurementScheduled = false;
   ScrollHoldController? _anchorScrollHold;
   int? _trackedAnchorPointer;
+  Timer? _anchorSelectionArmTimer;
   bool _isTrackedAnchorPointerArmed = false;
+  bool _isTrackedAnchorPointerHoldComplete = false;
   Offset? _trackedAnchorPointerOrigin;
-  double? _layoutAnchorWidth;
+  PointerEvent? _lastTrackedAnchorPointerEvent;
   Rect? _lastAnchorRect;
   Size? _paneSize;
 
@@ -90,13 +118,22 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
     return _PopoverCloseScope(close: _close, child: widget.pane);
   }
 
-  Decoration? _buildDecoration(BorderRadius borderRadius) {
+  Decoration? _buildDecoration(BuildContext context, BorderRadius borderRadius, {double shadowOpacity = 1}) {
     if (widget.backgroundColor == null && widget.borderSide == null) {
       return null;
     }
 
     return ShapeDecoration(
       color: widget.backgroundColor,
+      shadows: shadowOpacity <= 0
+          ? null
+          : [
+              BoxShadow(
+                color: context.colors.shadowDefault.withValues(alpha: 0.08 * shadowOpacity),
+                offset: const Offset(0, 4),
+                blurRadius: 12,
+              ),
+            ],
       shape: RoundedSuperellipseBorder(borderRadius: borderRadius, side: widget.borderSide ?? BorderSide.none),
     );
   }
@@ -104,7 +141,6 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
   void _handleAnimationStatusChanged(AnimationStatus status) {
     if (status == AnimationStatus.dismissed && !_isExpanded) {
       _overlayController.hide();
-      _layoutAnchorWidth = null;
       _lastAnchorRect = null;
       if (mounted) {
         setState(() {
@@ -129,9 +165,40 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
     _anchorScrollHold ??= scrollable?.position.hold(_handleAnchorScrollHoldCanceled);
     _trackedAnchorPointer = event.pointer;
     _isTrackedAnchorPointerArmed = false;
+    _isTrackedAnchorPointerHoldComplete = false;
     _trackedAnchorPointerOrigin = event.position;
+    _lastTrackedAnchorPointerEvent = event;
     _anchorPointerNotifier.value = PopoverPointerState(event: event, isSelectionArmed: false);
+    _anchorSelectionArmTimer?.cancel();
+    _anchorSelectionArmTimer = Timer(_selectionArmDelay, () {
+      if (_trackedAnchorPointer != event.pointer) {
+        return;
+      }
+
+      _isTrackedAnchorPointerHoldComplete = true;
+      final latestEvent = _lastTrackedAnchorPointerEvent;
+      final previousArmed = _isTrackedAnchorPointerArmed;
+      if (latestEvent != null) {
+        _updateTrackedAnchorPointerArmState(latestEvent);
+      }
+      if (latestEvent != null && previousArmed != _isTrackedAnchorPointerArmed) {
+        _anchorPointerNotifier.value = PopoverPointerState(event: latestEvent, isSelectionArmed: true);
+      }
+    });
     GestureBinding.instance.pointerRouter.addGlobalRoute(_handleAnchorPointerEvent);
+  }
+
+  void _updateTrackedAnchorPointerArmState(PointerEvent event) {
+    if (_isTrackedAnchorPointerArmed || !_isTrackedAnchorPointerHoldComplete) {
+      return;
+    }
+
+    final origin = _trackedAnchorPointerOrigin;
+    if (origin == null || (event.position - origin).distance <= _samePressSelectionDistance) {
+      return;
+    }
+
+    _isTrackedAnchorPointerArmed = true;
   }
 
   void _handleAnchorScrollHoldCanceled() {
@@ -151,8 +218,12 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
 
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_handleAnchorPointerEvent);
     _trackedAnchorPointer = null;
+    _anchorSelectionArmTimer?.cancel();
+    _anchorSelectionArmTimer = null;
     _isTrackedAnchorPointerArmed = false;
+    _isTrackedAnchorPointerHoldComplete = false;
     _trackedAnchorPointerOrigin = null;
+    _lastTrackedAnchorPointerEvent = null;
     _anchorPointerNotifier.value = null;
     _releaseAnchorScrollHold();
   }
@@ -162,13 +233,8 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
       return;
     }
 
-    if (!_isTrackedAnchorPointerArmed && event is PointerMoveEvent) {
-      final origin = _trackedAnchorPointerOrigin;
-      if (origin != null && (event.position - origin).distance > _samePressSelectionDistance) {
-        _isTrackedAnchorPointerArmed = true;
-      }
-    }
-
+    _lastTrackedAnchorPointerEvent = event;
+    _updateTrackedAnchorPointerArmState(event);
     _anchorPointerNotifier.value = PopoverPointerState(event: event, isSelectionArmed: _isTrackedAnchorPointerArmed);
 
     if (event is PointerUpEvent || event is PointerCancelEvent) {
@@ -207,7 +273,6 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
 
     if (_paneSize == null) {
       _overlayController.hide();
-      _layoutAnchorWidth = null;
       _lastAnchorRect = null;
       setState(() {
         _isOverlayVisible = false;
@@ -299,6 +364,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
     if (_trackedAnchorPointer != null) {
       GestureBinding.instance.pointerRouter.removeGlobalRoute(_handleAnchorPointerEvent);
     }
+    _anchorSelectionArmTimer?.cancel();
     _releaseAnchorScrollHold();
     _anchorPointerNotifier.dispose();
     _animationController
@@ -389,7 +455,6 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
     _schedulePaneMeasurement();
 
     final anchorRect = anchorRenderObject.localToGlobal(Offset.zero) & anchorRenderObject.size;
-    _layoutAnchorWidth ??= anchorRect.width;
     _lastAnchorRect = anchorRect;
     final mediaQuery = MediaQuery.of(context);
     final screenPadding = EdgeInsets.fromLTRB(
@@ -419,8 +484,6 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
               anchorRect: anchorRect,
               position: widget.position,
               maxWidth: widget.maxWidth,
-              matchAnchorWidth: widget.matchAnchorWidth,
-              layoutAnchorWidth: _layoutAnchorWidth,
               screenPadding: screenPadding,
             ),
             child: _buildAnimatedPane(context, anchorRect, effectivePosition),
@@ -450,7 +513,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
           child: _FloatingPaneSurface(
             key: _surfaceKey,
             borderRadius: widget.collapsedBorderRadius,
-            decoration: _buildDecoration(widget.collapsedBorderRadius),
+            decoration: _buildDecoration(context, widget.collapsedBorderRadius, shadowOpacity: 0),
             child: KeyedSubtree(key: _paneKey, child: paneContent),
           ),
         ),
@@ -474,11 +537,20 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
           final contentOpacity = _fadeCurve.transform(_animationController.value);
           final anchorContentOpacity = 1 - contentOpacity;
           final anchorContentRect = _anchorContentRect(paneSize, anchorRect.size, effectivePosition);
+          final paneTransition = PopoverPaneTransition(progress: clampedProgress, anchorContentRect: anchorContentRect);
           final paneChild = child!;
           final shouldCropContent = !_isExpanded || _animationController.isAnimating || _animationController.value < 1;
           final measuredChild = shouldCropContent
-              ? SizedBox(key: _paneKey, width: paneSize.width, height: paneSize.height, child: paneChild)
-              : KeyedSubtree(key: _paneKey, child: paneChild);
+              ? SizedBox(
+                  key: _paneKey,
+                  width: paneSize.width,
+                  height: paneSize.height,
+                  child: PopoverPaneTransitionScope(transition: paneTransition, child: paneChild),
+                )
+              : KeyedSubtree(
+                  key: _paneKey,
+                  child: PopoverPaneTransitionScope(transition: paneTransition, child: paneChild),
+                );
           final animatedChild = shouldCropContent
               ? OverflowBox(
                   alignment: _paneAlignment(effectivePosition),
@@ -508,7 +580,7 @@ class _PopoverState extends State<Popover> with SingleTickerProviderStateMixin {
                     child: _FloatingPaneSurface(
                       key: _surfaceKey,
                       borderRadius: borderRadius,
-                      decoration: _buildDecoration(borderRadius),
+                      decoration: _buildDecoration(context, borderRadius, shadowOpacity: contentOpacity),
                       child: animatedChild,
                     ),
                   ),
@@ -576,25 +648,6 @@ bool _rectEquals(Rect a, Rect b) {
       (a.height - b.height).abs() <= 0.5;
 }
 
-class _BackEaseInOutCurve extends Curve {
-  const _BackEaseInOutCurve({required this.overshoot});
-
-  final double overshoot;
-
-  @override
-  double transformInternal(double t) {
-    final c2 = overshoot * 1.525;
-
-    if (t < 0.5) {
-      final doubled = 2 * t;
-      return (doubled * doubled * (((c2 + 1) * doubled) - c2)) / 2;
-    }
-
-    final doubled = (2 * t) - 2;
-    return ((doubled * doubled * (((c2 + 1) * doubled) + c2)) + 2) / 2;
-  }
-}
-
 Alignment _paneAlignment(PopoverPosition position) {
   return switch (position) {
     PopoverPosition.bottomLeft => Alignment.topLeft,
@@ -630,16 +683,12 @@ class _PopoverLayoutDelegate extends SingleChildLayoutDelegate {
     required this.anchorRect,
     required this.position,
     required this.maxWidth,
-    required this.matchAnchorWidth,
-    required this.layoutAnchorWidth,
     required this.screenPadding,
   });
 
   final Rect anchorRect;
   final PopoverPosition position;
   final double? maxWidth;
-  final bool matchAnchorWidth;
-  final double? layoutAnchorWidth;
   final EdgeInsets screenPadding;
 
   @override
@@ -647,10 +696,8 @@ class _PopoverLayoutDelegate extends SingleChildLayoutDelegate {
     final safeWidth = math.max<double>(0, constraints.maxWidth - screenPadding.horizontal);
     final safeHeight = math.max<double>(0, constraints.maxHeight - screenPadding.vertical);
     final resolvedMaxWidth = maxWidth == null ? safeWidth : math.min(maxWidth!, safeWidth);
-    final anchorWidth = layoutAnchorWidth ?? anchorRect.width;
-    final resolvedMinWidth = !matchAnchorWidth || resolvedMaxWidth == 0 ? 0.0 : math.min(anchorWidth, resolvedMaxWidth);
 
-    return BoxConstraints(minWidth: resolvedMinWidth, maxWidth: resolvedMaxWidth, maxHeight: safeHeight);
+    return BoxConstraints(maxWidth: resolvedMaxWidth, maxHeight: safeHeight);
   }
 
   @override
@@ -695,8 +742,6 @@ class _PopoverLayoutDelegate extends SingleChildLayoutDelegate {
     return anchorRect != oldDelegate.anchorRect ||
         position != oldDelegate.position ||
         maxWidth != oldDelegate.maxWidth ||
-        matchAnchorWidth != oldDelegate.matchAnchorWidth ||
-        layoutAnchorWidth != oldDelegate.layoutAnchorWidth ||
         screenPadding != oldDelegate.screenPadding;
   }
 }
