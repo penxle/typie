@@ -1116,13 +1116,19 @@ input SchedulePlanChangeInput {
   planId: ID!
 }
 
-union SearchHit = SearchHitDocument | SearchHitPost
+union SearchHit = SearchHitDocument | SearchHitFolder | SearchHitPost
 
 type SearchHitDocument {
   document: Document!
   subtitle: String
   text: String
   title: String
+  type: SearchHitType!
+}
+
+type SearchHitFolder {
+  folder: Folder!
+  name: String
   type: SearchHitType!
 }
 
@@ -1136,6 +1142,7 @@ type SearchHitPost {
 
 enum SearchHitType {
   DOCUMENT
+  FOLDER
   POST
 }
 

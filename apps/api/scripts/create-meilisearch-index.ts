@@ -15,6 +15,18 @@ await documents.updateSettings({
   typoTolerance: { enabled: false },
 });
 
+await meilisearch.deleteIndexIfExists('folders');
+await meilisearch.createIndex('folders', {
+  primaryKey: 'id',
+});
+
+const folders = meilisearch.index('folders');
+await folders.updateSettings({
+  searchableAttributes: ['name'],
+  filterableAttributes: ['siteId'],
+  typoTolerance: { enabled: false },
+});
+
 console.log('Meilisearch index recreated.');
 
 process.exit(0);
