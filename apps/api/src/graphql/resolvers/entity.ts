@@ -11,35 +11,22 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   Folders,
-  IssueEntities,
-  Issues,
+  NoteEntities,
+  Notes,
   Posts,
   Redirects,
   Sites,
   TableCode,
   validateDbId,
 } from '@/db';
-import { EntityAvailability, EntityState, EntityType, EntityVisibility, IssueState, RedirectType, SiteState } from '@/enums';
+import { EntityAvailability, EntityState, EntityType, EntityVisibility, NoteState, RedirectType, SiteState } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
 import { pubsub } from '@/pubsub';
 import { generateFractionalOrder } from '@/utils';
 import { assertSitePermission } from '@/utils/permission';
 import { builder } from '../builder';
-import {
-  Entity,
-  EntityContainer,
-  EntityNode,
-  EntityView,
-  EntityViewNode,
-  IEntity,
-  Issue,
-  isTypeOf,
-  Note,
-  Site,
-  SiteView,
-  User,
-} from '../objects';
+import { Entity, EntityContainer, EntityNode, EntityView, EntityViewNode, IEntity, isTypeOf, Note, Site, SiteView, User } from '../objects';
 
 /**
  * * Types
@@ -206,52 +193,14 @@ Entity.implement({
 
     notes: t.withAuth({ session: true }).field({
       type: [Note],
-      resolve: async (self, _, ctx) => {
-        const rows = await db
-          .select()
-          .from(IssueEntities)
-          .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
-          .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)));
-
-        const priorityRank: Record<string, number> = { NONE: 0, LOW: 1, MEDIUM: 2, HIGH: 3, URGENT: 4 };
-
-        return rows
-          .map(({ issues }) => ({
-            id: issues.id,
-            user: ctx.session.userId,
-            entity: self.id,
-            content: issues.content,
-            color: 'gray',
-            order: `${9 - (priorityRank[issues.priority] ?? 0)}_${issues.createdAt.toISOString()}`,
-            createdAt: issues.createdAt,
-            updatedAt: issues.updatedAt,
-          }))
-          .toSorted((a, b) => a.order.localeCompare(b.order));
-      },
-    }),
-
-    issues: t.withAuth({ session: true }).field({
-      type: [Issue],
       resolve: async (self) => {
         const rows = await db
-          .select({ issue: Issues })
-          .from(IssueEntities)
-          .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
-          .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)));
+          .select({ note: Notes })
+          .from(NoteEntities)
+          .innerJoin(Notes, eq(NoteEntities.noteId, Notes.id))
+          .where(and(eq(NoteEntities.entityId, self.id), eq(Notes.state, NoteState.ACTIVE)));
 
-        const statusOrder = { IN_PROGRESS: 0, OPEN: 1, RESOLVED: 2, CLOSED: 3 } as const;
-        const priorityOrder = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 } as const;
-        return rows
-          .map((r) => r.issue)
-          .toSorted((a, b) => {
-            const sa = statusOrder[a.status as keyof typeof statusOrder] ?? 0;
-            const sb = statusOrder[b.status as keyof typeof statusOrder] ?? 0;
-            if (sa !== sb) return sa - sb;
-            const pa = priorityOrder[a.priority as keyof typeof priorityOrder] ?? 4;
-            const pb = priorityOrder[b.priority as keyof typeof priorityOrder] ?? 4;
-            if (pa !== pb) return pa - pb;
-            return b.createdAt.valueOf() - a.createdAt.valueOf();
-          });
+        return rows.map((r) => r.note).toSorted((a, b) => a.order.localeCompare(b.order));
       },
     }),
 
@@ -259,9 +208,9 @@ Entity.implement({
       resolve: async (self) => {
         const row = await db
           .select({ count: count() })
-          .from(IssueEntities)
-          .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
-          .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)))
+          .from(NoteEntities)
+          .innerJoin(Notes, eq(NoteEntities.noteId, Notes.id))
+          .where(and(eq(NoteEntities.entityId, self.id), eq(Notes.state, NoteState.ACTIVE)))
           .then(firstOrThrow);
 
         return row.count;

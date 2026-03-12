@@ -396,10 +396,12 @@ export const Notes = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => Users.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    siteId: text('site_id').references(() => Sites.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     entityId: text('entity_id').references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     content: text('content').notNull(),
     color: text('color').notNull(),
     order: text('order').notNull(),
+    status: E._NoteStatus('status').notNull().default('OPEN'),
     state: E._NoteState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()
@@ -412,7 +414,24 @@ export const Notes = pgTable(
     unique().on(t.userId, t.order).nullsNotDistinct(),
     index().on(t.userId, t.state, t.order),
     index().on(t.entityId, t.state, t.order),
+    index().on(t.siteId, t.state),
   ],
+);
+
+export const NoteEntities = pgTable(
+  'note_entities',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => createDbId(TableCode.NOTE_ENTITIES)),
+    noteId: text('note_id')
+      .notNull()
+      .references(() => Notes.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => Entities.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
+  },
+  (t) => [unique().on(t.noteId, t.entityId), index().on(t.entityId)],
 );
 
 export const PaymentInvoices = pgTable(

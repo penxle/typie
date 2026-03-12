@@ -13,7 +13,7 @@
   import { getPane, getPaneGroup } from '../@pane/context.svelte';
   import DocumentPanelAi from './DocumentPanelAi.svelte';
   import DocumentPanelInfo from './DocumentPanelInfo.svelte';
-  import DocumentPanelIssues from './DocumentPanelIssues.svelte';
+  import DocumentPanelNote from './DocumentPanelNote.svelte';
   import DocumentPanelRemark from './DocumentPanelRemark.svelte';
   import DocumentPanelSettings from './DocumentPanelSettings.svelte';
   import DocumentPanelSpellcheck from './DocumentPanelSpellcheck.svelte';
@@ -40,7 +40,7 @@
 
         entity {
           id
-          ...DocumentPanel_Issues_entity
+          ...DocumentPanel_Note_entity
         }
 
         ...DocumentPanel_Ai_document
@@ -226,8 +226,8 @@
       <DocumentPanelSettings {editor} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'info'}
       <DocumentPanelInfo document$key={document.data} {editor} user$key={user.data} />
-    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'issues'}
-      <DocumentPanelIssues entity$key={document.data.entity} />
+    {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'note'}
+      <DocumentPanelNote entity$key={document.data.entity} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'timeline'}
       <DocumentPanelTimeline document$key={document.data} {editor} />
     {:else if paneGroup.state.current.panelTabByPaneId[paneId] === 'spellcheck'}

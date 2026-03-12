@@ -17,6 +17,7 @@ export const _InAppPurchaseStore = createPgEnum('_in_app_purchase_store', E.InAp
 export const _IssueState = createPgEnum('_issue_state', E.IssueState);
 export const _IssuePriority = createPgEnum('_issue_priority', E.IssuePriority);
 export const _IssueStatus = createPgEnum('_issue_status', E.IssueStatus);
+export const _NoteStatus = createPgEnum('_note_status', E.NoteStatus);
 export const _NoteState = createPgEnum('_note_state', E.NoteState);
 export const _PaymentInvoiceState = createPgEnum('_payment_invoice_state', E.PaymentInvoiceState);
 export const _PaymentOutcome = createPgEnum('_payment_outcome', E.PaymentOutcome);
