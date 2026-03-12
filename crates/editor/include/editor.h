@@ -114,6 +114,7 @@ char* editor_get_text_with_mappings(EditorHandle* editor);
 int32_t editor_set_tracked_items(EditorHandle* editor, uint32_t group, const char* items_json);
 int32_t editor_remove_tracked_items(EditorHandle* editor, uint32_t group, const char* ids_json);
 char* editor_perform_search(EditorHandle* editor, const char* query, int32_t match_whole_word);
+int32_t editor_reveal_tracked_item(EditorHandle* editor, uint32_t group, const char* id);
 int32_t editor_replace_text_in_block(
     EditorHandle* editor, const char* block_id,
     size_t start_offset, size_t end_offset, const char* replacement

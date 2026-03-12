@@ -697,8 +697,7 @@ export class Editor {
     const anchor = this.selection.anchor;
 
     for (const item of this.trackedItems) {
-      const target =
-        item.group === 0 ? this.spellcheckErrors : item.group === 1 ? this.aiFeedbacks : item.group === 2 ? this.searchMatches : null;
+      const target = item.group === 0 ? this.spellcheckErrors : item.group === 1 ? this.aiFeedbacks : null;
 
       if (!target) {
         continue;
@@ -734,6 +733,17 @@ export class Editor {
         scroller.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
       }
     }
+  }
+
+  #scrollSearchMatchIntoView(id: string): void {
+    if (this.revealTrackedItem(2, id)) {
+      this.settled().then(() => {
+        this.scrollTrackedItemIntoView(id);
+      });
+      return;
+    }
+
+    this.scrollTrackedItemIntoView(id);
   }
 
   highlightRemark(remark: Pick<RemarkOverlay, 'pageIdx' | 'bounds'>): void {
@@ -1689,6 +1699,18 @@ export class Editor {
     }
   }
 
+  revealTrackedItem(group: number, id: string): boolean {
+    if (!this.#wasmEditor) {
+      return false;
+    }
+
+    const changed = this.#wasmEditor.revealTrackedItem(group, id);
+    if (changed) {
+      this.#wakeUp();
+    }
+    return changed;
+  }
+
   replaceTextInBlock(blockId: string, startOffset: number, endOffset: number, replacement: string): boolean {
     if (this.locked || this.restrictedText) {
       this.#onEditBlocked?.(this.locked ? 'locked' : 'restrictedText');
@@ -1768,7 +1790,7 @@ export class Editor {
 
     this.settled().then(() => {
       if (this.searchMatches.length > 0) {
-        this.scrollTrackedItemIntoView(this.searchMatches[0].id);
+        this.#scrollSearchMatchIntoView(this.searchMatches[0].id);
       }
     });
   }
@@ -1785,7 +1807,7 @@ export class Editor {
       match.active = found;
 
       if (found) {
-        this.scrollTrackedItemIntoView(match.id);
+        this.#scrollSearchMatchIntoView(match.id);
         found = false;
       }
 
@@ -1796,7 +1818,7 @@ export class Editor {
 
     if (found && this.searchMatches.length > 0) {
       this.searchMatches[0].active = true;
-      this.scrollTrackedItemIntoView(this.searchMatches[0].id);
+      this.#scrollSearchMatchIntoView(this.searchMatches[0].id);
     }
   }
 
@@ -1807,7 +1829,7 @@ export class Editor {
       match.active = found;
 
       if (found) {
-        this.scrollTrackedItemIntoView(match.id);
+        this.#scrollSearchMatchIntoView(match.id);
         found = false;
       }
 
@@ -1820,7 +1842,7 @@ export class Editor {
       const last = this.searchMatches.at(-1);
       if (last) {
         last.active = true;
-        this.scrollTrackedItemIntoView(last.id);
+        this.#scrollSearchMatchIntoView(last.id);
       }
     }
   }
@@ -1846,7 +1868,7 @@ export class Editor {
       if (this.searchMatches.length > 0 && !this.searchMatches.some((v) => v.active)) {
         const nextIndex = matchIndex < this.searchMatches.length ? matchIndex : 0;
         this.searchMatches[nextIndex].active = true;
-        this.scrollTrackedItemIntoView(this.searchMatches[nextIndex].id);
+        this.#scrollSearchMatchIntoView(this.searchMatches[nextIndex].id);
       }
     });
   }

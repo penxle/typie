@@ -1270,6 +1270,31 @@ pub extern "C" fn editor_perform_search(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn editor_reveal_tracked_item(
+    editor: *mut EditorHandle,
+    group: u32,
+    id: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+
+            let id = parse_cstr(id, "id")?;
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+
+            Ok(if editor.runtime.reveal_tracked_item(group, id) {
+                1
+            } else {
+                0
+            })
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn editor_replace_text_in_block(
     editor: *mut EditorHandle,
     block_id: *const c_char,

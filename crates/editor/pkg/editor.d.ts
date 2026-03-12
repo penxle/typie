@@ -341,6 +341,7 @@ export class Editor {
     renderPage(page_index: number): RenderInfo | undefined;
     replaceTextInBlock(block_id: string, start_offset: number, end_offset: number, replacement: string): boolean;
     replaceTextInBlocks(items: any): boolean;
+    revealTrackedItem(group: number, id: string): boolean;
     revertTo(version: Uint8Array): void;
     setAllFoldsExpanded(expanded: boolean): void;
     setLayoutDebug(enabled: boolean): void;

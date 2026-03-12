@@ -684,6 +684,28 @@ final class NativeEditor {
     }
   }
 
+  bool revealTrackedItem(int group, String id) {
+    _checkDisposed();
+    if (isTest) {
+      return false;
+    }
+
+    final idPtr = id.toNativeUtf8().cast<Char>();
+
+    try {
+      final result = _bindings.editor_reveal_tracked_item(_handle, group, idPtr);
+      if (result < 0) {
+        throw EditorException(_getLastError() ?? 'Failed to reveal tracked item');
+      }
+      if (result == 1) {
+        _wakeUp();
+      }
+      return result == 1;
+    } finally {
+      calloc.free(idPtr);
+    }
+  }
+
   bool replaceTextInBlock(String blockId, int startOffset, int endOffset, String replacement) {
     _checkDisposed();
     if (isTest) {

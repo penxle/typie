@@ -91,6 +91,23 @@ class FindReplaceSheet extends HookWidget {
       }
     }
 
+    void revealAndScrollToSearchMatch(int index) {
+      if (index < 0 || index >= searchMatches.value.length) {
+        return;
+      }
+
+      final match = searchMatches.value[index];
+      final revealed = controller.editor.revealTrackedItem(2, match['id'] as String);
+      if (revealed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          scrollToSearchMatch(index);
+        });
+        return;
+      }
+
+      scrollToSearchMatch(index);
+    }
+
     void performSearchAndUpdate(String query) {
       if (query.isEmpty) {
         searchMatches.value = [];
@@ -146,7 +163,7 @@ class FindReplaceSheet extends HookWidget {
         performSearchAndUpdate(findText);
         updateSearchActiveIndex(activeIndex.value);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          scrollToSearchMatch(activeIndex.value);
+          revealAndScrollToSearchMatch(activeIndex.value);
         });
       });
       return null;
@@ -158,7 +175,7 @@ class FindReplaceSheet extends HookWidget {
       }
       activeIndex.value = (activeIndex.value + 1) % searchMatches.value.length;
       updateSearchActiveIndex(activeIndex.value);
-      scrollToSearchMatch(activeIndex.value);
+      revealAndScrollToSearchMatch(activeIndex.value);
     }
 
     void findPrevious() {
@@ -167,7 +184,7 @@ class FindReplaceSheet extends HookWidget {
       }
       activeIndex.value = activeIndex.value <= 0 ? searchMatches.value.length - 1 : activeIndex.value - 1;
       updateSearchActiveIndex(activeIndex.value);
-      scrollToSearchMatch(activeIndex.value);
+      revealAndScrollToSearchMatch(activeIndex.value);
     }
 
     void replace() {
@@ -192,7 +209,7 @@ class FindReplaceSheet extends HookWidget {
       performSearchAndUpdate(findText);
       updateSearchActiveIndex(activeIndex.value);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        scrollToSearchMatch(activeIndex.value);
+        revealAndScrollToSearchMatch(activeIndex.value);
       });
     }
 
