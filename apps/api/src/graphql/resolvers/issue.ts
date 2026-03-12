@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db, Entities, firstOrThrow, IssueEntities, Issues, TableCode, validateDbId } from '@/db';
 import { EntityState, IssuePriority, IssueState, IssueStatus } from '@/enums';
 import { TypieError } from '@/errors';
@@ -43,7 +43,7 @@ Issue.implement({
   }),
 });
 
-const issueStatusOrder = { OPEN: 0, IN_PROGRESS: 1, RESOLVED: 2, CLOSED: 3 } as const;
+const issueStatusOrder = { IN_PROGRESS: 0, OPEN: 1, RESOLVED: 2, CLOSED: 3 } as const;
 const issuePriorityOrder = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 } as const;
 
 builder.queryFields((t) => ({
@@ -70,8 +70,7 @@ builder.queryFields((t) => ({
       const issues = await db
         .select()
         .from(Issues)
-        .where(and(...conditions))
-        .orderBy(desc(Issues.priority), desc(Issues.createdAt));
+        .where(and(...conditions));
 
       return issues.toSorted((a, b) => {
         const sa = issueStatusOrder[a.status as keyof typeof issueStatusOrder] ?? 0;
