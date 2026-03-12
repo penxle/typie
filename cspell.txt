@@ -92,7 +92,10 @@ objc
 observablehq
 oklch
 on+
+onaddentity
+oncollapse
 ondelete
+onexpand
 onissueclick
 onstatuschange
 oplog

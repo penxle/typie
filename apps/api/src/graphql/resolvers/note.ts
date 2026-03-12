@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db, Entities, first, firstOrThrow, NoteEntities, Notes, Sites, TableCode, validateDbId } from '@/db';
 import { EntityState, NoteState, NoteStatus } from '@/enums';
 import { TypieError } from '@/errors';
@@ -197,16 +197,16 @@ builder.mutationFields((t) => ({
         }
       }
 
-      // Get the last order for this user to place the new note at the end
-      const lastNote = await db
+      // Get the first order for this user to place the new note at the front
+      const firstNote = await db
         .select({ order: Notes.order })
         .from(Notes)
         .where(and(eq(Notes.userId, ctx.session.userId), eq(Notes.state, NoteState.ACTIVE)))
-        .orderBy(desc(Notes.order))
+        .orderBy(asc(Notes.order))
         .limit(1)
         .then(first);
 
-      const order = generateFractionalOrder({ lower: lastNote?.order, upper: null });
+      const order = generateFractionalOrder({ lower: null, upper: firstNote?.order });
 
       return await db.transaction(async (tx) => {
         const note = await tx

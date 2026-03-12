@@ -2,42 +2,23 @@
   import { createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { Button, Icon, Modal, Select } from '@typie/ui/components';
+  import { tooltip } from '@typie/ui/actions';
+  import { Button, Icon, Modal } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, clamp } from '@typie/ui/utils';
+  import { animateFlip, pushEscapeHandler } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
-  import { tick, untrack } from 'svelte';
-  import { fly } from 'svelte/transition';
-  import { match } from 'ts-pattern';
+  import { SvelteSet } from 'svelte/reactivity';
+  import ChevronDownIcon from '~icons/lucide/chevron-down';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
+  import CommandIcon from '~icons/lucide/command';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
-  import FileIcon from '~icons/lucide/file';
   import { beforeNavigate } from '$app/navigation';
-  import { page } from '$app/state';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
-  import Masonry from './Masonry.svelte';
+  import { noteColors } from './colors';
   import NoteComponent from './Note.svelte';
-
-  const currentEntityQuery = createQuery(
-    graphql(`
-      query DashboardLayout_Notes_CurrentEntity_Query($slug: String!) {
-        entity(slug: $slug) {
-          id
-
-          node {
-            __typename
-
-            ... on Document {
-              id
-              title
-            }
-          }
-        }
-      }
-    `),
-    () => ({ slug: page.params.slug ?? '' }),
-  );
+  import NoteEntitySearchModal from './NoteEntitySearchModal.svelte';
 
   const [createNote] = createMutation(
     graphql(`
@@ -48,7 +29,7 @@
           createdAt
           color
           status
-          entity {
+          entities {
             id
             slug
 
@@ -69,7 +50,7 @@
           content
           updatedAt
           status
-          entity {
+          entities {
             id
             slug
 
@@ -103,15 +84,38 @@
     `),
   );
 
+  const [removeNoteEntity] = createMutation(
+    graphql(`
+      mutation DashboardLayout_Notes_RemoveNoteEntity_Mutation($input: RemoveNoteEntityInput!) {
+        removeNoteEntity(input: $input) {
+          id
+          entities {
+            id
+            slug
+
+            node {
+              __typename
+            }
+          }
+        }
+      }
+    `),
+  );
+
   const app = getAppContext();
 
   const siteQuery = createQuery(
     graphql(`
       query DashboardLayout_Notes_Site_Query($siteId: ID) {
-        me @required {
+        notes(siteId: $siteId) {
           id
-
-          recentlyViewedEntities(siteId: $siteId) {
+          content
+          createdAt
+          updatedAt
+          order
+          color
+          status
+          entities {
             id
             slug
 
@@ -122,28 +126,10 @@
                 id
                 title
               }
-            }
-          }
-        }
 
-        notes(siteId: $siteId) {
-          id
-          content
-          createdAt
-          updatedAt
-          order
-          color
-          status
-          entity {
-            id
-            slug
-
-            node {
-              __typename
-
-              ... on Document {
+              ... on Folder {
                 id
-                title
+                name
               }
             }
           }
@@ -157,39 +143,11 @@
 
   let inputValue = $state('');
   let inputEl = $state<HTMLTextAreaElement>();
-  let selectedEntityId = $state<string | null>(null);
-  const selectedEntityTitle = $derived.by(() => {
-    const note = notes.find((note) => note.entity?.id === selectedEntityId);
-    if (!note) return null;
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return match(note.entity!.node)
-      .with({ __typename: 'Document' }, (node) => node.title)
-      .with({ __typename: 'Folder' }, () => null)
-      .otherwise(() => null);
-  });
-
-  let editingNoteId = $state<string | null>(null);
-  let editingValue = $state('');
-  let editInputEl = $state<HTMLTextAreaElement>();
-  let editSelectedEntityId = $state<string | null>(null);
-
-  const currentEntity = $derived(page.params.slug && currentEntityQuery.data ? currentEntityQuery.data.entity : null);
-  const recentlyViewedEntities = $derived(
-    (siteQuery.data?.me.recentlyViewedEntities ?? [])
-      .slice(0, 10)
-      .map((entity) =>
-        match(entity.node)
-          .with({ __typename: 'Document' }, (node) => ({
-            entity,
-            title: node.title,
-            icon: FileIcon,
-          }))
-          .with({ __typename: 'Folder' }, () => null)
-          .otherwise(() => null),
-      )
-      .filter((hit): hit is NonNullable<typeof hit> => hit !== null),
-  );
+  let selectedColor = $state('gray');
+  let expandedNoteId = $state<string | null>(null);
+  let entitySearchNoteId = $state<string | null>(null);
+  let resolvedOpen = $state(false);
+  const resolvingNoteIds = new SvelteSet<string>();
 
   let dragging = $state<{
     noteId: string;
@@ -209,9 +167,14 @@
     });
   });
 
-  const notesRelatedToEntity = $derived(sortedNotes.filter((note) => selectedEntityId && note.entity?.id === selectedEntityId));
-  const notesNotRelatedToEntity = $derived(sortedNotes.filter((note) => note.entity?.id !== selectedEntityId));
-  const restNotes = $derived(notesRelatedToEntity.length > 0 ? notesNotRelatedToEntity : sortedNotes);
+  const openNotes = $derived(sortedNotes.filter((n) => n.status === 'OPEN' || resolvingNoteIds.has(n.id)));
+  const resolvedNotes = $derived(sortedNotes.filter((n) => n.status === 'RESOLVED' && !resolvingNoteIds.has(n.id)));
+
+  const entitySearchExistingIds = $derived.by(() => {
+    if (!entitySearchNoteId) return [];
+    const n = notes.find((n) => n.id === entitySearchNoteId);
+    return n?.entities?.map((e) => e.id) ?? [];
+  });
 
   const handleDragEnd = async () => {
     if (!dragging) return;
@@ -238,8 +201,8 @@
         cache.invalidate({ __typename: 'Query', $field: 'notes' });
 
         const movedNote = sortedNotes.find((n) => n.id === noteId);
-        if (movedNote?.entity?.id) {
-          cache.invalidate({ __typename: 'Entity', id: movedNote.entity.id, $field: 'notes' });
+        for (const entity of movedNote?.entities ?? []) {
+          cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
         }
       } catch {
         localNoteOrder = notes.map((note) => note.id);
@@ -277,22 +240,37 @@
     }
   });
 
+  const handleDragStart = (noteId: string) => {
+    dragging = {
+      noteId,
+      originalIndex: localNoteOrder.indexOf(noteId),
+      dropTargetNoteId: null,
+    };
+  };
+
+  const handleExpand = (noteId: string) => {
+    expandedNoteId = noteId;
+  };
+
+  const handleCollapse = () => {
+    expandedNoteId = null;
+  };
+
+  $effect(() => {
+    if (expandedNoteId) {
+      return pushEscapeHandler(() => {
+        handleCollapse();
+        return true;
+      });
+    }
+  });
+
   const handleKeyDown = (event: KeyboardEvent) => {
     const metaOrCtrlKeyOnly = (event.metaKey && !event.ctrlKey) || (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey);
 
     if (metaOrCtrlKeyOnly && event.key === 'j') {
       event.preventDefault();
       app.state.notesOpen = !app.state.notesOpen;
-    } else if (app.state.notesOpen && event.key === 'Escape') {
-      event.stopPropagation();
-
-      if (editingNoteId) {
-        closeEditModal();
-        return;
-      }
-
-      close();
-      return;
     }
   };
 
@@ -301,21 +279,15 @@
 
     await createNote({
       input: {
-        color: 'gray',
+        color: selectedColor,
         content: inputValue,
-        entityId: selectedEntityId,
       },
     });
-    mixpanel.track('create_note', {
-      relatedToEntity: !!selectedEntityId,
-      via,
-    });
+    mixpanel.track('create_note', { via });
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
-    if (selectedEntityId) {
-      cache.invalidate({ __typename: 'Entity', id: selectedEntityId, $field: 'notes' });
-    }
 
     inputValue = '';
+    selectedColor = 'gray';
     inputEl?.focus();
   };
 
@@ -325,53 +297,83 @@
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
 
     const note = notes.find((n) => n.id === noteId);
-    if (note?.entity?.id) {
-      cache.invalidate({ __typename: 'Entity', id: note.entity.id, $field: 'notes' });
+    for (const entity of note?.entities ?? []) {
+      cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
     }
   };
+
+  const cancellingNoteIds = new SvelteSet<string>();
 
   const handleToggleStatus = async (noteId: string) => {
     const note = notes.find((n) => n.id === noteId);
     if (!note) return;
 
+    if (cancellingNoteIds.has(noteId)) return;
+
+    // Cancel resolving animation
+    if (resolvingNoteIds.has(noteId)) {
+      cancellingNoteIds.add(noteId);
+      try {
+        await updateNote({ input: { noteId, status: 'OPEN' } });
+        mixpanel.track('toggle_note_status', { status: 'OPEN' });
+        cache.invalidate({ __typename: 'Query', $field: 'notes' });
+      } catch {
+        cancellingNoteIds.delete(noteId);
+        return;
+      }
+      cancellingNoteIds.delete(noteId);
+      resolvingNoteIds.delete(noteId);
+      return;
+    }
+
     const newStatus = note.status === 'OPEN' ? 'RESOLVED' : 'OPEN';
-    await updateNote({ input: { noteId, status: newStatus } });
-    mixpanel.track('toggle_note_status', { status: newStatus });
+
+    if (newStatus === 'RESOLVED') {
+      resolvingNoteIds.add(noteId);
+    }
+
+    try {
+      await updateNote({ input: { noteId, status: newStatus } });
+      mixpanel.track('toggle_note_status', { status: newStatus });
+      if (newStatus === 'OPEN') {
+        cache.invalidate({ __typename: 'Query', $field: 'notes' });
+        for (const entity of note.entities ?? []) {
+          cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
+        }
+      }
+    } catch {
+      resolvingNoteIds.delete(noteId);
+    }
+  };
+
+  const handleEndResolve = (noteId: string) => {
+    const note = notes.find((n) => n.id === noteId);
+    resolvingNoteIds.delete(noteId);
     cache.invalidate({ __typename: 'Query', $field: 'notes' });
-    if (note.entity?.id) {
-      cache.invalidate({ __typename: 'Entity', id: note.entity.id, $field: 'notes' });
+    for (const entity of note?.entities ?? []) {
+      cache.invalidate({ __typename: 'Entity', id: entity.id, $field: 'notes' });
     }
   };
 
-  const editNote = (id: string) => {
-    const note = notes.find((n) => n.id === id);
-    if (note) {
-      editingNoteId = note.id;
-      editingValue = note.content;
-      editSelectedEntityId = note.entity?.id || null;
-    }
+  const handleUpdateContent = async (noteId: string, content: string) => {
+    await updateNote({ input: { noteId, content } });
+    cache.invalidate({ __typename: 'Query', $field: 'notes' });
   };
 
-  const handleSaveEdit = async () => {
-    if (editingNoteId && editingValue.trim()) {
-      await updateNote({
-        input: {
-          noteId: editingNoteId,
-          content: editingValue.trim(),
-          entityId: editSelectedEntityId,
-        },
-      });
-      mixpanel.track('update_note');
-
-      closeEditModal();
-    }
+  const handleChangeColor = async (noteId: string, color: string) => {
+    await updateNote({ input: { noteId, color } });
+    cache.invalidate({ __typename: 'Query', $field: 'notes' });
+    mixpanel.track('change_note_color', { color });
   };
 
-  const closeEditModal = () => {
-    editingNoteId = null;
-    editingValue = '';
-    editSelectedEntityId = null;
-    inputEl?.focus();
+  const handleAddEntity = (noteId: string) => {
+    entitySearchNoteId = noteId;
+  };
+
+  const handleRemoveEntity = async (noteId: string, entityId: string) => {
+    await removeNoteEntity({ input: { noteId, entityId } });
+    cache.invalidate({ __typename: 'Query', $field: 'notes' });
+    cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
   };
 
   const close = () => {
@@ -392,31 +394,13 @@
     }
   });
 
-  $effect(() => {
-    void currentEntity;
-
-    untrack(() => {
-      if (currentEntity?.id && recentlyViewedEntities.some((entity) => entity.entity.id === currentEntity.id)) {
-        selectedEntityId = currentEntity.id;
-      } else {
-        selectedEntityId = null;
-      }
-    });
-  });
-
-  $effect(() => {
-    if (editingNoteId && editInputEl) {
-      editInputEl.focus();
-      editInputEl.setSelectionRange(editingValue.length, editingValue.length);
-    }
-  });
   $effect.pre(() => {
     void localNoteOrder;
     animateFlip('[data-note-id]', 'noteId');
   });
 </script>
 
-<svelte:window ondragend={handleDragEnd} onkeydown={handleKeyDown} />
+<svelte:window onkeydown={handleKeyDown} />
 
 <Modal
   style={css.raw({
@@ -445,16 +429,28 @@
       scrollbarGutter: 'stable',
       alignItems: 'center',
     })}
+    onclick={(e) => {
+      const target = e.target as HTMLElement;
+      if (expandedNoteId && !target.closest(`[data-note-id="${expandedNoteId}"]`)) {
+        handleCollapse();
+        return;
+      }
+      if (target.closest('[data-notes-backdrop]')) {
+        close();
+      }
+    }}
+    role="presentation"
   >
     <div
       class={css({
         position: 'absolute',
         inset: '0',
       })}
-      onclick={close}
+      data-notes-backdrop
       role="none"
     ></div>
 
+    <!-- Input Area -->
     <div
       class={flex({
         position: 'sticky',
@@ -462,10 +458,10 @@
         zIndex: '2',
         flexDirection: 'column',
         width: 'full',
-        maxWidth: '450px',
+        maxWidth: '560px',
         flexShrink: '0',
         backgroundColor: 'surface.default',
-        borderRadius: '12px',
+        borderRadius: '14px',
         overflow: 'hidden',
         boxShadow: 'large',
       })}
@@ -474,7 +470,7 @@
         bind:this={inputEl}
         class={css({
           width: 'full',
-          minHeight: '80px',
+          minHeight: '120px',
           padding: '16px',
           fontSize: '16px',
           fontWeight: 'medium',
@@ -488,316 +484,154 @@
             handleAddNote('shortcut');
           }
         }}
-        placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
+        placeholder="떠오르는 생각을 자유롭게 적어보세요..."
         bind:value={inputValue}
       ></textarea>
 
-      <div class={flex({ gap: '4px', alignItems: 'center', paddingX: '12px', paddingY: '6px' })}>
-        <span class={css({ flexShrink: '0', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>관련 항목:</span>
-        <Select
-          items={[
-            { label: '없음', value: null },
-            ...recentlyViewedEntities.map((entity) => ({ label: entity.title, value: entity.entity.id, icon: entity.icon })),
-          ]}
-          onselect={(value) => {
-            selectedEntityId = value;
-          }}
-          value={selectedEntityId}
-        />
-        <kbd
-          class={center({
-            marginLeft: 'auto',
-            flexShrink: '0',
-            gap: '2px',
-            borderRadius: '4px',
-            paddingX: '6px',
-            paddingY: '2px',
-            fontFamily: 'mono',
-            fontSize: '13px',
-            fontWeight: 'medium',
-            color: 'text.faint',
-            backgroundColor: 'surface.muted',
-          })}
-        >
-          <span>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</span>
-          {#if !navigator.platform.includes('Mac')}
-            <span>+</span>
-          {/if}
-          <span>J</span>
-        </kbd>
-      </div>
-
-      <div class={css({ height: '1px', backgroundColor: 'interactive.hover' })}></div>
-
-      <div
-        class={flex({
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingX: '12px',
-          paddingY: '6px',
-          backgroundColor: 'surface.muted',
-        })}
-      >
-        <div class={flex({ alignItems: 'center', gap: '16px', color: 'text.faint' })}>
-          <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', paddingX: '4px', height: '22px' })}>
-              <div class={css({ fontSize: '10px', fontWeight: 'bold' })}>ESC</div>
-            </div>
-
-            <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>닫기</span>
-          </div>
-
-          <div class={flex({ alignItems: 'center', gap: '8px' })}>
-            <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', paddingX: '4px', height: '22px' })}>
-              <div class={flex({ fontSize: '10px', fontWeight: 'bold', alignItems: 'center', gap: '2px' })}>
-                {#if !navigator.platform.includes('Mac')}
-                  <span>Ctrl</span>
-                {:else}
-                  <span class={css({ fontSize: '14px' })}>⌘</span>
-                {/if}
-                <Icon icon={CornerDownLeftIcon} size={12} />
-              </div>
-            </div>
-
-            <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>추가</span>
-          </div>
+      <div class={flex({ alignItems: 'center', gap: '8px', paddingX: '12px', paddingY: '6px' })}>
+        <!-- Color dots -->
+        <div class={flex({ alignItems: 'center', gap: '4px' })}>
+          {#each noteColors as c (c.value)}
+            <button
+              style:background-color={selectedColor === c.value ? c.color : 'transparent'}
+              style:border={selectedColor === c.value ? 'none' : `1.5px solid ${c.color}`}
+              class={center({
+                width: '12px',
+                height: '12px',
+                borderRadius: 'full',
+                cursor: 'pointer',
+                padding: '0',
+              })}
+              aria-label={c.label}
+              onclick={() => (selectedColor = c.value)}
+              type="button"
+              use:tooltip={{ message: c.label, placement: 'top' }}
+            ></button>
+          {/each}
         </div>
 
-        <Button
-          style={css.raw({ flexShrink: '0' })}
-          disabled={!inputValue.trim()}
-          onclick={() => handleAddNote('button')}
-          size="sm"
-          variant="secondary"
-        >
+        <Button style={css.raw({ marginLeft: 'auto', gap: '4px' })} onclick={() => handleAddNote('button')} size="sm" variant="primary">
           추가
+          <div class={flex({ alignItems: 'center', opacity: '70' })}>
+            {#if navigator.platform.includes('Mac')}
+              <Icon icon={CommandIcon} size={12} />
+            {:else}
+              <span class={css({ fontSize: '12px' })}>Ctrl+</span>
+            {/if}
+            <Icon icon={CornerDownLeftIcon} size={12} />
+          </div>
         </Button>
       </div>
     </div>
 
+    <!-- Notes List -->
     <div
       class={css({
         paddingBottom: '50px',
-        maxWidth: '8/12',
+        maxWidth: '480px',
         flexGrow: '1',
         width: 'full',
       })}
     >
-      {#if notesRelatedToEntity.length > 0}
-        <h1
-          class={css({
-            position: 'relative',
-            width: 'fit',
-            zIndex: '1',
-            fontSize: '16px',
-            fontWeight: 'semibold',
-            color: 'text.subtle',
-            borderRadius: '8px',
-            paddingX: '10px',
-            paddingY: '4px',
-            backgroundColor: 'surface.default/70',
-          })}
-          in:fly={{ y: 10, duration: 150 }}
-        >
-          <span class={css({ fontWeight: 'bold', color: 'text.default' })}>{selectedEntityTitle || '현재 항목'}</span>
-          관련 노트
-        </h1>
-        <Masonry
-          style={css.raw({ height: 'fit' })}
-          ondrop={(e) => {
-            e.preventDefault();
-            // handleDragEnd가 먼저 실행되도록 함
-          }}
-        >
-          {#each notesRelatedToEntity as note (note.id)}
+      {#if openNotes.length > 0}
+        <div class={flex({ flexDirection: 'column', gap: '8px' })} role="list">
+          {#each openNotes as note (note.id)}
             <NoteComponent
-              dropTargetNoteId={dragging?.dropTargetNoteId ?? null}
-              isDragging={dragging?.noteId === note.id}
+              cancelling={cancellingNoteIds.has(note.id)}
+              draggingNoteId={dragging?.noteId ?? null}
+              expanded={expandedNoteId === note.id}
               {note}
+              onaddentity={handleAddEntity}
+              onchangecolor={handleChangeColor}
+              oncollapse={handleCollapse}
               ondelete={handleDeleteNote}
-              ondragenter={() => {
-                if (dragging?.noteId !== note.id) {
-                  handleNoteDragEnter(note.id);
-                }
-              }}
-              ondragstart={() => {
-                dragging = {
-                  noteId: note.id,
-                  originalIndex: localNoteOrder.indexOf(note.id),
-                  dropTargetNoteId: null,
-                };
-              }}
-              onedit={editNote}
+              ondragend={handleDragEnd}
+              ondragmove={handleNoteDragEnter}
+              ondragstart={() => handleDragStart(note.id)}
+              onendresolve={handleEndResolve}
+              onexpand={handleExpand}
+              onremoveentity={handleRemoveEntity}
               ontogglestatus={handleToggleStatus}
+              onupdatecontent={handleUpdateContent}
+              resolving={resolvingNoteIds.has(note.id)}
             />
           {/each}
-        </Masonry>
+        </div>
       {/if}
-      {#if notesRelatedToEntity.length > 0 && restNotes.length > 0}
-        <h1
-          class={css({
+
+      {#if resolvedNotes.length > 0}
+        <button
+          class={flex({
+            alignItems: 'center',
+            gap: '6px',
             marginTop: '16px',
-            position: 'relative',
-            width: 'fit',
-            zIndex: '1',
-            fontSize: '16px',
-            fontWeight: 'semibold',
+            paddingX: '8px',
+            paddingY: '6px',
+            fontSize: '13px',
+            fontWeight: 'medium',
             color: 'text.subtle',
-            borderRadius: '8px',
-            paddingX: '10px',
-            paddingY: '4px',
-            backgroundColor: 'surface.default/70',
+            cursor: 'pointer',
+            borderRadius: '6px',
+            transitionProperty: 'common!',
+            backgroundColor: 'surface.dark/10',
+            _hover: { color: 'text.default', backgroundColor: 'surface.dark/15' },
           })}
-          in:fly={{ y: 10, duration: 150 }}
+          onclick={() => {
+            handleCollapse();
+            resolvedOpen = !resolvedOpen;
+          }}
+          type="button"
         >
-          모든 노트
-        </h1>
+          <Icon icon={resolvedOpen ? ChevronDownIcon : ChevronRightIcon} size={14} />
+          완료됨 ({resolvedNotes.length})
+        </button>
+
+        {#if resolvedOpen}
+          <div class={flex({ flexDirection: 'column', gap: '8px', marginTop: '4px' })} role="list">
+            {#each resolvedNotes as note (note.id)}
+              <NoteComponent
+                cancelling={cancellingNoteIds.has(note.id)}
+                draggingNoteId={dragging?.noteId ?? null}
+                expanded={expandedNoteId === note.id}
+                {note}
+                onaddentity={handleAddEntity}
+                onchangecolor={handleChangeColor}
+                oncollapse={handleCollapse}
+                ondelete={handleDeleteNote}
+                ondragend={handleDragEnd}
+                ondragmove={handleNoteDragEnter}
+                ondragstart={() => handleDragStart(note.id)}
+                onendresolve={handleEndResolve}
+                onexpand={handleExpand}
+                onremoveentity={handleRemoveEntity}
+                ontogglestatus={handleToggleStatus}
+                onupdatecontent={handleUpdateContent}
+                resolving={resolvingNoteIds.has(note.id)}
+              />
+            {/each}
+          </div>
+        {/if}
       {/if}
-      <Masonry
-        ondrop={(e) => {
-          e.preventDefault();
-          // handleDragEnd가 먼저 실행되도록 함
-        }}
-      >
-        {#each restNotes as note (note.id)}
-          <NoteComponent
-            dropTargetNoteId={dragging?.dropTargetNoteId ?? null}
-            isDragging={dragging?.noteId === note.id}
-            {note}
-            ondelete={handleDeleteNote}
-            ondragenter={() => {
-              if (dragging?.noteId !== note.id) {
-                handleNoteDragEnter(note.id);
-              }
-            }}
-            ondragstart={() => {
-              dragging = {
-                noteId: note.id,
-                originalIndex: localNoteOrder.indexOf(note.id),
-                dropTargetNoteId: null,
-              };
-            }}
-            onedit={editNote}
-            ontogglestatus={handleToggleStatus}
-          />
-        {/each}
-      </Masonry>
+
+      {#if sortedNotes.length === 0}
+        <p
+          class={css({
+            paddingY: '32px',
+            textAlign: 'center',
+            fontSize: '14px',
+            color: 'text.faint',
+          })}
+        >
+          떠오르는 생각이나 아이디어를 자유롭게 기록해보세요
+        </p>
+      {/if}
     </div>
   </div>
 </Modal>
 
-<Modal
-  style={css.raw({
-    backgroundColor: 'transparent',
-    maxWidth: '450px',
-    border: 'none',
-  })}
-  focusTrapOptions={{
-    returnFocusOnDeactivate: false,
-  }}
-  onclose={closeEditModal}
-  open={editingNoteId !== null}
->
-  <div
-    class={flex({
-      flexDirection: 'column',
-      width: 'full',
-      backgroundColor: 'surface.default',
-      borderRadius: '12px',
-      overflow: 'hidden',
-    })}
-  >
-    <textarea
-      bind:this={editInputEl}
-      class={css({
-        width: 'full',
-        padding: '16px',
-        fontSize: '16px',
-        fontWeight: 'medium',
-        color: 'text.default',
-        borderRadius: '8px',
-        resize: 'none',
-      })}
-      oninput={(e) => {
-        const target = e.currentTarget;
-        const cursorPosition = target.selectionStart;
-        editingValue = target.value;
-        // NOTE: 원인은 알 수 없지만 중간에 입력하면 커서가 맨 뒤로 이동하는 문제를 해결하기 위한 workaround
-        tick().then(() => {
-          if (editInputEl && cursorPosition !== null) {
-            editInputEl.setSelectionRange(cursorPosition, cursorPosition);
-          }
-        });
-      }}
-      onkeydown={(e) => {
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
-          e.preventDefault();
-          handleSaveEdit();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          e.stopPropagation();
-          closeEditModal();
-        }
-      }}
-      placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
-      rows={clamp(editingValue.split('\n').length, 5, 15)}
-      value={editingValue}
-    ></textarea>
-
-    <div class={flex({ gap: '4px', alignItems: 'center', paddingX: '12px', paddingY: '6px' })}>
-      <span class={css({ flexShrink: '0', fontSize: '12px', fontWeight: 'medium', color: 'text.subtle' })}>관련 항목:</span>
-      <Select
-        items={[
-          { label: '없음', value: null },
-          ...recentlyViewedEntities.map((entity) => ({ label: entity.title, value: entity.entity.id, icon: entity.icon })),
-        ]}
-        onselect={(value) => {
-          editSelectedEntityId = value;
-        }}
-        value={editSelectedEntityId}
-      />
-    </div>
-
-    <div class={css({ height: '1px', backgroundColor: 'interactive.hover' })}></div>
-
-    <div
-      class={flex({
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingX: '12px',
-        paddingY: '6px',
-        backgroundColor: 'surface.muted',
-      })}
-    >
-      <div class={flex({ alignItems: 'center', gap: '16px', color: 'text.faint' })}>
-        <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', paddingX: '4px', height: '22px' })}>
-            <div class={css({ fontSize: '10px', fontWeight: 'bold' })}>ESC</div>
-          </div>
-
-          <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>취소</span>
-        </div>
-
-        <div class={flex({ alignItems: 'center', gap: '8px' })}>
-          <div class={center({ flexShrink: '0', borderWidth: '1px', borderRadius: '6px', paddingX: '4px', height: '22px' })}>
-            <div class={flex({ fontSize: '10px', fontWeight: 'bold', alignItems: 'center', gap: '2px' })}>
-              {#if !navigator.platform.includes('Mac')}
-                <span>Ctrl</span>
-              {:else}
-                <span class={css({ fontSize: '14px' })}>⌘</span>
-              {/if}
-              <Icon icon={CornerDownLeftIcon} size={12} />
-            </div>
-          </div>
-
-          <span class={css({ fontSize: '13px', fontWeight: 'semibold' })}>저장</span>
-        </div>
-      </div>
-
-      <div class={flex({ gap: '8px' })}>
-        <Button onclick={closeEditModal} size="sm" variant="secondary">취소</Button>
-        <Button disabled={!editingValue.trim()} onclick={handleSaveEdit} size="sm">저장</Button>
-      </div>
-    </div>
-  </div>
-</Modal>
+<NoteEntitySearchModal
+  existingEntityIds={entitySearchExistingIds}
+  noteId={entitySearchNoteId ?? ''}
+  onclose={() => (entitySearchNoteId = null)}
+  open={entitySearchNoteId !== null}
+/>

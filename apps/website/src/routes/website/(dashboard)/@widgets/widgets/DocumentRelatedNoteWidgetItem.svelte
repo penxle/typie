@@ -308,6 +308,7 @@
     <button
       style:background-color={displayStatus === 'RESOLVED' ? colorHex : 'transparent'}
       style:border={displayStatus === 'RESOLVED' ? 'none' : `1.5px solid ${colorHex}`}
+      style:transition={resolving || cancelling ? 'none' : undefined}
       class={center({
         width: '16px',
         height: '16px',
@@ -318,7 +319,7 @@
         cursor: palette ? 'default' : 'pointer',
         transition: 'common',
         pointerEvents: palette ? 'none' : 'auto',
-        ...(displayStatus === 'RESOLVED'
+        ...(displayStatus === 'RESOLVED' && !resolving
           ? {
               _hover: { opacity: '60' },
             }
