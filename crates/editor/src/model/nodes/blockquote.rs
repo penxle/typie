@@ -24,6 +24,7 @@ const MESSAGE_PADDING_X: f32 = 14.0;
 const MESSAGE_PADDING_Y: f32 = 8.0;
 const MESSAGE_MAX_WIDTH_RATIO: f32 = 0.8;
 const MESSAGE_MIN_WIDTH: f32 = 40.0;
+const MESSAGE_LAYOUT_GUARD_WIDTH: f32 = 1.0;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Codec)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -401,8 +402,10 @@ impl BlockquoteNode {
             })
         };
 
+        let final_constraint_width =
+            (measured_content_width + MESSAGE_LAYOUT_GUARD_WIDTH).min(max_content_width);
         let final_constraints =
-            BoxConstraints::new(0.0, measured_content_width, 0.0, constraints.max_height);
+            BoxConstraints::new(0.0, final_constraint_width, 0.0, constraints.max_height);
 
         struct PreparedChild {
             layout: Rc<LayoutNode>,
