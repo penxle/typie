@@ -12,12 +12,12 @@
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
-  import CircleCheckBigIcon from '~icons/lucide/circle-check-big';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import HomeIcon from '~icons/lucide/home';
   import SearchIcon from '~icons/lucide/search';
   import SquarePenIcon from '~icons/lucide/square-pen';
+  import StickyNoteIcon from '~icons/lucide/sticky-note';
   import { goto } from '$app/navigation';
   import { graphql } from '$mearie';
   import { getPaneGroup } from './[slug]/@pane/context.svelte';
@@ -509,13 +509,13 @@
           _supportHover: { backgroundColor: 'surface.muted' },
         })}
         onclick={() => {
-          app.state.issuesOpen = true;
-          mixpanel.track('open_issues_modal');
+          app.state.notesOpen = true;
+          mixpanel.track('open_notes_modal');
         }}
         type="button"
       >
-        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={CircleCheckBigIcon} size={16} />
-        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>할 일</span>
+        <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={StickyNoteIcon} size={16} />
+        <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>노트</span>
       </button>
     </div>
 

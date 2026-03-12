@@ -22,6 +22,7 @@ export const TableCode = {
   ISSUES: 'ISS',
   ISSUE_ENTITIES: 'ISSE',
   NOTES: 'N',
+  NOTE_ENTITIES: 'NE',
   PAYMENT_INVOICES: 'PYIV',
   PAYMENT_RECORDS: 'PYRC',
   PLANS: 'PL',

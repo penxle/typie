@@ -68,7 +68,7 @@
               id
 
               ...Editor_Widget_CharacterCountChangeWidget_document
-              ...Editor_Widget_DocumentRelatedIssueWidget_document
+              ...Editor_Widget_DocumentRelatedNoteWidget_document
             }
           }
         }

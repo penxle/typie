@@ -17,7 +17,7 @@ export type Member = PaneAxis | Pane;
 type _PaneInit<T extends Pane> = T extends unknown ? Omit<T, 'id' | 'type'> : never;
 export type PaneInit = _PaneInit<Pane>;
 
-export type PanelTab = 'info' | 'issues' | 'anchors' | 'spellcheck' | 'ai' | 'timeline' | 'settings' | 'remarks';
+export type PanelTab = 'info' | 'note' | 'anchors' | 'spellcheck' | 'ai' | 'timeline' | 'settings' | 'remarks';
 
 export type PaneGroupState = {
   root: Member | null;

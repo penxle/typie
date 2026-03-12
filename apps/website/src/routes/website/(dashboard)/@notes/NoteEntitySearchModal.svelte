@@ -15,13 +15,13 @@
   import { graphql } from '$mearie';
 
   type Props = {
-    issueId: string;
+    noteId: string;
     existingEntityIds: string[];
     open: boolean;
     onclose: () => void;
   };
 
-  let { issueId, existingEntityIds, open, onclose }: Props = $props();
+  let { noteId, existingEntityIds, open, onclose }: Props = $props();
 
   const app = getAppContext();
 
@@ -48,7 +48,7 @@
 
   const recentQuery = createQuery(
     graphql(`
-      query IssueEntitySearchModal_Recent_Query($siteId: ID) {
+      query NoteEntitySearchModal_Recent_Query($siteId: ID) {
         me @required {
           id
           recentlyViewedEntities(siteId: $siteId) {
@@ -75,7 +75,7 @@
 
   const searchQuery = createQuery(
     graphql(`
-      query IssueEntitySearchModal_Search_Query($query: String!, $siteId: ID!) {
+      query NoteEntitySearchModal_Search_Query($query: String!, $siteId: ID!) {
         search(query: $query, siteId: $siteId) {
           hits {
             __typename
@@ -107,10 +107,10 @@
     () => ({ skip: !debouncedQuery || !open }),
   );
 
-  const [addIssueEntity] = createMutation(
+  const [addNoteEntity] = createMutation(
     graphql(`
-      mutation IssueEntitySearchModal_AddIssueEntity_Mutation($input: AddIssueEntityInput!) {
-        addIssueEntity(input: $input) {
+      mutation NoteEntitySearchModal_AddNoteEntity_Mutation($input: AddNoteEntityInput!) {
+        addNoteEntity(input: $input) {
           id
         }
       }
@@ -172,14 +172,14 @@
 
   const handleSelect = async (item: ResultItem) => {
     if (item.isLinked) return;
-    await addIssueEntity({ input: { issueId, entityId: item.entityId } });
-    cache.invalidate({ __typename: 'Query', $field: 'issues', $args: { siteId: app.preference.current.currentSiteId ?? '' } });
-    cache.invalidate({ __typename: 'Entity', id: item.entityId, $field: 'issues' });
+    await addNoteEntity({ input: { noteId, entityId: item.entityId } });
+    cache.invalidate({ __typename: 'Query', $field: 'notes' });
+    cache.invalidate({ __typename: 'Entity', id: item.entityId, $field: 'notes' });
     onclose();
   };
 
   const scrollSelectedIntoView = () => {
-    const el = document.querySelector(`[data-issue-search-index="${selectedIndex}"]`);
+    const el = document.querySelector(`[data-note-search-index="${selectedIndex}"]`);
     el?.scrollIntoView({ block: 'nearest' });
   };
 
@@ -262,7 +262,7 @@
               opacity: item.isLinked ? '50' : '100',
               backgroundColor: index === selectedIndex ? 'surface.muted' : 'transparent',
             })}
-            data-issue-search-index={index}
+            data-note-search-index={index}
             onclick={() => handleSelect(item)}
             onpointermove={() => (selectedIndex = index)}
             type="button"

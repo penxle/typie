@@ -1,6 +1,6 @@
 import CharacterCountChangeWidget from './CharacterCountChangeWidget.svelte';
 import CharacterCountWidget from './CharacterCountWidget.svelte';
-import DocumentRelatedIssueWidget from './DocumentRelatedIssueWidget.svelte';
+import DocumentRelatedNoteWidget from './DocumentRelatedNoteWidget.svelte';
 import OnboardingWidget from './OnboardingWidget.svelte';
 import TimerWidget from './TimerWidget.svelte';
 import type { Component } from 'svelte';
@@ -8,7 +8,7 @@ import type { WidgetType } from '../widget-context.svelte';
 
 export { default as CharacterCountChangeWidget } from './CharacterCountChangeWidget.svelte';
 export { default as CharacterCountWidget } from './CharacterCountWidget.svelte';
-export { default as DocumentRelatedIssueWidget } from './DocumentRelatedIssueWidget.svelte';
+export { default as DocumentRelatedNoteWidget } from './DocumentRelatedNoteWidget.svelte';
 export { default as OnboardingWidget } from './OnboardingWidget.svelte';
 export { default as TimerWidget } from './TimerWidget.svelte';
 
@@ -22,7 +22,7 @@ export type WidgetComponent = Component<WidgetComponentProps>;
 export const WIDGET_COMPONENTS: Record<WidgetType, Component<WidgetComponentProps>> = {
   characterCount: CharacterCountWidget,
   characterCountChange: CharacterCountChangeWidget,
-  postRelatedNote: DocumentRelatedIssueWidget,
+  postRelatedNote: DocumentRelatedNoteWidget,
   onboarding: OnboardingWidget,
   timer: TimerWidget,
 };
@@ -38,7 +38,7 @@ export type WidgetMetadata = {
 export const WIDGET_METADATA: WidgetMetadata[] = [
   { type: 'characterCount', category: 'writing', name: '글자 수' },
   { type: 'characterCountChange', category: 'writing', name: '오늘의 기록' },
-  { type: 'postRelatedNote', category: 'writing', name: '할 일' },
+  { type: 'postRelatedNote', category: 'writing', name: '노트' },
   { type: 'timer', category: 'writing', name: '타이머' },
 ];
 

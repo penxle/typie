@@ -1,6 +1,6 @@
-input AddIssueEntityInput {
+input AddNoteEntityInput {
   entityId: ID!
-  issueId: ID!
+  noteId: ID!
 }
 
 type AdminDocumentsResult {
@@ -91,19 +91,12 @@ input CreateFolderInput {
   upperOrder: String
 }
 
-input CreateIssueInput {
-  content: String!
-  dueAt: DateTime
-  entityIds: [ID!]
-  priority: IssuePriority
-  siteId: ID!
-  status: IssueStatus
-}
-
 input CreateNoteInput {
   color: String!
   content: String!
   entityId: ID
+  entityIds: [ID!]
+  siteId: ID
 }
 
 input CreateSiteInput {
@@ -149,10 +142,6 @@ input DeleteEntitiesInput {
 
 input DeleteFolderInput {
   folderId: ID!
-}
-
-input DeleteIssueInput {
-  issueId: ID!
 }
 
 input DeleteNoteInput {
@@ -377,7 +366,6 @@ type Entity implements IEntity {
   depth: Int!
   descendants: [Entity!]!
   id: ID!
-  issues: [Issue!]!
   node: EntityNode!
   notes: [Note!]!
   notesCount: Int!
@@ -619,18 +607,6 @@ enum InAppPurchaseStore {
   GOOGLE_PLAY
 }
 
-type Issue {
-  content: String!
-  createdAt: DateTime!
-  dueAt: DateTime
-  entities: [Entity!]!
-  id: ID!
-  priority: IssuePriority!
-  site: Site!
-  status: IssueStatus!
-  updatedAt: DateTime!
-}
-
 input IssueBlobUploadUrlInput {
   filename: String!
 }
@@ -711,7 +687,7 @@ input MoveWidgetInput {
 }
 
 type Mutation {
-  addIssueEntity(input: AddIssueEntityInput!): Issue!
+  addNoteEntity(input: AddNoteEntityInput!): Note!
   adminGiveCredit(input: AdminGiveCreditInput!): Boolean!
   adminImpersonate(input: AdminImpersonateInput!): Boolean!
   adminRefundPayment(input: AdminRefundPaymentInput!): Boolean!
@@ -726,7 +702,6 @@ type Mutation {
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
   createFolder(input: CreateFolderInput!): Folder!
-  createIssue(input: CreateIssueInput!): Issue!
   createNote(input: CreateNoteInput!): Note!
   createSite(input: CreateSiteInput!): Site!
   createTextReplacement(input: CreateTextReplacementInput!): TextReplacementNode!
@@ -736,7 +711,6 @@ type Mutation {
   deleteDocument(input: DeleteDocumentInput!): Document!
   deleteEntities(input: DeleteEntitiesInput!): [Entity!]!
   deleteFolder(input: DeleteFolderInput!): Folder!
-  deleteIssue(input: DeleteIssueInput!): Issue!
   deleteNote(input: DeleteNoteInput!): Note!
   deleteSite(input: DeleteSiteInput!): Site!
   deleteTextReplacement(input: DeleteTextReplacementInput!): TextReplacementNode!
@@ -765,7 +739,7 @@ type Mutation {
   recoverEntity(input: RecoverEntityInput!): Entity!
   redeemCreditCode(input: RedeemCreditCodeInput!): User!
   registerPushNotificationToken(input: RegisterPushNotificationTokenInput!): Boolean!
-  removeIssueEntity(input: RemoveIssueEntityInput!): Issue!
+  removeNoteEntity(input: RemoveNoteEntityInput!): Note!
   renameFolder(input: RenameFolderInput!): Folder!
   reportDocument(input: ReportDocumentInput!): Boolean!
   resetPassword(input: ResetPasswordInput!): Boolean!
@@ -790,7 +764,6 @@ type Mutation {
   updateEmail(input: UpdateEmailInput!): Boolean!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateFoldersOption(input: UpdateFoldersOptionInput!): [Folder!]!
-  updateIssue(input: UpdateIssueInput!): Issue!
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
   updateNote(input: UpdateNoteInput!): Note!
   updatePassword(input: UpdatePasswordInput!): User!
@@ -808,9 +781,12 @@ type Note {
   color: String!
   content: String!
   createdAt: DateTime!
+  entities: [Entity!]!
   entity: Entity
   id: ID!
   order: String!
+  site: Site
+  status: NoteStatus!
   updatedAt: DateTime!
   user: User!
 }
@@ -819,6 +795,11 @@ enum NoteState {
   ACTIVE
   DELETED
   DELETED_CASCADED
+}
+
+enum NoteStatus {
+  OPEN
+  RESOLVED
 }
 
 type PaymentInvoice {
@@ -1040,11 +1021,9 @@ type Query {
   getBootstrap: JSON!
   image(imageId: ID!): Image!
   impersonation: Impersonation
-  issue(issueId: ID!): Issue!
-  issues(priority: IssuePriority, siteId: ID!, status: IssueStatus): [Issue!]!
   me: User
   note(noteId: ID!): Note!
-  notes(entityId: ID, siteId: ID): [Note!]!
+  notes(entityId: ID, siteId: ID, status: NoteStatus): [Note!]!
   permalink(permalink: String!): Permalink!
   post(slug: String!): Post!
   randomName: String!
@@ -1092,9 +1071,9 @@ input RegisterPushNotificationTokenInput {
   token: String!
 }
 
-input RemoveIssueEntityInput {
+input RemoveNoteEntityInput {
   entityId: ID!
-  issueId: ID!
+  noteId: ID!
 }
 
 input RenameFolderInput {
@@ -1358,14 +1337,6 @@ input UpdateFoldersOptionInput {
   visibility: EntityVisibility
 }
 
-input UpdateIssueInput {
-  content: String
-  dueAt: DateTime
-  issueId: ID!
-  priority: IssuePriority
-  status: IssueStatus
-}
-
 input UpdateMarketingConsentInput {
   marketingConsent: Boolean!
 }
@@ -1375,6 +1346,7 @@ input UpdateNoteInput {
   content: String
   entityId: ID
   noteId: ID!
+  status: NoteStatus
 }
 
 input UpdatePasswordInput {

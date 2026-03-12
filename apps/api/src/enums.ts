@@ -84,6 +84,12 @@ export const IssueStatus = {
   CLOSED: 'CLOSED',
 } as const;
 
+export type NoteStatus = keyof typeof NoteStatus;
+export const NoteStatus = {
+  OPEN: 'OPEN',
+  RESOLVED: 'RESOLVED',
+} as const;
+
 export type NoteState = keyof typeof NoteState;
 export const NoteState = {
   ACTIVE: 'ACTIVE',
