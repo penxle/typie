@@ -18,6 +18,7 @@ import 'package:typie/screens/home/__generated__/search_query.req.gql.dart';
 import 'package:typie/services/kv.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class SearchOverlay extends HookWidget {
@@ -155,7 +156,7 @@ class _SearchHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final topPadding = MediaQuery.paddingOf(context).top;
+    final topPadding = OverlayHeading.overlayHeight(context);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
