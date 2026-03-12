@@ -5,8 +5,10 @@
   import { tooltip } from '@typie/ui/actions';
   import { Button, Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, elementScrollViewport, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { SvelteSet } from 'svelte/reactivity';
+  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import PlusIcon from '~icons/lucide/plus';
   import StickyNoteIcon from '~icons/lucide/sticky-note';
   import { cache } from '$lib/graphql';
@@ -27,6 +29,7 @@
         notes {
           id
           order
+          status
           ...DocumentPanelNoteItem_note
         }
       }
@@ -82,15 +85,27 @@
   });
 
   const notes = $derived(sortedNotes || []);
+  const resolvingNoteIds = new SvelteSet<string>();
+  const openNotes = $derived(notes.filter((n) => n.status === 'OPEN' || resolvingNoteIds.has(n.id)));
+  const resolvedNotes = $derived(notes.filter((n) => n.status === 'RESOLVED' && !resolvingNoteIds.has(n.id)));
+  let resolvedExpanded = $state(false);
+
+  const handleBeginResolve = (noteId: string) => {
+    resolvingNoteIds.add(noteId);
+  };
+
+  const handleEndResolve = (noteId: string) => {
+    resolvingNoteIds.delete(noteId);
+    cache.invalidate({ __typename: 'Entity', id: entity.data.id, $field: 'notes' });
+  };
 
   let lastAddedNoteId = $state<string>();
 
   const handleAddNote = async (via: string) => {
-    const randomColor = getRandomNoteColor();
     const result = await createNote({
       input: {
         content: '',
-        color: randomColor,
+        color: 'gray',
         entityId: entity.data.id,
       },
     });
@@ -181,7 +196,15 @@
   });
 </script>
 
-<div class={flex({ flexDirection: 'column', flexGrow: '1', height: 'full', overflow: 'hidden' })}>
+<div
+  class={flex({
+    flexDirection: 'column',
+    minWidth: 'var(--min-width)',
+    width: 'var(--width)',
+    maxWidth: 'var(--max-width)',
+    height: 'full',
+  })}
+>
   <div
     class={flex({
       justifyContent: 'space-between',
@@ -195,7 +218,7 @@
   >
     <div class={flex({ alignItems: 'center', gap: '6px', fontWeight: 'semibold' })}>
       <div class={css({ fontSize: '13px', color: 'text.subtle' })}>노트</div>
-      {#if notes.length > 0}
+      {#if openNotes.length > 0}
         <div
           class={css({
             fontSize: '11px',
@@ -206,7 +229,7 @@
             borderRadius: '4px',
           })}
         >
-          {notes.length}
+          {openNotes.length}
         </div>
       {/if}
     </div>
@@ -239,7 +262,7 @@
       paddingBottom: '20px',
     })}
   >
-    {#if notes.length === 0}
+    {#if openNotes.length === 0}
       <div
         class={flex({
           flexDirection: 'column',
@@ -271,16 +294,92 @@
         <Button onclick={() => handleAddNote('button')} size="sm" variant="secondary">노트 추가</Button>
       </div>
     {:else}
-      {#each notes as note (note.id)}
+      {#each openNotes as note (note.id)}
         <DocumentPanelNoteItem
           draggingNoteId={dragging?.noteId ?? null}
           note$key={note}
           onAddNote={() => handleAddNote('shortcut')}
+          onBeginResolve={() => handleBeginResolve(note.id)}
           onDragEnd={handleDragEnd}
           onDragEnter={() => handleDragEnter(note.id)}
+          onDragMove={handleDragEnter}
           onDragStart={() => handleDragStart(note.id)}
+          onEndResolve={() => handleEndResolve(note.id)}
+          resolving={resolvingNoteIds.has(note.id)}
         />
       {/each}
+    {/if}
+
+    <!-- 완료됨 섹션 (빈 상태와 무관하게 항상 표시) -->
+    {#if resolvedNotes.length > 0}
+      <div
+        class={flex({
+          flexDirection: 'column',
+          gap: '6px',
+          borderTopWidth: '1px',
+          borderColor: 'surface.muted',
+          paddingTop: '6px',
+          marginTop: 'auto',
+        })}
+      >
+        <button
+          class={flex({
+            alignItems: 'center',
+            gap: '6px',
+            paddingX: '12px',
+            paddingY: '8px',
+            fontSize: '12px',
+            color: 'text.faint',
+            cursor: 'pointer',
+            borderRadius: '6px',
+            transition: 'common',
+            transitionProperty: '[color, background-color]',
+            _hover: { color: 'text.subtle', backgroundColor: 'surface.muted' },
+          })}
+          onclick={() => (resolvedExpanded = !resolvedExpanded)}
+          type="button"
+        >
+          <Icon
+            style={css.raw({ transition: 'common', transform: resolvedExpanded ? 'rotate(90deg)' : 'rotate(0deg)' })}
+            icon={ChevronRightIcon}
+            size={14}
+          />
+          완료됨
+          <div
+            class={css({
+              fontSize: '11px',
+              fontWeight: 'semibold',
+              color: 'text.default',
+              backgroundColor: 'surface.muted',
+              paddingX: '6px',
+              paddingY: '2px',
+              borderRadius: '4px',
+            })}
+          >
+            {resolvedNotes.length}
+          </div>
+        </button>
+        {#if resolvedExpanded}
+          {#each resolvedNotes as note (note.id)}
+            <DocumentPanelNoteItem
+              draggingNoteId={dragging?.noteId ?? null}
+              note$key={note}
+              onAddNote={() => handleAddNote('shortcut')}
+              onBeginResolve={() => {
+                /* noop: resolved notes */
+              }}
+              onDragEnd={handleDragEnd}
+              onDragEnter={() => handleDragEnter(note.id)}
+              onDragMove={handleDragEnter}
+              onDragStart={() => handleDragStart(note.id)}
+              onEndResolve={() => {
+                /* noop: resolved notes */
+              }}
+              resolving={false}
+            />
+          {/each}
+        {/if}
+      </div>
     {/if}
   </div>
 </div>

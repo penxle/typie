@@ -523,4 +523,12 @@ export const semanticColors = defineSemanticTokens.colors({
 
   'decoration.grid.brand': { value: { base: '{colors.brand.100}', _dark: '{colors.dark.gray.700}' } },
   'decoration.grid.brand.subtle': { value: { base: '{colors.brand.50}', _dark: '{colors.dark.gray.800}' } },
+
+  'palette.gray': { value: { base: '#71717a', _dark: '#b4b4bc' } },
+  'palette.red': { value: { base: '#ef4444', _dark: '#fca5a5' } },
+  'palette.orange': { value: { base: '#f97316', _dark: '#fdba74' } },
+  'palette.yellow': { value: { base: '#eab308', _dark: '#fde047' } },
+  'palette.green': { value: { base: '#22c55e', _dark: '#86efac' } },
+  'palette.blue': { value: { base: '#3b82f6', _dark: '#93c5fd' } },
+  'palette.purple': { value: { base: '#8b5cf6', _dark: '#c4b5fd' } },
 });

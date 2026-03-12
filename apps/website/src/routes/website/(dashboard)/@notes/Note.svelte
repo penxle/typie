@@ -3,13 +3,13 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { Icon, Popover } from '@typie/ui/components';
-  import { getNoteColor } from '@typie/ui/utils';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
   import CircleIcon from '~icons/lucide/circle';
   import CircleCheckIcon from '~icons/lucide/circle-check';
   import FileIcon from '~icons/lucide/file';
   import Trash2Icon from '~icons/lucide/trash-2';
+  import { getNoteColor } from './colors';
 
   type Props = {
     note: {
@@ -83,7 +83,7 @@
     }
   });
 
-  const color = $derived(getNoteColor(note.color)?.color ?? token('colors.surface.default'));
+  const color = $derived(getNoteColor(note.color) ?? token('colors.surface.default'));
 </script>
 
 <div

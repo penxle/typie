@@ -5,8 +5,9 @@
   import { tooltip } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, elementScrollViewport, getRandomNoteColor, handleDragScroll } from '@typie/ui/utils';
+  import { animateFlip, elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { SvelteSet } from 'svelte/reactivity';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronUpIcon from '~icons/lucide/chevron-up';
   import ExpandIcon from '~icons/lucide/expand';
@@ -39,6 +40,7 @@
           notes {
             id
             order
+            status
             ...DocumentRelatedNoteWidgetItem_note
           }
         }
@@ -109,17 +111,29 @@
   });
 
   const notes = $derived(sortedNotes);
+  const resolvingNoteIds = new SvelteSet<string>();
+  const openNotes = $derived(notes.filter((n) => n.status === 'OPEN' || resolvingNoteIds.has(n.id)));
+
+  const handleBeginResolve = (noteId: string) => {
+    resolvingNoteIds.add(noteId);
+  };
+
+  const handleEndResolve = (noteId: string) => {
+    resolvingNoteIds.delete(noteId);
+    if (relatedDocument.data?.entity.id) {
+      cache.invalidate({ __typename: 'Entity', id: relatedDocument.data.entity.id, $field: 'notes' });
+    }
+  };
 
   let lastAddedNoteId = $state<string>();
 
   const handleAddNote = async (via: string) => {
     if (!relatedDocument.data?.entity.id) return;
 
-    const randomColor = getRandomNoteColor();
     const result = await createNote({
       input: {
         content: '',
-        color: randomColor,
+        color: 'gray',
         entityId: relatedDocument.data.entity.id,
       },
     });
@@ -293,7 +307,7 @@
       paddingRight: '4px',
     })}
   >
-    {#if notes.length === 0}
+    {#if openNotes.length === 0}
       <div
         class={flex({
           flexDirection: 'column',
@@ -321,15 +335,19 @@
         </p>
       </div>
     {:else}
-      {#each notes as note (note.id)}
+      {#each openNotes as note (note.id)}
         <DocumentRelatedNoteWidgetItem
           draggingNoteId={dragging?.noteId ?? null}
           note$key={note}
           onAddNote={() => handleAddNote('shortcut')}
+          onBeginResolve={() => handleBeginResolve(note.id)}
           onDragEnd={handleDragEnd}
           onDragEnter={() => handleDragEnter(note.id)}
+          onDragMove={handleDragEnter}
           onDragStart={() => handleDragStart(note.id)}
+          onEndResolve={() => handleEndResolve(note.id)}
           {palette}
+          resolving={resolvingNoteIds.has(note.id)}
         />
       {/each}
     {/if}

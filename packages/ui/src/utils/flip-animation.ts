@@ -85,6 +85,7 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
     if (Math.abs(deltaX) === 0 && Math.abs(deltaY) === 0) continue;
 
     hasAnimation = true;
+    const originalTransition = el.style.transition;
     el.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
     el.style.transition = 'none';
 
@@ -100,8 +101,8 @@ export const animateFlip = async (selector: string, idAttribute = 'id', containe
         const el = elRef.deref();
         if (!el) return;
 
-        el.style.transition = 'none';
-        el.style.pointerEvents = 'auto';
+        el.style.transition = originalTransition;
+        el.style.pointerEvents = '';
       }, ANIMATION_DURATION);
     });
   }
