@@ -123,7 +123,9 @@
     userId,
     navigate: (path, opts) => goto(path, opts),
     onSiteChange: (id) => {
-      app.preference.current.currentSiteId = id;
+      if (query.data.me.sites.some((site) => site.id === id)) {
+        app.preference.current.currentSiteId = id;
+      }
     },
   });
 
