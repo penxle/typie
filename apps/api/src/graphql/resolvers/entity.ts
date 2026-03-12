@@ -894,6 +894,26 @@ builder.mutationFields((t) => ({
           )
           .returning();
 
+        const deletedEntityIds = deletedEntities.map(({ id }) => id);
+
+        await tx.execute(sql`
+          UPDATE ${Notes}
+          SET state = ${NoteState.DELETED_CASCADED}, updated_at = NOW()
+          WHERE ${Notes.id} IN (
+            SELECT ${NoteEntities.noteId}
+            FROM ${NoteEntities}
+            WHERE ${inArray(NoteEntities.entityId, deletedEntityIds)}
+          )
+          AND ${eq(Notes.state, NoteState.ACTIVE)}
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ${NoteEntities} ne2
+            INNER JOIN ${Entities} e ON e.id = ne2.entity_id
+            WHERE ne2.note_id = ${Notes.id}
+            AND ${eq(sql`e.state`, EntityState.ACTIVE)}
+          )
+        `);
+
         const inputEntityIdSet = new Set(input.entityIds);
         const directEntities = entities.filter((e) => inputEntityIdSet.has(e.id));
         const parentIds = new Set(directEntities.map((e) => e.parent_id).filter((id): id is string => id !== null));
@@ -975,7 +995,7 @@ builder.mutationFields((t) => ({
             .where(eq(Entities.id, entity.id));
         }
 
-        await tx.execute<{ id: string; type: EntityType }>(
+        const recoveredEntities = await tx.execute<{ id: string; type: EntityType }>(
           sql`
             WITH RECURSIVE sq AS (
               SELECT ${Entities.id}
@@ -994,6 +1014,22 @@ builder.mutationFields((t) => ({
             RETURNING ${Entities.id}, ${Entities.type}
           `,
         );
+
+        const recoveredEntityIds = recoveredEntities.map(({ id }) => id);
+        if (recoveredEntityIds.length > 0) {
+          await tx
+            .update(Notes)
+            .set({ state: NoteState.ACTIVE, updatedAt: dayjs() })
+            .where(
+              and(
+                eq(Notes.state, NoteState.DELETED_CASCADED),
+                inArray(
+                  Notes.id,
+                  db.select({ noteId: NoteEntities.noteId }).from(NoteEntities).where(inArray(NoteEntities.entityId, recoveredEntityIds)),
+                ),
+              ),
+            );
+        }
 
         const recoveredEntity = await tx.select().from(Entities).where(eq(Entities.id, entity.id)).then(firstOrThrow);
 

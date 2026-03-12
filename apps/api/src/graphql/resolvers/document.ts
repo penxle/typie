@@ -24,8 +24,8 @@ import {
   firstOrThrow,
   firstOrThrowWith,
   Images,
-  IssueEntities,
-  Issues,
+  NoteEntities,
+  Notes,
   TableCode,
   UserPersonalIdentities,
   UserPreferences,
@@ -42,7 +42,7 @@ import {
   EntityState,
   EntityType,
   EntityVisibility,
-  IssueState,
+  NoteState,
 } from '@/enums';
 import { env } from '@/env';
 import { NotFoundError, TypieError } from '@/errors';
@@ -939,16 +939,15 @@ builder.mutationFields((t) => ({
 
       // TODO: anchors
 
-      const issueRows = await db
+      const noteRows = await db
         .select({
-          content: Issues.content,
-          status: Issues.status,
-          priority: Issues.priority,
-          dueAt: Issues.dueAt,
+          content: Notes.content,
+          color: Notes.color,
+          status: Notes.status,
         })
-        .from(IssueEntities)
-        .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
-        .where(and(eq(IssueEntities.entityId, entity.id), eq(Issues.state, IssueState.ACTIVE)));
+        .from(NoteEntities)
+        .innerJoin(Notes, eq(NoteEntities.noteId, Notes.id))
+        .where(and(eq(NoteEntities.entityId, entity.id), eq(Notes.state, NoteState.ACTIVE)));
 
       const title = `(사본) ${document.title ?? '(제목 없음)'}`;
 
@@ -1010,24 +1009,31 @@ builder.mutationFields((t) => ({
           userId: ctx.session.userId,
         });
 
-        if (issueRows.length > 0) {
-          for (const row of issueRows) {
-            const newIssue = await tx
-              .insert(Issues)
+        if (noteRows.length > 0) {
+          let prevOrder: string | null = null;
+
+          for (const row of noteRows) {
+            const order = generateFractionalOrder({ lower: prevOrder, upper: null });
+
+            const newNote = await tx
+              .insert(Notes)
               .values({
+                userId: ctx.session.userId,
                 siteId: entity.siteId,
                 content: row.content,
+                color: row.color,
                 status: row.status,
-                priority: row.priority,
-                dueAt: row.dueAt,
+                order,
               })
-              .returning({ id: Issues.id })
+              .returning({ id: Notes.id })
               .then(firstOrThrow);
 
-            await tx.insert(IssueEntities).values({
-              issueId: newIssue.id,
+            await tx.insert(NoteEntities).values({
+              noteId: newNote.id,
               entityId: newEntity.id,
             });
+
+            prevOrder = order;
           }
         }
 

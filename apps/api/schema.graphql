@@ -617,26 +617,6 @@ type IssueBlobUploadUrlResult {
   url: String!
 }
 
-enum IssuePriority {
-  HIGH
-  LOW
-  MEDIUM
-  NONE
-  URGENT
-}
-
-enum IssueState {
-  ACTIVE
-  DELETED
-}
-
-enum IssueStatus {
-  CLOSED
-  IN_PROGRESS
-  OPEN
-  RESOLVED
-}
-
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
 """
@@ -785,7 +765,7 @@ type Note {
   entity: Entity
   id: ID!
   order: String!
-  site: Site
+  site: Site!
   status: NoteStatus!
   updatedAt: DateTime!
   user: User!
