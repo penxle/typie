@@ -2,7 +2,31 @@
 
 ## Project Structure
 
-Turborepo monorepo using Bun as package manager/runtime. `apps/` (api, website, desktop, mobile), `crates/` (editor), `packages/` (lib, ui, styled-system, tsconfig, lintconfig).
+Turborepo monorepo using Bun as package manager/runtime.
+
+- `apps/`: api, website, desktop, mobile, bmo, literoom, caddy
+- `crates/`: editor (Rust, WASM)
+- `packages/`: adapter-node, lib, ui, styled-system, tsconfig, lintconfig
+
+## Commands
+
+```bash
+bun install             # Install dependencies
+bun run dev             # Start all dev servers
+bun run build           # Build all packages
+bun run test            # Run all tests
+bun run lint:eslint     # Lint with ESLint
+bun run lint:prettier   # Check formatting
+bun run lint:typecheck  # TypeScript type checking
+bun run lint:svelte     # Svelte-specific linting
+bun run lint:spellcheck # Spell check with cspell
+bun run lint:syncpack   # Check dependency version sync
+```
+
+## Git Hooks (Lefthook)
+
+Pre-commit runs automatically: eslint fix, prettier fix, cspell, dart fix/format, cargo fmt.
+Run `bun run bootstrap` to install hooks after fresh clone.
 
 ## Code Style
 
@@ -11,70 +35,11 @@ Turborepo monorepo using Bun as package manager/runtime. `apps/` (api, website, 
 - Naming: `kebab-case.ts` utilities, `PascalCase.svelte` components, `SCREAMING_SNAKE_CASE` constants
 - Svelte: `$props()`, `$state()`, `$derived()` (Svelte 5 runes)
 - Rust: Edition 2024, `cargo fmt` before commits
+- Dart: `dart format`, `dart fix --apply` before commits (Flutter mobile app)
 
 ## Behavioral Guidelines
 
-Behavioral guidelines to reduce common LLM coding mistakes.
-
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-### 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-### 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-### 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-### 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+- **Think before coding**: State assumptions explicitly. Surface tradeoffs. If unclear, ask.
+- **Simplicity first**: Minimum code that solves the problem. No speculative features or abstractions.
+- **Surgical changes**: Touch only what you must. Match existing style. Remove only orphans YOUR changes created.
+- **Goal-driven execution**: Transform tasks into verifiable goals with success criteria. State a brief plan for multi-step tasks.
