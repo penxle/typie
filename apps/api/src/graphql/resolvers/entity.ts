@@ -239,7 +239,7 @@ Entity.implement({
           .innerJoin(Issues, eq(IssueEntities.issueId, Issues.id))
           .where(and(eq(IssueEntities.entityId, self.id), eq(Issues.state, IssueState.ACTIVE)));
 
-        const statusOrder = { OPEN: 0, IN_PROGRESS: 1, RESOLVED: 2, CLOSED: 3 } as const;
+        const statusOrder = { IN_PROGRESS: 0, OPEN: 1, RESOLVED: 2, CLOSED: 3 } as const;
         const priorityOrder = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 } as const;
         return rows
           .map((r) => r.issue)
