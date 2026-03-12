@@ -98,8 +98,11 @@ class HomeScreen extends HookWidget {
         loading: data == null,
         resizeToAvoidBottomInset: searching,
         extendBodyBehindAppBar: true,
-        heading: _Heading(data: data, scrollController: scrollController, visible: !searching),
-        child: data == null ? homeContent : OverlayHeadingLayout(child: homeContent),
+        heading: null,
+        child: OverlayHeadingLayout(
+          heading: _Heading(data: data, scrollController: scrollController, visible: !searching),
+          child: homeContent,
+        ),
       ),
     );
   }

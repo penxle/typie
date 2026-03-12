@@ -842,7 +842,6 @@ class _EntityList extends HookWidget {
     final controlShadow = _headingControlShadow(context);
     final isRoot = entity == null;
     final canPop = entity != null && context.router.canPop();
-    final headingFadeColors = OverlayHeading.buildFadeColors(context);
     final shellNavBottomInset = shellNavVisible
         ? MediaQuery.viewPaddingOf(context).bottom + _entityShellNavHeight + _entityShellNavBottomGap
         : 0.0;
@@ -1107,49 +1106,51 @@ class _EntityList extends HookWidget {
     return Screen(
       extendBodyBehindAppBar: true,
       backgroundColor: context.colors.surfaceSubtle,
-      heading: OverlayHeadingBar(
-        leading: buildLeadingControl(),
-        center: buildCenterControl(),
-        trailing: buildTrailingControl(),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(child: bodyContent),
-          Positioned(top: 0, left: 0, right: 0, child: OverlayHeadingFade(colors: headingFadeColors)),
-          if (isReordering.value) ...[
-            Positioned(
-              top: reorderViewportTopInset,
-              left: 0,
-              right: 0,
-              child: _EntityReorderEdgeFade(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                baseColor: context.colors.surfaceSubtle,
+      heading: null,
+      child: OverlayHeadingLayout(
+        heading: OverlayHeadingBar(
+          leading: buildLeadingControl(),
+          center: buildCenterControl(),
+          trailing: buildTrailingControl(),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(child: bodyContent),
+            if (isReordering.value) ...[
+              Positioned(
+                top: reorderViewportTopInset,
+                left: 0,
+                right: 0,
+                child: _EntityReorderEdgeFade(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  baseColor: context.colors.surfaceSubtle,
+                ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: shellNavBottomInset,
-              child: _EntityReorderEdgeFade(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                baseColor: context.colors.surfaceSubtle,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: shellNavBottomInset,
+                child: _EntityReorderEdgeFade(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  baseColor: context.colors.surfaceSubtle,
+                ),
               ),
-            ),
+            ],
+            if (isSelecting.value)
+              SelectedEntitiesBar(
+                bottomOffset: selectionBarBottomOffset,
+                isVisible: selectedItems.value.isNotEmpty,
+                selectedItems: selectedItems.value,
+                entities: entities,
+                onClearSelection: () {
+                  selectedItems.value = {};
+                },
+                onExitSelectionMode: exitSelectionMode,
+              ),
           ],
-          if (isSelecting.value)
-            SelectedEntitiesBar(
-              bottomOffset: selectionBarBottomOffset,
-              isVisible: selectedItems.value.isNotEmpty,
-              selectedItems: selectedItems.value,
-              entities: entities,
-              onClearSelection: () {
-                selectedItems.value = {};
-              },
-              onExitSelectionMode: exitSelectionMode,
-            ),
-        ],
+        ),
       ),
     );
   }
