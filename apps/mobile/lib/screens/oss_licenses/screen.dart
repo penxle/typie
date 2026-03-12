@@ -5,11 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:typie/context/bottom_sheet.dart';
-import 'package:typie/context/theme.dart';
-import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/widgets/heading.dart';
-import 'package:typie/widgets/screen.dart';
-import 'package:typie/widgets/tappable.dart';
+import 'package:typie/widgets/settings_screen.dart';
 
 @RoutePage()
 class OssLicensesScreen extends HookWidget {
@@ -30,65 +26,74 @@ class OssLicensesScreen extends HookWidget {
     });
 
     final licenses = useFuture(future);
+    final scrollController = useScrollController();
 
-    return Screen(
-      heading: const Heading(title: '오픈소스 라이센스'),
-      child: licenses.hasData
-          ? ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
-              itemCount: licenses.data!.length,
-              itemBuilder: (context, index) {
-                final license = licenses.data![index];
+    return SettingsOverlayScreen(
+      title: '오픈소스 라이센스',
+      scrollController: scrollController,
+      bodyBuilder: (context, title, padding) {
+        final itemCount = licenses.hasData ? licenses.data!.length + 1 : 2;
 
-                return Tappable(
-                  onTap: () async {
-                    await context.showBottomSheet(
-                      child: AppFullBottomSheet(
-                        title: license.key,
-                        padding: Pad.zero,
-                        child: ListView.separated(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
-                          itemCount: license.value.length,
-                          itemBuilder: (context, index) {
-                            return Text(license.value[index], style: const TextStyle(fontSize: 14));
-                          },
-                          separatorBuilder: (context, index) {
-                            return const Gap(12);
-                          },
-                        ),
+        return ListView.separated(
+          controller: scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: padding,
+          itemCount: itemCount,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  title,
+                  const Gap(settingsSectionGap),
+                  const SettingsSectionLabel(text: '패키지', top: 0),
+                ],
+              );
+            }
+
+            if (!licenses.hasData) {
+              return const SettingsSectionCard(
+                child: SizedBox(height: 220, child: Center(child: CircularProgressIndicator())),
+              );
+            }
+
+            final license = licenses.data![index - 1];
+
+            return SettingsSectionCard(
+              clipBehavior: Clip.antiAlias,
+              child: SettingsListRow(
+                label: license.key,
+                onTap: () async {
+                  await context.showBottomSheet(
+                    child: AppFullBottomSheet(
+                      title: license.key,
+                      padding: Pad.zero,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
+                        itemCount: license.value.length,
+                        itemBuilder: (context, index) {
+                          return Text(license.value[index], style: const TextStyle(fontSize: 14));
+                        },
+                        separatorBuilder: (context, index) {
+                          return const Gap(12);
+                        },
                       ),
-                    );
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: context.colors.surfaceDefault,
-                      border: Border.all(color: context.colors.borderStrong),
-                      borderRadius: const BorderRadius.all(Radius.circular(8)),
                     ),
-                    padding: const Pad(horizontal: 16, vertical: 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            license.key,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        const Icon(LucideLightIcons.chevron_right, size: 16),
-                      ],
-                    ),
-                  ),
-                );
-              },
-              separatorBuilder: (context, index) {
-                return const Gap(12);
-              },
-            )
-          : const Center(child: CircularProgressIndicator()),
+                  );
+                },
+              ),
+            );
+          },
+          separatorBuilder: (context, index) {
+            if (index == 0) {
+              return const SizedBox.shrink();
+            }
+
+            return const Gap(12);
+          },
+        );
+      },
     );
   }
 }

@@ -14,8 +14,8 @@ import 'package:typie/screens/update_email/__generated__/screen_query.req.gql.da
 import 'package:typie/screens/update_email/__generated__/send_email_update_email_mutation.req.gql.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/settings_screen.dart';
 
 @RoutePage()
 class UpdateEmailScreen extends HookWidget {
@@ -25,21 +25,22 @@ class UpdateEmailScreen extends HookWidget {
   Widget build(BuildContext context) {
     final form = useHookForm();
     final mixpanel = useService<Mixpanel>();
+    final scrollController = useScrollController();
 
-    return Screen(
-      heading: const Heading(title: '이메일 변경'),
-      resizeToAvoidBottomInset: true,
-      padding: const Pad(top: 20),
-      bottomAction: BottomAction(
-        text: '변경',
-        onTap: () async {
-          await form.submit();
-        },
-      ),
-      child: GraphQLOperation(
-        operation: GUpdateEmailScreen_QueryReq(),
-        builder: (context, client, data) {
-          return HookForm(
+    return GraphQLOperation(
+      operation: GUpdateEmailScreen_QueryReq(),
+      builder: (context, client, data) {
+        return SettingsOverlayScreen(
+          title: '이메일 변경',
+          scrollController: scrollController,
+          resizeToAvoidBottomInset: true,
+          bottomAction: BottomAction(
+            text: '변경',
+            onTap: () async {
+              await form.submit();
+            },
+          ),
+          child: HookForm(
             form: form,
             schema: l.schema({
               'email': l.string().email(message: '유효한 이메일 주소를 입력해주세요.')..required(message: '이메일 주소를 입력해주세요.'),
@@ -76,35 +77,34 @@ class UpdateEmailScreen extends HookWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const Pad(horizontal: 20),
+                  const Gap(settingsSectionGap),
+                  const SettingsSectionLabel(text: '이메일'),
+                  SettingsSectionCard(
+                    padding: const Pad(all: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      spacing: 4,
                       children: [
                         const Text('현재 이메일 주소', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                        const Gap(4),
                         Text(data.me!.email, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                        const Gap(16),
+                        const HookFormTextField(
+                          name: 'email',
+                          label: '변경할 이메일 주소',
+                          placeholder: 'me@example.com',
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: [AutofillHints.email],
+                          autofocus: true,
+                        ),
                       ],
-                    ),
-                  ),
-                  const Gap(20),
-                  const Padding(
-                    padding: Pad(horizontal: 20),
-                    child: HookFormTextField(
-                      name: 'email',
-                      label: '변경할 이메일 주소',
-                      placeholder: 'me@example.com',
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: [AutofillHints.email],
-                      autofocus: true,
                     ),
                   ),
                 ],
               );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:built_value/json_object.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -21,8 +22,8 @@ import 'package:typie/screens/update_profile/__generated__/update_user_mutation.
 import 'package:typie/services/blob.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/settings_screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -34,23 +35,25 @@ class UpdateProfileScreen extends HookWidget {
     final blob = useService<Blob>();
     final form = useHookForm();
     final mixpanel = useService<Mixpanel>();
+    final scrollController = useScrollController();
 
-    return Screen(
-      heading: const Heading(title: '프로필 변경'),
-      resizeToAvoidBottomInset: true,
-      bottomAction: BottomAction(
-        text: '변경',
-        onTap: () async {
-          await form.submit();
-        },
-      ),
-      child: GraphQLOperation(
-        operation: GUpdateProfileScreen_QueryReq(),
-        builder: (context, client, data) {
-          final avatarId = useState(data.me!.avatar.id);
-          final avatarUrl = useState<String>(data.me!.avatar.url);
+    return GraphQLOperation(
+      operation: GUpdateProfileScreen_QueryReq(),
+      builder: (context, client, data) {
+        final avatarId = useState(data.me!.avatar.id);
+        final avatarUrl = useState<String>(data.me!.avatar.url);
 
-          return HookForm(
+        return SettingsOverlayScreen(
+          title: '프로필 변경',
+          scrollController: scrollController,
+          resizeToAvoidBottomInset: true,
+          bottomAction: BottomAction(
+            text: '변경',
+            onTap: () async {
+              await form.submit();
+            },
+          ),
+          child: HookForm(
             form: form,
             schema: l.schema({
               'name': l
@@ -83,68 +86,74 @@ class UpdateProfileScreen extends HookWidget {
             },
             builder: (context, form) {
               return Column(
-                spacing: 24,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const Pad(top: 48),
-                    child: Tappable(
-                      onTap: () async {
-                        final result = await FilePicker.platform.pickFiles(type: FileType.image);
-                        if (result == null) {
-                          return;
-                        }
+                  const Gap(settingsSectionGap),
+                  const SettingsSectionLabel(text: '프로필 사진'),
+                  SettingsSectionCard(
+                    padding: const Pad(vertical: 28),
+                    child: Center(
+                      child: Tappable(
+                        onTap: () async {
+                          final result = await FilePicker.platform.pickFiles(type: FileType.image);
+                          if (result == null) {
+                            return;
+                          }
 
-                        final pickedFile = result.files.firstOrNull;
-                        if (pickedFile == null) {
-                          return;
-                        }
+                          final pickedFile = result.files.firstOrNull;
+                          if (pickedFile == null) {
+                            return;
+                          }
 
-                        final file = File(pickedFile.path!);
+                          final file = File(pickedFile.path!);
 
-                        final path = await blob.upload(file);
-                        final resp = await client.request(
-                          GUpdateProfileScreen_PersistBlobAsImage_MutationReq(
-                            (b) => b
-                              ..vars.input.path = path
-                              ..vars.input.modification = Value.present(
-                                JsonObject({
-                                  'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
-                                  'format': 'png',
-                                }),
+                          final path = await blob.upload(file);
+                          final resp = await client.request(
+                            GUpdateProfileScreen_PersistBlobAsImage_MutationReq(
+                              (b) => b
+                                ..vars.input.path = path
+                                ..vars.input.modification = Value.present(
+                                  JsonObject({
+                                    'resize': {'width': 512, 'height': 512, 'fit': 'cover', 'withoutEnlargement': true},
+                                    'format': 'png',
+                                  }),
+                                ),
+                            ),
+                          );
+
+                          avatarUrl.value = resp.persistBlobAsImage.url;
+                          avatarId.value = resp.persistBlobAsImage.id;
+                        },
+                        child: Stack(
+                          children: [
+                            ClipOval(
+                              child: FadeInImage.memoryNetwork(
+                                placeholder: kTransparentImage,
+                                image: avatarUrl.value,
+                                width: 80,
+                                height: 80,
+                                fit: BoxFit.cover,
+                                fadeInDuration: const Duration(milliseconds: 150),
                               ),
-                          ),
-                        );
-
-                        avatarUrl.value = resp.persistBlobAsImage.url;
-                        avatarId.value = resp.persistBlobAsImage.id;
-                      },
-                      child: Stack(
-                        children: [
-                          ClipOval(
-                            child: FadeInImage.memoryNetwork(
-                              placeholder: kTransparentImage,
-                              image: avatarUrl.value,
+                            ),
+                            Container(
                               width: 80,
                               height: 80,
-                              fit: BoxFit.cover,
-                              fadeInDuration: const Duration(milliseconds: 150),
+                              decoration: BoxDecoration(
+                                color: context.colors.textDefault.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textBright),
                             ),
-                          ),
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: context.colors.textDefault.withValues(alpha: 0.15),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(LucideLightIcons.camera, size: 28, color: context.colors.textBright),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                  Padding(
-                    padding: const Pad(horizontal: 20),
+                  const Gap(settingsSectionGap),
+                  const SettingsSectionLabel(text: '기본 정보'),
+                  SettingsSectionCard(
+                    padding: const Pad(all: 16),
                     child: HookFormTextField(
                       name: 'name',
                       label: '닉네임',
@@ -156,9 +165,9 @@ class UpdateProfileScreen extends HookWidget {
                 ],
               );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
