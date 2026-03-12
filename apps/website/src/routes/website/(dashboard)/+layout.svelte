@@ -18,6 +18,7 @@
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';
   import { pollBootstrapAssertion } from '$lib/bootstrap';
+  import { EnvironmentBanner } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { preloadEditorWasm } from '$lib/editor/editor.svelte';
   import { hydrateQuery } from '$lib/graphql';
@@ -337,6 +338,7 @@
   </div>
 {:else}
   <div class={flex({ flexDirection: 'column', height: '[100dvh]' })}>
+    <EnvironmentBanner />
     <AdminImpersonateBanner query$key={query.data} />
 
     <div
