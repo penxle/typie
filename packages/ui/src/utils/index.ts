@@ -6,7 +6,6 @@ export * from './drag-scroll';
 export * from './escape-stack';
 export * from './flip-animation';
 export * from './json';
-export * from './note-colors';
 export * from './number';
 export * from './ref';
 export * from './remeda';

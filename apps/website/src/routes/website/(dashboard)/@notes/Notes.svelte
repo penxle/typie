@@ -5,7 +5,7 @@
   import { Button, Icon, Modal, Select } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { Toast } from '@typie/ui/notification';
-  import { animateFlip, clamp, getRandomNoteColor } from '@typie/ui/utils';
+  import { animateFlip, clamp } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { tick, untrack } from 'svelte';
   import { fly } from 'svelte/transition';
@@ -301,7 +301,7 @@
 
     await createNote({
       input: {
-        color: getRandomNoteColor(),
+        color: 'gray',
         content: inputValue,
         entityId: selectedEntityId,
       },

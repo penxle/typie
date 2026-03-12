@@ -1,31 +1,49 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { css } from '@typie/styled-system/css';
+  import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
   import { autosize, tooltip } from '@typie/ui/actions';
-  import { Icon, Popover } from '@typie/ui/components';
-  import { getNoteColors } from '@typie/ui/utils';
+  import { HorizontalDivider, Icon, Menu, MenuItem, Submenu } from '@typie/ui/components';
+  import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
+  import CheckIcon from '~icons/lucide/check';
   import CircleIcon from '~icons/lucide/circle';
   import CircleCheckIcon from '~icons/lucide/circle-check';
-  import GripVerticalIcon from '~icons/lucide/grip-vertical';
+  import EllipsisIcon from '~icons/lucide/ellipsis';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { getNoteColor, noteColors } from '../../@notes/colors';
   import type { DocumentRelatedNoteWidgetItem_note$key } from '$mearie';
 
   type Props = {
     note$key: DocumentRelatedNoteWidgetItem_note$key;
     draggingNoteId: string | null;
     palette?: boolean;
-    onDragStart: () => void;
-    onDragEnter: () => void;
-    onDragEnd: () => void;
+    resolving: boolean;
     onAddNote: () => void;
+    onBeginResolve: () => void;
+    onDragEnd: () => void;
+    onDragEnter: () => void;
+    onDragMove: (noteId: string) => void;
+    onDragStart: () => void;
+    onEndResolve: () => void;
   };
 
-  let { note$key, draggingNoteId, palette = false, onDragStart, onDragEnter, onDragEnd, onAddNote }: Props = $props();
+  let {
+    note$key,
+    draggingNoteId,
+    palette = false,
+    resolving,
+    onAddNote,
+    onBeginResolve,
+    onDragEnd,
+    onDragEnter,
+    onDragMove,
+    onDragStart,
+    onEndResolve,
+  }: Props = $props();
 
   const note = createFragment(
     graphql(`
@@ -48,6 +66,7 @@
         updateNote(input: $input) {
           id
           content
+          color
           status
           updatedAt
         }
@@ -72,7 +91,13 @@
 
   const isDragging = $derived(draggingNoteId === note.data.id);
   const anyDragging = $derived(draggingNoteId !== null);
-  const color = $derived(getNoteColors().find((c) => c.value === note.data.color)?.color ?? token('colors.surface.default'));
+  const colorHex = $derived(getNoteColor(note.data.color) ?? token('colors.surface.default'));
+
+  const DRAG_THRESHOLD = 5;
+  let dragCleanup: (() => void) | null = null;
+
+  let cancelling = $state(false);
+  const displayStatus = $derived(cancelling ? 'OPEN' : resolving ? 'RESOLVED' : note.data.status);
 
   $effect(() => {
     const serverContent = note.data.content;
@@ -104,244 +129,340 @@
     contentUpdateTimeout = setTimeout(flushContentUpdate, 300);
   }
 
+  const handleChangeColor = async (color: string) => {
+    await updateNote({ input: { noteId: note.data.id, color } });
+    mixpanel.track('change_related_note_color', { color });
+  };
+
   const handleToggleStatus = async () => {
+    if (cancelling) return;
+
+    if (resolving) {
+      cancelling = true;
+      try {
+        await updateNote({ input: { noteId: note.data.id, status: 'OPEN' } });
+        mixpanel.track('toggle_widget_note_status', { status: 'OPEN' });
+      } catch {
+        cancelling = false;
+        return;
+      }
+      cancelling = false;
+      onEndResolve();
+      return;
+    }
+
     const newStatus = note.data.status === 'OPEN' ? 'RESOLVED' : 'OPEN';
-    await updateNote({ input: { noteId: note.data.id, status: newStatus } });
-    mixpanel.track('toggle_widget_note_status', { status: newStatus });
-    const entityId = note.data.entity?.id;
-    if (entityId) {
-      cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
+
+    if (newStatus === 'RESOLVED') {
+      onBeginResolve();
+    }
+
+    try {
+      await updateNote({ input: { noteId: note.data.id, status: newStatus } });
+      mixpanel.track('toggle_widget_note_status', { status: newStatus });
+    } catch {
+      if (newStatus === 'RESOLVED') {
+        onEndResolve();
+      }
+      return;
+    }
+
+    if (newStatus === 'OPEN') {
+      const entityId = note.data.entity?.id;
+      if (entityId) {
+        cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
+      }
     }
   };
 
-  const handleDeleteNote = async () => {
-    const entityId = note.data.entity?.id;
-    await deleteNote({ input: { noteId: note.data.id } });
-    mixpanel.track('delete_related_note');
-    if (entityId) {
-      cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
-    }
+  const handleDeleteNote = () => {
+    Dialog.confirm({
+      title: '노트를 삭제하시겠어요?',
+      message: '삭제된 노트는 복구할 수 없어요.',
+      action: 'danger',
+      actionLabel: '삭제',
+      actionHandler: async () => {
+        const entityId = note.data.entity?.id;
+        await deleteNote({ input: { noteId: note.data.id } });
+        mixpanel.track('delete_related_note');
+        if (entityId) {
+          cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'notes' });
+        }
+      },
+    });
   };
 </script>
 
 <div
-  style:background-color={`color-mix(in srgb, ${token('colors.surface.default')}, ${color} 75%)`}
-  style:opacity={isDragging ? '0.5' : '1'}
-  class={flex({
-    flexDirection: 'column',
-    gap: '8px',
-    position: 'relative',
-    clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)',
-    transition: 'common',
-    _after: {
-      content: '""',
-      position: 'absolute',
-      bottom: '0',
-      right: '0',
-      width: '12px',
-      height: '12px',
-      background: '[linear-gradient(315deg, rgba(255, 255, 255, 0.3) 50%, rgba(0, 0, 0, 0.08) 50%)]',
-      boxShadow: '[1px 1px 2px rgba(0, 0, 0, 0.1)]',
-    },
-  })}
+  style:--resolve-duration="500ms"
+  style:opacity={isDragging ? '0.5' : resolving && !cancelling ? '0' : '1'}
+  style:transition={cancelling ? 'none' : 'opacity var(--resolve-duration) ease'}
+  class={cx(
+    'group',
+    flex({
+      flexDirection: 'column',
+      position: 'relative',
+      backgroundColor: 'surface.subtle',
+      borderRadius: '8px',
+      cursor: 'grab',
+    }),
+  )}
   data-widget-note-id={note.data.id}
-  ondragend={onDragEnd}
   ondragenter={onDragEnter}
   ondragover={(e) => {
     e.preventDefault();
   }}
+  onpointerdown={(e) => {
+    if (palette) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, textarea')) return;
+
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+
+    const state = {
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+      started: false,
+      ghost: null as HTMLElement | null,
+      cursorStyle: null as HTMLStyleElement | null,
+    };
+
+    const cleanup = () => {
+      state.ghost?.remove();
+      state.cursorStyle?.remove();
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', handleUp);
+      dragCleanup = null;
+    };
+
+    const handleMove = (ev: PointerEvent) => {
+      const dist = Math.abs(ev.clientX - state.startX) + Math.abs(ev.clientY - state.startY);
+
+      if (!state.started && dist > DRAG_THRESHOLD) {
+        state.started = true;
+
+        const ghost = document.createElement('div');
+        const cloned = el.cloneNode(true) as HTMLElement;
+        cloned.style.pointerEvents = 'none';
+        cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
+        cloned.style.opacity = '0.8';
+        cloned.style.width = '100%';
+        cloned.style.height = '100%';
+        ghost.append(cloned);
+
+        ghost.style.position = 'fixed';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '9999';
+        ghost.style.width = `${rect.width}px`;
+        ghost.style.left = `${ev.clientX - state.offsetX}px`;
+        ghost.style.top = `${ev.clientY - state.offsetY}px`;
+        document.body.append(ghost);
+
+        state.ghost = ghost;
+        state.cursorStyle = document.createElement('style');
+        state.cursorStyle.textContent = '* { cursor: grabbing !important; }';
+        document.head.append(state.cursorStyle);
+        onDragStart();
+      }
+
+      if (state.started && state.ghost) {
+        state.ghost.style.left = `${ev.clientX - state.offsetX}px`;
+        state.ghost.style.top = `${ev.clientY - state.offsetY}px`;
+
+        const elemBelow = document.elementFromPoint(ev.clientX, ev.clientY);
+        const noteBelow = elemBelow?.closest('[data-widget-note-id]') as HTMLElement | null;
+        if (noteBelow) {
+          const noteId = noteBelow.dataset.widgetNoteId;
+          if (noteId && noteId !== note.data.id) {
+            onDragMove(noteId);
+          }
+        }
+      }
+    };
+
+    const handleUp = () => {
+      if (state.started) {
+        onDragEnd();
+      }
+      cleanup();
+    };
+
+    dragCleanup?.();
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleUp);
+    dragCleanup = cleanup;
+  }}
+  ontransitionend={(e) => {
+    if (e.target === e.currentTarget && e.propertyName === 'opacity' && resolving && !cancelling) {
+      onEndResolve();
+    }
+  }}
   role="listitem"
 >
-  {#if !palette}
+  <div class={flex({ gap: '10px', padding: '12px' })}>
+    <!-- Color Checkbox -->
     <button
+      style:background-color={displayStatus === 'RESOLVED' ? colorHex : 'transparent'}
+      style:border={displayStatus === 'RESOLVED' ? 'none' : `1.5px solid ${colorHex}`}
       class={center({
+        width: '16px',
+        height: '16px',
+        padding: '0',
+        borderRadius: 'full',
+        flexShrink: '0',
+        marginTop: '2px',
+        cursor: palette ? 'default' : 'pointer',
+        transition: 'common',
+        pointerEvents: palette ? 'none' : 'auto',
+        ...(displayStatus === 'RESOLVED'
+          ? {
+              _hover: { opacity: '60' },
+            }
+          : {
+              _hover: { opacity: '100' },
+            }),
+      })}
+      onclick={handleToggleStatus}
+      type="button"
+      use:tooltip={{ message: displayStatus === 'RESOLVED' ? '미완료로 표시' : '완료로 표시', placement: 'top' }}
+    >
+      {#if displayStatus === 'RESOLVED'}
+        <Icon style={css.raw({ color: 'surface.default', '& *': { strokeWidth: '[3px]' } })} icon={CheckIcon} size={12} />
+      {:else}
+        <div
+          style:background-color={colorHex}
+          class={center({
+            width: 'full',
+            height: 'full',
+            borderRadius: 'full',
+            opacity: '0',
+            transition: 'common',
+            ':hover > &': { opacity: '100' },
+          })}
+        >
+          <Icon style={css.raw({ color: 'surface.default', '& *': { strokeWidth: '[3px]' } })} icon={CheckIcon} size={12} />
+        </div>
+      {/if}
+    </button>
+
+    <!-- Textarea -->
+    <textarea
+      style:transition={cancelling ? 'none' : 'text-decoration-color var(--resolve-duration) ease, opacity var(--resolve-duration) ease'}
+      class={css({
+        width: 'full',
+        fontSize: '13px',
+        paddingRight: '22px',
+        color: 'text.default',
+        backgroundColor: 'transparent',
+        resize: 'none',
+        lineHeight: '[1.65]',
+        textDecorationLine: displayStatus === 'RESOLVED' ? 'line-through' : 'none',
+        textDecorationColor: displayStatus === 'RESOLVED' ? 'text.faint' : 'transparent',
+        opacity: displayStatus === 'RESOLVED' && !resolving ? '55' : '100',
+      })}
+      disabled={palette}
+      onblur={() => {
+        focused = false;
+        flushContentUpdate();
+      }}
+      onfocus={() => {
+        focused = true;
+      }}
+      oninput={() => {
+        handleContentChanged();
+      }}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
+          e.preventDefault();
+          onAddNote();
+        }
+      }}
+      placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
+      rows={1}
+      bind:value={content}
+      use:autosize={{ cacheKey: `widget-note-${note.data.id}` }}
+    ></textarea>
+  </div>
+
+  {#if !palette}
+    <!-- ⋯ More button with Menu -->
+    <Menu
+      style={center.raw({
         position: 'absolute',
         top: '8px',
         right: '8px',
-        size: '24px',
+        size: '22px',
         borderRadius: '4px',
         color: 'text.faint',
-        cursor: 'grab',
+        cursor: 'pointer',
         transition: 'common',
         opacity: '0',
-        ':hover > &': {
+        _groupHover: {
           opacity: anyDragging ? '0' : '100',
         },
         _hover: {
           color: 'text.default',
           backgroundColor: 'surface.dark/10',
         },
-        _active: {
-          cursor: 'grabbing',
-        },
-      })}
-      draggable="true"
-      ondragend={onDragEnd}
-      ondragstart={(e) => {
-        if (e.dataTransfer) {
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text', content || '');
-
-          const noteElement = e.currentTarget.closest('[data-widget-note-id]') as HTMLElement;
-          if (noteElement) {
-            const rect = noteElement.getBoundingClientRect();
-            const ghost = document.createElement('div');
-
-            const cloned = noteElement.cloneNode(true) as HTMLElement;
-            cloned.style.pointerEvents = 'none';
-            cloned.style.transform = 'rotate(1.5deg) scale(1.05)';
-            cloned.style.opacity = '0.8';
-            cloned.style.width = '100%';
-            cloned.style.height = '100%';
-            ghost.append(cloned);
-
-            ghost.style.position = 'absolute';
-            ghost.style.width = `${rect.width}px`;
-            ghost.style.height = `${rect.height}px`;
-            ghost.style.minHeight = `${rect.height}px`;
-            ghost.style.top = '-1000px';
-            ghost.style.left = '-1000px';
-
-            document.body.append(ghost);
-
-            const offsetX = e.clientX - rect.left;
-            const offsetY = e.clientY - rect.top;
-
-            e.dataTransfer.setDragImage(ghost, offsetX, offsetY);
-
-            setTimeout(() => {
-              ghost.remove();
-            });
-          }
-        }
-
-        onDragStart();
-      }}
-      type="button"
-      use:tooltip={{ message: '드래그해서 순서 변경', placement: 'top', force: anyDragging ? false : undefined }}
-    >
-      <Icon icon={GripVerticalIcon} size={16} />
-    </button>
-  {/if}
-
-  <textarea
-    class={css({
-      width: 'full',
-      fontSize: '13px',
-      padding: '12px',
-      color: 'text.default',
-      backgroundColor: 'transparent',
-      resize: 'none',
-      opacity: note.data.status === 'RESOLVED' ? '50' : '100',
-      textDecoration: note.data.status === 'RESOLVED' ? 'line-through' : 'none',
-    })}
-    disabled={palette}
-    onblur={() => {
-      focused = false;
-      flushContentUpdate();
-    }}
-    onfocus={() => {
-      focused = true;
-    }}
-    oninput={() => {
-      handleContentChanged();
-    }}
-    onkeydown={(e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) {
-        e.preventDefault();
-        onAddNote();
-      }
-    }}
-    placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
-    rows={3}
-    bind:value={content}
-    use:autosize={{ cacheKey: `widget-note-${note.data.id}` }}
-  ></textarea>
-
-  {#if !palette}
-    <button
-      class={center({
-        position: 'absolute',
-        bottom: '8px',
-        right: '36px',
-        size: '24px',
-        borderRadius: '4px',
-        color: note.data.status === 'RESOLVED' ? 'accent.success.default' : 'text.faint',
-        cursor: 'pointer',
-        transition: 'common',
-        opacity: note.data.status === 'RESOLVED' ? '100' : '0',
-        ':hover > &': {
-          opacity: anyDragging ? '0' : '100',
-        },
-        _hover: {
-          color: note.data.status === 'RESOLVED' ? 'accent.success.default' : 'text.default',
-          backgroundColor: 'surface.dark/10',
-        },
-      })}
-      onclick={handleToggleStatus}
-      title={note.data.status === 'RESOLVED' ? '미해결로 변경' : '해결됨으로 변경'}
-      type="button"
-    >
-      <Icon icon={note.data.status === 'RESOLVED' ? CircleCheckIcon : CircleIcon} size={14} />
-    </button>
-
-    <Popover
-      style={center.raw({
-        position: 'absolute',
-        bottom: '8px',
-        right: '8px',
-        size: '24px',
-        borderRadius: '4px',
-        color: 'text.faint',
-        cursor: 'pointer',
-        transition: 'common',
-        opacity: '0',
-        ':hover > &': {
-          opacity: anyDragging ? '0' : '100',
-        },
-        _hover: {
+        _focusVisible: {
+          opacity: '100',
           color: 'text.default',
           backgroundColor: 'surface.dark/10',
         },
-        _focus: {
+        '&[aria-expanded="true"]': {
           opacity: '100',
           color: 'text.default',
           backgroundColor: 'surface.dark/10',
         },
       })}
-      contentStyle={css.raw({ paddingX: '0', paddingY: '0' })}
+      placement="bottom-end"
     >
-      {#snippet trigger()}
-        <Icon icon={Trash2Icon} size={14} />
+      {#snippet button()}
+        <Icon icon={EllipsisIcon} size={14} />
       {/snippet}
       {#snippet children({ close })}
-        <button
-          class={flex({
-            alignItems: 'center',
-            gap: '8px',
-            paddingX: '12px',
-            paddingY: '8px',
-            fontSize: '13px',
-            fontWeight: 'medium',
-            color: 'text.default',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            transition: 'common',
-            _hover: {
-              backgroundColor: 'accent.danger.subtle',
-              color: 'accent.danger.default',
-            },
-          })}
+        <Submenu label="색 바꾸기" listStyle={css.raw({ minWidth: '100px' })}>
+          {#snippet prefix()}
+            <div
+              style:background-color={colorHex}
+              class={css({ width: '14px', height: '14px', borderRadius: 'full', flexShrink: '0' })}
+            ></div>
+          {/snippet}
+          {#each noteColors as noteColorOption (noteColorOption.value)}
+            <MenuItem onclick={() => handleChangeColor(noteColorOption.value)}>
+              {#snippet prefix()}
+                <div
+                  style:background-color={noteColorOption.color}
+                  class={center({ width: '14px', height: '14px', borderRadius: 'full', flexShrink: '0' })}
+                >
+                  {#if noteColorOption.value === note.data.color}
+                    <Icon style={css.raw({ color: 'surface.default' })} icon={CheckIcon} size={10} />
+                  {/if}
+                </div>
+              {/snippet}
+              {noteColorOption.label}
+            </MenuItem>
+          {/each}
+        </Submenu>
+        <MenuItem icon={displayStatus === 'RESOLVED' ? CircleIcon : CircleCheckIcon} onclick={handleToggleStatus}>
+          {displayStatus === 'RESOLVED' ? '미완료로 표시' : '완료로 표시'}
+        </MenuItem>
+        <HorizontalDivider />
+        <MenuItem
+          icon={Trash2Icon}
           onclick={() => {
-            handleDeleteNote();
             close();
+            handleDeleteNote();
           }}
-          type="button"
+          variant="danger"
         >
-          <Icon icon={Trash2Icon} size={14} />
-          노트 삭제
-        </button>
+          삭제
+        </MenuItem>
       {/snippet}
-    </Popover>
+    </Menu>
   {/if}
 </div>
