@@ -20,7 +20,7 @@ Note.implement({
     updatedAt: t.expose('updatedAt', { type: 'DateTime' }),
 
     user: t.expose('userId', { type: User }),
-    site: t.expose('siteId', { type: Site, nullable: true }),
+    site: t.expose('siteId', { type: Site }),
 
     entity: t.field({
       type: Entity,

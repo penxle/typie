@@ -498,6 +498,13 @@
       "when": 1773306427070,
       "tag": "0070_dear_tarot",
       "breakpoints": false
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1773349621206,
+      "tag": "0071_absent_dracula",
+      "breakpoints": false
     }
   ]
 }

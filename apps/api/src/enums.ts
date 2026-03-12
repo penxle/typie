@@ -61,29 +61,6 @@ export const InAppPurchaseStore = {
   GOOGLE_PLAY: 'GOOGLE_PLAY',
 } as const;
 
-export type IssueState = keyof typeof IssueState;
-export const IssueState = {
-  ACTIVE: 'ACTIVE',
-  DELETED: 'DELETED',
-} as const;
-
-export type IssuePriority = keyof typeof IssuePriority;
-export const IssuePriority = {
-  NONE: 'NONE',
-  LOW: 'LOW',
-  MEDIUM: 'MEDIUM',
-  HIGH: 'HIGH',
-  URGENT: 'URGENT',
-} as const;
-
-export type IssueStatus = keyof typeof IssueStatus;
-export const IssueStatus = {
-  OPEN: 'OPEN',
-  IN_PROGRESS: 'IN_PROGRESS',
-  RESOLVED: 'RESOLVED',
-  CLOSED: 'CLOSED',
-} as const;
-
 export type NoteStatus = keyof typeof NoteStatus;
 export const NoteStatus = {
   OPEN: 'OPEN',
