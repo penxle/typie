@@ -158,7 +158,7 @@
       </div>
     {:else}
       {#each sortedIssues as issue (issue.id)}
-        <DocumentPanelIssueItem autoEdit={issue.id === lastAddedIssueId} issue$key={issue} />
+        <DocumentPanelIssueItem autoEdit={issue.id === lastAddedIssueId} entityId={entity.data.id} issue$key={issue} />
       {/each}
     {/if}
   </div>

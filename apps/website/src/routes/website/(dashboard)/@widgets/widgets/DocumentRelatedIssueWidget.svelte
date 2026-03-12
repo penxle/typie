@@ -61,6 +61,7 @@
 
   let isExpanded = $state((data.isExpanded as boolean) ?? false);
   let isCollapsed = $state((data.isCollapsed as boolean) ?? false);
+  const entityId = $derived(relatedDocument.data?.entity.id);
 
   const toggleExpanded = () => {
     isExpanded = !isExpanded;
@@ -194,9 +195,9 @@
 
         <p class={css({ fontSize: '12px', color: 'text.faint', textAlign: 'center' })}>할 일이 없습니다</p>
       </div>
-    {:else}
+    {:else if entityId}
       {#each sortedIssues as issue (issue.id)}
-        <DocumentRelatedIssueWidgetItem issue$key={issue} {palette} />
+        <DocumentRelatedIssueWidgetItem {entityId} issue$key={issue} {palette} />
       {/each}
     {/if}
   </div>

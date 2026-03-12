@@ -175,6 +175,9 @@
       actionHandler: async () => {
         await deleteIssue({ input: { issueId } });
         mixpanel.track('delete_issue');
+        for (const entityId of existingEntityIds) {
+          cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'issues' });
+        }
         cache.invalidate({ __typename: 'Query', $field: 'issues', $args: { siteId } });
         onclose();
       },
