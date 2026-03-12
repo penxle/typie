@@ -58,8 +58,9 @@ class _Content extends HookWidget {
 
     return Screen(
       extendBodyBehindAppBar: true,
-      heading: _Heading(scrollController: scrollController),
+      heading: null,
       child: OverlayHeadingLayout(
+        heading: _Heading(scrollController: scrollController),
         child: SingleChildScrollView(
           controller: scrollController,
           physics: const AlwaysScrollableScrollPhysics(),

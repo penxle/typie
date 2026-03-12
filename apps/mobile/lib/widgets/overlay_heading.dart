@@ -21,19 +21,19 @@ class OverlayHeading extends StatelessWidget implements PreferredSizeWidget {
   static const gradientHeight = 16.0;
   static const contentTopSpacing = height;
   static const revealOffset = 44.0;
-  static const fadeStops = [0.0, 0.32, 0.72, 1.0];
+  static const _defaultFadeStops = [0.0, 0.66, 0.82, 1.0];
 
-  static double overlayHeight(BuildContext context) => MediaQuery.paddingOf(context).top + height + gradientHeight;
+  static double overlayHeight(BuildContext context) => MediaQuery.viewPaddingOf(context).top + height + gradientHeight;
 
   static double titleTopPadding(BuildContext context, {double extra = 8}) =>
-      MediaQuery.paddingOf(context).top + height + extra;
+      MediaQuery.viewPaddingOf(context).top + height + extra;
 
   static List<Color> buildFadeColors(
     BuildContext context, {
     Color? baseColor,
-    double topAlpha = 0.98,
-    double secondAlpha = 0.82,
-    double thirdAlpha = 0.22,
+    double topAlpha = 0.9,
+    double secondAlpha = 0.8,
+    double thirdAlpha = 0.5,
   }) {
     final color = baseColor ?? context.colors.surfaceSubtle;
 
@@ -85,29 +85,27 @@ class OverlayHeading extends StatelessWidget implements PreferredSizeWidget {
 }
 
 class OverlayHeadingLayout extends StatelessWidget {
-  const OverlayHeadingLayout({required this.child, this.fadeColors, super.key});
+  const OverlayHeadingLayout({required this.child, this.heading, super.key});
 
   final Widget child;
-  final List<Color>? fadeColors;
+  final Widget? heading;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedFadeColors = OverlayHeading.buildFadeColors(context);
+
     return Stack(
       children: [
         Positioned.fill(child: child),
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: OverlayHeadingFade(colors: fadeColors ?? OverlayHeading.buildFadeColors(context)),
-        ),
+        Positioned(top: 0, left: 0, right: 0, child: OverlayHeadingFade(colors: resolvedFadeColors)),
+        if (heading != null) Positioned(top: 0, left: 0, right: 0, child: heading!),
       ],
     );
   }
 }
 
 class OverlayHeadingFade extends StatelessWidget {
-  const OverlayHeadingFade({required this.colors, this.stops = OverlayHeading.fadeStops, super.key});
+  const OverlayHeadingFade({required this.colors, this.stops = OverlayHeading._defaultFadeStops, super.key});
 
   final List<Color> colors;
   final List<double> stops;
