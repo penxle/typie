@@ -19,9 +19,7 @@
   let { style, listStyle, icon, prefix, label, children }: Props = $props();
 
   const parentClose = getContext<undefined | (() => void)>('close');
-  let hiding = $state(false);
   setContext('close', () => {
-    hiding = true;
     submenuOpen = false;
     parentClose?.();
   });
@@ -32,6 +30,17 @@
   let submenuEl = $state<HTMLUListElement>();
   let lastPointerPos = { x: 0, y: 0 };
   let focused = $state(false);
+  let safeZoneTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  const onMenuClose = getContext<((cb: () => void) => () => void) | undefined>('onMenuClose');
+  $effect(() => {
+    if (submenuOpen && submenuEl && onMenuClose) {
+      const el = submenuEl;
+      return onMenuClose(() => {
+        el.style.visibility = 'hidden';
+      });
+    }
+  });
 
   const isPointInTriangle = (px: number, py: number, ax: number, ay: number, bx: number, by: number, cx: number, cy: number) => {
     const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
@@ -55,26 +64,97 @@
     const menuContainer = triggerEl.parentElement;
     if (!menuContainer) return;
 
-    // 다른 메뉴 아이템 호버 시 닫기 (삼각형 영역 내는 제외)
-    const handlePointerOver = (e: PointerEvent) => {
-      if (!submenuEl || !triggerEl) return;
-
-      const sr = submenuEl.getBoundingClientRect();
-      const safeEdgeX = flipped ? sr.right : sr.left;
-      if (isPointInTriangle(e.clientX, e.clientY, lastPointerPos.x, lastPointerPos.y, safeEdgeX, sr.top - 10, safeEdgeX, sr.bottom + 10))
-        return;
-
-      let el = e.target as HTMLElement | null;
+    // 다른 메뉴 아이템 호버 시 닫기 (삼각형 영역 내는 제외, 일정 시간 머무르면 닫기)
+    const findDirectChild = (target: HTMLElement) => {
+      let el: HTMLElement | null = target;
       while (el && el !== menuContainer && el.parentElement !== menuContainer) {
         el = el.parentElement;
       }
-      if (el && el !== menuContainer && el !== triggerEl) {
+      return el && el !== menuContainer ? el : null;
+    };
+
+    // submenu에 진입한 적이 있으면 triangle zone 비활성화
+    let hasEnteredSubmenu = false;
+
+    const handlePointerOver = (e: PointerEvent) => {
+      if (!submenuEl || !triggerEl) return;
+
+      if (!hasEnteredSubmenu) {
+        const sr = submenuEl.getBoundingClientRect();
+        const safeEdgeX = flipped ? sr.right : sr.left;
+        if (
+          isPointInTriangle(e.clientX, e.clientY, lastPointerPos.x, lastPointerPos.y, safeEdgeX, sr.top - 10, safeEdgeX, sr.bottom + 10)
+        ) {
+          clearTimeout(safeZoneTimeout);
+          // trigger 위에 있으면 타이머 불필요
+          const directChild = findDirectChild(e.target as HTMLElement);
+          if (directChild !== triggerEl) {
+            // 포인터~서브메뉴 거리에 비례하여 timeout 조절 (가까울수록 짧게)
+            const distance = flipped ? e.clientX - sr.right : sr.left - e.clientX;
+            const mcr = menuContainer.getBoundingClientRect();
+            const maxDistance = flipped ? mcr.right - sr.right : sr.left - mcr.left;
+            const ratio = Math.max(0, Math.min(1, distance / Math.max(1, maxDistance)));
+            const timeout = 150 + ratio * 250;
+
+            safeZoneTimeout = setTimeout(() => {
+              submenuOpen = false;
+            }, timeout);
+          }
+          return;
+        }
+      }
+
+      clearTimeout(safeZoneTimeout);
+      const directChild = findDirectChild(e.target as HTMLElement);
+      if (directChild && directChild !== triggerEl) {
         submenuOpen = false;
       }
     };
 
+    const exitSafezone = () => {
+      hasEnteredSubmenu = true;
+      delete menuContainer.dataset.submenuSafezone;
+    };
+
+    const handleSubmenuEnter = () => {
+      clearTimeout(safeZoneTimeout);
+      exitSafezone();
+    };
+
+    // safezone 상태에서 main menu 클릭 시 focus 방지 + submenu만 닫고 클릭 차단
+    const isSafezoneTarget = (e: Event) => {
+      if (hasEnteredSubmenu) return false;
+      const directChild = findDirectChild(e.target as HTMLElement);
+      return directChild !== null && directChild !== triggerEl;
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (isSafezoneTarget(e)) {
+        e.preventDefault(); // focus 방지
+      }
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      if (isSafezoneTarget(e)) {
+        e.stopPropagation();
+        e.preventDefault();
+        submenuOpen = false;
+      }
+    };
+
+    menuContainer.dataset.submenuSafezone = '';
     menuContainer.addEventListener('pointerover', handlePointerOver);
-    return () => menuContainer.removeEventListener('pointerover', handlePointerOver);
+    menuContainer.addEventListener('pointerdown', handlePointerDown, true);
+    menuContainer.addEventListener('click', handleClick, true);
+    submenuEl.addEventListener('pointerenter', handleSubmenuEnter);
+    return () => {
+      clearTimeout(safeZoneTimeout);
+      delete menuContainer.dataset.submenuSafezone;
+      menuContainer.removeEventListener('pointerover', handlePointerOver);
+      menuContainer.removeEventListener('pointerdown', handlePointerDown, true);
+      menuContainer.removeEventListener('click', handleClick, true);
+      submenuEl?.removeEventListener('pointerenter', handleSubmenuEnter);
+    };
   });
 
   const getSubmenuItems = () => {
@@ -148,7 +228,6 @@
 {#if submenuOpen}
   <ul
     bind:this={submenuEl}
-    style:visibility={hiding ? 'hidden' : undefined}
     class={css(
       {
         display: 'flex',

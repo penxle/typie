@@ -1,6 +1,7 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
   import { setContext, tick, untrack } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { scale } from 'svelte/transition';
   import { afterNavigate } from '$app/navigation';
   import { createFloatingActions, deactivateFocusTrap, focusTrap, portal } from '../actions';
@@ -60,7 +61,14 @@
     },
   });
 
+  const submenuHideCallbacks = new SvelteSet<() => void>();
+  setContext('onMenuClose', (cb: () => void) => {
+    submenuHideCallbacks.add(cb);
+    return () => submenuHideCallbacks.delete(cb);
+  });
+
   const close = () => {
+    for (const cb of submenuHideCallbacks) cb();
     if (menuEl) {
       deactivateFocusTrap(menuEl, { returnFocus: !!buttonEl });
     }

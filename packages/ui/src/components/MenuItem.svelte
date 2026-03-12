@@ -81,6 +81,10 @@
           color: 'text.disabled!',
           backgroundColor: 'transparent!',
         },
+        '[data-submenu-safezone] &': {
+          cursor: 'default',
+          _hover: { backgroundColor: 'transparent' },
+        },
       },
       icon: {
         _groupDisabled: {
@@ -97,16 +101,19 @@
           icon: {
             color: 'text.faint',
             _groupHover: { color: 'text.subtle' },
+            '[data-submenu-safezone] .group:hover &': { color: 'text.faint' },
           },
         },
         danger: {
           root: {
             color: 'text.subtle',
             _hover: { color: 'text.danger' },
+            '[data-submenu-safezone] &': { _hover: { color: 'text.subtle' } },
           },
           icon: {
             color: 'text.faint',
             _groupHover: { color: 'text.danger' },
+            '[data-submenu-safezone] .group:hover &': { color: 'text.faint' },
           },
         },
       },
