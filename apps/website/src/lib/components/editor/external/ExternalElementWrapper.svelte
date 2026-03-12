@@ -79,6 +79,9 @@
   </div>
 
   {#if el.isSelected}
-    <div style:background-color={selectionColor} class={css({ position: 'absolute', inset: '0', pointerEvents: 'none' })}></div>
+    <div
+      style:background-color={selectionColor}
+      class={css({ position: 'absolute', inset: '0', pointerEvents: 'none', opacity: '20' })}
+    ></div>
   {/if}
 </div>
