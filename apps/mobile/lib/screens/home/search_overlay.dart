@@ -110,20 +110,27 @@ class SearchOverlay extends HookWidget {
       children: [
         _SearchHeader(controller: searchController, focusNode: searchFocusNode, onChanged: doSearch, onCancel: exit),
         Expanded(
-          child: _SearchResults(
-            showRecentSearches: searchText.text.isEmpty,
-            searchData: searchData.value,
-            recentSearches: recentSearches.value,
-            onSelectResult: (slug) {
-              unawaited(saveRecentSearch(searchController.text));
-              unawaited(context.router.push(NativeEditorRoute(slug: slug)));
-            },
-            onSelectRecent: (query) {
-              searchController
-                ..text = query
-                ..selection = TextSelection.collapsed(offset: query.length);
-              doSearch(query);
-            },
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _SearchResults(
+                  showRecentSearches: searchText.text.isEmpty,
+                  searchData: searchData.value,
+                  recentSearches: recentSearches.value,
+                  onSelectResult: (slug) {
+                    unawaited(saveRecentSearch(searchController.text));
+                    unawaited(context.router.push(NativeEditorRoute(slug: slug)));
+                  },
+                  onSelectRecent: (query) {
+                    searchController
+                      ..text = query
+                      ..selection = TextSelection.collapsed(offset: query.length);
+                    doSearch(query);
+                  },
+                ),
+              ),
+              const Positioned(top: 0, left: 0, right: 0, child: _SearchTopFade()),
+            ],
           ),
         ),
       ],
@@ -148,64 +155,87 @@ class _SearchHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.paddingOf(context).top;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          height: 56,
-          padding: const Pad(horizontal: 20),
+          padding: EdgeInsets.only(top: topPadding),
           decoration: BoxDecoration(color: context.colors.surfaceSubtle),
-          child: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 44,
-                  padding: const Pad(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: context.colors.surfaceDefault,
-                    borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            height: 56,
+            child: Padding(
+              padding: const Pad(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 44,
+                      padding: const Pad(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: context.colors.surfaceDefault,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(LucideLightIcons.search, size: 16, color: context.colors.accentBrand),
+                          const Gap(10),
+                          Expanded(
+                            child: TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              onChanged: onChanged,
+                              style: const TextStyle(fontSize: 15),
+                              decoration: const InputDecoration(
+                                hintText: '문서 검색...',
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(LucideLightIcons.search, size: 16, color: context.colors.accentBrand),
-                      const Gap(10),
-                      Expanded(
-                        child: TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          onChanged: onChanged,
-                          style: const TextStyle(fontSize: 15),
-                          decoration: const InputDecoration(
-                            hintText: '문서 검색...',
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
+                  Tappable(
+                    onTap: onCancel,
+                    padding: const Pad(left: 14),
+                    child: SizedBox(
+                      height: 44,
+                      child: Center(
+                        child: Text(
+                          '취소',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: context.colors.accentBrand,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              Tappable(
-                onTap: onCancel,
-                padding: const Pad(left: 14),
-                child: SizedBox(
-                  height: 44,
-                  child: Center(
-                    child: Text(
-                      '취소',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.accentBrand),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-        Container(
-          height: 24,
+      ],
+    );
+  }
+}
+
+class _SearchTopFade extends StatelessWidget {
+  const _SearchTopFade();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: SizedBox(
+        height: 24,
+        child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -214,7 +244,7 @@ class _SearchHeader extends StatelessWidget {
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -260,6 +290,8 @@ class _SearchResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.paddingOf(context).bottom + 12;
+
     if (showRecentSearches) {
       return _RecentSearchesList(searches: recentSearches, onTap: onSelectRecent);
     }
@@ -273,7 +305,7 @@ class _SearchResults extends StatelessWidget {
     }
 
     return SingleChildScrollView(
-      padding: const Pad(horizontal: 20, top: 8),
+      padding: Pad(horizontal: 20, top: 16, bottom: bottomPadding),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       child: Container(
         decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(12)),
@@ -361,6 +393,8 @@ class _RecentSearchesList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.paddingOf(context).bottom + 12;
+
     if (searches.isEmpty) {
       return Center(
         child: Text('최근 검색어가 없습니다', style: TextStyle(fontSize: 15, color: context.colors.textFaint)),
@@ -385,7 +419,7 @@ class _RecentSearchesList extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const Pad(horizontal: 20),
+            padding: Pad(horizontal: 20, bottom: bottomPadding),
             child: Container(
               decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(12)),
               clipBehavior: Clip.antiAlias,
