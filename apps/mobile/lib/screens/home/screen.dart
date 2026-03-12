@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
@@ -227,7 +228,7 @@ class _RecentFolders extends StatelessWidget {
                         .map(
                           (folder) => Tappable(
                             onTap: () async {
-                              await context.router.push(EntityRoute(entityId: folder.id));
+                              await context.router.push(EntityRoute(entityId: folder.entity.id));
                             },
                             // ignore: avoid_unnecessary_containers -- false positive
                             child: Container(
