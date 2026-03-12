@@ -20,10 +20,11 @@
 
   type Props = {
     issue$key: DocumentPanelIssueItem_issue$key;
+    entityId: string;
     autoEdit?: boolean;
   };
 
-  let { issue$key, autoEdit = false }: Props = $props();
+  let { issue$key, entityId, autoEdit = false }: Props = $props();
 
   const issue = createFragment(
     graphql(`
@@ -144,6 +145,7 @@
       actionHandler: async () => {
         await deleteIssue({ input: { issueId: issue.data.id } });
         mixpanel.track('delete_issue');
+        cache.invalidate({ __typename: 'Entity', id: entityId, $field: 'issues' });
         cache.invalidate({ __typename: 'Query', $field: 'issues' });
         editing = false;
       },
