@@ -7,6 +7,7 @@
   import SettingsIcon from '~icons/lucide/settings';
   import UsersIcon from '~icons/lucide/users';
   import { page } from '$app/state';
+  import { EnvironmentBanner } from '$lib/components';
   import { AdminIcon, AdminImpersonateBanner } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
 
@@ -33,6 +34,7 @@
 </script>
 
 <div class={flex({ flexDirection: 'column', height: '[100dvh]', backgroundColor: 'gray.900', fontFamily: 'mono' })}>
+  <EnvironmentBanner />
   <AdminImpersonateBanner query$key={query.data} />
 
   <div class={flex({ flexGrow: '1', overflow: 'hidden' })}>

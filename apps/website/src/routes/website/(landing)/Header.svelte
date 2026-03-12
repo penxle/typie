@@ -9,6 +9,7 @@
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
+  import { EnvironmentBanner } from '$lib/components';
 
   let mobileMenuOpen = false;
 
@@ -27,9 +28,9 @@
     left: '0',
     right: '0',
     zIndex: '50',
-    paddingX: { sm: '24px', lg: '80px' },
   })}
 >
+  <EnvironmentBanner />
   <div
     class={flex({
       justifyContent: 'space-between',
@@ -38,6 +39,7 @@
       gap: { sm: '16px', lg: '32px' },
       maxWidth: '[1200px]',
       marginX: 'auto',
+      paddingX: { sm: '24px', lg: '80px' },
     })}
   >
     <a

@@ -18,7 +18,7 @@
   import WordmarkBlack from '$assets/logos/wordmark-black.svg?component';
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
   import { env } from '$env/dynamic/public';
-  import { Img } from '$lib/components';
+  import { EnvironmentBanner, Img } from '$lib/components';
   import { AdminImpersonateBanner } from '$lib/components/admin';
   import { hydrateQuery } from '$lib/graphql';
   import type { Theme } from '@typie/ui/context';
@@ -79,6 +79,7 @@
 </script>
 
 <div class={flex({ flexDirection: 'column', minHeight: '[100dvh]' })}>
+  <EnvironmentBanner />
   <header
     class={flex({
       flexDirection: 'column',
