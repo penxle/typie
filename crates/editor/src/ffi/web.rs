@@ -612,6 +612,11 @@ impl Editor {
         to_js_value(&results)
     }
 
+    #[wasm_bindgen(js_name = revealTrackedItem)]
+    pub fn reveal_tracked_item(&mut self, group: u32, id: &str) -> bool {
+        self.runtime.reveal_tracked_item(group, id)
+    }
+
     #[wasm_bindgen(js_name = replaceTextInBlock)]
     pub fn replace_text_in_block(
         &mut self,
