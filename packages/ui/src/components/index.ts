@@ -18,6 +18,7 @@ export { default as SearchableDropdown } from './SearchableDropdown.svelte';
 export { default as SegmentButtons } from './SegmentButtons.svelte';
 export { default as Select } from './Select.svelte';
 export { default as Slider } from './Slider.svelte';
+export { default as Submenu } from './Submenu.svelte';
 export { default as Switch } from './Switch.svelte';
 export { default as TextInput } from './TextInput.svelte';
 export { default as TimeAgo } from './TimeAgo.svelte';
