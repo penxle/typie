@@ -19,9 +19,8 @@ import 'package:typie/services/preference.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/slider.dart';
 import 'package:typie/widgets/forms/switch.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
-import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/settings_screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -33,277 +32,270 @@ class EditorSettingsScreen extends HookWidget {
     final pref = useService<Pref>();
     final mixpanel = useService<Mixpanel>();
     final isUpdatingAiOptIn = useState(false);
+    final scrollController = useScrollController();
     const aiOptInLoaderDelay = Duration(milliseconds: 150);
 
-    return Screen(
-      heading: const Heading(title: '에디터 설정'),
-      child: GraphQLOperation(
-        operation: GEditorSettingsScreen_QueryReq(),
-        builder: (context, client, data) {
-          final aiOptIn = data.me!.preferences.asMap['aiOptIn'] as bool? ?? false;
+    return GraphQLOperation(
+      operation: GEditorSettingsScreen_QueryReq(),
+      builder: (context, client, data) {
+        final aiOptIn = data.me!.preferences.asMap['aiOptIn'] as bool? ?? false;
 
-          Future<void> toggleAiOptIn() async {
-            if (isUpdatingAiOptIn.value) {
-              return;
-            }
-
-            if (aiOptIn) {
-              isUpdatingAiOptIn.value = true;
-              try {
-                await context.runWithLoader(() async {
-                  await client.request(
-                    GEditorSettingsScreen_UpdatePreferences_MutationReq(
-                      (b) => b..vars.input.value = JsonObject({'aiOptIn': false}),
-                    ),
-                  );
-                }, showDelay: aiOptInLoaderDelay);
-                unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': false}));
-              } finally {
-                isUpdatingAiOptIn.value = false;
-              }
-            } else {
-              await context.showBottomSheet(
-                child: ConfirmBottomSheet(
-                  title: 'AI 기능을 활성화하시겠어요?',
-                  confirmText: '활성화',
-                  onConfirm: () async {
-                    if (isUpdatingAiOptIn.value) {
-                      return;
-                    }
-
-                    isUpdatingAiOptIn.value = true;
-                    try {
-                      await context.runWithLoader(() async {
-                        await client.request(
-                          GEditorSettingsScreen_UpdatePreferences_MutationReq(
-                            (b) => b..vars.input.value = JsonObject({'aiOptIn': true}),
-                          ),
-                        );
-                      }, showDelay: aiOptInLoaderDelay);
-                      unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': true}));
-                    } finally {
-                      isUpdatingAiOptIn.value = false;
-                    }
-                  },
-                  child: const _AiOptInNotice(),
-                ),
-              );
-            }
+        Future<void> toggleAiOptIn() async {
+          if (isUpdatingAiOptIn.value) {
+            return;
           }
 
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 24,
-              children: [
-                _Section(
-                  title: '작성 위치',
-                  children: [
-                    HookForm(
-                      submitMode: HookFormSubmitMode.onChange,
-                      onSubmit: (form) async {
-                        final typewriterEnabled = form.data['typewriterEnabled'] as bool;
-                        pref.typewriterEnabled = typewriterEnabled;
+          if (aiOptIn) {
+            isUpdatingAiOptIn.value = true;
+            try {
+              await context.runWithLoader(() async {
+                await client.request(
+                  GEditorSettingsScreen_UpdatePreferences_MutationReq(
+                    (b) => b..vars.input.value = JsonObject({'aiOptIn': false}),
+                  ),
+                );
+              }, showDelay: aiOptInLoaderDelay);
+              unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': false}));
+            } finally {
+              isUpdatingAiOptIn.value = false;
+            }
+          } else {
+            await context.showBottomSheet(
+              child: ConfirmBottomSheet(
+                title: 'AI 기능을 활성화하시겠어요?',
+                confirmText: '활성화',
+                onConfirm: () async {
+                  if (isUpdatingAiOptIn.value) {
+                    return;
+                  }
 
-                        unawaited(mixpanel.track('toggle_typewriter', properties: {'enabled': typewriterEnabled}));
-                      },
-                      builder: (context, form) {
-                        return Column(
-                          children: [
-                            _Item(
-                              label: '타자기 모드',
-                              description: '현재 작성 중인 줄을 항상 화면의 특정 위치에 고정합니다.',
-                              trailing: HookFormSwitch(name: 'typewriterEnabled', initialValue: pref.typewriterEnabled),
-                            ),
-                            if (pref.typewriterEnabled) ...[
-                              const _Divider(),
-                              HookForm(
-                                submitMode: HookFormSubmitMode.onChange,
-                                onSubmit: (form) async {
-                                  final position = form.data['typewriterPosition'] as double;
-                                  pref.typewriterPosition = position;
+                  isUpdatingAiOptIn.value = true;
+                  try {
+                    await context.runWithLoader(() async {
+                      await client.request(
+                        GEditorSettingsScreen_UpdatePreferences_MutationReq(
+                          (b) => b..vars.input.value = JsonObject({'aiOptIn': true}),
+                        ),
+                      );
+                    }, showDelay: aiOptInLoaderDelay);
+                    unawaited(mixpanel.track('ai_opt_in', properties: {'enabled': true}));
+                  } finally {
+                    isUpdatingAiOptIn.value = false;
+                  }
+                },
+                child: const _AiOptInNotice(),
+              ),
+            );
+          }
+        }
 
-                                  unawaited(
-                                    mixpanel.track(
-                                      'change_typewriter_position',
-                                      properties: {'position': (position * 100).round()},
-                                    ),
-                                  );
-                                },
-                                builder: (context, form) {
-                                  return Padding(
-                                    padding: const Pad(horizontal: 16, vertical: 8),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text('고정 위치', style: TextStyle(fontSize: 14)),
-                                        const Gap(4),
-                                        Text(
-                                          '현재 작성 중인 줄이 고정될 화면상의 위치를 설정합니다.',
-                                          style: TextStyle(fontSize: 13, color: context.colors.textFaint),
-                                        ),
-                                        const Gap(12),
-                                        Row(
-                                          spacing: 12,
-                                          children: [
-                                            Text(
-                                              '화면 상단',
-                                              style: TextStyle(fontSize: 13, color: context.colors.textFaint),
-                                            ),
-                                            Expanded(
-                                              child: Padding(
-                                                padding: const Pad(horizontal: 4),
-                                                child: HookFormSlider(
-                                                  name: 'typewriterPosition',
-                                                  min: 0,
-                                                  max: 1,
-                                                  step: 0.05,
-                                                  initialValue: pref.typewriterPosition,
-                                                ),
+        return SettingsOverlayScreen(
+          title: '에디터 설정',
+          scrollController: scrollController,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: settingsSectionGap,
+            children: [
+              _Section(
+                title: '작성 위치',
+                children: [
+                  HookForm(
+                    submitMode: HookFormSubmitMode.onChange,
+                    onSubmit: (form) async {
+                      final typewriterEnabled = form.data['typewriterEnabled'] as bool;
+                      pref.typewriterEnabled = typewriterEnabled;
+
+                      unawaited(mixpanel.track('toggle_typewriter', properties: {'enabled': typewriterEnabled}));
+                    },
+                    builder: (context, form) {
+                      return Column(
+                        children: [
+                          _Item(
+                            label: '타자기 모드',
+                            description: '현재 작성 중인 줄을 항상 화면의 특정 위치에 고정합니다.',
+                            trailing: HookFormSwitch(name: 'typewriterEnabled', initialValue: pref.typewriterEnabled),
+                          ),
+                          if (pref.typewriterEnabled) ...[
+                            const _Divider(),
+                            HookForm(
+                              submitMode: HookFormSubmitMode.onChange,
+                              onSubmit: (form) async {
+                                final position = form.data['typewriterPosition'] as double;
+                                pref.typewriterPosition = position;
+
+                                unawaited(
+                                  mixpanel.track(
+                                    'change_typewriter_position',
+                                    properties: {'position': (position * 100).round()},
+                                  ),
+                                );
+                              },
+                              builder: (context, form) {
+                                return Padding(
+                                  padding: const Pad(horizontal: 16, vertical: 8),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('고정 위치', style: TextStyle(fontSize: 14)),
+                                      const Gap(4),
+                                      Text(
+                                        '현재 작성 중인 줄이 고정될 화면상의 위치를 설정합니다.',
+                                        style: TextStyle(fontSize: 13, color: context.colors.textFaint),
+                                      ),
+                                      const Gap(12),
+                                      Row(
+                                        spacing: 12,
+                                        children: [
+                                          Text(
+                                            '화면 상단',
+                                            style: TextStyle(fontSize: 13, color: context.colors.textFaint),
+                                          ),
+                                          Expanded(
+                                            child: Padding(
+                                              padding: const Pad(horizontal: 4),
+                                              child: HookFormSlider(
+                                                name: 'typewriterPosition',
+                                                min: 0,
+                                                max: 1,
+                                                step: 0.05,
+                                                initialValue: pref.typewriterPosition,
                                               ),
                                             ),
-                                            Text(
-                                              '화면 하단',
-                                              style: TextStyle(fontSize: 13, color: context.colors.textFaint),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                _Section(
-                  title: '표시 설정',
-                  children: [
-                    HookForm(
-                      submitMode: HookFormSubmitMode.onChange,
-                      onSubmit: (form) async {
-                        final lineHighlightEnabled = form.data['lineHighlightEnabled'] as bool;
-                        pref.lineHighlightEnabled = lineHighlightEnabled;
-
-                        unawaited(
-                          mixpanel.track('toggle_line_highlight', properties: {'enabled': lineHighlightEnabled}),
-                        );
-                      },
-                      builder: (context, form) {
-                        return _Item(
-                          label: '현재 줄 강조',
-                          description: '현재 작성 중인 줄을 강조하여 화면에 표시합니다.',
-                          trailing: HookFormSwitch(
-                            name: 'lineHighlightEnabled',
-                            initialValue: pref.lineHighlightEnabled,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                _Section(
-                  title: '편집 설정',
-                  children: [
-                    HookForm(
-                      submitMode: HookFormSubmitMode.onChange,
-                      onSubmit: (form) async {
-                        final autoSurroundEnabled = form.data['autoSurroundEnabled'] as bool;
-                        pref.autoSurroundEnabled = autoSurroundEnabled;
-
-                        unawaited(mixpanel.track('toggle_auto_surround', properties: {'enabled': autoSurroundEnabled}));
-                      },
-                      builder: (context, form) {
-                        return _Item(
-                          label: '선택 영역 둘러싸기',
-                          description: '따옴표나 괄호를 입력하면 선택 영역을 둘러쌉니다.',
-                          trailing: HookFormSwitch(name: 'autoSurroundEnabled', initialValue: pref.autoSurroundEnabled),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                _Section(
-                  title: '위젯 설정',
-                  children: [
-                    HookForm(
-                      submitMode: HookFormSubmitMode.onChange,
-                      onSubmit: (form) async {
-                        final characterCountFloatingEnabled = form.data['characterCountFloatingEnabled'] as bool;
-                        pref.characterCountFloatingEnabled = characterCountFloatingEnabled;
-
-                        unawaited(
-                          mixpanel.track(
-                            'toggle_character_count_floating',
-                            properties: {'enabled': characterCountFloatingEnabled},
-                          ),
-                        );
-                      },
-                      builder: (context, form) {
-                        return Column(
-                          children: [
-                            _Item(
-                              label: '글자 수 위젯',
-                              description: '에디터에서 글자 수를 표시합니다.',
-                              trailing: HookFormSwitch(
-                                name: 'characterCountFloatingEnabled',
-                                initialValue: pref.characterCountFloatingEnabled,
-                              ),
+                                          ),
+                                          Text(
+                                            '화면 하단',
+                                            style: TextStyle(fontSize: 13, color: context.colors.textFaint),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                            if (pref.characterCountFloatingEnabled) ...[
-                              const _Divider(),
-                              HookForm(
-                                submitMode: HookFormSubmitMode.onChange,
-                                onSubmit: (form) async {
-                                  final widgetAutoFadeEnabled = form.data['widgetAutoFadeEnabled'] as bool;
-                                  pref.widgetAutoFadeEnabled = widgetAutoFadeEnabled;
-
-                                  unawaited(
-                                    mixpanel.track(
-                                      'toggle_widget_auto_fade',
-                                      properties: {'enabled': widgetAutoFadeEnabled},
-                                    ),
-                                  );
-                                },
-                                builder: (context, form) {
-                                  return _Item(
-                                    label: '위젯 자동 페이드 인/아웃',
-                                    description: '타이핑, 스크롤 시 위젯이 잠시 사라집니다.',
-                                    trailing: HookFormSwitch(
-                                      name: 'widgetAutoFadeEnabled',
-                                      initialValue: pref.widgetAutoFadeEnabled,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
                           ],
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                _Section(
-                  title: 'AI 설정',
-                  children: [
-                    _Item(
-                      label: 'AI 기능 활성화',
-                      description: '활성화하면 AI 피드백 등 타이피가 제공하는 AI 기능을 사용할 수 있어요.',
-                      trailing: _CustomSwitch(value: aiOptIn, onTap: toggleAiOptIn),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+              _Section(
+                title: '표시 설정',
+                children: [
+                  HookForm(
+                    submitMode: HookFormSubmitMode.onChange,
+                    onSubmit: (form) async {
+                      final lineHighlightEnabled = form.data['lineHighlightEnabled'] as bool;
+                      pref.lineHighlightEnabled = lineHighlightEnabled;
+
+                      unawaited(mixpanel.track('toggle_line_highlight', properties: {'enabled': lineHighlightEnabled}));
+                    },
+                    builder: (context, form) {
+                      return _Item(
+                        label: '현재 줄 강조',
+                        description: '현재 작성 중인 줄을 강조하여 화면에 표시합니다.',
+                        trailing: HookFormSwitch(name: 'lineHighlightEnabled', initialValue: pref.lineHighlightEnabled),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              _Section(
+                title: '편집 설정',
+                children: [
+                  HookForm(
+                    submitMode: HookFormSubmitMode.onChange,
+                    onSubmit: (form) async {
+                      final autoSurroundEnabled = form.data['autoSurroundEnabled'] as bool;
+                      pref.autoSurroundEnabled = autoSurroundEnabled;
+
+                      unawaited(mixpanel.track('toggle_auto_surround', properties: {'enabled': autoSurroundEnabled}));
+                    },
+                    builder: (context, form) {
+                      return _Item(
+                        label: '선택 영역 둘러싸기',
+                        description: '따옴표나 괄호를 입력하면 선택 영역을 둘러쌉니다.',
+                        trailing: HookFormSwitch(name: 'autoSurroundEnabled', initialValue: pref.autoSurroundEnabled),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              _Section(
+                title: '위젯 설정',
+                children: [
+                  HookForm(
+                    submitMode: HookFormSubmitMode.onChange,
+                    onSubmit: (form) async {
+                      final characterCountFloatingEnabled = form.data['characterCountFloatingEnabled'] as bool;
+                      pref.characterCountFloatingEnabled = characterCountFloatingEnabled;
+
+                      unawaited(
+                        mixpanel.track(
+                          'toggle_character_count_floating',
+                          properties: {'enabled': characterCountFloatingEnabled},
+                        ),
+                      );
+                    },
+                    builder: (context, form) {
+                      return Column(
+                        children: [
+                          _Item(
+                            label: '글자 수 위젯',
+                            description: '에디터에서 글자 수를 표시합니다.',
+                            trailing: HookFormSwitch(
+                              name: 'characterCountFloatingEnabled',
+                              initialValue: pref.characterCountFloatingEnabled,
+                            ),
+                          ),
+                          if (pref.characterCountFloatingEnabled) ...[
+                            const _Divider(),
+                            HookForm(
+                              submitMode: HookFormSubmitMode.onChange,
+                              onSubmit: (form) async {
+                                final widgetAutoFadeEnabled = form.data['widgetAutoFadeEnabled'] as bool;
+                                pref.widgetAutoFadeEnabled = widgetAutoFadeEnabled;
+
+                                unawaited(
+                                  mixpanel.track(
+                                    'toggle_widget_auto_fade',
+                                    properties: {'enabled': widgetAutoFadeEnabled},
+                                  ),
+                                );
+                              },
+                              builder: (context, form) {
+                                return _Item(
+                                  label: '위젯 자동 페이드 인/아웃',
+                                  description: '타이핑, 스크롤 시 위젯이 잠시 사라집니다.',
+                                  trailing: HookFormSwitch(
+                                    name: 'widgetAutoFadeEnabled',
+                                    initialValue: pref.widgetAutoFadeEnabled,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+              _Section(
+                title: 'AI 설정',
+                children: [
+                  _Item(
+                    label: 'AI 기능 활성화',
+                    description: '활성화하면 AI 피드백 등 타이피가 제공하는 AI 기능을 사용할 수 있어요.',
+                    trailing: _CustomSwitch(value: aiOptIn, onTap: toggleAiOptIn),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -318,18 +310,10 @@ class _Section extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 8,
       children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textFaint),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: context.colors.borderStrong),
-            borderRadius: BorderRadius.circular(8),
-            color: context.colors.surfaceDefault,
-          ),
+        SettingsSectionLabel(text: title),
+        SettingsSectionCard(
+          clipBehavior: Clip.antiAlias,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
         ),
       ],
@@ -342,7 +326,7 @@ class _Divider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return HorizontalDivider(color: context.colors.borderDefault);
+    return HorizontalDivider(color: context.colors.borderSubtle);
   }
 }
 

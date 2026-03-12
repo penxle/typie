@@ -13,8 +13,7 @@ import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/delete_user/__generated__/delete_user_mutation.req.gql.dart';
 import 'package:typie/services/auth.dart';
-import 'package:typie/widgets/heading.dart';
-import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/settings_screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -28,13 +27,15 @@ class DeleteUserScreen extends HookWidget {
     final mixpanel = useService<Mixpanel>();
 
     final isChecked = useState(false);
+    final scrollController = useScrollController();
 
-    return Screen(
-      heading: const Heading(title: '회원 탈퇴'),
-      padding: const Pad(horizontal: 20, top: 40),
+    return SettingsOverlayScreen(
+      title: '회원 탈퇴',
+      scrollController: scrollController,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const Gap(settingsSectionGap),
           const Text(
             '정말 탈퇴하시겠어요?',
             textAlign: TextAlign.center,
@@ -46,19 +47,13 @@ class DeleteUserScreen extends HookWidget {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: context.colors.textFaint),
           ),
-          const Gap(24),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: context.colors.borderStrong),
-              borderRadius: BorderRadius.circular(8),
-              color: context.colors.surfaceDefault,
-            ),
+          const Gap(settingsSectionGap),
+          const SettingsSectionLabel(text: '유의사항'),
+          SettingsSectionCard(
             padding: const Pad(all: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('유의사항', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                const Gap(4),
                 Text(
                   '- 작성한 모든 글과 데이터는 탈퇴와 함께 삭제되며 재가입시에도 복구할 수 없어요.',
                   style: TextStyle(fontSize: 14, color: context.colors.textSubtle),
@@ -117,8 +112,7 @@ class DeleteUserScreen extends HookWidget {
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                border: Border.all(color: context.colors.borderStrong),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(settingsCardRadius),
                 color: context.colors.accentDanger,
               ),
               padding: const Pad(vertical: 12),
@@ -136,8 +130,7 @@ class DeleteUserScreen extends HookWidget {
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                border: Border.all(color: context.colors.borderStrong),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(settingsCardRadius),
                 color: context.colors.surfaceDefault,
               ),
               padding: const Pad(vertical: 12),

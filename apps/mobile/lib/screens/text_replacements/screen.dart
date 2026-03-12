@@ -12,7 +12,6 @@ import 'package:typie/context/theme.dart';
 import 'package:typie/graphql/__generated__/schema.schema.gql.dart';
 import 'package:typie/graphql/client.dart';
 import 'package:typie/graphql/widget.dart';
-import 'package:typie/hooks/service.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/native/editor_native.dart' show validateRegex;
 import 'package:typie/screens/text_replacements/__generated__/create_text_replacement_mutation.req.gql.dart';
@@ -26,7 +25,8 @@ import 'package:typie/widgets/forms/switch.dart';
 import 'package:typie/widgets/forms/text_field.dart';
 import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
-import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/overlay_heading.dart';
+import 'package:typie/widgets/settings_screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 class _NormalizedItem {
@@ -101,16 +101,34 @@ class TextReplacementsScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final client = useService<GraphQLClient>();
     final refreshNotifier = useMemoized(RefreshNotifier.new);
     final customItemsRef = useRef<List<_NormalizedItem>>([]);
 
-    return Screen(
-      heading: Heading(
-        title: '텍스트 대치',
-        actions: [
-          HeadingAction(
+    final scrollController = useScrollController();
+
+    return GraphQLOperation(
+      operation: GTextReplacementsScreen_QueryReq(),
+      refreshNotifier: refreshNotifier,
+      builder: (context, client, data) {
+        final items = data.me!.textReplacements.map(_normalize).toList();
+
+        final allPresets = items.where((item) => item.preset).toList()
+          ..sort((a, b) => (a.order ?? '').compareTo(b.order ?? ''));
+        final smartQuoteItems = allPresets.where((item) => _smartQuoteIds.contains(item.textReplacementId)).toList();
+        final presets = allPresets.where((item) => !_smartQuoteIds.contains(item.textReplacementId)).toList();
+        final smartQuoteAllActive = smartQuoteItems.every((item) => item.state == GTextReplacementState.ACTIVE);
+        final customItems = items.where((item) => !item.preset).toList()
+          ..sort((a, b) => (a.order ?? '').compareTo(b.order ?? ''));
+        customItemsRef.value = customItems;
+
+        return SettingsOverlayScreen(
+          title: '텍스트 대치',
+          scrollController: scrollController,
+          trailing: HeadingCircleButton(
             icon: LucideLightIcons.plus,
+            backgroundColor: OverlayHeading.controlBackgroundColor(context),
+            boxShadow: OverlayHeading.controlShadow(context),
+            useSlotHeight: false,
             onTap: () async {
               await context.showBottomSheet(
                 child: _FormBottomSheet(
@@ -121,68 +139,48 @@ class TextReplacementsScreen extends HookWidget {
               );
             },
           ),
-        ],
-      ),
-      child: GraphQLOperation(
-        operation: GTextReplacementsScreen_QueryReq(),
-        refreshNotifier: refreshNotifier,
-        builder: (context, client, data) {
-          final items = data.me!.textReplacements.map(_normalize).toList();
-
-          final allPresets = items.where((item) => item.preset).toList()
-            ..sort((a, b) => (a.order ?? '').compareTo(b.order ?? ''));
-          final smartQuoteItems = allPresets.where((item) => _smartQuoteIds.contains(item.textReplacementId)).toList();
-          final presets = allPresets.where((item) => !_smartQuoteIds.contains(item.textReplacementId)).toList();
-          final smartQuoteAllActive = smartQuoteItems.every((item) => item.state == GTextReplacementState.ACTIVE);
-          final customItems = items.where((item) => !item.preset).toList()
-            ..sort((a, b) => (a.order ?? '').compareTo(b.order ?? ''));
-          customItemsRef.value = customItems;
-
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('입력 중 특정 텍스트를 자동으로 변환해요.', style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
-                const Gap(20),
-                _Section(
-                  title: '기본 대치',
-                  children: [
-                    for (int i = 0; i < presets.length; i++) ...[
-                      if (i > 0) const _Divider(),
-                      _PresetItem(item: presets[i], client: client, refreshNotifier: refreshNotifier),
-                    ],
-                    if (smartQuoteItems.isNotEmpty) ...[
-                      if (presets.isNotEmpty) const _Divider(),
-                      _SmartQuoteItem(
-                        allActive: smartQuoteAllActive,
-                        smartQuoteItems: smartQuoteItems,
-                        client: client,
-                        refreshNotifier: refreshNotifier,
-                      ),
-                    ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Gap(settingsSectionGap),
+              Text('입력 중 특정 텍스트를 자동으로 변환해요.', style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
+              const Gap(settingsSectionGap),
+              _Section(
+                title: '기본 대치',
+                children: [
+                  for (int i = 0; i < presets.length; i++) ...[
+                    if (i > 0) const _Divider(),
+                    _PresetItem(item: presets[i], client: client, refreshNotifier: refreshNotifier),
                   ],
-                ),
-                const Gap(24),
-                _Section(
-                  title: '사용자 대치',
-                  description: '위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.',
-                  children: [
-                    if (customItems.isEmpty)
-                      const Padding(
-                        padding: Pad(all: 16),
-                        child: Center(child: Text('아직 사용자 대치 규칙이 없어요.', style: TextStyle(fontSize: 13))),
-                      )
-                    else
-                      _CustomItemsList(customItems: customItems, client: client, refreshNotifier: refreshNotifier),
+                  if (smartQuoteItems.isNotEmpty) ...[
+                    if (presets.isNotEmpty) const _Divider(),
+                    _SmartQuoteItem(
+                      allActive: smartQuoteAllActive,
+                      smartQuoteItems: smartQuoteItems,
+                      client: client,
+                      refreshNotifier: refreshNotifier,
+                    ),
                   ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+                ],
+              ),
+              const Gap(settingsSectionGap),
+              _Section(
+                title: '사용자 대치',
+                description: '위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.',
+                children: [
+                  if (customItems.isEmpty)
+                    const Padding(
+                      padding: Pad(all: 16),
+                      child: Center(child: Text('아직 사용자 대치 규칙이 없어요.', style: TextStyle(fontSize: 13))),
+                    )
+                  else
+                    _CustomItemsList(customItems: customItems, client: client, refreshNotifier: refreshNotifier),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -199,21 +197,14 @@ class _Section extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textFaint),
-        ),
+        SettingsSectionLabel(text: title),
         if (description != null) ...[
-          const Gap(4),
+          const Gap(0),
           Text(description!, style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
+          const Gap(12),
         ],
-        const Gap(8),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: context.colors.borderStrong),
-            borderRadius: BorderRadius.circular(8),
-            color: context.colors.surfaceDefault,
-          ),
+        SettingsSectionCard(
+          clipBehavior: Clip.antiAlias,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
         ),
       ],
@@ -226,7 +217,7 @@ class _Divider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return HorizontalDivider(color: context.colors.borderDefault);
+    return HorizontalDivider(color: context.colors.borderSubtle);
   }
 }
 

@@ -29,7 +29,7 @@ import 'package:typie/services/site.dart';
 import 'package:typie/widgets/horizontal_divider.dart';
 import 'package:typie/widgets/img.dart';
 import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
-import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/settings_screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
@@ -43,93 +43,26 @@ class SiteScreen extends HookWidget {
     final data = useQuery(GSiteScreen_QueryReq((b) => b.vars.siteId = siteId));
 
     final scrollController = useScrollController();
-    final showHeadingTitle = useState(false);
+    final currentSiteId = data?.site.id;
+    final otherSiteCount = switch (currentSiteId) {
+      final String id => data?.me?.sites.where((s) => s.id != id).length ?? 0,
+      null => 0,
+    };
+    final showOtherSpaces = otherSiteCount > 0 || data?.me?.subscription != null;
 
-    useEffect(() {
-      void onScroll() {
-        showHeadingTitle.value = scrollController.offset > 44;
-      }
-
-      scrollController.addListener(onScroll);
-      return () => scrollController.removeListener(onScroll);
-    }, [scrollController]);
-
-    return Screen(
+    return SettingsOverlayScreen(
+      title: '스페이스',
+      scrollController: scrollController,
       loading: data == null,
-      child: Stack(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.paddingOf(context).bottom + 140),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SingleChildScrollView(
-            controller: scrollController,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Gap(72),
-                const Padding(
-                  padding: Pad(horizontal: 20, top: 8, bottom: 4),
-                  child: Text('스페이스', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-                ),
-                _CurrentSpaceHero(data: data, site: site),
-                _OtherSpaces(data: data, site: site),
-                Gap(140 + MediaQuery.paddingOf(context).bottom),
-              ],
-            ),
-          ),
-          _Heading(showTitle: showHeadingTitle.value),
+          const Gap(settingsSectionGap),
+          _CurrentSpaceHero(data: data, site: site),
+          if (showOtherSpaces) ...[const Gap(settingsSectionGap), _OtherSpaces(data: data, site: site)],
         ],
       ),
-    );
-  }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading({required this.showTitle});
-
-  final bool showTitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          height: 48,
-          padding: const Pad(horizontal: 20),
-          decoration: BoxDecoration(color: context.colors.surfaceSubtle),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Tappable(
-                  onTap: () => context.router.maybePop(),
-                  child: Icon(LucideLightIcons.chevron_left, size: 20, color: context.colors.textDefault),
-                ),
-              ),
-              AnimatedSlide(
-                offset: Offset(0, showTitle ? 0.0 : 0.4),
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: showTitle ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 150),
-                  child: const Text('스페이스', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          height: 24,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [context.colors.surfaceSubtle, context.colors.surfaceSubtle.withValues(alpha: 0)],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -226,84 +159,90 @@ class _CurrentSpaceHero extends HookWidget {
       }
     }
 
-    return Padding(
-      padding: const Pad(top: 24, bottom: 32),
-      child: Column(
-        children: [
-          Tappable(
-            onTap: updateSiteLogo,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Img(image: data?.site.logo, size: 64),
-            ),
-          ),
-          const Gap(12),
-          if (isEditing.value)
-            SizedBox(
-              width: 200,
-              child: TextField(
-                controller: nameController,
-                focusNode: nameFocusNode,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                decoration: InputDecoration(
-                  contentPadding: const Pad(horizontal: 12, vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: context.colors.accentBrand),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: context.colors.accentBrand, width: 1.5),
-                  ),
-                  filled: true,
-                  fillColor: context.colors.surfaceDefault,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SettingsSectionLabel(text: '현재 스페이스'),
+        SettingsSectionCard(
+          padding: const Pad(top: 24, bottom: 32, left: 24, right: 24),
+          child: Column(
+            children: [
+              Tappable(
+                onTap: updateSiteLogo,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Img(image: data?.site.logo, size: 64),
                 ),
-                onSubmitted: (_) {
-                  unawaited(
-                    _submitName(
-                      context: context,
-                      client: client,
-                      mixpanel: mixpanel,
-                      siteId: data?.site.id ?? '',
-                      nameController: nameController,
-                      nameValue: nameValue,
-                      isEditing: isEditing,
+              ),
+              const Gap(12),
+              if (isEditing.value)
+                SizedBox(
+                  width: 200,
+                  child: TextField(
+                    controller: nameController,
+                    focusNode: nameFocusNode,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    decoration: InputDecoration(
+                      contentPadding: const Pad(horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: context.colors.accentBrand),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: context.colors.accentBrand, width: 1.5),
+                      ),
+                      filled: true,
+                      fillColor: context.colors.surfaceDefault,
                     ),
-                  );
+                    onSubmitted: (_) {
+                      unawaited(
+                        _submitName(
+                          context: context,
+                          client: client,
+                          mixpanel: mixpanel,
+                          siteId: data?.site.id ?? '',
+                          nameController: nameController,
+                          nameValue: nameValue,
+                          isEditing: isEditing,
+                        ),
+                      );
+                    },
+                  ),
+                )
+              else
+                Tappable(
+                  onTap: () {
+                    isEditing.value = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      nameFocusNode.requestFocus();
+                    });
+                  },
+                  child: Text(nameValue.value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                ),
+              const Gap(12),
+              Tappable(
+                onTap: () {
+                  unawaited(context.router.push(const SiteSettingsRoute()));
                 },
+                child: Container(
+                  padding: const Pad(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: context.colors.surfaceMuted, borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 4,
+                    children: [
+                      Icon(LucideLightIcons.settings, size: 14, color: context.colors.textSubtle),
+                      Text('스페이스 설정', style: TextStyle(fontSize: 13, color: context.colors.textSubtle)),
+                    ],
+                  ),
+                ),
               ),
-            )
-          else
-            Tappable(
-              onTap: () {
-                isEditing.value = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  nameFocusNode.requestFocus();
-                });
-              },
-              child: Text(nameValue.value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            ),
-          const Gap(12),
-          Tappable(
-            onTap: () {
-              unawaited(context.router.push(const SiteSettingsRoute()));
-            },
-            child: Container(
-              padding: const Pad(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 4,
-                children: [
-                  Icon(LucideLightIcons.settings, size: 14, color: context.colors.textSubtle),
-                  Text('스페이스 설정', style: TextStyle(fontSize: 13, color: context.colors.textSubtle)),
-                ],
-              ),
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -369,106 +308,89 @@ class _OtherSpaces extends HookWidget {
       return const SizedBox.shrink();
     }
 
-    return Padding(
-      padding: const Pad(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const Pad(bottom: 12),
-            child: Text(
-              '다른 스페이스',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-                color: context.colors.textFaint,
-              ),
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(12)),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                ...otherSites.map((s) {
-                  return Column(
-                    children: [
-                      Tappable(
-                        onTap: () {
-                          site.setSiteId(s.id);
-                          unawaited(context.router.maybePop());
-                        },
-                        child: Padding(
-                          padding: const Pad(horizontal: 16, vertical: 14),
-                          child: Tappable.scale(
-                            child: Row(
-                              spacing: 12,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Img(image: s.logo, size: 28),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SettingsSectionLabel(text: '다른 스페이스'),
+        SettingsSectionCard(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              ...otherSites.map((s) {
+                return Column(
+                  children: [
+                    Tappable(
+                      onTap: () {
+                        site.setSiteId(s.id);
+                        unawaited(context.router.maybePop());
+                      },
+                      child: Padding(
+                        padding: const Pad(horizontal: 16, vertical: 14),
+                        child: Tappable.scale(
+                          child: Row(
+                            spacing: 12,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Img(image: s.logo, size: 28),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  s.name,
+                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                Expanded(
-                                  child: Text(
-                                    s.name,
-                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      HorizontalDivider(color: context.colors.borderSubtle),
-                    ],
-                  );
-                }),
-                Tappable(
-                  onTap: () async {
-                    if (!hasSubscription) {
-                      if (context.mounted) {
-                        final result = await context.showBottomSheet<PlanUpgradeResult>(
-                          child: const PlanUpgradeBottomSheet(message: '멀티 스페이스는 FULL ACCESS 플랜에서 사용할 수 있어요.'),
-                        );
-
-                        if (result == PlanUpgradeResult.upgrade && context.mounted) {
-                          unawaited(context.router.push(const EnrollPlanRoute()));
-                        }
-                      }
-                      return;
-                    }
-
+                    ),
+                    HorizontalDivider(color: context.colors.borderSubtle),
+                  ],
+                );
+              }),
+              Tappable(
+                onTap: () async {
+                  if (!hasSubscription) {
                     if (context.mounted) {
-                      await context.showBottomSheet(
-                        child: _CreateSiteBottomSheet(client: client, site: site, mixpanel: mixpanel),
+                      final result = await context.showBottomSheet<PlanUpgradeResult>(
+                        child: const PlanUpgradeBottomSheet(message: '멀티 스페이스는 FULL ACCESS 플랜에서 사용할 수 있어요.'),
                       );
+
+                      if (result == PlanUpgradeResult.upgrade && context.mounted) {
+                        unawaited(context.router.push(const EnrollPlanRoute()));
+                      }
                     }
-                  },
-                  child: Padding(
-                    padding: const Pad(horizontal: 16, vertical: 14),
-                    child: Tappable.scale(
-                      child: Row(
-                        spacing: 12,
-                        children: [
-                          SizedBox(
-                            width: 28,
-                            child: Center(
-                              child: Icon(LucideLightIcons.plus, size: 18, color: context.colors.textSubtle),
-                            ),
-                          ),
-                          Text('새 스페이스 생성', style: TextStyle(fontSize: 15, color: context.colors.textSubtle)),
-                        ],
-                      ),
+                    return;
+                  }
+
+                  if (context.mounted) {
+                    await context.showBottomSheet(
+                      child: _CreateSiteBottomSheet(client: client, site: site, mixpanel: mixpanel),
+                    );
+                  }
+                },
+                child: Padding(
+                  padding: const Pad(horizontal: 16, vertical: 14),
+                  child: Tappable.scale(
+                    child: Row(
+                      spacing: 12,
+                      children: [
+                        SizedBox(
+                          width: 28,
+                          child: Center(child: Icon(LucideLightIcons.plus, size: 18, color: context.colors.textSubtle)),
+                        ),
+                        Text('새 스페이스 생성', style: TextStyle(fontSize: 15, color: context.colors.textSubtle)),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

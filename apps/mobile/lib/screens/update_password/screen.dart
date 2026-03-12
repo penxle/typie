@@ -2,6 +2,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:gql_tristate_value/gql_tristate_value.dart';
 import 'package:luthor/luthor.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -13,8 +14,8 @@ import 'package:typie/screens/update_password/__generated__/screen_query.req.gql
 import 'package:typie/screens/update_password/__generated__/update_password_mutation.req.gql.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/text_field.dart';
-import 'package:typie/widgets/heading.dart';
 import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/settings_screen.dart';
 
 @RoutePage()
 class UpdatePasswordScreen extends HookWidget {
@@ -24,14 +25,15 @@ class UpdatePasswordScreen extends HookWidget {
   Widget build(BuildContext context) {
     final form = useHookForm();
     final mixpanel = useService<Mixpanel>();
+    final scrollController = useScrollController();
 
     return GraphQLOperation(
       operation: GUpdatePasswordScreen_QueryReq(),
       builder: (context, client, data) {
-        return Screen(
-          heading: const Heading(title: '비밀번호 변경'),
+        return SettingsOverlayScreen(
+          title: '비밀번호 변경',
+          scrollController: scrollController,
           resizeToAvoidBottomInset: true,
-          padding: const Pad(top: 20),
           bottomAction: BottomAction(
             text: (data.me?.hasPassword ?? false) ? '변경' : '설정',
             onTap: () async {
@@ -90,40 +92,41 @@ class UpdatePasswordScreen extends HookWidget {
               final hasPassword = data.me?.hasPassword ?? false;
 
               return Column(
-                spacing: 20,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (hasPassword)
-                    const Padding(
-                      padding: Pad(horizontal: 20),
-                      child: HookFormTextField(
-                        name: 'currentPassword',
-                        label: '현재 비밀번호',
-                        placeholder: '현재 비밀번호를 입력하세요',
-                        obscureText: true,
-                        autofillHints: [AutofillHints.password],
-                        autofocus: true,
-                      ),
-                    ),
-                  Padding(
-                    padding: const Pad(horizontal: 20),
-                    child: HookFormTextField(
-                      name: 'newPassword',
-                      label: '새 비밀번호',
-                      placeholder: '********',
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.password],
-                      autofocus: !hasPassword,
-                    ),
-                  ),
-                  const Padding(
-                    padding: Pad(horizontal: 20),
-                    child: HookFormTextField(
-                      name: 'confirmPassword',
-                      label: '새 비밀번호 확인',
-                      placeholder: '********',
-                      obscureText: true,
-                      autofillHints: [AutofillHints.password],
+                  const Gap(settingsSectionGap),
+                  const SettingsSectionLabel(text: '비밀번호'),
+                  SettingsSectionCard(
+                    padding: const Pad(all: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      spacing: 16,
+                      children: [
+                        if (hasPassword)
+                          const HookFormTextField(
+                            name: 'currentPassword',
+                            label: '현재 비밀번호',
+                            placeholder: '현재 비밀번호를 입력하세요',
+                            obscureText: true,
+                            autofillHints: [AutofillHints.password],
+                            autofocus: true,
+                          ),
+                        HookFormTextField(
+                          name: 'newPassword',
+                          label: '새 비밀번호',
+                          placeholder: '********',
+                          obscureText: true,
+                          autofillHints: const [AutofillHints.password],
+                          autofocus: !hasPassword,
+                        ),
+                        const HookFormTextField(
+                          name: 'confirmPassword',
+                          label: '새 비밀번호 확인',
+                          placeholder: '********',
+                          obscureText: true,
+                          autofillHints: [AutofillHints.password],
+                        ),
+                      ],
                     ),
                   ),
                 ],

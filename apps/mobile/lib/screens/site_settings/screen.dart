@@ -35,8 +35,7 @@ import 'package:typie/services/site.dart';
 import 'package:typie/widgets/forms/form.dart';
 import 'package:typie/widgets/forms/select.dart';
 import 'package:typie/widgets/forms/text_field.dart';
-import 'package:typie/widgets/heading.dart';
-import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/settings_screen.dart';
 import 'package:typie/widgets/tappable.dart';
 
 const _unavailableSiteSlugs = ['admin', 'app', 'cname', 'dev', 'docs', 'help', 'template', 'www'];
@@ -54,37 +53,35 @@ class SiteSettingsScreen extends HookWidget {
   Widget build(BuildContext context) {
     final site = useService<Site>();
     final siteId = useValueListenable(site);
+    final scrollController = useScrollController();
 
-    return Screen(
-      heading: const Heading(title: '스페이스 설정'),
-      resizeToAvoidBottomInset: true,
-      child: GraphQLOperation(
-        operation: GSiteSettingsScreen_QueryReq((b) => b..vars.siteId = siteId),
-        builder: (context, client, data) {
-          final sites = data.me?.sites.toList() ?? [];
-          final isLastSite = sites.length <= 1;
+    return GraphQLOperation(
+      operation: GSiteSettingsScreen_QueryReq((b) => b..vars.siteId = siteId),
+      builder: (context, client, data) {
+        final sites = data.me?.sites.toList() ?? [];
+        final isLastSite = sites.length <= 1;
 
-          return SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: Pad(all: 20, bottom: MediaQuery.paddingOf(context).bottom),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 24,
-              children: [
-                _GeneralTab(client: client, site: data.site, hasSubscription: data.me?.subscription != null),
-                _DesignTab(client: client, site: data.site),
-                _DangerZone(
-                  client: client,
-                  site: data.site,
-                  siteService: site,
-                  isLastSite: isLastSite,
-                  remainingSiteIds: sites.map((s) => s.id).where((id) => id != data.site.id).toList(),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+        return SettingsOverlayScreen(
+          title: '스페이스 설정',
+          scrollController: scrollController,
+          resizeToAvoidBottomInset: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: settingsSectionGap,
+            children: [
+              _GeneralTab(client: client, site: data.site, hasSubscription: data.me?.subscription != null),
+              _DesignTab(client: client, site: data.site),
+              _DangerZone(
+                client: client,
+                site: data.site,
+                siteService: site,
+                isLastSite: isLastSite,
+                remainingSiteIds: sites.map((s) => s.id).where((id) => id != data.site.id).toList(),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -491,39 +488,58 @@ class _DangerZone extends HookWidget {
     final mixpanel = useService<Mixpanel>();
     final totalCount = site.documentCount + site.folderCount;
 
-    return Padding(
-      padding: const Pad(top: 16),
-      child: Center(
-        child: GestureDetector(
-          onTap: () async {
-            if (isLastSite) {
-              await context.showModal(
-                child: const AlertModal(
-                  title: '스페이스를 삭제할 수 없어요',
-                  message: '최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SettingsSectionLabel(text: '위험 구역'),
+        SettingsSectionCard(
+          clipBehavior: Clip.antiAlias,
+          child: Tappable(
+            onTap: () async {
+              if (isLastSite) {
+                await context.showModal(
+                  child: const AlertModal(
+                    title: '스페이스를 삭제할 수 없어요',
+                    message: '최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.',
+                  ),
+                );
+                return;
+              }
+
+              final deleted = await context.showBottomSheet<bool>(
+                child: _DeleteSiteConfirmSheet(
+                  client: client,
+                  site: site,
+                  siteService: siteService,
+                  mixpanel: mixpanel,
+                  totalCount: totalCount,
+                  remainingSiteIds: remainingSiteIds,
                 ),
               );
-              return;
-            }
 
-            final deleted = await context.showBottomSheet<bool>(
-              child: _DeleteSiteConfirmSheet(
-                client: client,
-                site: site,
-                siteService: siteService,
-                mixpanel: mixpanel,
-                totalCount: totalCount,
-                remainingSiteIds: remainingSiteIds,
+              if ((deleted ?? false) && context.mounted) {
+                await context.router.maybePop();
+              }
+            },
+            padding: const Pad(horizontal: 16),
+            child: Tappable.scale(
+              child: SizedBox(
+                height: settingsListRowHeight,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '스페이스 삭제',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDanger),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            );
-
-            if ((deleted ?? false) && context.mounted) {
-              await context.router.maybePop();
-            }
-          },
-          child: Text('스페이스 삭제', style: TextStyle(fontSize: 14, color: context.colors.textDanger)),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -616,20 +632,9 @@ class _Section extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 8,
       children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textFaint),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: context.colors.borderStrong),
-            borderRadius: BorderRadius.circular(8),
-            color: context.colors.surfaceDefault,
-          ),
-          child: child,
-        ),
+        SettingsSectionLabel(text: title),
+        SettingsSectionCard(clipBehavior: Clip.antiAlias, child: child),
       ],
     );
   }
