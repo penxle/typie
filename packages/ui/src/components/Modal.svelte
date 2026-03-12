@@ -3,7 +3,7 @@
   import { center } from '@typie/styled-system/patterns';
   import { cubicOut } from 'svelte/easing';
   import { fade, scale } from 'svelte/transition';
-  import { focusTrap, portal } from '../actions';
+  import { deactivateFocusTrap, focusTrap, portal } from '../actions';
   import { pushEscapeHandler } from '../utils';
   import RingSpinner from './RingSpinner.svelte';
   import type { SystemStyleObject } from '@typie/styled-system/types';
@@ -39,6 +39,26 @@
     onclose?.();
   };
 
+  let trapEl = $state<HTMLElement>();
+  let previouslyFocused: HTMLElement | null = null;
+
+  // 자식 컴포넌트가 focus-trap 활성화 전에 포커스를 가져가면(예: Notes의 textarea autofocus),
+  // focus-trap이 잘못된 엘리먼트를 캡처한다. $effect.pre는 DOM 렌더 전에 실행되므로
+  // open이 true가 되는 시점에 올바른 activeElement를 저장하고, 닫을 때 직접 복원한다.
+  $effect.pre(() => {
+    if (open) {
+      if (!previouslyFocused) {
+        previouslyFocused = document.activeElement as HTMLElement | null;
+      }
+    } else {
+      if (trapEl) {
+        deactivateFocusTrap(trapEl, { returnFocus: false });
+        previouslyFocused?.focus();
+      }
+      previouslyFocused = null;
+    }
+  });
+
   $effect(() => {
     if (open) {
       return pushEscapeHandler(() => {
@@ -54,6 +74,7 @@
 
 {#if open}
   <div
+    bind:this={trapEl}
     style:padding={`${overlayPadding}px`}
     class={center({ position: 'fixed', inset: '0', zIndex: 'modal', userSelect: 'none' })}
     use:focusTrap={{

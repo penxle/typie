@@ -7,6 +7,7 @@
   import { Toast } from '@typie/ui/notification';
   import { animateFlip, elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
+  import { tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import PlusIcon from '~icons/lucide/plus';
@@ -179,10 +180,13 @@
       localNoteOrder = noteIds;
     }
 
-    const noteElement = document.querySelector(`[data-related-note-id="${lastAddedNoteId}"] textarea`) as HTMLTextAreaElement;
-    if (noteElement) {
-      noteElement.focus();
+    if (lastAddedNoteId && noteIds.includes(lastAddedNoteId)) {
+      const targetId = lastAddedNoteId;
       lastAddedNoteId = undefined;
+      tick().then(() => {
+        const noteElement = document.querySelector(`[data-related-note-id="${targetId}"] textarea`) as HTMLTextAreaElement;
+        noteElement?.focus();
+      });
     }
   });
 

@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, Entities, IssueEntities, Issues, NoteEntities, Notes, Sites } from '@/db';
 import { TableCode } from '@/db/schemas/codes';
 import { createDbId } from '@/db/schemas/id';
 import { generateFractionalOrder } from '@/utils/order';
+import type { Dayjs } from 'dayjs';
 
 process.env.SCRIPT = '1';
 
@@ -51,11 +52,25 @@ for (let i = 0; i < mappingRows.length; i += BATCH_SIZE) {
   const issueIds = batch.map((r) => r.issue_id);
   const noteIds = batch.map((r) => r.note_id);
 
-  const issues = await db.select().from(Issues).where(inArray(Issues.id, issueIds));
-  const notes = await db.select().from(Notes).where(inArray(Notes.id, noteIds));
+  const [issues, notes, allIssueEntities] = await Promise.all([
+    db.select().from(Issues).where(inArray(Issues.id, issueIds)),
+    db.select().from(Notes).where(inArray(Notes.id, noteIds)),
+    db
+      .select({ issueId: IssueEntities.issueId, entityId: IssueEntities.entityId })
+      .from(IssueEntities)
+      .where(inArray(IssueEntities.issueId, issueIds)),
+  ]);
 
   const issueMap = new Map(issues.map((i) => [i.id, i]));
   const noteMap = new Map(notes.map((n) => [n.id, n]));
+  const issueEntityMap = new Map<string, string[]>();
+  for (const r of allIssueEntities) {
+    const arr = issueEntityMap.get(r.issueId) ?? [];
+    arr.push(r.entityId);
+    issueEntityMap.set(r.issueId, arr);
+  }
+
+  const noteEntityValues: { id: string; noteId: string; entityId: string }[] = [];
 
   for (const { note_id, issue_id } of batch) {
     const issue = issueMap.get(issue_id);
@@ -76,24 +91,14 @@ for (let i = 0; i < mappingRows.length; i += BATCH_SIZE) {
       syncedCount++;
     }
 
-    // Sync issue_entities → note_entities
-    const issueEntityRows = await db
-      .select({ entityId: IssueEntities.entityId })
-      .from(IssueEntities)
-      .where(eq(IssueEntities.issueId, issue_id));
-
-    if (issueEntityRows.length > 0) {
-      await db
-        .insert(NoteEntities)
-        .values(
-          issueEntityRows.map((r) => ({
-            id: createDbId(TableCode.NOTE_ENTITIES),
-            noteId: note_id,
-            entityId: r.entityId,
-          })),
-        )
-        .onConflictDoNothing();
+    const entityIds = issueEntityMap.get(issue_id) ?? [];
+    for (const entityId of entityIds) {
+      noteEntityValues.push({ id: createDbId(TableCode.NOTE_ENTITIES), noteId: note_id, entityId });
     }
+  }
+
+  if (noteEntityValues.length > 0) {
+    await db.insert(NoteEntities).values(noteEntityValues).onConflictDoNothing();
   }
 
   console.log(`  Step B-1 progress: ${i + batch.length}/${mappingRows.length} (synced: ${syncedCount})`);
@@ -106,8 +111,8 @@ console.log(`Step B-1 complete: ${syncedCount} notes synced from issues`);
 console.log('--- Step B-2: Insert unmapped issues as notes ---');
 
 const mappedIssueIds = new Set(mappingRows.map((r) => r.issue_id));
-const allIssues = await db.select().from(Issues);
-const unmappedIssues = allIssues.filter((i) => !mappedIssueIds.has(i.id));
+const allUnmappedIssues = await db.select().from(Issues);
+const unmappedIssues = allUnmappedIssues.filter((i) => !mappedIssueIds.has(i.id));
 
 console.log(`  Found ${unmappedIssues.length} unmapped issues`);
 
@@ -124,12 +129,56 @@ if (siteIds.length > 0) {
   }
 }
 
-// Track last order per user for fractional indexing
+// Pre-fetch all issue_entities for unmapped issues
+const unmappedIssueIds = unmappedIssues.map((i) => i.id);
+const allUnmappedIssueEntities = new Map<string, string[]>();
+for (let i = 0; i < unmappedIssueIds.length; i += BATCH_SIZE) {
+  const batch = unmappedIssueIds.slice(i, i + BATCH_SIZE);
+  const rows = await db
+    .select({ issueId: IssueEntities.issueId, entityId: IssueEntities.entityId })
+    .from(IssueEntities)
+    .where(inArray(IssueEntities.issueId, batch));
+  for (const r of rows) {
+    const arr = allUnmappedIssueEntities.get(r.issueId) ?? [];
+    arr.push(r.entityId);
+    allUnmappedIssueEntities.set(r.issueId, arr);
+  }
+}
+
+// Pre-fetch last order per user
+const userIdsForOrder = [...new Set(unmappedIssues.map((i) => siteOwnerMap.get(i.siteId)).filter(Boolean))] as string[];
 const userLastOrder = new Map<string, string | null>();
+for (let i = 0; i < userIdsForOrder.length; i += BATCH_SIZE) {
+  const batch = userIdsForOrder.slice(i, i + BATCH_SIZE);
+  const rows = await db
+    .select({ userId: Notes.userId, order: sql<string>`max(${Notes.order})`.as('order') })
+    .from(Notes)
+    .where(and(inArray(Notes.userId, batch), eq(Notes.state, 'ACTIVE')))
+    .groupBy(Notes.userId);
+  for (const r of rows) {
+    userLastOrder.set(r.userId, r.order ?? null);
+  }
+}
+
+const statusMap: Record<string, string> = { OPEN: 'OPEN', IN_PROGRESS: 'OPEN', RESOLVED: 'RESOLVED', CLOSED: 'RESOLVED' };
 
 let insertedCount = 0;
 for (let i = 0; i < unmappedIssues.length; i += BATCH_SIZE) {
   const batch = unmappedIssues.slice(i, i + BATCH_SIZE);
+
+  const noteValues: {
+    id: string;
+    userId: string;
+    siteId: string;
+    content: typeof Issues.$inferSelect.content;
+    color: string;
+    order: string;
+    status: 'OPEN' | 'RESOLVED';
+    state: 'ACTIVE' | 'DELETED';
+    createdAt: Dayjs;
+    updatedAt: Dayjs;
+  }[] = [];
+  const issueToNoteId = new Map<string, string>();
 
   for (const issue of batch) {
     const userId = siteOwnerMap.get(issue.siteId);
@@ -138,61 +187,43 @@ for (let i = 0; i < unmappedIssues.length; i += BATCH_SIZE) {
       continue;
     }
 
-    // Get last order for this user (cached)
-    if (!userLastOrder.has(userId)) {
-      const lastNote = await db
-        .select({ order: Notes.order })
-        .from(Notes)
-        .where(and(eq(Notes.userId, userId), eq(Notes.state, 'ACTIVE')))
-        .orderBy(desc(Notes.order))
-        .limit(1)
-        .then((rows) => rows[0]);
-      userLastOrder.set(userId, lastNote?.order ?? null);
-    }
-
     const lastOrder = userLastOrder.get(userId) ?? null;
     const order = generateFractionalOrder({ lower: lastOrder, upper: null });
     userLastOrder.set(userId, order);
 
-    const statusMap: Record<string, string> = { OPEN: 'OPEN', IN_PROGRESS: 'OPEN', RESOLVED: 'RESOLVED', CLOSED: 'RESOLVED' };
+    const noteId = createDbId(TableCode.NOTES);
+    issueToNoteId.set(issue.id, noteId);
 
-    await db.transaction(async (tx) => {
-      const [note] = await tx
-        .insert(Notes)
-        .values({
-          userId,
-          siteId: issue.siteId,
-          content: issue.content,
-          color: 'gray',
-          order,
-          status: (statusMap[issue.status] ?? 'OPEN') as 'OPEN' | 'RESOLVED',
-          state: issue.state === 'ACTIVE' ? 'ACTIVE' : 'DELETED',
-          createdAt: issue.createdAt,
-          updatedAt: issue.updatedAt,
-        })
-        .returning();
-
-      // Copy issue_entities → note_entities
-      const issueEntityRows = await tx
-        .select({ entityId: IssueEntities.entityId })
-        .from(IssueEntities)
-        .where(eq(IssueEntities.issueId, issue.id));
-
-      if (issueEntityRows.length > 0) {
-        await tx
-          .insert(NoteEntities)
-          .values(
-            issueEntityRows.map((r) => ({
-              id: createDbId(TableCode.NOTE_ENTITIES),
-              noteId: note.id,
-              entityId: r.entityId,
-            })),
-          )
-          .onConflictDoNothing();
-      }
+    noteValues.push({
+      id: noteId,
+      userId,
+      siteId: issue.siteId,
+      content: issue.content,
+      color: 'gray',
+      order,
+      status: (statusMap[issue.status] ?? 'OPEN') as 'OPEN' | 'RESOLVED',
+      state: issue.state === 'ACTIVE' ? 'ACTIVE' : 'DELETED',
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
     });
+  }
 
-    insertedCount++;
+  if (noteValues.length > 0) {
+    await db.insert(Notes).values(noteValues);
+
+    const noteEntityValues: { id: string; noteId: string; entityId: string }[] = [];
+    for (const [issueId, noteId] of issueToNoteId) {
+      const entityIds = allUnmappedIssueEntities.get(issueId) ?? [];
+      for (const entityId of entityIds) {
+        noteEntityValues.push({ id: createDbId(TableCode.NOTE_ENTITIES), noteId, entityId });
+      }
+    }
+
+    if (noteEntityValues.length > 0) {
+      await db.insert(NoteEntities).values(noteEntityValues).onConflictDoNothing();
+    }
+
+    insertedCount += noteValues.length;
   }
 
   console.log(`  Step B-2 progress: ${i + batch.length}/${unmappedIssues.length} (inserted: ${insertedCount})`);
@@ -228,30 +259,24 @@ for (let i = 0; i < userIdsForSite.length; i += BATCH_SIZE) {
 let filledCount = 0;
 for (let i = 0; i < notesWithoutSite.length; i += BATCH_SIZE) {
   const batch = notesWithoutSite.slice(i, i + BATCH_SIZE);
+  const batchNoteIds = batch.map((n) => n.id);
+
+  // Batch: note_entities → entity.siteId via JOIN
+  const noteEntitySites = await db
+    .select({ noteId: NoteEntities.noteId, siteId: Entities.siteId })
+    .from(NoteEntities)
+    .innerJoin(Entities, eq(NoteEntities.entityId, Entities.id))
+    .where(inArray(NoteEntities.noteId, batchNoteIds));
+
+  const noteSiteFromEntity = new Map<string, string>();
+  for (const r of noteEntitySites) {
+    if (!noteSiteFromEntity.has(r.noteId)) {
+      noteSiteFromEntity.set(r.noteId, r.siteId);
+    }
+  }
 
   for (const note of batch) {
-    // Try note_entities → entity.siteId first
-    const noteEntity = await db
-      .select({ entityId: NoteEntities.entityId })
-      .from(NoteEntities)
-      .where(eq(NoteEntities.noteId, note.id))
-      .limit(1)
-      .then((rows) => rows[0]);
-
-    let siteId: string | undefined;
-
-    if (noteEntity) {
-      const entity = await db
-        .select({ siteId: Entities.siteId })
-        .from(Entities)
-        .where(eq(Entities.id, noteEntity.entityId))
-        .then((rows) => rows[0]);
-      siteId = entity?.siteId;
-    }
-
-    if (!siteId) {
-      siteId = userFirstSiteMap.get(note.userId);
-    }
+    const siteId = noteSiteFromEntity.get(note.id) ?? userFirstSiteMap.get(note.userId);
 
     if (siteId) {
       await db.update(Notes).set({ siteId }).where(eq(Notes.id, note.id));

@@ -12,6 +12,7 @@
   import BarChart3Icon from '~icons/lucide/bar-chart-3';
   import ChevronsLeftIcon from '~icons/lucide/chevrons-left';
   import ChevronsRightIcon from '~icons/lucide/chevrons-right';
+  import CommandIcon from '~icons/lucide/command';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
   import GripVerticalIcon from '~icons/lucide/grip-vertical';
   import HomeIcon from '~icons/lucide/home';
@@ -496,6 +497,14 @@
       >
         <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={SearchIcon} size={16} />
         <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>검색</span>
+        <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
+          {#if navigator.platform.includes('Mac')}
+            <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
+          {:else}
+            <span>Ctrl+</span>
+          {/if}
+          <span>K</span>
+        </div>
       </button>
 
       <button
@@ -516,6 +525,14 @@
       >
         <Icon style={css.raw({ flexShrink: '0', color: 'text.faint' })} icon={StickyNoteIcon} size={16} />
         <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>노트</span>
+        <div class={flex({ alignItems: 'center', marginLeft: 'auto', color: 'text.faint', fontSize: '11px' })}>
+          {#if navigator.platform.includes('Mac')}
+            <Icon style={css.raw({ marginRight: '2px' })} icon={CommandIcon} size={10} />
+          {:else}
+            <span>Ctrl+</span>
+          {/if}
+          <span>J</span>
+        </div>
       </button>
     </div>
 

@@ -305,6 +305,7 @@
     <button
       style:background-color={displayStatus === 'RESOLVED' ? colorHex : 'transparent'}
       style:border={displayStatus === 'RESOLVED' ? 'none' : `1.5px solid ${colorHex}`}
+      style:transition={resolving || cancelling ? 'none' : undefined}
       class={center({
         width: '16px',
         height: '16px',
@@ -314,7 +315,7 @@
         marginTop: '2px',
         cursor: 'pointer',
         transition: 'common',
-        ...(displayStatus === 'RESOLVED'
+        ...(displayStatus === 'RESOLVED' && !resolving
           ? {
               _hover: { opacity: '60' },
             }
@@ -376,7 +377,9 @@
           onAddNote();
         }
       }}
-      placeholder="기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요."
+      placeholder={displayStatus === 'RESOLVED' && !resolving
+        ? '(내용 없음)'
+        : '기억할 내용이나 작성에 도움이 되는 내용을 자유롭게 적어보세요.'}
       rows={1}
       bind:value={content}
       use:autosize={{ cacheKey: `document-panel-note-${note.data.id}` }}
