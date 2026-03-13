@@ -216,15 +216,20 @@ class EditorScrollbar extends HookWidget {
     final safeTop = safePadding.top;
     final toolbarVisible = isEditorFocused;
     final safeBottom = (!isKeyboardVisible && !toolbarVisible) ? safePadding.bottom : 0.0;
+    final verticalTrackTopInset = math.max(safeTop, viewportTopInset);
     final rawTrackHeight =
-        actualViewHeight - _trackPadding * 2 - safeTop - safeBottom - (hasHorizontalScroll ? _trackWidth : 0);
+        actualViewHeight -
+        _trackPadding * 2 -
+        verticalTrackTopInset -
+        safeBottom -
+        (hasHorizontalScroll ? _trackWidth : 0);
     final trackHeight = math.max<double>(0, rawTrackHeight);
     final thumbRatio = viewportDimension > 0 ? viewportDimension / (viewportDimension + maxScrollExtent) : 1.0;
     final thumbHeight = math.min(trackHeight, math.max(_minThumbSize, thumbRatio * trackHeight));
     final thumbTravelV = math.max<double>(0, trackHeight - thumbHeight);
     final scrollRatioV = maxScrollExtent > 0 ? (scrollOffset / maxScrollExtent).clamp(0.0, 1.0) : 0.0;
-    final thumbTop = _trackPadding + scrollRatioV * thumbTravelV;
-    final indicatorTop = safeTop + thumbTop + thumbHeight / 2 - _indicatorHeight / 2;
+    final thumbTop = verticalTrackTopInset + _trackPadding + scrollRatioV * thumbTravelV;
+    final indicatorTop = thumbTop + thumbHeight / 2 - _indicatorHeight / 2;
     const indicatorRight = _trackPadding + _activeThumbWidth + _indicatorGap;
 
     final safeLeft = safePadding.left;
@@ -396,7 +401,7 @@ class EditorScrollbar extends HookWidget {
         if (hasVerticalScroll)
           Positioned(
             right: 0,
-            top: safeTop + thumbTop,
+            top: thumbTop,
             width: _trackWidth + _longPressHitExpansion,
             height: thumbHeight,
             child: AnimatedOpacity(

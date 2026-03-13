@@ -125,108 +125,102 @@ class _Content extends HookWidget {
     }
 
     return Screen(
-      extendBodyBehindAppBar: true,
-      heading: null,
-      child: OverlayHeadingLayout(
-        heading: _Heading(scrollController: scrollController),
-        child: SingleChildScrollView(
-          controller: scrollController,
-          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
-                child: const Text('나의 글쓰기 통계', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+      heading: _Heading(scrollController: scrollController),
+      child: SingleChildScrollView(
+        controller: scrollController,
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+              child: const Text('나의 글쓰기 통계', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            ),
+            const Gap(_sectionGap),
+            _SummaryCard(label: '총 글자', value: totalCharacterCount.comma, unit: '자'),
+            const Gap(_sectionGap),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _SummaryCard(label: '총 문서', value: user.documentCount.toString(), unit: '개'),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _SummaryCard(label: '활동일', value: streakData.totalDays.toString(), unit: '일'),
+                  ),
+                ],
               ),
-              const Gap(_sectionGap),
-              _SummaryCard(label: '총 글자', value: totalCharacterCount.comma, unit: '자'),
-              const Gap(_sectionGap),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _SummaryCard(label: '총 문서', value: user.documentCount.toString(), unit: '개'),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _SummaryCard(label: '활동일', value: streakData.totalDays.toString(), unit: '일'),
-                    ),
-                  ],
-                ),
-              ),
-              const Gap(_sectionGap),
-              _StreakCard(streakData: streakData),
-              const Gap(_sectionGap),
-              _WeekdayCard(weekdayData: weekdayData, maxWeekdayAvg: maxWeekdayAvg, bestWeekdayIndex: bestWeekdayIndex),
-              const Gap(_sectionGap),
-              _SectionCard(
-                padding: EdgeInsets.zero,
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const Pad(horizontal: 16, top: 16, bottom: 12),
-                      child: Row(
-                        children: [
-                          Text(
-                            '지난 1년간의 기록',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.textSubtle,
-                            ),
+            ),
+            const Gap(_sectionGap),
+            _StreakCard(streakData: streakData),
+            const Gap(_sectionGap),
+            _WeekdayCard(weekdayData: weekdayData, maxWeekdayAvg: maxWeekdayAvg, bestWeekdayIndex: bestWeekdayIndex),
+            const Gap(_sectionGap),
+            _SectionCard(
+              padding: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const Pad(horizontal: 16, top: 16, bottom: 12),
+                    child: Row(
+                      children: [
+                        Text(
+                          '지난 1년간의 기록',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textSubtle),
+                        ),
+                        const Spacer(),
+                        Popover(
+                          screenPadding: const EdgeInsets.all(20),
+                          collapsedBorderRadius: BorderRadius.circular(10),
+                          backgroundColor: context.colors.surfaceDefault,
+                          borderSide: BorderSide(color: context.colors.borderStrong),
+                          anchor: const _ActionButton(child: _ActionButtonContent(label: '이미지 받기')),
+                          pane: _ActivityImagePane(
+                            onCopy: () {
+                              unawaited(copyActivityImage());
+                            },
+                            onDownload: () {
+                              unawaited(downloadActivityImage());
+                            },
                           ),
-                          const Spacer(),
-                          Popover(
-                            screenPadding: const EdgeInsets.all(20),
-                            collapsedBorderRadius: BorderRadius.circular(10),
-                            backgroundColor: context.colors.surfaceDefault,
-                            borderSide: BorderSide(color: context.colors.borderStrong),
-                            anchor: const _ActionButton(child: _ActionButtonContent(label: '이미지 받기')),
-                            pane: _ActivityImagePane(
-                              onCopy: () {
-                                unawaited(copyActivityImage());
-                              },
-                              onDownload: () {
-                                unawaited(downloadActivityImage());
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    ActivityGrid(
-                      changes: [
-                        for (final change in changes)
-                          ActivityGridChange(date: change.date, additions: change.additions),
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  ActivityGrid(
+                    changes: [
+                      for (final change in changes) ActivityGridChange(date: change.date, additions: change.additions),
+                    ],
+                  ),
+                ],
               ),
-              const Gap(_sectionGap),
-              _SectionCard(
-                padding: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: ActivityChart(characterCountChanges: changes, horizontalPadding: 16),
-                ),
+            ),
+            const Gap(_sectionGap),
+            _SectionCard(
+              padding: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: ActivityChart(characterCountChanges: changes, horizontalPadding: 16),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Heading extends StatelessWidget implements PreferredSizeWidget {
+class _Heading extends StatelessWidget implements ScreenOverlayHeading {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
+
+  @override
+  List<Color> overlayFadeColors(BuildContext context) => OverlayHeading.buildFadeColors(context);
 
   @override
   Widget build(BuildContext context) {

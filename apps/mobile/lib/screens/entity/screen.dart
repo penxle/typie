@@ -935,20 +935,22 @@ class _EntityList extends HookWidget {
       }
 
       if (isReordering.value || isSelecting.value) {
-        return buildCapsuleLabel();
+        return ResponsiveOverlayHeadingCenter(child: buildCapsuleLabel());
       }
 
-      return Popover(
-        position: PopoverPosition.bottomCenter,
-        screenPadding: _headingPopoverScreenPadding,
-        collapsedBorderRadius: Popover.defaultExpandedBorderRadius,
-        backgroundColor: controlBackgroundColor,
-        borderSide: BorderSide(color: context.colors.borderStrong),
-        anchor: buildCapsuleLabel(),
-        pane: _EntityHeadingPopoverPane(
-          header: _EntityHeadingPaneHeader(entity: entity, siteName: currentSiteName.value),
-          expandToMaxWidth: true,
-          entries: centerMenuEntries,
+      return ResponsiveOverlayHeadingCenter(
+        child: Popover(
+          position: PopoverPosition.bottomCenter,
+          screenPadding: _headingPopoverScreenPadding,
+          collapsedBorderRadius: Popover.defaultExpandedBorderRadius,
+          backgroundColor: controlBackgroundColor,
+          borderSide: BorderSide(color: context.colors.borderStrong),
+          anchor: buildCapsuleLabel(),
+          pane: _EntityHeadingPopoverPane(
+            header: _EntityHeadingPaneHeader(entity: entity, siteName: currentSiteName.value),
+            expandToMaxWidth: true,
+            entries: centerMenuEntries,
+          ),
         ),
       );
     }
@@ -1104,53 +1106,49 @@ class _EntityList extends HookWidget {
         : SizedBox.expand(key: reorderBoundaryKey, child: buildBodyContent());
 
     return Screen(
-      extendBodyBehindAppBar: true,
       backgroundColor: context.colors.surfaceSubtle,
-      heading: null,
-      child: OverlayHeadingLayout(
-        heading: OverlayHeadingBar(
-          leading: buildLeadingControl(),
-          center: buildCenterControl(),
-          trailing: buildTrailingControl(),
-        ),
-        child: Stack(
-          children: [
-            Positioned.fill(child: bodyContent),
-            if (isReordering.value) ...[
-              Positioned(
-                top: reorderViewportTopInset,
-                left: 0,
-                right: 0,
-                child: _EntityReorderEdgeFade(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  baseColor: context.colors.surfaceSubtle,
-                ),
+      heading: OverlayHeadingBar(
+        leading: buildLeadingControl(),
+        center: buildCenterControl(),
+        trailing: buildTrailingControl(),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(child: bodyContent),
+          if (isReordering.value) ...[
+            Positioned(
+              top: reorderViewportTopInset,
+              left: 0,
+              right: 0,
+              child: _EntityReorderEdgeFade(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                baseColor: context.colors.surfaceSubtle,
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: shellNavBottomInset,
-                child: _EntityReorderEdgeFade(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  baseColor: context.colors.surfaceSubtle,
-                ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: shellNavBottomInset,
+              child: _EntityReorderEdgeFade(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                baseColor: context.colors.surfaceSubtle,
               ),
-            ],
-            if (isSelecting.value)
-              SelectedEntitiesBar(
-                bottomOffset: selectionBarBottomOffset,
-                isVisible: selectedItems.value.isNotEmpty,
-                selectedItems: selectedItems.value,
-                entities: entities,
-                onClearSelection: () {
-                  selectedItems.value = {};
-                },
-                onExitSelectionMode: exitSelectionMode,
-              ),
+            ),
           ],
-        ),
+          if (isSelecting.value)
+            SelectedEntitiesBar(
+              bottomOffset: selectionBarBottomOffset,
+              isVisible: selectedItems.value.isNotEmpty,
+              selectedItems: selectedItems.value,
+              entities: entities,
+              onClearSelection: () {
+                selectedItems.value = {};
+              },
+              onExitSelectionMode: exitSelectionMode,
+            ),
+        ],
       ),
     );
   }
@@ -1703,7 +1701,7 @@ class _EntityHeadingPopoverPane extends StatelessWidget {
     );
 
     if (expandToMaxWidth) {
-      return ConstrainedBox(constraints: const BoxConstraints(minWidth: 280, maxWidth: 320), child: content);
+      return ConstrainedBox(constraints: const BoxConstraints(minWidth: 280, maxWidth: 600), child: content);
     }
 
     return IntrinsicWidth(child: content);

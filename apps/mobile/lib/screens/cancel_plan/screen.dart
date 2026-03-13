@@ -57,90 +57,89 @@ class _Content extends HookWidget {
     final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
 
     return Screen(
-      extendBodyBehindAppBar: true,
-      heading: null,
-      child: OverlayHeadingLayout(
-        heading: _Heading(scrollController: scrollController),
-        child: SingleChildScrollView(
-          controller: scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
-                child: const Text('이용권 해지', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-              ),
-              const Gap(_sectionGap),
-              DecoratedBox(
-                decoration: _cardDecoration(context),
-                child: const Padding(
-                  padding: Pad(all: 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('정말 해지하시겠어요?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                      Gap(6),
-                      Text('해지 시 다음 혜택을 더 이상 받을 수 없어요.', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                    ],
-                  ),
+      heading: _Heading(scrollController: scrollController),
+      child: SingleChildScrollView(
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+              child: const Text('이용권 해지', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            ),
+            const Gap(_sectionGap),
+            DecoratedBox(
+              decoration: _cardDecoration(context),
+              child: const Padding(
+                padding: Pad(all: 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('정말 해지하시겠어요?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                    Gap(6),
+                    Text('해지 시 다음 혜택을 더 이상 받을 수 없어요.', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  ],
                 ),
               ),
-              const Gap(_sectionGap),
-              DecoratedBox(
-                decoration: _cardDecoration(context),
-                child: Padding(
-                  padding: const Pad(all: 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('이용 중인 혜택', style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
-                      const Gap(12),
-                      for (final feature in fullPlanFeatures) ...[
-                        _FeatureItem(icon: feature.icon, label: feature.label),
-                        if (feature != fullPlanFeatures.last) const Gap(10),
-                      ],
+            ),
+            const Gap(_sectionGap),
+            DecoratedBox(
+              decoration: _cardDecoration(context),
+              child: Padding(
+                padding: const Pad(all: 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('이용 중인 혜택', style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
+                    const Gap(12),
+                    for (final feature in fullPlanFeatures) ...[
+                      _FeatureItem(icon: feature.icon, label: feature.label),
+                      if (feature != fullPlanFeatures.last) const Gap(10),
                     ],
-                  ),
+                  ],
                 ),
               ),
-              const Gap(12),
-              Text(
-                '지금 해지하더라도 ${subscription.expiresAt.toLocal().yyyyMMddKorean}까지는 계속해서 ${subscription.plan.name} 혜택을 이용할 수 있어요.',
-                style: TextStyle(fontSize: 14, height: 1.5, color: context.colors.textFaint),
-              ),
-              const Gap(24),
-              _PrimaryDangerButton(
-                label: '스토어로 이동해서 해지하기',
-                onTap: () async {
-                  final url = Platform.isIOS
-                      ? Uri.parse('https://apps.apple.com/account/subscriptions')
-                      : Uri.parse('https://play.google.com/store/account/subscriptions?package=co.typie&sku=plan.full');
+            ),
+            const Gap(12),
+            Text(
+              '지금 해지하더라도 ${subscription.expiresAt.toLocal().yyyyMMddKorean}까지는 계속해서 ${subscription.plan.name} 혜택을 이용할 수 있어요.',
+              style: TextStyle(fontSize: 14, height: 1.5, color: context.colors.textFaint),
+            ),
+            const Gap(24),
+            _PrimaryDangerButton(
+              label: '스토어로 이동해서 해지하기',
+              onTap: () async {
+                final url = Platform.isIOS
+                    ? Uri.parse('https://apps.apple.com/account/subscriptions')
+                    : Uri.parse('https://play.google.com/store/account/subscriptions?package=co.typie&sku=plan.full');
 
-                  unawaited(mixpanel.track('cancel_plan_try'));
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                },
-              ),
-              const Gap(8),
-              _SecondaryButton(
-                label: '계속 이용하기',
-                onTap: () async {
-                  await context.router.maybePop();
-                },
-              ),
-            ],
-          ),
+                unawaited(mixpanel.track('cancel_plan_try'));
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              },
+            ),
+            const Gap(8),
+            _SecondaryButton(
+              label: '계속 이용하기',
+              onTap: () async {
+                await context.router.maybePop();
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Heading extends StatelessWidget implements PreferredSizeWidget {
+class _Heading extends StatelessWidget implements ScreenOverlayHeading {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
+
+  @override
+  List<Color> overlayFadeColors(BuildContext context) => OverlayHeading.buildFadeColors(context);
 
   @override
   Widget build(BuildContext context) {

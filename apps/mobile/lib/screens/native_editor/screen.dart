@@ -51,7 +51,6 @@ import 'package:typie/screens/native_editor/sync/title.dart';
 import 'package:typie/screens/native_editor/view/editor.dart';
 import 'package:typie/services/preference.dart';
 import 'package:typie/services/state.dart';
-import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/plan_upgrade_bottom_sheet.dart';
 import 'package:typie/widgets/screen.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -173,19 +172,7 @@ class _Content extends HookWidget {
         );
       }
 
-      return Stack(
-        children: [
-          Positioned.fill(child: child),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: OverlayHeadingFade(
-              colors: OverlayHeading.buildFadeColors(context, baseColor: context.colors.surfaceDefault),
-            ),
-          ),
-        ],
-      );
+      return child;
     }
 
     Future<bool> ensureFullAccess(String message) async {
@@ -503,7 +490,6 @@ class _Content extends HookWidget {
           backgroundColor: context.colors.surfaceDefault,
           keyboardDismiss: false,
           responsive: false,
-          extendBodyBehindAppBar: true,
           child: buildEditorBody(),
         ),
       ),

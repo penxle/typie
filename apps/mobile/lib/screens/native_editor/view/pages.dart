@@ -287,41 +287,43 @@ class PageList extends HookWidget {
                               },
                             ),
                       },
-                      child: Column(
-                        children: [
-                          MeasuredTitleFields(scope: scope),
-                          TrackedHorizontalScrollView(
-                            controller: horizontalScrollController,
-                            physics: horizontalPhysics,
+                      child: TrackedHorizontalScrollView(
+                        controller: horizontalScrollController,
+                        physics: horizontalPhysics,
+                        child: SizedBox(
+                          width: math.max(contentWidth, viewWidth),
+                          child: Align(
+                            alignment: Alignment.topCenter,
                             child: SizedBox(
-                              width: math.max(contentWidth, viewWidth),
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                child: Container(
-                                  width: contentWidth,
-                                  padding: EdgeInsets.only(
-                                    left: geo.horizontalPadding,
-                                    right: geo.horizontalPadding,
-                                    bottom: contentBottomPadding,
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      for (var i = 0; i < pages.length; i++) ...[
-                                        PageSlot(
-                                          key: ValueKey(i),
-                                          pageIndex: i,
-                                          pageTop: geo.titleAreaHeight + offsets[i],
-                                          pageBottom: geo.titleAreaHeight + offsets[i] + geo.pageHeightAt(i),
-                                          activeCursorPageIdx: renderedCursor?.pageIdx,
-                                        ),
+                              width: contentWidth,
+                              child: Column(
+                                children: [
+                                  MeasuredTitleFields(scope: scope, pageWidth: contentWidth),
+                                  Padding(
+                                    padding: EdgeInsets.only(
+                                      left: geo.horizontalPadding,
+                                      right: geo.horizontalPadding,
+                                      bottom: contentBottomPadding,
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        for (var i = 0; i < pages.length; i++) ...[
+                                          PageSlot(
+                                            key: ValueKey(i),
+                                            pageIndex: i,
+                                            pageTop: geo.titleAreaHeight + offsets[i],
+                                            pageBottom: geo.titleAreaHeight + offsets[i] + geo.pageHeightAt(i),
+                                            activeCursorPageIdx: renderedCursor?.pageIdx,
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     );
 
@@ -617,9 +619,10 @@ class _OverscrollSafeScrollPosition extends ScrollPositionWithSingleContext {
 }
 
 class MeasuredTitleFields extends HookWidget {
-  const MeasuredTitleFields({required this.scope, super.key});
+  const MeasuredTitleFields({required this.scope, required this.pageWidth, super.key});
 
   final ContentScope scope;
+  final double pageWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -641,20 +644,16 @@ class MeasuredTitleFields extends HookWidget {
     final title = useValueListenable(scope.title);
     final subtitle = useValueListenable(scope.subtitle);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return TitleFields(
-          title: title,
-          subtitle: subtitle,
-          onEnterDocument: () {
-            scope.inputController.openInput();
-            scope.controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
-            scope.controller.scrollIntoView();
-          },
-          pageWidth: constraints.maxWidth,
-          onFieldTap: scope.inputController.clearFocus,
-        );
+    return TitleFields(
+      title: title,
+      subtitle: subtitle,
+      onEnterDocument: () {
+        scope.inputController.openInput();
+        scope.controller.dispatch({'type': 'navigate', 'direction': 'documentStart', 'extend': false});
+        scope.controller.scrollIntoView();
       },
+      pageWidth: pageWidth,
+      onFieldTap: scope.inputController.clearFocus,
     );
   }
 }

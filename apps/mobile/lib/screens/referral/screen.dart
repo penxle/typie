@@ -80,109 +80,108 @@ class _Content extends HookWidget {
     }
 
     return Screen(
-      extendBodyBehindAppBar: true,
-      heading: null,
-      child: OverlayHeadingLayout(
-        heading: _Heading(scrollController: scrollController),
-        child: SingleChildScrollView(
-          controller: scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
-                child: const Text('초대', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-              ),
-              const Gap(_sectionGap),
-              DecoratedBox(
-                decoration: _cardDecoration(context),
-                child: Padding(
-                  padding: const Pad(all: 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('친구 초대', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      const Gap(8),
-                      Text(
-                        '친구를 초대하면 친구는 바로 1달 무료, 친구가 첫 결제를 하면 나도 1달 무료 혜택을 받아요.',
-                        style: TextStyle(fontSize: 14, height: 1.5, color: context.colors.textSubtle),
-                      ),
-                      const Gap(16),
-                      Row(
-                        spacing: 8,
-                        children: [
-                          Expanded(
-                            child: _ActionButton(icon: LucideLightIcons.copy, label: '초대 링크 복사', onTap: copyLink),
-                          ),
-                          Expanded(
-                            child: _ActionButton(icon: LucideLightIcons.share, label: '공유하기', onTap: shareLink),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+      heading: _Heading(scrollController: scrollController),
+      child: SingleChildScrollView(
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+              child: const Text('초대', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            ),
+            const Gap(_sectionGap),
+            DecoratedBox(
+              decoration: _cardDecoration(context),
+              child: Padding(
+                padding: const Pad(all: 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('친구 초대', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    const Gap(8),
+                    Text(
+                      '친구를 초대하면 친구는 바로 1달 무료, 친구가 첫 결제를 하면 나도 1달 무료 혜택을 받아요.',
+                      style: TextStyle(fontSize: 14, height: 1.5, color: context.colors.textSubtle),
+                    ),
+                    const Gap(16),
+                    Row(
+                      spacing: 8,
+                      children: [
+                        Expanded(
+                          child: _ActionButton(icon: LucideLightIcons.copy, label: '초대 링크 복사', onTap: copyLink),
+                        ),
+                        Expanded(
+                          child: _ActionButton(icon: LucideLightIcons.share, label: '공유하기', onTap: shareLink),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const Gap(_sectionGap),
-              DecoratedBox(
-                decoration: _cardDecoration(context),
-                child: Padding(
-                  padding: const Pad(all: 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('초대 현황', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      const Gap(14),
-                      _MetricCard(icon: LucideLightIcons.users, label: '초대한 친구', value: '$referralCount명'),
-                      const Gap(10),
-                      _MetricCard(
-                        icon: LucideLightIcons.gift,
-                        label: '받은 혜택',
-                        value: compensatedCount > 0 ? '$compensatedCount개월 무료' : '없음',
-                      ),
-                    ],
-                  ),
+            ),
+            const Gap(_sectionGap),
+            DecoratedBox(
+              decoration: _cardDecoration(context),
+              child: Padding(
+                padding: const Pad(all: 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('초대 현황', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    const Gap(14),
+                    _MetricCard(icon: LucideLightIcons.users, label: '초대한 친구', value: '$referralCount명'),
+                    const Gap(10),
+                    _MetricCard(
+                      icon: LucideLightIcons.gift,
+                      label: '받은 혜택',
+                      value: compensatedCount > 0 ? '$compensatedCount개월 무료' : '없음',
+                    ),
+                  ],
                 ),
               ),
-              const _SectionLabel(text: '초대 혜택 안내', top: 24),
-              DecoratedBox(
-                decoration: _cardDecoration(context),
-                child: const Padding(
-                  padding: Pad(all: 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _BulletPoint(text: '초대 링크를 통해 웹에서 가입하고, 웹에서 플랜을 가입해야 초대 혜택을 받을 수 있어요. 앱에서 가입하면 혜택을 받을 수 없어요.'),
-                      Gap(10),
-                      _BulletPoint(
-                        text:
-                            '친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 크레딧을 지급받아요. 지급받은 크레딧으로 바로 FULL ACCESS 플랜을 체험해볼 수 있어요.',
-                      ),
-                      Gap(10),
-                      _BulletPoint(
-                        text:
-                            '친구가 크레딧을 통한 체험을 끝내고 첫 결제를 완료하면 나도 FULL ACCESS 플랜 1개월에 상응하는 크레딧을 지급받아요. 이 크레딧은 다음 FULL ACCESS 플랜 갱신시 자동으로 이용돼요.',
-                      ),
-                      Gap(10),
-                      _BulletPoint(text: '초대 횟수에는 제한이 없어요.'),
-                    ],
-                  ),
+            ),
+            const _SectionLabel(text: '초대 혜택 안내', top: 24),
+            DecoratedBox(
+              decoration: _cardDecoration(context),
+              child: const Padding(
+                padding: Pad(all: 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _BulletPoint(text: '초대 링크를 통해 웹에서 가입하고, 웹에서 플랜을 가입해야 초대 혜택을 받을 수 있어요. 앱에서 가입하면 혜택을 받을 수 없어요.'),
+                    Gap(10),
+                    _BulletPoint(
+                      text:
+                          '친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 크레딧을 지급받아요. 지급받은 크레딧으로 바로 FULL ACCESS 플랜을 체험해볼 수 있어요.',
+                    ),
+                    Gap(10),
+                    _BulletPoint(
+                      text:
+                          '친구가 크레딧을 통한 체험을 끝내고 첫 결제를 완료하면 나도 FULL ACCESS 플랜 1개월에 상응하는 크레딧을 지급받아요. 이 크레딧은 다음 FULL ACCESS 플랜 갱신시 자동으로 이용돼요.',
+                    ),
+                    Gap(10),
+                    _BulletPoint(text: '초대 횟수에는 제한이 없어요.'),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Heading extends StatelessWidget implements PreferredSizeWidget {
+class _Heading extends StatelessWidget implements ScreenOverlayHeading {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
+
+  @override
+  List<Color> overlayFadeColors(BuildContext context) => OverlayHeading.buildFadeColors(context);
 
   @override
   Widget build(BuildContext context) {

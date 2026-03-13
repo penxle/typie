@@ -91,6 +91,7 @@ class TitleFields extends HookWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: ContentGeometry.pagePadding),
             GestureDetector(
               onTapDown: (_) {
                 onFieldTap?.call();
