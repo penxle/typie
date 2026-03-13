@@ -183,7 +183,10 @@ fn parse_children(
                     .map(|pt| schema.node_spec(pt).is_textblock(schema))
                     .unwrap_or(false);
                 let is_whitespace_only = s.chars().all(|c| c.is_ascii_whitespace());
-                let skip = is_whitespace_only && (!is_textblock_parent || s.contains('\n'));
+                let has_inline_styles = !styles.is_empty();
+                let skip = is_whitespace_only
+                    && !has_inline_styles
+                    && (!is_textblock_parent || s.contains('\n'));
                 if !s.is_empty() && !skip {
                     let id = pending_text_id.take();
                     add_text(
