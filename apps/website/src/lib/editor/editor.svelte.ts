@@ -27,6 +27,8 @@ import {
   DIRTY_SETTINGS,
   DIRTY_TABLE_OVERLAYS,
   DIRTY_TRACKED_ITEMS,
+  POINTER_STATE_IDLE,
+  POINTER_STATE_PRESSED,
   SELECTION_EXPAND_ALL,
   SlateReader,
 } from './slate';
@@ -1072,6 +1074,7 @@ export class Editor {
     }
 
     this.isDraggable = this.isSelectionHit(pageIdx, x, y);
+    const shouldGuardCursorOnPointerDown = e.button === 0 && !this.isDraggable;
 
     if (e.button === 0) {
       if (!this.isDraggable) {
@@ -1082,7 +1085,7 @@ export class Editor {
 
     const count = e.button === 0 ? this.#getClickCount(e.clientX, e.clientY, e.timeStamp) : 1;
 
-    this.dispatch({
+    const dispatched = this.dispatch({
       type: 'pointerDown',
       pageIdx,
       x,
@@ -1091,6 +1094,9 @@ export class Editor {
       button: this.#toPointerButton(e.button),
       modifier: this.#toModifier(e),
     });
+    if (shouldGuardCursorOnPointerDown) {
+      dispatched.scrollIntoView();
+    }
   }
 
   handlePointerMove(e: PointerEvent): void {
@@ -1177,7 +1183,7 @@ export class Editor {
 
     const { pageIdx, x, y } = resolved;
 
-    const dispatched = this.dispatch({
+    this.dispatch({
       type: 'pointerUp',
       pageIdx,
       x,
@@ -1185,9 +1191,6 @@ export class Editor {
       button: this.#toPointerButton(e.button),
       modifier: this.#toModifier(e),
     });
-    if (e.button === 0) {
-      dispatched.scrollIntoView();
-    }
 
     this.pointer.isPressed = false;
   }
@@ -2099,7 +2102,8 @@ export class Editor {
       return;
     }
 
-    if (this.pointer.isPressed || this.pointerState !== 0) {
+    const allowPressedCursorPending = pending.mode === 'cursor' && this.pointer.isPressed && this.pointerState <= POINTER_STATE_PRESSED;
+    if ((this.pointer.isPressed || this.pointerState !== POINTER_STATE_IDLE) && !allowPressedCursorPending) {
       this.#clearPendingScrollAfterRender();
       return;
     }
