@@ -206,6 +206,13 @@ class EditorController extends ChangeNotifier {
   void scrollIntoView({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {
     pendingScrollMode = mode;
     pendingScrollWaitForCursorUpdate = waitForCursorUpdate;
+    if (!waitForCursorUpdate) {
+      if (_isBatching) {
+        _needsNotify = true;
+      } else {
+        notifyListeners();
+      }
+    }
   }
 
   void clearPendingScroll() {
