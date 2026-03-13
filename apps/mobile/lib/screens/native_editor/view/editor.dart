@@ -601,6 +601,14 @@ class EditorView extends HookWidget {
       }
     }
 
+    bool shouldUseTypewriterScrollForInteraction(InteractionSnapshot interaction, {ScrollMode? requestedMode}) {
+      if (!pref.typewriterEnabled || interaction.isSelecting) {
+        return false;
+      }
+
+      return requestedMode == ScrollMode.typewriter;
+    }
+
     CursorInfo? resolveScrollTargetCursor({required CursorInfo? cursor, required EditorSelection? selection}) {
       final headBounds = selection?.collapsed == false ? selection?.headBounds : null;
       if (headBounds != null) {
@@ -880,7 +888,7 @@ class EditorView extends HookWidget {
           }
 
           if (pendingMode != null) {
-            final useTypewriter = pref.typewriterEnabled && pendingMode == ScrollMode.typewriter;
+            final useTypewriter = shouldUseTypewriterScrollForInteraction(interaction, requestedMode: pendingMode);
             final waitForCursorUpdate = controller.pendingScrollWaitForCursorUpdate;
             typewriterRecoveryPending.value = useTypewriter;
             controller.clearPendingScroll();
@@ -894,13 +902,17 @@ class EditorView extends HookWidget {
 
           if (externalElementsChanged) {
             if (cursorFollowScrollActive.value) {
-              final followTypewriter = cursorFollowScrollMode.value == ScrollMode.typewriter && pref.typewriterEnabled;
+              final followTypewriter = shouldUseTypewriterScrollForInteraction(
+                interaction,
+                requestedMode: cursorFollowScrollMode.value,
+              );
               typewriterRecoveryPending.value = false;
               applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: followTypewriter);
               return;
             }
 
-            if (typewriterRecoveryPending.value && pref.typewriterEnabled) {
+            if (typewriterRecoveryPending.value &&
+                shouldUseTypewriterScrollForInteraction(interaction, requestedMode: ScrollMode.typewriter)) {
               typewriterRecoveryPending.value = false;
               applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: true);
               return;
@@ -911,7 +923,7 @@ class EditorView extends HookWidget {
             return;
           }
 
-          applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: pref.typewriterEnabled);
+          applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: false);
         }
 
         controller.addListener(applyPendingCursorScroll);
@@ -1096,7 +1108,7 @@ class EditorView extends HookWidget {
     return Listener(
       onPointerDown: (_) {
         inputController
-          ..commitPreedit()
+          ..commitPreedit(scroll: false)
           ..invalidate();
       },
       child: NativeEditorToolbarScope(
