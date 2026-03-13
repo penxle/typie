@@ -9,9 +9,15 @@ const _kBackGestureWidth = 20.0;
 const _kMinFlingVelocity = 1.0;
 
 class ParallaxPageRoute<T> extends PageRoute<T> {
-  ParallaxPageRoute({required this.content, super.settings, super.fullscreenDialog});
+  ParallaxPageRoute({
+    required this.content,
+    this.fullScreenBackGesture = false,
+    super.settings,
+    super.fullscreenDialog,
+  });
 
   final Widget content;
+  final bool fullScreenBackGesture;
 
   @override
   Color? get barrierColor => null;
@@ -103,6 +109,7 @@ class ParallaxPageRoute<T> extends PageRoute<T> {
       enabledCallback: () => _canPopWithGesture,
       controller: controller!,
       navigator: navigator!,
+      fullScreen: fullScreenBackGesture,
       child: AnimatedBuilder(
         animation: secondaryAnimation,
         builder: (context, child) => DecoratedBox(
@@ -139,12 +146,14 @@ class _BackGestureDetector extends StatefulWidget {
     required this.enabledCallback,
     required this.controller,
     required this.navigator,
+    required this.fullScreen,
   });
 
   final Widget child;
   final ValueGetter<bool> enabledCallback;
   final AnimationController controller;
   final NavigatorState navigator;
+  final bool fullScreen;
 
   @override
   State<_BackGestureDetector> createState() => _BackGestureDetectorState();
@@ -239,13 +248,18 @@ class _BackGestureDetectorState extends State<_BackGestureDetector> {
       fit: StackFit.passthrough,
       children: [
         widget.child,
-        Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: _kBackGestureWidth,
-          child: Listener(onPointerDown: _onPointerDown, behavior: HitTestBehavior.translucent),
-        ),
+        if (widget.fullScreen)
+          Positioned.fill(
+            child: Listener(onPointerDown: _onPointerDown, behavior: HitTestBehavior.translucent),
+          )
+        else
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _kBackGestureWidth,
+            child: Listener(onPointerDown: _onPointerDown, behavior: HitTestBehavior.translucent),
+          ),
       ],
     );
   }
