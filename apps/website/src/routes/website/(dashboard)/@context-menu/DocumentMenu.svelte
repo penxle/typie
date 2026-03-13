@@ -358,4 +358,25 @@
     <div>생성: {dayjs(document.createdAt).formatAsDateTime()}</div>
     <div>수정: {dayjs(document.updatedAt).formatAsDateTime()}</div>
   </div>
+
+  <button
+    class={flex({
+      alignItems: 'center',
+      gap: '2px',
+      width: 'fit',
+      cursor: 'pointer',
+      fontSize: '11px',
+      color: 'text.disabled',
+      transition: 'common',
+      _hover: { color: 'text.muted' },
+    })}
+    onclick={async () => {
+      await navigator.clipboard.writeText(document.id);
+      Toast.success('문서 ID가 복사되었어요');
+    }}
+    type="button"
+  >
+    <Icon icon={CopyIcon} size={12} />
+    문서 ID 복사
+  </button>
 </div>
