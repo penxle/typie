@@ -208,7 +208,10 @@ impl LineElement {
                     style.brush.hash(state);
                     style.underline.is_some().hash(state);
                     style.strikethrough.is_some().hash(state);
+
                     glyph_run.offset().to_bits().hash(state);
+                    glyph_run.advance().to_bits().hash(state);
+                    glyph_run.baseline().to_bits().hash(state);
 
                     let run = glyph_run.run();
                     run.font_size().to_bits().hash(state);
