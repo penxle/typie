@@ -63,8 +63,7 @@ class KeyboardHandler {
     dispatch(message);
 
     if (type == 'navigate') {
-      final extend = message['extend'] as bool? ?? false;
-      scrollIntoView(mode: extend ? ScrollMode.auto : ScrollMode.typewriter);
+      scrollIntoView(mode: ScrollMode.typewriter);
     } else if (type == 'deleteForward' || type == 'deleteWordForward') {
       scrollIntoView(mode: ScrollMode.typewriter);
     } else {

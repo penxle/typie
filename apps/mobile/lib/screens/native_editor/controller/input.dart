@@ -147,9 +147,11 @@ class InputController {
     scrollIntoView(mode: ScrollMode.typewriter);
   }
 
-  void commitPreedit() {
+  void commitPreedit({bool scroll = true}) {
     dispatch({'type': 'commitPreedit'});
-    scrollIntoView(mode: ScrollMode.typewriter);
+    if (scroll) {
+      scrollIntoView(mode: ScrollMode.typewriter);
+    }
   }
 
   void compositionEnd() {
