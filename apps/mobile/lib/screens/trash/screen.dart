@@ -4,6 +4,7 @@ import 'package:assorted_layout_widgets/assorted_layout_widgets.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:gap/gap.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:typie/context/bottom_sheet.dart';
 import 'package:typie/context/modal.dart';
@@ -25,7 +26,10 @@ import 'package:typie/screens/trash/__generated__/screen_with_entity_id_query.re
 import 'package:typie/screens/trash/__generated__/screen_with_site_id_query.req.gql.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/heading.dart';
-import 'package:typie/widgets/screen.dart';
+import 'package:typie/widgets/horizontal_divider.dart';
+import 'package:typie/widgets/overlay_heading.dart';
+import 'package:typie/widgets/settings_screen.dart';
+import 'package:typie/widgets/tappable.dart';
 
 @RoutePage()
 class TrashScreen extends StatelessWidget {
@@ -88,7 +92,9 @@ class _TrashList extends HookWidget {
   Widget build(BuildContext context) {
     final client = useService<GraphQLClient>();
     final mixpanel = useService<Mixpanel>();
-    final primaryScrollController = PrimaryScrollController.of(context);
+    final scrollController = useScrollController();
+    final title = entity == null ? '휴지통' : folder!.name;
+    final subtitle = entity == null ? '$siteName 스페이스의 삭제된 항목이에요' : '이 폴더에서 삭제된 항목이에요';
 
     String getEntityTitle(GTrashScreen_Entity_entity entity) {
       return entity.node.when(
@@ -204,165 +210,179 @@ class _TrashList extends HookWidget {
       );
     }
 
-    return Screen(
-      heading: Heading(
-        titleWidget: Row(
-          spacing: 8,
-          children: [
-            const Icon(LucideLightIcons.trash_2, size: 20),
-            Expanded(
-              child: Text(
-                entity == null ? '휴지통' : folder!.name,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
+    Future<void> showTrashActionsMenu() async {
+      await context.showBottomSheet(
+        child: BottomMenu(
+          header: _BottomMenuHeader(entity: entity, siteName: siteName),
+          items: [
+            if (entity != null) ...[
+              BottomMenuItem(
+                label: '복원',
+                icon: LucideLightIcons.undo_2,
+                onTap: () async {
+                  await recoverEntity(entity!, via: 'trash_menu', shouldPop: true);
+                },
               ),
+              BottomMenuItem(
+                label: '영구 삭제',
+                icon: LucideLightIcons.trash_2,
+                iconColor: context.colors.textDanger,
+                labelColor: context.colors.textDanger,
+                onTap: () async {
+                  await purgeEntity(entity!, via: 'trash_menu', shouldPop: true);
+                },
+              ),
+            ],
+            BottomMenuItem(
+              label: entity == null ? '휴지통 비우기' : '폴더 비우기',
+              icon: LucideLightIcons.brush_cleaning,
+              iconColor: context.colors.textDanger,
+              labelColor: context.colors.textDanger,
+              onTap: () async {
+                if (entities.isEmpty) {
+                  if (context.mounted) {
+                    if (entity == null) {
+                      context.toast(ToastType.notification, '휴지통이 비어있어요');
+                    } else {
+                      context.toast(ToastType.notification, '폴더가 비어있어요');
+                    }
+                  }
+                  return;
+                }
+
+                await context.showModal(
+                  child: ConfirmModal(
+                    title: entity == null ? '휴지통 비우기' : '폴더 비우기',
+                    message: entity == null
+                        ? '휴지통에 있는 ${entities.length}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요.'
+                        : '이 폴더에 있는 ${entities.length}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요.',
+                    confirmText: '비우기',
+                    confirmTextColor: context.colors.textBright,
+                    confirmBackgroundColor: context.colors.accentDanger,
+                    onConfirm: () async {
+                      try {
+                        await client.request(
+                          GTrashScreen_PurgeEntities_MutationReq(
+                            (b) => b..vars.input.entityIds.addAll(entities.map((e) => e.id)),
+                          ),
+                        );
+
+                        unawaited(
+                          mixpanel.track('purge_entities', properties: {'via': 'trash', 'count': entities.length}),
+                        );
+
+                        if (context.mounted) {
+                          context.toast(ToastType.success, '휴지통을 비웠어요');
+                        }
+                      } catch (_) {
+                        if (context.mounted) {
+                          context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
+                        }
+                      }
+                    },
+                  ),
+                );
+              },
             ),
           ],
         ),
-        actions: [
-          HeadingAction(
-            icon: LucideLightIcons.ellipsis,
-            onTap: () async {
-              await context.showBottomSheet(
-                child: BottomMenu(
-                  header: _BottomMenuHeader(entity: entity, siteName: siteName),
-                  items: [
-                    if (entity != null) ...[
-                      BottomMenuItem(
-                        label: '복원',
-                        icon: LucideLightIcons.undo_2,
-                        onTap: () async {
-                          await recoverEntity(entity!, via: 'trash_menu', shouldPop: true);
-                        },
-                      ),
-                      BottomMenuItem(
-                        label: '영구 삭제',
-                        icon: LucideLightIcons.trash_2,
-                        iconColor: context.colors.textDanger,
-                        labelColor: context.colors.textDanger,
-                        onTap: () async {
-                          await purgeEntity(entity!, via: 'trash_menu', shouldPop: true);
-                        },
-                      ),
-                    ],
-                    BottomMenuItem(
-                      label: entity == null ? '휴지통 비우기' : '폴더 비우기',
-                      icon: LucideLightIcons.brush_cleaning,
-                      iconColor: context.colors.textDanger,
-                      labelColor: context.colors.textDanger,
-                      onTap: () async {
-                        if (entities.isEmpty) {
-                          if (context.mounted) {
-                            if (entity == null) {
-                              context.toast(ToastType.notification, '휴지통이 비어있어요');
-                            } else {
-                              context.toast(ToastType.notification, '폴더가 비어있어요');
-                            }
-                          }
-                          return;
-                        }
+      );
+    }
 
-                        await context.showModal(
-                          child: ConfirmModal(
-                            title: entity == null ? '휴지통 비우기' : '폴더 비우기',
-                            message: entity == null
-                                ? '휴지통에 있는 ${entities.length}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요.'
-                                : '이 폴더에 있는 ${entities.length}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요.',
-                            confirmText: '비우기',
-                            confirmTextColor: context.colors.textBright,
-                            confirmBackgroundColor: context.colors.accentDanger,
-                            onConfirm: () async {
-                              try {
-                                await client.request(
-                                  GTrashScreen_PurgeEntities_MutationReq(
-                                    (b) => b..vars.input.entityIds.addAll(entities.map((e) => e.id)),
-                                  ),
-                                );
+    return SettingsOverlayScreen(
+      title: title,
+      scrollController: scrollController,
+      trailing: HeadingCircleButton(
+        icon: LucideLightIcons.ellipsis,
+        backgroundColor: OverlayHeading.controlBackgroundColor(context),
+        boxShadow: OverlayHeading.controlShadow(context),
+        useSlotHeight: false,
+        onTap: showTrashActionsMenu,
+      ),
+      bodyBuilder: (context, titleWidget, padding) {
+        const itemCount = 2;
 
-                                unawaited(
-                                  mixpanel.track(
-                                    'purge_entities',
-                                    properties: {'via': 'trash', 'count': entities.length},
-                                  ),
-                                );
+        return ListView.separated(
+          controller: scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: padding,
+          itemCount: itemCount,
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  titleWidget,
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: context.colors.textFaint),
+                  ),
+                  const Gap(settingsSectionGap),
+                  const SettingsSectionLabel(text: '삭제된 항목', top: 0),
+                ],
+              );
+            }
 
-                                if (context.mounted) {
-                                  context.toast(ToastType.success, '휴지통을 비웠어요');
-                                }
-                              } catch (_) {
-                                if (context.mounted) {
-                                  context.toast(ToastType.error, '오류가 발생했어요. 잠시 후 다시 시도해주세요.', bottom: 64);
-                                }
-                              }
-                            },
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+            if (entities.isEmpty) {
+              return SettingsSectionCard(
+                padding: const Pad(vertical: 36, horizontal: 20),
+                child: Center(
+                  child: Text(
+                    entity == null ? '휴지통이 비어있어요' : '폴더가 비어있어요',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
+                  ),
                 ),
               );
-            },
-          ),
-        ],
-      ),
-      child: entities.isEmpty
-          ? Center(
-              child: Text(
-                entity == null ? '휴지통이 비어있어요' : '폴더가 비어있어요',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
-              ),
-            )
-          : ListView(
-              controller: primaryScrollController,
-              padding: const Pad(horizontal: 20, vertical: 14),
-              children: entities.map((entity) {
-                return Padding(
-                  padding: const Pad(vertical: 6),
-                  child: GestureDetector(
-                    onTap: () async {
-                      await entity.node.when(
-                        folder: (folder) async {
-                          await context.router.push(TrashRoute(entityId: entity.id));
-                        },
-                        document: (_) async {
-                          await showEntityMenu(entity);
-                        },
-                        orElse: () => throw UnimplementedError(),
-                      );
-                    },
-                    onLongPress: () async {
-                      await entity.node.when(
-                        folder: (folder) async {
-                          await showEntityMenu(entity);
-                        },
-                        document: (_) async {
-                          await showEntityMenu(entity);
-                        },
-                        orElse: () => throw UnimplementedError(),
-                      );
-                    },
-                    child: IntrinsicHeight(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: context.colors.borderStrong),
-                          borderRadius: const BorderRadius.all(Radius.circular(8)),
-                          color: context.colors.surfaceDefault,
-                        ),
-                        child: Padding(
-                          padding: const Pad(horizontal: 16, vertical: 12),
-                          child: entity.node.when(
-                            folder: (_) => _Folder(entity),
-                            document: (_) => _Document(entity),
+            }
+
+            return SettingsSectionCard(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  for (var entityIndex = 0; entityIndex < entities.length; entityIndex++) ...[
+                    if (entityIndex > 0) HorizontalDivider(color: context.colors.borderSubtle),
+                    Tappable(
+                      onTap: () async {
+                        final deletedEntity = entities[entityIndex];
+
+                        await deletedEntity.node.when(
+                          folder: (folder) async {
+                            await context.router.push(TrashRoute(entityId: deletedEntity.id));
+                          },
+                          document: (_) async {
+                            await showEntityMenu(deletedEntity);
+                          },
+                          orElse: () => throw UnimplementedError(),
+                        );
+                      },
+                      onLongPress: () async {
+                        await showEntityMenu(entities[entityIndex]);
+                      },
+                      child: Padding(
+                        padding: const Pad(horizontal: 16, vertical: 14),
+                        child: Tappable.scale(
+                          child: entities[entityIndex].node.when(
+                            folder: (_) => _Folder(entities[entityIndex]),
+                            document: (_) => _Document(entities[entityIndex]),
                             orElse: () => throw UnimplementedError(),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
-            ),
+                  ],
+                ],
+              ),
+            );
+          },
+          separatorBuilder: (context, index) {
+            if (index == 0) {
+              return const SizedBox.shrink();
+            }
+
+            return const Gap(12);
+          },
+        );
+      },
     );
   }
 }
