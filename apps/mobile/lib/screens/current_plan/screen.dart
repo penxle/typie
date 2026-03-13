@@ -52,59 +52,55 @@ class _Content extends HookWidget {
     final bottomPadding = MediaQuery.paddingOf(context).bottom + 72;
 
     return Screen(
-      extendBodyBehindAppBar: true,
-      heading: null,
-      child: OverlayHeadingLayout(
-        heading: _Heading(scrollController: scrollController),
-        child: SingleChildScrollView(
-          controller: scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
-                child: const Text('이용권 정보', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-              ),
-              const Gap(_sectionGap),
-              DecoratedBox(
-                decoration: _cardDecoration(context),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const Pad(all: 18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('현재 이용권', style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
-                          const Gap(6),
-                          Text(
-                            subscription.plan.name,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                          ),
-                          const Gap(12),
-                          ..._detailLines(context, subscription),
-                        ],
-                      ),
+      heading: _Heading(scrollController: scrollController),
+      child: SingleChildScrollView(
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: OverlayHeading.titleTopPadding(context), bottom: 4),
+              child: const Text('이용권 정보', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            ),
+            const Gap(_sectionGap),
+            DecoratedBox(
+              decoration: _cardDecoration(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const Pad(all: 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('현재 이용권', style: TextStyle(fontSize: 13, color: context.colors.textFaint)),
+                        const Gap(6),
+                        Text(subscription.plan.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                        const Gap(12),
+                        ..._detailLines(context, subscription),
+                      ],
                     ),
-                    ..._footer(context, subscription),
-                  ],
-                ),
+                  ),
+                  ..._footer(context, subscription),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Heading extends StatelessWidget implements PreferredSizeWidget {
+class _Heading extends StatelessWidget implements ScreenOverlayHeading {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
+
+  @override
+  List<Color> overlayFadeColors(BuildContext context) => OverlayHeading.buildFadeColors(context);
 
   @override
   Widget build(BuildContext context) {

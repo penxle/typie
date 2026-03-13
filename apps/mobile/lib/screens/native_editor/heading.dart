@@ -25,7 +25,7 @@ List<BoxShadow> _headingControlShadow(BuildContext context) => [
   BoxShadow(color: context.colors.shadowDefault.withValues(alpha: 0.06), offset: const Offset(0, 1), blurRadius: 4),
 ];
 
-class NativeEditorHeading extends StatelessWidget implements PreferredSizeWidget {
+class NativeEditorHeading extends StatelessWidget implements ScreenOverlayHeading {
   const NativeEditorHeading({
     required this.editorContext,
     required this.documentType,
@@ -38,6 +38,10 @@ class NativeEditorHeading extends StatelessWidget implements PreferredSizeWidget
   final GDocumentType? documentType;
   final Widget toolsPane;
   final Widget documentMenuPane;
+
+  @override
+  List<Color> overlayFadeColors(BuildContext context) =>
+      OverlayHeading.buildFadeColors(context, baseColor: context.colors.surfaceDefault);
 
   @override
   Widget build(BuildContext context) {
@@ -72,14 +76,16 @@ class NativeEditorHeading extends StatelessWidget implements PreferredSizeWidget
               await context.router.maybePop();
             },
           ),
-          center: Popover(
-            position: PopoverPosition.bottomCenter,
-            screenPadding: _headingPopoverScreenPadding,
-            collapsedBorderRadius: Popover.defaultExpandedBorderRadius,
-            backgroundColor: controlBackgroundColor,
-            borderSide: BorderSide(color: context.colors.borderStrong),
-            anchor: capsule,
-            pane: documentMenuPane,
+          center: ResponsiveOverlayHeadingCenter(
+            child: Popover(
+              position: PopoverPosition.bottomCenter,
+              screenPadding: _headingPopoverScreenPadding,
+              collapsedBorderRadius: Popover.defaultExpandedBorderRadius,
+              backgroundColor: controlBackgroundColor,
+              borderSide: BorderSide(color: context.colors.borderStrong),
+              anchor: capsule,
+              pane: documentMenuPane,
+            ),
           ),
           trailing: Popover(
             screenPadding: _headingPopoverScreenPadding,
@@ -308,7 +314,7 @@ class _HeadingPopoverPane extends StatelessWidget {
     );
 
     if (expandToMaxWidth) {
-      return SizedBox(width: double.infinity, child: content);
+      return ConstrainedBox(constraints: const BoxConstraints(minWidth: 280, maxWidth: 600), child: content);
     }
 
     return IntrinsicWidth(child: content);

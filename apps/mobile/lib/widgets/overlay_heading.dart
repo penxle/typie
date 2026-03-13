@@ -6,8 +6,25 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/responsive_container.dart';
 
-class OverlayHeading extends StatelessWidget implements PreferredSizeWidget {
+abstract interface class ScreenOverlayHeading implements PreferredSizeWidget {
+  List<Color> overlayFadeColors(BuildContext context);
+}
+
+class ResponsiveOverlayHeadingCenter extends StatelessWidget {
+  const ResponsiveOverlayHeadingCenter({required this.child, this.maxWidth, super.key});
+
+  final Widget child;
+  final double? maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return ResponsiveContainer(maxWidth: maxWidth, child: child);
+  }
+}
+
+class OverlayHeading extends StatelessWidget implements ScreenOverlayHeading {
   const OverlayHeading({
     required this.leading,
     required this.title,
@@ -63,6 +80,9 @@ class OverlayHeading extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onTap;
 
   @override
+  List<Color> overlayFadeColors(BuildContext context) => OverlayHeading.buildFadeColors(context);
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedSlide(
       offset: Offset(0, visible ? 0 : -1),
@@ -83,26 +103,6 @@ class OverlayHeading extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => const Size.fromHeight(height);
-}
-
-class OverlayHeadingLayout extends StatelessWidget {
-  const OverlayHeadingLayout({required this.child, this.heading, super.key});
-
-  final Widget child;
-  final Widget? heading;
-
-  @override
-  Widget build(BuildContext context) {
-    final resolvedFadeColors = OverlayHeading.buildFadeColors(context);
-
-    return Stack(
-      children: [
-        Positioned.fill(child: child),
-        Positioned(top: 0, left: 0, right: 0, child: OverlayHeadingFade(colors: resolvedFadeColors)),
-        if (heading != null) Positioned(top: 0, left: 0, right: 0, child: heading!),
-      ],
-    );
-  }
 }
 
 class OverlayHeadingFade extends StatelessWidget {
@@ -133,7 +133,7 @@ class OverlayHeadingFade extends StatelessWidget {
   }
 }
 
-class OverlayHeadingBar extends StatelessWidget implements PreferredSizeWidget {
+class OverlayHeadingBar extends StatelessWidget implements ScreenOverlayHeading {
   const OverlayHeadingBar({
     this.leading,
     this.center,
@@ -141,7 +141,7 @@ class OverlayHeadingBar extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor = Colors.transparent,
     this.leadingWidth = HeadingCircleButton.slotWidth,
     this.trailingWidth = HeadingCircleButton.slotWidth,
-    this.maxCenterWidth = 420,
+    this.maxCenterWidth,
     this.onTap,
     super.key,
   });
@@ -156,13 +156,29 @@ class OverlayHeadingBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onTap;
 
   @override
+  List<Color> overlayFadeColors(BuildContext context) =>
+      OverlayHeading.buildFadeColors(context, baseColor: backgroundColor.a == 0 ? null : backgroundColor);
+
+  @override
   Widget build(BuildContext context) {
-    final constrainedCenter = switch (maxCenterWidth) {
-      final double width => ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width),
-        child: center ?? const SizedBox.shrink(),
+    final responsiveCenter = switch (center) {
+      ResponsiveOverlayHeadingCenter(:final child, :final maxWidth) => ResponsiveOverlayHeadingCenter(
+        maxWidth: maxWidth,
+        child: switch (maxCenterWidth) {
+          final double width => ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: width),
+            child: child,
+          ),
+          null => child,
+        },
       ),
-      null => center ?? const SizedBox.shrink(),
+      _ => switch (maxCenterWidth) {
+        final double width => ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: width),
+          child: center ?? const SizedBox.shrink(),
+        ),
+        null => center ?? const SizedBox.shrink(),
+      },
     };
 
     return AnnotatedRegion(
@@ -184,7 +200,7 @@ class OverlayHeadingBar extends StatelessWidget implements PreferredSizeWidget {
                       child: Align(alignment: Alignment.centerLeft, child: leading ?? const SizedBox.shrink()),
                     ),
                     const Gap(12),
-                    Expanded(child: Center(child: constrainedCenter)),
+                    Expanded(child: Center(child: responsiveCenter)),
                     const Gap(12),
                     SizedBox(
                       width: trailingWidth,

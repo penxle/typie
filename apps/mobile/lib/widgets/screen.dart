@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/widgets/heading.dart';
+import 'package:typie/widgets/overlay_heading.dart';
 import 'package:typie/widgets/responsive_container.dart';
 import 'package:typie/widgets/tappable.dart';
 
@@ -40,6 +41,7 @@ class Screen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final overlayHeading = heading is ScreenOverlayHeading ? heading! as ScreenOverlayHeading : null;
     var body = child;
 
     if (expand) {
@@ -66,6 +68,21 @@ class Screen extends StatelessWidget {
       );
     }
 
+    if (overlayHeading != null) {
+      body = Stack(
+        children: [
+          Positioned.fill(child: body),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: OverlayHeadingFade(colors: overlayHeading.overlayFadeColors(context)),
+          ),
+          Positioned(top: 0, left: 0, right: 0, child: overlayHeading),
+        ],
+      );
+    }
+
     if (keyboardDismiss) {
       body = KeyboardDismiss(child: body);
     }
@@ -80,7 +97,7 @@ class Screen extends StatelessWidget {
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       extendBodyBehindAppBar: extendBodyBehindAppBar,
       backgroundColor: backgroundColor ?? context.colors.surfaceSubtle,
-      appBar: heading,
+      appBar: overlayHeading == null ? heading : null,
       body: body,
     );
   }

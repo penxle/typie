@@ -90,83 +90,87 @@ class ShellScreen extends HookWidget {
                     duration: const Duration(milliseconds: 200),
                     child: IgnorePointer(
                       ignoring: !navVisibleValue,
-                      child: Row(
-                        children: [
-                          Flexible(
-                            child: Container(
-                              height: 60,
-                              constraints: const BoxConstraints(maxWidth: 420),
-                              decoration: BoxDecoration(
-                                color: pillColor,
-                                borderRadius: BorderRadius.circular(30),
-                                border: Border.all(color: context.colors.borderDefault),
-                                boxShadow: [
-                                  BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
-                                  BoxShadow(
-                                    color: context.colors.shadowDefault,
-                                    offset: const Offset(0, 4),
-                                    blurRadius: 12,
-                                  ),
-                                  BoxShadow(
-                                    color: context.colors.shadowDefault,
-                                    offset: const Offset(0, 12),
-                                    blurRadius: 32,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (int i = 0; i < 4; i++)
-                                    Expanded(
-                                      child: _Button(
-                                        index: i,
-                                        activeIndex: tabsRouter.activeIndex,
-                                        icon: Icon(
-                                          [
-                                            LucideIcons.house,
-                                            LucideIcons.folder_open,
-                                            LucideIcons.sticky_note,
-                                            LucideIcons.circle_user_round,
-                                          ][i],
-                                          size: 24,
-                                          color: context.colors.textSubtle,
-                                        ),
-                                        onTap: () {
-                                          crossFadeKey.currentState?.captureAndAnimate();
-                                          tabsRouter.setActiveIndex(i);
-                                        },
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 488),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: pillColor,
+                                    borderRadius: BorderRadius.circular(30),
+                                    border: Border.all(color: context.colors.borderDefault),
+                                    boxShadow: [
+                                      BoxShadow(color: context.colors.shadowAmbient, blurRadius: 8),
+                                      BoxShadow(
+                                        color: context.colors.shadowDefault,
+                                        offset: const Offset(0, 4),
+                                        blurRadius: 12,
                                       ),
-                                    ),
-                                ],
+                                      BoxShadow(
+                                        color: context.colors.shadowDefault,
+                                        offset: const Offset(0, 12),
+                                        blurRadius: 32,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      for (int i = 0; i < 4; i++)
+                                        Expanded(
+                                          child: _Button(
+                                            index: i,
+                                            activeIndex: tabsRouter.activeIndex,
+                                            icon: Icon(
+                                              [
+                                                LucideIcons.house,
+                                                LucideIcons.folder_open,
+                                                LucideIcons.sticky_note,
+                                                LucideIcons.circle_user_round,
+                                              ][i],
+                                              size: 24,
+                                              color: context.colors.textSubtle,
+                                            ),
+                                            onTap: () {
+                                              crossFadeKey.currentState?.captureAndAnimate();
+                                              tabsRouter.setActiveIndex(i);
+                                            },
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              if (effectiveTrailingAction case ShellTrailingActionConfig(
+                                icon: final icon,
+                                pane: final pane?,
+                              ))
+                                Popover(
+                                  position: PopoverPosition.topRight,
+                                  screenPadding: const EdgeInsets.fromLTRB(24, 8, 24, 80),
+                                  collapsedBorderRadius: BorderRadius.circular(999),
+                                  backgroundColor: context.colors.surfaceDefault,
+                                  borderSide: BorderSide(color: context.colors.borderDefault),
+                                  anchor: _ShellTrailingActionButton(icon: icon, color: pillColor),
+                                  pane: pane,
+                                )
+                              else
+                                Tappable(
+                                  onTap: () async {
+                                    await (effectiveTrailingAction?.onTap?.call() ?? createDocument());
+                                  },
+                                  child: _ShellTrailingActionButton(
+                                    icon: effectiveTrailingAction?.icon ?? LucideIcons.square_pen,
+                                    color: pillColor,
+                                  ),
+                                ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          if (effectiveTrailingAction case ShellTrailingActionConfig(
-                            icon: final icon,
-                            pane: final pane?,
-                          ))
-                            Popover(
-                              position: PopoverPosition.topRight,
-                              screenPadding: const EdgeInsets.fromLTRB(24, 8, 24, 80),
-                              collapsedBorderRadius: BorderRadius.circular(999),
-                              backgroundColor: context.colors.surfaceDefault,
-                              borderSide: BorderSide(color: context.colors.borderDefault),
-                              anchor: _ShellTrailingActionButton(icon: icon, color: pillColor),
-                              pane: pane,
-                            )
-                          else
-                            Tappable(
-                              onTap: () async {
-                                await (effectiveTrailingAction?.onTap?.call() ?? createDocument());
-                              },
-                              child: _ShellTrailingActionButton(
-                                icon: effectiveTrailingAction?.icon ?? LucideIcons.square_pen,
-                                color: pillColor,
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

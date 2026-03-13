@@ -97,12 +97,8 @@ class HomeScreen extends HookWidget {
       child: Screen(
         loading: data == null,
         resizeToAvoidBottomInset: searching,
-        extendBodyBehindAppBar: true,
-        heading: null,
-        child: OverlayHeadingLayout(
-          heading: _Heading(data: data, scrollController: scrollController, visible: !searching),
-          child: homeContent,
-        ),
+        heading: _Heading(data: data, scrollController: scrollController, visible: !searching),
+        child: homeContent,
       ),
     );
   }
@@ -140,12 +136,15 @@ class _SearchBarPlaceholder extends StatelessWidget {
 
 // -- Heading ------------------------------------------------------------------
 
-class _Heading extends StatelessWidget implements PreferredSizeWidget {
+class _Heading extends StatelessWidget implements ScreenOverlayHeading {
   const _Heading({required this.data, required this.scrollController, required this.visible});
 
   final GHomeScreen_QueryData? data;
   final ScrollController scrollController;
   final bool visible;
+
+  @override
+  List<Color> overlayFadeColors(BuildContext context) => OverlayHeading.buildFadeColors(context);
 
   @override
   Widget build(BuildContext context) {

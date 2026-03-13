@@ -59,27 +59,23 @@ class SettingsOverlayScreen extends StatelessWidget {
         );
 
     return Screen(
-      extendBodyBehindAppBar: true,
-      heading: null,
+      heading: OverlayHeading(
+        title: title,
+        scrollController: scrollController,
+        leading:
+            leading ??
+            OverlayHeadingBackButton(
+              onTap: () async {
+                await context.router.maybePop();
+              },
+            ),
+        trailing: trailing,
+      ),
       loading: loading,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       backgroundColor: backgroundColor ?? context.colors.surfaceSubtle,
       bottomAction: bottomAction,
-      child: OverlayHeadingLayout(
-        heading: OverlayHeading(
-          title: title,
-          scrollController: scrollController,
-          leading:
-              leading ??
-              OverlayHeadingBackButton(
-                onTap: () async {
-                  await context.router.maybePop();
-                },
-              ),
-          trailing: trailing,
-        ),
-        child: body,
-      ),
+      child: body,
     );
   }
 }

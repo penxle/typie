@@ -52,37 +52,36 @@ class _Content extends HookWidget {
     final scrollController = useScrollController();
 
     return Screen(
-      extendBodyBehindAppBar: true,
-      heading: null,
-      child: OverlayHeadingLayout(
-        heading: _Heading(scrollController: scrollController),
-        child: SingleChildScrollView(
-          controller: scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(20, OverlayHeading.titleTopPadding(context), 20, 4),
-                child: const Text('프로필', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-              ),
-              _ProfileHero(me: me),
-              _ProfileActivitySection(data: data),
-              _ProfileAccountSection(me: me),
-              _ProfileSupportSection(me: me, client: client),
-              const Gap(140),
-            ],
-          ),
+      heading: _Heading(scrollController: scrollController),
+      child: SingleChildScrollView(
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(20, OverlayHeading.titleTopPadding(context), 20, 4),
+              child: const Text('프로필', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            ),
+            _ProfileHero(me: me),
+            _ProfileActivitySection(data: data),
+            _ProfileAccountSection(me: me),
+            _ProfileSupportSection(me: me, client: client),
+            const Gap(140),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Heading extends StatelessWidget implements PreferredSizeWidget {
+class _Heading extends StatelessWidget implements ScreenOverlayHeading {
   const _Heading({required this.scrollController});
 
   final ScrollController scrollController;
+
+  @override
+  List<Color> overlayFadeColors(BuildContext context) => OverlayHeading.buildFadeColors(context);
 
   @override
   Widget build(BuildContext context) {
