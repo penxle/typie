@@ -13,8 +13,6 @@ use zeno::{Vector, Verb};
 
 const SUBPIXEL_POS_BITS: u32 = 2;
 const SUBPIXEL_POS_COUNT: u32 = 1 << SUBPIXEL_POS_BITS;
-const SUBPIXEL_ROUND: f32 = 1.0 / ((SUBPIXEL_POS_COUNT << 1) as f32);
-const SUBPIXEL_MASK: u32 = SUBPIXEL_POS_COUNT - 1;
 
 const EMBOLDEN_RATIO: f32 = 1.0 / 64.0;
 
@@ -116,8 +114,9 @@ impl GlyphRenderer {
             let glyph_x = tx + glyph.x * sx;
             let glyph_y = ty + glyph.y * transform.sy;
 
-            let fract_x = glyph_x - glyph_x.floor();
-            let subpixel_x = quantize_subpixel(fract_x.abs());
+            let snapped_x =
+                (glyph_x * SUBPIXEL_POS_COUNT as f32).round() / SUBPIXEL_POS_COUNT as f32;
+            let subpixel_x = ((snapped_x - snapped_x.floor()) * SUBPIXEL_POS_COUNT as f32) as u8;
             let subpixel_y = 0u8;
 
             let cache_key = GlyphCacheKey {
@@ -187,7 +186,7 @@ impl GlyphRenderer {
                     let p = &image.placement;
                     match image.content {
                         Content::Mask => {
-                            let blit_x = glyph_x.floor() as i32 + p.left;
+                            let blit_x = snapped_x.floor() as i32 + p.left;
                             let blit_y = glyph_y.floor() as i32 - p.top;
                             blit::blit_mask_d32_a8(
                                 pixmap,
@@ -203,7 +202,7 @@ impl GlyphRenderer {
                             );
                         }
                         Content::Color | Content::SubpixelMask => {
-                            let blit_x = glyph_x.floor() as i32 + p.left;
+                            let blit_x = snapped_x.floor() as i32 + p.left;
                             let blit_y = glyph_y.floor() as i32 - p.top;
                             blit::blit_color(
                                 pixmap,
@@ -270,9 +269,8 @@ impl GlyphRenderer {
             }
 
             let glyph_point = map_transform(transform, glyph.x, glyph.y);
-            let fract_x = glyph_point.x - glyph_point.x.floor();
-            let subpixel_x = quantize_subpixel(fract_x.abs());
-            let subpixel_offset_x = subpixel_x as f32 * (1.0 / SUBPIXEL_POS_COUNT as f32);
+            let snapped_x =
+                (glyph_point.x * SUBPIXEL_POS_COUNT as f32).round() / SUBPIXEL_POS_COUNT as f32;
 
             let mut scaler = self
                 .scale_context
@@ -295,7 +293,7 @@ impl GlyphRenderer {
                 let Some(path) = build_outline_layer_path(
                     layer.points(),
                     layer.verbs(),
-                    glyph_point.x + subpixel_offset_x,
+                    snapped_x,
                     glyph_point.y,
                 ) else {
                     continue;
@@ -365,12 +363,6 @@ fn build_outline_layer_path(
     }
 
     pb.finish()
-}
-
-fn quantize_subpixel(fract: f32) -> u8 {
-    let biased = fract + SUBPIXEL_ROUND;
-    let fixed = (biased * (SUBPIXEL_POS_COUNT as f32)) as u32;
-    (fixed & SUBPIXEL_MASK) as u8
 }
 
 fn calculate_font_hash(font_data: &[u8]) -> u64 {
