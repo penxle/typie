@@ -7,7 +7,13 @@ class AppRouter extends RootStackRouter {
   @override
   final defaultRouteType = RouteType.custom(
     customRouteBuilder: <T>(context, child, page) {
-      return ParallaxPageRoute<T>(content: child, settings: page, fullscreenDialog: page.fullscreenDialog);
+      final fullScreenBackGesture = page.routeData.name == EntityRoute.name;
+      return ParallaxPageRoute<T>(
+        content: child,
+        fullScreenBackGesture: fullScreenBackGesture,
+        settings: page,
+        fullscreenDialog: page.fullscreenDialog,
+      );
     },
   );
 
