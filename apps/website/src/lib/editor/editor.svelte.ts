@@ -662,17 +662,23 @@ export class Editor {
 
   #handleFontRequired(family: string, weight: number, codepoints: number[]): void {
     const familyFonts = this.fontFamilies.find((f) => f.familyName === family)?.fonts ?? [];
-    // see: Rust nearest_weight()
+    // CSS Fonts Level 4 §5.2 font-weight matching
     const font =
       familyFonts.find((f) => f.weight === weight) ??
-      familyFonts.reduce<FontFamily['fonts'][number] | null>((prev, curr) => {
-        if (!prev) return curr;
-        const prevDiff = Math.abs(prev.weight - weight);
-        const currDiff = Math.abs(curr.weight - weight);
-        if (currDiff < prevDiff) return curr;
-        if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
-        return prev;
-      }, null);
+      (() => {
+        const sorted = familyFonts.toSorted((a, b) => a.weight - b.weight);
+        if (weight >= 400 && weight <= 500) {
+          return (
+            sorted.find((f) => f.weight >= weight && f.weight <= 500) ??
+            sorted.findLast((f) => f.weight < weight) ??
+            sorted.find((f) => f.weight > 500)
+          );
+        } else if (weight < 400) {
+          return sorted.findLast((f) => f.weight <= weight) ?? sorted.find((f) => f.weight > weight);
+        } else {
+          return sorted.find((f) => f.weight >= weight) ?? sorted.findLast((f) => f.weight < weight);
+        }
+      })();
     if (!font) return;
 
     Promise.all([
