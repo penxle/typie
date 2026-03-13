@@ -6,6 +6,7 @@
   import { Icon, Menu, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import mixpanel from 'mixpanel-browser';
+  import { untrack } from 'svelte';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
@@ -92,10 +93,16 @@
 
   $effect(() => {
     if (editing) {
+      untrack(() => app.state.openMenuCount++);
+
       // NOTE: Menu 닫힐 때 포커스 트랩에 의해 select 하자마자 blur되지 않도록 setTimeout
       setTimeout(() => {
         inputEl?.select();
       });
+
+      return () => {
+        untrack(() => app.state.openMenuCount--);
+      };
     }
   });
 
