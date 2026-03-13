@@ -312,14 +312,22 @@ export async function ensureRequiredFallbackFont(app: Application, weight: numbe
     if (remaining.length === 0) break;
 
     if (fallbackFontFamily.fonts.length === 0) continue;
-    // see: Rust nearest_weight()
-    const fallbackFont = fallbackFontFamily.fonts.reduce((prev, curr) => {
-      const prevDiff = Math.abs(prev.weight - weight);
-      const currDiff = Math.abs(curr.weight - weight);
-      if (currDiff < prevDiff) return curr;
-      if (currDiff === prevDiff && curr.weight > prev.weight) return curr;
-      return prev;
-    });
+    // CSS Fonts Level 4 §5.2 font-weight matching
+    const sorted = fallbackFontFamily.fonts.toSorted((a, b) => a.weight - b.weight);
+    const fallbackFont = (() => {
+      if (weight >= 400 && weight <= 500) {
+        return (
+          sorted.find((f) => f.weight >= weight && f.weight <= 500) ??
+          sorted.findLast((f) => f.weight < weight) ??
+          sorted.find((f) => f.weight > 500)
+        );
+      } else if (weight < 400) {
+        return sorted.findLast((f) => f.weight <= weight) ?? sorted.find((f) => f.weight > weight);
+      } else {
+        return sorted.find((f) => f.weight >= weight) ?? sorted.findLast((f) => f.weight < weight);
+      }
+    })();
+    if (!fallbackFont) continue;
 
     const covered = remaining.filter((cp) => hasCodepoint(fallbackFont, cp));
     if (covered.length === 0) continue;

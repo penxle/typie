@@ -171,18 +171,17 @@ class FontManager {
       return exact;
     }
 
-    // see: Rust nearest_weight()
-    return familyFonts.reduce((prev, curr) {
-      final prevDiff = (prev.weight - weight).abs();
-      final currDiff = (curr.weight - weight).abs();
-      if (currDiff < prevDiff) {
-        return curr;
-      }
-      if (currDiff == prevDiff && curr.weight > prev.weight) {
-        return curr;
-      }
-      return prev;
-    });
+    // CSS Fonts Level 4 §5.2 font-weight matching
+    final sorted = [...familyFonts]..sort((a, b) => a.weight.compareTo(b.weight));
+    if (weight >= 400 && weight <= 500) {
+      return sorted.where((f) => f.weight >= weight && f.weight <= 500).firstOrNull ??
+          sorted.where((f) => f.weight < weight).lastOrNull ??
+          sorted.where((f) => f.weight > 500).firstOrNull;
+    } else if (weight < 400) {
+      return sorted.where((f) => f.weight <= weight).lastOrNull ?? sorted.where((f) => f.weight > weight).firstOrNull;
+    } else {
+      return sorted.where((f) => f.weight >= weight).firstOrNull ?? sorted.where((f) => f.weight < weight).lastOrNull;
+    }
   }
 
   Future<Uint8List> _fetchFont(String url) async {
@@ -455,17 +454,24 @@ class FontManager {
       if (fallbackFontFamily.fonts.isEmpty) {
         continue;
       }
-      final fallbackFont = fallbackFontFamily.fonts.reduce((prev, curr) {
-        final prevDiff = (prev.weight - weight).abs();
-        final currDiff = (curr.weight - weight).abs();
-        if (currDiff < prevDiff) {
-          return curr;
-        }
-        if (currDiff == prevDiff && curr.weight > prev.weight) {
-          return curr;
-        }
-        return prev;
-      });
+      // CSS Fonts Level 4 §5.2 font-weight matching
+      final sorted = [...fallbackFontFamily.fonts]..sort((a, b) => a.weight.compareTo(b.weight));
+      final Font? fallbackFont;
+      if (weight >= 400 && weight <= 500) {
+        fallbackFont =
+            sorted.where((f) => f.weight >= weight && f.weight <= 500).firstOrNull ??
+            sorted.where((f) => f.weight < weight).lastOrNull ??
+            sorted.where((f) => f.weight > 500).firstOrNull;
+      } else if (weight < 400) {
+        fallbackFont =
+            sorted.where((f) => f.weight <= weight).lastOrNull ?? sorted.where((f) => f.weight > weight).firstOrNull;
+      } else {
+        fallbackFont =
+            sorted.where((f) => f.weight >= weight).firstOrNull ?? sorted.where((f) => f.weight < weight).lastOrNull;
+      }
+      if (fallbackFont == null) {
+        continue;
+      }
 
       final manifest = _manifestCache[fallbackFont.url];
       if (manifest == null) {
