@@ -2508,4 +2508,59 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn copy_paste_html_preserves_font_size_on_space() {
+        use crate::runtime::Message;
+
+        let mut p = id!();
+
+        // 1. Source document: ABCD[font_size 20pt space]EFG
+        let source_rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text {
+                        "ABCD",
+                        " " => [font_size(2000)],
+                        "EFG"
+                    }
+                }
+            }
+            selection { (p, 0) -> (p, 8) }
+        };
+
+        // 2. Copy: extract_fragment → to_html (same as get_clipboard_data in web FFI)
+        let state = source_rt.state();
+        let fragment = state.selection.extract_fragment(&state.doc).unwrap();
+        let html = fragment.to_html();
+        let text = fragment.to_plain_text();
+
+        // 3. Paste into empty document via Message::PasteHtml handler
+        let mut paste_rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        paste_rt.update(Message::PasteHtml { html, text });
+
+        // 4. Verify
+        let expected = state! {
+            doc {
+                @p paragraph {
+                    text {
+                        "ABCD",
+                        " " => [font_size(2000)],
+                        "EFG"
+                    }
+                }
+            }
+            selection { (p, 8) }
+        };
+
+        assert_state_eq!(paste_rt.state(), expected);
+    }
 }
