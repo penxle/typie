@@ -4,13 +4,14 @@
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem, RingSpinner } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { Dialog } from '@typie/ui/notification';
+  import { Dialog, Toast } from '@typie/ui/notification';
   import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { getContext, tick } from 'svelte';
   import { EntityType, EntityVisibility } from '@/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
+  import CopyIcon from '~icons/lucide/copy';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
@@ -337,7 +338,17 @@
 
 <HorizontalDivider color="secondary" />
 
-<div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', userSelect: 'none' })}>
+<div
+  class={flex({
+    flexDirection: 'column',
+    gap: '4px',
+    paddingX: '10px',
+    paddingY: '4px',
+    fontSize: '12px',
+    color: 'text.disabled',
+    userSelect: 'none',
+  })}
+>
   <div class={css({ fontWeight: 'medium' })}>
     {#if entity.visibility === EntityVisibility.PUBLIC}
       <span class={css({ color: 'accent.success.default' })}>공개 폴더</span>
@@ -371,6 +382,27 @@
 
     <span>총 {comma(info.data.folder.characterCount)}자</span>
   {/if}
+
+  <button
+    class={flex({
+      alignItems: 'center',
+      gap: '2px',
+      width: 'fit',
+      cursor: 'pointer',
+      fontSize: '11px',
+      color: 'text.disabled',
+      transition: 'common',
+      _hover: { color: 'text.muted' },
+    })}
+    onclick={async () => {
+      await navigator.clipboard.writeText(folder.id);
+      Toast.success('폴더 ID가 복사되었어요');
+    }}
+    type="button"
+  >
+    <Icon icon={CopyIcon} size={12} />
+    폴더 ID 복사
+  </button>
 </div>
 
 {#snippet descendantsView()}
