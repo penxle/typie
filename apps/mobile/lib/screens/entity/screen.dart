@@ -1762,14 +1762,14 @@ class _EntityCreatePopoverPane extends StatelessWidget {
             if (onCreateFolder != null)
               PopoverListItem(
                 onSelected: () {
-                  Popover.close(context);
+                  ShellTrailingActionMenuScope.dismiss(context);
                   unawaited(onCreateFolder!());
                 },
                 child: const _EntityCreatePopoverItem(icon: LucideLightIcons.folder_plus, label: '여기에 폴더 만들기'),
               ),
             PopoverListItem(
               onSelected: () {
-                Popover.close(context);
+                ShellTrailingActionMenuScope.dismiss(context);
                 unawaited(onCreateDocument());
               },
               child: const _EntityCreatePopoverItem(icon: LucideLightIcons.square_pen, label: '여기에 문서 만들기'),

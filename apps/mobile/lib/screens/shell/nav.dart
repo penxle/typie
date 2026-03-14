@@ -9,6 +9,19 @@ class ShellTrailingActionConfig {
   final Widget? pane;
 }
 
+class ShellTrailingActionMenuScope extends InheritedWidget {
+  const ShellTrailingActionMenuScope({required this.close, required super.child, super.key});
+
+  final VoidCallback close;
+
+  static void dismiss(BuildContext context) {
+    context.getInheritedWidgetOfExactType<ShellTrailingActionMenuScope>()?.close();
+  }
+
+  @override
+  bool updateShouldNotify(covariant ShellTrailingActionMenuScope oldWidget) => close != oldWidget.close;
+}
+
 class ShellTrailingActionController extends ValueNotifier<ShellTrailingActionConfig?> {
   ShellTrailingActionController() : super(null);
 
