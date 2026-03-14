@@ -26,6 +26,7 @@ class NativeEditorTextBackgroundColorTextOptionsToolbar extends HookWidget {
           color: item['color'] != null ? (item['color'] as Color Function(BuildContext))(context) : null,
           value: item['value'] as String,
           isActive: isActive,
+          prepareMutationOnTapDown: true,
           onTap: () {
             final value = item['value'] as String;
             scope.dispatch({

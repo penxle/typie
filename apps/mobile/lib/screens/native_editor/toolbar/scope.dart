@@ -72,6 +72,15 @@ class NativeEditorToolbarScope extends InheritedWidget {
     return scope!;
   }
 
+  static NativeEditorToolbarScope? maybeOf(BuildContext context) {
+    return context.getInheritedWidgetOfExactType<NativeEditorToolbarScope>();
+  }
+
+  void prepareMutation() {
+    reconcileInput();
+    requestFocus();
+  }
+
   @override
   bool updateShouldNotify(covariant NativeEditorToolbarScope old) => false;
 }

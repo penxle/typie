@@ -48,6 +48,7 @@ class NativeEditorFontWeightTextOptionsToolbar extends HookWidget {
         return LabelToolbarButton(
           text: item['label'] as String,
           isActive: isActive,
+          prepareMutationOnTapDown: true,
           onTap: () {
             scope.dispatch({
               'type': 'toggleStyle',

@@ -54,6 +54,7 @@ class NativeEditorFontSizeTextOptionsToolbar extends HookWidget {
           text: item['label'] as String,
           isActive: isActive,
           suffix: isActive ? const Icon(LucideLightIcons.pencil, size: 14) : null,
+          prepareMutationOnTapDown: true,
           onTap: () async {
             if (isActive) {
               await context.showModal(

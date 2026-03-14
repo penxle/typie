@@ -175,6 +175,7 @@ class NativeEditorTextToolbar extends HookWidget {
           IconToolbarButton(
             icon: LucideLightIcons.bold,
             isActive: isBold,
+            prepareMutationOnTapDown: true,
             onTap: () {
               scope.dispatch({'type': 'toggleBold'});
             },
@@ -182,6 +183,7 @@ class NativeEditorTextToolbar extends HookWidget {
           IconToolbarButton(
             icon: LucideLightIcons.italic,
             isActive: isItalic,
+            prepareMutationOnTapDown: true,
             onTap: () {
               scope.dispatch({
                 'type': 'toggleStyle',
@@ -192,6 +194,7 @@ class NativeEditorTextToolbar extends HookWidget {
           IconToolbarButton(
             icon: LucideLightIcons.underline,
             isActive: isUnderline,
+            prepareMutationOnTapDown: true,
             onTap: () {
               scope.dispatch({
                 'type': 'toggleStyle',
@@ -202,6 +205,7 @@ class NativeEditorTextToolbar extends HookWidget {
           IconToolbarButton(
             icon: LucideLightIcons.strikethrough,
             isActive: isStrikethrough,
+            prepareMutationOnTapDown: true,
             onTap: () {
               scope.dispatch({
                 'type': 'toggleStyle',
@@ -290,6 +294,7 @@ class NativeEditorTextToolbar extends HookWidget {
           AppVerticalDivider(color: context.colors.borderSubtle, height: 20),
           IconToolbarButton(
             icon: LucideLightIcons.remove_formatting,
+            prepareMutationOnTapDown: true,
             onTap: () {
               scope.dispatch({'type': 'clearFormatting'});
             },

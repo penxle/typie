@@ -26,6 +26,7 @@ class NativeEditorTextColorTextOptionsToolbar extends HookWidget {
           color: (item['color'] as Color Function(BuildContext))(context),
           value: item['value'] as String,
           isActive: isActive,
+          prepareMutationOnTapDown: true,
           onTap: () {
             scope.dispatch({
               'type': 'toggleStyle',

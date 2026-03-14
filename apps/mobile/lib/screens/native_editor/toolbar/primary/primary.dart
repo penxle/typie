@@ -85,6 +85,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                       ),
                       IconToolbarButton(
                         icon: LucideLightIcons.undo,
+                        prepareMutationOnTapDown: true,
                         onTap: () {
                           scope.dispatch({'type': 'undo'});
                           scope.controller.scrollIntoView();
@@ -92,6 +93,7 @@ class NativeEditorPrimaryToolbar extends HookWidget {
                       ),
                       IconToolbarButton(
                         icon: LucideLightIcons.redo,
+                        prepareMutationOnTapDown: true,
                         onTap: () {
                           scope.dispatch({'type': 'redo'});
                           scope.controller.scrollIntoView();

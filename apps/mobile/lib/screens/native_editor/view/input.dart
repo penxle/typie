@@ -737,6 +737,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
       text: precedingText + followingText + marker,
       selection: TextSelection.collapsed(offset: precedingText.length),
     );
+    var shouldCommitPreedit = false;
 
     if (_currentValue != newValue) {
       var forceSync = false;
@@ -759,6 +760,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
           'currentValue': _serializeValue(_currentValue),
           'newValue': _serializeValue(newValue),
         });
+        shouldCommitPreedit = true;
         _currentValue = _currentValue.copyWith(composing: TextRange.empty);
         _extendedComposingStart = null;
         _connection = TextInput.attach(this, _configuration);
@@ -809,7 +811,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
       _addRecordingEntry({'type': 'reconcile', 'result': 'unchanged', 'currentValue': _serializeValue(_currentValue)});
     }
 
-    return true;
+    return shouldCommitPreedit;
   }
 
   void _setCurrentValue(TextEditingValue value, {bool allowSentinel = true}) {

@@ -1105,78 +1105,78 @@ class EditorView extends HookWidget {
       return const SizedBox.shrink();
     }
 
-    return Listener(
-      onPointerDown: (_) {
-        inputController
-          ..commitPreedit(scroll: false)
-          ..invalidate();
-      },
-      child: NativeEditorToolbarScope(
+    return NativeEditorToolbarScope(
+      controller: controller,
+      keyboardHeight: keyboardHeight,
+      isKeyboardVisible: isKeyboardVisible,
+      keyboardType: keyboardType,
+      isEditorFocused: isEditorFocused,
+      bottomToolbarMode: bottomToolbarMode,
+      secondaryToolbarMode: secondaryToolbarMode,
+      selection: selection,
+      attrs: attrs,
+      floatingContext: controller.floatingContext,
+      floatingNodeId: controller.floatingNodeId,
+      externalElements: externalElements,
+      uploadManager: uploadManager,
+      dispatch: controller.dispatch,
+      requestFocus: inputController.requestFocus,
+      clearFocus: inputController.clearFocus,
+      dismissKeyboard: inputController.dismissKeyboard,
+      reconcileInput: inputController.invalidate,
+      child: ContentScope(
         controller: controller,
-        keyboardHeight: keyboardHeight,
-        isKeyboardVisible: isKeyboardVisible,
-        keyboardType: keyboardType,
-        isEditorFocused: isEditorFocused,
-        bottomToolbarMode: bottomToolbarMode,
-        secondaryToolbarMode: secondaryToolbarMode,
-        selection: selection,
-        attrs: attrs,
-        floatingContext: controller.floatingContext,
-        floatingNodeId: controller.floatingNodeId,
-        externalElements: externalElements,
-        uploadManager: uploadManager,
-        dispatch: controller.dispatch,
-        requestFocus: inputController.requestFocus,
-        clearFocus: inputController.clearFocus,
-        dismissKeyboard: inputController.dismissKeyboard,
-        reconcileInput: inputController.invalidate,
-        child: ContentScope(
-          controller: controller,
-          ticker: ticker,
-          dndController: dndController,
-          interactionState: interactionState,
-          interactionSnapshot: interactionState.listenable,
-          verticalScrollController: verticalScrollController,
-          horizontalScrollController: horizontalScrollController,
-          inputController: inputController,
-          longPressPosition: longPressPosition,
-          handleDragPosition: handleDragPosition,
-          titleAreaHeight: titleAreaHeight,
-          viewportTopInset: viewportTopInset,
-          title: titleNotifier,
-          subtitle: subtitleNotifier,
-          onTitleChanged: onTitleChanged,
-          onSubtitleChanged: onSubtitleChanged,
-          titleFocusNode: titleFocusNode,
-          subtitleFocusNode: subtitleFocusNode,
-          pendingScroll: pendingScroll,
-          pendingScrollPageIdx: pendingScrollPageIdx,
-          presentedViewport: presentedViewport,
-          displayZoom: displayZoom,
-          renderZoom: renderZoom,
-          setZoom: setZoom,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth.floorToDouble();
-              final height = constraints.maxHeight;
-              if (zoomViewportWidth.value != constraints.maxWidth) {
-                final nextViewportWidth = constraints.maxWidth;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (zoomViewportWidth.value != nextViewportWidth) {
-                    zoomViewportWidth.value = nextViewportWidth;
-                  }
-                });
-              }
-              final zoomForRender = isPaginatedLayout ? currentRenderZoom : 1.0;
-              final scaleFactor = MediaQuery.devicePixelRatioOf(context) * zoomForRender;
-              final currentSize = (width, height, scaleFactor);
-              if (lastSize.value != currentSize) {
-                lastSize.value = currentSize;
-                controller.dispatch({'type': 'resize', 'width': width, 'height': height, 'scaleFactor': scaleFactor});
-              }
-              return Column(
-                children: [
-                  Expanded(
+        ticker: ticker,
+        dndController: dndController,
+        interactionState: interactionState,
+        interactionSnapshot: interactionState.listenable,
+        verticalScrollController: verticalScrollController,
+        horizontalScrollController: horizontalScrollController,
+        inputController: inputController,
+        longPressPosition: longPressPosition,
+        handleDragPosition: handleDragPosition,
+        titleAreaHeight: titleAreaHeight,
+        viewportTopInset: viewportTopInset,
+        title: titleNotifier,
+        subtitle: subtitleNotifier,
+        onTitleChanged: onTitleChanged,
+        onSubtitleChanged: onSubtitleChanged,
+        titleFocusNode: titleFocusNode,
+        subtitleFocusNode: subtitleFocusNode,
+        pendingScroll: pendingScroll,
+        pendingScrollPageIdx: pendingScrollPageIdx,
+        presentedViewport: presentedViewport,
+        displayZoom: displayZoom,
+        renderZoom: renderZoom,
+        setZoom: setZoom,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth.floorToDouble();
+            final height = constraints.maxHeight;
+            if (zoomViewportWidth.value != constraints.maxWidth) {
+              final nextViewportWidth = constraints.maxWidth;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (zoomViewportWidth.value != nextViewportWidth) {
+                  zoomViewportWidth.value = nextViewportWidth;
+                }
+              });
+            }
+            final zoomForRender = isPaginatedLayout ? currentRenderZoom : 1.0;
+            final scaleFactor = MediaQuery.devicePixelRatioOf(context) * zoomForRender;
+            final currentSize = (width, height, scaleFactor);
+            if (lastSize.value != currentSize) {
+              lastSize.value = currentSize;
+              controller.dispatch({'type': 'resize', 'width': width, 'height': height, 'scaleFactor': scaleFactor});
+            }
+            return Column(
+              children: [
+                Expanded(
+                  child: Listener(
+                    onPointerDown: (_) {
+                      inputController
+                        ..commitPreedit(scroll: false)
+                        ..invalidate();
+                    },
                     child: Stack(
                       key: floatingContainerKey,
                       fit: StackFit.expand,
@@ -1246,11 +1246,11 @@ class EditorView extends HookWidget {
                       ],
                     ),
                   ),
-                  const NativeEditorToolbar(),
-                ],
-              );
-            },
-          ),
+                ),
+                const NativeEditorToolbar(),
+              ],
+            );
+          },
         ),
       ),
     );

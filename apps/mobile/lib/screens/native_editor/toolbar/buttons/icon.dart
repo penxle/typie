@@ -6,6 +6,8 @@ class IconToolbarButton extends StatelessWidget {
   const IconToolbarButton({
     required this.onTap,
     required this.icon,
+    this.onTapDown,
+    this.prepareMutationOnTapDown = false,
     this.isActive = false,
     this.isDisabled = false,
     this.isRepeatable = false,
@@ -17,6 +19,8 @@ class IconToolbarButton extends StatelessWidget {
   final bool isActive;
   final bool isDisabled;
   final bool isRepeatable;
+  final void Function()? onTapDown;
+  final bool prepareMutationOnTapDown;
   final void Function() onTap;
 
   @override
@@ -25,6 +29,8 @@ class IconToolbarButton extends StatelessWidget {
       isActive: isActive,
       isDisabled: isDisabled,
       isRepeatable: isRepeatable,
+      onTapDown: onTapDown,
+      prepareMutationOnTapDown: prepareMutationOnTapDown,
       onTap: onTap,
       builder: (context, color, backgroundColor) {
         return Container(
