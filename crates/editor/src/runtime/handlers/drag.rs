@@ -480,7 +480,7 @@ mod tests {
                 @p1 paragraph { text { "Hello" } }
                 @p2 paragraph { text { "World" } }
             }
-            selection { (p1, 0) -> (p1, 5) }
+            selection { (p1, 0) -> (p1, 5, Affinity::Upstream) }
         };
         rt.layout();
 
@@ -496,7 +496,7 @@ mod tests {
                 @p1 paragraph { text { "Hello" } }
                 @p2 paragraph { text { "World" } }
             }
-            selection { (p1, 0) -> (p1, 5) }
+            selection { (p1, 0) -> (p1, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -531,7 +531,7 @@ mod tests {
                 @p2 paragraph { text { "Wor" } }
                 paragraph { text { "Target" } }
             }
-            selection { (p1, 0) -> (p2, 3) }
+            selection { (p1, 0) -> (p2, 3, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -920,7 +920,7 @@ mod tests {
                 image (id: Some("test-image-id".to_string()),) {}
                 @p paragraph { text { "He" } }
             }
-            selection { (NodeId::ROOT, 1) -> (p, 2) }
+            selection { (NodeId::ROOT, 1) -> (p, 2, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -980,7 +980,7 @@ mod tests {
                 @img image (id: Some("test-image-id".to_string()),) {}
                 @p4 paragraph { text { "4" } }
             }
-            selection { (p3, 0) -> (p4, 1) }
+            selection { (p3, 0) -> (p4, 1, Affinity::Upstream) }
         };
         rt.layout();
 
@@ -999,7 +999,7 @@ mod tests {
                 @p2 paragraph { text { "2" } }
                 paragraph {}
             }
-            selection { (p3, 0) -> (p4, 1) }
+            selection { (p3, 0) -> (p4, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1021,7 +1021,7 @@ mod tests {
                 @p3 paragraph { text { "3" } }
                 @p4 paragraph { text { "4" } }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         rt.layout();
 
@@ -1039,7 +1039,7 @@ mod tests {
                 image (id: Some("test-image-id".to_string()),) {}
                 @p2 paragraph { text { "2" } }
             }
-            selection { (p1, 1) -> (p2, 1) }
+            selection { (p1, 1) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1062,7 +1062,7 @@ mod tests {
                 @p3 paragraph { text { "3" } }
                 @p4 paragraph { text { "4" } }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         rt.layout();
 
@@ -1082,7 +1082,7 @@ mod tests {
                 @p3 paragraph { text { "3" } }
                 @p4 paragraph { text { "4" } }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1104,7 +1104,7 @@ mod tests {
                 @p3 paragraph { text { "3" } }
                 @p4 paragraph { text { "4" } }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         rt.layout();
 
@@ -1122,7 +1122,7 @@ mod tests {
                 @bq blockquote { paragraph { text { "bq" } } }
                 @p2 paragraph { text { "2" } }
             }
-            selection { (p1, 1) -> (p2, 1) }
+            selection { (p1, 1) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1155,7 +1155,7 @@ mod tests {
                 @n paragraph { text { "New" } }
                 paragraph { text { "2" } }
             }
-            selection { (n, 0) -> (n, 3) }
+            selection { (n, 0) -> (n, 3, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1183,7 +1183,7 @@ mod tests {
                     text { "44" }
                 }
             }
-            selection { (p1, 1) -> (p2, 1) }
+            selection { (p1, 1) -> (p2, 1, Affinity::Upstream) }
         };
 
         rt.layout();
@@ -1211,7 +1211,7 @@ mod tests {
                     text { "34" }
                 }
             }
-            selection { (p1, 1) -> (p2, 1) }
+            selection { (p1, 1) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1229,7 +1229,7 @@ mod tests {
                     text { "2" }
                 }
             }
-            selection { (p, 0) -> (p, 3) }
+            selection { (p, 0) -> (p, 3, Affinity::Upstream) }
         };
         rt.layout();
 
@@ -1248,7 +1248,7 @@ mod tests {
                     text { "2" }
                 }
             }
-            selection { (p, 0) -> (p, 3) }
+            selection { (p, 0) -> (p, 3, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1282,7 +1282,7 @@ mod tests {
                 image (id: Some("test-image-id".to_string()),) {}
                 paragraph { }
             }
-            selection { (p, 0) -> (NodeId::ROOT, 4) }
+            selection { (p, 0) -> (NodeId::ROOT, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -1440,7 +1440,7 @@ mod tests {
                 @pb_para paragraph { page_break {} }
                 paragraph { }
             }
-            selection { (pb_para, 0) -> (pb_para, 1) }
+            selection { (pb_para, 0) -> (pb_para, 1, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -1526,7 +1526,7 @@ mod tests {
                     text { "23" }
                 }
             }
-            selection { (p1, 1) -> (p2, 1) }
+            selection { (p1, 1) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1562,7 +1562,7 @@ mod tests {
                 @p3 paragraph { text { "3" } }
                 paragraph { text { "23" } }
             }
-            selection { (p2, 0) -> (p3, 1) }
+            selection { (p2, 0) -> (p3, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1598,7 +1598,7 @@ mod tests {
                 @p2 paragraph { text { "2" } }
                 @p3 paragraph { text { "3" } }
             }
-            selection { (p2, 0) -> (p3, 1) }
+            selection { (p2, 0) -> (p3, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1632,7 +1632,7 @@ mod tests {
                 bullet_list { list_item { paragraph { text { "22" } } } }
                 @p2 paragraph { text { "33" } }
             }
-            selection { (p1, 3) -> (p2, 1) }
+            selection { (p1, 3) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1667,7 +1667,7 @@ mod tests {
                 }
                 paragraph { }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1701,7 +1701,7 @@ mod tests {
                 blockquote { paragraph { text { "AB" } } }
                 paragraph { }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1736,7 +1736,7 @@ mod tests {
                 paragraph { text { "AB" } }
                 paragraph {}
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1753,7 +1753,7 @@ mod tests {
                 blockquote { @p2 paragraph { text { "B" } } }
                 paragraph { text { "C" } }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
 
         rt.layout();
@@ -1772,7 +1772,7 @@ mod tests {
                 blockquote { @p2 paragraph { text { "B" } } }
                 paragraph {}
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
         assert_state_eq!(rt.state(), expected);
     }
@@ -1794,7 +1794,7 @@ mod tests {
                 }
                 paragraph { text { "Tail" } }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
 
         rt.layout();
@@ -1816,7 +1816,7 @@ mod tests {
                 }
                 paragraph { text { "Tail" } }
             }
-            selection { (p1, 0) -> (p2, 1) }
+            selection { (p1, 0) -> (p2, 1, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -1962,7 +1962,7 @@ mod tests {
                 paragraph { text { "existing" } }
                 @n paragraph { text { "dropped" } }
             }
-            selection { (n, 0) -> (n, 7) }
+            selection { (n, 0) -> (n, 7, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -1994,7 +1994,7 @@ mod tests {
                 paragraph { text { "existing" } }
                 @n paragraph { text { "hello" } }
             }
-            selection { (n, 0) -> (n, 5) }
+            selection { (n, 0) -> (n, 5, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -2028,7 +2028,7 @@ mod tests {
                     text(styles: [bold()]) { "bold" }
                 }
             }
-            selection { (n, 0) -> (n, 4) }
+            selection { (n, 0) -> (n, 4, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
@@ -2060,7 +2060,7 @@ mod tests {
                 paragraph { text { "existing" } }
                 @n paragraph { text { "fallback" } }
             }
-            selection { (n, 0) -> (n, 8) }
+            selection { (n, 0) -> (n, 8, Affinity::Upstream) }
         };
 
         assert_state_eq!(rt.state(), expected);
