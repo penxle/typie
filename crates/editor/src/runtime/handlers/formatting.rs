@@ -1,13 +1,28 @@
 use crate::model::*;
 use crate::runtime::{Effect, Runtime};
+use crate::transaction::Transaction;
+use anyhow::Result;
 
 impl Runtime {
+    fn transact_after_commit_preedit_if_present<F>(&mut self, f: F) -> Vec<Effect>
+    where
+        F: FnOnce(&mut Transaction) -> Result<bool>,
+    {
+        let mut effects = if self.state.preedit.is_some() {
+            self.handle_commit_preedit()
+        } else {
+            vec![]
+        };
+        effects.extend(self.transact(f));
+        effects
+    }
+
     pub(crate) fn handle_toggle_bold(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_bold_style())
+        self.transact_after_commit_preedit_if_present(|tr| tr.toggle_bold_style())
     }
 
     pub(crate) fn handle_toggle_style(&mut self, style: Style) -> Vec<Effect> {
-        self.transact(|tr| match &style {
+        self.transact_after_commit_preedit_if_present(|tr| match &style {
             Style::Bold(_) | Style::Italic(_) | Style::Strikethrough(_) | Style::Underline(_) => {
                 tr.toggle_style(style)
             }
@@ -16,31 +31,31 @@ impl Runtime {
     }
 
     pub(crate) fn handle_toggle_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_blockquote(variant))
+        self.transact_after_commit_preedit_if_present(|tr| tr.toggle_blockquote(variant))
     }
 
     pub(crate) fn handle_set_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
-        self.transact(|tr| tr.set_blockquote(variant))
+        self.transact_after_commit_preedit_if_present(|tr| tr.set_blockquote(variant))
     }
 
     pub(crate) fn handle_toggle_callout(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_callout())
+        self.transact_after_commit_preedit_if_present(|tr| tr.toggle_callout())
     }
 
     pub(crate) fn handle_toggle_bullet_list(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_bullet_list())
+        self.transact_after_commit_preedit_if_present(|tr| tr.toggle_bullet_list())
     }
 
     pub(crate) fn handle_toggle_ordered_list(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.toggle_ordered_list())
+        self.transact_after_commit_preedit_if_present(|tr| tr.toggle_ordered_list())
     }
 
     pub(crate) fn handle_set_line_height(&mut self, height: u32) -> Vec<Effect> {
-        self.transact(|tr| tr.set_line_height(height))
+        self.transact_after_commit_preedit_if_present(|tr| tr.set_line_height(height))
     }
 
     pub(crate) fn handle_set_text_align(&mut self, align: TextAlign) -> Vec<Effect> {
-        self.transact(|tr| tr.set_text_align(align))
+        self.transact_after_commit_preedit_if_present(|tr| tr.set_text_align(align))
     }
 
     pub(crate) fn handle_set_block_gap(&mut self, gap: u32) -> Vec<Effect> {
@@ -59,18 +74,18 @@ impl Runtime {
         &mut self,
         variant: HorizontalRuleVariant,
     ) -> Vec<Effect> {
-        self.transact(|tr| tr.insert_horizontal_rule(variant))
+        self.transact_after_commit_preedit_if_present(|tr| tr.insert_horizontal_rule(variant))
     }
 
     pub(crate) fn handle_set_horizontal_rule(
         &mut self,
         variant: HorizontalRuleVariant,
     ) -> Vec<Effect> {
-        self.transact(|tr| tr.set_horizontal_rule(variant))
+        self.transact_after_commit_preedit_if_present(|tr| tr.set_horizontal_rule(variant))
     }
 
     pub(crate) fn handle_clear_formatting(&mut self) -> Vec<Effect> {
-        self.transact(|tr| {
+        self.transact_after_commit_preedit_if_present(|tr| {
             let selection = tr.selection().clone();
             if selection.is_collapsed() {
                 tr.reset_all_styles()
@@ -123,11 +138,11 @@ impl Runtime {
     }
 
     pub(crate) fn handle_indent(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.sink_list_item())
+        self.transact_after_commit_preedit_if_present(|tr| tr.sink_list_item())
     }
 
     pub(crate) fn handle_outdent(&mut self) -> Vec<Effect> {
-        self.transact(|tr| tr.lift_list_item())
+        self.transact_after_commit_preedit_if_present(|tr| tr.lift_list_item())
     }
 }
 
@@ -519,7 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn test_shortcut_during_composition_commits_preedit_and_applies_styles() {
+    fn test_toggle_bold_during_composition_commits_preedit_and_applies_styles() {
         let mut p = id!();
 
         let mut fonts = std::collections::HashMap::new();
@@ -543,7 +558,6 @@ mod tests {
         assert_eq!(runtime.state().preedit.as_ref().unwrap().text, "abc");
         assert!(runtime.state().doc.to_plain_text().ends_with("start "));
 
-        runtime.update(Message::CommitPreedit);
         runtime.update(Message::ToggleBold);
 
         assert!(runtime.state().doc.to_plain_text().ends_with("start abc"));
@@ -579,6 +593,79 @@ mod tests {
             }
         }
         assert!(found_bold_d);
+    }
+
+    #[test]
+    fn test_toggle_style_during_composition_commits_preedit_and_only_styles_subsequent_input() {
+        let mut p = id!();
+
+        let mut runtime = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph {
+                    text { "start " }
+                }
+            }
+            selection { (p, 6) }
+        };
+
+        runtime.update(Message::CompositionUpdate {
+            text: "abc".to_string(),
+            replace_length: None,
+        });
+
+        runtime.update(Message::ToggleStyle {
+            style: Style::Italic(ItalicStyle {}),
+        });
+
+        assert!(runtime.state().doc.to_plain_text().ends_with("start abc"));
+        assert!(runtime.state().preedit.is_none());
+        assert!(
+            runtime
+                .state()
+                .pending_styles
+                .iter()
+                .any(|s| matches!(s, Style::Italic(_)))
+        );
+
+        let doc = &runtime.state().doc;
+        let p_node = doc.node(p).unwrap();
+        let mut found_italic_preedit = false;
+        for child in p_node.children() {
+            if let Some(Node::Text(text_node)) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    if seg.text.contains("abc")
+                        && seg.styles.iter().any(|s| matches!(s, Style::Italic(_)))
+                    {
+                        found_italic_preedit = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            !found_italic_preedit,
+            "committed preedit text should keep the old pending styles"
+        );
+
+        runtime.update(Message::Input {
+            text: "d".to_string(),
+        });
+
+        let doc = &runtime.state().doc;
+        let p_node = doc.node(p).unwrap();
+        let mut found_italic_d = false;
+        for child in p_node.children() {
+            if let Some(Node::Text(text_node)) = child.node() {
+                for seg in text_node.text.get_segments() {
+                    if seg.text.contains('d')
+                        && seg.styles.iter().any(|s| matches!(s, Style::Italic(_)))
+                    {
+                        found_italic_d = true;
+                    }
+                }
+            }
+        }
+        assert!(found_italic_d);
     }
 
     #[test]
