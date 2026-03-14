@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_thumbhash/flutter_thumbhash.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/context/toast.dart';
 import 'package:typie/graphql/client.dart';
@@ -251,11 +249,7 @@ class ImageWidget extends HookWidget {
     InflightImage inflight,
   ) async {
     try {
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/upload_$uploadId.jpg');
-      await tempFile.writeAsBytes(inflight.bytes);
-
-      final path = await blob.upload(tempFile);
+      final path = await blob.uploadBytes(inflight.bytes, filename: inflight.name ?? 'upload_$uploadId.jpg');
       final result = await client.request(
         GNativeEditorScreen_PersistBlobAsImage_MutationReq((b) => b..vars.input.path = path),
       );
@@ -272,8 +266,6 @@ class ImageWidget extends HookWidget {
       uploadManager.completeImageUpload(uploadId: uploadId, nodeId: element.nodeId, asset: asset);
 
       scope.dispatch({'type': 'setImageId', 'nodeId': element.nodeId, 'imageId': image.id});
-
-      await tempFile.delete();
     } catch (err) {
       uploadManager.failImageUpload(uploadId: uploadId, nodeId: element.nodeId);
       if (context.mounted) {

@@ -156,8 +156,11 @@ class FileWidget extends HookWidget {
     InflightFile inflight,
   ) async {
     try {
-      final file = File(inflight.path);
-      final path = await blob.upload(file);
+      final path = switch ((inflight.path, inflight.bytes)) {
+        (final path?, _) => await blob.upload(File(path), filename: inflight.name),
+        (_, final bytes?) => await blob.uploadBytes(bytes, filename: inflight.name, mimeType: inflight.mimeType),
+        _ => throw StateError('Inflight file missing both path and bytes'),
+      };
       final result = await client.request(
         GNativeEditorScreen_PersistBlobAsFile_MutationReq((b) => b..vars.input.path = path),
       );

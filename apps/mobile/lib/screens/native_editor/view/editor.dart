@@ -295,12 +295,23 @@ class EditorView extends HookWidget {
 
       inputController
         ..onPasteHandler = () async {
-          final payload = await EditorClipboard().getPastePayload();
-          if (payload != null) {
-            controller
-              ..dispatch(payload)
-              ..scrollIntoView(mode: ScrollMode.typewriter);
-          }
+          await EditorClipboard().handlePaste(
+            uploadManager: uploadManager,
+            dispatch: controller.dispatch,
+            scrollIntoView: () => controller.scrollIntoView(mode: ScrollMode.typewriter),
+            restrictedBlob: controller.restrictedBlob,
+            onEditBlocked: controller.onEditBlocked,
+          );
+        }
+        ..onInsertContentHandler = (content) async {
+          await EditorClipboard().handleInsertedContent(
+            content: content,
+            uploadManager: uploadManager,
+            dispatch: controller.dispatch,
+            scrollIntoView: () => controller.scrollIntoView(mode: ScrollMode.typewriter),
+            restrictedBlob: controller.restrictedBlob,
+            onEditBlocked: controller.onEditBlocked,
+          );
         }
         ..floatingCursorBeginHandler = () {
           floatingCursorOrigin.value = controller.state.cursor;
@@ -363,6 +374,7 @@ class EditorView extends HookWidget {
       return () {
         inputController
           ..onPasteHandler = null
+          ..onInsertContentHandler = null
           ..floatingCursorBeginHandler = null
           ..floatingCursorUpdateHandler = null
           ..floatingCursorEndHandler = null;

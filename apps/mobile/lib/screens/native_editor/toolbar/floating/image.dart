@@ -86,7 +86,10 @@ class NativeEditorImageFloatingToolbar extends StatelessWidget {
       final width = frame.image.width;
       final height = frame.image.height;
 
-      uploadManager.addInflightImage(firstUploadId, InflightImage(bytes: bytes, width: width, height: height));
+      uploadManager.addInflightImage(
+        firstUploadId,
+        InflightImage(name: firstFile.name, bytes: bytes, width: width, height: height),
+      );
     } catch (err) {
       uploadManager.removeLocalImageUploadId(element.nodeId);
       if (context.mounted) {
@@ -106,7 +109,10 @@ class NativeEditorImageFloatingToolbar extends StatelessWidget {
         final width = frame.image.width;
         final height = frame.image.height;
 
-        uploadManager.addInflightImage(uploadId, InflightImage(bytes: bytes, width: width, height: height));
+        uploadManager.addInflightImage(
+          uploadId,
+          InflightImage(name: platformFile.name, bytes: bytes, width: width, height: height),
+        );
         scope.dispatch({'type': 'insertImage', 'uploadId': uploadId});
         scope.controller.scrollIntoView();
       } catch (err) {

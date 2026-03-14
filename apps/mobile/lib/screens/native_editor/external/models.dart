@@ -45,17 +45,21 @@ abstract class ExternalElement with _$ExternalElement {
 }
 
 class InflightImage {
-  const InflightImage({required this.bytes, required this.width, required this.height});
+  const InflightImage({required this.bytes, required this.width, required this.height, this.name});
 
   final Uint8List bytes;
   final int width;
   final int height;
+  final String? name;
 }
 
 class InflightFile {
-  const InflightFile({required this.path, required this.name, required this.size});
+  const InflightFile({this.path, this.bytes, this.mimeType, required this.name, required this.size})
+    : assert(path != null || bytes != null);
 
-  final String path;
+  final String? path;
+  final Uint8List? bytes;
+  final String? mimeType;
   final String name;
   final int size;
 }
