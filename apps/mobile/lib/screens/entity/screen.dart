@@ -37,6 +37,7 @@ import 'package:typie/screens/entity/__generated__/site_fragment.data.gql.dart';
 import 'package:typie/screens/entity/move_entity_modal.dart';
 import 'package:typie/screens/entity/multi_entities_menu.dart';
 import 'package:typie/screens/entity/selected_entities_bar.dart';
+import 'package:typie/screens/native_editor/auto_discard.dart';
 import 'package:typie/screens/shell/nav.dart';
 import 'package:typie/services/site.dart';
 import 'package:typie/widgets/haptic_reorderable.dart';
@@ -241,6 +242,7 @@ class _EntityTrailingActionScope extends HookWidget {
       unawaited(mixpanel.track('create_document', properties: {'via': 'entity_menu'}));
 
       if (context.mounted) {
+        markAutoDiscardCandidate(resp.createDocument.entity.slug);
         await context.router.push(NativeEditorRoute(slug: resp.createDocument.entity.slug));
       }
     }
@@ -587,6 +589,7 @@ class _EntityList extends HookWidget {
                   unawaited(mixpanel.track('create_document', properties: {'via': 'entity_folder_menu'}));
 
                   if (context.mounted) {
+                    markAutoDiscardCandidate(resp.createDocument.entity.slug);
                     await context.router.push(NativeEditorRoute(slug: resp.createDocument.entity.slug));
                   }
                 },
