@@ -7,6 +7,8 @@ class LabelToolbarButton extends StatelessWidget {
   const LabelToolbarButton({
     required this.onTap,
     required this.text,
+    this.onTapDown,
+    this.prepareMutationOnTapDown = false,
     this.isActive = false,
     this.color,
     this.suffix,
@@ -16,6 +18,8 @@ class LabelToolbarButton extends StatelessWidget {
   final String text;
   final Color? color;
   final bool isActive;
+  final void Function()? onTapDown;
+  final bool prepareMutationOnTapDown;
   final void Function() onTap;
   final Widget? suffix;
 
@@ -23,6 +27,8 @@ class LabelToolbarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToolbarButton(
       isActive: isActive,
+      onTapDown: onTapDown,
+      prepareMutationOnTapDown: prepareMutationOnTapDown,
       onTap: onTap,
       color: color ?? context.colors.textFaint,
       builder: (context, color, _) {

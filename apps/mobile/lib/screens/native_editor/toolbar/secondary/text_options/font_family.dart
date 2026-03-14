@@ -43,6 +43,7 @@ class NativeEditorFontFamilyTextOptionsToolbar extends HookWidget {
         return ToolbarButton(
           isActive: isActive,
           color: context.colors.textFaint,
+          prepareMutationOnTapDown: true,
           onTap: () {
             scope.dispatch({
               'type': 'toggleStyle',

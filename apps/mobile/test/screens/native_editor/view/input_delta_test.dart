@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:typie/native/editor_native.dart';
 import 'package:typie/screens/native_editor/controller/input.dart';
 import 'package:typie/screens/native_editor/state/scroll_mode.dart';
+import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/toolbar/scope.dart';
 import 'package:typie/screens/native_editor/view/input.dart';
 
@@ -178,4 +179,41 @@ void main() {
       }
     });
   }
+
+  testWidgets('input controller reconcile does not dispatch commitPreedit for ordinary selection sync', (tester) async {
+    EditorSelection? selection;
+    controller = InputController(
+      inputKey: inputKey,
+      dispatch: dispatched.add,
+      editor: NativeEditor.test(),
+      onFocusChanged: (_) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      getBottomToolbarMode: () => BottomToolbarMode.hidden,
+      getEditorSelection: () => selection,
+    );
+
+    await pumpAndActivate(tester);
+
+    selection = const EditorSelection(
+      range: {
+        'anchor': {'nodeId': 'node-1', 'offset': 3, 'affinity': 'upstream'},
+        'head': {'nodeId': 'node-1', 'offset': 3, 'affinity': 'upstream'},
+      },
+      precedingText: 'abc',
+      followingText: 'def',
+    );
+    controller.reconcile();
+    expect(dispatched, isEmpty);
+
+    selection = const EditorSelection(
+      range: {
+        'anchor': {'nodeId': 'node-1', 'offset': 4, 'affinity': 'upstream'},
+        'head': {'nodeId': 'node-1', 'offset': 4, 'affinity': 'upstream'},
+      },
+      precedingText: 'abcd',
+      followingText: 'ef',
+    );
+    controller.reconcile();
+    expect(dispatched, isEmpty);
+  });
 }

@@ -9,6 +9,8 @@ class BackgroundColorToolbarButton extends StatelessWidget {
     required this.onTap,
     required this.color,
     required this.value,
+    this.onTapDown,
+    this.prepareMutationOnTapDown = false,
     this.isActive = false,
     super.key,
   });
@@ -16,12 +18,16 @@ class BackgroundColorToolbarButton extends StatelessWidget {
   final Color? color;
   final String value;
   final bool isActive;
+  final void Function()? onTapDown;
+  final bool prepareMutationOnTapDown;
   final void Function() onTap;
 
   @override
   Widget build(BuildContext context) {
     return ToolbarButton(
       isActive: isActive,
+      onTapDown: onTapDown,
+      prepareMutationOnTapDown: prepareMutationOnTapDown,
       onTap: onTap,
       builder: (context, textColor, backgroundColor) {
         return Center(

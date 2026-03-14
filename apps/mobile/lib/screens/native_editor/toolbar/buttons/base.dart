@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
+import 'package:typie/screens/native_editor/toolbar/scope.dart';
 
 enum _ButtonState { idle, pressed, active }
 
@@ -10,6 +11,8 @@ class ToolbarButton extends HookWidget {
   const ToolbarButton({
     required this.onTap,
     required this.builder,
+    this.onTapDown,
+    this.prepareMutationOnTapDown = false,
     this.isActive = false,
     this.isDisabled = false,
     this.isRepeatable = false,
@@ -20,6 +23,8 @@ class ToolbarButton extends HookWidget {
   final Widget Function(BuildContext context, Color color, Color? backgroundColor) builder;
 
   final Color? color;
+  final void Function()? onTapDown;
+  final bool prepareMutationOnTapDown;
   final bool isActive;
   final bool isDisabled;
   final bool isRepeatable;
@@ -102,7 +107,13 @@ class ToolbarButton extends HookWidget {
         repeatTimer.value?.cancel();
         state.value = _ButtonState.idle;
       },
-      onTapDown: (_) => state.value = _ButtonState.pressed,
+      onTapDown: (_) {
+        state.value = _ButtonState.pressed;
+        if (prepareMutationOnTapDown) {
+          NativeEditorToolbarScope.maybeOf(context)?.prepareMutation();
+        }
+        onTapDown?.call();
+      },
       onTapUp: (_) => state.value = _ButtonState.idle,
       onTapCancel: () => state.value = _ButtonState.idle,
       child: AnimatedBuilder(
