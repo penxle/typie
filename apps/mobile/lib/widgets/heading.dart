@@ -341,7 +341,7 @@ class HeadingCapsuleLabel extends StatelessWidget {
         child: ClipRSuperellipse(
           borderRadius: squircleBorderRadius,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: Row(
               children: [
                 if (icon != null) ...[
