@@ -604,6 +604,11 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     _handleBackspace(logicalKeyLabel: LogicalKeyboardKey.backspace.keyLabel);
   }
 
+  bool _shouldHandleBackspaceLocally() {
+    final keyboard = HardwareKeyboard.instance;
+    return !keyboard.isMetaPressed && !keyboard.isControlPressed && !keyboard.isAltPressed;
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -621,6 +626,9 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     }
 
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (!_shouldHandleBackspaceLocally()) {
+        return KeyEventResult.ignored;
+      }
       _handleBackspace(logicalKeyLabel: event.logicalKey.keyLabel);
       return KeyEventResult.handled;
     }
