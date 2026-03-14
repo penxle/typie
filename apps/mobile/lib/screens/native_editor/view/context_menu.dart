@@ -4,14 +4,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
-import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/zoom.dart';
 
 class SelectionContextMenu extends StatelessWidget {
-  const SelectionContextMenu({required this.clipboard, required this.onDismiss, super.key});
-
-  final EditorClipboard clipboard;
+  const SelectionContextMenu({required this.onDismiss, super.key});
   final VoidCallback onDismiss;
 
   @override
@@ -43,7 +40,7 @@ class SelectionContextMenu extends StatelessWidget {
                   child: Transform.scale(scale: 0.8 + 0.2 * value, child: child),
                 );
               },
-              child: _MenuBubble(clipboard: clipboard, onDismiss: onDismiss),
+              child: _MenuBubble(onDismiss: onDismiss),
             ),
           ),
         );
@@ -153,9 +150,7 @@ class _MenuPositionDelegate extends SingleChildLayoutDelegate {
 }
 
 class _MenuBubble extends HookWidget {
-  const _MenuBubble({required this.clipboard, required this.onDismiss});
-
-  final EditorClipboard clipboard;
+  const _MenuBubble({required this.onDismiss});
   final VoidCallback onDismiss;
 
   @override
@@ -192,15 +187,15 @@ class _MenuBubble extends HookWidget {
         if (hasSelection) ...[
           _MenuButton(
             label: '복사',
-            onTap: () async {
-              await clipboard.copy(scope.editor);
+            onTap: () {
+              scope.inputController.onShortcut('copy');
               onDismiss();
             },
           ),
           _MenuButton(
             label: '잘라내기',
-            onTap: () async {
-              await clipboard.cut(scope.editor, scope.controller.dispatch);
+            onTap: () {
+              scope.inputController.onShortcut('cut');
               onDismiss();
             },
           ),
@@ -208,15 +203,8 @@ class _MenuBubble extends HookWidget {
         _MenuButton(
           label: '붙여넣기',
           onTap: () {
-            unawaited(
-              EditorClipboard().getPastePayload().then((payload) {
-                if (payload != null) {
-                  scope.controller.dispatch(payload);
-                  scope.controller.scrollIntoView();
-                }
-                onDismiss();
-              }),
-            );
+            scope.inputController.onShortcut('paste');
+            onDismiss();
           },
         ),
         if (selection?.canExpand ?? true) _MenuButton(label: '선택 확장', onTap: () => isExpanded.value = true),

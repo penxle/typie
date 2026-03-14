@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:super_drag_and_drop/super_drag_and_drop.dart';
 import 'package:typie/hooks/service.dart';
-import 'package:typie/screens/native_editor/controller/clipboard.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/context_menu.dart';
 import 'package:typie/screens/native_editor/view/editor_draggable.dart';
@@ -58,7 +57,6 @@ class PageList extends HookWidget {
 
     final showContextMenu = useState(false);
     final wasContextMenuOpen = useRef(false);
-    final clipboard = useMemoized(EditorClipboard.new);
     final viewportWidth = useValueNotifier<double>(0);
     final viewportSize = useValueNotifier(Size.zero);
 
@@ -426,7 +424,7 @@ class PageList extends HookWidget {
                       longPressPosition.value == null &&
                       !interactionController.hasSelectionHandleDrag &&
                       !interactionController.isDoubleTapDragActive)
-                    SelectionContextMenu(clipboard: clipboard, onDismiss: () => showContextMenu.value = false),
+                    SelectionContextMenu(onDismiss: () => showContextMenu.value = false),
                 ],
               ),
             ),

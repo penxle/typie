@@ -227,6 +227,14 @@ class InputController {
   }
 
   Future<void> Function()? onPasteHandler;
+  Future<void> Function(KeyboardInsertedContent content)? onInsertContentHandler;
+
+  void onInsertContent(KeyboardInsertedContent content) {
+    onInputAttempt?.call();
+    if (onInsertContentHandler != null) {
+      unawaited(onInsertContentHandler!(content));
+    }
+  }
 
   VoidCallback? floatingCursorBeginHandler;
   void Function(double dx, double dy)? floatingCursorUpdateHandler;

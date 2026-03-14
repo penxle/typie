@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
@@ -19,22 +20,43 @@ class Blob {
     return lookupMimeType(file.path, headerBytes: headerBytes) ?? 'application/octet-stream';
   }
 
-  Future<String> upload(File file) async {
+  Future<String> upload(File file, {String? filename}) async {
+    final uploadName = filename ?? file.uri.pathSegments.last;
+    final mimeType = await mime(file);
+    final stream = file.openRead();
+    final length = await file.length();
+    return _uploadMultipart(
+      filename: uploadName,
+      mimeType: mimeType,
+      multipartFile: MultipartFile.fromStream(() => stream, length),
+    );
+  }
+
+  Future<String> uploadBytes(Uint8List bytes, {required String filename, String? mimeType}) {
+    final resolvedMimeType = mimeType ?? lookupMimeType(filename, headerBytes: bytes) ?? 'application/octet-stream';
+    return _uploadMultipart(
+      filename: filename,
+      mimeType: resolvedMimeType,
+      multipartFile: MultipartFile.fromBytes(bytes, filename: filename),
+    );
+  }
+
+  Future<String> _uploadMultipart({
+    required String filename,
+    required String mimeType,
+    required MultipartFile multipartFile,
+  }) async {
     final result = await _client.request(
-      GBlob_IssueBlobUploadUrl_MutationReq((b) => b..vars.input.filename = file.uri.pathSegments.last),
+      GBlob_IssueBlobUploadUrl_MutationReq((b) => b..vars.input.filename = filename),
     );
 
     final url = result.issueBlobUploadUrl.url;
     final fields = result.issueBlobUploadUrl.fields;
 
-    final mimeType = await mime(file);
-    final stream = file.openRead();
-    final length = await file.length();
-
     final formData = FormData()
       ..fields.addAll(fields.asMap.entries.map((e) => MapEntry(e.key as String, e.value as String)))
       ..fields.add(MapEntry('Content-Type', mimeType))
-      ..files.add(MapEntry('file', MultipartFile.fromStream(() => stream, length)));
+      ..files.add(MapEntry('file', multipartFile));
 
     await _dio.post<void>(url, data: formData);
 

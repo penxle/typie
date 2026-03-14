@@ -214,6 +214,7 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     inputType: TextInputType.multiline,
     inputAction: TextInputAction.newline,
     enableDeltaModel: true,
+    allowedMimeTypes: kDefaultContentInsertionMimeTypes,
     smartDashesType: SmartDashesType.disabled,
     smartQuotesType: SmartQuotesType.disabled,
     keyboardAppearance: widget.brightness,
@@ -568,7 +569,21 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
   void performAction(TextInputAction action) {}
 
   @override
-  void performSelector(String selectorName) {}
+  void performSelector(String selectorName) {
+    final action = switch (selectorName) {
+      'copy:' => 'copy',
+      'cut:' => 'cut',
+      'paste:' => 'paste',
+      'selectAll:' => 'selectAll',
+      'undo:' => 'undo',
+      'redo:' => 'redo',
+      _ => null,
+    };
+
+    if (action != null) {
+      _controller.onShortcut(action);
+    }
+  }
 
   @override
   void connectionClosed() {
@@ -589,7 +604,9 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
   void didChangeInputControl(TextInputControl? oldControl, TextInputControl? newControl) {}
 
   @override
-  void insertContent(KeyboardInsertedContent content) {}
+  void insertContent(KeyboardInsertedContent content) {
+    _controller.onInsertContent(content);
+  }
 
   @override
   void performPrivateCommand(String action, Map<String, dynamic> data) {}

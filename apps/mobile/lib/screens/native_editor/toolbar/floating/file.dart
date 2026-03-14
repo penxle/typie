@@ -88,7 +88,7 @@ class NativeEditorFileFloatingToolbar extends StatelessWidget {
 
     uploadManager.addInflightFile(
       firstUploadId,
-      InflightFile(path: firstFile.path!, name: firstFile.name, size: firstFile.size),
+      InflightFile(path: firstFile.path, name: firstFile.name, size: firstFile.size),
     );
 
     final restFiles = platformFiles.sublist(1);
@@ -96,7 +96,7 @@ class NativeEditorFileFloatingToolbar extends StatelessWidget {
       final uploadId = uuid.v4();
       uploadManager.addInflightFile(
         uploadId,
-        InflightFile(path: platformFile.path!, name: platformFile.name, size: platformFile.size),
+        InflightFile(path: platformFile.path, name: platformFile.name, size: platformFile.size),
       );
       scope.dispatch({'type': 'insertFile', 'uploadId': uploadId});
       scope.controller.scrollIntoView();
