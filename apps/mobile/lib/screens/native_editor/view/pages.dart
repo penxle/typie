@@ -33,6 +33,7 @@ class PageList extends HookWidget {
     final pages = state.state.pages;
     final cursor = state.state.cursor;
     final presentedViewport = useValueListenable(scope.presentedViewport);
+    final visualSyncPageIdx = useValueListenable(scope.visualSyncPageIdx);
     final renderedCursor = presentedViewport.cursor;
     final isFocused = state.state.isFocused;
     final selection = state.state.selection;
@@ -311,7 +312,7 @@ class PageList extends HookWidget {
                                             pageIndex: i,
                                             pageTop: geo.titleAreaHeight + offsets[i],
                                             pageBottom: geo.titleAreaHeight + offsets[i] + geo.pageHeightAt(i),
-                                            activeCursorPageIdx: renderedCursor?.pageIdx,
+                                            activeCursorPageIdx: visualSyncPageIdx ?? renderedCursor?.pageIdx,
                                           ),
                                         ],
                                       ],

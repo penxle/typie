@@ -1,3 +1,7 @@
+// Uses legacy synthetic key-data helpers because WidgetTester does not expose an
+// equivalent path for the IME-remapped physical-key fallback coverage below.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -72,7 +76,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: (_) {},
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: shortcuts.add,
     );
 
@@ -87,7 +91,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: (_) {},
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: shortcuts.add,
     );
 
@@ -102,7 +106,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: dispatches.add,
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: (_) {},
     );
 
@@ -119,7 +123,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: dispatches.add,
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: (_) {},
     );
 
@@ -136,7 +140,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: (_) {},
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: shortcuts.add,
     );
 
@@ -151,7 +155,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: (_) {},
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: shortcuts.add,
     );
 
@@ -166,7 +170,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: (_) {},
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: shortcuts.add,
     );
 
@@ -195,7 +199,7 @@ void main() {
     final handler = KeyboardHandler(
       dispatch: (_) {},
       reconcileInput: () {},
-      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {},
       onShortcut: shortcuts.add,
     );
 
@@ -209,5 +213,23 @@ void main() {
     );
 
     expect(shortcuts, isEmpty);
+  });
+
+  testWidgets('navigation waits for cursor update before consuming scroll intent', (tester) async {
+    final scrollCalls = <({ScrollMode mode, bool waitForCursorUpdate})>[];
+    final handler = KeyboardHandler(
+      dispatch: (_) {},
+      reconcileInput: () {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto, bool waitForCursorUpdate = false}) {
+        scrollCalls.add((mode: mode, waitForCursorUpdate: waitForCursorUpdate));
+      },
+      onShortcut: (_) {},
+    );
+
+    await _pumpHarness(tester, handler);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+
+    expect(scrollCalls, [(mode: ScrollMode.typewriter, waitForCursorUpdate: true)]);
   });
 }

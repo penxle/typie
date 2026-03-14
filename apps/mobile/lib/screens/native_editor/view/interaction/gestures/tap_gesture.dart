@@ -113,7 +113,6 @@ extension TapGestureMethods on EditorInteractionController {
     );
 
     if (clickCount != 1) {
-      scope.controller.scrollIntoView();
       return;
     }
 
