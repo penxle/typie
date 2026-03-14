@@ -146,6 +146,21 @@ void main() {
     expect(shortcuts, ['deleteWordBackward']);
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
+  testWidgets('meta backspace deletes to the start of the line', (tester) async {
+    final shortcuts = <String>[];
+    final handler = KeyboardHandler(
+      dispatch: (_) {},
+      reconcileInput: () {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      onShortcut: shortcuts.add,
+    );
+
+    await _pumpHarness(tester, handler);
+    await _sendChord(tester, [LogicalKeyboardKey.metaLeft], LogicalKeyboardKey.backspace);
+
+    expect(shortcuts, ['deleteToLineStart']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
   testWidgets('shortcut letters still work when IME reports a non latin logical key', (tester) async {
     final shortcuts = <String>[];
     final handler = KeyboardHandler(

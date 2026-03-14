@@ -153,6 +153,17 @@ void main() {
     return inputKey.currentState!;
   }
 
+  Future<void> sendChord(WidgetTester tester, List<LogicalKeyboardKey> modifiers, LogicalKeyboardKey key) async {
+    for (final modifier in modifiers) {
+      await tester.sendKeyDownEvent(modifier);
+    }
+    await tester.sendKeyDownEvent(key);
+    await tester.sendKeyUpEvent(key);
+    for (final modifier in modifiers.reversed) {
+      await tester.sendKeyUpEvent(modifier);
+    }
+  }
+
   final fixtures = _discoverFixtures();
   for (final (name, file) in fixtures) {
     testWidgets('fixture: $name', (tester) async {
@@ -214,6 +225,22 @@ void main() {
       followingText: 'ef',
     );
     controller.reconcile();
+    expect(dispatched, isEmpty);
+  });
+
+  testWidgets('local input ignores modified backspace shortcuts', (tester) async {
+    final state = await pumpAndActivate(tester);
+
+    state.reconcile('node-1', 3, 'abc', 'def');
+    dispatched.clear();
+
+    await sendChord(tester, [LogicalKeyboardKey.metaLeft], LogicalKeyboardKey.backspace);
+    expect(dispatched, isEmpty);
+
+    await sendChord(tester, [LogicalKeyboardKey.controlLeft], LogicalKeyboardKey.backspace);
+    expect(dispatched, isEmpty);
+
+    await sendChord(tester, [LogicalKeyboardKey.altLeft], LogicalKeyboardKey.backspace);
     expect(dispatched, isEmpty);
   });
 }
