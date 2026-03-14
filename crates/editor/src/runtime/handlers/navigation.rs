@@ -94,41 +94,49 @@ impl Runtime {
     }
 
     pub(crate) fn handle_select_all(&mut self) -> Vec<Effect> {
+        let mut effects = if self.state.preedit.is_some() {
+            self.handle_commit_preedit()
+        } else {
+            vec![]
+        };
+
+        let current = self.state.selection.as_sorted(&self.state.doc).ok();
+
         if let Some(isolating_id) = self.common_isolating_ancestor_id(&self.state.selection) {
             if let Some(isolating) = self.state.doc.node(isolating_id) {
                 if let (Some(start), Some(end)) =
                     (leaf_block_start(&isolating), leaf_block_end(&isolating))
                 {
-                    if let Ok((from, to)) = self.state.selection.as_sorted(&self.state.doc) {
-                        if start != from || end != to {
-                            return self.transact(move |tr| {
-                                tr.set_selection(Selection::new(start, end));
-                                Ok(true)
-                            });
-                        }
+                    if current != Some((start, end)) {
+                        effects.extend(self.transact(move |tr| {
+                            tr.set_selection(Selection::new(start, end));
+                            Ok(true)
+                        }));
+                        return effects;
                     }
                 }
             }
         }
 
-        let ctx = NavigationContext::new(&self.state.doc);
-        let doc_start = Cursor::move_to_document_start(&ctx, self.pages());
-        let doc_end = Cursor::move_to_document_end(&ctx, self.pages());
+        let Some(root) = self.state.doc.node(NodeId::ROOT) else {
+            return effects;
+        };
+        let Some(start) = leaf_block_start(&root) else {
+            return effects;
+        };
+        let Some(end) = leaf_block_end(&root) else {
+            return effects;
+        };
 
-        if let (Some(start_sel), Some(end_sel)) = (doc_start, doc_end) {
-            let Ok((start, _)) = start_sel.as_sorted(&self.state.doc) else {
-                return vec![];
-            };
-            let Ok((_, end)) = end_sel.as_sorted(&self.state.doc) else {
-                return vec![];
-            };
-            self.transact(move |tr| {
-                tr.set_selection(Selection::new(start, end));
-                Ok(true)
-            })
-        } else {
-            vec![]
+        if current == Some((start, end)) {
+            return effects;
         }
+
+        effects.extend(self.transact(move |tr| {
+            tr.set_selection(Selection::new(start, end));
+            Ok(true)
+        }));
+        effects
     }
 
     pub(crate) fn handle_select_word(&mut self) -> Vec<Effect> {
@@ -678,6 +686,47 @@ mod tests {
     }
 
     #[test]
+    fn select_all_in_isolating_node_second_press_selects_whole_document() {
+        let mut before = id!();
+        let mut inside = id!();
+        let mut after = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @before paragraph {
+                    text { "before" }
+                }
+                fold {
+                    fold_title {
+                        text { "title" }
+                    }
+                    fold_content {
+                        @inside paragraph {
+                            text { "inside fold" }
+                        }
+                    }
+                }
+                @after paragraph {
+                    text { "after" }
+                }
+            }
+            selection { (inside, 3) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+        rt.update(Message::SelectAll);
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, before);
+        assert_eq!(selection.anchor.offset, 0);
+        assert_eq!(selection.head.node_id, after);
+        assert_eq!(selection.head.offset, 5);
+        assert_eq!(selection.head.affinity, Affinity::Upstream);
+    }
+
+    #[test]
     fn select_all_in_fold_with_multiple_paragraphs() {
         let mut p1 = id!();
         let mut p2 = id!();
@@ -933,6 +982,37 @@ mod tests {
         assert_eq!(selection.anchor.offset, 0);
         assert_eq!(selection.head.node_id, p2);
         assert_eq!(selection.head.offset, 6);
+    }
+
+    #[test]
+    fn select_all_during_preedit_commits_text_before_expanding_selection() {
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p paragraph { text { "start " } }
+            }
+            selection { (p, 6) }
+        };
+
+        rt.layout();
+        rt.update(Message::CompositionUpdate {
+            text: "한".to_string(),
+            replace_length: None,
+        });
+
+        rt.update(Message::SelectAll);
+        rt.update(Message::CommitPreedit);
+
+        assert_eq!(rt.state().doc.to_plain_text(), "start 한");
+        assert!(rt.state().preedit.is_none());
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, p);
+        assert_eq!(selection.anchor.offset, 0);
+        assert_eq!(selection.head.node_id, p);
+        assert_eq!(selection.head.offset, 7);
     }
 
     #[test]

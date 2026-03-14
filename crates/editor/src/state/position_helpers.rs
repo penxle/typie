@@ -218,15 +218,14 @@ pub fn leaf_block_end(node: &NodeRef<'_>) -> Option<Position> {
         return Some(Position::new(
             node.node_id(),
             block_content_len(node),
-            Affinity::Downstream,
+            Affinity::Upstream,
         ));
     }
 
     if node.spec().map_or(false, |s| s.content.is_leaf()) || node.last_child().is_none() {
         let parent_id = node.parent_id()?;
         let idx = node.index()?;
-        // TODO: Upstream으로 바꿔야 함
-        return Some(Position::new(parent_id, idx + 1, Affinity::Downstream));
+        return Some(Position::new(parent_id, idx + 1, Affinity::Upstream));
     }
 
     let child = node.last_child()?;
@@ -467,7 +466,7 @@ mod tests {
         assert_eq!(start_pos, Position::new(root_id, 0, Affinity::Downstream));
 
         let end_pos = leaf_block_end(&image).unwrap();
-        assert_eq!(end_pos, Position::new(root_id, 1, Affinity::Downstream));
+        assert_eq!(end_pos, Position::new(root_id, 1, Affinity::Upstream));
     }
 
     #[test]
@@ -484,7 +483,7 @@ mod tests {
         assert_eq!(start_pos, Position::new(root_id, 0, Affinity::Downstream));
 
         let end_pos = leaf_block_end(&blockquote).unwrap();
-        assert_eq!(end_pos, Position::new(root_id, 1, Affinity::Downstream));
+        assert_eq!(end_pos, Position::new(root_id, 1, Affinity::Upstream));
     }
 
     #[test]
@@ -503,7 +502,7 @@ mod tests {
         assert_eq!(start_pos, Position::new(p, 0, Affinity::Downstream));
 
         let end_pos = leaf_block_end(&blockquote).unwrap();
-        assert_eq!(end_pos, Position::new(p, 1, Affinity::Downstream));
+        assert_eq!(end_pos, Position::new(p, 1, Affinity::Upstream));
     }
 
     #[test]
@@ -519,7 +518,7 @@ mod tests {
         assert_eq!(start_pos, Position::new(p, 0, Affinity::Downstream));
 
         let end_pos = leaf_block_end(&paragraph).unwrap();
-        assert_eq!(end_pos, Position::new(p, 5, Affinity::Downstream));
+        assert_eq!(end_pos, Position::new(p, 5, Affinity::Upstream));
     }
 
     #[test]
@@ -545,7 +544,7 @@ mod tests {
         assert_eq!(start_pos, Position::new(p, 0, Affinity::Downstream));
 
         let end_pos = leaf_block_end(&blockquote).unwrap();
-        assert_eq!(end_pos, Position::new(p, 6, Affinity::Downstream));
+        assert_eq!(end_pos, Position::new(p, 6, Affinity::Upstream));
     }
 
     #[test]
@@ -565,7 +564,7 @@ mod tests {
         assert_eq!(start_pos, Position::new(bq, 0, Affinity::Downstream));
 
         let end_pos = leaf_block_end(&blockquote).unwrap();
-        assert_eq!(end_pos, Position::new(bq, 1, Affinity::Downstream));
+        assert_eq!(end_pos, Position::new(bq, 1, Affinity::Upstream));
     }
 
     #[test]
