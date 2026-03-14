@@ -50,6 +50,11 @@ subscription HomeScreen_SiteUpdateStream_Subscription($siteId: ID!) {
     ... on Entity {
       id
       ...EntityScreen_Entity_entity
+
+      children {
+        id
+        ...EntityScreen_Entity_entity
+      }
     }
   }
 }
