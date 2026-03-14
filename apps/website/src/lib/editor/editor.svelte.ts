@@ -120,6 +120,15 @@ const INSERTION_MESSAGE_TYPES = new Set<Message['type']>([
   'drop',
 ]);
 
+const SCROLL_INTENT_PRESERVING_MESSAGE_TYPES = new Set<Message['type']>([
+  'initialize',
+  'resize',
+  'setTheme',
+  'fontsLoaded',
+  'setExternalElementHeight',
+  'setFocused',
+]);
+
 const CLICK_INTERVAL = 500;
 const CLICK_DISTANCE = 5;
 
@@ -233,8 +242,7 @@ export class Editor {
 
   pendingScrollConsumer = $state<'cursor' | 'typewriter' | null>(null);
   #pendingDocChanged = false;
-  #pendingTypewriterRequest = false;
-  #pendingCursorRequest = false;
+  #pendingScrollRequest: { mode: 'cursor' | 'typewriter' } | null = null;
   #typewriterAvailable = false;
   #cursorFollowScrollActive = false;
   #cursorFollowScrollMode: 'cursor' | 'typewriter' = 'cursor';
@@ -440,8 +448,6 @@ export class Editor {
         this.#pendingDocChanged = false;
         this.#onDocChanged?.();
       }
-      this.#pendingTypewriterRequest = false;
-      this.#pendingCursorRequest = false;
 
       if (!this.#flushPending) {
         this.#flushPending = true;
@@ -550,10 +556,6 @@ export class Editor {
         this.cursor.visible = false;
       }
 
-      if (this.#pendingTypewriterRequest) {
-        this.#armPendingScrollConsumer();
-      }
-
       const scrollTarget = this.#snapshotScrollTarget();
       if (!scrollTarget) {
         this.#applyPresentedCursor(null);
@@ -591,9 +593,6 @@ export class Editor {
       this.externalElements = slate.readExternalElements();
       if (this.#cursorFollowScrollActive) {
         this.#armScrollConsumerForMode(this.#cursorFollowScrollMode);
-      }
-      if (this.#pendingTypewriterRequest) {
-        this.#armPendingScrollConsumer();
       }
     }
 
@@ -659,7 +658,7 @@ export class Editor {
       this.remarkOverlays = slate.readRemarks();
     }
 
-    this.#armPendingCursorConsumer();
+    this.#armPendingScrollRequest();
   }
 
   #handleFontRequired(family: string, weight: number, codepoints: number[]): void {
@@ -789,6 +788,10 @@ export class Editor {
     if (this.restrictedText && INSERTION_MESSAGE_TYPES.has(message.type)) {
       this.#onEditBlocked?.('restrictedText');
       return this;
+    }
+
+    if (!SCROLL_INTENT_PRESERVING_MESSAGE_TYPES.has(message.type)) {
+      this.#invalidatePendingScrollIntent();
     }
 
     this.#wasmEditor?.enqueueMessage(message);
@@ -1898,21 +1901,14 @@ export class Editor {
     this.#wakeUp();
   }
 
-  #armPendingScrollConsumer(): void {
-    if (!this.#pendingTypewriterRequest) {
+  #armPendingScrollRequest(): void {
+    const pending = this.#pendingScrollRequest;
+    if (!pending) {
       return;
     }
 
-    this.#armScrollConsumerForCurrentCursor();
-  }
-
-  #armPendingCursorConsumer(): void {
-    if (!this.#pendingCursorRequest) {
-      return;
-    }
-
-    this.#pendingCursorRequest = false;
-    this.#armScrollConsumerForMode('cursor');
+    this.#pendingScrollRequest = null;
+    this.#armScrollConsumerForMode(pending.mode);
   }
 
   #snapshotCurrentCursor(): { pageIdx: number; bounds: Rect | null; visible: boolean } {
@@ -1984,6 +1980,13 @@ export class Editor {
     this.#pendingScrollAfterRender = null;
   }
 
+  #invalidatePendingScrollIntent(): void {
+    this.#pendingScrollRequest = null;
+    this.pendingScrollConsumer = null;
+    this.#cursorFollowScrollActive = false;
+    this.#clearPendingScrollAfterRender();
+  }
+
   #isPageRenderableSoon(pageIdx: number): boolean {
     const pageEl = this.pageContainerEls[pageIdx];
     const viewport = this.scrollViewport;
@@ -2032,10 +2035,6 @@ export class Editor {
     this.pendingScrollConsumer = resolvedMode;
   }
 
-  #armScrollConsumerForCurrentCursor(): void {
-    this.#armScrollConsumerForMode('typewriter');
-  }
-
   registerCursorAutoScroll(mode: 'cursor' | 'typewriter'): void {
     this.#cursorFollowScrollActive = true;
     this.#cursorFollowScrollMode = mode;
@@ -2054,15 +2053,9 @@ export class Editor {
   }
 
   scrollIntoView({ mode = 'auto' }: { mode?: 'auto' | 'typewriter' } = {}): Editor {
-    if (mode === 'typewriter') {
-      this.#pendingTypewriterRequest = true;
-      this.#pendingCursorRequest = false;
-    } else {
-      this.#pendingCursorRequest = true;
-      this.pendingScrollConsumer = null;
-      this.#clearPendingScrollAfterRender();
-      this.#pendingTypewriterRequest = false;
-    }
+    this.#pendingScrollRequest = { mode: mode === 'typewriter' ? 'typewriter' : 'cursor' };
+    this.pendingScrollConsumer = null;
+    this.#clearPendingScrollAfterRender();
     return this;
   }
 
