@@ -107,11 +107,9 @@ class EditorView extends HookWidget {
     final interactionState = useMemoized(EditorInteractionState.new);
     final pendingScroll = useValueNotifier<VoidCallback?>(null);
     final pendingScrollPageIdx = useValueNotifier<int?>(null);
+    final visualSyncPageIdx = useValueNotifier<int?>(null);
     final presentedViewport = useValueNotifier<PresentedViewport>(
-      PresentedViewport.base(
-        cursor: controller.state.cursor,
-        renderVersion: controller.state.cursor == null ? null : controller.state.renderVersion,
-      ),
+      PresentedViewport.base(cursor: controller.state.cursor, renderVersion: controller.state.renderVersion),
     );
     final zoomViewportWidth = useValueNotifier<double>(0);
     final displayZoom = useValueNotifier<double>(1);
@@ -462,6 +460,10 @@ class EditorView extends HookWidget {
       );
     }
 
+    void clearCursorFollowScroll() => cursorFollowScrollActive.value = false;
+
+    void clearTypewriterRecovery() => typewriterRecoveryPending.value = false;
+
     void registerCursorAutoScroll({required bool typewriter}) {
       cursorFollowScrollActive.value = true;
       cursorFollowScrollMode.value = typewriter ? ScrollMode.typewriter : ScrollMode.auto;
@@ -521,7 +523,7 @@ class EditorView extends HookWidget {
     }
 
     PresentedViewport buildPresentedViewportSnapshot({required CursorInfo? cursor, required bool projectTypewriter}) {
-      final renderVersion = cursor == null ? null : controller.state.renderVersion;
+      final renderVersion = controller.state.renderVersion;
       if (!projectTypewriter || cursor == null) {
         return PresentedViewport.base(cursor: cursor, renderVersion: renderVersion);
       }
@@ -576,12 +578,18 @@ class EditorView extends HookWidget {
       required CursorInfo nextCursor,
       required bool typewriter,
       required int? targetPageIdx,
+      int? visualTargetPageIdx,
+      bool scroll = true,
     }) {
       pendingScrollPageIdx.value = targetPageIdx;
+      visualSyncPageIdx.value = visualTargetPageIdx;
       pendingScroll.value = () {
         pendingScrollPageIdx.value = null;
+        visualSyncPageIdx.value = null;
         setRenderedCursorSnapshot(nextCursor, projectTypewriter: typewriter);
-        runCursorScroll(nextCursor, typewriter: typewriter);
+        if (scroll) {
+          runCursorScroll(nextCursor, typewriter: typewriter);
+        }
         syncInputCursorPosition(nextCursor);
       };
     }
@@ -605,12 +613,34 @@ class EditorView extends HookWidget {
       if (canApplyCursorScrollNow()) {
         pendingScroll.value = null;
         pendingScrollPageIdx.value = null;
+        visualSyncPageIdx.value = null;
         setRenderedCursorSnapshot(nextCursor, projectTypewriter: typewriter);
         runCursorScroll(nextCursor, typewriter: typewriter);
         syncInputCursorPosition(nextCursor);
       } else {
         queueRenderSynchronizedCursorUpdate(nextCursor: nextCursor, typewriter: typewriter, targetPageIdx: null);
       }
+    }
+
+    void applyCursorVisualOnly(CursorInfo nextCursor, {bool synchronizeWithRender = true}) {
+      final shouldSynchronizeWithRender =
+          synchronizeWithRender && !identical(presentedViewport.value.renderVersion, controller.state.renderVersion);
+      if (shouldSynchronizeWithRender) {
+        queueRenderSynchronizedCursorUpdate(
+          nextCursor: nextCursor,
+          typewriter: false,
+          targetPageIdx: nextCursor.pageIdx,
+          visualTargetPageIdx: nextCursor.pageIdx,
+          scroll: false,
+        );
+        return;
+      }
+
+      pendingScroll.value = null;
+      pendingScrollPageIdx.value = null;
+      visualSyncPageIdx.value = null;
+      setRenderedCursorSnapshot(nextCursor);
+      syncInputCursorPosition(nextCursor);
     }
 
     bool shouldUseTypewriterScrollForInteraction(InteractionSnapshot interaction, {ScrollMode? requestedMode}) {
@@ -869,13 +899,14 @@ class EditorView extends HookWidget {
           previousExternalElements.value = nextExternalElements;
 
           if (nextCursor == null && nextScrollTargetCursor == null) {
-            typewriterRecoveryPending.value = false;
-            cursorFollowScrollActive.value = false;
+            clearTypewriterRecovery();
+            clearCursorFollowScroll();
             if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
               controller.clearPendingScroll();
             }
             pendingScroll.value = null;
             pendingScrollPageIdx.value = null;
+            visualSyncPageIdx.value = null;
             setRenderedCursorSnapshot(null);
             return;
           }
@@ -885,16 +916,17 @@ class EditorView extends HookWidget {
           final blockedByInteraction = interaction.isLongPressing || interaction.isDndActive || !focused;
           if (blockedByInteraction || nextLayout == null || nextScrollTargetCursor == null) {
             if (blockedByInteraction) {
-              typewriterRecoveryPending.value = false;
+              clearTypewriterRecovery();
             }
             if (!focused || nextScrollTargetCursor == null) {
-              cursorFollowScrollActive.value = false;
+              clearCursorFollowScroll();
             }
             if (pendingMode != null && !controller.pendingScrollWaitForCursorUpdate) {
               controller.clearPendingScroll();
             }
             pendingScroll.value = null;
             pendingScrollPageIdx.value = null;
+            visualSyncPageIdx.value = null;
             setRenderedCursorSnapshot(nextCursor);
             return;
           }
@@ -912,29 +944,36 @@ class EditorView extends HookWidget {
             return;
           }
 
+          if (nextSelection?.collapsed == false) {
+            clearTypewriterRecovery();
+            clearCursorFollowScroll();
+            final visualCursor = nextCursor ?? nextScrollTargetCursor;
+            applyCursorVisualOnly(visualCursor);
+            return;
+          }
+
           if (externalElementsChanged) {
             if (cursorFollowScrollActive.value) {
               final followTypewriter = shouldUseTypewriterScrollForInteraction(
                 interaction,
                 requestedMode: cursorFollowScrollMode.value,
               );
-              typewriterRecoveryPending.value = false;
+              clearTypewriterRecovery();
               applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: followTypewriter);
               return;
             }
 
             if (typewriterRecoveryPending.value &&
                 shouldUseTypewriterScrollForInteraction(interaction, requestedMode: ScrollMode.typewriter)) {
-              typewriterRecoveryPending.value = false;
+              clearTypewriterRecovery();
               applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: true);
               return;
             }
 
-            typewriterRecoveryPending.value = false;
+            clearTypewriterRecovery();
             setRenderedCursorSnapshot(nextCursor);
             return;
           }
-
           applyCursorScrollAndVisual(nextScrollTargetCursor, typewriter: false);
         }
 
@@ -1157,6 +1196,7 @@ class EditorView extends HookWidget {
         subtitleFocusNode: subtitleFocusNode,
         pendingScroll: pendingScroll,
         pendingScrollPageIdx: pendingScrollPageIdx,
+        visualSyncPageIdx: visualSyncPageIdx,
         presentedViewport: presentedViewport,
         displayZoom: displayZoom,
         renderZoom: renderZoom,
@@ -1197,8 +1237,8 @@ class EditorView extends HookWidget {
                         NotificationListener<UserScrollNotification>(
                           onNotification: (notification) {
                             if (notification.direction != ScrollDirection.idle) {
-                              cursorFollowScrollActive.value = false;
-                              typewriterRecoveryPending.value = false;
+                              clearCursorFollowScroll();
+                              clearTypewriterRecovery();
                             }
                             return false;
                           },

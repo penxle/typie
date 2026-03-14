@@ -85,6 +85,7 @@ class _PageListHarnessDeps {
     required this.subtitle,
     required this.pendingScroll,
     required this.pendingScrollPageIdx,
+    required this.visualSyncPageIdx,
     required this.presentedViewport,
     required this.displayZoom,
     required this.renderZoom,
@@ -164,6 +165,7 @@ class _PageListHarnessDeps {
       subtitle: ValueNotifier<String>(''),
       pendingScroll: ValueNotifier<VoidCallback?>(null),
       pendingScrollPageIdx: ValueNotifier<int?>(null),
+      visualSyncPageIdx: ValueNotifier<int?>(null),
       presentedViewport: ValueNotifier(const PresentedViewport.base(cursor: null, renderVersion: null)),
       displayZoom: displayZoom,
       renderZoom: renderZoom,
@@ -198,6 +200,7 @@ class _PageListHarnessDeps {
   final ValueNotifier<String> subtitle;
   final ValueNotifier<VoidCallback?> pendingScroll;
   final ValueNotifier<int?> pendingScrollPageIdx;
+  final ValueNotifier<int?> visualSyncPageIdx;
   final ValueNotifier<PresentedViewport> presentedViewport;
   final ValueNotifier<double> displayZoom;
   final ValueNotifier<double> renderZoom;
@@ -239,6 +242,7 @@ class _PageListHarnessDeps {
         subtitleFocusNode: subtitleFocusNode,
         pendingScroll: pendingScroll,
         pendingScrollPageIdx: pendingScrollPageIdx,
+        visualSyncPageIdx: visualSyncPageIdx,
         presentedViewport: presentedViewport,
         dndController: dndController,
         interactionState: interactionState,
@@ -299,6 +303,7 @@ class _PageListHarnessDeps {
     subtitle.dispose();
     pendingScroll.dispose();
     pendingScrollPageIdx.dispose();
+    visualSyncPageIdx.dispose();
     presentedViewport.dispose();
     displayZoom.dispose();
     renderZoom.dispose();
@@ -710,6 +715,38 @@ void main() {
       expect(click1, 0);
     });
 
+    testWidgets('double-tap on existing selection does not queue scroll intent', (tester) async {
+      final deps = _PageListHarnessDeps.create(selectionHit: true);
+      addTearDown(deps.dispose);
+      deps.controller.updateState(
+        (state) => state.copyWith(
+          selection: const EditorSelection(
+            collapsed: false,
+            cmp: 1,
+            range: {
+              'anchor': {'nodeId': 'n1', 'offset': 3, 'affinity': 'forward'},
+              'head': {'nodeId': 'n1', 'offset': 8, 'affinity': 'forward'},
+            },
+          ),
+        ),
+      );
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final point = interactionPoint(tester, deps);
+
+      await quickTap(tester, point);
+      deps.editor.clearTestDispatchedMessages();
+      await quickTap(tester, point);
+      await tester.pump();
+
+      expect(deps.controller.pendingScrollMode, isNull);
+      expect(deps.pendingScroll.value, isNull);
+
+      final pointerDowns = deps.editor.testDispatchedMessages.where((message) => message['type'] == 'pointerDown');
+      expect(pointerDowns.where((message) => message['clickCount'] == 2).length, 1);
+    });
+
     testWidgets('double-tap drag does not extend until selection bounds are materialized', (tester) async {
       final deps = _PageListHarnessDeps.create();
       addTearDown(deps.dispose);
@@ -760,6 +797,53 @@ void main() {
         orElse: () => <String, dynamic>{},
       );
       expect(extendEvent.isNotEmpty, isTrue);
+    });
+
+    testWidgets('selection handles resync after render completes without cursor', (tester) async {
+      final deps = _PageListHarnessDeps.create();
+      addTearDown(deps.dispose);
+
+      final initialRenderVersion = Object();
+      final updatedRenderVersion = Object();
+
+      deps.controller.updateState(
+        (state) => state.copyWith(selection: seededRangeSelection(), renderVersion: initialRenderVersion),
+      );
+      deps.presentedViewport.value = PresentedViewport.base(cursor: null, renderVersion: initialRenderVersion);
+
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      final handles = find.byType(SelectionHandle);
+      expect(handles, findsWidgets);
+
+      final before = tester.getTopLeft(handles.last);
+
+      deps.controller.updateState(
+        (state) => state.copyWith(
+          selection: const EditorSelection(
+            collapsed: false,
+            cmp: 1,
+            anchorBounds: SelectionEndpointBounds(pageIdx: 0, x: 120, y: 320, width: 1, height: 20),
+            headBounds: SelectionEndpointBounds(pageIdx: 0, x: 180, y: 240, width: 1, height: 20),
+            range: {
+              'anchor': {'nodeId': 'n1', 'offset': 3, 'affinity': 'forward'},
+              'head': {'nodeId': 'n1', 'offset': 12, 'affinity': 'forward'},
+            },
+          ),
+          renderVersion: updatedRenderVersion,
+        ),
+      );
+      await tester.pump();
+
+      final held = tester.getTopLeft(handles.last);
+      expect((held.dy - before.dy).abs(), lessThan(1));
+
+      deps.presentedViewport.value = PresentedViewport.base(cursor: null, renderVersion: updatedRenderVersion);
+      await tester.pump();
+
+      final after = tester.getTopLeft(handles.last);
+      expect(after.dy, lessThan(before.dy - 40));
     });
 
     testWidgets('double-tap selection handle drag locks pan before first extension', (tester) async {

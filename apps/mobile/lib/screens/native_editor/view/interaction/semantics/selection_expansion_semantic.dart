@@ -111,7 +111,6 @@ extension SelectionExpansionSemanticActions on EditorInteractionController {
       clickCount: 2,
       isShiftPressed: false,
     );
-    scope.controller.scrollIntoView();
     return true;
   }
 

@@ -57,6 +57,7 @@ class ContentScope extends InheritedWidget {
     required this.subtitleFocusNode,
     required this.pendingScroll,
     required this.pendingScrollPageIdx,
+    required this.visualSyncPageIdx,
     required this.presentedViewport,
     required this.dndController,
     required this.interactionState,
@@ -88,6 +89,7 @@ class ContentScope extends InheritedWidget {
   final FocusNode subtitleFocusNode;
   final ValueNotifier<VoidCallback?> pendingScroll;
   final ValueNotifier<int?> pendingScrollPageIdx;
+  final ValueNotifier<int?> visualSyncPageIdx;
   final ValueNotifier<PresentedViewport> presentedViewport;
   final ValueNotifier<double> displayZoom;
   final ValueNotifier<double> renderZoom;

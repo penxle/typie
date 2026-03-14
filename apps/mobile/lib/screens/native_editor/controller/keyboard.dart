@@ -71,7 +71,7 @@ class KeyboardHandler {
 
   final void Function(Map<String, dynamic> message) dispatch;
   final void Function() reconcileInput;
-  final void Function({ScrollMode mode}) scrollIntoView;
+  final void Function({ScrollMode mode, bool waitForCursorUpdate}) scrollIntoView;
   final void Function(String action) onShortcut;
 
   bool handleKeyEvent(KeyEvent event) {
@@ -95,7 +95,7 @@ class KeyboardHandler {
     dispatch(message);
 
     if (type == 'navigate') {
-      scrollIntoView(mode: ScrollMode.typewriter);
+      scrollIntoView(mode: ScrollMode.typewriter, waitForCursorUpdate: true);
     } else if (type == 'deleteForward' || type == 'deleteWordForward') {
       scrollIntoView(mode: ScrollMode.typewriter);
     } else {

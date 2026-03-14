@@ -29,6 +29,7 @@ class PageItem extends HookWidget {
     final pref = useService<Pref>();
     final editorState = scope.controller.state;
     final renderedCursor = useValueListenable(scope.presentedViewport).cursor;
+    final visualSyncPageIdx = useValueListenable(scope.visualSyncPageIdx);
 
     final layout = editorState.layout!;
     final pageCursor = renderedCursor?.pageIdx == pageIndex ? renderedCursor : null;
@@ -55,9 +56,11 @@ class PageItem extends HookWidget {
     final isMounted = useRef(true);
     final retryAttempts = useRef(0);
     final retryTimer = useRef<Timer?>(null);
+    final initialRenderTimer = useRef<Timer?>(null);
     final isRenderTaskRunning = useRef(false);
     final hasQueuedRender = useRef(false);
     final latestLogicalSize = useRef<Size>(Size.zero)..value = Size(logicalPageWidth, logicalPageHeight);
+    final shouldRenderImmediately = visualSyncPageIdx == pageIndex;
 
     void resetRetryState() {
       retryAttempts.value = 0;
@@ -150,17 +153,39 @@ class PageItem extends HookWidget {
     }
 
     useEffect(() {
-      final timer = Timer(const Duration(milliseconds: 150), () {
-        unawaited(render());
-      });
+      void kickInitialRender() {
+        initialRenderTimer.value?.cancel();
+        if (shouldRenderImmediately) {
+          unawaited(render());
+          return;
+        }
+
+        initialRenderTimer.value = Timer(const Duration(milliseconds: 150), () {
+          initialRenderTimer.value = null;
+          unawaited(render());
+        });
+      }
+
+      kickInitialRender();
       return () {
-        timer.cancel();
+        initialRenderTimer.value?.cancel();
+        initialRenderTimer.value = null;
         retryTimer.value?.cancel();
         retryTimer.value = null;
         isMounted.value = false;
         unawaited(renderer.value?.dispose());
       };
     }, const []);
+
+    useEffect(() {
+      if (!shouldRenderImmediately || renderer.value?.textureId != null) {
+        return null;
+      }
+      initialRenderTimer.value?.cancel();
+      initialRenderTimer.value = null;
+      unawaited(render());
+      return null;
+    }, [shouldRenderImmediately]);
 
     useEffect(() {
       resetRetryState();

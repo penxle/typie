@@ -222,7 +222,7 @@ HorizontalScrollMetrics resolveHorizontalScrollMetrics({
   final positions = controller.positions.where((position) => position.hasContentDimensions).toList(growable: false);
   if (positions.isEmpty) {
     final fallbackPosition = resolveScrollPosition(controller);
-    if (fallbackPosition != null) {
+    if (fallbackPosition != null && fallbackPosition.hasContentDimensions) {
       _preferredHorizontalPositionByController[controller] = fallbackPosition;
       return _resolvedHorizontalMetrics(position: fallbackPosition, contentWidth: contentWidth);
     }
