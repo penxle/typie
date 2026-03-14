@@ -425,7 +425,7 @@
       document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-id]') ??
       document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[role="tree"]')?.querySelector('& > [data-id]:last-child');
 
-    if (!targetElement && dragging.eligible) {
+    if (!targetElement && dragging.eligible && dragging.element.dataset.type === 'document') {
       const zone = paneGroup.hitTest(clientX, clientY);
       if (zone) {
         paneGroup.activeZone = zone;
@@ -437,6 +437,12 @@
     }
 
     if (!targetElement) {
+      if (paneGroup.activeZone) {
+        paneGroup.cancelDrag();
+      }
+
+      dragging.indicator = {};
+      dragging.drop = undefined;
       clearFolderHoverTimeout();
       return;
     }
@@ -736,8 +742,8 @@
       } else if (target === 'view') {
         const entitySlug = dragging.element.dataset.slug;
         const entityType = dragging.element.dataset.type;
-        if (entitySlug && entityType) {
-          paneGroup.executeDrop({ slug: entitySlug, type: entityType as 'document' });
+        if (entitySlug && entityType === 'document') {
+          paneGroup.executeDrop({ slug: entitySlug, type: 'document' });
         } else {
           paneGroup.cancelDrag();
         }
