@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,15 +28,42 @@ Future<void> _pumpHarness(WidgetTester tester, KeyboardHandler handler) async {
   await tester.pump();
 }
 
-Future<void> _sendChord(WidgetTester tester, List<LogicalKeyboardKey> modifiers, LogicalKeyboardKey key) async {
+Future<void> _sendChord(
+  WidgetTester tester,
+  List<LogicalKeyboardKey> modifiers,
+  LogicalKeyboardKey key, {
+  PhysicalKeyboardKey? physicalKey,
+  String? character,
+}) async {
   for (final modifier in modifiers) {
     await tester.sendKeyDownEvent(modifier);
   }
-  await tester.sendKeyDownEvent(key);
-  await tester.sendKeyUpEvent(key);
+  await tester.sendKeyDownEvent(key, physicalKey: physicalKey, character: character);
+  await tester.sendKeyUpEvent(key, physicalKey: physicalKey);
   for (final modifier in modifiers.reversed) {
     await tester.sendKeyUpEvent(modifier);
   }
+}
+
+Future<void> _sendSyntheticKeyEvent(
+  WidgetTester tester, {
+  required ui.KeyEventType type,
+  required LogicalKeyboardKey logicalKey,
+  required PhysicalKeyboardKey physicalKey,
+  String? character,
+}) async {
+  ServicesBinding.instance.keyEventManager.handleKeyData(
+    ui.KeyData(
+      type: type,
+      physical: physicalKey.usbHidUsage,
+      logical: logicalKey.keyId,
+      timeStamp: Duration.zero,
+      character: character,
+      synthesized: true,
+    ),
+  );
+
+  await tester.pump();
 }
 
 void main() {
@@ -116,4 +145,54 @@ void main() {
 
     expect(shortcuts, ['deleteWordBackward']);
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+  testWidgets('shortcut letters still work when IME reports a non latin logical key', (tester) async {
+    final shortcuts = <String>[];
+    final handler = KeyboardHandler(
+      dispatch: (_) {},
+      reconcileInput: () {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      onShortcut: shortcuts.add,
+    );
+
+    await _pumpHarness(tester, handler);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await _sendSyntheticKeyEvent(
+      tester,
+      type: ui.KeyEventType.down,
+      logicalKey: LogicalKeyboardKey('ㅠ'.runes.single),
+      physicalKey: PhysicalKeyboardKey.keyB,
+      character: 'ㅠ',
+    );
+    await _sendSyntheticKeyEvent(
+      tester,
+      type: ui.KeyEventType.up,
+      logicalKey: LogicalKeyboardKey('ㅠ'.runes.single),
+      physicalKey: PhysicalKeyboardKey.keyB,
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+    expect(shortcuts, ['toggleBold']);
+  });
+
+  testWidgets('physical fallback does not trigger for latin layout remaps', (tester) async {
+    final shortcuts = <String>[];
+    final handler = KeyboardHandler(
+      dispatch: (_) {},
+      reconcileInput: () {},
+      scrollIntoView: ({ScrollMode mode = ScrollMode.auto}) {},
+      onShortcut: shortcuts.add,
+    );
+
+    await _pumpHarness(tester, handler);
+    await _sendChord(
+      tester,
+      [LogicalKeyboardKey.controlLeft],
+      LogicalKeyboardKey.keyQ,
+      physicalKey: PhysicalKeyboardKey.keyA,
+      character: 'q',
+    );
+
+    expect(shortcuts, isEmpty);
+  });
 }
