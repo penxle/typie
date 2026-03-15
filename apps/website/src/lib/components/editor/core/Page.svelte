@@ -45,12 +45,8 @@
 
   $effect(() => {
     const renderVersion = editor.renderVersion;
-    const draggingSelection = editor.pointerState === 4;
     if (!visible || !ctx2d) return;
     untrack(() => {
-      if (draggingSelection && editor.cursor.pageIdx !== page) {
-        return;
-      }
       const rendered = render();
       if (rendered) {
         editor.notifyPageRendered(page, renderVersion);
