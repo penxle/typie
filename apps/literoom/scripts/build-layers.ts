@@ -6,7 +6,7 @@ await fs.mkdir('dist/layers/sharp/nodejs', { recursive: true });
 
 const $$ = $({ cwd: 'dist/layers/sharp' });
 
-await $$`tar xJf ../../../../../vendor/sharp-al2023.tar.xz`;
+await $$`curl -fsSL https://github.com/penxle/vendor/releases/download/sharp/v0.34.5/sharp-al2023.tar.xz | tar xJf -`;
 await $$`mv node_modules nodejs`;
 await $$`zip -r ../sharp.zip .`;
 

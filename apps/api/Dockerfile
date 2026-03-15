@@ -52,9 +52,8 @@ ENV IMAGE_TAG=$IMAGE_TAG
 
 COPY --from=prod-deps /app/ .
 COPY --from=build /app/ .
-COPY vendor/sharp-debian.tar.xz ./vendor/
-
-RUN tar -xf vendor/sharp-debian.tar.xz -C apps/api/ && rm -rf vendor
+RUN curl -fsSL "https://github.com/penxle/vendor/releases/download/sharp/v0.34.5/sharp-debian.tar.xz" \
+    | tar xJf - -C apps/api/
 
 ENTRYPOINT ["tini", "--"]
 CMD ["node", "--import", "./apps/api/src/instrumentation.ts", "apps/api/src/main.ts"]
