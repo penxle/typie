@@ -4,15 +4,15 @@ pre-commit:
   commands:
     eslint:
       glob: '*.{ts,tsx,js,jsx,svelte}'
-      run: bunx eslint --fix --quiet {staged_files}
+      run: pnpm exec eslint --fix --quiet {staged_files}
       stage_fixed: true
     prettier:
       glob: '*.{ts,tsx,js,jsx,svelte,json,yaml,yml,md,graphql}'
-      run: bunx prettier --write --ignore-unknown --no-error-on-unmatched-pattern {staged_files}
+      run: pnpm exec prettier --write --ignore-unknown --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     cspell:
       glob: '*'
-      run: bunx cspell --no-progress --relative --no-must-find-files {staged_files}
+      run: pnpm exec cspell --no-progress --relative --no-must-find-files {staged_files}
     dart-fix:
       glob: '*.dart'
       run: |

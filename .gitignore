@@ -30,3 +30,6 @@ vite.config.ts.timestamp-*
 
 .superpowers/
 docs/superpowers/
+
+*.tsx.js
+*.tsx.d.ts

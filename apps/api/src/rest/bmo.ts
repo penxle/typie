@@ -1,8 +1,8 @@
 import dedent from 'dedent';
 import { Hono } from 'hono';
-import { pgr } from '@/db';
-import { env } from '@/env';
-import type { Env } from '@/context';
+import { pgr } from '#/db/index.ts';
+import { env } from '#/env.ts';
+import type { Env } from '#/context.ts';
 
 export const bmo = new Hono<Env>();
 

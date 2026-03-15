@@ -1,16 +1,17 @@
 import '@typie/lib/dayjs';
-import '@/mq';
+import '#/mq/index.ts';
 
-import * as Sentry from '@sentry/bun';
+import { serve } from '@hono/node-server';
+import * as Sentry from '@sentry/node';
 import { getClientAddress, logger, withContext } from '@typie/lib';
-import { websocket } from 'hono/bun';
 import { HTTPException } from 'hono/http-exception';
-import { app } from '@/app';
-import { checkBootstrap } from '@/bootstrap';
-import { deriveContext } from '@/context';
-import { env } from '@/env';
-import { graphql } from '@/graphql';
-import { rest } from '@/rest';
+import { app } from '#/app.ts';
+import { checkBootstrap } from '#/bootstrap.ts';
+import { deriveContext } from '#/context.ts';
+import { env } from '#/env.ts';
+import { graphql } from '#/graphql/index.ts';
+import { rest } from '#/rest/index.ts';
+import { injectWebSocket } from '#/ws.ts';
 
 const log = logger.getChild('main');
 
@@ -61,18 +62,15 @@ app.onError((error, c) => {
   return c.text('Internal Server Error', { status: 500 });
 });
 
-const server = Bun.serve({
-  fetch: app.fetch,
-  hostname: '0.0.0.0',
-  port: env.LISTEN_PORT ?? 3000,
-  idleTimeout: 60,
-  websocket: {
-    ...websocket,
-    idleTimeout: 60,
-    perMessageDeflate: true,
-    maxPayloadLength: 16 * 1024 * 1024, // 16 MB
-    backpressureLimit: 16 * 1024 * 1024, // 16 MB
+const server = serve(
+  {
+    fetch: app.fetch,
+    hostname: '0.0.0.0',
+    port: env.LISTEN_PORT ?? 3000,
   },
-});
+  (info) => {
+    log.info('Listening {*}', { hostname: info.address, port: info.port });
+  },
+);
 
-log.info('Listening {*}', { hostname: server.hostname, port: server.port });
+injectWebSocket(server);

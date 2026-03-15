@@ -1,5 +1,5 @@
 import ky from 'ky';
-import { env } from '@/env';
+import { env } from '#/env.ts';
 
 type CreateIssueParams = { title: string; description: string; labelIds?: string[] };
 export const createIssue = async ({ title, description, labelIds }: CreateIssueParams) => {

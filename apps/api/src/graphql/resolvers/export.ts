@@ -13,12 +13,12 @@ import {
   TableCode,
   Users,
   validateDbId,
-} from '@/db';
-import { DocumentExportFormat, EntityVisibility } from '@/enums';
-import { NotFoundError, TypieError } from '@/errors';
-import { generateDocument } from '@/export';
-import { builder } from '../builder';
-import type { ExportFontFamily, ExportFormat } from '@/export';
+} from '#/db/index.ts';
+import { DocumentExportFormat, EntityVisibility } from '#/enums.ts';
+import { NotFoundError, TypieError } from '#/errors.ts';
+import { generateDocument } from '#/export/index.ts';
+import { builder } from '../builder.ts';
+import type { ExportFontFamily, ExportFormat } from '#/export/index.ts';
 
 /**
  * * Types

@@ -1,6 +1,7 @@
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { processFont } from '@/utils/font';
+import { processFont } from '#/utils/font.ts';
 
 const S3_BUCKET = 'typie-cdn';
 const S3_PREFIX = 'editor/fonts';
@@ -95,7 +96,7 @@ for (const family of FALLBACK_FONTS) {
   for (const font of family.fonts) {
     done++;
     const ttfPath = path.resolve(sourceDir, `${font.path}.ttf`);
-    const ttfData = new Uint8Array(await Bun.file(ttfPath).bytes());
+    const ttfData = new Uint8Array(await readFile(ttfPath));
 
     console.log(`[${done}/${total}] Processing ${font.path}...`);
     const { manifest, strategy, base, chunks } = await processFont(font.path, ttfData);
@@ -132,7 +133,7 @@ for (const family of FALLBACK_FONTS) {
 console.log(`\nS3: ${uploaded} uploaded, ${skipped} skipped`);
 
 // Write fallbacks.json
-const workspaceDir = path.resolve(import.meta.dir, '../../..');
+const workspaceDir = path.resolve(import.meta.dirname, '../../..');
 const fallbacksPath = path.join(workspaceDir, 'crates/editor/assets/fallbacks.json');
-await Bun.write(fallbacksPath, JSON.stringify(fallbacksData));
+await writeFile(fallbacksPath, JSON.stringify(fallbacksData));
 console.log(`Written: ${fallbacksPath}`);

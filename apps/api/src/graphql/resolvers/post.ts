@@ -1,8 +1,8 @@
 import dayjs from 'dayjs';
-import { TableCode } from '@/db';
-import { PostAvailableAction, PostContentRating, PostLayoutMode, PostType, PostViewBodyUnavailableReason } from '@/enums';
-import { NotFoundError } from '@/errors';
-import { builder } from '../builder';
+import { TableCode } from '#/db/index.ts';
+import { PostAvailableAction, PostContentRating, PostLayoutMode, PostType, PostViewBodyUnavailableReason } from '#/enums.ts';
+import { NotFoundError } from '#/errors.ts';
+import { builder } from '../builder.ts';
 import {
   CharacterCountChange,
   Document,
@@ -16,7 +16,7 @@ import {
   PostReaction,
   PostSnapshot,
   PostView,
-} from '../objects';
+} from '../objects.ts';
 
 /**
  * * Types

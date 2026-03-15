@@ -8,8 +8,8 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { DocumentType, EntityAvailability, EntityVisibility } from '@/enums';
-  import { TypieError } from '@/errors';
+  import { DocumentType, EntityAvailability, EntityVisibility } from '#/enums';
+  import { TypieError } from '#/errors';
   import BlendIcon from '~icons/lucide/blend';
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';

@@ -1,13 +1,13 @@
 // spell-checker:words cand
 
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import { XMLParser } from 'fast-xml-parser';
 import DOMPurify from 'isomorphic-dompurify';
 import ky from 'ky';
 import pMap from 'p-map';
 import { rapidhash } from 'rapidhash-js';
-import { redis } from '@/cache';
-import { env } from '@/env';
+import { redis } from '#/cache.ts';
+import { env } from '#/env.ts';
 
 const errorTypes = [
   'no-error',

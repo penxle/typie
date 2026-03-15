@@ -1,13 +1,13 @@
 import { isAsyncIterable } from '@envelop/core';
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import { GraphQLError, print } from 'graphql';
-import { dev } from '@/env';
-import { TypieError } from '@/errors';
-import { truncateVariables } from './utils';
+import { dev } from '#/env.ts';
+import { TypieError } from '#/errors.ts';
+import { truncateVariables } from './utils.ts';
 import type { AsyncIterableIteratorOrValue, ExecutionResult } from '@envelop/core';
 import type { Plugin } from 'graphql-yoga';
-import type { Context } from '@/context';
+import type { Context } from '#/context.ts';
 
 const log = logger.getChild('graphql');
 

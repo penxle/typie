@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "clean": "flutter clean && dart run build_runner clean && bun run clean:generated",
+    "clean": "flutter clean && dart run build_runner clean && pnpm run clean:generated",
     "clean:generated": "find . -name '__generated__' -type d -exec rm -rf {} +",
     "codegen:build": "dart run ffigen --config ffigen.yaml && doppler run -- dart run build_runner build --delete-conflicting-outputs",
     "codegen:build:release": "dart run ffigen --config ffigen.yaml && doppler run -c prod -- dart run build_runner build --delete-conflicting-outputs",
@@ -12,7 +12,7 @@
     "codegen:watch": "doppler run -- dart run build_runner watch --delete-conflicting-outputs"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.96",
+    "@iconify-json/lucide": "^1.2.98",
     "@iconify/tools": "^5.0.5",
     "change-case-all": "^2.1.0",
     "fantasticon": "^4.1.0",

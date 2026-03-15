@@ -1,8 +1,8 @@
 {
-  "extends": ["@typie/tsconfig"],
+  "extends": ["@typie/tsconfig/node"],
   "compilerOptions": {
     "paths": {
-      "@/*": ["./src/*"]
+      "#/*": ["./src/*"]
     }
   }
 }

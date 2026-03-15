@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { db, TextReplacements } from '@/db';
-import { generateFractionalOrder } from '@/utils';
+import { db, TextReplacements } from '#/db/index.ts';
+import { generateFractionalOrder } from '#/utils/index.ts';
 
 // spell-checker:disable
 const presets = [

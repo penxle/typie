@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["NODE_ENV", "AWS_PROFILE"],
+  "globalEnv": ["NODE_ENV"],
   "tasks": {
     "codegen": {
       "dependsOn": ["^build"],

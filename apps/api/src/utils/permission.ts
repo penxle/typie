@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
-import { db, firstOrThrow, Sites, Users, UserSessions } from '@/db';
-import { UserRole } from '@/enums';
-import { TypieError } from '@/errors';
+import { db, firstOrThrow, Sites, Users, UserSessions } from '#/db/index.ts';
+import { UserRole } from '#/enums.ts';
+import { TypieError } from '#/errors.ts';
 
 type AssertAdminPermissionParams = {
   sessionId: string;

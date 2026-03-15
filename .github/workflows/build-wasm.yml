@@ -22,13 +22,19 @@ jobs:
           path: crates/editor/pkg/
           key: wasm-${{ hashFiles('crates/**', 'Cargo.lock') }}
 
-      - name: Setup Bun
+      - name: Set up Node.js
         if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: oven-sh/setup-bun@v2
+        uses: actions/setup-node@v6
+        with:
+          node-version: 25
+
+      - name: Install pnpm
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: pnpm/action-setup@v4
 
       - name: Install dependencies
         if: steps.wasm-cache.outputs.cache-hit != 'true'
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Setup Rust
         if: steps.wasm-cache.outputs.cache-hit != 'true'

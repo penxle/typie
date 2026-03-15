@@ -1,5 +1,5 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
-import * as E from '@/enums';
+import * as E from '#/enums.ts';
 
 function createPgEnum<T extends string>(enumName: string, obj: Record<string, T>) {
   return pgEnum(enumName, Object.values(obj) as [T, ...T[]]);

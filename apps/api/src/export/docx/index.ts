@@ -17,10 +17,10 @@ import {
   TextRun,
   WidthType,
 } from 'docx';
-import { mapFormat } from '../core/assets';
-import { parseDocument } from '../core/document';
-import { findFontFamily, nearestWeight } from '../core/fonts';
-import { traverse } from '../core/traverse';
+import { mapFormat } from '../core/assets.ts';
+import { parseDocument } from '../core/document.ts';
+import { findFontFamily, nearestWeight } from '../core/fonts.ts';
+import { traverse } from '../core/traverse.ts';
 import {
   convertBlockquote,
   convertCallout,
@@ -32,15 +32,15 @@ import {
   NO_BORDER,
   SUBTLE_BORDER,
   toBlockChildren,
-} from './blocks';
-import { createRubyRun } from './ruby';
-import { convertTable, convertTableCell, convertTableRow } from './table';
-import { convertTextSegments } from './text';
+} from './blocks.ts';
+import { createRubyRun } from './ruby.ts';
+import { convertTable, convertTableCell, convertTableRow } from './table.ts';
+import { convertTextSegments } from './text.ts';
 import type { XmlComponent } from 'docx';
-import type { NodeVisitor } from '../core/traverse';
-import type { Annotation, EmbedInfo, ExportFontFamily, ImageAsset, InlineSegment, NodeEntry, Style, TextSegment } from '../core/types';
-import type { BlockquoteParagraph, DocDefaults } from './blocks';
-import type { TextConvertContext } from './text';
+import type { NodeVisitor } from '../core/traverse.ts';
+import type { Annotation, EmbedInfo, ExportFontFamily, ImageAsset, InlineSegment, NodeEntry, Style, TextSegment } from '../core/types.ts';
+import type { BlockquoteParagraph, DocDefaults } from './blocks.ts';
+import type { TextConvertContext } from './text.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type FileChild = Paragraph | Table | any;

@@ -1,17 +1,17 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import fontkit from '@pdf-lib/fontkit';
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import { LineCapStyle, LineJoinStyle, PDFDocument, popGraphicsState, pushGraphicsState, rgb, setLineJoin } from 'pdf-lib';
 import sharp from 'sharp';
-import * as aws from '@/external/aws';
-import { decompressZstd } from '@/utils/compression';
-import { outlineTextToSvg } from '@/utils/font';
-import { computeDesiredSize } from './external';
+import * as aws from '#/external/aws.ts';
+import { decompressZstd } from '#/utils/compression.ts';
+import { outlineTextToSvg } from '#/utils/font.ts';
+import { computeDesiredSize } from './external.ts';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
-import type { ImageAsset } from '../core/types';
-import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './codec';
-import type { Asset } from './external';
-import type { ExternalElement } from './slate';
+import type { ImageAsset } from '../core/types.ts';
+import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './codec.ts';
+import type { Asset } from './external.ts';
+import type { ExternalElement } from './slate.ts';
 
 const CSS_PX_TO_PDF_PT = 72 / 96;
 const PLACEHOLDER_BACKGROUND = rgb(0.965, 0.965, 0.969);

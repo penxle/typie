@@ -1,10 +1,10 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { defaultPlanRules } from '@/const';
-import { db, first, Plans, Subscriptions } from '@/db';
-import { SubscriptionState } from '@/enums';
-import { TypieError } from '@/errors';
-import { getUserUsage } from './user';
-import type { PlanRules } from '@/db/schemas/json';
+import { defaultPlanRules } from '#/const.ts';
+import { db, first, Plans, Subscriptions } from '#/db/index.ts';
+import { SubscriptionState } from '#/enums.ts';
+import { TypieError } from '#/errors.ts';
+import { getUserUsage } from './user.ts';
+import type { PlanRules } from '#/db/schemas/json.ts';
 
 type GetPlanParams<T extends keyof PlanRules> = {
   userId: string;

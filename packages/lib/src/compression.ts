@@ -1,6 +1,10 @@
+import { promisify } from 'node:util';
+import { constants, deflateSync, gzipSync, zstdCompress } from 'node:zlib';
 import { createMiddleware } from 'hono/factory';
 import { COMPRESSIBLE_CONTENT_TYPE_REGEX } from 'hono/utils/compress';
 import { match } from 'ts-pattern';
+
+const zstdCompressAsync = promisify(zstdCompress);
 
 const ENCODINGS = ['zstd', 'gzip', 'deflate'] as const;
 
@@ -31,12 +35,12 @@ export const compression = () =>
     try {
       const bytes = await c.res.bytes();
       const compressed = await match(encoding)
-        .with('zstd', () => Bun.zstdCompress(bytes, { level: 19 }))
-        .with('gzip', () => Bun.gzipSync(bytes, { level: 6 }))
-        .with('deflate', () => Bun.deflateSync(bytes, { level: 6 }))
+        .with('zstd', () => zstdCompressAsync(bytes, { params: { [constants.ZSTD_c_compressionLevel]: 19 } }))
+        .with('gzip', () => gzipSync(bytes, { level: 6 }))
+        .with('deflate', () => deflateSync(bytes, { level: 6 }))
         .exhaustive();
 
-      c.res = new Response(Uint8Array.from(compressed), c.res);
+      c.res = new Response(new Uint8Array(compressed), c.res);
 
       c.res.headers.set('Content-Encoding', encoding);
       c.res.headers.delete('Content-Length');

@@ -7,7 +7,7 @@
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
-  import { SingleSignOnProvider } from '@/enums';
+  import { SingleSignOnProvider } from '#/enums';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';

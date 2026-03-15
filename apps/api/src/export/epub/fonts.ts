@@ -1,9 +1,10 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { decompressZstd } from '@/utils/compression';
-import { nearestWeight } from '../core/fonts';
-import type { ExportFontFamily, NodeEntry, TextSegment } from '../core/types';
+import { execa } from 'execa';
+import { decompressZstd } from '#/utils/compression.ts';
+import { nearestWeight } from '../core/fonts.ts';
+import type { ExportFontFamily, NodeEntry, TextSegment } from '../core/types.ts';
 
 export type FontFile = {
   familyName: string;
@@ -19,15 +20,14 @@ async function compressWoff2(ttf: Uint8Array): Promise<Uint8Array> {
 
   try {
     await mkdir(dir);
-    await Bun.write(ttfPath, ttf);
+    await writeFile(ttfPath, ttf);
 
-    const proc = Bun.spawn(['woff2_compress', ttfPath], { stdout: 'ignore', stderr: 'ignore' });
-    const exitCode = await proc.exited;
+    const { exitCode } = await execa('woff2_compress', [ttfPath], { stdio: 'ignore', reject: false });
     if (exitCode !== 0) {
       throw new Error(`woff2_compress exited with ${exitCode}`);
     }
 
-    return new Uint8Array(await Bun.file(woff2Path).arrayBuffer());
+    return new Uint8Array(await readFile(woff2Path));
   } finally {
     await rm(dir, { recursive: true });
   }

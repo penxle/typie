@@ -7,7 +7,7 @@
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
-  import { TypieError } from '@/errors';
+  import { TypieError } from '#/errors';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';

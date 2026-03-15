@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import fallbackFontFamilies from '@typie/editor/font/fallbacks.json' with { type: 'json' };
 import type { Application } from '@typie/editor';
 
@@ -182,7 +183,7 @@ async function loadChunks(app: Application, family: string, font: Font, codepoin
 export async function initFonts(app: Application): Promise<void> {
   await Promise.all(
     phantomFontFamilies.map(async ({ familyName, path }) => {
-      const data = await Bun.file(new URL(path)).bytes();
+      const data = await readFile(new URL(path));
       app.addFontBase(familyName, 400, data);
     }),
   );

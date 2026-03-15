@@ -6,7 +6,7 @@
   import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { SvelteMap } from 'svelte/reactivity';
-  import { TypieError } from '@/errors';
+  import { TypieError } from '#/errors';
   import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
   import TypeIcon from '~icons/lucide/type';

@@ -1,7 +1,7 @@
 import { AlignmentType, BorderStyle, Table, TableCell, TableRow, WidthType } from 'docx';
-import { toBlockChildren } from './blocks';
+import { toBlockChildren } from './blocks.ts';
 import type { IBorderOptions, ITableBordersOptions } from 'docx';
-import type { FileChild } from './index';
+import type { FileChild } from './index.ts';
 
 function mapBorderStyle(style: string): IBorderOptions {
   switch (style) {

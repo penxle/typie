@@ -1,9 +1,9 @@
 import { ExternalHyperlink, TextRun } from 'docx';
-import { findFontFamily, nearestWeight } from '../core/fonts';
-import { resolveColorToHex } from '../core/theme';
+import { findFontFamily, nearestWeight } from '../core/fonts.ts';
+import { resolveColorToHex } from '../core/theme.ts';
 import type { XmlComponent } from 'docx';
-import type { Annotation, ExportFontFamily, Style, TextSegment } from '../core/types';
-import type { createRubyRun } from './ruby';
+import type { Annotation, ExportFontFamily, Style, TextSegment } from '../core/types.ts';
+import type { createRubyRun } from './ruby.ts';
 
 type RubyRunFactory = typeof createRubyRun;
 

@@ -5,7 +5,7 @@
   import { Helmet, Icon } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
   import { fade } from 'svelte/transition';
-  import { EntityState } from '@/enums';
+  import { EntityState } from '#/enums';
   import FileXIcon from '~icons/lucide/file-x';
   import XIcon from '~icons/lucide/x';
   import { fb } from '$lib/analytics';

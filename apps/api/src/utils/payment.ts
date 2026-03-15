@@ -1,11 +1,11 @@
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import dayjs from 'dayjs';
 import { and, eq, isNull } from 'drizzle-orm';
 import { match } from 'ts-pattern';
-import { first, firstOrThrow, PaymentInvoices, PaymentRecords, Referrals, UserBillingKeys, UserPaymentCredits, Users } from '@/db';
-import { PaymentOutcome, PlanInterval } from '@/enums';
-import * as portone from '@/external/portone';
-import type { Transaction } from '@/db';
+import { first, firstOrThrow, PaymentInvoices, PaymentRecords, Referrals, UserBillingKeys, UserPaymentCredits, Users } from '#/db/index.ts';
+import { PaymentOutcome, PlanInterval } from '#/enums.ts';
+import * as portone from '#/external/portone.ts';
+import type { Transaction } from '#/db/index.ts';
 
 export const getSubscriptionExpiresAt = (startsAt: dayjs.Dayjs, interval: PlanInterval) => {
   if (interval === PlanInterval.LIFETIME) {

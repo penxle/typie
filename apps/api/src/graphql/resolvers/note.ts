@@ -1,12 +1,12 @@
 import dayjs from 'dayjs';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { db, Entities, first, firstOrThrow, NoteEntities, Notes, Sites, TableCode, validateDbId } from '@/db';
-import { EntityState, NoteState, NoteStatus } from '@/enums';
-import { TypieError } from '@/errors';
-import { generateFractionalOrder } from '@/utils/order';
-import { assertSitePermission } from '@/utils/permission';
-import { builder } from '../builder';
-import { Entity, isTypeOf, Note, Site, User } from '../objects';
+import { db, Entities, first, firstOrThrow, NoteEntities, Notes, Sites, TableCode, validateDbId } from '#/db/index.ts';
+import { EntityState, NoteState, NoteStatus } from '#/enums.ts';
+import { TypieError } from '#/errors.ts';
+import { generateFractionalOrder } from '#/utils/order.ts';
+import { assertSitePermission } from '#/utils/permission.ts';
+import { builder } from '../builder.ts';
+import { Entity, isTypeOf, Note, Site, User } from '../objects.ts';
 
 Note.implement({
   isTypeOf: isTypeOf(TableCode.NOTES),

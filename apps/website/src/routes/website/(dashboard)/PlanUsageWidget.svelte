@@ -4,8 +4,8 @@
   import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { defaultPlanRules } from '@/const';
-  import { PlanAvailability } from '@/enums';
+  import { defaultPlanRules } from '#/const';
+  import { PlanAvailability } from '#/enums';
   import { pushState } from '$app/navigation';
   import { graphql } from '$mearie';
   import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';

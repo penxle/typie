@@ -12,13 +12,15 @@
   "scripts": {
     "lint:typecheck": "tsc"
   },
-  "devDependencies": {
-    "@sveltejs/kit": "^2.53.4",
-    "@types/bun": "^1.3.10",
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
     "@typie/lib": "workspace:*",
+    "hono": "^4.12.8"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "^2.55.0",
     "@typie/tsconfig": "workspace:*",
-    "hono": "^4.12.5",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "rolldown": "^1.0.0-rc.9",
+    "typescript": "^6.0.1-rc"
   }
 }

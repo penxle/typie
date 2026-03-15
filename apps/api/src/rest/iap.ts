@@ -1,26 +1,17 @@
-import {
-  AccountTenure,
-  ConsumptionStatus,
-  DeliveryStatus,
-  LifetimeDollarsPurchased,
-  LifetimeDollarsRefunded,
-  Platform,
-  PlayTime,
-  UserStatus,
-} from '@apple/app-store-server-library';
+import { DeliveryStatus, RefundPreference } from '@apple/app-store-server-library';
 import dayjs from 'dayjs';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { match } from 'ts-pattern';
-import { db, first, PaymentInvoices, Plans, Subscriptions, UserInAppPurchases, Users, UserTrials } from '@/db';
-import { InAppPurchaseStore, PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@/enums';
-import { production } from '@/env';
-import * as appstore from '@/external/appstore';
-import * as googleplay from '@/external/googleplay';
-import * as slack from '@/external/slack';
+import { db, first, Plans, Subscriptions, UserInAppPurchases, UserTrials } from '#/db/index.ts';
+import { InAppPurchaseStore, PlanAvailability, SubscriptionState } from '#/enums.ts';
+import { production } from '#/env.ts';
+import * as appstore from '#/external/appstore.ts';
+import * as googleplay from '#/external/googleplay.ts';
+import * as slack from '#/external/slack.ts';
 import type { ResponseBodyV2 } from '@apple/app-store-server-library';
-import type { Env } from '@/context';
-import type { DeveloperNotification } from '@/external/googleplay';
+import type { Env } from '#/context.ts';
+import type { DeveloperNotification } from '#/external/googleplay.ts';
 
 export const iap = new Hono<Env>();
 
@@ -140,68 +131,13 @@ iap.post('/appstore', async (c) => {
         return;
       }
 
-      const user = await db
-        .select({ createdAt: Users.createdAt, state: Users.state })
-        .from(Users)
-        .where(eq(Users.id, inAppPurchase.userId))
-        .then(first);
-
       const trial = await db.select({ id: UserTrials.id }).from(UserTrials).where(eq(UserTrials.userId, inAppPurchase.userId)).then(first);
 
-      // 총 결제 금액 (KRW)
-      const paidTotal = await db
-        .select({ total: sql<number>`coalesce(sum(${PaymentInvoices.amount}), 0)` })
-        .from(PaymentInvoices)
-        .where(and(eq(PaymentInvoices.userId, inAppPurchase.userId), eq(PaymentInvoices.state, PaymentInvoiceState.PAID)))
-        .then(first);
-
-      const inRange = <T>(value: number, ranges: [number, T][], fallback: T): T =>
-        ranges.find(([threshold]) => value < threshold)?.[1] ?? fallback;
-
-      const accountDays = user ? dayjs().diff(dayjs(user.createdAt), 'day') : 0;
-      const accountTenure = inRange(
-        accountDays,
-        [
-          [3, AccountTenure.ZERO_TO_THREE_DAYS],
-          [10, AccountTenure.THREE_DAYS_TO_TEN_DAYS],
-          [30, AccountTenure.TEN_DAYS_TO_THIRTY_DAYS],
-          [90, AccountTenure.THIRTY_DAYS_TO_NINETY_DAYS],
-          [180, AccountTenure.NINETY_DAYS_TO_ONE_HUNDRED_EIGHTY_DAYS],
-          [365, AccountTenure.ONE_HUNDRED_EIGHTY_DAYS_TO_THREE_HUNDRED_SIXTY_FIVE_DAYS],
-        ],
-        AccountTenure.GREATER_THAN_THREE_HUNDRED_SIXTY_FIVE_DAYS,
-      );
-
-      // KRW → USD 근사 변환 (1 USD ≈ 1,400 KRW)
-      const lifetimeUsd = (paidTotal?.total ?? 0) / 1400;
-      const lifetimeDollarsPurchased = inRange(
-        lifetimeUsd,
-        [
-          [1, LifetimeDollarsPurchased.ZERO_DOLLARS],
-          [50, LifetimeDollarsPurchased.ONE_CENT_TO_FORTY_NINE_DOLLARS_AND_NINETY_NINE_CENTS],
-          [100, LifetimeDollarsPurchased.FIFTY_DOLLARS_TO_NINETY_NINE_DOLLARS_AND_NINETY_NINE_CENTS],
-          [500, LifetimeDollarsPurchased.ONE_HUNDRED_DOLLARS_TO_FOUR_HUNDRED_NINETY_NINE_DOLLARS_AND_NINETY_NINE_CENTS],
-          [1000, LifetimeDollarsPurchased.FIVE_HUNDRED_DOLLARS_TO_NINE_HUNDRED_NINETY_NINE_DOLLARS_AND_NINETY_NINE_CENTS],
-          [2000, LifetimeDollarsPurchased.ONE_THOUSAND_DOLLARS_TO_ONE_THOUSAND_NINE_HUNDRED_NINETY_NINE_DOLLARS_AND_NINETY_NINE_CENTS],
-        ],
-        LifetimeDollarsPurchased.TWO_THOUSAND_DOLLARS_OR_GREATER,
-      );
-
-      const userStatus = user?.state === 'DEACTIVATED' ? UserStatus.TERMINATED : UserStatus.ACTIVE;
-
-      await appstore.sendConsumptionData(transactionId, {
+      await appstore.sendConsumptionInformation(transactionId, {
         customerConsented: true,
-        consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
-        platform: Platform.APPLE,
         sampleContentProvided: !!trial,
-        deliveryStatus: DeliveryStatus.DELIVERED_AND_WORKING_PROPERLY,
-        appAccountToken: notification.data.transaction?.appAccountToken,
-        accountTenure,
-        playTime: PlayTime.UNDECLARED,
-        lifetimeDollarsRefunded: LifetimeDollarsRefunded.ZERO_DOLLARS,
-        lifetimeDollarsPurchased,
-        userStatus,
-        refundPreference: 2, // PREFER_DECLINE
+        deliveryStatus: DeliveryStatus.DELIVERED,
+        refundPreference: RefundPreference.DECLINE,
       });
     })
     .with('DID_FAIL_TO_RENEW', async () => {

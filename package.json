@@ -3,11 +3,6 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "crates/*",
-    "packages/*"
-  ],
   "scripts": {
     "bootstrap": "lefthook install",
     "build": "turbo run build",
@@ -20,19 +15,25 @@
     "lint:typecheck": "turbo run lint:typecheck",
     "test": "turbo run test"
   },
-  "overrides": {
-    "ioredis": "^5.10.0"
-  },
   "devDependencies": {
-    "@types/bun": "^1.3.10",
     "@typie/lintconfig": "workspace:*",
     "cspell": "^9.7.0",
     "eslint": "^9.39.3",
-    "lefthook": "^2.1.3",
+    "lefthook": "^2.1.4",
     "prettier": "^3.8.1",
-    "syncpack": "^14.1.0",
-    "turbo": "^2.8.14",
-    "typescript": "^5.9.3"
+    "syncpack": "^14.2.0",
+    "turbo": "^2.8.17",
+    "typescript": "^6.0.1-rc"
   },
-  "packageManager": "bun@1.3.0"
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "typescript": ">=6"
+      }
+    },
+    "overrides": {
+      "ioredis": "^5.10.0"
+    }
+  }
 }

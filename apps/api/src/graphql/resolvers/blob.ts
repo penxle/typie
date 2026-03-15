@@ -8,16 +8,16 @@ import ffmpeg from 'fluent-ffmpeg';
 import qs from 'query-string';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { db, Files, first, firstOrThrow, FontFamilies, FontNames, Fonts, Images, TableCode, validateDbId } from '@/db';
-import { FontFamilyState } from '@/enums';
-import { stack } from '@/env';
-import { TypieError } from '@/errors';
-import * as aws from '@/external/aws';
-import { compressZstd } from '@/utils/compression';
-import { processFont } from '@/utils/font';
-import { wasm } from '@/utils/wasm';
-import { builder } from '../builder';
-import { Blob, File, Font, Image, isTypeOf } from '../objects';
+import { db, Files, first, firstOrThrow, FontFamilies, FontNames, Fonts, Images, TableCode, validateDbId } from '#/db/index.ts';
+import { FontFamilyState } from '#/enums.ts';
+import { stack } from '#/env.ts';
+import { TypieError } from '#/errors.ts';
+import * as aws from '#/external/aws.ts';
+import { compressZstd } from '#/utils/compression.ts';
+import { processFont } from '#/utils/font.ts';
+import { wasm } from '#/utils/wasm.ts';
+import { builder } from '../builder.ts';
+import { Blob, File, Font, Image, isTypeOf } from '../objects.ts';
 
 type VideoMetadata = {
   width: number;

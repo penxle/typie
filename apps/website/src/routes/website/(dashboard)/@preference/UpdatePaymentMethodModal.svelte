@@ -9,10 +9,10 @@
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import { z } from 'zod';
-  import { PlanId } from '@/const';
-  import { PlanInterval } from '@/enums';
-  import { TypieError } from '@/errors';
-  import { cardSchema } from '@/validation';
+  import { PlanId } from '#/const';
+  import { PlanInterval } from '#/enums';
+  import { TypieError } from '#/errors';
+  import { cardSchema } from '#/validation';
   import { fb } from '$lib/analytics';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';

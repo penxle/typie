@@ -6,7 +6,7 @@ import { filter, pipe, Repeater } from 'graphql-yoga';
 import { LoroDoc, VersionVector } from 'loro-crdt';
 import { nanoid } from 'nanoid';
 import { match } from 'ts-pattern';
-import { redis } from '@/cache';
+import { redis } from '#/cache.ts';
 import {
   db,
   decodeDbId,
@@ -31,7 +31,7 @@ import {
   UserPreferences,
   Users,
   validateDbId,
-} from '@/db';
+} from '#/db/index.ts';
 import {
   DocumentAvailableAction,
   DocumentContentRating,
@@ -43,13 +43,15 @@ import {
   EntityType,
   EntityVisibility,
   NoteState,
-} from '@/enums';
-import { env } from '@/env';
-import { NotFoundError, TypieError } from '@/errors';
-import * as slack from '@/external/slack';
-import * as spellcheck from '@/external/spellcheck';
-import { enqueueJob } from '@/mq';
-import { pubsub } from '@/pubsub';
+} from '#/enums.ts';
+import { env } from '#/env.ts';
+import { NotFoundError, TypieError } from '#/errors.ts';
+import * as slack from '#/external/slack.ts';
+import * as spellcheck from '#/external/spellcheck.ts';
+import { enqueueJob } from '#/mq/index.ts';
+import { pubsub } from '#/pubsub.ts';
+import { compressZstd, decompressZstd } from '#/utils/compression.ts';
+import { getDocumentFontFamilies } from '#/utils/document.ts';
 import {
   extractAssetIdsFromLoroDoc,
   extractLoroDocContents,
@@ -59,13 +61,11 @@ import {
   generateSlug,
   getKoreanAge,
   makeLoroDoc,
-} from '@/utils';
-import { compressZstd, decompressZstd } from '@/utils/compression';
-import { getDocumentFontFamilies } from '@/utils/document';
-import { assertSitePermission } from '@/utils/permission';
-import { assertPlanRule } from '@/utils/plan';
-import { wasm } from '@/utils/wasm';
-import { builder } from '../builder';
+} from '#/utils/index.ts';
+import { assertSitePermission } from '#/utils/permission.ts';
+import { assertPlanRule } from '#/utils/plan.ts';
+import { wasm } from '#/utils/wasm.ts';
+import { builder } from '../builder.ts';
 import {
   CharacterCountChange,
   Document,
@@ -81,8 +81,8 @@ import {
   IDocument,
   Image,
   isTypeOf,
-} from '../objects';
-import type { Context } from '@/context';
+} from '../objects.ts';
+import type { Context } from '#/context.ts';
 
 const DocumentAsset = builder.loadableUnion('DocumentAsset', {
   types: [Image, File, Embed, DocumentArchivedNode],

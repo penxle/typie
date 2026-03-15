@@ -1,8 +1,8 @@
-import { queue } from './bullmq';
-import { crons } from './tasks';
+import { queue } from './bullmq.ts';
+import { crons } from './tasks/index.ts';
 import type { JobsOptions } from 'bullmq';
-import type { JobMap, JobName } from './tasks';
-import type { JobFn } from './types';
+import type { JobMap, JobName } from './tasks/index.ts';
+import type { JobFn } from './types.ts';
 
 for (const cron of crons) {
   queue.upsertJobScheduler(cron.name, {

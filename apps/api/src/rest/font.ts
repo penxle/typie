@@ -5,12 +5,12 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
-import { redis } from '@/cache';
-import { db, first, Fonts } from '@/db';
-import * as aws from '@/external/aws';
-import { decompressZstd } from '@/utils/compression';
-import { outlineTextToSvg } from '@/utils/font';
-import type { Env } from '@/context';
+import { redis } from '#/cache.ts';
+import { db, first, Fonts } from '#/db/index.ts';
+import * as aws from '#/external/aws.ts';
+import { decompressZstd } from '#/utils/compression.ts';
+import { outlineTextToSvg } from '#/utils/font.ts';
+import type { Env } from '#/context.ts';
 
 const defaultFontMap = new Map(defaultFontFamilies.flatMap((f) => f.fonts.map((v) => [v.id, v.path] as const)));
 

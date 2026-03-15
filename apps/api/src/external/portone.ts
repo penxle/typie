@@ -1,5 +1,5 @@
 import { PortOneClient, RestError } from '@portone/server-sdk';
-import { env } from '../env';
+import { env } from '../env.ts';
 
 export const client = PortOneClient({ secret: env.PORTONE_API_SECRET });
 

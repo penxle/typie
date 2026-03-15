@@ -11,7 +11,7 @@
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
-  import { DocumentType } from '@/enums';
+  import { DocumentType } from '#/enums';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';

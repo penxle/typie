@@ -1,5 +1,5 @@
 import { androidpublisher, auth } from '@googleapis/androidpublisher';
-import { env } from '@/env';
+import { env } from '#/env.ts';
 
 const client = androidpublisher({
   version: 'v3',

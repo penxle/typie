@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import { count, eq, inArray, sql } from 'drizzle-orm';
-import { db, DocumentContents, Documents, Entities, Folders } from '@/db';
-import { EntityState } from '@/enums';
-import { elasticsearch, esIndex } from '@/search';
-import { decompose } from '@/utils/text';
+import { db, DocumentContents, Documents, Entities, Folders } from '#/db/index.ts';
+import { EntityState } from '#/enums.ts';
+import { elasticsearch, esIndex } from '#/search.ts';
+import { decompose } from '#/utils/text.ts';
 
 process.env.SCRIPT = '1';
 

@@ -7,9 +7,9 @@ import { HTTPException } from 'hono/http-exception';
 import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import * as R from 'remeda';
-import { redis } from '@/cache';
-import { db, first, UserSessions } from '@/db';
-import { publicKey } from '@/utils';
+import { redis } from '#/cache.ts';
+import { db, first, UserSessions } from '#/db/index.ts';
+import { publicKey } from '#/utils/index.ts';
 import type { Context as HonoContext } from 'hono';
 
 type LoaderParams<Key, Result, SortKey, Nullability extends boolean, Many extends boolean> = {

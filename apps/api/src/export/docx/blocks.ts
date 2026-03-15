@@ -13,9 +13,9 @@ import {
   TextRun,
   WidthType,
 } from 'docx';
-import { resolveColorToHex } from '../core/theme';
+import { resolveColorToHex } from '../core/theme.ts';
 import type { IParagraphOptions, ISpacingProperties } from 'docx';
-import type { FileChild } from './index';
+import type { FileChild } from './index.ts';
 
 const INDENT_LEFT_TWIPS = 720; // 0.5 inch
 

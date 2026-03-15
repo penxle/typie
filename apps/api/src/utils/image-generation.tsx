@@ -1,3 +1,4 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { random } from '@ctrl/tinycolor';
 import { renderAsync } from '@resvg/resvg-js';
@@ -7,7 +8,7 @@ import ky from 'ky';
 import { renderToStaticMarkup } from 'react-dom/server';
 import satori from 'satori';
 import twemoji from 'twemoji';
-import { db, DocumentCharacterCountChanges, first, Images, Users } from '@/db';
+import { db, DocumentCharacterCountChanges, first, Images, Users } from '#/db/index.ts';
 
 const generateRandomGradient = () => {
   const first = random({
@@ -49,12 +50,13 @@ const loadFonts = async <T extends string>(names: T[]) => {
     const filePath = path.join('/tmp/fonts', `${name}.ttf`);
 
     try {
-      return await Bun.file(filePath).bytes();
+      return await readFile(filePath);
     } catch {
       const url = `https://cdn.typie.net/fonts/ttf/${name}.ttf`;
       const resp = await ky.get(url).arrayBuffer();
 
-      await Bun.write(filePath, resp);
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, new Uint8Array(resp));
 
       return resp;
     }

@@ -1,9 +1,9 @@
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import dayjs from 'dayjs';
 import { and, eq, gt, lt, sql } from 'drizzle-orm';
 import { LoroDoc } from 'loro-crdt';
 import * as R from 'remeda';
-import { redis } from '@/cache';
+import { redis } from '#/cache.ts';
 import {
   db,
   DocumentCharacterCountChanges,
@@ -13,14 +13,14 @@ import {
   DocumentVersions,
   Entities,
   firstOrThrow,
-} from '@/db';
-import { DocumentSyncType } from '@/enums';
-import { Lock } from '@/lock';
-import { pubsub } from '@/pubsub';
-import { extractLoroDocContents, garbageCollectLoroDoc } from '@/utils';
-import { compressZstd } from '@/utils/compression';
-import { enqueueJob } from '../index';
-import { defineCron, defineJob } from '../types';
+} from '#/db/index.ts';
+import { DocumentSyncType } from '#/enums.ts';
+import { Lock } from '#/lock.ts';
+import { pubsub } from '#/pubsub.ts';
+import { compressZstd } from '#/utils/compression.ts';
+import { extractLoroDocContents, garbageCollectLoroDoc } from '#/utils/index.ts';
+import { enqueueJob } from '../index.ts';
+import { defineCron, defineJob } from '../types.ts';
 
 export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (documentId: string) => {
   const lock = new Lock(`document:${documentId}`);

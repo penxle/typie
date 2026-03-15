@@ -1,4 +1,4 @@
-import type { ExportFontFamily } from './types';
+import type { ExportFontFamily } from './types.ts';
 
 /** CSS Fonts Level 4 §5.2 font-weight matching algorithm */
 export function nearestWeight<T extends { weight: number }>(weights: T[], target: number): T | undefined {

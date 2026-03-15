@@ -12,7 +12,7 @@
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { z } from 'zod';
-  import { TypieError } from '@/errors';
+  import { TypieError } from '#/errors';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';

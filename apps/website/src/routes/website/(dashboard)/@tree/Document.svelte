@@ -5,7 +5,7 @@
   import { contextMenu } from '@typie/ui/actions';
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { DocumentType } from '@/enums';
+  import { DocumentType } from '#/enums';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';

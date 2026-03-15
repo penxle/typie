@@ -1,4 +1,4 @@
-import type { FontFile } from './fonts';
+import type { FontFile } from './fonts.ts';
 
 export type DocDefaults = {
   fontFamily: string;

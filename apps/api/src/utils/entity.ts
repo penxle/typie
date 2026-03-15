@@ -1,9 +1,9 @@
 import { faker } from '@faker-js/faker';
 import { inArray, sql } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
-import { defaultValues } from '@/const';
-import { db, Files, Images } from '@/db';
-import { wasm } from '@/utils/wasm';
+import { defaultValues } from '#/const.ts';
+import { db, Files, Images } from '#/db/index.ts';
+import { wasm } from '#/utils/wasm.ts';
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 export const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });

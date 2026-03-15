@@ -8,7 +8,7 @@
   import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { getContext, tick } from 'svelte';
-  import { EntityType, EntityVisibility } from '@/enums';
+  import { EntityType, EntityVisibility } from '#/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';

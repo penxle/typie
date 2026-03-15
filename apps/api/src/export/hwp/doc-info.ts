@@ -1,6 +1,6 @@
 // spell-checker:words HWPTAG
-import { allocate, concat, encodeUTF16LE, HWPTAG, makeRecord } from './records';
-import type { IdTable } from './records';
+import { allocate, concat, encodeUTF16LE, HWPTAG, makeRecord } from './records.ts';
+import type { IdTable } from './records.ts';
 
 export type FontEntry = { name: string; postScriptName: string };
 

@@ -1,8 +1,8 @@
 import { createRedisEventTarget } from '@graphql-yoga/redis-event-target';
 import { createPubSub } from 'graphql-yoga';
 import { Redis } from 'ioredis';
-import { env } from '@/env';
-import type { DocumentSyncType } from '@/enums';
+import { env } from '#/env.ts';
+import type { DocumentSyncType } from '#/enums.ts';
 
 export const pubsub = createPubSub<{
   'document:sync': [documentId: string, { target: string; type: DocumentSyncType; data: string }];

@@ -1,12 +1,12 @@
 // spell-checker:words HWPTAG HWPUNIT DBEAFE DCFCE
-import { resolveColorToHex } from '../core/theme';
-import { buildSectionDef, collectInlineSegments, collectParagraphsFromChildren, makeParagraph } from './paragraph';
-import { allocate, ctrlId, hexToColorref, HWPTAG, makeRecord, pxToHwpunit } from './records';
-import { estimateTextWidthHwp, resolveParaShape } from './styles';
-import { makeSimpleTableFromParagraphs, makeTwoRowTable } from './table';
-import type { NodeEntry } from '../core/types';
-import type { BorderFillEntry, CharShapeEntry } from './doc-info';
-import type { HwpConvertContext, InlineSegment } from './types';
+import { resolveColorToHex } from '../core/theme.ts';
+import { buildSectionDef, collectInlineSegments, collectParagraphsFromChildren, makeParagraph } from './paragraph.ts';
+import { allocate, ctrlId, hexToColorref, HWPTAG, makeRecord, pxToHwpunit } from './records.ts';
+import { estimateTextWidthHwp, resolveParaShape } from './styles.ts';
+import { makeSimpleTableFromParagraphs, makeTwoRowTable } from './table.ts';
+import type { NodeEntry } from '../core/types.ts';
+import type { BorderFillEntry, CharShapeEntry } from './doc-info.ts';
+import type { HwpConvertContext, InlineSegment } from './types.ts';
 
 export type ConvertNodeFn = (nodeId: string, ctx: HwpConvertContext, isFirst: boolean) => Uint8Array[];
 

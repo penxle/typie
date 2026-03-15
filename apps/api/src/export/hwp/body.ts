@@ -1,5 +1,5 @@
 // cspell:ignore Hwpunit Segs
-import { traverse } from '../core/traverse';
+import { traverse } from '../core/traverse.ts';
 import {
   convertBlockquoteNode,
   convertCalloutNode,
@@ -7,16 +7,16 @@ import {
   convertFoldNode,
   convertPlaceholderNode,
   makeHorizontalRule,
-} from './blocks';
-import { convertImageNode } from './image';
-import { buildSectionDef, collectInlineSegments, makeParagraph, setLastParagraphFlag } from './paragraph';
-import { concat, pxToHwpunit } from './records';
-import { resolveParaShape } from './styles';
-import { convertTableNode } from './table';
-import type { ParsedDocument } from '../core/document';
-import type { NodeVisitor } from '../core/traverse';
-import type { NodeEntry } from '../core/types';
-import type { HwpConvertContext } from './types';
+} from './blocks.ts';
+import { convertImageNode } from './image.ts';
+import { buildSectionDef, collectInlineSegments, makeParagraph, setLastParagraphFlag } from './paragraph.ts';
+import { concat, pxToHwpunit } from './records.ts';
+import { resolveParaShape } from './styles.ts';
+import { convertTableNode } from './table.ts';
+import type { ParsedDocument } from '../core/document.ts';
+import type { NodeVisitor } from '../core/traverse.ts';
+import type { NodeEntry } from '../core/types.ts';
+import type { HwpConvertContext } from './types.ts';
 
 function consumeSectionDef(ctx: HwpConvertContext): Uint8Array[] | undefined {
   if (!ctx.sectionDefEmitted) {

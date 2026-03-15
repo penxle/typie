@@ -7,11 +7,11 @@ import { deleteCookie, getCookie } from 'hono/cookie';
 import * as jose from 'jose';
 import { nanoid } from 'nanoid';
 import qs from 'query-string';
-import { redis } from '@/cache';
-import { db, first, UserSessions } from '@/db';
-import { env } from '@/env';
-import { jwk, privateKey, publicKey } from '@/utils';
-import type { Env } from '@/context';
+import { redis } from '#/cache.ts';
+import { db, first, UserSessions } from '#/db/index.ts';
+import { env } from '#/env.ts';
+import { jwk, privateKey, publicKey } from '#/utils/index.ts';
+import type { Env } from '#/context.ts';
 
 export const auth = new Hono<Env>();
 

@@ -1,5 +1,5 @@
 import ky from 'ky';
-import { env } from '@/env';
+import { env } from '#/env.ts';
 
 type SendMessageParams = { channel: string; message: string; username?: string; iconEmoji?: string };
 export const sendMessage = async ({ channel, message, username, iconEmoji }: SendMessageParams) => {

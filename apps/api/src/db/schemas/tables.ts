@@ -1,11 +1,11 @@
 import { eq, sql } from 'drizzle-orm';
 import { bigint, boolean, index, integer, jsonb, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
-import { TableCode } from './codes';
-import * as E from './enums';
-import { createDbId } from './id';
-import { bytea, datetime } from './types';
+import { TableCode } from './codes.ts';
+import * as E from './enums.ts';
+import { createDbId } from './id.ts';
+import { bytea, datetime } from './types.ts';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { CouponCondition, PageLayout, PlanRules } from './json';
+import type { CouponCondition, PageLayout, PlanRules } from './json.ts';
 
 export const DocumentArchivedNodes = pgTable('document_archived_nodes', {
   id: text('id')

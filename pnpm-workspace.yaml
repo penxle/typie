@@ -1,0 +1,4 @@
+packages:
+  - apps/*
+  - crates/*
+  - packages/*

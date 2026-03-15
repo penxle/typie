@@ -11,7 +11,7 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
-  import { defaultPlanRules } from '@/const';
+  import { defaultPlanRules } from '#/const';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { updated } from '$app/state';

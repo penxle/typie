@@ -1,9 +1,9 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import { inArray } from 'drizzle-orm';
-import { db, Embeds, Images } from '@/db';
-import * as aws from '@/external/aws';
-import type { EmbedInfo, ImageAsset } from './types';
+import { db, Embeds, Images } from '#/db/index.ts';
+import * as aws from '#/external/aws.ts';
+import type { EmbedInfo, ImageAsset } from './types.ts';
 
 export function collectNodeIds(nodes: Record<string, { type: string; id?: string }>, type: string): string[] {
   const ids: string[] = [];

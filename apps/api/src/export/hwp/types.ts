@@ -1,5 +1,5 @@
-import type { EmbedInfo, ExportFontFamily, ImageAsset, NodeEntry, PageLayout } from '../core/types';
-import type { DocInfoTables } from './doc-info';
+import type { EmbedInfo, ExportFontFamily, ImageAsset, NodeEntry, PageLayout } from '../core/types.ts';
+import type { DocInfoTables } from './doc-info.ts';
 
 export type HwpConvertContext = {
   nodes: Record<string, NodeEntry>;

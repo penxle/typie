@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
-import { auth } from './auth';
-import { bmo } from './bmo';
-import { font } from './font';
-import { healthz } from './healthz';
-import { iap } from './iap';
-import { og } from './og';
-import type { Env } from '@/context';
+import { auth } from './auth.ts';
+import { bmo } from './bmo.ts';
+import { font } from './font.ts';
+import { healthz } from './healthz.ts';
+import { iap } from './iap.ts';
+import { og } from './og.tsx.js';
+import type { Env } from '#/context.ts';
 
 export const rest = new Hono<Env>();
 

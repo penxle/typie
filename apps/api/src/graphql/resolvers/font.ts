@@ -1,8 +1,8 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { db, first, firstOrThrow, FontFamilies, FontNames, Fonts, TableCode, validateDbId } from '@/db';
-import { FontFamilyState, FontState } from '@/enums';
-import { builder } from '../builder';
-import { Blob, Font, FontFamily, isTypeOf } from '../objects';
+import { db, first, firstOrThrow, FontFamilies, FontNames, Fonts, TableCode, validateDbId } from '#/db/index.ts';
+import { FontFamilyState, FontState } from '#/enums.ts';
+import { builder } from '../builder.ts';
+import { Blob, Font, FontFamily, isTypeOf } from '../objects.ts';
 
 const LANG_KO_KR = 0x04_12;
 const LANG_EN_US = 0x04_09;

@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { db, Embeds, first, firstOrThrow, TableCode } from '@/db';
-import * as iframely from '@/external/iframely';
-import { builder } from '../builder';
-import { Embed, isTypeOf } from '../objects';
+import { db, Embeds, first, firstOrThrow, TableCode } from '#/db/index.ts';
+import * as iframely from '#/external/iframely.ts';
+import { builder } from '../builder.ts';
+import { Embed, isTypeOf } from '../objects.ts';
 
 /**
  * * Types

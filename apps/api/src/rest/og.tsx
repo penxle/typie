@@ -1,3 +1,4 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { renderAsync } from '@resvg/resvg-js';
@@ -9,10 +10,10 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { match } from 'ts-pattern';
 import twemoji from 'twemoji';
-import { db, Documents, Entities, first, Folders, Images, Posts } from '@/db';
-import { EntityState, EntityType } from '@/enums';
-import * as aws from '@/external/aws';
-import type { Env } from '@/context';
+import { db, Documents, Entities, first, Folders, Images, Posts } from '#/db/index.ts';
+import { EntityState, EntityType } from '#/enums.ts';
+import * as aws from '#/external/aws.ts';
+import type { Env } from '#/context.ts';
 
 export const og = new Hono<Env>();
 
@@ -22,12 +23,13 @@ const loadFonts = async (filenames: string[]) => {
     const filePath = path.join('/tmp/fonts', filename);
 
     try {
-      return await Bun.file(filePath).bytes();
+      return await readFile(filePath);
     } catch {
       const url = `https://cdn.typie.net/fonts/${ext}/${filename}`;
       const resp = await ky.get(url).arrayBuffer();
 
-      await Bun.write(filePath, resp);
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, new Uint8Array(resp));
 
       return resp;
     }

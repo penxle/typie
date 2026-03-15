@@ -1,10 +1,10 @@
 import os from 'node:os';
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import { Queue, Worker } from 'bullmq';
-import Redis from 'ioredis';
-import { dev, env, stack } from '@/env';
-import { crons, jobs } from './tasks';
+import { Redis } from 'ioredis';
+import { dev, env, stack } from '#/env.ts';
+import { crons, jobs } from './tasks/index.ts';
 
 const log = logger.getChild('mq');
 const lane = dev ? os.hostname() : stack;
