@@ -76,5 +76,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             IMAGE_TAG=${{ steps.meta.outputs.version }}
+          secrets: |
+            TURBO_TOKEN=${{ secrets.TURBO_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

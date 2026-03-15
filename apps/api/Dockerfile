@@ -23,7 +23,8 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
 COPY out/full/ .
-RUN pnpm exec turbo build --filter=@typie/api && \
+RUN --mount=type=secret,id=TURBO_TOKEN,env=TURBO_TOKEN \
+    pnpm exec turbo build --filter=@typie/api && \
     find . -type d -name "node_modules" -prune -exec rm -rf {} +
 
 FROM builder AS prod-deps

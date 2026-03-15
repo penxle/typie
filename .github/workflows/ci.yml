@@ -15,9 +15,8 @@ permissions:
   packages: read
 
 env:
-  TURBO_TEAM: penxle
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-  TURBO_REMOTE_ONLY: true
+  TURBO_CACHE: remote:rw
 
 jobs:
   lint:

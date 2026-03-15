@@ -26,7 +26,8 @@ ARG IMAGE_TAG
 ENV PUBLIC_IMAGE_TAG=$IMAGE_TAG
 
 COPY out/full/ .
-RUN pnpm exec turbo build --filter=@typie/website && \
+RUN --mount=type=secret,id=TURBO_TOKEN,env=TURBO_TOKEN \
+    pnpm exec turbo build --filter=@typie/website && \
     find . -type d -name "node_modules" -prune -exec rm -rf {} +
 
 FROM builder AS prod-deps
