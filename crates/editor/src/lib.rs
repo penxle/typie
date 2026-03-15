@@ -28,6 +28,8 @@ pub use runtime::{Direction, Effect, Message, Runtime, State};
 #[cfg(any(test, feature = "bench"))]
 pub use state::{Position, Selection, compute_selection_attrs};
 #[cfg(any(test, feature = "bench"))]
+pub use test_utils::init_bench_env;
+#[cfg(any(test, feature = "bench"))]
 pub use test_utils::init_test_env;
 #[cfg(any(test, feature = "bench"))]
 pub use transaction::Transaction;

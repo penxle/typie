@@ -1,7 +1,7 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use editor::{
-    Affinity, Direction, Doc, Effect, Message, Node, NodeId, Position, Runtime, Selection, State,
-    Text, TextNode, Theme, Transaction, compute_selection_attrs, init_test_env, transact,
+    Affinity, Direction, Doc, Message, Node, NodeId, Position, Runtime, Selection, State, Text,
+    TextNode, Theme, Transaction, compute_selection_attrs, init_bench_env, init_test_env, transact,
 };
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
@@ -131,7 +131,7 @@ fn bench_editing(c: &mut Criterion) {
                 runtime
             },
             |runtime| {
-                runtime.update(Message::DeleteBackward);
+                runtime.update(Message::DeleteBackward { length: None });
                 runtime.tick();
                 runtime.render_page(0);
                 runtime.flush();
@@ -283,7 +283,7 @@ fn bench_editing(c: &mut Criterion) {
                 let mut runtime = prepared_runtime(1_000);
                 runtime.update(Message::SelectAll);
                 runtime.tick();
-                runtime.update(Message::DeleteBackward);
+                runtime.update(Message::DeleteBackward { length: None });
                 runtime.tick();
                 runtime.flush();
                 runtime
@@ -399,11 +399,164 @@ fn bench_data_access(c: &mut Criterion) {
     group.finish();
 }
 
+const KOREAN_PROSE: &str = include_str!("fixtures/korean_prose.txt");
+
+fn runtime_with_long_paragraph() -> (Runtime, NodeId, usize) {
+    init_bench_env();
+
+    let doc = Rc::new(Doc::new());
+    let initial_state = State::new(
+        doc,
+        Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
+    );
+
+    let p_id = NodeId::new();
+    let t_id = NodeId::new();
+    let single: String = KOREAN_PROSE
+        .split('\n')
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let long_text = single.repeat(5);
+    let char_count = long_text.chars().count();
+
+    let state = transact!(initial_state, |tr| {
+        tr.doc()
+            .node(NodeId::ROOT)
+            .unwrap()
+            .as_mut()
+            .insert_child_with_id(0, p_id, Node::Paragraph(Default::default()))
+            .unwrap();
+
+        let text = Text::from(long_text);
+        tr.doc()
+            .node(p_id)
+            .unwrap()
+            .as_mut()
+            .insert_child_with_id(
+                0,
+                t_id,
+                Node::Text(TextNode {
+                    text,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+    });
+
+    let mut runtime = Runtime::new(800.0, 1.0, state);
+    runtime.update(Message::Initialize {
+        theme: test_theme(),
+        viewport_width: 800.0,
+        viewport_height: 600.0,
+        scale_factor: 1.0,
+    });
+    runtime.tick();
+    runtime.flush();
+    runtime.layout();
+    (runtime, p_id, char_count)
+}
+
+fn bench_long_paragraph(c: &mut Criterion) {
+    let mut group = c.benchmark_group("long_paragraph");
+    group
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(20));
+
+    group.bench_function("input_at_start", |b| {
+        b.iter_batched_ref(
+            || {
+                let (mut runtime, p_id, _) = runtime_with_long_paragraph();
+                let id_str = p_id.to_string();
+                runtime.update(Message::SetSelection {
+                    anchor_node_id: id_str.clone(),
+                    anchor_offset: 0,
+                    anchor_affinity: Affinity::default(),
+                    head_node_id: id_str,
+                    head_offset: 0,
+                    head_affinity: Affinity::default(),
+                });
+                runtime.tick();
+                runtime
+            },
+            |runtime| {
+                runtime.update(Message::Input {
+                    text: "a".to_string(),
+                });
+                runtime.tick();
+                runtime.render_page(0);
+                runtime.flush();
+            },
+            BATCH,
+        );
+    });
+
+    group.bench_function("input_at_middle", |b| {
+        b.iter_batched_ref(
+            || {
+                let (mut runtime, p_id, char_count) = runtime_with_long_paragraph();
+                let id_str = p_id.to_string();
+                runtime.update(Message::SetSelection {
+                    anchor_node_id: id_str.clone(),
+                    anchor_offset: char_count / 2,
+                    anchor_affinity: Affinity::default(),
+                    head_node_id: id_str,
+                    head_offset: char_count / 2,
+                    head_affinity: Affinity::default(),
+                });
+                runtime.tick();
+                runtime
+            },
+            |runtime| {
+                runtime.update(Message::Input {
+                    text: "a".to_string(),
+                });
+                runtime.tick();
+                runtime.render_page(0);
+                runtime.flush();
+            },
+            BATCH,
+        );
+    });
+
+    group.bench_function("input_at_end", |b| {
+        b.iter_batched_ref(
+            || {
+                let (mut runtime, p_id, char_count) = runtime_with_long_paragraph();
+                let id_str = p_id.to_string();
+                runtime.update(Message::SetSelection {
+                    anchor_node_id: id_str.clone(),
+                    anchor_offset: char_count,
+                    anchor_affinity: Affinity::default(),
+                    head_node_id: id_str,
+                    head_offset: char_count,
+                    head_affinity: Affinity::default(),
+                });
+                runtime.tick();
+                runtime
+            },
+            |runtime| {
+                runtime.update(Message::Input {
+                    text: "a".to_string(),
+                });
+                runtime.tick();
+                let page_count = runtime.pages().len();
+                runtime.render_page(page_count - 1);
+                runtime.flush();
+            },
+            BATCH,
+        );
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_editing,
     bench_commit,
     bench_render,
     bench_data_access,
+    bench_long_paragraph,
 );
 criterion_main!(benches);
