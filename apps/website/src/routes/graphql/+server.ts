@@ -30,14 +30,16 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
       ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
       ...(bootstrapBypass ? { 'X-Bootstrap-Bypass': bootstrapBypass } : {}),
     },
-    body: await request.arrayBuffer(),
+    body: request.body,
+    // @ts-expect-error -- required for streaming request bodies
+    duplex: 'half',
   });
 
   if (response.status === 401) {
     cookies.delete('typie-at', { path: '/' });
   }
 
-  const responseBody = await response.arrayBuffer();
+  const responseBody = response.body;
   const responseHeaders = new Headers(response.headers);
 
   return new Response(responseBody, {
