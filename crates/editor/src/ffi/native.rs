@@ -500,14 +500,14 @@ pub extern "C" fn editor_set_tracing(
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
             let trace_id_str = unsafe { std::ffi::CStr::from_ptr(trace_id) }
                 .to_str()
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+                .map_err(|e| e.to_string())?;
             let parent_span_id_str = unsafe { std::ffi::CStr::from_ptr(parent_span_id) }
                 .to_str()
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
-            let trace_id = opentelemetry::trace::TraceId::from_hex(trace_id_str)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+                .map_err(|e| e.to_string())?;
+            let trace_id =
+                opentelemetry::trace::TraceId::from_hex(trace_id_str).map_err(|e| e.to_string())?;
             let parent_span_id = opentelemetry::trace::SpanId::from_hex(parent_span_id_str)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+                .map_err(|e| e.to_string())?;
             editor.runtime.tracing.set_tracing(trace_id, parent_span_id);
             Ok(())
         },
