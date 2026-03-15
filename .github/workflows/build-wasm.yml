@@ -53,7 +53,7 @@ jobs:
       - name: Build WASM
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         working-directory: crates/editor
-        run: RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target=bundler --no-pack
+        run: RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target=web --no-pack
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v7
