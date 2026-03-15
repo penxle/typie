@@ -287,21 +287,21 @@ class _RecentDocuments extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final docs =
-        data?.me?.recentlyViewedEntities.ofType<_RecentDocument>((v) => v.node).toList() ??
-        List.filled(
-          10,
-          _RecentDocument(
-            (b) => b
-              ..id = ''
-              ..title = BoneMock.title
-              ..excerpt = BoneMock.subtitle
-              ..updatedAt = Jiffy.now()
-              ..type = GDocumentType.NORMAL
-              ..entity.id = ''
-              ..entity.slug = '',
-          ),
-        );
+    final docs = data == null
+        ? List.filled(
+            10,
+            _RecentDocument(
+              (b) => b
+                ..id = ''
+                ..title = BoneMock.title
+                ..excerpt = BoneMock.subtitle
+                ..updatedAt = Jiffy.now()
+                ..type = GDocumentType.NORMAL
+                ..entity.id = ''
+                ..entity.slug = '',
+            ),
+          )
+        : data?.me?.recentlyViewedEntities.ofType<_RecentDocument>((v) => v.node).toList() ?? [];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -318,20 +318,34 @@ class _RecentDocuments extends StatelessWidget {
             ),
           ),
         ),
-        if (docs.isNotEmpty)
-          Padding(
-            padding: const Pad(horizontal: 20),
-            child: Container(
-              decoration: BoxDecoration(color: context.colors.surfaceDefault, borderRadius: BorderRadius.circular(12)),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: docs
-                    .map((doc) => _DocumentRow(doc: doc))
-                    .intersperseWith(HorizontalDivider(color: context.colors.borderSubtle))
-                    .toList(),
-              ),
-            ),
-          ),
+        Padding(
+          padding: const Pad(horizontal: 20),
+          child: docs.isEmpty
+              ? SizedBox(
+                  height: 110,
+                  child: Container(
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: context.colors.surfaceDefault,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text('최근 사용한 문서가 여기 나타나요', style: TextStyle(fontSize: 15, color: context.colors.textFaint)),
+                  ),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    color: context.colors.surfaceDefault,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: docs
+                        .map((doc) => _DocumentRow(doc: doc))
+                        .intersperseWith(HorizontalDivider(color: context.colors.borderSubtle))
+                        .toList(),
+                  ),
+                ),
+        ),
       ],
     );
   }
