@@ -7,8 +7,18 @@ const S3_PREFIX = 'editor/fonts';
 
 const FALLBACK_FONTS = [
   {
-    familyName: 'Pretendard (Fallback)',
-    fonts: [{ weight: 400, path: 'Pretendard-Regular' }],
+    familyName: 'Noto Sans',
+    fonts: [
+      { weight: 400, path: 'NotoSans-Regular' },
+      { weight: 700, path: 'NotoSans-Bold' },
+    ],
+  },
+  {
+    familyName: 'Noto Sans KR',
+    fonts: [
+      { weight: 400, path: 'NotoSansKR-Regular' },
+      { weight: 700, path: 'NotoSansKR-Bold' },
+    ],
   },
   {
     familyName: 'Noto Sans JP',
@@ -23,6 +33,18 @@ const FALLBACK_FONTS = [
       { weight: 400, path: 'NotoSansSC-Regular' },
       { weight: 700, path: 'NotoSansSC-Bold' },
     ],
+  },
+  {
+    familyName: 'Noto Sans Math',
+    fonts: [{ weight: 400, path: 'NotoSansMath-Regular' }],
+  },
+  {
+    familyName: 'Noto Sans Symbols',
+    fonts: [{ weight: 400, path: 'NotoSansSymbols-Regular' }],
+  },
+  {
+    familyName: 'Noto Sans Symbols 2',
+    fonts: [{ weight: 400, path: 'NotoSansSymbols2-Regular' }],
   },
   {
     familyName: 'NotoColorEmoji',
