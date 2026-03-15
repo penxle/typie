@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-Turborepo monorepo using Bun as package manager/runtime.
+Turborepo monorepo using pnpm as package manager.
 
 - `apps/`: api, website, desktop, mobile, bmo, literoom, caddy
 - `crates/`: editor (Rust, WASM)
@@ -11,22 +11,22 @@ Turborepo monorepo using Bun as package manager/runtime.
 ## Commands
 
 ```bash
-bun install             # Install dependencies
-bun run dev             # Start all dev servers
-bun run build           # Build all packages
-bun run test            # Run all tests
-bun run lint:eslint     # Lint with ESLint
-bun run lint:prettier   # Check formatting
-bun run lint:typecheck  # TypeScript type checking
-bun run lint:svelte     # Svelte-specific linting
-bun run lint:spellcheck # Spell check with cspell
-bun run lint:syncpack   # Check dependency version sync
+pnpm install             # Install dependencies
+pnpm run dev             # Start all dev servers
+pnpm run build           # Build all packages
+pnpm run test            # Run all tests
+pnpm run lint:eslint     # Lint with ESLint
+pnpm run lint:prettier   # Check formatting
+pnpm run lint:typecheck  # TypeScript type checking
+pnpm run lint:svelte     # Svelte-specific linting
+pnpm run lint:spellcheck # Spell check with cspell
+pnpm run lint:syncpack   # Check dependency version sync
 ```
 
 ## Git Hooks (Lefthook)
 
 Pre-commit runs automatically: eslint fix, prettier fix, cspell, dart fix/format, cargo fmt.
-Run `bun run bootstrap` to install hooks after fresh clone.
+Run `pnpm run bootstrap` to install hooks after fresh clone.
 
 ## Code Style
 
