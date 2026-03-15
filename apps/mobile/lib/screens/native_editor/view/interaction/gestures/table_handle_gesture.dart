@@ -71,8 +71,7 @@ extension TableHandleGestureMethods on EditorInteractionController {
     _autoScrollSemantic.handle(
       y: viewportPosition.dy,
       x: viewportPosition.dx,
-      viewWidth: viewWidth,
-      viewHeight: viewHeight,
+      visibleArea: scope.visibleEditorArea,
       handleDragPosition: cellHandleDragPosition,
       longPressPosition: scope.longPressPosition,
       dropPosition: tableDropPosition,

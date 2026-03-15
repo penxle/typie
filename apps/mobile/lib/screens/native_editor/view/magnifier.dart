@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:typie/context/theme.dart';
 
 class EditorMagnifier extends StatelessWidget {
-  const EditorMagnifier({required this.position, required this.focalPoint, required this.pageSize, super.key});
+  const EditorMagnifier({
+    required this.position,
+    required this.focalPoint,
+    required this.visibleOrigin,
+    required this.visibleSize,
+    super.key,
+  });
 
   final Offset position;
   final Offset focalPoint;
-  final Size pageSize;
+  final Offset visibleOrigin;
+  final Size visibleSize;
 
   static const Size _size = Size(144, 80);
   static const double _magnification = 1.3;
@@ -14,18 +21,16 @@ class EditorMagnifier extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final clampedX = position.dx.clamp(_size.width / 2, pageSize.width - _size.width / 2);
-
+    final clampedX = position.dx.clamp(_size.width / 2, visibleSize.width - _size.width / 2);
     final showBelow = position.dy < _size.height + _verticalOffset;
-    final magnifierY = showBelow ? position.dy + _verticalOffset : position.dy - _verticalOffset - _size.height;
-
-    final magnifierPosition = Offset(clampedX - _size.width / 2, magnifierY);
+    final preferredY = showBelow ? position.dy + _verticalOffset : position.dy - _verticalOffset - _size.height;
+    final magnifierPosition = Offset(clampedX - _size.width / 2, preferredY < 0 ? 0 : preferredY);
 
     final borderRadius = BorderRadius.circular(_size.height / 2);
 
     return Positioned(
-      left: magnifierPosition.dx,
-      top: magnifierPosition.dy,
+      left: visibleOrigin.dx + magnifierPosition.dx,
+      top: visibleOrigin.dy + magnifierPosition.dy,
       child: IgnorePointer(
         child: Container(
           decoration: BoxDecoration(

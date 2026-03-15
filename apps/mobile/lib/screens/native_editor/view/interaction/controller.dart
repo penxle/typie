@@ -16,6 +16,7 @@ import 'package:typie/screens/native_editor/view/interaction/contracts.dart';
 import 'package:typie/screens/native_editor/view/interaction/core.dart';
 import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/visible_area.dart';
 import 'package:typie/screens/native_editor/view/zoom.dart';
 
 part 'gestures/dnd_gesture.dart';
@@ -444,13 +445,12 @@ class EditorInteractionController {
     _autoScrollSemantic.handle(
       y: y,
       x: x,
-      viewWidth: readViewWidth(),
-      viewHeight: readViewHeight(),
       handleDragPosition: handleDragPosition,
       longPressPosition: longPressPosition,
       dropPosition: dropPosition,
       verticalScrollController: scope.verticalScrollController,
       resolveHorizontalMetrics: _resolveHorizontalMetrics,
+      visibleArea: scope.visibleEditorArea,
       getPageAtPosition: getPageAtPosition,
       getPointerX: _resolvePointerX,
       readSelectionContext: _resolveAutoScrollSelectionContext,
