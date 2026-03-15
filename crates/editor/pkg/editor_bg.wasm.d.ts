@@ -37,7 +37,6 @@ export const application_new: () => number;
 export const application_outlineTextToSvg: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const application_setAutoSurroundEnabled: (a: number, b: number) => void;
 export const application_setAvailableFonts: (a: number, b: any) => void;
-export const application_setFallbackFonts: (a: number, b: any) => void;
 export const application_setTextReplacementRules: (a: number, b: any) => void;
 export const application_snapshotToJson: (a: number, b: number, c: number) => [number, number, number];
 export const application_validateDocumentJson: (a: number, b: any) => [number, number];

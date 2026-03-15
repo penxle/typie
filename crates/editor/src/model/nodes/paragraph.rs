@@ -532,6 +532,9 @@ impl Layout for ParagraphNode {
             builder.push_default(StyleProperty::OverflowWrap(OverflowWrap::Anywhere));
             builder.push_default(StyleProperty::WordBreak(WordBreak::BreakAll));
 
+            let font_mappings = globals.font_mappings.borrow();
+            let font_interner = globals.font_family_interner.borrow();
+
             let mut offset = 0;
             for child in ctx.node.children() {
                 match child.node() {
@@ -559,7 +562,12 @@ impl Layout for ParagraphNode {
                             let has_embolden =
                                 segment.styles.iter().any(|s| matches!(s, Style::Bold(_)));
 
+                            // Push non-FontFamily styles as before
                             for style in &segment.styles {
+                                if matches!(style, Style::FontFamily(_)) {
+                                    continue; // FontFamily is now handled by mapping lookup below
+                                }
+
                                 let (start, end) = map_range_with_preedit(
                                     (base_start, base_end),
                                     preedit_info,
@@ -585,6 +593,100 @@ impl Layout for ParagraphNode {
                                 );
                             }
 
+                            // Mapping-based font family resolution (single pass)
+                            let segment_family = segment
+                                .styles
+                                .iter()
+                                .find_map(|s| match s {
+                                    Style::FontFamily(m) => Some(m.family.as_str()),
+                                    _ => None,
+                                })
+                                .unwrap_or(&cascade_family);
+
+                            let segment_weight = segment
+                                .styles
+                                .iter()
+                                .find_map(|s| match s {
+                                    Style::FontWeight(w) => Some(w.weight),
+                                    _ => None,
+                                })
+                                .unwrap_or(cascade_weight);
+
+                            let interned_primary = font_interner
+                                .get(segment_family)
+                                .cloned()
+                                .unwrap_or_else(|| std::sync::Arc::from(segment_family));
+
+                            let mut current_resolved: Option<(std::sync::Arc<str>, u16)> = None;
+                            let mut range_start_char = base_start;
+
+                            for (i, ch) in segment.text.chars().enumerate() {
+                                let char_idx = base_start + i;
+                                let cp = ch as u32;
+
+                                let resolved = font_mappings
+                                    .get(&(interned_primary.clone(), segment_weight, cp))
+                                    .cloned()
+                                    .unwrap_or_else(|| (interned_primary.clone(), segment_weight));
+
+                                let is_same = current_resolved.as_ref().map_or(false, |prev| {
+                                    prev.0 == resolved.0 && prev.1 == resolved.1
+                                });
+
+                                if !is_same {
+                                    // Flush previous range
+                                    if let Some(ref prev) = current_resolved {
+                                        let (start, end) = map_range_with_preedit(
+                                            (range_start_char, char_idx),
+                                            preedit_info,
+                                            &Expand::None,
+                                        );
+                                        let byte_range =
+                                            char_to_byte_offset_with_map(&char_to_byte, start)
+                                                ..char_to_byte_offset_with_map(&char_to_byte, end);
+                                        builder.push(
+                                            StyleProperty::FontFamily(FontFamily::Single(
+                                                FontFamilyName::Named(prev.0.to_string().into()),
+                                            )),
+                                            byte_range.clone(),
+                                        );
+                                        if prev.1 != segment_weight {
+                                            builder.push(
+                                                StyleProperty::FontWeight(FontWeight::new(
+                                                    prev.1 as f32,
+                                                )),
+                                                byte_range,
+                                            );
+                                        }
+                                    }
+                                    current_resolved = Some(resolved);
+                                    range_start_char = char_idx;
+                                }
+                            }
+
+                            // Flush last range
+                            if let Some(ref prev) = current_resolved {
+                                let (start, end) = map_range_with_preedit(
+                                    (range_start_char, base_end),
+                                    preedit_info,
+                                    &Expand::None,
+                                );
+                                let byte_range = char_to_byte_offset_with_map(&char_to_byte, start)
+                                    ..char_to_byte_offset_with_map(&char_to_byte, end);
+                                builder.push(
+                                    StyleProperty::FontFamily(FontFamily::Single(
+                                        FontFamilyName::Named(prev.0.to_string().into()),
+                                    )),
+                                    byte_range.clone(),
+                                );
+                                if prev.1 != segment_weight {
+                                    builder.push(
+                                        StyleProperty::FontWeight(FontWeight::new(prev.1 as f32)),
+                                        byte_range,
+                                    );
+                                }
+                            }
+
                             for annotation in &segment.annotations {
                                 let (start, end) = map_range_with_preedit(
                                     (base_start, base_end),
@@ -608,6 +710,9 @@ impl Layout for ParagraphNode {
                     _ => continue,
                 }
             }
+
+            drop(font_mappings);
+            drop(font_interner);
 
             if let (Some(preedit), Some(ps)) = (preedit, pending_styles) {
                 let preedit_start = preedit.offset;

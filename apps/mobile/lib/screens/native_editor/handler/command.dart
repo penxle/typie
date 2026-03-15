@@ -505,30 +505,35 @@ class CommandHandler {
       }
 
       unawaited(
-        Future.wait([
-              manager.ensureRequiredFont(req.family, font, req.codepoints).then((_) {
-                unawaited(manager.preloadRemainingChunks(req.family, font));
-              }),
-              manager.filterUncoveredCodepoints(font, req.codepoints).then((uncovered) async {
-                if (uncovered.isNotEmpty) {
-                  await manager.ensureRequiredFallbackFont(req.weight, uncovered);
-                }
-              }),
-            ])
-            .then((_) {
-              if (controller.isDisposed) {
-                return;
-              }
-              controller.dispatch({
-                'type': 'fontsLoaded',
-                'family': req.family,
-                'weight': req.weight,
-                'codepoints': req.codepoints,
-              });
-            })
-            .catchError((Object err) {
-              debugPrint('Font load handler skipped: $err');
-            }),
+        (() async {
+          await manager.ensureRequiredFont(req.family, font, req.codepoints);
+          unawaited(manager.preloadRemainingChunks(req.family, font));
+
+          final uncovered = await manager.filterUncoveredCodepoints(font, req.codepoints);
+          final coveredSet = uncovered.toSet();
+          final covered = req.codepoints.where((cp) => !coveredSet.contains(cp)).toList();
+
+          final mappings = <Map<String, dynamic>>[
+            {'family': req.family, 'weight': font.weight, 'codepoints': covered},
+          ];
+
+          if (uncovered.isNotEmpty) {
+            final fallbackMappings = await manager.resolveFallbackMappings(req.weight, uncovered);
+            mappings.addAll(fallbackMappings);
+          }
+
+          if (controller.isDisposed) {
+            return;
+          }
+          controller.dispatch({
+            'type': 'fontsLoaded',
+            'family': req.family,
+            'weight': req.weight,
+            'mappings': mappings,
+          });
+        })().catchError((Object err) {
+          debugPrint('Font load handler skipped: $err');
+        }),
       );
     }
   }

@@ -176,21 +176,6 @@ class NativeEditorApplication {
     }
   }
 
-  void setFallbackFonts(List<String> names) {
-    _checkDisposed();
-
-    final json = jsonEncode(names);
-    final jsonPtr = json.toNativeUtf8();
-
-    final result = _bindings.editor_application_set_fallback_fonts(_handle, jsonPtr.cast());
-
-    calloc.free(jsonPtr);
-
-    if (result != 0) {
-      throw EditorException(_getLastError() ?? 'Failed to set fallback fonts');
-    }
-  }
-
   void setTextReplacementRules(List<Map<String, dynamic>> rules) {
     _checkDisposed();
 

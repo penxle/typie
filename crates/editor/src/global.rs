@@ -1,10 +1,14 @@
 use crate::font::decode_tpft;
+use crate::runtime::FontMapping;
 use crate::runtime::text_replacement::{
     CompiledPattern, RawTextReplacementRule, TextReplacementRule,
 };
+use rustc_hash::FxHashMap;
 use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+pub const PHANTOM_FONT_FAMILY: &str = "Noto (Phantom)";
 
 thread_local! {
     pub static GLOBALS: RefCell<Globals> = RefCell::new(Globals::new());
@@ -44,6 +48,8 @@ pub struct Globals {
     pub auto_surround_enabled: RefCell<bool>,
     pub available_fonts: RefCell<HashMap<String, Vec<u16>>>,
     pub font_versions: RefCell<HashMap<usize, u64>>,
+    pub font_family_interner: RefCell<HashMap<String, Arc<str>>>,
+    pub font_mappings: RefCell<FxHashMap<(Arc<str>, u16, u32), (Arc<str>, u16)>>,
 }
 
 impl Globals {
@@ -56,8 +62,66 @@ impl Globals {
             auto_surround_enabled: RefCell::new(true),
             available_fonts: RefCell::new(HashMap::new()),
             font_versions: RefCell::new(HashMap::new()),
+            font_family_interner: RefCell::new(HashMap::new()),
+            font_mappings: RefCell::new(FxHashMap::default()),
         }
     }
+}
+
+pub fn intern_font_family(name: &str) -> Arc<str> {
+    GLOBALS.with(|globals| {
+        let globals = globals.borrow();
+        let mut interner = globals.font_family_interner.borrow_mut();
+        interner
+            .entry(name.to_string())
+            .or_insert_with(|| Arc::from(name))
+            .clone()
+    })
+}
+
+pub fn lookup_font_mapping(
+    family: &Arc<str>,
+    weight: u16,
+    codepoint: u32,
+) -> Option<(Arc<str>, u16)> {
+    GLOBALS.with(|globals| {
+        let globals = globals.borrow();
+        let mappings = globals.font_mappings.borrow();
+        mappings.get(&(family.clone(), weight, codepoint)).cloned()
+    })
+}
+
+pub fn update_font_mappings(
+    requested_family: &str,
+    requested_weight: u16,
+    mappings: &[FontMapping],
+) -> Vec<u32> {
+    GLOBALS.with(|globals| {
+        let globals = globals.borrow();
+        let mut interner = globals.font_family_interner.borrow_mut();
+        let mut table = globals.font_mappings.borrow_mut();
+
+        let req_arc = interner
+            .entry(requested_family.to_string())
+            .or_insert_with(|| Arc::from(requested_family))
+            .clone();
+
+        let mut all_codepoints = Vec::new();
+        for m in mappings {
+            let res_arc = interner
+                .entry(m.family.clone())
+                .or_insert_with(|| Arc::from(m.family.as_str()))
+                .clone();
+            for &cp in &m.codepoints {
+                table.insert(
+                    (req_arc.clone(), requested_weight, cp),
+                    (res_arc.clone(), m.weight),
+                );
+                all_codepoints.push(cp);
+            }
+        }
+        all_codepoints
+    })
 }
 
 pub(crate) fn font_version(ptr: *const u8) -> u64 {

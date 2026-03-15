@@ -46,7 +46,6 @@ int32_t editor_application_load_icu_data(EditorApplication* app, const uint8_t* 
 int32_t editor_application_add_font_base(EditorApplication* app, const char* family, uint16_t weight, const uint8_t* data, size_t data_len);
 int32_t editor_application_add_font_chunk(EditorApplication* app, const char* family, uint16_t weight, const uint8_t* data, size_t data_len);
 int32_t editor_application_set_available_fonts(EditorApplication* app, const char* fonts_json);
-int32_t editor_application_set_fallback_fonts(EditorApplication* app, const char* names_json);
 int32_t editor_application_set_text_replacement_rules(EditorApplication* app, const char* rules_json);
 int32_t editor_application_clear_text_replacement_rules(EditorApplication* app);
 EditorHandle* editor_application_create_editor(EditorApplication* app, double scale_factor, const uint8_t* snapshot, size_t snapshot_len);

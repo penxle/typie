@@ -1,4 +1,4 @@
-use crate::global::{add_font_base, add_font_chunk, set_available_fonts, set_fallback_fonts};
+use crate::global::{add_font_base, add_font_chunk, set_available_fonts};
 use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
 use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::{is_cursor_hit, is_selection_hit};
@@ -338,24 +338,6 @@ pub extern "C" fn editor_application_set_available_fonts(
             let fonts: std::collections::HashMap<String, Vec<u16>> =
                 serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))?;
             set_available_fonts(fonts);
-            Ok(())
-        },
-        -1
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn editor_application_set_fallback_fonts(
-    _app: *mut EditorApplication,
-    names_json: *const c_char,
-) -> i32 {
-    ffi!(
-        {
-            let json = parse_cstr(names_json, "Names JSON")?;
-            let names: Vec<String> =
-                serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))?;
-            let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-            set_fallback_fonts(&name_refs);
             Ok(())
         },
         -1
