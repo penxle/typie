@@ -368,3 +368,138 @@ export class RenderInfo {
     ptr: number;
     width: number;
 }
+
+export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+
+export interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+    readonly __wbg_application_free: (a: number, b: number) => void;
+    readonly __wbg_charactercounts_free: (a: number, b: number) => void;
+    readonly __wbg_clipboarddata_free: (a: number, b: number) => void;
+    readonly __wbg_dragimageinfo_free: (a: number, b: number) => void;
+    readonly __wbg_editor_free: (a: number, b: number) => void;
+    readonly __wbg_get_charactercounts_doc_with_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_doc_without_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_doc_without_whitespace_and_punctuation: (a: number) => number;
+    readonly __wbg_get_charactercounts_selection_with_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_selection_without_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_selection_without_whitespace_and_punctuation: (a: number) => number;
+    readonly __wbg_get_clipboarddata_html: (a: number) => [number, number];
+    readonly __wbg_get_clipboarddata_text: (a: number) => [number, number];
+    readonly __wbg_renderinfo_free: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_doc_with_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_doc_without_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_doc_without_whitespace_and_punctuation: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_selection_with_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_selection_without_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_selection_without_whitespace_and_punctuation: (a: number, b: number) => void;
+    readonly __wbg_set_clipboarddata_html: (a: number, b: number, c: number) => void;
+    readonly __wbg_set_clipboarddata_text: (a: number, b: number, c: number) => void;
+    readonly application_addFontBase: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly application_addFontChunk: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly application_clearTextReplacementRules: (a: number) => void;
+    readonly application_createEditor: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly application_encodeFont: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly application_getFontCodepoints: (a: number, b: number, c: number) => [number, number, number];
+    readonly application_getFontMetadata: (a: number, b: number, c: number) => [number, number, number];
+    readonly application_getMemory: (a: number) => any;
+    readonly application_jsonToSnapshot: (a: number, b: any) => [number, number, number, number];
+    readonly application_loadIcuData: (a: number, b: number, c: number) => [number, number];
+    readonly application_new: () => number;
+    readonly application_outlineTextToSvg: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly application_setAutoSurroundEnabled: (a: number, b: number) => void;
+    readonly application_setAvailableFonts: (a: number, b: any) => void;
+    readonly application_setTextReplacementRules: (a: number, b: any) => void;
+    readonly application_snapshotToJson: (a: number, b: number, c: number) => [number, number, number];
+    readonly application_validateDocumentJson: (a: number, b: any) => [number, number];
+    readonly application_validateRegex: (a: number, b: number, c: number) => number;
+    readonly dragimageinfo_height: (a: number) => number;
+    readonly dragimageinfo_len: (a: number) => number;
+    readonly dragimageinfo_offsetX: (a: number) => number;
+    readonly dragimageinfo_offsetY: (a: number) => number;
+    readonly dragimageinfo_ptr: (a: number) => number;
+    readonly dragimageinfo_scaleFactor: (a: number) => number;
+    readonly dragimageinfo_width: (a: number) => number;
+    readonly editor_checkout: (a: number, b: number, c: number) => [number, number];
+    readonly editor_checkoutToLatest: (a: number) => [number, number];
+    readonly editor_clearTracing: (a: number) => void;
+    readonly editor_dispatch: (a: number, b: any) => void;
+    readonly editor_drainTraces: (a: number) => any;
+    readonly editor_enqueueMessage: (a: number, b: any) => void;
+    readonly editor_export: (a: number, b: any) => [number, number, number, number];
+    readonly editor_exportPageVector: (a: number, b: number) => [number, number];
+    readonly editor_flush: (a: number) => void;
+    readonly editor_getCharacterCountAtVersion: (a: number, b: number, c: number) => number;
+    readonly editor_getCharacterCounts: (a: number) => number;
+    readonly editor_getClipboardData: (a: number) => number;
+    readonly editor_getSlabLen: (a: number) => number;
+    readonly editor_getSlabPtr: (a: number) => number;
+    readonly editor_getSlateLen: (a: number) => number;
+    readonly editor_getSlateOffsets: (a: number) => any;
+    readonly editor_getSlatePtr: (a: number) => number;
+    readonly editor_getTextWithMappings: (a: number) => [number, number, number];
+    readonly editor_importUpdates: (a: number, b: number, c: number) => [number, number];
+    readonly editor_importUpdatesBatch: (a: number, b: any) => [number, number];
+    readonly editor_insertTemplateFragment: (a: number, b: number, c: number) => [number, number];
+    readonly editor_inspectPageElement: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly editor_inspectSelectionAsFragmentMacro: (a: number) => [number, number];
+    readonly editor_inspectState: (a: number) => [number, number];
+    readonly editor_inspectStateAsMacro: (a: number) => [number, number];
+    readonly editor_isCursorHit: (a: number, b: number, c: number, d: number) => number;
+    readonly editor_isDetached: (a: number) => number;
+    readonly editor_isReadOnly: (a: number) => number;
+    readonly editor_isSelectionHit: (a: number, b: number, c: number, d: number) => number;
+    readonly editor_performSearch: (a: number, b: number, c: number, d: number) => any;
+    readonly editor_removeTrackedItems: (a: number, b: number, c: number, d: number) => void;
+    readonly editor_renderDragImage: (a: number, b: number, c: number, d: number) => number;
+    readonly editor_renderPage: (a: number, b: number) => number;
+    readonly editor_replaceTextInBlock: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
+    readonly editor_replaceTextInBlocks: (a: number, b: any) => number;
+    readonly editor_revealTrackedItem: (a: number, b: number, c: number, d: number) => number;
+    readonly editor_revertTo: (a: number, b: number, c: number) => [number, number];
+    readonly editor_setAllFoldsExpanded: (a: number, b: number) => void;
+    readonly editor_setLayoutDebug: (a: number, b: number) => void;
+    readonly editor_setReadOnly: (a: number, b: number) => void;
+    readonly editor_setRenderDebug: (a: number, b: number) => void;
+    readonly editor_setTracing: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly editor_setTrackedItems: (a: number, b: number, c: number, d: number) => void;
+    readonly editor_tick: (a: number) => void;
+    readonly __wbg_set_renderinfo_height: (a: number, b: number) => void;
+    readonly __wbg_set_renderinfo_len: (a: number, b: number) => void;
+    readonly __wbg_set_renderinfo_ptr: (a: number, b: number) => void;
+    readonly __wbg_set_renderinfo_width: (a: number, b: number) => void;
+    readonly __wbg_get_renderinfo_height: (a: number) => number;
+    readonly __wbg_get_renderinfo_len: (a: number) => number;
+    readonly __wbg_get_renderinfo_ptr: (a: number) => number;
+    readonly __wbg_get_renderinfo_width: (a: number) => number;
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_exn_store: (a: number) => void;
+    readonly __externref_table_alloc: () => number;
+    readonly __wbindgen_externrefs: WebAssembly.Table;
+    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __externref_table_dealloc: (a: number) => void;
+    readonly __wbindgen_start: () => void;
+}
+
+export type SyncInitInput = BufferSource | WebAssembly.Module;
+
+/**
+ * Instantiates the given `module`, which can either be bytes or
+ * a precompiled `WebAssembly.Module`.
+ *
+ * @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
+ *
+ * @returns {InitOutput}
+ */
+export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
+
+/**
+ * If `module_or_path` is {RequestInfo} or {URL}, makes a request and
+ * for everything else, calls `WebAssembly.instantiate` directly.
+ *
+ * @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
+ *
+ * @returns {Promise<InitOutput>}
+ */
+export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;

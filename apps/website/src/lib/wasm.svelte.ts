@@ -30,7 +30,8 @@ function wrapWithCrashDetection<T extends object>(target: T): T {
 }
 
 export function initWasm(): Promise<Application> {
-  return (initPromise ??= import('@typie/editor').then(({ Application }) => {
+  return (initPromise ??= import('@typie/editor').then(async ({ default: init, Application }) => {
+    await init();
     instance = wrapWithCrashDetection(new Application());
     return instance;
   }));

@@ -6,7 +6,6 @@ import mearie from 'mearie/vite';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
-import wasm from 'vite-plugin-wasm';
 import type { Plugin } from 'vite';
 
 const currentDir = fileURLToPath(new URL('.', import.meta.url));
@@ -50,7 +49,6 @@ const wasmReloadPlugin = (): Plugin => {
 export default defineConfig({
   clearScreen: false,
   plugins: [
-    wasm(),
     svg(),
     icons({
       scale: 1,
@@ -70,7 +68,7 @@ export default defineConfig({
     port: 4000,
     strictPort: true,
     fs: {
-      allow: ['..'],
+      allow: ['../..'],
     },
   },
 });

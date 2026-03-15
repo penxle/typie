@@ -4,48 +4,25 @@ import type { Application } from '@typie/editor';
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const base = import.meta.resolve!('@typie/editor');
 const WASM_PATH = new URL('editor_bg.wasm', base).pathname;
-const GLUE_PATH = new URL('editor_bg.js', base).pathname;
+const GLUE_PATH = new URL('editor.js', base).pathname;
 
 const POOL_SIZE = 10;
 
-type WasmExports = {
-  memory: WebAssembly.Memory;
-  __wbindgen_start: () => void;
-  [key: string]: unknown;
-};
-
-type GlueModule = {
-  Application: new () => Application;
-  __wbg_set_wasm: (exports: WasmExports) => void;
-};
-
 const glueSource = await readFile(GLUE_PATH, 'utf8');
-const strippedGlueSource = glueSource.replaceAll(/^export /gm, '');
+const isolatedSource = glueSource
+  .replaceAll(/^export \{[^}]*\}.*$/gm, '')
+  .replaceAll(/^export /gm, '')
+  .replaceAll('import.meta.url', '""');
 
-const glueExportNames: string[] = [];
-const exportRe = /^export (?:function|class)\s+(\w+)/gm;
-let match;
-while ((match = exportRe.exec(glueSource)) !== null) {
-  glueExportNames.push(match[1]);
-}
+type IsolatedScope = {
+  initSync: (input: { module: WebAssembly.Module }) => void;
+  Application: new () => Application;
+};
 
-function createGlueInstance(): GlueModule {
-  const factory = new Function(`"use strict";\n${strippedGlueSource}\nreturn{${glueExportNames.join(',')}};`);
-  return factory() as GlueModule;
-}
-
-async function createInstance(module: WebAssembly.Module): Promise<Application> {
-  const glue = createGlueInstance();
-
-  const instance = (await WebAssembly.instantiate(module, {
-    './editor_bg.js': glue as unknown as WebAssembly.ModuleImports,
-  })) as unknown as WebAssembly.Instance;
-
-  const exports = instance.exports as WasmExports;
-  glue.__wbg_set_wasm(exports);
-  exports.__wbindgen_start();
-
-  return new glue.Application();
+function createInstance(module: WebAssembly.Module): Application {
+  const { initSync, Application } = new Function(`"use strict";\n${isolatedSource}\nreturn{initSync,Application};`)() as IsolatedScope;
+  initSync({ module });
+  return new Application();
 }
 
 const available: Application[] = [];
@@ -56,9 +33,9 @@ let wasmModule: WebAssembly.Module | null = null;
 async function initPool(): Promise<void> {
   const wasmBuffer = await readFile(WASM_PATH);
   wasmModule = await WebAssembly.compile(wasmBuffer);
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const instances = await Promise.all(Array.from({ length: POOL_SIZE }, () => createInstance(wasmModule!)));
-  available.push(...instances);
+  for (let i = 0; i < POOL_SIZE; i++) {
+    available.push(createInstance(wasmModule));
+  }
 }
 
 function returnToPool(app: Application): void {
@@ -83,9 +60,11 @@ async function use<T>(fn: (app: Application) => T): Promise<Awaited<T>> {
     return result;
   } catch (err) {
     if (err instanceof WebAssembly.RuntimeError && wasmModule) {
-      createInstance(wasmModule).then(returnToPool, () => {
-        /* noop*/
-      });
+      try {
+        returnToPool(createInstance(wasmModule));
+      } catch {
+        /* noop */
+      }
     } else {
       returnToPool(app);
     }
