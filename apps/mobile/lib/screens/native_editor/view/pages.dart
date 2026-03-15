@@ -27,8 +27,8 @@ class PageList extends HookWidget {
     final scope = ContentScope.of(context);
     final pref = useService<Pref>();
     final state = useListenable(scope.controller);
-    final sheetBottomInset = useValueListenable(scope.controller.sheetBottomInset);
-    final viewportTopInset = useValueListenable(scope.viewportTopInset);
+    final visibleArea = useValueListenable(scope.visibleArea);
+    final viewportSize = scope.viewportSize;
 
     final pages = state.state.pages;
     final cursor = state.state.cursor;
@@ -59,8 +59,6 @@ class PageList extends HookWidget {
     final showContextMenu = useState(false);
     final wasContextMenuOpen = useRef(false);
     final viewportWidth = useValueNotifier<double>(0);
-    final viewportSize = useValueNotifier(Size.zero);
-
     final longPressPosition = scope.longPressPosition;
     final interactionRuntime = useEditorInteractionRuntime(
       context: context,
@@ -233,9 +231,13 @@ class PageList extends HookWidget {
             });
           }
 
-          final nextSize = Size(viewWidth, viewHeight);
-          if (viewportSize.value != nextSize) {
-            viewportSize.value = nextSize;
+          final nextViewportSize = Size(viewWidth, viewHeight);
+          if (viewportSize.value != nextViewportSize) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (viewportSize.value != nextViewportSize) {
+                viewportSize.value = nextViewportSize;
+              }
+            });
           }
 
           final allowHorizontalPan = geo.isPaginated;
@@ -246,18 +248,17 @@ class PageList extends HookWidget {
           final horizontalPhysics = scrollLocked || !allowHorizontalPan
               ? const NeverScrollableScrollPhysics()
               : const NonGestureBouncingScrollPhysics();
-          final effectiveViewportHeight = math.max<double>(0, viewHeight - sheetBottomInset);
-
           final contentBottomPadding = geo.bottomPadding(
-            viewportHeight: effectiveViewportHeight,
+            viewportHeight: visibleArea.height,
             cursor: cursor,
             typewriterEnabled: pref.typewriterEnabled,
             typewriterPosition: pref.typewriterPosition,
-            viewportTopInset: viewportTopInset,
+            viewportTopInset: visibleArea.topInset,
+            viewportBottomInset: visibleArea.bottomInset,
           );
 
           final listView = Padding(
-            padding: EdgeInsets.only(bottom: sheetBottomInset),
+            padding: EdgeInsets.only(bottom: visibleArea.bottomInset),
             child: ScrollConfiguration(
               behavior: ScrollConfiguration.of(
                 context,

@@ -9,12 +9,9 @@ import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/services/preference.dart';
 
 class NativeCharacterCountFloating extends HookWidget {
-  const NativeCharacterCountFloating({required this.containerKey, required this.headerKey, super.key});
+  const NativeCharacterCountFloating({super.key});
 
   static const defaultRelativePosition = Offset(0.05, 0.05);
-
-  final GlobalKey containerKey;
-  final GlobalKey headerKey;
 
   @override
   Widget build(BuildContext context) {
@@ -47,8 +44,6 @@ class NativeCharacterCountFloating extends HookWidget {
     }
 
     return NativeEditorFloatingWidget(
-      containerKey: containerKey,
-      headerKey: headerKey,
       initialRelativePosition: initialRelativePosition,
       isExpanded: isExpanded.value,
       onPositionChanged: handlePositionChanged,

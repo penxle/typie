@@ -37,6 +37,7 @@ import 'package:typie/screens/native_editor/view/repaste_as_text.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/scroll.dart';
 import 'package:typie/screens/native_editor/view/scrollbar.dart';
+import 'package:typie/screens/native_editor/view/visible_area.dart';
 import 'package:typie/screens/native_editor/view/zoom.dart';
 import 'package:typie/screens/native_editor/view/zoom_overlay.dart';
 import 'package:typie/services/keyboard.dart';
@@ -99,9 +100,21 @@ class EditorView extends HookWidget {
     final suppressScrollbarTimer = useRef<Timer?>(null);
     final titleAreaHeight = useValueNotifier<double>(0);
     final viewportTopInset = useValueNotifier<double>(0);
+    final viewportSize = useValueNotifier(Size.zero);
+    final viewportBottomInset = useValueNotifier<double>(0);
+    final visibleArea = useMemoized(
+      () => VisibleEditorAreaNotifier(
+        viewportSize: viewportSize,
+        topInset: viewportTopInset,
+        bottomInset: viewportBottomInset,
+      ),
+      [viewportSize, viewportTopInset, viewportBottomInset],
+    );
+    useEffect(() => visibleArea.dispose, [visibleArea]);
     final scrollMetricsRevision = useValueNotifier(0);
     final currentTitleAreaHeight = useValueListenable(titleAreaHeight);
     final currentViewportTopInset = useValueListenable(viewportTopInset);
+    final currentVisibleArea = useValueListenable<VisibleEditorArea>(visibleArea);
     final longPressPosition = useValueNotifier<Offset?>(null);
     final handleDragPosition = useValueNotifier<Offset?>(null);
     final interactionState = useMemoized(EditorInteractionState.new);
@@ -119,6 +132,8 @@ class EditorView extends HookWidget {
     final currentDisplayZoom = useValueListenable(displayZoom);
     final currentRenderZoom = useValueListenable(renderZoom);
     final sheetBottomInset = useValueListenable(controller.sheetBottomInset);
+    final remarkScrollTarget = useValueListenable(controller.remarkScrollTarget);
+    final remarkHighlightTarget = useValueListenable(controller.remarkHighlightTarget);
     final cursorFollowScrollActive = useRef(false);
     final cursorFollowScrollMode = useRef(ScrollMode.auto);
     final typewriterRecoveryPending = useRef(false);
@@ -154,7 +169,7 @@ class EditorView extends HookWidget {
       suppressScrollbarShow.value = visible;
     }
 
-    void syncViewportTopInset() {
+    void syncViewportInsets() {
       final headerRenderBox = headerKey.currentContext?.findRenderObject() as RenderBox?;
       final containerRenderBox = floatingContainerKey.currentContext?.findRenderObject() as RenderBox?;
       if (headerRenderBox == null ||
@@ -166,10 +181,18 @@ class EditorView extends HookWidget {
 
       final headerBottom = headerRenderBox.localToGlobal(Offset(0, headerRenderBox.size.height)).dy;
       final containerTop = containerRenderBox.localToGlobal(Offset.zero).dy;
+      final containerBottom = containerRenderBox.localToGlobal(Offset(0, containerRenderBox.size.height)).dy;
+      final screenHeight = MediaQuery.sizeOf(context).height;
+      final keyboardInsetBottom = MediaQuery.viewInsetsOf(context).bottom;
       final nextViewportTopInset = (headerBottom - containerTop).clamp(0.0, containerRenderBox.size.height);
+      final sheetTop = screenHeight - keyboardInsetBottom - sheetBottomInset;
+      final nextViewportBottomInset = (containerBottom - sheetTop).clamp(0.0, containerRenderBox.size.height);
 
       if ((viewportTopInset.value - nextViewportTopInset).abs() > 0.5) {
         viewportTopInset.value = nextViewportTopInset;
+      }
+      if ((viewportBottomInset.value - nextViewportBottomInset).abs() > 0.5) {
+        viewportBottomInset.value = nextViewportBottomInset;
       }
     }
 
@@ -456,7 +479,7 @@ class EditorView extends HookWidget {
         cursor: c,
         typewriterEnabled: typewriter,
         typewriterPosition: typewriter ? pref.typewriterPosition : 0.5,
-        viewportTopInset: currentViewportTopInset,
+        viewportTopInset: currentVisibleArea.topInset,
       );
     }
 
@@ -544,16 +567,16 @@ class EditorView extends HookWidget {
       );
       final viewportHeight = verticalPosition.viewportDimension;
       final cursorHeight = geo.toDisplayY(cursor.height);
-      final usableViewportHeight = (viewportHeight - currentViewportTopInset).clamp(0.0, double.infinity);
+      final usableViewportHeight = (viewportHeight - currentVisibleArea.topInset).clamp(0.0, double.infinity);
       final availableRange = (usableViewportHeight - cursorHeight).clamp(0.0, double.infinity);
       final targetScroll =
-          geo.cursorTopInContent(cursor) - currentViewportTopInset - availableRange * pref.typewriterPosition;
+          geo.cursorTopInContent(cursor) - currentVisibleArea.topInset - availableRange * pref.typewriterPosition;
       final totalContentHeight = geo.totalContentHeight(
         viewportHeight: viewportHeight,
         cursor: cursor,
         typewriterEnabled: true,
         typewriterPosition: pref.typewriterPosition,
-        viewportTopInset: currentViewportTopInset,
+        viewportTopInset: currentVisibleArea.topInset,
       );
       final maxScrollExtent = (totalContentHeight - viewportHeight).clamp(0.0, double.infinity);
       final scrollOffset = targetScroll.clamp(0.0, maxScrollExtent);
@@ -731,10 +754,10 @@ class EditorView extends HookWidget {
         if (!context.mounted) {
           return;
         }
-        syncViewportTopInset();
+        syncViewportInsets();
       });
       return null;
-    }, [mediaQuerySize, mediaQueryPaddingTop, currentTitleAreaHeight]);
+    }, [mediaQuerySize, mediaQueryPaddingTop, currentTitleAreaHeight, sheetBottomInset, viewInsetsBottom]);
 
     useEffect(() {
       // Fallback repeat only: used when platform repeat events are not delivered.
@@ -985,7 +1008,7 @@ class EditorView extends HookWidget {
         dndController,
         currentDisplayZoom,
         currentViewportTopInset,
-        sheetBottomInset,
+        currentVisibleArea.bottomInset,
         pref.typewriterEnabled,
       ],
     );
@@ -1074,12 +1097,12 @@ class EditorView extends HookWidget {
     }
 
     useEffect(() {
-      if (sheetBottomInset <= 0) {
+      if (currentVisibleArea.bottomInset <= 0) {
         return null;
       }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final target = controller.remarkHighlightTarget.value;
+        final target = remarkHighlightTarget;
         if (target == null) {
           return;
         }
@@ -1093,64 +1116,105 @@ class EditorView extends HookWidget {
       });
 
       return null;
-    }, [sheetBottomInset, currentViewportTopInset]);
+    }, [remarkHighlightTarget, currentVisibleArea.bottomInset, currentViewportTopInset, currentDisplayZoom]);
 
     useEffect(() {
       final target = state.state.search.scrollTarget;
-      if (target != null) {
+      if (target == null) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted || controller.state.search.scrollTarget != target) {
+          return;
+        }
         scrollToOverlay(pageIdx: target.pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
-      }
+      });
       return null;
-    }, [state.state.search.scrollTarget]);
+    }, [state.state.search.scrollTarget, currentVisibleArea.bottomInset, currentViewportTopInset, currentDisplayZoom]);
 
-    useEffect(() {
-      final target = state.state.spellcheck.scrollTarget;
-      final pageIdx = state.state.spellcheck.scrollTargetPageIdx;
-      if (target != null && pageIdx != null) {
-        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
-      }
-      return null;
-    }, [state.state.spellcheck.scrollTarget, state.state.spellcheck.scrollTargetPageIdx]);
+    useEffect(
+      () {
+        final target = state.state.spellcheck.scrollTarget;
+        final pageIdx = state.state.spellcheck.scrollTargetPageIdx;
+        if (target == null || pageIdx == null) {
+          return null;
+        }
 
-    useEffect(() {
-      final target = state.state.aiFeedback.scrollTarget;
-      final pageIdx = state.state.aiFeedback.scrollTargetPageIdx;
-      if (target != null && pageIdx != null) {
-        scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
-      }
-      return null;
-    }, [state.state.aiFeedback.scrollTarget, state.state.aiFeedback.scrollTargetPageIdx]);
-
-    useEffect(() {
-      void onRemarkScroll() {
-        final target = controller.remarkScrollTarget.value;
-        if (target != null) {
-          final layout = controller.state.layout;
-          if (layout != null) {
-            scrollToOverlayTarget(
-              verticalScrollController: verticalScrollController,
-              horizontalScrollController: horizontalScrollController,
-              geometry: ContentGeometry(
-                titleAreaHeight: titleAreaHeight.value,
-                layout: layout,
-                pages: controller.state.pages,
-                zoom: currentDisplayZoom,
-              ),
-              pageIdx: target.pageIdx,
-              targetX: target.boundsX,
-              targetY: target.boundsY,
-              targetWidth: target.boundsWidth,
-              targetHeight: target.boundsHeight,
-              viewportTopInset: currentViewportTopInset,
-            );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) {
+            return;
           }
+          if (controller.state.spellcheck.scrollTarget != target ||
+              controller.state.spellcheck.scrollTargetPageIdx != pageIdx) {
+            return;
+          }
+          scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
+        });
+        return null;
+      },
+      [
+        state.state.spellcheck.scrollTarget,
+        state.state.spellcheck.scrollTargetPageIdx,
+        currentVisibleArea.bottomInset,
+        currentViewportTopInset,
+        currentDisplayZoom,
+      ],
+    );
+
+    useEffect(
+      () {
+        final target = state.state.aiFeedback.scrollTarget;
+        final pageIdx = state.state.aiFeedback.scrollTargetPageIdx;
+        if (target == null || pageIdx == null) {
+          return null;
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) {
+            return;
+          }
+          if (controller.state.aiFeedback.scrollTarget != target ||
+              controller.state.aiFeedback.scrollTargetPageIdx != pageIdx) {
+            return;
+          }
+          scrollToOverlay(pageIdx: pageIdx, x: target.x, y: target.y, width: target.width, height: target.height);
+        });
+        return null;
+      },
+      [
+        state.state.aiFeedback.scrollTarget,
+        state.state.aiFeedback.scrollTargetPageIdx,
+        currentVisibleArea.bottomInset,
+        currentViewportTopInset,
+        currentDisplayZoom,
+      ],
+    );
+
+    useEffect(() {
+      final target = remarkScrollTarget;
+      if (target == null) {
+        return null;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted || controller.remarkScrollTarget.value != target) {
+          return;
+        }
+        scrollToOverlay(
+          pageIdx: target.pageIdx,
+          x: target.boundsX,
+          y: target.boundsY,
+          width: target.boundsWidth,
+          height: target.boundsHeight,
+        );
+        if (controller.remarkScrollTarget.value == target) {
           controller.remarkScrollTarget.value = null;
         }
-      }
+      });
 
-      controller.remarkScrollTarget.addListener(onRemarkScroll);
-      return () => controller.remarkScrollTarget.removeListener(onRemarkScroll);
-    }, [controller, currentDisplayZoom, currentViewportTopInset, sheetBottomInset]);
+      return null;
+    }, [remarkScrollTarget, currentViewportTopInset, currentVisibleArea.bottomInset, currentDisplayZoom]);
 
     if (currentLayout == null) {
       return const SizedBox.shrink();
@@ -1183,7 +1247,9 @@ class EditorView extends HookWidget {
         interactionSnapshot: interactionState.listenable,
         verticalScrollController: verticalScrollController,
         horizontalScrollController: horizontalScrollController,
+        visibleArea: visibleArea,
         inputController: inputController,
+        viewportSize: viewportSize,
         longPressPosition: longPressPosition,
         handleDragPosition: handleDragPosition,
         titleAreaHeight: titleAreaHeight,
@@ -1271,9 +1337,10 @@ class EditorView extends HookWidget {
                                   return const SizedBox.shrink();
                                 }
                                 return EditorMagnifier(
-                                  position: pos,
-                                  focalPoint: pos,
-                                  pageSize: Size(controller.state.pages.firstOrNull?.width ?? 0, constraints.maxHeight),
+                                  position: currentVisibleArea.localToVisible(pos),
+                                  focalPoint: currentVisibleArea.localToVisible(pos),
+                                  visibleOrigin: currentVisibleArea.origin,
+                                  visibleSize: currentVisibleArea.size,
                                 );
                               },
                             );
@@ -1284,8 +1351,7 @@ class EditorView extends HookWidget {
                           brightness: context.theme.brightness,
                           controller: inputController,
                         ),
-                        if (pref.characterCountFloatingEnabled)
-                          NativeCharacterCountFloating(containerKey: floatingContainerKey, headerKey: headerKey),
+                        if (pref.characterCountFloatingEnabled) const NativeCharacterCountFloating(),
                         const NativeEditorZoomOverlay(),
                         const Positioned(bottom: 20, right: 20, child: NativeEditorFloatingToolbar()),
                         if (state.state.repasteAsTextEnabled)

@@ -8,6 +8,7 @@ import 'package:typie/screens/native_editor/state/controller.dart';
 import 'package:typie/screens/native_editor/state/state.dart';
 import 'package:typie/screens/native_editor/view/geometry.dart';
 import 'package:typie/screens/native_editor/view/interaction/state.dart';
+import 'package:typie/screens/native_editor/view/visible_area.dart';
 
 class PresentedViewport {
   const PresentedViewport.base({required this.cursor, required this.renderVersion})
@@ -44,6 +45,8 @@ class ContentScope extends InheritedWidget {
     required this.ticker,
     required this.verticalScrollController,
     required this.horizontalScrollController,
+    required this.visibleArea,
+    required this.viewportSize,
     required this.inputController,
     required this.longPressPosition,
     required this.handleDragPosition,
@@ -75,6 +78,8 @@ class ContentScope extends InheritedWidget {
   final ValueListenable<InteractionSnapshot> interactionSnapshot;
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
+  final ValueListenable<VisibleEditorArea> visibleArea;
+  final ValueNotifier<Size> viewportSize;
   final InputController inputController;
 
   final ValueNotifier<Offset?> longPressPosition;
@@ -96,6 +101,8 @@ class ContentScope extends InheritedWidget {
   final void Function(double zoom, {bool commitRender}) setZoom;
 
   NativeEditor get editor => controller.editor;
+
+  VisibleEditorArea get visibleEditorArea => visibleArea.value;
 
   ContentGeometry get geometry {
     return ContentGeometry(

@@ -17,6 +17,7 @@ import 'package:typie/screens/native_editor/view/interaction/state.dart';
 import 'package:typie/screens/native_editor/view/pages.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
 import 'package:typie/screens/native_editor/view/selection.dart';
+import 'package:typie/screens/native_editor/view/visible_area.dart';
 import 'package:typie/service.dart';
 import 'package:typie/services/keyboard.dart';
 import 'package:typie/services/preference.dart';
@@ -78,9 +79,12 @@ class _PageListHarnessDeps {
     required this.interactionState,
     required this.verticalScrollController,
     required this.horizontalScrollController,
+    required this.visibleArea,
     required this.longPressPosition,
     required this.handleDragPosition,
     required this.titleAreaHeight,
+    required this.viewportTopInset,
+    required this.viewportSize,
     required this.title,
     required this.subtitle,
     required this.pendingScroll,
@@ -129,6 +133,8 @@ class _PageListHarnessDeps {
     final horizontalScrollController = ScrollController();
     final interactionState = EditorInteractionState();
     final titleAreaHeight = ValueNotifier<double>(0);
+    final viewportTopInset = ValueNotifier<double>(0);
+    final viewportSize = ValueNotifier<Size>(Size.zero);
     final displayZoom = ValueNotifier<double>(1);
     final renderZoom = ValueNotifier<double>(1);
 
@@ -158,9 +164,16 @@ class _PageListHarnessDeps {
       interactionState: interactionState,
       verticalScrollController: verticalScrollController,
       horizontalScrollController: horizontalScrollController,
+      visibleArea: VisibleEditorAreaNotifier(
+        viewportSize: viewportSize,
+        topInset: viewportTopInset,
+        bottomInset: controller.sheetBottomInset,
+      ),
       longPressPosition: ValueNotifier<Offset?>(null),
       handleDragPosition: ValueNotifier<Offset?>(null),
       titleAreaHeight: titleAreaHeight,
+      viewportTopInset: viewportTopInset,
+      viewportSize: viewportSize,
       title: ValueNotifier<String>(''),
       subtitle: ValueNotifier<String>(''),
       pendingScroll: ValueNotifier<VoidCallback?>(null),
@@ -193,9 +206,12 @@ class _PageListHarnessDeps {
 
   final ScrollController verticalScrollController;
   final ScrollController horizontalScrollController;
+  final VisibleEditorAreaNotifier visibleArea;
   final ValueNotifier<Offset?> longPressPosition;
   final ValueNotifier<Offset?> handleDragPosition;
   final ValueNotifier<double> titleAreaHeight;
+  final ValueNotifier<double> viewportTopInset;
+  final ValueNotifier<Size> viewportSize;
   final ValueNotifier<String> title;
   final ValueNotifier<String> subtitle;
   final ValueNotifier<VoidCallback?> pendingScroll;
@@ -230,10 +246,13 @@ class _PageListHarnessDeps {
         ticker: ticker,
         verticalScrollController: verticalScrollController,
         horizontalScrollController: horizontalScrollController,
+        visibleArea: visibleArea,
         inputController: inputController,
+        viewportSize: viewportSize,
         longPressPosition: longPressPosition,
         handleDragPosition: handleDragPosition,
         titleAreaHeight: titleAreaHeight,
+        viewportTopInset: viewportTopInset,
         title: title,
         subtitle: subtitle,
         onTitleChanged: (_) {},
@@ -253,8 +272,19 @@ class _PageListHarnessDeps {
           displayZoom.value = zoom;
           renderZoom.value = zoom;
         },
-        viewportTopInset: ValueNotifier(0),
-        child: const PageList(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final nextViewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+            if (viewportSize.value != nextViewportSize) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (viewportSize.value != nextViewportSize) {
+                  viewportSize.value = nextViewportSize;
+                }
+              });
+            }
+            return const PageList();
+          },
+        ),
       );
     }
 
@@ -296,9 +326,12 @@ class _PageListHarnessDeps {
     uploadManager.dispose();
     verticalScrollController.dispose();
     horizontalScrollController.dispose();
+    visibleArea.dispose();
     longPressPosition.dispose();
     handleDragPosition.dispose();
     titleAreaHeight.dispose();
+    viewportTopInset.dispose();
+    viewportSize.dispose();
     title.dispose();
     subtitle.dispose();
     pendingScroll.dispose();
@@ -634,6 +667,60 @@ void main() {
           .toList();
       expect(extendEvents.isNotEmpty, isTrue);
       expect(after, greaterThan(before));
+    });
+
+    testWidgets('selection handle auto-scroll uses visible top edge below header inset', (tester) async {
+      final deps = _PageListHarnessDeps.create();
+      addTearDown(deps.dispose);
+      deps.viewportTopInset.value = 80;
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      deps.controller.updateState(
+        (state) => state.copyWith(
+          selection: const EditorSelection(
+            collapsed: false,
+            cmp: 1,
+            anchorBounds: SelectionEndpointBounds(pageIdx: 0, x: 120, y: 520, width: 1, height: 20),
+            headBounds: SelectionEndpointBounds(pageIdx: 0, x: 180, y: 560, width: 1, height: 20),
+            range: {
+              'anchor': {'nodeId': 'n1', 'offset': 3, 'affinity': 'forward'},
+              'head': {'nodeId': 'n1', 'offset': 12, 'affinity': 'forward'},
+            },
+          ),
+        ),
+      );
+      await tester.pump();
+
+      deps.verticalScrollController.jumpTo(400);
+      await tester.pump();
+
+      final handles = find.byType(SelectionHandle);
+      expect(handles, findsWidgets);
+
+      final interaction = interactionControllerOf(tester);
+      final listTopLeft = tester.getTopLeft(find.byType(PageList));
+      final size = tester.getSize(find.byType(PageList));
+      final handleCenter = tester.getCenter(handles.last);
+      final before = deps.verticalScrollController.offset;
+
+      interaction
+        ..onHandleDragDown(SelectionHandleType.to, DragDownDetails(globalPosition: handleCenter))
+        ..onHandleDragStart(SelectionHandleType.to, DragStartDetails(globalPosition: handleCenter));
+      await tester.pump();
+      interaction.onHandleDragUpdate(
+        SelectionHandleType.to,
+        DragUpdateDetails(
+          globalPosition: listTopLeft + Offset(size.width / 2, deps.viewportTopInset.value + 10),
+          delta: const Offset(0, -70),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      interaction.onHandleDragEnd(SelectionHandleType.to, DragEndDetails());
+      await tester.pump();
+
+      final after = deps.verticalScrollController.offset;
+      expect(after, lessThan(before - 1));
     });
 
     testWidgets('onPan path stays blocked while double-tap drag is pending and dragging', (tester) async {
@@ -1431,6 +1518,29 @@ void main() {
       await quickTap(tester, point);
       await tester.pump(const Duration(milliseconds: 200));
       expect(find.byType(SelectionContextMenu), findsOneWidget);
+    });
+
+    testWidgets('context menu stays below visible top inset', (tester) async {
+      final deps = _PageListHarnessDeps.create(immediateSettledTicker: true);
+      addTearDown(deps.dispose);
+      deps.viewportTopInset.value = 80;
+      await tester.pumpWidget(deps.build());
+      await tester.pumpAndSettle();
+
+      deps.controller.updateState(
+        (state) => state.copyWith(
+          cursor: const CursorInfo(pageIdx: 0, x: 160, y: 20, height: 20, visible: true),
+          selection: null,
+        ),
+      );
+      await tester.pump();
+
+      final point = interactionPoint(tester, deps);
+      await quickTap(tester, point);
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byType(SelectionContextMenu), findsOneWidget);
+      expect(tester.getTopLeft(find.text('붙여넣기')).dy, greaterThanOrEqualTo(deps.viewportTopInset.value));
     });
 
     testWidgets('double-tap hold keeps double-tap selecting mode even outside selection', (tester) async {

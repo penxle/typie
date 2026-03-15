@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:typie/context/theme.dart';
 import 'package:typie/icons/lucide_light.dart';
 import 'package:typie/screens/native_editor/view/scope.dart';
+import 'package:typie/screens/native_editor/view/visible_area.dart';
 import 'package:typie/screens/native_editor/view/zoom.dart';
 
 class SelectionContextMenu extends StatelessWidget {
@@ -20,14 +22,20 @@ class SelectionContextMenu extends StatelessWidget {
         scope.verticalScrollController,
         scope.horizontalScrollController,
         scope.displayZoom,
+        scope.visibleArea,
       ]),
       builder: (context, _) {
-        final anchor = _computeMenuAnchor(scope, viewportWidth: MediaQuery.sizeOf(context).width);
+        final visibleArea = scope.visibleEditorArea;
+        if (visibleArea.size.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final anchor = _computeMenuAnchor(scope, visibleArea: visibleArea);
         if (anchor == null) {
           return const SizedBox.shrink();
         }
 
-        return Positioned.fill(
+        return Positioned.fromRect(
+          rect: visibleArea.bounds,
           child: CustomSingleChildLayout(
             delegate: _MenuPositionDelegate(centerX: anchor.centerX, above: anchor.above, below: anchor.below),
             child: TweenAnimationBuilder<double>(
@@ -50,7 +58,7 @@ class SelectionContextMenu extends StatelessWidget {
 
   ({double centerX, double above, double below})? _computeMenuAnchor(
     ContentScope scope, {
-    required double viewportWidth,
+    required VisibleEditorArea visibleArea,
   }) {
     final geo = scope.geometry;
     final offsets = geo.computeCumulativePageOffsets();
@@ -64,7 +72,7 @@ class SelectionContextMenu extends StatelessWidget {
     final horizontalMetrics = resolveHorizontalScrollMetrics(
       controller: hController,
       contentWidth: geo.contentWidth,
-      fallbackViewportDimension: viewportWidth,
+      fallbackViewportDimension: visibleArea.width,
     );
     final scrollOffset = verticalPosition.pixels;
     final hScrollOffset = horizontalMetrics.scrollOffset;
@@ -84,24 +92,30 @@ class SelectionContextMenu extends StatelessWidget {
 
     if (fromHandle != null && toHandle != null) {
       final fromPageTop = geo.titleAreaHeight + offsets[fromHandle.pageIdx];
-      final fromScreenY = fromPageTop + geo.toDisplayY(fromHandle.y) - scrollOffset;
-      final fromScreenX = contentStartX + geo.toDisplayX(fromHandle.x);
+      final fromScreen = visibleArea.localToVisible(
+        Offset(contentStartX + geo.toDisplayX(fromHandle.x), fromPageTop + geo.toDisplayY(fromHandle.y) - scrollOffset),
+      );
 
       final toPageTop = geo.titleAreaHeight + offsets[toHandle.pageIdx];
-      final toScreenY = toPageTop + geo.toDisplayY(toHandle.y + toHandle.height) - scrollOffset;
-      final toScreenX = contentStartX + geo.toDisplayX(toHandle.x);
+      final toScreen = visibleArea.localToVisible(
+        Offset(
+          contentStartX + geo.toDisplayX(toHandle.x),
+          toPageTop + geo.toDisplayY(toHandle.y + toHandle.height) - scrollOffset,
+        ),
+      );
 
-      topY = fromScreenY;
-      bottomY = toScreenY;
-      centerX = (fromScreenX + toScreenX) / 2;
+      topY = fromScreen.dy;
+      bottomY = toScreen.dy;
+      centerX = (fromScreen.dx + toScreen.dx) / 2;
     } else if (cursor != null) {
       final cursorPageTop = geo.titleAreaHeight + offsets[cursor.pageIdx];
-      final cursorScreenY = cursorPageTop + geo.toDisplayY(cursor.y) - scrollOffset;
-      final cursorScreenX = contentStartX + geo.toDisplayX(cursor.x);
+      final cursorScreen = visibleArea.localToVisible(
+        Offset(contentStartX + geo.toDisplayX(cursor.x), cursorPageTop + geo.toDisplayY(cursor.y) - scrollOffset),
+      );
 
-      topY = cursorScreenY;
-      bottomY = cursorScreenY + geo.toDisplayY(cursor.height);
-      centerX = cursorScreenX;
+      topY = cursorScreen.dy;
+      bottomY = cursorScreen.dy + geo.toDisplayY(cursor.height);
+      centerX = cursorScreen.dx;
     } else {
       return null;
     }
@@ -133,12 +147,15 @@ class _MenuPositionDelegate extends SingleChildLayoutDelegate {
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final showBelow = above < childSize.height;
-
     var x = centerX - childSize.width / 2;
-    x = x.clamp(_padding, size.width - childSize.width - _padding);
+    final maxX = math.max(_padding, size.width - childSize.width - _padding);
+    x = x.clamp(_padding, maxX);
 
-    final y = showBelow ? below : above - childSize.height;
+    final canShowAbove = above >= childSize.height;
+    final preferredY = canShowAbove ? above - childSize.height : below;
+    const minY = _padding;
+    final maxY = math.max(minY, size.height - childSize.height - _padding);
+    final y = preferredY.clamp(minY, maxY);
 
     return Offset(x, y);
   }

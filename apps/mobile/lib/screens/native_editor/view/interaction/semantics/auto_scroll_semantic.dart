@@ -6,7 +6,6 @@ class AutoScrollSemantic implements InteractionSemantic {
   double _horizontalEdgeDistance = 0;
   double _verticalDirection = 0;
   double _horizontalDirection = 0;
-  Size _autoScrollViewSize = Size.zero;
   (int, double, double)? _lastDispatchedPosition;
 
   static const _edgeThreshold = 30.0;
@@ -24,8 +23,7 @@ class AutoScrollSemantic implements InteractionSemantic {
   void handle({
     required double y,
     required double x,
-    required double viewWidth,
-    required double viewHeight,
+    required VisibleEditorArea visibleArea,
     required ValueNotifier<Offset?> handleDragPosition,
     required ValueNotifier<Offset?> longPressPosition,
     required ValueNotifier<Offset?> dropPosition,
@@ -37,23 +35,25 @@ class AutoScrollSemantic implements InteractionSemantic {
     required void Function(Map<String, dynamic> event) dispatch,
     required VoidCallback scrollIntoView,
   }) {
-    _autoScrollViewSize = Size(viewWidth, viewHeight);
+    final visiblePosition = visibleArea.localToVisible(Offset(x, y));
+    const topThreshold = _edgeThreshold;
+    final bottomThreshold = visibleArea.visibleHeight - _edgeThreshold;
 
-    if (y < _edgeThreshold) {
-      _verticalEdgeDistance = y;
+    if (visiblePosition.dy < topThreshold) {
+      _verticalEdgeDistance = visiblePosition.dy.clamp(0.0, _edgeThreshold);
       _verticalDirection = -1;
-    } else if (y > viewHeight - _edgeThreshold) {
-      _verticalEdgeDistance = viewHeight - y;
+    } else if (visiblePosition.dy > bottomThreshold) {
+      _verticalEdgeDistance = (visibleArea.visibleHeight - visiblePosition.dy).clamp(0.0, _edgeThreshold);
       _verticalDirection = 1;
     } else {
       _verticalDirection = 0;
     }
 
-    if (x < _edgeThreshold) {
-      _horizontalEdgeDistance = x;
+    if (visiblePosition.dx < _edgeThreshold) {
+      _horizontalEdgeDistance = visiblePosition.dx;
       _horizontalDirection = -1;
-    } else if (x > viewWidth - _edgeThreshold) {
-      _horizontalEdgeDistance = viewWidth - x;
+    } else if (visiblePosition.dx > visibleArea.width - _edgeThreshold) {
+      _horizontalEdgeDistance = visibleArea.width - visiblePosition.dx;
       _horizontalDirection = 1;
     } else {
       _horizontalDirection = 0;
@@ -61,6 +61,7 @@ class AutoScrollSemantic implements InteractionSemantic {
 
     if (_verticalDirection != 0 || _horizontalDirection != 0) {
       _start(
+        visibleArea: visibleArea,
         handleDragPosition: handleDragPosition,
         longPressPosition: longPressPosition,
         dropPosition: dropPosition,
@@ -79,6 +80,7 @@ class AutoScrollSemantic implements InteractionSemantic {
   }
 
   void _start({
+    required VisibleEditorArea visibleArea,
     required ValueNotifier<Offset?> handleDragPosition,
     required ValueNotifier<Offset?> longPressPosition,
     required ValueNotifier<Offset?> dropPosition,
@@ -96,8 +98,8 @@ class AutoScrollSemantic implements InteractionSemantic {
 
     _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       final activePosition = dropPosition.value ?? handleDragPosition.value ?? longPressPosition.value;
-      var scrolledY = activePosition?.dy ?? 0;
-      var scrolledX = activePosition?.dx ?? 0;
+      var scrolledVisibleY = activePosition == null ? 0.0 : visibleArea.localToVisibleY(activePosition.dy);
+      var scrolledVisibleX = activePosition == null ? 0.0 : visibleArea.localToVisible(activePosition).dx;
 
       final verticalPosition = resolveScrollPosition(verticalScrollController);
       if (_verticalDirection != 0 && verticalPosition != null && verticalPosition.hasContentDimensions) {
@@ -112,10 +114,12 @@ class AutoScrollSemantic implements InteractionSemantic {
 
         if (newOffset != currentOffset) {
           verticalPosition.jumpTo(newOffset);
-          final viewHeight = _autoScrollViewSize.height;
-          scrolledY = _verticalDirection > 0
-              ? viewHeight - _edgeThreshold + (newOffset >= verticalPosition.maxScrollExtent ? _edgeThreshold : 0)
-              : newOffset.clamp(0.0, _edgeThreshold);
+          scrolledVisibleY = _verticalDirection > 0
+              ? (visibleArea.visibleHeight -
+                        _edgeThreshold +
+                        (newOffset >= verticalPosition.maxScrollExtent ? _edgeThreshold : 0))
+                    .clamp(0.0, visibleArea.visibleHeight)
+              : (newOffset <= 0 ? 0.0 : _edgeThreshold).clamp(0.0, visibleArea.visibleHeight);
         }
       }
 
@@ -133,9 +137,10 @@ class AutoScrollSemantic implements InteractionSemantic {
 
         if (newOffset != currentOffset) {
           horizontalPosition.jumpTo(newOffset);
-          final viewWidth = _autoScrollViewSize.width;
-          scrolledX = _horizontalDirection > 0
-              ? viewWidth - _edgeThreshold + (newOffset >= horizontalPosition.maxScrollExtent ? _edgeThreshold : 0)
+          scrolledVisibleX = _horizontalDirection > 0
+              ? visibleArea.width -
+                    _edgeThreshold +
+                    (newOffset >= horizontalPosition.maxScrollExtent ? _edgeThreshold : 0)
               : newOffset.clamp(0.0, _edgeThreshold);
         }
       }
@@ -149,6 +154,8 @@ class AutoScrollSemantic implements InteractionSemantic {
         return;
       }
 
+      final scrolledY = visibleArea.visibleToLocalY(scrolledVisibleY);
+      final scrolledX = visibleArea.visibleToLocal(Offset(scrolledVisibleX, 0)).dx;
       final (pageIdx, localY) = getPageAtPosition(scrolledY);
       if (pageIdx < 0) {
         return;
@@ -204,6 +211,5 @@ class AutoScrollSemantic implements InteractionSemantic {
     stop();
     _verticalEdgeDistance = 0;
     _horizontalEdgeDistance = 0;
-    _autoScrollViewSize = Size.zero;
   }
 }
