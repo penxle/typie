@@ -860,6 +860,7 @@ class _EntityList extends HookWidget {
     final reorderListTopPadding = isReordering.value
         ? _entityHeadingFadeHeight - OverlayHeading.height
         : topInset + _entityHeadingFadeHeight;
+    final rootEmptyStateBottomInset = (reorderTitleTopPadding + 40) / 2 + shellNavBottomInset;
     final capsuleTitle = entity == null ? (currentSiteName.value ?? '내 스페이스') : folder!.name;
     final capsuleSubtitle = entity == null ? _buildSpaceSummary(entities) : _buildFolderSummary(folder!);
     final capsuleIcon = entity == null ? LucideLightIcons.folder_open : LucideLightIcons.folder;
@@ -1048,10 +1049,13 @@ class _EntityList extends HookWidget {
             if (entities.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: Center(
-                  child: Text(
-                    '스페이스가 비어있어요',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: rootEmptyStateBottomInset),
+                  child: Center(
+                    child: Text(
+                      '스페이스가 비어있어요',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textFaint),
+                    ),
                   ),
                 ),
               )
