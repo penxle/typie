@@ -3,9 +3,21 @@ use crate::model::NodeId;
 use crate::runtime::{Direction, Effect, Runtime};
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::position_helpers::move_from_block_position;
-use crate::state::{Position, Selection, leaf_block_end, leaf_block_start};
+use crate::state::{
+    Position, Selection, eq_positions_ignoring_affinity, leaf_block_end, leaf_block_start,
+};
 use crate::transaction::{sentence_range_at, word_range_at};
 use crate::types::Affinity;
+
+fn selection_matches_sorted_range_ignoring_affinity(
+    current: Option<(Position, Position)>,
+    start: Position,
+    end: Position,
+) -> bool {
+    current.is_some_and(|(from, to)| {
+        eq_positions_ignoring_affinity(from, start) && eq_positions_ignoring_affinity(to, end)
+    })
+}
 
 impl Runtime {
     fn common_isolating_ancestor_id(&self, selection: &Selection) -> Option<NodeId> {
@@ -107,7 +119,7 @@ impl Runtime {
                 if let (Some(start), Some(end)) =
                     (leaf_block_start(&isolating), leaf_block_end(&isolating))
                 {
-                    if current != Some((start, end)) {
+                    if !selection_matches_sorted_range_ignoring_affinity(current, start, end) {
                         effects.extend(self.transact(move |tr| {
                             tr.set_selection(Selection::new(start, end));
                             Ok(true)
@@ -128,7 +140,7 @@ impl Runtime {
             return effects;
         };
 
-        if current == Some((start, end)) {
+        if selection_matches_sorted_range_ignoring_affinity(current, start, end) {
             return effects;
         }
 
@@ -838,6 +850,100 @@ mod tests {
         assert_eq!(selection.head.node_id, p_last);
         assert_eq!(selection.head.offset, 1);
         assert!(!selection.is_collapsed());
+    }
+
+    #[test]
+    fn select_all_in_table_cell_selects_within_cell_boundary() {
+        let mut before = id!();
+        let mut p_cell = id!();
+        let mut after = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @before paragraph { text { "before" } }
+                table {
+                    table_row {
+                        table_cell { @p_cell paragraph { text { "cell" } } }
+                    }
+                }
+                @after paragraph { text { "after" } }
+            }
+            selection { (p_cell, 2) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, p_cell);
+        assert_eq!(selection.anchor.offset, 0);
+        assert_eq!(selection.head.node_id, p_cell);
+        assert_eq!(selection.head.offset, 4);
+        assert_eq!(selection.head.affinity, Affinity::Upstream);
+        assert!(!selection.is_collapsed());
+    }
+
+    #[test]
+    fn select_all_from_fully_selected_table_cell_expands_to_whole_document() {
+        let mut before = id!();
+        let mut p_cell = id!();
+        let mut after = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @before paragraph { text { "before" } }
+                table {
+                    table_row {
+                        table_cell { @p_cell paragraph { text { "cell" } } }
+                    }
+                }
+                @after paragraph { text { "after" } }
+            }
+            selection { (p_cell, 0, Affinity::Downstream) -> (p_cell, 4, Affinity::Downstream) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, before);
+        assert_eq!(selection.anchor.offset, 0);
+        assert_eq!(selection.head.node_id, after);
+        assert_eq!(selection.head.offset, 5);
+        assert_eq!(selection.head.affinity, Affinity::Upstream);
+    }
+
+    #[test]
+    fn select_all_in_empty_table_cell_selects_whole_document() {
+        let mut before = id!();
+        let mut p_empty = id!();
+        let mut after = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @before paragraph { text { "before" } }
+                table {
+                    table_row {
+                        table_cell { @p_empty paragraph {} }
+                    }
+                }
+                @after paragraph { text { "after" } }
+            }
+            selection { (p_empty, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::SelectAll);
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, before);
+        assert_eq!(selection.anchor.offset, 0);
+        assert_eq!(selection.head.node_id, after);
+        assert_eq!(selection.head.offset, 5);
+        assert_eq!(selection.head.affinity, Affinity::Upstream);
     }
 
     #[test]
