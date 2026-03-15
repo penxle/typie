@@ -12,7 +12,7 @@
   import { nanoid } from 'nanoid';
   import { setContext } from 'svelte';
   import { fly } from 'svelte/transition';
-  import { DocumentSyncType } from '@/enums';
+  import { DocumentSyncType } from '#/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';

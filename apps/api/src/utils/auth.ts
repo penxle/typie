@@ -1,6 +1,6 @@
 import * as jose from 'jose';
-import { env } from '@/env';
-import { decode } from './text';
+import { env } from '#/env.ts';
+import { decode } from './text.ts';
 
 export const jwk = JSON.parse(
   decode(Uint8Array.fromBase64(env.OIDC_JWK, { alphabet: 'base64url', lastChunkHandling: 'loose' })),

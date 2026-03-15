@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { env, stack } from '@/env';
-import { s3 } from '@/external/aws';
-import { bootstrapSchema } from '@/validation';
+import { env, stack } from '#/env.ts';
+import { s3 } from '#/external/aws.ts';
+import { bootstrapSchema } from '#/validation.ts';
 import type { z } from 'zod';
 
 type Bootstrap = z.infer<typeof bootstrapSchema>;

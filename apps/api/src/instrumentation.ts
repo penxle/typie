@@ -1,5 +1,5 @@
-import * as Sentry from '@sentry/bun';
-import { dev, env, stack } from '@/env';
+import * as Sentry from '@sentry/node';
+import { dev, env, stack } from '#/env.ts';
 
 Sentry.init({
   enabled: !dev,

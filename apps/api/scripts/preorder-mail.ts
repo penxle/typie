@@ -3,10 +3,10 @@
 import dayjs from 'dayjs';
 import { eq, isNull } from 'drizzle-orm';
 import { customAlphabet } from 'nanoid';
-import { CreditCodes, db, first, firstOrThrow, PreorderUsers } from '@/db';
-import { sendEmail } from '@/email';
-import { PreorderCodeEmail } from '@/email/templates';
-import { delay } from '@/utils/promise';
+import { CreditCodes, db, first, firstOrThrow, PreorderUsers } from '#/db/index.ts';
+import { sendEmail } from '#/email/index.ts';
+import { PreorderCodeEmail } from '#/email/templates/index.ts';
+import { delay } from '#/utils/promise.ts';
 
 // cspell:disable-next-line
 const generateRedeemCode = customAlphabet('ABCDEFGHJKMNPQRSTUVWXYZ1234567890', 20);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import dayjs from 'dayjs';
 import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
-import { defaultPlanRules, PlanId, TRIAL_DURATION_DAYS } from '@/const';
+import { defaultPlanRules, PlanId, TRIAL_DURATION_DAYS } from '#/const.ts';
 import {
   CreditCodes,
   db,
@@ -22,7 +22,7 @@ import {
   UserRevenues,
   UserTrials,
   validateDbId,
-} from '@/db';
+} from '#/db/index.ts';
 import {
   CreditCodeState,
   InAppPurchaseStore,
@@ -31,15 +31,15 @@ import {
   PlanAvailability,
   PlanInterval,
   SubscriptionState,
-} from '@/enums';
-import { NotFoundError, TypieError } from '@/errors';
-import * as appstore from '@/external/appstore';
-import * as googleplay from '@/external/googleplay';
-import * as portone from '@/external/portone';
-import { getSubscriptionExpiresAt, payAmountWithBillingKey, payInvoiceWithBillingKey } from '@/utils';
-import { delay } from '@/utils/promise';
-import { cardSchema, redeemCodeSchema } from '@/validation';
-import { builder } from '../builder';
+} from '#/enums.ts';
+import { NotFoundError, TypieError } from '#/errors.ts';
+import * as appstore from '#/external/appstore.ts';
+import * as googleplay from '#/external/googleplay.ts';
+import * as portone from '#/external/portone.ts';
+import { getSubscriptionExpiresAt, payAmountWithBillingKey, payInvoiceWithBillingKey } from '#/utils/index.ts';
+import { delay } from '#/utils/promise.ts';
+import { cardSchema, redeemCodeSchema } from '#/validation.ts';
+import { builder } from '../builder.ts';
 import {
   CreditCode,
   isTypeOf,
@@ -51,7 +51,7 @@ import {
   User,
   UserBillingKey,
   UserTrial,
-} from '../objects';
+} from '../objects.ts';
 
 /**
  * * Types

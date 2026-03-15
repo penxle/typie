@@ -1,9 +1,9 @@
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
 import { handleStreamOrSingleExecutionResult } from 'graphql-yoga';
-import { truncateVariables } from './utils';
+import { truncateVariables } from './utils.ts';
 import type { Plugin } from 'graphql-yoga';
-import type { Context } from '@/context';
+import type { Context } from '#/context.ts';
 
 const log = logger.getChild('graphql');
 

@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { db, DocumentContents, Documents, Entities, firstOrThrow, Folders } from '@/db';
-import { EntityState } from '@/enums';
-import { elasticsearch, esIndex } from '@/search';
-import { getAncestorEntityIds } from '@/utils/entity';
-import { decompose } from '@/utils/text';
-import { defineJob } from '../types';
+import { db, DocumentContents, Documents, Entities, firstOrThrow, Folders } from '#/db/index.ts';
+import { EntityState } from '#/enums.ts';
+import { elasticsearch, esIndex } from '#/search.ts';
+import { getAncestorEntityIds } from '#/utils/entity.ts';
+import { decompose } from '#/utils/text.ts';
+import { defineJob } from '../types.ts';
 
 export const DocumentIndexJob = defineJob('search:index:document', async (documentId: string) => {
   const document = await db

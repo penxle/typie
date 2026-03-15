@@ -1,13 +1,13 @@
-import { DocumentGCJob, DocumentGCScanCron, DocumentSyncCollectJob, DocumentSyncScanCron } from './document';
-import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email';
-import { DocumentIndexJob, FolderIndexJob } from './search';
+import { DocumentGCJob, DocumentGCScanCron, DocumentSyncCollectJob, DocumentSyncScanCron } from './document.ts';
+import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email.ts';
+import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import {
   SubscriptionRenewalCancelJob,
   SubscriptionRenewalCron,
   SubscriptionRenewalInitialJob,
   SubscriptionRenewalPlanChangeJob,
   SubscriptionRenewalRetryJob,
-} from './subscription';
+} from './subscription.ts';
 
 export const jobs = [
   DocumentSyncCollectJob,

@@ -1,5 +1,5 @@
-import { generateActivityImage, generateRandomName } from '@/utils';
-import { builder } from '../builder';
+import { generateActivityImage, generateRandomName } from '#/utils/index.ts';
+import { builder } from '../builder.ts';
 
 /**
  * * Queries

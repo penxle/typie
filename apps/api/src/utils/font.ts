@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { optimize } from 'svgo';
-import { compressZstd } from './compression';
-import { wasm } from './wasm';
+import { compressZstd } from './compression.ts';
+import { wasm } from './wasm.ts';
 
 const MAGIC = new Uint8Array([0x54, 0x50, 0x46, 0x54]);
 const VERSION = 1;

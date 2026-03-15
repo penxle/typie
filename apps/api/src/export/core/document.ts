@@ -1,6 +1,6 @@
-import { wasm } from '@/utils/wasm';
-import { collectNodeIds, loadEmbeds, loadImageAssets } from './assets';
-import type { DocumentJson, EmbedInfo, ImageAsset, NodeEntry } from './types';
+import { wasm } from '#/utils/wasm.ts';
+import { collectNodeIds, loadEmbeds, loadImageAssets } from './assets.ts';
+import type { DocumentJson, EmbedInfo, ImageAsset, NodeEntry } from './types.ts';
 
 export type ParsedDocument = {
   nodes: Record<string, NodeEntry>;

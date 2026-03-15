@@ -7,8 +7,8 @@ import ZodPlugin from '@pothos/plugin-zod';
 import dayjs from 'dayjs';
 import { GraphQLJSON } from 'graphql-scalars';
 import * as R from 'remeda';
-import { TypieError } from '@/errors';
-import type { SessionContext, UserContext } from '@/context';
+import { TypieError } from '#/errors.ts';
+import type { SessionContext, UserContext } from '#/context.ts';
 
 export const builder = new SchemaBuilder<{
   AuthContexts: {

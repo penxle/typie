@@ -1,5 +1,5 @@
 LICENSE
-bun.lock
+pnpm-lock.yaml
 docs/*
 !docs/*.md
 *.dart

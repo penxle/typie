@@ -1,8 +1,8 @@
 import { and, asc, eq } from 'drizzle-orm';
-import { db, firstOrThrow, TableCode, validateDbId, Widgets } from '@/db';
-import { generateFractionalOrder } from '@/utils';
-import { builder } from '../builder';
-import { isTypeOf, User, Widget } from '../objects';
+import { db, firstOrThrow, TableCode, validateDbId, Widgets } from '#/db/index.ts';
+import { generateFractionalOrder } from '#/utils/index.ts';
+import { builder } from '../builder.ts';
+import { isTypeOf, User, Widget } from '../objects.ts';
 
 Widget.implement({
   isTypeOf: isTypeOf(TableCode.WIDGETS),

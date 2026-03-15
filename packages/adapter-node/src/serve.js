@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { serve as honoServe } from '@hono/node-server';
 import { getClientAddress } from '@typie/lib';
 import { Hono } from 'hono';
 import { getMimeType } from 'hono/utils/mime';
@@ -113,10 +114,11 @@ export const serve = async ({ Server, manifest, prerendered }) => {
     return response;
   });
 
-  Bun.serve({
+  const server = honoServe({
     fetch: app.fetch,
     hostname: '0.0.0.0',
     port: 3000,
-    idleTimeout: 60,
   });
+  server.requestTimeout = 60_000;
+  server.keepAliveTimeout = 60_000;
 };

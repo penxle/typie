@@ -3,9 +3,9 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import qs from 'query-string';
 import sharp from 'sharp';
 import { rgbaToThumbHash } from 'thumbhash';
-import { db, firstOrThrow, Images } from '@/db';
-import { stack } from '@/env';
-import * as aws from '@/external/aws';
+import { db, firstOrThrow, Images } from '#/db/index.ts';
+import { stack } from '#/env.ts';
+import * as aws from '#/external/aws.ts';
 
 type PersistBlobAsImageParams = { userId?: string; file: File };
 export const persistBlobAsImage = async ({ userId, file }: PersistBlobAsImageParams) => {

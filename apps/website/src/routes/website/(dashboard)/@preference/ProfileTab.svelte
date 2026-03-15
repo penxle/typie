@@ -9,7 +9,7 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '@/errors';
+  import { TypieError } from '#/errors';
   import CheckCircle2Icon from '~icons/lucide/check-circle-2';
   import PencilIcon from '~icons/lucide/pencil';
   import UploadIcon from '~icons/lucide/upload';

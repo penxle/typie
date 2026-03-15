@@ -1,12 +1,12 @@
 import DOMPurify from 'isomorphic-dompurify';
 import { match } from 'ts-pattern';
-import { TableCode, validateDbId } from '@/db';
-import { SearchHitType } from '@/enums';
-import { elasticsearch, esIndex } from '@/search';
-import { assertSitePermission } from '@/utils/permission';
-import { decompose } from '@/utils/text';
-import { builder } from '../builder';
-import { Document, Folder } from '../objects';
+import { TableCode, validateDbId } from '#/db/index.ts';
+import { SearchHitType } from '#/enums.ts';
+import { elasticsearch, esIndex } from '#/search.ts';
+import { assertSitePermission } from '#/utils/permission.ts';
+import { decompose } from '#/utils/text.ts';
+import { builder } from '../builder.ts';
+import { Document, Folder } from '../objects.ts';
 
 /**
  * * Types

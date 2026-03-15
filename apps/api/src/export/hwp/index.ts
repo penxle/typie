@@ -1,14 +1,14 @@
 // spell-checker:words HWPUNIT
-import { parseDocument } from '../core/document';
-import { findFontFamily, nearestWeight } from '../core/fonts';
-import { buildBodyStream } from './body';
-import { buildDocInfoStream } from './doc-info';
-import { collectBinDataStreams } from './image';
-import { buildOle2 } from './ole2';
-import { allocate, compressStream, IdTable, pxToHwpunit } from './records';
-import type { ExportFontFamily } from '../core/types';
-import type { CharShapeEntry, DocInfoTables, ParaShapeEntry } from './doc-info';
-import type { HwpConvertContext } from './types';
+import { parseDocument } from '../core/document.ts';
+import { findFontFamily, nearestWeight } from '../core/fonts.ts';
+import { buildBodyStream } from './body.ts';
+import { buildDocInfoStream } from './doc-info.ts';
+import { collectBinDataStreams } from './image.ts';
+import { buildOle2 } from './ole2.ts';
+import { allocate, compressStream, IdTable, pxToHwpunit } from './records.ts';
+import type { ExportFontFamily } from '../core/types.ts';
+import type { CharShapeEntry, DocInfoTables, ParaShapeEntry } from './doc-info.ts';
+import type { HwpConvertContext } from './types.ts';
 
 export type GenerateDocumentHwpParams = {
   snapshot: Uint8Array;

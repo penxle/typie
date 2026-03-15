@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./tsconfig.json"
+    ".": "./tsconfig.json",
+    "./node": "./tsconfig.node.json"
   }
 }

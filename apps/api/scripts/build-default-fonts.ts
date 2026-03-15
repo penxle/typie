@@ -1,8 +1,9 @@
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { compressZstd } from '@/utils/compression';
-import { processFont } from '@/utils/font';
-import { wasm } from '@/utils/wasm';
+import { compressZstd } from '#/utils/compression.ts';
+import { processFont } from '#/utils/font.ts';
+import { wasm } from '#/utils/wasm.ts';
 
 const S3_BUCKET = 'typie-cdn';
 const S3_PREFIX = 'editor/fonts';
@@ -114,7 +115,7 @@ for (const family of DEFAULT_FONTS) {
   for (const font of family.fonts) {
     done++;
     const ttfPath = path.resolve(sourceDir, `${font.path}.ttf`);
-    const ttfData = new Uint8Array(await Bun.file(ttfPath).bytes());
+    const ttfData = new Uint8Array(await readFile(ttfPath));
 
     console.log(`[${done}/${total}] Processing ${font.path}...`);
     const { manifest, strategy, base, chunks } = await processFont(font.path, ttfData);
@@ -187,7 +188,7 @@ for (const family of DEFAULT_FONTS) {
 console.log(`\nS3: ${uploaded} uploaded, ${skipped} skipped`);
 
 // Write defaults.json
-const workspaceDir = path.resolve(import.meta.dir, '../../..');
+const workspaceDir = path.resolve(import.meta.dirname, '../../..');
 const defaultsPath = path.join(workspaceDir, 'crates/editor/assets/defaults.json');
-await Bun.write(defaultsPath, JSON.stringify(defaultsData));
+await writeFile(defaultsPath, JSON.stringify(defaultsData));
 console.log(`Written: ${defaultsPath}`);

@@ -1,5 +1,5 @@
 import { logger } from '@typie/lib';
-import { dev } from '@/env';
+import { dev } from '#/env.ts';
 import type { Logger } from 'drizzle-orm/logger';
 
 const log = logger.getChild('db');

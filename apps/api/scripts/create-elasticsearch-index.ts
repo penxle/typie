@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { elasticsearch, esIndex } from '@/search';
+import { elasticsearch, esIndex } from '#/search.ts';
 
 process.env.SCRIPT = '1';
 

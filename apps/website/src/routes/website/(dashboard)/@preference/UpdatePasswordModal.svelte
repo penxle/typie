@@ -6,7 +6,7 @@
   import { createForm, FormError } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '@/errors';
+  import { TypieError } from '#/errors';
   import { graphql } from '$mearie';
 
   type Props = {

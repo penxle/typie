@@ -1,7 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
-import { SingleSignOnProvider } from '@/enums';
-import { env } from '@/env';
-import type { ExternalUser } from './types';
+import { SingleSignOnProvider } from '#/enums.ts';
+import { env } from '#/env.ts';
+import type { ExternalUser } from './types.ts';
 
 const createOAuthClient = () => {
   return new OAuth2Client({

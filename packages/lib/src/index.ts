@@ -1,3 +1,3 @@
-export * from './compression';
-export * from './hono';
-export * from './logging';
+export * from './compression.ts';
+export * from './hono.ts';
+export * from './logging.ts';

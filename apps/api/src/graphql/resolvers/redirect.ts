@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm';
-import { db, first, Redirects, TableCode } from '@/db';
-import { RedirectType } from '@/enums';
-import { builder } from '../builder';
-import { isTypeOf, Redirect } from '../objects';
+import { db, first, Redirects, TableCode } from '#/db/index.ts';
+import { RedirectType } from '#/enums.ts';
+import { builder } from '../builder.ts';
+import { isTypeOf, Redirect } from '../objects.ts';
 
 /**
  * * Types

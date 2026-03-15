@@ -1,4 +1,4 @@
-import TypieLinkEmail from './components/TypieLinkEmail';
+import TypieLinkEmail from './components/TypieLinkEmail.tsx';
 
 type Props = {
   name: string;

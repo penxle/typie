@@ -3,13 +3,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.71",
-    "@aws-sdk/client-dynamodb": "^3.1004.0",
-    "@aws-sdk/client-lambda": "^3.1004.0",
-    "@aws-sdk/client-s3": "^3.1004.0",
-    "@aws-sdk/client-ssm": "^3.1004.0",
-    "@aws-sdk/lib-dynamodb": "^3.1004.0",
-    "@slack/web-api": "^7.14.1",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
+    "@aws-sdk/client-dynamodb": "^3.1009.0",
+    "@aws-sdk/client-lambda": "^3.1009.0",
+    "@aws-sdk/client-s3": "^3.1009.0",
+    "@aws-sdk/client-ssm": "^3.1009.0",
+    "@aws-sdk/lib-dynamodb": "^3.1009.0",
+    "@slack/web-api": "^7.15.0",
     "dedent": "^1.7.2",
     "remark": "^15.0.1",
     "remark-gfm": "^4.0.1",
@@ -17,6 +17,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.1-rc"
   }
 }

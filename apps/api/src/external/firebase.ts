@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { cert, initializeApp } from 'firebase-admin/app';
 import { FirebaseMessagingError, getMessaging } from 'firebase-admin/messaging';
-import { db, UserPushNotificationTokens } from '@/db';
-import { env } from '@/env';
+import { db, UserPushNotificationTokens } from '#/db/index.ts';
+import { env } from '#/env.ts';
 
 export const app = initializeApp({
   credential: cert(JSON.parse(env.GOOGLE_SERVICE_ACCOUNT)),

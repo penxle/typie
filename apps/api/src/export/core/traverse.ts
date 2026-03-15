@@ -1,4 +1,4 @@
-import type { ParsedDocument } from './document';
+import type { ParsedDocument } from './document.ts';
 import type {
   ArchivedData,
   EmbedInfo,
@@ -9,7 +9,7 @@ import type {
   NodeEntry,
   ParagraphData,
   TextSegment,
-} from './types';
+} from './types.ts';
 
 export type ConvertChildrenFn<TOut> = (entry: NodeEntry) => TOut[];
 

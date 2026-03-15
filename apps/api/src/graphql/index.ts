@@ -3,14 +3,14 @@ import { GraphQLError } from 'graphql';
 import { CloseCode, makeServer } from 'graphql-ws';
 import { createYoga, useExecutionCancellation } from 'graphql-yoga';
 import { Hono } from 'hono';
-import { upgradeWebSocket } from 'hono/bun';
-import { checkBootstrap } from '@/bootstrap';
-import { redis } from '@/cache';
-import { useError } from './plugins/error';
-import { useLogger } from './plugins/logger';
-import { useRateLimit } from './plugins/rate-limit';
-import { schema } from './schema';
-import type { Env, ServerContext, UserContext } from '@/context';
+import { checkBootstrap } from '#/bootstrap.ts';
+import { redis } from '#/cache.ts';
+import { upgradeWebSocket } from '#/ws.ts';
+import { useError } from './plugins/error.ts';
+import { useLogger } from './plugins/logger.ts';
+import { useRateLimit } from './plugins/rate-limit.ts';
+import { schema } from './schema.ts';
+import type { Env, ServerContext, UserContext } from '#/context.ts';
 
 export const graphql = new Hono<Env>();
 
@@ -104,7 +104,7 @@ graphql.get(
 
     let handleMessage: ((data: string) => Promise<void>) | undefined;
     let handleClose: ((code?: number, reason?: string) => Promise<void>) | undefined;
-    let bootstrapInterval: Timer | undefined;
+    let bootstrapInterval: ReturnType<typeof setInterval> | undefined;
 
     return {
       onOpen: (_, ws) => {

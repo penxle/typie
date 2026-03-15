@@ -1,5 +1,5 @@
 import { Client, HttpConnection } from '@elastic/elasticsearch';
-import { env, production } from '@/env';
+import { env, production } from '#/env.ts';
 
 export const elasticsearch = new Client({
   cloud: { id: env.ELASTICSEARCH_CLOUD_ID },

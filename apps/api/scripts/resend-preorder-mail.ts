@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { eq } from 'drizzle-orm';
-import { CreditCodes, db, firstOrThrow, PreorderUsers } from '@/db';
-import { sendEmail } from '@/email';
-import { PreorderCodeEmail } from '@/email/templates';
+import { CreditCodes, db, firstOrThrow, PreorderUsers } from '#/db/index.ts';
+import { sendEmail } from '#/email/index.ts';
+import { PreorderCodeEmail } from '#/email/templates/index.ts';
 
 if (!process.argv[2]) {
   console.error('Usage: node scripts/resend-preorder-mail.ts <email>');

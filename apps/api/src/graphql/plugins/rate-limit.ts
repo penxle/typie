@@ -1,7 +1,7 @@
 import { GraphQLError } from 'graphql';
-import { redis } from '@/cache';
+import { redis } from '#/cache.ts';
 import type { Plugin } from 'graphql-yoga';
-import type { Context } from '@/context';
+import type { Context } from '#/context.ts';
 
 export type RateLimitRule = {
   max: number;

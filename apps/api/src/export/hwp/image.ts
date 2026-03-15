@@ -1,12 +1,12 @@
 // spell-checker:words HWPTAG Hwpunit
-import { mapFormat } from '../core/assets';
-import { convertPlaceholderNode } from './blocks';
-import { buildSectionDef, makeInlineObjectParagraph } from './paragraph';
-import { allocate, ctrlId, HWPTAG, makeRecord, pxToHwpunit } from './records';
-import { resolveParaShape } from './styles';
-import type { ImageAsset, NodeEntry } from '../core/types';
-import type { DocInfoTables } from './doc-info';
-import type { HwpConvertContext } from './types';
+import { mapFormat } from '../core/assets.ts';
+import { convertPlaceholderNode } from './blocks.ts';
+import { buildSectionDef, makeInlineObjectParagraph } from './paragraph.ts';
+import { allocate, ctrlId, HWPTAG, makeRecord, pxToHwpunit } from './records.ts';
+import { resolveParaShape } from './styles.ts';
+import type { ImageAsset, NodeEntry } from '../core/types.ts';
+import type { DocInfoTables } from './doc-info.ts';
+import type { HwpConvertContext } from './types.ts';
 
 /** 이미지용 gso 컨트롤 헤더 (46바이트, 글자처럼 취급) */
 function buildImageCtrlHeader(width: number, height: number, instanceId: number): Uint8Array {

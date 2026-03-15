@@ -1,5 +1,5 @@
-import * as enums from '@/enums';
-import { builder } from './builder';
+import * as enums from '#/enums.ts';
+import { builder } from './builder.ts';
 
 /**
  * * Enums

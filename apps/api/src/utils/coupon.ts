@@ -1,8 +1,8 @@
 import dayjs from 'dayjs';
 import { eq } from 'drizzle-orm';
 import { LogicEngine } from 'json-logic-engine';
-import { db, first, Subscriptions, Users } from '@/db';
-import type { CouponCondition } from '@/db/schemas/json';
+import { db, first, Subscriptions, Users } from '#/db/index.ts';
+import type { CouponCondition } from '#/db/schemas/json.ts';
 
 const engine = new LogicEngine();
 

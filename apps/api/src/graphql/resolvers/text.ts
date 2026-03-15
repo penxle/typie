@@ -1,11 +1,11 @@
 import dayjs from 'dayjs';
 import { and, asc, eq, isNotNull, or } from 'drizzle-orm';
-import { db, firstOrThrow, TableCode, TextReplacementPreferences, TextReplacements, validateDbId } from '@/db';
-import { TextReplacementState } from '@/enums';
-import { TypieError } from '@/errors';
-import { generateFractionalOrder } from '@/utils';
-import { builder } from '../builder';
-import { isTypeOf, TextReplacement, TextReplacementPreference, User } from '../objects';
+import { db, firstOrThrow, TableCode, TextReplacementPreferences, TextReplacements, validateDbId } from '#/db/index.ts';
+import { TextReplacementState } from '#/enums.ts';
+import { TypieError } from '#/errors.ts';
+import { generateFractionalOrder } from '#/utils/index.ts';
+import { builder } from '../builder.ts';
+import { isTypeOf, TextReplacement, TextReplacementPreference, User } from '../objects.ts';
 
 TextReplacement.implement({
   isTypeOf: isTypeOf(TableCode.TEXT_REPLACEMENTS),

@@ -1,9 +1,9 @@
 import dedent from 'dedent';
 import { eq } from 'drizzle-orm';
-import { db, firstOrThrow, Users } from '@/db';
-import { env } from '@/env';
-import * as linear from '@/external/linear';
-import { builder } from '../builder';
+import { db, firstOrThrow, Users } from '#/db/index.ts';
+import { env } from '#/env.ts';
+import * as linear from '#/external/linear.ts';
+import { builder } from '../builder.ts';
 
 const moodLabels: Record<string, string> = {
   angry: '😠 불만',

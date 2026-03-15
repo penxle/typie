@@ -1,4 +1,4 @@
-import type { SingleSignOnProvider } from '@/enums';
+import type { SingleSignOnProvider } from '#/enums.ts';
 
 export type ExternalUser = {
   provider: SingleSignOnProvider;

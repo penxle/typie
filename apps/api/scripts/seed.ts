@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { PlanId } from '@/const';
-import { db, Plans } from '@/db';
-import { PlanAvailability, PlanInterval } from '@/enums';
+import { PlanId } from '#/const.ts';
+import { db, Plans } from '#/db/index.ts';
+import { PlanAvailability, PlanInterval } from '#/enums.ts';
 
 await db.transaction(async (tx) => {
   await tx.insert(Plans).values({

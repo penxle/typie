@@ -1,9 +1,9 @@
 import { Fragment } from 'react';
-import { resolveColorToHex } from '../core/theme';
-import { extFromFormat } from './utils';
+import { resolveColorToHex } from '../core/theme.ts';
+import { extFromFormat } from './utils.ts';
 import type React from 'react';
-import type { NodeVisitor } from '../core/traverse';
-import type { Annotation, InlineSegment, NodeEntry, TextSegment } from '../core/types';
+import type { NodeVisitor } from '../core/traverse.ts';
+import type { Annotation, InlineSegment, NodeEntry, TextSegment } from '../core/types.ts';
 
 const CALLOUT_ICONS: Record<string, string> = {
   info: '\u2139\uFE0F',

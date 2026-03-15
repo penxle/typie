@@ -1,12 +1,12 @@
 import dayjs from 'dayjs';
 import { and, desc, eq } from 'drizzle-orm';
-import { SUBSCRIPTION_GRACE_DAYS } from '@/const';
-import { db, first, firstOrThrow, PaymentInvoices, PaymentRecords, Plans, Subscriptions, Users } from '@/db';
-import { sendEmail } from '@/email';
-import { SubscriptionExpiredEmail, SubscriptionExpiringEmail, SubscriptionGracePeriodEmail } from '@/email/templates';
-import { PaymentInvoiceState, PaymentOutcome } from '@/enums';
-import { env } from '@/env';
-import { defineJob } from '../types';
+import { SUBSCRIPTION_GRACE_DAYS } from '#/const.ts';
+import { db, first, firstOrThrow, PaymentInvoices, PaymentRecords, Plans, Subscriptions, Users } from '#/db/index.ts';
+import { sendEmail } from '#/email/index.ts';
+import { SubscriptionExpiredEmail, SubscriptionExpiringEmail, SubscriptionGracePeriodEmail } from '#/email/templates/index.ts';
+import { PaymentInvoiceState, PaymentOutcome } from '#/enums.ts';
+import { env } from '#/env.ts';
+import { defineJob } from '../types.ts';
 
 export const SendSubscriptionGracePeriodEmailJob = defineJob('email:subscription-grace-period', async (subscriptionId: string) => {
   const subscription = await db

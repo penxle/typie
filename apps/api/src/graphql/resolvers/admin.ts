@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { and, count, desc, eq, getTableColumns, ilike, or, sql } from 'drizzle-orm';
-import { fetchBootstrap, putBootstrap } from '@/bootstrap';
-import { redis } from '@/cache';
+import { fetchBootstrap, putBootstrap } from '#/bootstrap.ts';
+import { redis } from '#/cache.ts';
 import {
   db,
   Documents,
@@ -17,14 +17,14 @@ import {
   Users,
   UserSessions,
   validateDbId,
-} from '@/db';
-import { DocumentType, EntityState, PaymentInvoiceState, PaymentOutcome, SubscriptionState, UserRole, UserState } from '@/enums';
-import { TypieError } from '@/errors';
-import * as portone from '@/external/portone';
-import { assertAdminPermission } from '@/utils/permission';
-import { bootstrapSchema } from '@/validation';
-import { builder } from '../builder';
-import { Document, User } from '../objects';
+} from '#/db/index.ts';
+import { DocumentType, EntityState, PaymentInvoiceState, PaymentOutcome, SubscriptionState, UserRole, UserState } from '#/enums.ts';
+import { TypieError } from '#/errors.ts';
+import * as portone from '#/external/portone.ts';
+import { assertAdminPermission } from '#/utils/permission.ts';
+import { bootstrapSchema } from '#/validation.ts';
+import { builder } from '../builder.ts';
+import { Document, User } from '../objects.ts';
 
 builder.queryFields((t) => ({
   adminUsers: t.withAuth({ session: true }).field({

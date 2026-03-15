@@ -2,15 +2,15 @@
 import JSZip from 'jszip';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { parseDocument } from '../core/document';
-import { traverse } from '../core/traverse';
-import { collectUsedFonts, loadFontFiles } from './fonts';
-import { generateContainerXml, generateContentOpf, generateNavXhtml } from './meta';
-import { epubVisitor } from './nodes';
-import { generateStylesheet } from './styles';
-import { extFromFormat } from './utils';
-import type { ExportFontFamily } from '../core/types';
-import type { EpubConvertContext } from './nodes';
+import { parseDocument } from '../core/document.ts';
+import { traverse } from '../core/traverse.ts';
+import { collectUsedFonts, loadFontFiles } from './fonts.ts';
+import { generateContainerXml, generateContentOpf, generateNavXhtml } from './meta.ts';
+import { epubVisitor } from './nodes.tsx.js';
+import { generateStylesheet } from './styles.ts';
+import { extFromFormat } from './utils.ts';
+import type { ExportFontFamily } from '../core/types.ts';
+import type { EpubConvertContext } from './nodes.tsx.js';
 
 export type GenerateDocumentEpubParams = {
   snapshot: Uint8Array;

@@ -1,12 +1,12 @@
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
-import * as Sentry from '@sentry/bun';
+import * as Sentry from '@sentry/node';
 import dedent from 'dedent';
 import { Repeater } from 'graphql-yoga';
 import pMap from 'p-map';
 import { rapidhash } from 'rapidhash-js';
-import { redis } from '@/cache';
-import { env } from '@/env';
-import { builder } from '../builder';
+import { redis } from '#/cache.ts';
+import { env } from '#/env.ts';
+import { builder } from '../builder.ts';
 
 const ai = new GoogleGenAI({
   vertexai: true,

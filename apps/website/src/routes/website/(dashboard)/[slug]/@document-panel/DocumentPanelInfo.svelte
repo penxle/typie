@@ -7,7 +7,7 @@
   import { getAppContext } from '@typie/ui/context';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { EntityAvailability, EntityVisibility } from '@/enums';
+  import { EntityAvailability, EntityVisibility } from '#/enums';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import { graphql } from '$mearie';
   import DocumentPanelCharacterCount from './DocumentPanelCharacterCount.svelte';

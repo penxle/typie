@@ -1,4 +1,4 @@
-import type { PlanRules } from '@/db/schemas/json';
+import type { PlanRules } from '#/db/schemas/json.ts';
 
 // spell-checker:disable
 export type PlanId = keyof typeof PlanId;

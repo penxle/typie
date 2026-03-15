@@ -7,8 +7,8 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { PlanPair } from '@/const';
-  import { PlanAvailability, PlanInterval, SubscriptionState } from '@/enums';
+  import { PlanPair } from '#/const';
+  import { PlanAvailability, PlanInterval, SubscriptionState } from '#/enums';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';

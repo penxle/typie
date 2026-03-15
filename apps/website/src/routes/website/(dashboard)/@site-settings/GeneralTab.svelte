@@ -8,8 +8,8 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '@/errors';
-  import { siteSchema } from '@/validation';
+  import { TypieError } from '#/errors';
+  import { siteSchema } from '#/validation';
   import CheckIcon from '~icons/lucide/check';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import UploadIcon from '~icons/lucide/upload';

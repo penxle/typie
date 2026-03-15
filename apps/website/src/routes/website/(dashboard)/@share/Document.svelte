@@ -7,7 +7,7 @@
   import { createForm } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { DocumentContentRating, EntityAvailability, EntityVisibility } from '@/enums';
+  import { DocumentContentRating, EntityAvailability, EntityVisibility } from '#/enums';
   import BanIcon from '~icons/lucide/ban';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';

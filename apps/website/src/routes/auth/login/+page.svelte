@@ -10,8 +10,8 @@
   import qs from 'query-string';
   import { onMount, tick } from 'svelte';
   import { z } from 'zod';
-  import { SingleSignOnProvider } from '@/enums';
-  import { TypieError } from '@/errors';
+  import { SingleSignOnProvider } from '#/enums';
+  import { TypieError } from '#/errors';
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';

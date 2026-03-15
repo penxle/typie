@@ -1,10 +1,10 @@
 // spell-checker:words HWPUNIT
-import { findFontFamily, nearestWeight } from '../core/fonts';
-import { resolveColorToHex } from '../core/theme';
-import { hexToColorref } from './records';
-import type { Style } from '../core/types';
-import type { CharShapeEntry, ParaShapeEntry } from './doc-info';
-import type { HwpConvertContext, InlineSegment } from './types';
+import { findFontFamily, nearestWeight } from '../core/fonts.ts';
+import { resolveColorToHex } from '../core/theme.ts';
+import { hexToColorref } from './records.ts';
+import type { Style } from '../core/types.ts';
+import type { CharShapeEntry, ParaShapeEntry } from './doc-info.ts';
+import type { HwpConvertContext, InlineSegment } from './types.ts';
 
 const BLACK_COLORREF = 0x00_00_00_00;
 

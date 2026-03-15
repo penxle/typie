@@ -1,5 +1,5 @@
 // spell-checker:words ENDOFCHAIN FREESECT FATSECT DIFAT NOSTREAM CLSID
-import { concat } from './records';
+import { concat } from './records.ts';
 
 const SECTOR_SIZE = 512;
 const MINI_SECTOR_SIZE = 64;

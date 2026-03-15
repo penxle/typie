@@ -10,7 +10,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { match } from 'ts-pattern';
-  import { DocumentType } from '@/enums';
+  import { DocumentType } from '#/enums';
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';

@@ -5,7 +5,7 @@
   import { Button, Icon, Modal } from '@typie/ui/components';
   import { PLAN_FEATURES } from '@typie/ui/constants';
   import dayjs from 'dayjs';
-  import { SubscriptionState } from '@/enums';
+  import { SubscriptionState } from '#/enums';
   import CheckIcon from '~icons/lucide/check';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import XIcon from '~icons/lucide/x';

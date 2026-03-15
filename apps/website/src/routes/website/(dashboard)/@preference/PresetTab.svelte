@@ -10,7 +10,7 @@
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
-  import { defaultValues } from '@/const';
+  import { defaultValues } from '#/const';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import CheckIcon from '~icons/lucide/check';

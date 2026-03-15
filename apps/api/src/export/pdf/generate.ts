@@ -1,15 +1,15 @@
 import { readFile } from 'node:fs/promises';
-import { wasm } from '@/utils/wasm';
-import { nearestWeight } from '../core/fonts';
-import { DEFAULT_THEME } from '../core/theme';
-import { parseVectorPageBinary } from './codec';
-import { computeDesiredSize, resolveAssets } from './external';
-import { ensureRequiredFont, filterUncoveredCodepoints, initFonts, resolveFallbackMappings } from './fonts';
-import { createPdfFromVectorPages } from './index';
-import { SlateReader } from './slate';
+import { wasm } from '#/utils/wasm.ts';
+import { nearestWeight } from '../core/fonts.ts';
+import { DEFAULT_THEME } from '../core/theme.ts';
+import { parseVectorPageBinary } from './codec.ts';
+import { computeDesiredSize, resolveAssets } from './external.ts';
+import { ensureRequiredFont, filterUncoveredCodepoints, initFonts, resolveFallbackMappings } from './fonts.ts';
+import { createPdfFromVectorPages } from './index.ts';
+import { SlateReader } from './slate.ts';
 import type { Application } from '@typie/editor';
-import type { Asset } from './external';
-import type { FontFamily } from './fonts';
+import type { Asset } from './external.ts';
+import type { FontFamily } from './fonts.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const ICU_DATA_PATH = new URL(import.meta.resolve!('@typie/editor/icu/data.postcard')).pathname;

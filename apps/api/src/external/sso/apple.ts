@@ -1,7 +1,7 @@
 import appleSignIn from 'apple-signin-auth';
-import { SingleSignOnProvider } from '@/enums';
-import { env } from '@/env';
-import type { ExternalUser } from './types';
+import { SingleSignOnProvider } from '#/enums.ts';
+import { env } from '#/env.ts';
+import type { ExternalUser } from './types.ts';
 
 export const generateAuthorizationUrl = () => {
   throw new Error('Not implemented');

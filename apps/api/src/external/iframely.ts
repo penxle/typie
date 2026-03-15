@@ -1,5 +1,5 @@
 import ky from 'ky';
-import { env } from '@/env';
+import { env } from '#/env.ts';
 
 export const unfurl = async (url: string) => {
   const resp = await ky('https://iframe.ly/api/oembed', {
