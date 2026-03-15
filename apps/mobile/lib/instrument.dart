@@ -4,11 +4,11 @@ import 'package:typie/env.dart';
 import 'package:typie/otel.dart';
 
 Future<void> configureInstruments() async {
+  setupOpenTelemetry();
+
   if (kDebugMode) {
     return;
   }
-
-  setupOpenTelemetry();
 
   await SentryFlutter.init((options) {
     options
