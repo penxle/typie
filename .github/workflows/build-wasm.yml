@@ -13,11 +13,11 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Cache WASM artifact
         id: wasm-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: crates/editor/pkg/
           key: wasm-${{ hashFiles('crates/**', 'Cargo.lock') }}
@@ -38,15 +38,12 @@ jobs:
 
       - name: Setup Rust
         if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache Rust
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: Swatinem/rust-cache@v2
-        with:
+          target: wasm32-unknown-unknown
           cache-all-crates: 'true'
+          cache-workspace-crates: 'true'
+          rustflags: ''
 
       - name: Install wasm-pack
         if: steps.wasm-cache.outputs.cache-hit != 'true'
@@ -58,7 +55,7 @@ jobs:
         run: RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target=bundler --no-pack
 
       - name: Upload WASM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: editor-wasm
           path: crates/editor/pkg/
