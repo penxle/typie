@@ -25,6 +25,7 @@ ARG IMAGE_TAG
 ENV PUBLIC_IMAGE_TAG=$IMAGE_TAG
 
 COPY out/full/ .
+COPY apps/api/schema.graphql apps/website/schema.graphql
 RUN --mount=type=secret,id=TURBO_TOKEN,env=TURBO_TOKEN \
     pnpm exec turbo build --filter=@typie/website && \
     find . -type d -name "node_modules" -prune -exec rm -rf {} +
