@@ -73,9 +73,9 @@
     syncState();
 
     return () => {
-      scrollContainer.removeEventListener('scroll', handleScroll);
-      scrollContainer.removeEventListener('wheel', handleUserScroll);
-      scrollContainer.removeEventListener('touchmove', handleUserScroll);
+      scrollContainer?.removeEventListener('scroll', handleScroll);
+      scrollContainer?.removeEventListener('wheel', handleUserScroll);
+      scrollContainer?.removeEventListener('touchmove', handleUserScroll);
       resizeObserver.disconnect();
       clearTimeout(hideTimer);
     };
