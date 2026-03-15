@@ -6,7 +6,10 @@ impl Renderer {
         page_idx: usize,
         doc: &Doc,
     ) -> Option<PaintDebugFrame> {
-        let mut base_profile = BasePrepareProfile::default();
+        use crate::tracing::TRACER;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
+
+        let _s = mark_span_as_active(TRACER.start("render.base"));
         let mut debug_frame =
             (self.render_debug_enabled || self.layout_debug_enabled).then(PaintDebugFrame::default);
         let width = self.pixmap.width();
@@ -14,13 +17,12 @@ impl Renderer {
         let scale = self.scale_factor as f32;
         let canvas_width = width as f32 / scale;
         let canvas_height = height as f32 / scale;
-        let snapshot_started_at = self.render_debug_enabled.then(profile_now);
-        let render_snapshot = PageRenderSnapshot::from_page(page);
-        if let Some(started_at) = snapshot_started_at {
-            base_profile.snapshot_ms = profile_elapsed_ms(started_at);
-        }
+        let render_snapshot = {
+            let _s = mark_span_as_active(TRACER.start("render.base.snapshot"));
+            PageRenderSnapshot::from_page(page)
+        };
 
-        let dirty_started_at = self.render_debug_enabled.then(profile_now);
+        let _s_dirty = mark_span_as_active(TRACER.start("render.base.dirty_rects"));
         let previous_cache = self.page_cache.remove(&page_idx);
         let mut resize_dirty_rects = Vec::new();
         let mut cache = match previous_cache {
@@ -41,10 +43,7 @@ impl Renderer {
         };
         dirty_rects.extend(resize_dirty_rects);
         dirty_rects = normalize_dirty_rects(dirty_rects, canvas_width, canvas_height);
-        base_profile.dirty_rect_count = dirty_rects.len();
-        if let Some(started_at) = dirty_started_at {
-            base_profile.dirty_ms = profile_elapsed_ms(started_at);
-        }
+        drop(_s_dirty);
 
         if !dirty_rects.is_empty() {
             let should_full_repaint =
@@ -56,7 +55,6 @@ impl Renderer {
             } else {
                 dirty_rects
             };
-            base_profile.render_rect_count = render_rects.len();
             if let Some(frame) = debug_frame.as_mut() {
                 frame.render_rects = render_rects.clone();
                 frame.full_repaint = should_full_repaint;
@@ -68,107 +66,99 @@ impl Renderer {
                 cache.background_pixmap.data_mut().fill(0);
                 cache.content_pixmap.data_mut().fill(0);
 
-                let background_started_at = self.render_debug_enabled.then(profile_now);
-                let mut background_pixmap = cache.background_pixmap.as_mut();
-                Self::render_background_phase(
-                    &mut background_pixmap,
-                    &mut self.glyph_renderer,
-                    self.scale_factor,
-                    &self.theme,
-                    self.is_focused,
-                    page,
-                    doc,
-                    None,
-                    Point::zero(),
-                );
-                if let Some(started_at) = background_started_at {
-                    base_profile.background_ms += profile_elapsed_ms(started_at);
-                }
-
-                let compose_started_at = self.render_debug_enabled.then(profile_now);
-                cache
-                    .base_pixmap
-                    .data_mut()
-                    .copy_from_slice(cache.background_pixmap.data());
-                if let Some(started_at) = compose_started_at {
-                    base_profile.compose_ms += profile_elapsed_ms(started_at);
-                }
-
-                let content_started_at = self.render_debug_enabled.then(profile_now);
-                let mut content_pixmap = cache.content_pixmap.as_mut();
-                Self::render_content_phase(
-                    &mut content_pixmap,
-                    &mut self.glyph_renderer,
-                    self.scale_factor,
-                    &self.theme,
-                    self.is_focused,
-                    page,
-                    doc,
-                    None,
-                    Point::zero(),
-                );
-                if let Some(started_at) = content_started_at {
-                    base_profile.content_ms += profile_elapsed_ms(started_at);
-                }
-
-                let compose_started_at = self.render_debug_enabled.then(profile_now);
-                let mut base_pixmap = cache.base_pixmap.as_mut();
-                Self::composite_cached_content_layer_clipped(
-                    &mut base_pixmap,
-                    &cache.content_pixmap,
-                    &render_rects,
-                    self.scale_factor,
-                );
-                if let Some(started_at) = compose_started_at {
-                    base_profile.compose_ms += profile_elapsed_ms(started_at);
-                }
-            } else {
-                for rect in &render_rects {
-                    let background_started_at = self.render_debug_enabled.then(profile_now);
-                    clear_layout_rect(&mut cache.background_pixmap, *rect, scale);
-                    self.render_background_phase_clipped(
-                        &mut cache.background_pixmap,
-                        page,
-                        doc,
-                        *rect,
-                    );
-                    if let Some(started_at) = background_started_at {
-                        base_profile.background_ms += profile_elapsed_ms(started_at);
-                    }
-
-                    let compose_started_at = self.render_debug_enabled.then(profile_now);
-                    Self::copy_cached_layer_clipped(
-                        &mut cache.base_pixmap,
-                        &cache.background_pixmap,
-                        &[*rect],
+                {
+                    let _s = mark_span_as_active(TRACER.start("render.base.background"));
+                    let mut background_pixmap = cache.background_pixmap.as_mut();
+                    Self::render_background_phase(
+                        &mut background_pixmap,
+                        &mut self.glyph_renderer,
                         self.scale_factor,
-                    );
-                    if let Some(started_at) = compose_started_at {
-                        base_profile.compose_ms += profile_elapsed_ms(started_at);
-                    }
-
-                    let content_started_at = self.render_debug_enabled.then(profile_now);
-                    clear_layout_rect(&mut cache.content_pixmap, *rect, scale);
-                    self.render_content_phase_clipped_with_scratch(
-                        &mut cache.content_pixmap,
+                        &self.theme,
+                        self.is_focused,
                         page,
                         doc,
-                        *rect,
+                        None,
+                        Point::zero(),
                     );
-                    if let Some(started_at) = content_started_at {
-                        base_profile.content_ms += profile_elapsed_ms(started_at);
-                    }
+                }
 
-                    let compose_started_at = self.render_debug_enabled.then(profile_now);
+                {
+                    let _s = mark_span_as_active(TRACER.start("render.base.compose"));
+                    cache
+                        .base_pixmap
+                        .data_mut()
+                        .copy_from_slice(cache.background_pixmap.data());
+                }
+
+                {
+                    let _s = mark_span_as_active(TRACER.start("render.base.content"));
+                    let mut content_pixmap = cache.content_pixmap.as_mut();
+                    Self::render_content_phase(
+                        &mut content_pixmap,
+                        &mut self.glyph_renderer,
+                        self.scale_factor,
+                        &self.theme,
+                        self.is_focused,
+                        page,
+                        doc,
+                        None,
+                        Point::zero(),
+                    );
+                }
+
+                {
+                    let _s = mark_span_as_active(TRACER.start("render.base.compose"));
                     let mut base_pixmap = cache.base_pixmap.as_mut();
                     Self::composite_cached_content_layer_clipped(
                         &mut base_pixmap,
                         &cache.content_pixmap,
-                        &[*rect],
+                        &render_rects,
                         self.scale_factor,
                     );
-                    if let Some(started_at) = compose_started_at {
-                        base_profile.compose_ms += profile_elapsed_ms(started_at);
+                }
+            } else {
+                for rect in &render_rects {
+                    {
+                        let _s = mark_span_as_active(TRACER.start("render.base.background"));
+                        clear_layout_rect(&mut cache.background_pixmap, *rect, scale);
+                        self.render_background_phase_clipped(
+                            &mut cache.background_pixmap,
+                            page,
+                            doc,
+                            *rect,
+                        );
+                    }
+
+                    {
+                        let _s = mark_span_as_active(TRACER.start("render.base.compose"));
+                        Self::copy_cached_layer_clipped(
+                            &mut cache.base_pixmap,
+                            &cache.background_pixmap,
+                            &[*rect],
+                            self.scale_factor,
+                        );
+                    }
+
+                    {
+                        let _s = mark_span_as_active(TRACER.start("render.base.content"));
+                        clear_layout_rect(&mut cache.content_pixmap, *rect, scale);
+                        self.render_content_phase_clipped_with_scratch(
+                            &mut cache.content_pixmap,
+                            page,
+                            doc,
+                            *rect,
+                        );
+                    }
+
+                    {
+                        let _s = mark_span_as_active(TRACER.start("render.base.compose"));
+                        let mut base_pixmap = cache.base_pixmap.as_mut();
+                        Self::composite_cached_content_layer_clipped(
+                            &mut base_pixmap,
+                            &cache.content_pixmap,
+                            &[*rect],
+                            self.scale_factor,
+                        );
                     }
                 }
             }
@@ -214,7 +204,6 @@ impl Renderer {
         cache.snapshot = render_snapshot;
         cache.snapshot_initialized = true;
         self.page_cache.insert(page_idx, cache);
-        self.base_prepare_profile = base_profile;
         debug_frame
     }
 

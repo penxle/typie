@@ -1,11 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:typie/env.dart';
+import 'package:typie/otel.dart';
 
 Future<void> configureInstruments() async {
   if (kDebugMode) {
     return;
   }
+
+  setupOpenTelemetry();
 
   await SentryFlutter.init((options) {
     options

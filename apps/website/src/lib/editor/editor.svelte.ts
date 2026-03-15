@@ -33,9 +33,11 @@ import {
   SlateReader,
 } from './slate';
 import { TouchGestureController } from './touch-gesture.svelte';
+import { drainTraces, startFrameSpan } from './tracing';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
 import { WebGLRenderer } from './webgl';
 import type { Placement } from '@floating-ui/dom';
+import type { Span } from '@opentelemetry/api';
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
 import type { ScrollViewport } from '@typie/ui/utils';
 import type { FontFamily } from './fonts';
@@ -148,6 +150,7 @@ export type EditorOptions = {
   initialViewportWidth: number;
   initialViewportHeight: number;
   readOnly?: boolean;
+  documentId?: string;
   onDocChanged?: () => void;
   onExitedDocumentStart?: () => void;
   onSelectionChanged?: (anchor: Position, head: Position) => void;
@@ -162,6 +165,9 @@ export class Editor {
   #awake = false;
   #renderDebugEnabled = false;
   #layoutDebugEnabled = false;
+  #span: Span | null = null;
+  #documentId?: string;
+  #drainInterval: ReturnType<typeof setInterval> | null = null;
   #settledResolvers: (() => void)[] = [];
   #onDocChanged?: () => void;
   #onExitedDocumentStart?: () => void;
@@ -367,6 +373,7 @@ export class Editor {
       this.fontFamilies = options.fontFamilies;
     }
 
+    this.#documentId = options.documentId;
     this.#onDocChanged = options.onDocChanged;
     this.#onExitedDocumentStart = options.onExitedDocumentStart;
     this.#onSelectionChanged = options.onSelectionChanged;
@@ -407,6 +414,13 @@ export class Editor {
     if (this.#running) return;
     this.#running = true;
     this.#ensureActive();
+    if (!this.#drainInterval && this.#wasmEditor) {
+      this.#drainInterval = setInterval(() => {
+        if (this.#wasmEditor) {
+          drainTraces(() => this.#wasmEditor?.drainTraces());
+        }
+      }, 5000);
+    }
   }
 
   #stop(): void {
@@ -437,11 +451,30 @@ export class Editor {
 
     if (this.#wasmEditor && this.#slateReader && this.#awake) {
       this.#awake = false;
+
+      if (this.#span) {
+        this.#span.end();
+        this.#span = null;
+      }
+
+      this.#span = startFrameSpan(this.#documentId);
+
+      if (this.#span) {
+        const ctx = this.#span.spanContext();
+        this.#wasmEditor.setTracing(ctx.traceId, ctx.spanId);
+      }
+
       this.#wasmEditor.tick();
+
+      if (this.#span) {
+        this.#wasmEditor.clearTracing();
+      }
+
       this.#slateReader.refresh(this.#wasmEditor.getSlatePtr(), this.#wasmEditor.getSlabPtr());
       if (this.#slateReader.hasDirty) {
         this.#readSlate(this.#slateReader);
       }
+
       // Defer callbacks that may call into WASM (and grow memory) until after
       // #readSlate has finished reading from the shared DataView.
       if (this.#pendingDocChanged) {
@@ -1671,6 +1704,18 @@ export class Editor {
     this.#wakeUp();
   }
 
+  get span(): Span | null {
+    return this.#span;
+  }
+
+  setTracing(traceId: string, spanId: string): void {
+    this.#wasmEditor?.setTracing(traceId, spanId);
+  }
+
+  clearTracing(): void {
+    this.#wasmEditor?.clearTracing();
+  }
+
   setRenderDebug(enabled: boolean): void {
     this.#renderDebugEnabled = enabled;
     this.#wasmEditor?.setRenderDebug(enabled);
@@ -2126,9 +2171,23 @@ export class Editor {
 
   destroy(): void {
     this.#stop();
+
+    if (this.#drainInterval) {
+      clearInterval(this.#drainInterval);
+      this.#drainInterval = null;
+    }
+
+    this.#span?.end();
+    this.#span = null;
+
+    if (this.#wasmEditor) {
+      drainTraces(() => this.#wasmEditor?.drainTraces());
+    }
+
     this.touchGesture.destroy();
     this.#renderer?.dispose();
     this.#renderer = null;
+
     this.#wasmEditor = null;
     this.#slateReader = null;
   }

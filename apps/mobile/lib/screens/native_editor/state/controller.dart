@@ -44,6 +44,7 @@ class EditorController extends ChangeNotifier {
   EditorController({
     required this.editor,
     required this.fontManager,
+    this.documentId,
     this.onDocChanged,
     this.onExitedDocumentStart,
     this.onSelectionChanged,
@@ -52,6 +53,7 @@ class EditorController extends ChangeNotifier {
 
   final NativeEditor editor;
   final FontManager? fontManager;
+  final String? documentId;
   final void Function()? onDocChanged;
   final void Function()? onExitedDocumentStart;
   final void Function(Map<String, dynamic> anchor, Map<String, dynamic> head)? onSelectionChanged;

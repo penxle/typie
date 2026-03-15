@@ -60,41 +60,6 @@ pub struct DragImageResult {
     pub scale_factor: f32,
 }
 
-#[derive(Default, Clone, Copy)]
-pub(super) struct OverlayProfile {
-    pub(super) overflow_ms: f64,
-    pub(super) selection_ms: f64,
-    pub(super) selection_collect_ms: f64,
-    pub(super) selection_paint_ms: f64,
-    pub(super) selection_fast_path: bool,
-    pub(super) selection_phase_full: bool,
-    pub(super) selection_clip_rect_count: usize,
-    pub(super) selection_text_rect_count: usize,
-    pub(super) selection_has_non_text: bool,
-    pub(super) content_ms: f64,
-    pub(super) content_full_ms: f64,
-    pub(super) content_composite_ms: f64,
-    pub(super) content_clipped_ms: f64,
-    pub(super) content_full_render: bool,
-    pub(super) content_cached_composite: bool,
-    pub(super) content_clipped_render: bool,
-    pub(super) content_clip_rect_count: usize,
-    pub(super) content_clipped_pass_count: usize,
-    pub(super) drop_ms: f64,
-    pub(super) debug_ms: f64,
-}
-
-#[derive(Default, Clone, Copy)]
-pub(super) struct BasePrepareProfile {
-    pub(super) snapshot_ms: f64,
-    pub(super) dirty_ms: f64,
-    pub(super) background_ms: f64,
-    pub(super) content_ms: f64,
-    pub(super) compose_ms: f64,
-    pub(super) dirty_rect_count: usize,
-    pub(super) render_rect_count: usize,
-}
-
 pub(super) struct OverflowRenderCacheEntry {
     pub(super) scale_factor: f64,
     pub(super) canvas_width: u32,
@@ -152,7 +117,6 @@ pub struct Renderer {
     pub(super) layout_debug_enabled: bool,
     pub(super) paint_diagnostics: PaintDiagnosticsState,
     pub(super) diagnostics: FrameDiagnostics,
-    pub(super) base_prepare_profile: BasePrepareProfile,
 }
 
 impl Renderer {
@@ -173,7 +137,6 @@ impl Renderer {
             layout_debug_enabled: false,
             paint_diagnostics: PaintDiagnosticsState::default(),
             diagnostics,
-            base_prepare_profile: BasePrepareProfile::default(),
         }
     }
 
@@ -241,14 +204,8 @@ impl Renderer {
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
     ) -> RenderResult {
-        let total_started_at = profile_now();
-
-        let base_prepare_started_at = profile_now();
         let mut debug_frame = self.prepare_base_layer(page, page_idx, doc);
-        let base_prepare_ms = profile_elapsed_ms(base_prepare_started_at);
-        let base_prepare_profile = self.base_prepare_profile;
 
-        let base_copy_started_at = profile_now();
         let mut background_layer = None;
         let mut content_layer = None;
         if let Some(cache) = self.page_cache.get(&page_idx) {
@@ -262,11 +219,9 @@ impl Renderer {
         } else {
             self.pixmap.data_mut().fill(0);
         }
-        let base_copy_ms = profile_elapsed_ms(base_copy_started_at);
 
-        let overlay_started_at = profile_now();
         let mut pixmap = self.pixmap.as_mut();
-        let overlay_profile = Self::render_overlay_layers(
+        Self::render_overlay_layers(
             &mut pixmap,
             &mut self.glyph_renderer,
             self.scale_factor,
@@ -274,7 +229,6 @@ impl Renderer {
             self.is_focused,
             self.render_debug_enabled,
             self.layout_debug_enabled,
-            self.render_debug_enabled,
             background_layer,
             content_layer,
             &mut self.overflow_cache,
@@ -286,24 +240,6 @@ impl Renderer {
             doc,
             &mut debug_frame,
         );
-        let overlay_ms = profile_elapsed_ms(overlay_started_at);
-        let total_ms = profile_elapsed_ms(total_started_at);
-
-        if self.render_debug_enabled {
-            self.log_render_profile(
-                page_idx,
-                selections.len(),
-                drop_indicator.is_some(),
-                next_page.is_some(),
-                debug_frame.as_ref(),
-                base_prepare_ms,
-                base_prepare_profile,
-                base_copy_ms,
-                overlay_ms,
-                total_ms,
-                overlay_profile,
-            );
-        }
 
         let data = self.pixmap.data();
         RenderResult {
@@ -349,7 +285,7 @@ impl Renderer {
             pixmap.data_mut().fill(0);
         }
 
-        let _overlay_profile = Self::render_overlay_layers(
+        Self::render_overlay_layers(
             &mut pixmap,
             &mut self.glyph_renderer,
             self.scale_factor,
@@ -357,7 +293,6 @@ impl Renderer {
             self.is_focused,
             self.render_debug_enabled,
             self.layout_debug_enabled,
-            self.render_debug_enabled,
             background_layer,
             content_layer,
             &mut self.overflow_cache,
@@ -437,107 +372,6 @@ impl Renderer {
             ops,
             text_ops,
         }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn log_render_profile(
-        &self,
-        page_idx: usize,
-        selection_count: usize,
-        has_drop_indicator: bool,
-        has_next_page: bool,
-        frame: Option<&PaintDebugFrame>,
-        base_prepare_ms: f64,
-        base_prepare_profile: BasePrepareProfile,
-        base_copy_ms: f64,
-        overlay_ms: f64,
-        total_ms: f64,
-        overlay_profile: OverlayProfile,
-    ) {
-        let render_rect_count = frame.map(|f| f.render_rects.len()).unwrap_or(0);
-        let overflow_rect_count = frame.map(|f| f.overflow_rects.len()).unwrap_or(0);
-        let full_repaint = frame.map(|f| f.full_repaint).unwrap_or(false);
-        let cache_reused = frame.map(|f| f.cache_reused).unwrap_or(false);
-        let dirty_area: f32 = frame
-            .map(|f| f.render_rects.iter().map(|rect| rect.area()).sum())
-            .unwrap_or(0.0);
-
-        let scale = self.scale_factor as f32;
-        let canvas_width = if scale > 0.0 {
-            self.pixmap.width() as f32 / scale
-        } else {
-            0.0
-        };
-        let canvas_height = if scale > 0.0 {
-            self.pixmap.height() as f32 / scale
-        } else {
-            0.0
-        };
-        let canvas_area = canvas_width * canvas_height;
-        let dirty_ratio = if canvas_area > 0.0 {
-            dirty_area / canvas_area
-        } else {
-            0.0
-        };
-        let selection_mode = if overlay_profile.selection_fast_path {
-            "fast"
-        } else if overlay_profile.selection_phase_full {
-            "phase_full"
-        } else if selection_count > 0 && overlay_profile.selection_ms > 0.0 {
-            "phase_partial"
-        } else {
-            "none"
-        };
-        let content_mode = if overlay_profile.content_full_render {
-            "full"
-        } else if overlay_profile.content_cached_composite {
-            "composite"
-        } else if overlay_profile.content_clipped_render {
-            "clipped"
-        } else {
-            "none"
-        };
-
-        log!(
-            "[render-prof] page={} total={:.2}ms base_prepare={:.2}ms base_snapshot={:.2}ms base_dirty={:.2}ms base_background={:.2}ms base_content={:.2}ms base_compose={:.2}ms base_dirty_rects={} base_render_rects={} base_copy={:.2}ms overlay={:.2}ms overlay_overflow={:.2}ms overlay_selection={:.2}ms overlay_selection_collect={:.2}ms overlay_selection_paint={:.2}ms overlay_selection_mode={} overlay_selection_clip_rects={} overlay_selection_text_rects={} overlay_selection_non_text={} overlay_content={:.2}ms overlay_content_mode={} overlay_content_full={:.2}ms overlay_content_composite={:.2}ms overlay_content_clipped={:.2}ms overlay_content_clip_rects={} overlay_content_clipped_passes={} overlay_drop={:.2}ms overlay_debug={:.2}ms rects={} overflow_rects={} dirty={:.1}% full={} cache_reused={} selections={} drop={} next_page={}",
-            page_idx,
-            total_ms,
-            base_prepare_ms,
-            base_prepare_profile.snapshot_ms,
-            base_prepare_profile.dirty_ms,
-            base_prepare_profile.background_ms,
-            base_prepare_profile.content_ms,
-            base_prepare_profile.compose_ms,
-            base_prepare_profile.dirty_rect_count,
-            base_prepare_profile.render_rect_count,
-            base_copy_ms,
-            overlay_ms,
-            overlay_profile.overflow_ms,
-            overlay_profile.selection_ms,
-            overlay_profile.selection_collect_ms,
-            overlay_profile.selection_paint_ms,
-            selection_mode,
-            overlay_profile.selection_clip_rect_count,
-            overlay_profile.selection_text_rect_count,
-            overlay_profile.selection_has_non_text,
-            overlay_profile.content_ms,
-            content_mode,
-            overlay_profile.content_full_ms,
-            overlay_profile.content_composite_ms,
-            overlay_profile.content_clipped_ms,
-            overlay_profile.content_clip_rect_count,
-            overlay_profile.content_clipped_pass_count,
-            overlay_profile.drop_ms,
-            overlay_profile.debug_ms,
-            render_rect_count,
-            overflow_rect_count,
-            dirty_ratio * 100.0,
-            full_repaint,
-            cache_reused,
-            selection_count,
-            has_drop_indicator,
-            has_next_page,
-        );
     }
 }
 

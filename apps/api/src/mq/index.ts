@@ -1,5 +1,3 @@
-import './metrics';
-
 import { queue } from './bullmq';
 import { crons } from './tasks';
 import type { JobsOptions } from 'bullmq';

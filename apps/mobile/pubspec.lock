@@ -1306,6 +1306,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.0"
+  opentelemetry:
+    dependency: "direct main"
+    description:
+      name: opentelemetry
+      sha256: "92d63a2e0731d34a7548add82420b8f3819ccda569f9bdfdcc4b25e00fe88da4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.18.11"
   package_config:
     dependency: transitive
     description:
@@ -1538,6 +1546,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.2"
+  protobuf:
+    dependency: transitive
+    description:
+      name: protobuf
+      sha256: "75ec242d22e950bdcc79ee38dd520ce4ee0bc491d7fadc4ea47694604d22bf06"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.0"
   pub_semver:
     dependency: transitive
     description:

@@ -8,7 +8,6 @@ mod impls;
 pub mod outline;
 mod paint_diagnostics;
 mod pipeline;
-mod profiling;
 mod renderer;
 mod vector_codec;
 
@@ -35,14 +34,13 @@ use geometry::{
     merge_and_clamp_rects,
 };
 use paint_diagnostics::{PaintDebugFrame, PaintDiagnosticsState, collect_layout_dirty_rects};
-use profiling::{profile_elapsed_ms, profile_now};
-use renderer::{
-    BasePrepareProfile, OverflowRenderCacheEntry, OverflowRenderSnapshot, OverflowSnapshotItem,
-    OverlayProfile, SelectionOverlayData, SelectionPaintStats, next_page_overflow_cull_clip,
-    normalize_dirty_rects, should_promote_full_repaint,
-};
 #[cfg(test)]
 use renderer::{FULL_REPAINT_RECT_THRESHOLD, PAGE_EDGE_OVERFLOW_BAND};
+use renderer::{
+    OverflowRenderCacheEntry, OverflowRenderSnapshot, OverflowSnapshotItem, SelectionOverlayData,
+    SelectionPaintStats, next_page_overflow_cull_clip, normalize_dirty_rects,
+    should_promote_full_repaint,
+};
 
 use crate::diagnostics::FrameDiagnostics;
 use crate::layout::elements::LineElement;

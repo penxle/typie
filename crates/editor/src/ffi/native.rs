@@ -505,6 +505,67 @@ pub extern "C" fn editor_tick(editor: *mut EditorHandle) -> i32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn editor_set_tracing(
+    editor: *mut EditorHandle,
+    trace_id: *const c_char,
+    parent_span_id: *const c_char,
+) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            let trace_id_str = unsafe { std::ffi::CStr::from_ptr(trace_id) }
+                .to_str()
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let parent_span_id_str = unsafe { std::ffi::CStr::from_ptr(parent_span_id) }
+                .to_str()
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let trace_id = opentelemetry::trace::TraceId::from_hex(trace_id_str)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let parent_span_id = opentelemetry::trace::SpanId::from_hex(parent_span_id_str)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            editor.runtime.tracing.set_tracing(trace_id, parent_span_id);
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_clear_tracing(editor: *mut EditorHandle) -> i32 {
+    ffi!(
+        {
+            if editor.is_null() {
+                return Err("Editor is null".into());
+            }
+            let editor = unsafe { &mut *(editor as *mut EditorInner) };
+            editor.runtime.tracing.clear_tracing();
+            Ok(())
+        },
+        -1
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn editor_drain_traces(editor: *mut EditorHandle) -> *mut c_char {
+    install_panic_hook();
+    if editor.is_null() {
+        return std::ptr::null_mut();
+    }
+    let editor = unsafe { &mut *(editor as *mut EditorInner) };
+    let traces = editor.runtime.tracing.drain();
+    match serde_json::to_string(&traces) {
+        Ok(json) => match std::ffi::CString::new(json) {
+            Ok(c_str) => c_str.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn editor_get_slate_ptr(editor: *mut EditorHandle) -> *const u8 {
     install_panic_hook();
     if editor.is_null() {

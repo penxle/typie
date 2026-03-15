@@ -18,6 +18,7 @@ mod render;
 mod runtime;
 mod schema;
 mod state;
+mod tracing;
 mod transaction;
 mod types;
 

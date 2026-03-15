@@ -460,6 +460,17 @@ impl NodeHtmlCodec for ParagraphNode {
 
 impl Layout for ParagraphNode {
     fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
+        use crate::tracing::TRACER;
+        use opentelemetry::KeyValue;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
+
+        let mut para_span = TRACER.start("layout.paragraph");
+        opentelemetry::trace::Span::set_attribute(
+            &mut para_span,
+            KeyValue::new("node_id", ctx.node.node_id().to_string()),
+        );
+        let _para_guard = mark_span_as_active(para_span);
+
         let mut text = ctx
             .node
             .children()
@@ -621,23 +632,29 @@ impl Layout for ParagraphNode {
                 0.0
             };
 
-            let mut layout = builder.build(&text);
+            let mut layout = {
+                let _s = mark_span_as_active(TRACER.start("layout.paragraph.shape_text"));
+                builder.build(&text)
+            };
 
             if matches!(self.align, TextAlign::Left | TextAlign::Justify if indent > 0.0) {
                 layout.indent(indent, parley::IndentOptions::default());
             }
 
-            layout.break_all_lines(Some(constraints.max_width));
-            layout.align(
-                Some(constraints.max_width),
-                match self.align {
-                    TextAlign::Left => parley::Alignment::Left,
-                    TextAlign::Center => parley::Alignment::Center,
-                    TextAlign::Right => parley::Alignment::Right,
-                    TextAlign::Justify => parley::Alignment::Justify,
-                },
-                parley::AlignmentOptions::default(),
-            );
+            {
+                let _s = mark_span_as_active(TRACER.start("layout.paragraph.break_lines"));
+                layout.break_all_lines(Some(constraints.max_width));
+                layout.align(
+                    Some(constraints.max_width),
+                    match self.align {
+                        TextAlign::Left => parley::Alignment::Left,
+                        TextAlign::Center => parley::Alignment::Center,
+                        TextAlign::Right => parley::Alignment::Right,
+                        TextAlign::Justify => parley::Alignment::Justify,
+                    },
+                    parley::AlignmentOptions::default(),
+                );
+            }
 
             let (strut_ascent, strut_descent, strut_font_size) = {
                 let ps_styles = if preedit.is_some() || is_text_empty {
@@ -709,15 +726,18 @@ impl Layout for ParagraphNode {
 
         let (layout, strut_ascent, strut_descent, strut_font_size) = layout;
         let layout = Rc::new(layout);
-        let metrics = build_metrics(
-            &layout,
-            &text,
-            ctx.scale_factor,
-            strut_ascent,
-            strut_descent,
-            strut_font_size,
-            line_height,
-        );
+        let metrics = {
+            let _s = mark_span_as_active(TRACER.start("layout.paragraph.build_metrics"));
+            build_metrics(
+                &layout,
+                &text,
+                ctx.scale_factor,
+                strut_ascent,
+                strut_descent,
+                strut_font_size,
+                line_height,
+            )
+        };
 
         let ruby_segments = extract_ruby_segments(ctx);
         let background_segments = extract_background_segments(ctx);

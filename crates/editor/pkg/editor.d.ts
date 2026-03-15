@@ -310,7 +310,9 @@ export class Editor {
     [Symbol.dispose](): void;
     checkout(version: Uint8Array): void;
     checkoutToLatest(): void;
+    clearTracing(): void;
     dispatch(val: any): void;
+    drainTraces(): any;
     enqueueMessage(val: any): void;
     export(mode: DocExportMode): Uint8Array;
     exportPageVector(page_index: number): Uint8Array | undefined;
@@ -347,6 +349,7 @@ export class Editor {
     setLayoutDebug(enabled: boolean): void;
     setReadOnly(read_only: boolean): void;
     setRenderDebug(enabled: boolean): void;
+    setTracing(trace_id: string, parent_span_id: string): void;
     setTrackedItems(group: number, raw_items: RawTrackedItem[]): void;
     tick(): void;
 }

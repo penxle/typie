@@ -123,6 +123,10 @@ int32_t editor_replace_text_in_blocks(EditorHandle* editor, const char* items_js
 
 int32_t editor_insert_template_fragment(EditorHandle* editor, const uint8_t* snapshot, size_t snapshot_len);
 
+int32_t editor_set_tracing(EditorHandle* editor, const char* trace_id, const char* parent_span_id);
+int32_t editor_clear_tracing(EditorHandle* editor);
+char* editor_drain_traces(EditorHandle* editor);
+
 #ifdef __cplusplus
 }
 #endif

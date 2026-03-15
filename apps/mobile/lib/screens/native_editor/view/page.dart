@@ -31,7 +31,7 @@ class PageItem extends HookWidget {
     final renderedCursor = useValueListenable(scope.presentedViewport).cursor;
     final visualSyncPageIdx = useValueListenable(scope.visualSyncPageIdx);
 
-    final layout = editorState.layout!;
+    final layout = editorState.layout;
     final pageCursor = renderedCursor?.pageIdx == pageIndex ? renderedCursor : null;
     final isFocused = editorState.isFocused;
     final isPaginated = layout is PaginatedLayout;
@@ -118,7 +118,15 @@ class PageItem extends HookWidget {
             return;
           }
 
+          final span = scope.ticker.span;
+          if (span != null) {
+            final ctx = span.spanContext;
+            editor.setTracing(ctx.traceId.toString(), ctx.spanId.toString());
+          }
           final didRender = await r.render(pageIndex);
+          if (span != null) {
+            editor.clearTracing();
+          }
           if (!isMounted.value) {
             return;
           }
