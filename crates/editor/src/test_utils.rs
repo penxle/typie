@@ -102,6 +102,47 @@ pub fn init_test_env() {
 }
 
 #[allow(unused)]
+pub fn init_bench_env() {
+    use std::cell::Cell;
+
+    static ICU_INIT: std::sync::Once = std::sync::Once::new();
+    ICU_INIT.call_once(|| {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let icu_path = std::path::Path::new(&manifest_dir).join("pkg/icu_data.postcard");
+        if icu_path.exists() {
+            let data = std::fs::read(&icu_path).expect("Failed to read ICU data");
+            let _ = load_icu_data(&data);
+        } else {
+            eprintln!("Warning: ICU data not found at {:?}", icu_path);
+        }
+    });
+
+    thread_local! {
+        static FONT_INIT: Cell<bool> = const { Cell::new(false) };
+    }
+
+    FONT_INIT.with(|init| {
+        if !init.get() {
+            init.set(true);
+
+            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+            let assets_dir = std::path::Path::new(&manifest_dir).join("assets");
+
+            GLOBALS.with(|globals| {
+                let globals = globals.borrow();
+                let mut fcx = globals.parley_font_context.borrow_mut();
+
+                let font_path = assets_dir.join("Pretendard-Regular.ttf");
+                let data = std::fs::read(&font_path).expect("Failed to read Pretendard font");
+                register_font(&mut fcx, "Pretendard", 400, data);
+            });
+
+            set_fallback_fonts(&["Pretendard"]);
+        }
+    });
+}
+
+#[allow(unused)]
 pub fn click_fold_toggle(runtime: &mut crate::runtime::Runtime, fold_id: crate::model::NodeId) {
     runtime.layout();
     runtime.update(crate::runtime::Message::ToggleFold {
