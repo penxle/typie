@@ -24,6 +24,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       app: api
+    secrets: inherit
 
   build-website:
     name: Build (website)
@@ -31,6 +32,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       app: website
+    secrets: inherit
 
   deploy-dev:
     name: Deployment (dev)
