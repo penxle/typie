@@ -19,22 +19,22 @@ RUN npm install -g pnpm
 FROM builder AS build
 
 COPY out/json/ .
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 COPY out/full/ .
-RUN pnpm exec turbo build --filter=@typie/api
-RUN find . -type d -name "node_modules" -prune -exec rm -rf {} +
+RUN pnpm exec turbo build --filter=@typie/api && \
+    find . -type d -name "node_modules" -prune -exec rm -rf {} +
 
 FROM builder AS prod-deps
 
 COPY out/json/ .
-RUN pnpm install --frozen-lockfile --prod
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prod
 
 FROM node:25-slim AS runtime
 WORKDIR /app
 
-ARG IMAGE_TAG
-ENV IMAGE_TAG=$IMAGE_TAG
 ENV LD_LIBRARY_PATH="/app/apps/api/lib"
 ENV NODE_ENV=production
 
@@ -46,6 +46,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     woff2 \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+ARG IMAGE_TAG
+ENV IMAGE_TAG=$IMAGE_TAG
 
 COPY --from=prod-deps /app/ .
 COPY --from=build /app/ .
