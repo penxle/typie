@@ -266,8 +266,6 @@ export async function initFonts(app: Application): Promise<void> {
       fontManifests.set(`${CDN_BASE}/${font.path}`, font);
     }
   }
-
-  app.setFallbackFonts([...fallbackFontFamilies.map((f) => f.familyName), ...phantomFontFamilies.map((f) => f.familyName)]);
 }
 
 export async function filterUncoveredCodepoints(font: FontRef, codepoints: number[]): Promise<number[]> {
@@ -304,9 +302,13 @@ export async function preloadRemainingChunks(app: Application, family: string, f
   }
 }
 
-export async function ensureRequiredFallbackFont(app: Application, weight: number, codepoints: number[]): Promise<void> {
-  const tasks: { family: string; font: { weight: number; url: string }; codepoints: number[] }[] = [];
-  let remaining = codepoints;
+export async function resolveFallbackMappings(
+  app: Application,
+  weight: number,
+  uncovered: number[],
+): Promise<{ family: string; weight: number; codepoints: number[] }[]> {
+  const mappings: { family: string; weight: number; codepoints: number[] }[] = [];
+  let remaining = uncovered;
 
   for (const fallbackFontFamily of fallbackFontFamilies) {
     if (remaining.length === 0) break;
@@ -332,9 +334,13 @@ export async function ensureRequiredFallbackFont(app: Application, weight: numbe
     const covered = remaining.filter((cp) => hasCodepoint(fallbackFont, cp));
     if (covered.length === 0) continue;
 
-    tasks.push({
+    const fontRef = { weight: fallbackFont.weight, url: `${CDN_BASE}/${fallbackFont.path}` };
+    await loadBase(app, fallbackFontFamily.familyName, fontRef);
+    await loadChunks(app, fallbackFontFamily.familyName, fontRef, covered);
+
+    mappings.push({
       family: fallbackFontFamily.familyName,
-      font: { weight: fallbackFont.weight, url: `${CDN_BASE}/${fallbackFont.path}` },
+      weight: fallbackFont.weight,
       codepoints: covered,
     });
 
@@ -342,11 +348,5 @@ export async function ensureRequiredFallbackFont(app: Application, weight: numbe
     remaining = remaining.filter((cp) => !coveredSet.has(cp));
   }
 
-  await Promise.all(
-    tasks.map(async ({ family, font, codepoints }) => {
-      await loadBase(app, family, font);
-      await loadChunks(app, family, font, codepoints);
-      app.setFallbackFonts([...fallbackFontFamilies.map((f) => f.familyName), ...phantomFontFamilies.map((f) => f.familyName)]);
-    }),
-  );
+  return mappings;
 }

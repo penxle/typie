@@ -5,7 +5,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { defaultValues } from '@/const';
 import { initWasm, wasm } from '$lib/wasm.svelte';
 import { PAGE_GAP } from './constants';
-import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks } from './fonts';
+import { ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks, resolveFallbackMappings } from './fonts';
 import {
   DIRTY_ATTRS,
   DIRTY_CURSOR,
@@ -715,17 +715,24 @@ export class Editor {
       })();
     if (!font) return;
 
-    Promise.all([
-      ensureRequiredFont(wasm, family, font, codepoints).then(() => {
-        if (!this.readOnly) {
-          preloadRemainingChunks(wasm, family, font);
-        }
-      }),
-      filterUncoveredCodepoints(font, codepoints).then((uncovered) =>
-        uncovered.length > 0 ? ensureRequiredFallbackFont(wasm, weight, uncovered) : undefined,
-      ),
-    ]).then(() => {
-      this.dispatch({ type: 'fontsLoaded', family, weight, codepoints });
+    Promise.resolve().then(async () => {
+      await ensureRequiredFont(wasm, family, font, codepoints);
+      if (!this.readOnly) {
+        preloadRemainingChunks(wasm, family, font);
+      }
+
+      const uncovered = await filterUncoveredCodepoints(font, codepoints);
+      const uncoveredSet = new SvelteSet(uncovered);
+      const covered = codepoints.filter((cp) => !uncoveredSet.has(cp));
+
+      const mappings: { family: string; weight: number; codepoints: number[] }[] = [{ family, weight: font.weight, codepoints: covered }];
+
+      if (uncovered.length > 0) {
+        const fallbackMappings = await resolveFallbackMappings(wasm, font.weight, uncovered);
+        mappings.push(...fallbackMappings);
+      }
+
+      this.dispatch({ type: 'fontsLoaded', family, weight, mappings });
     });
   }
 

@@ -1,6 +1,6 @@
 use crate::font::FontMetadata;
 use crate::font::encode::EncodedFont;
-use crate::global::{add_font_base, add_font_chunk, set_available_fonts, set_fallback_fonts};
+use crate::global::{add_font_base, add_font_chunk, set_available_fonts};
 use crate::global::{
     clear_text_replacement_rules, set_auto_surround_enabled, set_text_replacement_rules,
 };
@@ -70,14 +70,6 @@ impl Application {
             serde_wasm_bindgen::from_value::<std::collections::HashMap<String, Vec<u16>>>(fonts)
         {
             set_available_fonts(fonts);
-        }
-    }
-
-    #[wasm_bindgen(js_name = setFallbackFonts)]
-    pub fn set_fallback_fonts(&self, names: JsValue) {
-        if let Ok(names) = serde_wasm_bindgen::from_value::<Vec<String>>(names) {
-            let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-            set_fallback_fonts(&name_refs);
         }
     }
 

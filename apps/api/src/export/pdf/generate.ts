@@ -4,7 +4,7 @@ import { nearestWeight } from '../core/fonts';
 import { DEFAULT_THEME } from '../core/theme';
 import { parseVectorPageBinary } from './codec';
 import { computeDesiredSize, resolveAssets } from './external';
-import { ensureRequiredFallbackFont, ensureRequiredFont, filterUncoveredCodepoints, initFonts } from './fonts';
+import { ensureRequiredFont, filterUncoveredCodepoints, initFonts, resolveFallbackMappings } from './fonts';
 import { createPdfFromVectorPages } from './index';
 import { SlateReader } from './slate';
 import type { Application } from '@typie/editor';
@@ -96,24 +96,29 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
       for (const req of slate.readFontRequests()) {
         const familyFonts = fonts.find((f) => f.familyName === req.family)?.fonts ?? [];
         const font = nearestWeight(familyFonts, req.weight);
-        if (font) {
-          tasks.push(
-            Promise.all([
-              ensureRequiredFont(wasm, req.family, font, req.codepoints),
-              filterUncoveredCodepoints(font, req.codepoints).then((uncovered) =>
-                uncovered.length > 0 ? ensureRequiredFallbackFont(wasm, req.weight, uncovered) : undefined,
-              ),
-            ]).then(() => {
-              editor.dispatch({ type: 'fontsLoaded', family: req.family, weight: req.weight, codepoints: req.codepoints });
-            }),
-          );
-        } else {
-          tasks.push(
-            ensureRequiredFallbackFont(wasm, req.weight, req.codepoints).then(() => {
-              editor.dispatch({ type: 'fontsLoaded', family: req.family, weight: req.weight, codepoints: req.codepoints });
-            }),
-          );
-        }
+        tasks.push(
+          (async () => {
+            if (font) {
+              await ensureRequiredFont(wasm, req.family, font, req.codepoints);
+            }
+
+            const uncovered = font ? await filterUncoveredCodepoints(font, req.codepoints) : req.codepoints;
+            const coveredSet = new Set(uncovered);
+            const covered = req.codepoints.filter((cp) => !coveredSet.has(cp));
+
+            const mappings: { family: string; weight: number; codepoints: number[] }[] = [];
+            if (font && covered.length > 0) {
+              mappings.push({ family: req.family, weight: font.weight, codepoints: covered });
+            }
+
+            if (uncovered.length > 0) {
+              const fallbackMappings = await resolveFallbackMappings(wasm, req.weight, uncovered);
+              mappings.push(...fallbackMappings);
+            }
+
+            editor.dispatch({ type: 'fontsLoaded', family: req.family, weight: req.weight, mappings });
+          })(),
+        );
       }
 
       // 외부 요소 asset 해석 & 높이 보정

@@ -400,8 +400,7 @@ class FontManager {
       }),
     );
 
-    final fallbacks = await _loadFallbackFontFamilies();
-    _app.setFallbackFonts([...fallbacks.map((f) => f.familyName), ..._phantomFontFamilies.map((f) => f.familyName)]);
+    await _loadFallbackFontFamilies();
   }
 
   Future<List<int>> filterUncoveredCodepoints(Font font, List<int> codepoints) async {
@@ -440,11 +439,10 @@ class FontManager {
     }
   }
 
-  Future<void> ensureRequiredFallbackFont(int weight, List<int> codepoints) async {
+  Future<List<Map<String, dynamic>>> resolveFallbackMappings(int weight, List<int> uncovered) async {
     final fallbacks = await _loadFallbackFontFamilies();
-
-    final tasks = <({String family, Font font, List<int> codepoints})>[];
-    var remaining = codepoints;
+    final mappings = <Map<String, dynamic>>[];
+    var remaining = uncovered;
 
     for (final fallbackFontFamily in fallbacks) {
       if (remaining.isEmpty) {
@@ -483,22 +481,16 @@ class FontManager {
         continue;
       }
 
-      tasks.add((family: fallbackFontFamily.familyName, font: fallbackFont, codepoints: covered));
+      await _loadBase(fallbackFontFamily.familyName, fallbackFont);
+      await _loadChunks(fallbackFontFamily.familyName, fallbackFont, covered);
+
+      mappings.add({'family': fallbackFontFamily.familyName, 'weight': fallbackFont.weight, 'codepoints': covered});
 
       final coveredSet = covered.toSet();
       remaining = remaining.where((cp) => !coveredSet.contains(cp)).toList();
     }
 
-    await Future.wait(
-      tasks.map((t) async {
-        await _loadBase(t.family, t.font);
-        await _loadChunks(t.family, t.font, t.codepoints);
-        _app.setFallbackFonts([
-          ...fallbacks.map((f) => f.familyName),
-          ..._phantomFontFamilies.map((f) => f.familyName),
-        ]);
-      }),
-    );
+    return mappings;
   }
 }
 

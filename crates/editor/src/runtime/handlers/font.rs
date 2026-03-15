@@ -1,4 +1,6 @@
+use crate::global::update_font_mappings;
 use crate::model::{Annotation, Attr, Node, NodeId, Style};
+use crate::runtime::FontMapping;
 use crate::runtime::{Effect, Runtime};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -126,13 +128,16 @@ impl Runtime {
         &mut self,
         family: String,
         weight: u16,
-        codepoints: Vec<u32>,
+        mappings: Vec<FontMapping>,
     ) -> Vec<Effect> {
         let key = (family.clone(), weight);
 
-        // Remove loaded codepoints from the embedded pending set
+        // 1. Update global font mappings
+        let all_codepoints = update_font_mappings(&family, weight, &mappings);
+
+        // 2. Remove loaded codepoints from the embedded pending set
         if let Some((_, pending_cps)) = self.missing_font_nodes.get_mut(&key) {
-            for cp in &codepoints {
+            for cp in &all_codepoints {
                 pending_cps.remove(cp);
             }
         }

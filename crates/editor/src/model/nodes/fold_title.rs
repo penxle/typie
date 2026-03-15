@@ -103,6 +103,69 @@ impl Layout for FoldTitleNode {
 
             setup_defaults(&mut builder);
 
+            // Mapping-based font family resolution
+            {
+                let font_mappings = globals.font_mappings.borrow();
+                let font_interner = globals.font_family_interner.borrow();
+
+                let interned_primary = font_interner
+                    .get(cascade_family.as_str())
+                    .cloned()
+                    .unwrap_or_else(|| std::sync::Arc::from(cascade_family.as_str()));
+
+                let primary_weight = FOLD_TITLE_FONT_WEIGHT;
+                let mut current_resolved: Option<(std::sync::Arc<str>, u16)> = None;
+                let mut range_start_byte = 0usize;
+
+                for (byte_idx, ch) in text.char_indices() {
+                    let cp = ch as u32;
+                    let resolved = font_mappings
+                        .get(&(interned_primary.clone(), primary_weight, cp))
+                        .cloned()
+                        .unwrap_or_else(|| (interned_primary.clone(), primary_weight));
+
+                    let is_same = current_resolved
+                        .as_ref()
+                        .map_or(false, |prev| prev.0 == resolved.0 && prev.1 == resolved.1);
+
+                    if !is_same {
+                        if let Some(ref prev) = current_resolved {
+                            let byte_range = range_start_byte..byte_idx;
+                            builder.push(
+                                StyleProperty::FontFamily(FontFamily::Single(
+                                    FontFamilyName::Named(prev.0.to_string().into()),
+                                )),
+                                byte_range.clone(),
+                            );
+                            if prev.1 != primary_weight {
+                                builder.push(
+                                    StyleProperty::FontWeight(FontWeight::new(prev.1 as f32)),
+                                    byte_range,
+                                );
+                            }
+                        }
+                        current_resolved = Some(resolved);
+                        range_start_byte = byte_idx;
+                    }
+                }
+
+                if let Some(ref prev) = current_resolved {
+                    let byte_range = range_start_byte..text.len();
+                    builder.push(
+                        StyleProperty::FontFamily(FontFamily::Single(FontFamilyName::Named(
+                            prev.0.to_string().into(),
+                        ))),
+                        byte_range.clone(),
+                    );
+                    if prev.1 != primary_weight {
+                        builder.push(
+                            StyleProperty::FontWeight(FontWeight::new(prev.1 as f32)),
+                            byte_range,
+                        );
+                    }
+                }
+            }
+
             let mut layout = builder.build(&text);
             layout.break_all_lines(Some(content_width));
             layout.align(

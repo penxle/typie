@@ -53,6 +53,15 @@ pub enum Direction {
     SentenceDown,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+#[serde(rename_all = "camelCase")]
+pub struct FontMapping {
+    pub family: String,
+    pub weight: u16,
+    pub codepoints: Vec<u32>,
+}
+
 macro_rules! define_messages {
     (
         $(
@@ -470,10 +479,10 @@ define_messages! {
     FontsLoaded {
         family: String,
         weight: u16,
-        codepoints: Vec<u32>,
+        mappings: Vec<FontMapping>,
     }
     => when When::True
-    => handle(rt) { rt.handle_fonts_loaded(family, weight, codepoints) },
+    => handle(rt) { rt.handle_fonts_loaded(family, weight, mappings) },
 
     Escape
     => when When::True
