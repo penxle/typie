@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsdown && node scripts/package-function.ts",
     "build:layers": "node scripts/build-layers.ts",
+    "lint:eslint": "eslint --max-warnings 0 .",
     "lint:typecheck": "tsc"
   },
   "devDependencies": {

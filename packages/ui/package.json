@@ -18,6 +18,7 @@
   },
   "scripts": {
     "codegen": "svelte-kit sync",
+    "lint:eslint": "eslint --max-warnings 0 .",
     "lint:svelte": "svelte-check --fail-on-warnings"
   },
   "dependencies": {
