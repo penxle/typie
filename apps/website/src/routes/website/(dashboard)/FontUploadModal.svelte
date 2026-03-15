@@ -1,12 +1,12 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
   import { HorizontalDivider, Icon, Modal, RingSpinner } from '@typie/ui/components';
   import { Dialog } from '@typie/ui/notification';
   import { SvelteMap } from 'svelte/reactivity';
-  import { TypieError } from '#/errors';
   import GemIcon from '~icons/lucide/gem';
   import InfoIcon from '~icons/lucide/info';
   import TypeIcon from '~icons/lucide/type';

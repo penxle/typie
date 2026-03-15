@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { DocumentType, EntityAvailability, EntityVisibility } from '@typie/lib/enums';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem } from '@typie/ui/components';
@@ -8,8 +10,6 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { DocumentType, EntityAvailability, EntityVisibility } from '#/enums';
-  import { TypieError } from '#/errors';
   import BlendIcon from '~icons/lucide/blend';
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';

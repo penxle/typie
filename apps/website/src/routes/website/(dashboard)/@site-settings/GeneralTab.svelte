@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation, createQuery } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
+  import { siteSchema } from '@typie/lib/validation';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -8,8 +10,6 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '#/errors';
-  import { siteSchema } from '#/validation';
   import CheckIcon from '~icons/lucide/check';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import UploadIcon from '~icons/lucide/upload';

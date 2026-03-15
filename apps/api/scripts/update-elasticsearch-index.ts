@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
+import { EntityState } from '@typie/lib/enums';
 import { count, eq, inArray, sql } from 'drizzle-orm';
 import { db, DocumentContents, Documents, Entities, Folders } from '#/db/index.ts';
-import { EntityState } from '#/enums.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { decompose } from '#/utils/text.ts';
 

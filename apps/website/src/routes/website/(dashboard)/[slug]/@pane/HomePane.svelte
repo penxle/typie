@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createMutation, createQuery } from '@mearie/svelte';
+  import { DocumentType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon } from '@typie/ui/components';
@@ -10,7 +11,6 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { match } from 'ts-pattern';
-  import { DocumentType } from '#/enums';
   import FileIcon from '~icons/lucide/file';
   import FilePenIcon from '~icons/lucide/file-pen';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';

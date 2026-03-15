@@ -1,11 +1,11 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { DocumentType } from '@typie/lib/enums';
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { contextMenu } from '@typie/ui/actions';
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { DocumentType } from '#/enums';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';

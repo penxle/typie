@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import * as PortOne from '@portone/browser-sdk/v2';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, ContentProtect, Helmet, HorizontalDivider, Icon, TextInput } from '@typie/ui/components';
@@ -12,7 +13,6 @@
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { z } from 'zod';
-  import { TypieError } from '#/errors';
   import LockIcon from '~icons/lucide/lock';
   import LockOpenIcon from '~icons/lucide/lock-open';
   import ShieldAlertIcon from '~icons/lucide/shield-alert';

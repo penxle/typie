@@ -1,12 +1,12 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon, TextInput } from '@typie/ui/components';
   import { createForm, FormError } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '#/errors';
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import { page } from '$app/state';

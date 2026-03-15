@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
+  import { PlanPair } from '@typie/lib/const';
+  import { PlanAvailability, PlanInterval, SubscriptionState } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button } from '@typie/ui/components';
@@ -7,8 +9,6 @@
   import { comma } from '@typie/ui/utils';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { PlanPair } from '#/const';
-  import { PlanAvailability, PlanInterval, SubscriptionState } from '#/enums';
   import { SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';

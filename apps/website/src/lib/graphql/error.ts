@@ -1,7 +1,7 @@
 import { map, pipe } from '@mearie/core/stream';
 import { isAggregatedError, isGraphQLError } from '@mearie/svelte';
+import { TypieError } from '@typie/lib/errors';
 import { FormError } from '@typie/ui/form';
-import { TypieError } from '#/errors';
 import type { Exchange } from '@mearie/svelte';
 
 export function unwrapError(err: unknown): unknown {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createSubscription } from '@mearie/svelte';
+  import { defaultPlanRules } from '@typie/lib/const';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -11,7 +12,6 @@
   import mixpanel from 'mixpanel-browser';
   import qs from 'query-string';
   import { onMount, untrack } from 'svelte';
-  import { defaultPlanRules } from '#/const';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
   import { updated } from '$app/state';

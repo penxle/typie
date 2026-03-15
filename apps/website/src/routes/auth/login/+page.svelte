@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { SingleSignOnProvider } from '@typie/lib/enums';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Helmet, Icon, TextInput } from '@typie/ui/components';
@@ -10,8 +12,6 @@
   import qs from 'query-string';
   import { onMount, tick } from 'svelte';
   import { z } from 'zod';
-  import { SingleSignOnProvider } from '#/enums';
-  import { TypieError } from '#/errors';
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';
   import KakaoIcon from '~icons/typie/kakao';

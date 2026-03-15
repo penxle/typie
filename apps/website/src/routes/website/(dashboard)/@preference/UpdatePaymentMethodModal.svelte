@@ -1,5 +1,9 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
+  import { PlanId } from '@typie/lib/const';
+  import { PlanInterval } from '@typie/lib/enums';
+  import { TypieError } from '@typie/lib/errors';
+  import { cardSchema } from '@typie/lib/validation';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Checkbox, Modal, TextInput } from '@typie/ui/components';
@@ -9,10 +13,6 @@
   import mixpanel from 'mixpanel-browser';
   import { untrack } from 'svelte';
   import { z } from 'zod';
-  import { PlanId } from '#/const';
-  import { PlanInterval } from '#/enums';
-  import { TypieError } from '#/errors';
-  import { cardSchema } from '#/validation';
   import { fb } from '$lib/analytics';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';

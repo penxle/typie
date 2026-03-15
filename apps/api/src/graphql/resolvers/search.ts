@@ -1,7 +1,7 @@
+import { SearchHitType } from '@typie/lib/enums';
 import DOMPurify from 'isomorphic-dompurify';
 import { match } from 'ts-pattern';
 import { TableCode, validateDbId } from '#/db/index.ts';
-import { SearchHitType } from '#/enums.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { decompose } from '#/utils/text.ts';

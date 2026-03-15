@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { token } from '@typie/styled-system/tokens';
@@ -7,7 +8,6 @@
   import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { onMount } from 'svelte';
-  import { TypieError } from '#/errors';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { EntityAvailability, EntityVisibility } from '@typie/lib/enums';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -7,7 +8,6 @@
   import { getAppContext } from '@typie/ui/context';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { EntityAvailability, EntityVisibility } from '#/enums';
   import ExternalLinkIcon from '~icons/lucide/external-link';
   import { graphql } from '$mearie';
   import DocumentPanelCharacterCount from './DocumentPanelCharacterCount.svelte';

@@ -1,4 +1,4 @@
-import * as enums from '#/enums.ts';
+import * as enums from '@typie/lib/enums';
 import { builder } from './builder.ts';
 
 /**

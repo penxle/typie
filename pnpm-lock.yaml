@@ -445,9 +445,6 @@ importers:
       '@typie/adapter-node':
         specifier: workspace:*
         version: link:../../packages/adapter-node
-      '@typie/api':
-        specifier: workspace:*
-        version: link:../api
       '@typie/editor':
         specifier: workspace:*
         version: link:../../crates/editor
@@ -578,6 +575,9 @@ importers:
       dayjs:
         specifier: ^1.11.20
         version: 1.11.20
+      graphql:
+        specifier: ^16.13.1
+        version: 16.13.1
       hono:
         specifier: ^4.12.8
         version: 4.12.8
@@ -590,6 +590,9 @@ importers:
       ts-pattern:
         specifier: ^5.9.0
         version: 5.9.0
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@sveltejs/kit':
         specifier: ^2.55.0

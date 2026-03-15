@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createMutation, createQuery } from '@mearie/svelte';
+  import { EntityType, EntityVisibility } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, MenuItem, RingSpinner } from '@typie/ui/components';
@@ -8,7 +9,6 @@
   import { comma } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { getContext, tick } from 'svelte';
-  import { EntityType, EntityVisibility } from '#/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import CopyIcon from '~icons/lucide/copy';

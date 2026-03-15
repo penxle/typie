@@ -1,8 +1,8 @@
 import icuPostcardUrl from '@typie/editor/icu/data.postcard?url';
+import { defaultValues } from '@typie/lib/const';
 import { Tip } from '@typie/ui/notification';
 import { nanoid } from 'nanoid';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { defaultValues } from '#/const';
 import { initWasm, wasm } from '$lib/wasm.svelte';
 import { PAGE_GAP } from './constants';
 import { ensureRequiredFont, filterUncoveredCodepoints, initFonts, preloadRemainingChunks, resolveFallbackMappings } from './fonts';

@@ -1,5 +1,5 @@
+import { SingleSignOnProvider } from '@typie/lib/enums';
 import appleSignIn from 'apple-signin-auth';
-import { SingleSignOnProvider } from '#/enums.ts';
 import { env } from '#/env.ts';
 import type { ExternalUser } from './types.ts';
 

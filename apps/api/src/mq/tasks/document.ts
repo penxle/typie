@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/node';
+import { DocumentSyncType } from '@typie/lib/enums';
 import dayjs from 'dayjs';
 import { and, eq, gt, lt, sql } from 'drizzle-orm';
 import { LoroDoc } from 'loro-crdt';
@@ -14,7 +15,6 @@ import {
   Entities,
   firstOrThrow,
 } from '#/db/index.ts';
-import { DocumentSyncType } from '#/enums.ts';
 import { Lock } from '#/lock.ts';
 import { pubsub } from '#/pubsub.ts';
 import { compressZstd } from '#/utils/compression.ts';

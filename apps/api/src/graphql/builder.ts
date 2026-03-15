@@ -4,10 +4,10 @@ import ScopeAuthPlugin from '@pothos/plugin-scope-auth';
 import SimpleObjectsPlugin from '@pothos/plugin-simple-objects';
 import WithInputPlugin from '@pothos/plugin-with-input';
 import ZodPlugin from '@pothos/plugin-zod';
+import { TypieError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { GraphQLJSON } from 'graphql-scalars';
 import * as R from 'remeda';
-import { TypieError } from '#/errors.ts';
 import type { SessionContext, UserContext } from '#/context.ts';
 
 export const builder = new SchemaBuilder<{

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
+  import { EntityVisibility } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -7,7 +8,6 @@
   import { createForm } from '@typie/ui/form';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { EntityVisibility } from '#/enums';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
   import GlobeIcon from '~icons/lucide/globe';

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
+  import { defaultValues } from '@typie/lib/const';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { createFloatingActions } from '@typie/ui/actions';
@@ -10,7 +11,6 @@
   import mixpanel from 'mixpanel-browser';
   import { tick } from 'svelte';
   import { fly } from 'svelte/transition';
-  import { defaultValues } from '#/const';
   import AlignVerticalSpaceAroundIcon from '~icons/lucide/align-vertical-space-around';
   import ArrowRightToLineIcon from '~icons/lucide/arrow-right-to-line';
   import CheckIcon from '~icons/lucide/check';

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation, createSubscription } from '@mearie/svelte';
+  import { DocumentSyncType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { autosize, tooltip } from '@typie/ui/actions';
@@ -12,7 +13,6 @@
   import { nanoid } from 'nanoid';
   import { setContext } from 'svelte';
   import { fly } from 'svelte/transition';
-  import { DocumentSyncType } from '#/enums';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import CrownIcon from '~icons/lucide/crown';
   import EllipsisIcon from '~icons/lucide/ellipsis';

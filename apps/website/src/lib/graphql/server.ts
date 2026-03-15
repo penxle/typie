@@ -1,6 +1,6 @@
 import { AggregatedError, cacheExchange, createClient, httpExchange, isExchangeError, isGraphQLError } from '@mearie/svelte';
 import { error, redirect } from '@sveltejs/kit';
-import { TypieError } from '#/errors';
+import { TypieError } from '@typie/lib/errors';
 import { browser } from '$app/environment';
 import { env } from '$env/dynamic/public';
 import { schema } from '$mearie';

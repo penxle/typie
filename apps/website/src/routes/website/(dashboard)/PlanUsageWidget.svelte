@@ -1,11 +1,11 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { defaultPlanRules } from '@typie/lib/const';
+  import { PlanAvailability } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
-  import { defaultPlanRules } from '#/const';
-  import { PlanAvailability } from '#/enums';
   import { pushState } from '$app/navigation';
   import { graphql } from '$mearie';
   import { PlanUpgradeDialog } from './plan-upgrade-dialog.svelte';

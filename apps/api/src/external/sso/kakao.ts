@@ -1,6 +1,6 @@
+import { SingleSignOnProvider } from '@typie/lib/enums';
 import ky from 'ky';
 import qs from 'query-string';
-import { SingleSignOnProvider } from '#/enums.ts';
 import { env } from '#/env.ts';
 import type { ExternalUser } from './types.ts';
 

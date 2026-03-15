@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { flex } from '@typie/styled-system/patterns';
   import { Button, Modal, TextInput } from '@typie/ui/components';
@@ -7,7 +8,6 @@
   import { Dialog } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '#/errors';
   import { graphql } from '$mearie';
 
   type Props = {

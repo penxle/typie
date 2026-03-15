@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
+  import { DocumentType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { portal } from '@typie/ui/actions';
@@ -11,7 +12,6 @@
   import { on } from 'svelte/events';
   import { SvelteMap } from 'svelte/reactivity';
   import { fade } from 'svelte/transition';
-  import { DocumentType } from '#/enums';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';

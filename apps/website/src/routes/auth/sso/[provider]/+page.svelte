@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { SingleSignOnProvider } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Helmet, RingSpinner } from '@typie/ui/components';
@@ -7,7 +8,6 @@
   import qs from 'query-string';
   import { onMount } from 'svelte';
   import { match } from 'ts-pattern';
-  import { SingleSignOnProvider } from '#/enums';
   import { page } from '$app/state';
   import Logo from '$assets/logos/logo.svg?component';
   import { env } from '$env/dynamic/public';

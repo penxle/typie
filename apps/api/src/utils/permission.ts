@@ -1,7 +1,7 @@
+import { UserRole } from '@typie/lib/enums';
+import { TypieError } from '@typie/lib/errors';
 import { eq } from 'drizzle-orm';
 import { db, firstOrThrow, Sites, Users, UserSessions } from '#/db/index.ts';
-import { UserRole } from '#/enums.ts';
-import { TypieError } from '#/errors.ts';
 
 type AssertAdminPermissionParams = {
   sessionId: string;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment, createMutation, createQuery } from '@mearie/svelte';
+  import { DocumentType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
@@ -12,7 +13,6 @@
   import { tick } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { match } from 'ts-pattern';
-  import { DocumentType } from '#/enums';
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';

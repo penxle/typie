@@ -11,7 +11,6 @@ export default {
   kit: {
     adapter: node(),
     alias: {
-      '#/*': '../api/src/*',
       '$assets/*': './src/assets/*',
     },
     paths: { relative: false },

@@ -8,6 +8,10 @@
     "./dayjs": "./src/dayjs/index.ts",
     "./postcss": "./src/postcss/index.js",
     "./svelte": "./src/svelte/index.ts",
+    "./const": "./src/const.ts",
+    "./enums": "./src/enums.ts",
+    "./errors": "./src/errors.ts",
+    "./validation": "./src/validation.ts",
     "./vite": {
       "types": "./src/vite/index.d.ts",
       "default": "./src/vite/index.js"
@@ -22,10 +26,12 @@
     "@logtape/logtape": "^2.0.4",
     "@logtape/sentry": "^2.0.4",
     "dayjs": "^1.11.20",
+    "graphql": "^16.13.1",
     "hono": "^4.12.8",
     "ipaddr.js": "^2.3.0",
     "remeda": "^2.33.6",
-    "ts-pattern": "^5.9.0"
+    "ts-pattern": "^5.9.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@sveltejs/kit": "^2.55.0",

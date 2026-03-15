@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
+  import { SiteDateDisplay } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { Select } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
-  import { SiteDateDisplay } from '#/enums';
   import { SettingsCard, SettingsRow } from '$lib/components';
   import { graphql } from '$mearie';
   import type { DashboardLayout_SiteSettingsModal_DesignTab_site$key } from '$mearie';

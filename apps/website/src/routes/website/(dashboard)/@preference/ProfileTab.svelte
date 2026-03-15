@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
   import * as PortOne from '@portone/browser-sdk/v2';
+  import { TypieError } from '@typie/lib/errors';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, Icon, Switch, TextInput } from '@typie/ui/components';
@@ -9,7 +10,6 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '#/errors';
   import CheckCircle2Icon from '~icons/lucide/check-circle-2';
   import PencilIcon from '~icons/lucide/pencil';
   import UploadIcon from '~icons/lucide/upload';

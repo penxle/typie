@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createMutation } from '@mearie/svelte';
+  import { TypieError } from '@typie/lib/errors';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
@@ -8,7 +9,6 @@
   import { serializeOAuthState } from '@typie/ui/utils';
   import mixpanel from 'mixpanel-browser';
   import { z } from 'zod';
-  import { TypieError } from '#/errors';
   import ShuffleIcon from '~icons/lucide/dices';
   import NaverIcon from '~icons/simple-icons/naver';
   import GoogleIcon from '~icons/typie/google';

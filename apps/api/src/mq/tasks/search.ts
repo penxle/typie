@@ -1,6 +1,6 @@
+import { EntityState } from '@typie/lib/enums';
 import { eq } from 'drizzle-orm';
 import { db, DocumentContents, Documents, Entities, firstOrThrow, Folders } from '#/db/index.ts';
-import { EntityState } from '#/enums.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { getAncestorEntityIds } from '#/utils/entity.ts';
 import { decompose } from '#/utils/text.ts';

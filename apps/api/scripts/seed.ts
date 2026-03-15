@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { PlanId } from '#/const.ts';
+import { PlanId } from '@typie/lib/const';
+import { PlanAvailability, PlanInterval } from '@typie/lib/enums';
 import { db, Plans } from '#/db/index.ts';
-import { PlanAvailability, PlanInterval } from '#/enums.ts';
 
 await db.transaction(async (tx) => {
   await tx.insert(Plans).values({

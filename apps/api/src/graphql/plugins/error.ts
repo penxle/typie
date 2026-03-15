@@ -1,9 +1,9 @@
 import { isAsyncIterable } from '@envelop/core';
 import * as Sentry from '@sentry/node';
 import { logger } from '@typie/lib';
+import { TypieError } from '@typie/lib/errors';
 import { GraphQLError, print } from 'graphql';
 import { dev } from '#/env.ts';
-import { TypieError } from '#/errors.ts';
 import { truncateVariables } from './utils.ts';
 import type { AsyncIterableIteratorOrValue, ExecutionResult } from '@envelop/core';
 import type { Plugin } from 'graphql-yoga';

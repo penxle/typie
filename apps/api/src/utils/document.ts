@@ -1,7 +1,7 @@
 import defaultFontFamilies from '@typie/editor/font/defaults.json' with { type: 'json' };
+import { FontFamilySource, FontFamilyState, FontState } from '@typie/lib/enums';
 import { asc, eq, inArray } from 'drizzle-orm';
 import { db, FontFamilies, FontNames, Fonts } from '#/db/index.ts';
-import { FontFamilySource, FontFamilyState, FontState } from '#/enums.ts';
 
 export type DocumentFontFamily = {
   id: string;

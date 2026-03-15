@@ -1,7 +1,7 @@
+import { PostAvailableAction, PostContentRating, PostLayoutMode, PostType, PostViewBodyUnavailableReason } from '@typie/lib/enums';
+import { NotFoundError } from '@typie/lib/errors';
 import dayjs from 'dayjs';
 import { TableCode } from '#/db/index.ts';
-import { PostAvailableAction, PostContentRating, PostLayoutMode, PostType, PostViewBodyUnavailableReason } from '#/enums.ts';
-import { NotFoundError } from '#/errors.ts';
 import { builder } from '../builder.ts';
 import {
   CharacterCountChange,

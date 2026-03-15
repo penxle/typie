@@ -1,4 +1,4 @@
-import type { SingleSignOnProvider } from '#/enums.ts';
+import type { SingleSignOnProvider } from '@typie/lib/enums';
 
 export type ExternalUser = {
   provider: SingleSignOnProvider;

@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
+import { defaultValues } from '@typie/lib/const';
 import { inArray, sql } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
-import { defaultValues } from '#/const.ts';
 import { db, Files, Images } from '#/db/index.ts';
 import { wasm } from '#/utils/wasm.ts';
 

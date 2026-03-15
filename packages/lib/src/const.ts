@@ -1,4 +1,7 @@
-import type { PlanRules } from '#/db/schemas/json.ts';
+type PlanRules = {
+  maxTotalCharacterCount: number;
+  maxTotalBlobSize: number;
+};
 
 // spell-checker:disable
 export type PlanId = keyof typeof PlanId;

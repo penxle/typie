@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { EntityVisibility } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { Checkbox } from '@typie/ui/components';
-  import { EntityVisibility } from '#/enums';
   import { getTreeContext } from '../state.svelte';
   import { resetShiftMultiSelectTip, showShiftMultiSelectTipIfNeeded } from './shift-multi-select-tip';
   import type { TreeEntity } from './types';

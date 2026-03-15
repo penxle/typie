@@ -1,6 +1,6 @@
+import { RedirectType } from '@typie/lib/enums';
 import { and, eq } from 'drizzle-orm';
 import { db, first, Redirects, TableCode } from '#/db/index.ts';
-import { RedirectType } from '#/enums.ts';
 import { builder } from '../builder.ts';
 import { isTypeOf, Redirect } from '../objects.ts';
 

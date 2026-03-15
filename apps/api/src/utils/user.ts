@@ -1,6 +1,6 @@
+import { EntityState } from '@typie/lib/enums';
 import { and, eq, sum } from 'drizzle-orm';
 import { db, DocumentContents, Documents, Entities, firstOrThrow } from '#/db/index.ts';
-import { EntityState } from '#/enums.ts';
 
 type GetUserUsageParams = {
   userId: string;
