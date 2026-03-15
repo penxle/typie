@@ -19,8 +19,7 @@ RUN npm install -g pnpm
 FROM builder AS build
 
 COPY out/json/ .
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 ARG IMAGE_TAG
 ENV PUBLIC_IMAGE_TAG=$IMAGE_TAG
@@ -33,8 +32,7 @@ RUN --mount=type=secret,id=TURBO_TOKEN,env=TURBO_TOKEN \
 FROM builder AS prod-deps
 
 COPY out/json/ .
-RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --prod
+RUN pnpm install --frozen-lockfile --prod
 
 FROM node:25-slim AS runtime
 WORKDIR /app
