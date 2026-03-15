@@ -7,7 +7,7 @@
     "bootstrap": "lefthook install",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:eslint": "turbo run lint:eslint",
     "lint:prettier": "prettier --check --ignore-unknown '**/*'",
     "lint:spellcheck": "cspell --no-progress --relative '**/*'",
     "lint:svelte": "turbo run lint:svelte",

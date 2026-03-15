@@ -18,6 +18,9 @@
       "persistent": true,
       "cache": false
     },
+    "lint:eslint": {
+      "dependsOn": ["codegen"]
+    },
     "lint:svelte": {
       "dependsOn": ["^codegen", "codegen"]
     },
