@@ -1,5 +1,9 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "remoteCache": {
+    "apiUrl": "https://turbo.penxle.io",
+    "teamSlug": "typie"
+  },
   "globalEnv": ["NODE_ENV"],
   "tasks": {
     "codegen": {
