@@ -8,7 +8,6 @@ impl Renderer {
         is_focused: bool,
         render_debug_enabled: bool,
         layout_debug_enabled: bool,
-        profiling_enabled: bool,
         background_layer: Option<&Pixmap>,
         content_layer: Option<&Pixmap>,
         overflow_cache: &mut FxHashMap<usize, OverflowRenderCacheEntry>,
@@ -19,8 +18,11 @@ impl Renderer {
         drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
         debug_frame: &mut Option<PaintDebugFrame>,
-    ) -> OverlayProfile {
-        let mut overlay_profile = OverlayProfile::default();
+    ) {
+        use crate::tracing::TRACER;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
+
+        let _s = mark_span_as_active(TRACER.start("render.overlay"));
         let scale = scale_factor as f32;
         let canvas_width = if scale > 0.0 {
             pixmap.width() as f32 / scale
@@ -33,15 +35,9 @@ impl Renderer {
             0.0
         };
 
-        let selection_collect_started_at = profiling_enabled.then(profile_now);
+        let _s_selection = mark_span_as_active(TRACER.start("render.overlay.selection"));
         let selection_data =
             Self::collect_selection_overlay_data(page, selections, canvas_width, canvas_height);
-        overlay_profile.selection_clip_rect_count = selection_data.clip_rects.len();
-        overlay_profile.selection_text_rect_count = selection_data.text_paint_rects.len();
-        overlay_profile.selection_has_non_text = selection_data.has_non_text_selection;
-        if let Some(started_at) = selection_collect_started_at {
-            overlay_profile.selection_collect_ms = profile_elapsed_ms(started_at);
-        }
 
         if !selection_data.clip_rects.is_empty()
             && let Some(background_layer) = background_layer
@@ -56,8 +52,7 @@ impl Renderer {
             );
         }
 
-        let selection_paint_started_at = profiling_enabled.then(profile_now);
-        let selection_paint_stats = Self::render_selection_overlay(
+        Self::render_selection_overlay(
             pixmap,
             glyph_renderer,
             scale_factor,
@@ -68,59 +63,42 @@ impl Renderer {
             doc,
             &selection_data,
         );
-        overlay_profile.selection_fast_path = selection_paint_stats.fast_path;
-        overlay_profile.selection_phase_full = selection_paint_stats.full_phase;
-        if let Some(started_at) = selection_paint_started_at {
-            overlay_profile.selection_paint_ms = profile_elapsed_ms(started_at);
-        }
-        overlay_profile.selection_ms =
-            overlay_profile.selection_collect_ms + overlay_profile.selection_paint_ms;
+        drop(_s_selection);
 
-        let content_started_at = profiling_enabled.then(profile_now);
-        if !selections.is_empty() && !selection_data.clip_rects.is_empty() {
-            if should_promote_full_repaint(&selection_data.clip_rects, canvas_width, canvas_height)
-            {
-                let started_at = profiling_enabled.then(profile_now);
-                Self::render_content_phase(
-                    pixmap,
-                    glyph_renderer,
-                    scale_factor,
-                    theme,
-                    is_focused,
-                    page,
-                    doc,
-                    None,
-                    Point::zero(),
-                );
-                overlay_profile.content_full_render = true;
-                if let Some(started_at) = started_at {
-                    overlay_profile.content_full_ms = profile_elapsed_ms(started_at);
-                }
-            } else if let Some(content_layer) = content_layer {
-                let started_at = profiling_enabled.then(profile_now);
-                Self::composite_cached_content_layer_clipped(
-                    pixmap,
-                    content_layer,
+        {
+            let _s = mark_span_as_active(TRACER.start("render.overlay.content"));
+            if !selections.is_empty() && !selection_data.clip_rects.is_empty() {
+                if should_promote_full_repaint(
                     &selection_data.clip_rects,
-                    scale_factor,
-                );
-                overlay_profile.content_cached_composite = true;
-                overlay_profile.content_clip_rect_count = selection_data.clip_rects.len();
-                if let Some(started_at) = started_at {
-                    overlay_profile.content_composite_ms = profile_elapsed_ms(started_at);
-                }
-            } else {
-                overlay_profile.content_clipped_render = true;
-                let clip_pixel_rects = collect_non_overlapping_pixel_rects(
-                    &selection_data.clip_rects,
-                    scale,
-                    pixmap.width(),
-                    pixmap.height(),
-                );
-                if !clip_pixel_rects.is_empty() {
-                    overlay_profile.content_clip_rect_count = selection_data.clip_rects.len();
+                    canvas_width,
+                    canvas_height,
+                ) {
+                    Self::render_content_phase(
+                        pixmap,
+                        glyph_renderer,
+                        scale_factor,
+                        theme,
+                        is_focused,
+                        page,
+                        doc,
+                        None,
+                        Point::zero(),
+                    );
+                } else if let Some(content_layer) = content_layer {
+                    Self::composite_cached_content_layer_clipped(
+                        pixmap,
+                        content_layer,
+                        &selection_data.clip_rects,
+                        scale_factor,
+                    );
+                } else {
+                    let clip_pixel_rects = collect_non_overlapping_pixel_rects(
+                        &selection_data.clip_rects,
+                        scale,
+                        pixmap.width(),
+                        pixmap.height(),
+                    );
                     for pixel_rect in clip_pixel_rects {
-                        let started_at = profiling_enabled.then(profile_now);
                         Self::render_content_phase_clipped(
                             pixmap,
                             glyph_renderer,
@@ -131,21 +109,14 @@ impl Renderer {
                             doc,
                             pixel_rect.to_layout_rect(scale),
                         );
-                        overlay_profile.content_clipped_pass_count += 1;
-                        if let Some(started_at) = started_at {
-                            overlay_profile.content_clipped_ms += profile_elapsed_ms(started_at);
-                        }
                     }
                 }
             }
         }
-        if let Some(started_at) = content_started_at {
-            overlay_profile.content_ms = profile_elapsed_ms(started_at);
-        }
 
         let mut overflow_rects = Vec::new();
         if let Some(next_page) = next_page {
-            let overflow_started_at = profiling_enabled.then(profile_now);
+            let _s_overflow = mark_span_as_active(TRACER.start("render.overlay.overflow"));
             let overflow_debug = if debug_frame.is_some() {
                 Some(&mut overflow_rects)
             } else {
@@ -165,16 +136,14 @@ impl Renderer {
             if let Some(frame) = debug_frame.as_mut() {
                 frame.overflow_rects = overflow_rects.clone();
             }
-            if let Some(started_at) = overflow_started_at {
-                overlay_profile.overflow_ms = profile_elapsed_ms(started_at);
-            }
+            drop(_s_overflow);
         } else {
             overflow_cache.remove(&page_idx);
         }
 
         let mut drop_rect = None;
         if let Some(indicator) = drop_indicator {
-            let drop_started_at = profiling_enabled.then(profile_now);
+            let _s_drop = mark_span_as_active(TRACER.start("render.overlay.drop_indicator"));
             let transform = Transform::from_scale(scale, scale);
             let overlay_ctx = RenderContext {
                 scale_factor,
@@ -189,9 +158,7 @@ impl Renderer {
             drop_rect =
                 Self::drop_indicator_layout_rect(indicator, page_idx, canvas_width, canvas_height);
             Self::render_drop_indicator(pixmap, indicator, page_idx, transform, &overlay_ctx);
-            if let Some(started_at) = drop_started_at {
-                overlay_profile.drop_ms = profile_elapsed_ms(started_at);
-            }
+            drop(_s_drop);
         }
 
         if let Some(frame) = debug_frame.as_mut() {
@@ -211,7 +178,7 @@ impl Renderer {
         }
 
         if let Some(frame) = debug_frame.as_ref() {
-            let debug_started_at = profiling_enabled.then(profile_now);
+            let _s = mark_span_as_active(TRACER.start("render.overlay.debug"));
             render_debug_overlay(
                 pixmap,
                 scale_factor,
@@ -219,12 +186,7 @@ impl Renderer {
                 render_debug_enabled,
                 layout_debug_enabled,
             );
-            if let Some(started_at) = debug_started_at {
-                overlay_profile.debug_ms = profile_elapsed_ms(started_at);
-            }
         }
-
-        overlay_profile
     }
 
     pub(in super::super) fn render_selection_overlay(

@@ -221,7 +221,12 @@ impl LayoutEngine {
             )
         };
 
-        let root_layout = ctx.layout(&root_ref, constraints);
+        let root_layout = {
+            use crate::tracing::TRACER;
+            use opentelemetry::trace::{Tracer, mark_span_as_active};
+            let _s = mark_span_as_active(TRACER.start("layout.tree"));
+            ctx.layout(&root_ref, constraints)
+        };
         self.layout_cache.borrow_mut().clear_prev();
 
         let paginator = Paginator::new(
@@ -232,7 +237,12 @@ impl LayoutEngine {
             margin_left,
             settings.layout_mode,
         );
-        self.pages = paginator.paginate_rc(root_layout);
+        self.pages = {
+            use crate::tracing::TRACER;
+            use opentelemetry::trace::{Tracer, mark_span_as_active};
+            let _s = mark_span_as_active(TRACER.start("layout.paginate"));
+            paginator.paginate_rc(root_layout)
+        };
         if let Some(trace) = trace {
             self.diagnostics.commit_layout_pass(trace.into_inner());
         } else {

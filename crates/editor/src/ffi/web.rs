@@ -437,6 +437,28 @@ impl Editor {
         self.runtime.tick();
     }
 
+    #[wasm_bindgen(js_name = setTracing)]
+    pub fn set_tracing(&mut self, trace_id: &str, parent_span_id: &str) {
+        let Ok(trace_id) = opentelemetry::trace::TraceId::from_hex(trace_id) else {
+            return;
+        };
+        let Ok(parent_span_id) = opentelemetry::trace::SpanId::from_hex(parent_span_id) else {
+            return;
+        };
+        self.runtime.tracing.set_tracing(trace_id, parent_span_id);
+    }
+
+    #[wasm_bindgen(js_name = clearTracing)]
+    pub fn clear_tracing(&mut self) {
+        self.runtime.tracing.clear_tracing();
+    }
+
+    #[wasm_bindgen(js_name = drainTraces)]
+    pub fn drain_traces(&mut self) -> JsValue {
+        let traces = self.runtime.tracing.drain();
+        serde_wasm_bindgen::to_value(&traces).unwrap_or(JsValue::NULL)
+    }
+
     #[wasm_bindgen(js_name = getSlatePtr)]
     pub fn get_slate_ptr(&self) -> u32 {
         &self.runtime.slate as *const _ as u32

@@ -47,7 +47,18 @@
     const renderVersion = editor.renderVersion;
     if (!visible || !ctx2d) return;
     untrack(() => {
+      const ctx = editor.span?.spanContext();
+
+      if (ctx) {
+        editor.setTracing(ctx.traceId, ctx.spanId);
+      }
+
       const rendered = render();
+
+      if (ctx) {
+        editor.clearTracing();
+      }
+
       if (rendered) {
         editor.notifyPageRendered(page, renderVersion);
       }

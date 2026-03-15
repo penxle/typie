@@ -54,4 +54,10 @@ abstract class Env {
 
   @EnviedField()
   static String bootstrapUrl = _Env.bootstrapUrl;
+
+  @EnviedField()
+  static String otelExporterOtlpEndpoint = _Env.otelExporterOtlpEndpoint;
+
+  @EnviedField()
+  static String otelSampleRate = _Env.otelSampleRate;
 }

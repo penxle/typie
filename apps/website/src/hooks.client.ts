@@ -7,9 +7,11 @@ import { dev } from '$app/environment';
 import { env } from '$env/dynamic/public';
 import { PUBLIC_IMAGE_TAG } from '$env/static/public';
 import { setupMixpanel } from '$lib/analytics';
+import { setupOpenTelemetry } from '$lib/otel';
 import type { HandleClientError } from '@sveltejs/kit';
 
 setupMixpanel();
+setupOpenTelemetry();
 
 Sentry.init({
   enabled: !dev,

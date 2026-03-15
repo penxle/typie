@@ -1,5 +1,3 @@
-import { useOpenTelemetry } from '@envelop/opentelemetry';
-import { trace } from '@opentelemetry/api';
 import { getClientAddress } from '@typie/lib';
 import { GraphQLError } from 'graphql';
 import { CloseCode, makeServer } from 'graphql-ws';
@@ -31,13 +29,6 @@ const app = createYoga<{ c: ServerContext }, UserContext>({
     useRateLimit({
       default: { max: 300, refillRate: 5 },
     }),
-    useOpenTelemetry(
-      {
-        document: false,
-        resolvers: true,
-      },
-      trace.getTracerProvider(),
-    ),
   ],
 });
 

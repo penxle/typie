@@ -807,6 +807,48 @@ final class NativeEditor {
     }
   }
 
+  void setTracing(String traceId, String parentSpanId) {
+    _checkDisposed();
+    if (isTest) {
+      return;
+    }
+
+    final traceIdPtr = traceId.toNativeUtf8().cast<Char>();
+    final parentSpanIdPtr = parentSpanId.toNativeUtf8().cast<Char>();
+
+    try {
+      _bindings.editor_set_tracing(_handle, traceIdPtr, parentSpanIdPtr);
+    } finally {
+      calloc
+        ..free(traceIdPtr)
+        ..free(parentSpanIdPtr);
+    }
+  }
+
+  void clearTracing() {
+    if (_disposed || isTest) {
+      return;
+    }
+
+    _bindings.editor_clear_tracing(_handle);
+  }
+
+  String? drainTraces() {
+    _checkDisposed();
+    if (isTest) {
+      return null;
+    }
+
+    final ptr = _bindings.editor_drain_traces(_handle);
+    if (ptr == nullptr) {
+      return null;
+    }
+
+    final json = ptr.cast<Utf8>().toDartString();
+    _bindings.editor_free_string(ptr);
+    return json;
+  }
+
   (Pointer<Uint8>, int) _allocNative(Uint8List data) {
     final ptr = _bindings.editor_alloc(data.length);
     ptr.asTypedList(data.length).setAll(0, data);

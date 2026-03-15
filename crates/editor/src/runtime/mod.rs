@@ -132,6 +132,8 @@ pub struct Runtime {
     text_replacement_undo: Option<ReplacementUndoState>,
 
     repaste_text: Option<(Selection, String, Vec<Style>, Option<ParagraphNode>)>,
+
+    pub tracing: crate::tracing::TracingReporter,
 }
 
 impl Runtime {
@@ -184,6 +186,7 @@ impl Runtime {
             last_table_overlays: Vec::new(),
             text_replacement_undo: None,
             repaste_text: None,
+            tracing: crate::tracing::TracingReporter::default(),
         }
     }
 
@@ -959,6 +962,17 @@ impl Runtime {
     }
 
     pub fn render_page(&mut self, page_index: usize) -> Option<RenderResult> {
+        use crate::tracing::TRACER;
+        use opentelemetry::KeyValue;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
+
+        let mut span = TRACER.start("render.page");
+        opentelemetry::trace::Span::set_attribute(
+            &mut span,
+            KeyValue::new("page_index", page_index as i64),
+        );
+        let _guard = mark_span_as_active(span);
+
         let snapshot = self.selection_snapshot();
 
         let doc = self.state.doc.as_ref();
@@ -1032,6 +1046,17 @@ impl Runtime {
 
     #[cfg(feature = "native")]
     pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
+        use crate::tracing::TRACER;
+        use opentelemetry::KeyValue;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
+
+        let mut span = TRACER.start("render.page");
+        opentelemetry::trace::Span::set_attribute(
+            &mut span,
+            KeyValue::new("page_index", page_index as i64),
+        );
+        let _guard = mark_span_as_active(span);
+
         let snapshot = self.selection_snapshot();
 
         let doc = self.state.doc.as_ref();
@@ -1140,16 +1165,23 @@ impl Runtime {
     }
 
     pub fn tick(&mut self) {
-        self.slate.dirty = 0;
-        self.slab.reset();
-        let messages = std::mem::take(&mut self.message_queue);
-        for msg in messages {
-            self.process_message(msg);
-        }
+        use crate::tracing::TRACER;
+        use opentelemetry::trace::Tracer;
 
-        self.build_output();
-        self.slate.slab_len = self.slab.len() as u32;
-        self.slate.slab_capacity = self.slab.data.capacity() as u32;
+        TRACER.in_span("tick", |_| {
+            self.slate.dirty = 0;
+            self.slab.reset();
+            let messages = std::mem::take(&mut self.message_queue);
+            TRACER.in_span("tick.process_messages", |_| {
+                for msg in messages {
+                    self.process_message(msg);
+                }
+            });
+
+            self.build_output();
+            self.slate.slab_len = self.slab.len() as u32;
+            self.slate.slab_capacity = self.slab.data.capacity() as u32;
+        });
     }
 
     pub fn flush(&mut self) {
@@ -1162,6 +1194,14 @@ impl Runtime {
     }
 
     fn process_message(&mut self, msg: Message) {
+        use crate::tracing::TRACER;
+        use heck::ToSnakeCase;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
+
+        let _s = mark_span_as_active(
+            TRACER.start(format!("message.{}", msg.type_name().to_snake_case())),
+        );
+
         self.ensure_valid_selection_state();
         if Self::requires_flush_before_handle(&msg) {
             self.flush();
@@ -1187,14 +1227,21 @@ impl Runtime {
     }
 
     fn build_output(&mut self) {
+        use crate::tracing::TRACER;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
+
+        let span = TRACER.start("tick.build_output");
+        let _guard = mark_span_as_active(span);
         let mut had_layout = false;
 
         if self.pending.doc {
+            let _s = mark_span_as_active(TRACER.start("slate.doc_changed"));
             self.slate.mark_doc_changed();
             self.pending.doc = false;
         }
 
         if self.pending.render {
+            let _s = mark_span_as_active(TRACER.start("slate.render_required"));
             self.slab
                 .write_drop_indicator(&mut self.slate, self.pending.drop_indicator.as_ref());
             self.slate.mark_render_required();
@@ -1202,6 +1249,7 @@ impl Runtime {
         }
 
         if self.pending.settings {
+            let _s = mark_span_as_active(TRACER.start("slate.settings"));
             let settings = self.doc().settings();
             self.slab.write_settings(
                 &mut self.slate,
@@ -1213,12 +1261,14 @@ impl Runtime {
         }
 
         if self.pending.default_attrs {
+            let _s = mark_span_as_active(TRACER.start("slate.default_attrs"));
             let attrs = self.doc().default_attrs();
             self.slab.write_default_attrs(&mut self.slate, &attrs);
             self.pending.default_attrs = false;
         }
 
         if self.pending.layout {
+            let _s = mark_span_as_active(TRACER.start("layout.compute"));
             self.layout();
 
             let layout_mode = self.doc().settings().layout_mode;
@@ -1272,6 +1322,7 @@ impl Runtime {
         }
 
         if self.pending.cursor {
+            let _s = mark_span_as_active(TRACER.start("slate.cursor"));
             let selection = self.state.selection;
             let ctx = NavigationContext::new(&self.state.doc);
             let (page_idx, bounds, visible) = Cursor::bounds(&ctx, self.pages(), selection.head)
@@ -1284,6 +1335,7 @@ impl Runtime {
         }
 
         if self.pending.selection {
+            let _s = mark_span_as_active(TRACER.start("slate.selection"));
             let selection = self.state.selection;
             let collapsed = selection.is_collapsed();
 
@@ -1370,6 +1422,7 @@ impl Runtime {
         }
 
         if self.pending.active_styles {
+            let _s = mark_span_as_active(TRACER.start("slate.active_styles"));
             let selection = self.state.selection;
 
             if selection.is_collapsed() {
@@ -1426,6 +1479,7 @@ impl Runtime {
         }
 
         if self.pending.external_elements {
+            let _s = mark_span_as_active(TRACER.start("slate.external_elements"));
             let elements = self.build_external_elements();
             self.slab
                 .write_external_elements(&mut self.slate, &elements);
@@ -1433,11 +1487,13 @@ impl Runtime {
         }
 
         if let Some(style) = self.pending.pointer_style.take() {
+            let _s = mark_span_as_active(TRACER.start("slate.pointer_style"));
             self.slab.write_pointer_style(&mut self.slate, style);
         }
 
         let fonts = std::mem::take(&mut self.pending.fonts);
         if !fonts.is_empty() {
+            let _s = mark_span_as_active(TRACER.start("slate.fonts"));
             self.slab.write_font_requests(&mut self.slate, &fonts);
         }
 
@@ -1446,6 +1502,7 @@ impl Runtime {
         }
 
         if self.pending.enabled_actions {
+            let _s = mark_span_as_active(TRACER.start("slate.enabled_actions"));
             let enabled = self.evaluate_enabled_actions();
             self.slab.write_enabled_actions(&mut self.slate, &enabled);
             self.pending.enabled_actions = false;
@@ -1462,6 +1519,7 @@ impl Runtime {
         }
 
         if self.pending.placeholder {
+            let _s = mark_span_as_active(TRACER.start("slate.placeholder"));
             let visible = self.doc().is_empty()
                 && self.preedit().is_none()
                 && self.selection().is_collapsed();
@@ -1476,12 +1534,14 @@ impl Runtime {
         }
 
         if self.pending.link_overlays {
+            let _s = mark_span_as_active(TRACER.start("slate.link_overlays"));
             let overlays = self.build_link_overlays();
             self.slab.write_link_overlays(&mut self.slate, &overlays);
             self.pending.link_overlays = false;
         }
 
         if self.pending.tracked_items {
+            let _s = mark_span_as_active(TRACER.start("slate.tracked_items"));
             let overlays = tracked_items::build_tracked_item_overlays(
                 self.pages(),
                 &self.tracked_items,
@@ -1492,6 +1552,7 @@ impl Runtime {
         }
 
         if self.pending.table_overlays {
+            let _s = mark_span_as_active(TRACER.start("slate.table_overlays"));
             let overlays = self.build_table_overlays();
             if overlays != self.last_table_overlays {
                 self.last_table_overlays = overlays.clone();
@@ -1501,6 +1562,7 @@ impl Runtime {
         }
 
         if self.pending.interactive_overlays {
+            let _s = mark_span_as_active(TRACER.start("slate.interactive_overlays"));
             let overlays = self.build_interactive_overlays();
             self.slab
                 .write_interactive_overlays(&mut self.slate, &overlays);
@@ -1508,12 +1570,14 @@ impl Runtime {
         }
 
         if self.pending.repaste {
+            let _s = mark_span_as_active(TRACER.start("slate.repaste"));
             self.slate
                 .write_repaste_enabled(self.repaste_text.is_some());
             self.pending.repaste = false;
         }
 
         if self.pending.remarks {
+            let _s = mark_span_as_active(TRACER.start("slate.remarks"));
             let overlays = self.build_remark_overlays();
             self.slab.write_remarks(&mut self.slate, &overlays);
             self.pending.remarks = false;

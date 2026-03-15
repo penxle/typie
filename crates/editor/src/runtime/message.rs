@@ -72,6 +72,14 @@ macro_rules! define_messages {
         }
 
         impl Message {
+            pub fn type_name(&self) -> &'static str {
+                match self {
+                    $(
+                        Self::$name { .. } => stringify!($name),
+                    )*
+                }
+            }
+
             pub fn when(&self) -> When {
                 match self {
                     $(
