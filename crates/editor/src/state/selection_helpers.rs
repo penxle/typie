@@ -7,7 +7,9 @@ use crate::state::position::Position;
 use crate::state::position_helpers::{
     compare_positions, find_child_at_offset, position_in_selection,
 };
-use crate::state::table_helpers::{collect_cells_in_range, compute_table_selection};
+use crate::state::table_helpers::{
+    collect_cells_in_range, compute_table_selection, is_full_table_range,
+};
 use crate::state::{BlockTraverser, Selection};
 use crate::types::Affinity;
 use anyhow::{Context, Result};
@@ -322,6 +324,12 @@ fn collect_structure_decorations(
     let mut decorations = Vec::new();
     match structure_selection {
         StructureSelectionInfo::Rectangular { table_id, range } => {
+            if is_full_table_range(doc, *table_id, *range) {
+                decorations.push(SelectionDecor::Block { node_id: *table_id });
+                descendant_suppression_roots.insert(*table_id);
+                return decorations;
+            }
+
             let cells = collect_cells_in_range(doc, *table_id, *range);
             for cell_id in cells {
                 let Some(suppress_descendants) =
@@ -349,23 +357,8 @@ fn collect_structure_decorations(
                 };
 
                 if matches!(node.node(), Some(Node::Table(_))) {
-                    for row in node.children() {
-                        for cell in row.children() {
-                            let cell_id = cell.node_id();
-                            let Some(cell_suppress_descendants) = block_decoration_suppression(
-                                doc,
-                                cell_id,
-                                descendant_suppression_roots,
-                            ) else {
-                                continue;
-                            };
-
-                            decorations.push(SelectionDecor::Block { node_id: cell_id });
-                            if cell_suppress_descendants {
-                                descendant_suppression_roots.insert(cell_id);
-                            }
-                        }
-                    }
+                    decorations.push(SelectionDecor::Block { node_id: block_id });
+                    descendant_suppression_roots.insert(block_id);
                 } else if matches!(node.node(), Some(Node::Fold(_))) {
                     decorations.push(SelectionDecor::Block { node_id: block_id });
                     if suppress_descendants {
@@ -887,11 +880,8 @@ pub fn collect_selected_block_ids(
             }
 
             let mut result: Vec<NodeId> = ids.into_iter().collect();
-            result.sort_by(|&a, &b| {
-                let pos_a = Position::new(a, 0, Affinity::default());
-                let pos_b = Position::new(b, 0, Affinity::default());
-                compare_positions(doc, pos_a, pos_b).unwrap_or(Ordering::Equal)
-            });
+            result
+                .sort_by_cached_key(|&id| doc.node(id).map(|node| node.path()).unwrap_or_default());
             result
         }
         StructureSelectionInfo::None => collect_blocks_in_range(doc, from, to).unwrap_or_default(),
@@ -2330,6 +2320,47 @@ mod tests {
             }
             _ => panic!("Expected Rectangular selection, got {:?}", cell_selection),
         }
+    }
+
+    #[test]
+    fn test_build_selection_decorations_full_table_uses_table_block_only() {
+        let mut t = id!();
+        let mut p_start = id!();
+        let mut p_end = id!();
+
+        let state = state! {
+            doc {
+                @t table {
+                    table_row {
+                        table_cell { @p_start paragraph { text { "A" } } }
+                        table_cell { paragraph { text { "B" } } }
+                    }
+                    table_row {
+                        table_cell { paragraph { text { "C" } } }
+                        table_cell { @p_end paragraph { text { "D" } } }
+                    }
+                }
+            }
+            selection { (p_start, 0) -> (p_end, 1) }
+        };
+
+        let decorations = build_selection_decorations(&state.doc, &state.selection, None);
+
+        assert!(
+            decorations
+                .iter()
+                .any(|d| matches!(d, SelectionDecor::Block { node_id } if *node_id == t)),
+            "full-table selection should include the table block decoration"
+        );
+        assert!(
+            decorations.iter().all(|d| {
+                !matches!(
+                    d,
+                    SelectionDecor::TextRange { node_id, .. } if *node_id == p_start || *node_id == p_end
+                )
+            }),
+            "full-table selection should suppress descendant text decorations"
+        );
     }
 
     #[test]
