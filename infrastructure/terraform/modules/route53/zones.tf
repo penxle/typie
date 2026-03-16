@@ -21,3 +21,7 @@ resource "aws_route53_zone" "typie_net" {
 resource "aws_route53_zone" "typie_io" {
   name = "typie.io"
 }
+
+resource "aws_route53_zone" "typie_ninja" {
+  name = "typie.ninja"
+}
