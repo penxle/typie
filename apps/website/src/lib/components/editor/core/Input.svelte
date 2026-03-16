@@ -16,15 +16,24 @@
 
   let inputEl = $state<HTMLInputElement>();
 
+  let compositionActive = false;
   let lastInputValue = '';
   let pendingImeDelete = false;
   let lastHandledBackspaceAt = 0;
+  let windowFocused = typeof document === 'undefined' ? true : document.hasFocus();
+  let documentVisible = typeof document === 'undefined' ? true : document.visibilityState === 'visible';
+
+  const clearInputBuffer = () => {
+    if (!inputEl) return;
+
+    inputEl.value = '';
+    lastInputValue = '';
+    pendingImeDelete = false;
+  };
 
   const resetInputState = () => {
     if (inputEl) {
-      inputEl.value = '';
-      lastInputValue = '';
-      pendingImeDelete = false;
+      clearInputBuffer();
 
       // 강제로 일본어 조합을 끝냄
       inputEl.blur();
@@ -197,6 +206,9 @@
   };
 
   const handleBlur = (e: FocusEvent) => {
+    if (!compositionActive) {
+      clearInputBuffer();
+    }
     pendingImeDelete = false;
     onBlur?.(e);
   };
@@ -205,6 +217,7 @@
     if (editor.readOnly) return;
 
     const text = e.data || '';
+    compositionActive = true;
     editor.dispatch({ type: 'compositionStart', text }).scrollIntoView({ mode: 'typewriter' });
   };
 
@@ -212,24 +225,18 @@
     if (editor.readOnly) return;
 
     const text = e.data || '';
+    compositionActive = true;
 
     editor.dispatch({ type: 'compositionUpdate', text }).scrollIntoView({ mode: 'typewriter' });
   };
 
-  const handleCompositionEnd = (e: CompositionEvent) => {
+  const handleCompositionEnd = () => {
     if (editor.readOnly) return;
-
-    const text = e.data || '';
 
     editor.dispatch({ type: 'commitPreedit' });
 
     if (inputEl) {
-      const newValue = lastInputValue + text;
-      if (newValue.length > 64) {
-        inputEl.value = newValue.slice(-64);
-      } else {
-        inputEl.value = newValue;
-      }
+      inputEl.value = lastInputValue.slice(-64);
       lastInputValue = inputEl.value;
     }
 
@@ -237,6 +244,8 @@
       handleKeyEvent(editor, pendingKeyEvent);
       pendingKeyEvent = undefined;
     }
+
+    compositionActive = false;
   };
 
   let pointerDownOutsideEditor = false;
@@ -258,12 +267,31 @@
   });
 
   $effect(() => {
-    if (ctx.paneFocused) {
-      if (pointerDownOutsideEditor) return;
-      inputEl?.focus({ preventScroll: true });
-    }
+    if (!ctx.paneFocused) return;
+    if (!editor.isFocused) return;
+    if (pointerDownOutsideEditor) return;
+    if (!windowFocused || !documentVisible) return;
+    if (typeof document !== 'undefined' && document.activeElement === inputEl) return;
+
+    inputEl?.focus({ preventScroll: true });
   });
+
+  const handleWindowBlur = () => {
+    windowFocused = false;
+  };
+
+  const handleWindowFocus = () => {
+    windowFocused = true;
+  };
+
+  const handleVisibilityChange = () => {
+    documentVisible = document.visibilityState === 'visible';
+    windowFocused = document.hasFocus();
+  };
 </script>
+
+<svelte:window onblur={handleWindowBlur} onfocus={handleWindowFocus} />
+<svelte:document onvisibilitychange={handleVisibilityChange} />
 
 <input
   bind:this={inputEl}
