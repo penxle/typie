@@ -540,3 +540,55 @@ fn snapshot_marks_table_border_dirty_when_columns_change_without_bounds_change()
         "테이블 열/폭이 바뀌면 bounds가 같아도 dirty로 잡혀야 함"
     );
 }
+
+#[test]
+fn snapshot_marks_removed_overflowing_table_strip_dirty() {
+    let table_id = NodeId::new();
+    let layout_width = 300.0;
+    let table_x = 20.0;
+
+    let make_page = |cols: usize, table_width: f32, col_widths: Vec<f32>| {
+        root_with_children(
+            Some(vec![PositionedNode {
+                position: Point::new(table_x, 24.0),
+                node: Rc::new(LayoutNode {
+                    size: Size::new(layout_width, 120.0),
+                    element: Some(Element::TableBorder(TableBorderElement::new(
+                        Size::new(table_width, 120.0),
+                        table_id,
+                        TableBorderStyle::Solid,
+                        TableAlign::Left,
+                        2,
+                        cols,
+                        vec![59.0, 59.0],
+                        col_widths,
+                        SplitEdges::default(),
+                        0.0,
+                        0.0,
+                        0,
+                        2,
+                    ))),
+                    children: None,
+                    page_break_policy: PageBreakPolicy::default(),
+                    render_hints: RenderHints::default(),
+                    scope_id: None,
+                }),
+            }]),
+            Size::new(360.0, 200.0),
+        )
+    };
+
+    let page1 = make_page(4, 420.0, vec![101.0, 101.0, 101.0, 101.0]);
+    let page2 = make_page(3, 300.0, vec![98.0, 98.0, 98.0]);
+
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
+    let rects = snapshot1.dirty_rects(&snapshot2);
+
+    assert!(
+        rects
+            .iter()
+            .any(|rect| rect.right() > table_x + layout_width),
+        "overflow됐다가 사라진 오른쪽 테이블 잔상도 dirty rect에 포함돼야 함"
+    );
+}

@@ -136,6 +136,13 @@ pub(super) fn node_paint_bounds(positioned: &PositionedNode, pos: Point) -> Opti
     let mut height = positioned.node.size.height;
 
     if let Some(element) = positioned.node.element.as_ref() {
+        if let Element::TableBorder(table) = element {
+            // NOTE: 테이블은 LayoutNode 폭보다 더 넓게 그려질 수 있음
+            x += table.x_offset;
+            width = table.size.width;
+            height = table.size.height;
+        }
+
         let overflow = element.paint_overflow();
         x -= overflow.left;
         y -= overflow.top;
