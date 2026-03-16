@@ -1,4 +1,4 @@
-use crate::global::GLOBALS;
+use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::LineElement;
 use crate::render::glyph::Glyph;
 use crate::render::outline::ElementSink;
@@ -17,7 +17,7 @@ fn create_solid_paint(color: Color) -> Paint<'static> {
 fn draw_text_layer_for_glyph_run(
     sink: &mut dyn ElementSink,
     source_text: &str,
-    run: &parley::layout::Run<'_, String>,
+    run: &parley::layout::Run<'_, TextBrush>,
     font_size: f32,
     run_x: f32,
     run_y: f32,
@@ -416,13 +416,14 @@ impl LineElement {
 
                             let default_text_brush =
                                 format!("text.{}", ctx.doc.default_attrs().text_color());
-                            let color =
-                                if style.brush.is_empty() || style.brush == default_text_brush {
-                                    ctx.default_text_color
-                                        .unwrap_or_else(|| ctx.theme.color(&default_text_brush))
-                                } else {
-                                    ctx.theme.color(&style.brush)
-                                };
+                            let color = if style.brush.color.is_empty()
+                                || style.brush.color == default_text_brush
+                            {
+                                ctx.default_text_color
+                                    .unwrap_or_else(|| ctx.theme.color(&default_text_brush))
+                            } else {
+                                ctx.theme.color(&style.brush.color)
+                            };
                             let text_paint = create_solid_paint(color);
 
                             let run_x = glyph_run.offset();
@@ -471,7 +472,7 @@ impl LineElement {
                                 })
                                 .collect();
 
-                            let embolden = synthesis.embolden();
+                            let embolden = style.brush.embolden;
 
                             sink.draw_glyphs(
                                 &run.font(),

@@ -8,6 +8,12 @@ use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+pub struct TextBrush {
+    pub color: String,
+    pub embolden: bool,
+}
+
 thread_local! {
     pub static GLOBALS: RefCell<Globals> = RefCell::new(Globals::new());
 }
@@ -39,7 +45,7 @@ pub struct Font {
 }
 
 pub struct Globals {
-    pub parley_layout_context: RefCell<parley::LayoutContext<String>>,
+    pub parley_layout_context: RefCell<parley::LayoutContext<TextBrush>>,
     pub parley_font_context: RefCell<parley::FontContext>,
     pub text_replacement_rules: RefCell<Vec<TextReplacementRule>>,
     pub fonts: RefCell<HashMap<(String, u16), Font>>,

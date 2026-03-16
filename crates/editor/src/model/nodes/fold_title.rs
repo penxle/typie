@@ -1,4 +1,4 @@
-use crate::global::GLOBALS;
+use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::{FoldTitleIconElement, LineElement, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
@@ -77,7 +77,7 @@ impl Layout for FoldTitleNode {
             let mut lcx = globals.parley_layout_context.borrow_mut();
             let mut fcx = globals.parley_font_context.borrow_mut();
 
-            let setup_defaults = |builder: &mut parley::RangedBuilder<'_, String>| {
+            let setup_defaults = |builder: &mut parley::RangedBuilder<'_, TextBrush>| {
                 builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
                     FontFamilyName::Named(cascade_family.clone().into()),
                 )));
@@ -89,7 +89,10 @@ impl Layout for FoldTitleNode {
                     line_height,
                 )));
                 builder.push_default(StyleProperty::LetterSpacing(0.0));
-                builder.push_default(StyleProperty::Brush("ui.text.faint".to_string()));
+                builder.push_default(StyleProperty::Brush(TextBrush {
+                    color: "ui.text.faint".to_string(),
+                    ..Default::default()
+                }));
 
                 builder.push_default(StyleProperty::FontFeatures(FontFeatures::Source(
                     Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),

@@ -1,4 +1,4 @@
-use crate::global::font_version;
+use crate::global::{TextBrush, font_version};
 use crate::layout::cursor::{CursorNavigable, CursorNavigation, NavigationContext};
 use crate::model::{NodeId, PreeditDecor, SelectionDecor};
 use crate::state::{Position, Selection};
@@ -91,7 +91,7 @@ pub struct LineElement {
     pub block_id: NodeId,
     pub size: Size,
     pub line_idx: usize,
-    pub layout: Rc<parley::Layout<String>>,
+    pub layout: Rc<parley::Layout<TextBrush>>,
     pub metric: LineMetric,
     pub preedit: Option<PreeditDecor>,
     pub is_empty: bool,
@@ -132,7 +132,7 @@ impl LineElement {
         block_id: NodeId,
         size: Size,
         line_idx: usize,
-        layout: Rc<parley::Layout<String>>,
+        layout: Rc<parley::Layout<TextBrush>>,
         metric: LineMetric,
         preedit: Option<PreeditDecor>,
         is_empty: bool,
@@ -1336,7 +1336,7 @@ pub struct LineMetric {
 }
 
 pub fn build_metrics(
-    layout: &parley::Layout<String>,
+    layout: &parley::Layout<TextBrush>,
     text: &str,
     scale_factor: f64,
     strut_ascent: f32,

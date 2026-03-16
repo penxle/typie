@@ -1,4 +1,4 @@
-use crate::global::GLOBALS;
+use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::{BackgroundSegment, LineElement, RubySegment, build_metrics};
 use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
@@ -190,7 +190,7 @@ fn extract_background_segments(ctx: &LayoutContext) -> Vec<BackgroundSegment> {
 }
 
 fn apply_style_to_builder(
-    builder: &mut parley::RangedBuilder<'_, String>,
+    builder: &mut parley::RangedBuilder<'_, TextBrush>,
     style: &Style,
     range: std::ops::Range<usize>,
     font_size: u32,
@@ -200,12 +200,7 @@ fn apply_style_to_builder(
     }
 
     match style {
-        Style::FontFamily(m) => builder.push(
-            StyleProperty::FontFamily(FontFamily::Single(FontFamilyName::Named(
-                m.family.clone().into(),
-            ))),
-            range,
-        ),
+        Style::FontFamily(_) => {} // Handled by mapping-based font resolution
         Style::FontSize(m) => builder.push(
             StyleProperty::FontSize(convert_length(
                 m.size as f32 / 100.0,
@@ -226,19 +221,17 @@ fn apply_style_to_builder(
                 range,
             )
         }
-        Style::Bold(_) => {}
+        Style::Bold(_) => {} // Handled via TextBrush.embolden
         Style::Italic(_) => builder.push(StyleProperty::FontStyle(FontStyle::Italic), range),
         Style::Strikethrough(_) => builder.push(StyleProperty::Strikethrough(true), range),
         Style::Underline(_) => builder.push(StyleProperty::Underline(true), range),
-        Style::TextColor(m) => {
-            builder.push(StyleProperty::Brush(format!("text.{}", m.color)), range)
-        }
+        Style::TextColor(_) => {} // Handled via TextBrush.color
         Style::BackgroundColor(_) => {}
     }
 }
 
 fn apply_annotation_to_builder(
-    builder: &mut parley::RangedBuilder<'_, String>,
+    builder: &mut parley::RangedBuilder<'_, TextBrush>,
     annotation: &Annotation,
     range: std::ops::Range<usize>,
 ) {
@@ -249,14 +242,20 @@ fn apply_annotation_to_builder(
     match annotation {
         Annotation::Link(_) => {
             builder.push(StyleProperty::Underline(true), range.clone());
-            builder.push(StyleProperty::Brush("ui.text.faint".to_string()), range);
+            builder.push(
+                StyleProperty::Brush(TextBrush {
+                    color: "ui.text.faint".to_string(),
+                    ..Default::default()
+                }),
+                range,
+            );
         }
         Annotation::Ruby(_) => {}
     }
 }
 
 fn apply_pending_styles_to_builder(
-    builder: &mut parley::RangedBuilder<'_, String>,
+    builder: &mut parley::RangedBuilder<'_, TextBrush>,
     styles: &[Style],
     range: std::ops::Range<usize>,
     default_font_size: u32,
@@ -559,15 +558,19 @@ impl Layout for ParagraphNode {
                                 })
                                 .unwrap_or(1200);
 
+                            // Build TextBrush from segment styles (color + embolden)
                             let has_embolden =
                                 segment.styles.iter().any(|s| matches!(s, Style::Bold(_)));
+                            let text_color = segment
+                                .styles
+                                .iter()
+                                .find_map(|s| match s {
+                                    Style::TextColor(m) => Some(format!("text.{}", m.color)),
+                                    _ => None,
+                                })
+                                .unwrap_or_default();
 
-                            // Push non-FontFamily styles as before
-                            for style in &segment.styles {
-                                if matches!(style, Style::FontFamily(_)) {
-                                    continue; // FontFamily is now handled by mapping lookup below
-                                }
-
+                            {
                                 let (start, end) = map_range_with_preedit(
                                     (base_start, base_end),
                                     preedit_info,
@@ -576,14 +579,26 @@ impl Layout for ParagraphNode {
                                 let range = char_to_byte_offset_with_map(&char_to_byte, start)
                                     ..char_to_byte_offset_with_map(&char_to_byte, end);
 
-                                if has_embolden && let Style::FontWeight(weight_style) = style {
-                                    let target_weight = weight_style.weight.max(700) as f32;
+                                if has_embolden || !text_color.is_empty() {
                                     builder.push(
-                                        StyleProperty::FontWeight(FontWeight::new(target_weight)),
+                                        StyleProperty::Brush(TextBrush {
+                                            color: text_color,
+                                            embolden: has_embolden,
+                                        }),
                                         range,
                                     );
-                                    continue;
                                 }
+                            }
+
+                            // Push remaining styles (FontSize, FontWeight, LetterSpacing, etc.)
+                            for style in &segment.styles {
+                                let (start, end) = map_range_with_preedit(
+                                    (base_start, base_end),
+                                    preedit_info,
+                                    &Expand::None,
+                                );
+                                let range = char_to_byte_offset_with_map(&char_to_byte, start)
+                                    ..char_to_byte_offset_with_map(&char_to_byte, end);
 
                                 apply_style_to_builder(
                                     &mut builder,
