@@ -8,8 +8,6 @@ use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub const PHANTOM_FONT_FAMILY: &str = "Noto (Phantom)";
-
 thread_local! {
     pub static GLOBALS: RefCell<Globals> = RefCell::new(Globals::new());
 }
@@ -66,29 +64,6 @@ impl Globals {
             font_mappings: RefCell::new(FxHashMap::default()),
         }
     }
-}
-
-pub fn intern_font_family(name: &str) -> Arc<str> {
-    GLOBALS.with(|globals| {
-        let globals = globals.borrow();
-        let mut interner = globals.font_family_interner.borrow_mut();
-        interner
-            .entry(name.to_string())
-            .or_insert_with(|| Arc::from(name))
-            .clone()
-    })
-}
-
-pub fn lookup_font_mapping(
-    family: &Arc<str>,
-    weight: u16,
-    codepoint: u32,
-) -> Option<(Arc<str>, u16)> {
-    GLOBALS.with(|globals| {
-        let globals = globals.borrow();
-        let mappings = globals.font_mappings.borrow();
-        mappings.get(&(family.clone(), weight, codepoint)).cloned()
-    })
 }
 
 pub fn update_font_mappings(

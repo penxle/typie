@@ -38,8 +38,7 @@ use paint_diagnostics::{PaintDebugFrame, PaintDiagnosticsState, collect_layout_d
 use renderer::{FULL_REPAINT_RECT_THRESHOLD, PAGE_EDGE_OVERFLOW_BAND};
 use renderer::{
     OverflowRenderCacheEntry, OverflowRenderSnapshot, OverflowSnapshotItem, SelectionOverlayData,
-    SelectionPaintStats, next_page_overflow_cull_clip, normalize_dirty_rects,
-    should_promote_full_repaint,
+    next_page_overflow_cull_clip, normalize_dirty_rects, should_promote_full_repaint,
 };
 
 use crate::diagnostics::FrameDiagnostics;

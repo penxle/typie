@@ -88,12 +88,6 @@ pub(super) struct SelectionOverlayData {
     pub(super) has_non_text_selection: bool,
 }
 
-#[derive(Default, Clone, Copy)]
-pub(super) struct SelectionPaintStats {
-    pub(super) fast_path: bool,
-    pub(super) full_phase: bool,
-}
-
 impl DragImageResult {
     pub fn ptr(&self) -> *const u8 {
         self.pixmap.data().as_ptr()

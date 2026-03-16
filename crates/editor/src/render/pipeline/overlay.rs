@@ -199,14 +199,14 @@ impl Renderer {
         selections: &[SelectionDecor],
         doc: &Doc,
         selection_data: &SelectionOverlayData,
-    ) -> SelectionPaintStats {
+    ) {
         if selections.is_empty() || selection_data.clip_rects.is_empty() {
-            return SelectionPaintStats::default();
+            return;
         }
 
         let scale = scale_factor as f32;
         if scale <= 0.0 {
-            return SelectionPaintStats::default();
+            return;
         }
 
         let canvas_width = pixmap.width() as f32 / scale;
@@ -223,10 +223,7 @@ impl Renderer {
                 scale_factor,
                 color,
             );
-            return SelectionPaintStats {
-                fast_path: true,
-                full_phase: false,
-            };
+            return;
         }
 
         if should_promote_full_repaint(&selection_data.clip_rects, canvas_width, canvas_height) {
@@ -242,10 +239,7 @@ impl Renderer {
                 None,
                 Point::zero(),
             );
-            return SelectionPaintStats {
-                fast_path: false,
-                full_phase: true,
-            };
+            return;
         }
 
         let clip_pixel_rects = collect_non_overlapping_pixel_rects(
@@ -266,11 +260,6 @@ impl Renderer {
                 doc,
                 pixel_rect.to_layout_rect(scale),
             );
-        }
-
-        SelectionPaintStats {
-            fast_path: false,
-            full_phase: false,
         }
     }
 
