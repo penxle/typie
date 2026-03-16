@@ -14,9 +14,6 @@
       "dependsOn": ["codegen", "^build"],
       "outputs": ["dist/**"]
     },
-    "wasm:build": {
-      "outputs": ["pkg/**"]
-    },
     "dev": {
       "dependsOn": ["codegen"],
       "persistent": true,

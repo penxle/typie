@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened, review_requested]
 
+concurrency:
+  group: claude-code-review-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
     if: |
