@@ -9,6 +9,7 @@ pub mod outline;
 mod paint_diagnostics;
 mod pipeline;
 mod renderer;
+mod selection;
 mod vector_codec;
 
 #[cfg(test)]
@@ -21,12 +22,12 @@ pub use renderer::RenderInfo;
 pub use renderer::{
     DragImageResult, Outline, Render, RenderContext, RenderPhase, RenderResult, Renderer,
 };
+pub(crate) use selection::{
+    fill_rect_src_over_fast, selection_overlay_color, selection_overlay_paint,
+};
 pub use vector_codec::encode_vector_page;
 
-use blend::{
-    blend_row_const_src_over_lut, blend_row_const_src_over_opaque, blend_row_src_over,
-    build_const_src_over_lut,
-};
+use blend::blend_row_src_over;
 use cache::{PageRenderCache, PageRenderSnapshot, node_paint_bounds, same_scale_factor};
 use debug_overlay::render_debug_overlay;
 use geometry::{
@@ -52,4 +53,4 @@ use rstar::AABB;
 use rustc_hash::{FxHashMap, FxHasher};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
-use tiny_skia::{Color, Pixmap, PixmapMut, PixmapPaint, Rect, Transform};
+use tiny_skia::{Color, Paint, Pixmap, PixmapMut, PixmapPaint, Rect, Transform};

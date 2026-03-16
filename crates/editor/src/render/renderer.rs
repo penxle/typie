@@ -23,6 +23,37 @@ pub struct RenderContext<'a> {
     pub render_origin: Point,
 }
 
+impl RenderContext<'_> {
+    pub(crate) fn selection_color(&self) -> Color {
+        selection_overlay_color(self.theme, self.is_focused)
+    }
+
+    pub(crate) fn selection_paint(&self) -> Paint<'static> {
+        selection_overlay_paint(self.theme, self.is_focused)
+    }
+
+    pub(crate) fn is_block_selected(&self, node_id: NodeId) -> bool {
+        self.selections.iter().any(|selection| {
+            matches!(selection, SelectionDecor::Block { node_id: id } if *id == node_id)
+        })
+    }
+
+    pub(crate) fn has_descendant_text_selection(&self, node_id: NodeId) -> bool {
+        self.selections.iter().any(|selection| {
+            matches!(selection, SelectionDecor::TextRange { node_id: id, .. } if *id == node_id || self.doc.is_ancestor(node_id, *id))
+        })
+    }
+
+    pub(crate) fn fill_selection_rect_fast(
+        &self,
+        pixmap: &mut PixmapMut,
+        rect: Rect,
+        transform: Transform,
+    ) -> bool {
+        fill_rect_src_over_fast(pixmap, rect, transform, self.selection_color())
+    }
+}
+
 pub trait Render {
     fn render(
         &self,
@@ -218,6 +249,7 @@ impl Renderer {
         Self::render_overlay_layers(
             &mut pixmap,
             &mut self.glyph_renderer,
+            &mut self.scratch_pixmap,
             self.scale_factor,
             &self.theme,
             self.is_focused,
@@ -282,6 +314,7 @@ impl Renderer {
         Self::render_overlay_layers(
             &mut pixmap,
             &mut self.glyph_renderer,
+            &mut self.scratch_pixmap,
             self.scale_factor,
             &self.theme,
             self.is_focused,

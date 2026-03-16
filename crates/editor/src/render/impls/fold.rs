@@ -155,15 +155,7 @@ impl FoldTitleElement {
                 }
             }
             RenderPhase::Selection => {
-                let is_selected = ctx.selections.iter().any(|s| {
-                    if let crate::model::SelectionDecor::Block { node_id } = s {
-                        *node_id == self.fold_id
-                    } else {
-                        false
-                    }
-                });
-
-                if is_selected {
+                if ctx.is_block_selected(self.fold_id) {
                     if let Some(ref path) = path {
                         let color = if ctx.is_focused {
                             ctx.theme.color_with_alpha("selection", 77)
@@ -249,15 +241,7 @@ impl FoldContentElement {
                 }
             }
             RenderPhase::Selection => {
-                let is_selected = ctx.selections.iter().any(|s| {
-                    if let crate::model::SelectionDecor::Block { node_id } = s {
-                        *node_id == self.fold_id
-                    } else {
-                        false
-                    }
-                });
-
-                if is_selected {
+                if ctx.is_block_selected(self.fold_id) {
                     let color = if ctx.is_focused {
                         ctx.theme.color_with_alpha("selection", 77)
                     } else {

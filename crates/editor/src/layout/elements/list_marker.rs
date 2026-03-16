@@ -1,5 +1,5 @@
 use crate::global::GLOBALS;
-use crate::model::{LIST_ITEM_MARKER_GAP, NodeId, SelectionDecor};
+use crate::model::{LIST_ITEM_MARKER_GAP, NodeId};
 use crate::render::outline::ElementSink;
 use crate::render::{
     GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase, glyph::Glyph,
@@ -7,7 +7,7 @@ use crate::render::{
 use parley::setting::{FontFeature, Tag};
 use parley::style::{FontFamily, FontFamilyName, FontFeatures, StyleProperty};
 use std::fmt;
-use tiny_skia::{Paint, PixmapMut, Transform};
+use tiny_skia::{Paint, PixmapMut, Rect, Transform};
 
 const MARKER_FONT_SIZE: f32 = 14.0;
 const BULLET_SIZE: f32 = 4.0;
@@ -74,6 +74,13 @@ impl Render for ListMarkerElement {
         transform: Transform,
         ctx: &RenderContext<'_>,
     ) {
+        if matches!(ctx.phase, RenderPhase::Selection)
+            && let Some(rect) = self.selection_background_rect(ctx)
+            && ctx.fill_selection_rect_fast(pixmap, rect, transform)
+        {
+            return;
+        }
+
         let mut sink = RasterSink::new(pixmap, glyph_renderer);
         self.paint_to(&mut sink, transform, ctx);
     }
@@ -110,34 +117,23 @@ impl ListMarkerElement {
         transform: Transform,
         ctx: &RenderContext<'_>,
     ) {
-        let includes_front_boundary = ctx.selections.iter().any(|selection| {
-            matches!(
-                selection,
-                SelectionDecor::Block { node_id } if *node_id == self.selection_node_id
-            )
-        });
-
-        if !includes_front_boundary {
+        let Some(rect) = self.selection_background_rect(ctx) else {
             return;
+        };
+
+        let paint = ctx.selection_paint();
+        sink.fill_rect(rect, &paint, transform);
+    }
+
+    fn selection_background_rect(&self, ctx: &RenderContext<'_>) -> Option<Rect> {
+        if !ctx.is_block_selected(self.selection_node_id) {
+            return None;
         }
 
         let width = self
             .selection_width
             .max(self.marker_width + LIST_ITEM_MARKER_GAP);
-        let Some(rect) = tiny_skia::Rect::from_xywh(0.0, 0.0, width, self.selection_height) else {
-            return;
-        };
-
-        let color = if ctx.is_focused {
-            ctx.theme.color_with_alpha("selection", 77)
-        } else {
-            ctx.theme.color_with_alpha("selection", 48)
-        };
-
-        let mut paint = Paint::default();
-        paint.set_color(color);
-        paint.anti_alias = true;
-        sink.fill_rect(rect, &paint, transform);
+        Rect::from_xywh(0.0, 0.0, width, self.selection_height)
     }
 
     fn render_bullet(

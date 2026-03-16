@@ -915,6 +915,7 @@ fn selection_overlay_does_not_double_blend_selected_content() {
     Renderer::render_selection_overlay(
         &mut expected_pixmap,
         &mut renderer.glyph_renderer,
+        &mut renderer.scratch_pixmap,
         renderer.scale_factor,
         &renderer.theme,
         renderer.is_focused,
@@ -933,6 +934,74 @@ fn selection_overlay_does_not_double_blend_selected_content() {
     assert_eq!(
         actual, expected,
         "선택 영역은 background -> selection -> content 순서로 단일 합성돼야 하며, content 이중 블렌딩이 없어야 함"
+    );
+}
+
+#[test]
+fn full_table_selection_highlights_table_border_rect() {
+    let table_id = NodeId::new();
+    let page = root_with_children(
+        Some(vec![PositionedNode {
+            position: Point::new(8.0, 6.0),
+            node: Rc::new(LayoutNode {
+                size: Size::new(32.0, 20.0),
+                element: Some(Element::TableBorder(TableBorderElement::new(
+                    Size::new(32.0, 20.0),
+                    table_id,
+                    TableBorderStyle::Solid,
+                    TableAlign::Left,
+                    1,
+                    2,
+                    vec![18.0],
+                    vec![15.0, 15.0],
+                    SplitEdges::default(),
+                    0.0,
+                    0.0,
+                    0,
+                    1,
+                ))),
+                children: None,
+                page_break_policy: PageBreakPolicy::default(),
+                render_hints: RenderHints::default(),
+                scope_id: Some(table_id),
+            }),
+        }]),
+        Size::new(56.0, 36.0),
+    );
+
+    let doc = Doc::new();
+    let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
+    renderer.set_size(56.0, 36.0, 1.0);
+
+    let mut colors = FxHashMap::default();
+    colors.insert("ui.surface.default".to_string(), 0x00_00_00_00);
+    colors.insert("selection".to_string(), 0xff_00_00_ff);
+    renderer.set_theme(Theme { colors });
+
+    let width = renderer.width() as usize;
+    let mut plain = vec![0u8; width * renderer.height() as usize * 4];
+    let mut selected = plain.clone();
+
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut plain));
+    assert!(renderer.render_to(
+        &page,
+        0,
+        None,
+        &[SelectionDecor::Block { node_id: table_id }],
+        None,
+        &doc,
+        &mut selected
+    ));
+
+    assert_ne!(
+        rgba_at(&plain, width, 10, 8),
+        rgba_at(&selected, width, 10, 8),
+        "full-table selection should highlight the table border/background rect"
+    );
+    assert_ne!(
+        rgba_at(&plain, width, 20, 16),
+        rgba_at(&selected, width, 20, 16),
+        "full-table selection should also cover the interior gap area"
     );
 }
 
@@ -1003,6 +1072,7 @@ fn selection_non_text_clipped_phase_avoids_double_fill_for_pixel_snapped_overlap
     Renderer::render_selection_overlay(
         &mut pixmap,
         &mut renderer.glyph_renderer,
+        &mut renderer.scratch_pixmap,
         renderer.scale_factor,
         &renderer.theme,
         renderer.is_focused,
@@ -1073,6 +1143,7 @@ fn selection_non_text_clipped_phase_respects_disjoint_clip_regions() {
     Renderer::render_selection_overlay(
         &mut pixmap,
         &mut renderer.glyph_renderer,
+        &mut renderer.scratch_pixmap,
         renderer.scale_factor,
         &renderer.theme,
         renderer.is_focused,

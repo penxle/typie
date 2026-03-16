@@ -2,7 +2,7 @@ use crate::layout::elements::SplitEdges;
 use crate::layout::elements::blockquote::{
     BlockquoteLineElement, BlockquoteMessageElement, BlockquoteQuoteElement, MESSAGE_TAIL_SIZE,
 };
-use crate::model::{BlockquoteVariant, SelectionDecor};
+use crate::model::BlockquoteVariant;
 use crate::render::outline::ElementSink;
 use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
@@ -20,6 +20,20 @@ impl Render for BlockquoteLineElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        if matches!(ctx.phase, RenderPhase::Selection) && ctx.is_block_selected(self.block_id) {
+            let selection_width = if ctx.has_descendant_text_selection(self.block_id) {
+                (self.line_width + BLOCKQUOTE_DECORATION_GAP).min(self.size.width)
+            } else {
+                self.size.width
+            };
+
+            if let Some(rect) = Rect::from_xywh(0.0, 0.0, selection_width, self.size.height)
+                && ctx.fill_selection_rect_fast(pixmap, rect, transform)
+            {
+                return;
+            }
+        }
+
         let mut sink = RasterSink::new(pixmap, glyph_renderer);
         self.paint_to(&mut sink, transform, ctx);
     }
@@ -33,12 +47,7 @@ impl Outline for BlockquoteLineElement {
 
 impl BlockquoteLineElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        let is_selected = ctx.selections.iter().any(|selection| {
-            matches!(
-                selection,
-                SelectionDecor::Block { node_id } if *node_id == self.block_id
-            )
-        });
+        let is_selected = ctx.is_block_selected(self.block_id);
 
         match ctx.phase {
             RenderPhase::Content => {
@@ -59,7 +68,7 @@ impl BlockquoteLineElement {
                     return;
                 }
 
-                let selection_width = if self.has_descendant_text_selection(ctx) {
+                let selection_width = if ctx.has_descendant_text_selection(self.block_id) {
                     (self.line_width + BLOCKQUOTE_DECORATION_GAP).min(self.size.width)
                 } else {
                     self.size.width
@@ -70,25 +79,11 @@ impl BlockquoteLineElement {
                     return;
                 };
 
-                let color = if ctx.is_focused {
-                    ctx.theme.color_with_alpha("selection", 77)
-                } else {
-                    ctx.theme.color_with_alpha("selection", 48)
-                };
-
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
+                let paint = ctx.selection_paint();
                 sink.fill_rect(rect, &paint, transform);
             }
             _ => {}
         }
-    }
-
-    fn has_descendant_text_selection(&self, ctx: &RenderContext<'_>) -> bool {
-        ctx.selections.iter().any(|selection| {
-            matches!(selection, SelectionDecor::TextRange { node_id, .. } if *node_id == self.block_id || ctx.doc.is_ancestor(self.block_id, *node_id))
-        })
     }
 }
 
@@ -100,6 +95,20 @@ impl Render for BlockquoteQuoteElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        if matches!(ctx.phase, RenderPhase::Selection) && ctx.is_block_selected(self.block_id) {
+            let selection_width = if ctx.has_descendant_text_selection(self.block_id) {
+                (QUOTE_ICON_SIZE + BLOCKQUOTE_DECORATION_GAP).min(self.size.width)
+            } else {
+                self.size.width
+            };
+
+            if let Some(rect) = Rect::from_xywh(0.0, 0.0, selection_width, self.size.height)
+                && ctx.fill_selection_rect_fast(pixmap, rect, transform)
+            {
+                return;
+            }
+        }
+
         let mut sink = RasterSink::new(pixmap, glyph_renderer);
         self.paint_to(&mut sink, transform, ctx);
     }
@@ -113,12 +122,7 @@ impl Outline for BlockquoteQuoteElement {
 
 impl BlockquoteQuoteElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        let is_selected = ctx.selections.iter().any(|selection| {
-            matches!(
-                selection,
-                SelectionDecor::Block { node_id } if *node_id == self.block_id
-            )
-        });
+        let is_selected = ctx.is_block_selected(self.block_id);
 
         match ctx.phase {
             RenderPhase::Content => {
@@ -141,7 +145,7 @@ impl BlockquoteQuoteElement {
                     return;
                 }
 
-                let selection_width = if self.has_descendant_text_selection(ctx) {
+                let selection_width = if ctx.has_descendant_text_selection(self.block_id) {
                     (QUOTE_ICON_SIZE + BLOCKQUOTE_DECORATION_GAP).min(self.size.width)
                 } else {
                     self.size.width
@@ -152,25 +156,11 @@ impl BlockquoteQuoteElement {
                     return;
                 };
 
-                let color = if ctx.is_focused {
-                    ctx.theme.color_with_alpha("selection", 77)
-                } else {
-                    ctx.theme.color_with_alpha("selection", 48)
-                };
-
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
+                let paint = ctx.selection_paint();
                 sink.fill_rect(rect, &paint, transform);
             }
             _ => {}
         }
-    }
-
-    fn has_descendant_text_selection(&self, ctx: &RenderContext<'_>) -> bool {
-        ctx.selections.iter().any(|selection| {
-            matches!(selection, SelectionDecor::TextRange { node_id, .. } if *node_id == self.block_id || ctx.doc.is_ancestor(self.block_id, *node_id))
-        })
     }
 }
 
@@ -195,12 +185,7 @@ impl Outline for BlockquoteMessageElement {
 
 impl BlockquoteMessageElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        let is_selected = ctx.selections.iter().any(|selection| {
-            matches!(
-                selection,
-                SelectionDecor::Block { node_id } if *node_id == self.block_id
-            )
-        });
+        let is_selected = ctx.is_block_selected(self.block_id);
 
         match ctx.phase {
             RenderPhase::Background => {
@@ -249,15 +234,7 @@ impl BlockquoteMessageElement {
                 let is_sent = matches!(self.variant, BlockquoteVariant::MessageSent);
                 let has_tail = !self.split_edges.bottom;
 
-                let color = if ctx.is_focused {
-                    ctx.theme.color_with_alpha("selection", 77)
-                } else {
-                    ctx.theme.color_with_alpha("selection", 48)
-                };
-
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
+                let paint = ctx.selection_paint();
 
                 let (tl, tr, mut br, mut bl) =
                     corner_radii(MESSAGE_BORDER_RADIUS, &self.split_edges);

@@ -230,6 +230,17 @@ impl Render for TableBorderElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        if matches!(ctx.phase, RenderPhase::Selection) {
+            let is_selected = ctx.is_block_selected(self.node_id);
+            if is_selected
+                && let Some(rect) =
+                    Rect::from_xywh(self.x_offset, 0.0, self.size.width, self.size.height)
+                && ctx.fill_selection_rect_fast(pixmap, rect, transform)
+            {
+                return;
+            }
+        }
+
         let mut sink = RasterSink::new(pixmap, glyph_renderer);
         self.paint_to(&mut sink, transform, ctx);
     }
@@ -243,6 +254,7 @@ impl Outline for TableBorderElement {
 
 impl TableBorderElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        let is_selected = ctx.is_block_selected(self.node_id);
         match ctx.phase {
             RenderPhase::Background => {
                 let mut paint = Paint::default();
@@ -293,7 +305,19 @@ impl TableBorderElement {
                     sink.stroke_path(&path, &paint, &stroke, transform);
                 }
             }
-            _ => {}
+            RenderPhase::Selection => {
+                if !is_selected {
+                    return;
+                }
+
+                let paint = ctx.selection_paint();
+
+                if let Some(rect) =
+                    Rect::from_xywh(self.x_offset, 0.0, self.size.width, self.size.height)
+                {
+                    sink.fill_rect(rect, &paint, transform);
+                }
+            }
         }
     }
 }
@@ -306,6 +330,16 @@ impl Render for TableCellElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        if matches!(ctx.phase, RenderPhase::Selection) {
+            let is_selected = ctx.is_block_selected(self.node_id);
+            if is_selected
+                && let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
+                && ctx.fill_selection_rect_fast(pixmap, rect, transform)
+            {
+                return;
+            }
+        }
+
         let mut sink = RasterSink::new(pixmap, glyph_renderer);
         self.paint_to(&mut sink, transform, ctx);
     }
@@ -319,18 +353,12 @@ impl Outline for TableCellElement {
 
 impl TableCellElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        let is_selected = ctx.selections.iter().any(|s| s.node_id() == self.node_id);
+        let is_selected = ctx.is_block_selected(self.node_id);
         match ctx.phase {
             RenderPhase::Background => {}
             RenderPhase::Selection => {
                 if is_selected {
-                    let color = if ctx.is_focused {
-                        ctx.theme.color_with_alpha("selection", 77)
-                    } else {
-                        ctx.theme.color_with_alpha("selection", 48)
-                    };
-                    let mut paint = Paint::default();
-                    paint.set_color(color);
+                    let paint = ctx.selection_paint();
 
                     if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
                     {

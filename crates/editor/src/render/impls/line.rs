@@ -130,12 +130,7 @@ impl LineElement {
         point: Point,
         ctx: &RenderContext,
     ) {
-        let color = if ctx.is_focused {
-            ctx.theme.color_with_alpha("selection", 77)
-        } else {
-            ctx.theme.color_with_alpha("selection", 48)
-        };
-        let paint = create_solid_paint(color);
+        let paint = ctx.selection_paint();
         for rect in self.compute_selection_rects(point, ctx.selections) {
             if let Some(rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
                 sink.fill_rect(rect, &paint, transform);

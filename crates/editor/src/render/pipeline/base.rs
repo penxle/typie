@@ -1,4 +1,7 @@
 use super::*;
+use crate::render::blend::{
+    blend_row_const_src_over_lut, blend_row_const_src_over_opaque, build_const_src_over_lut,
+};
 impl Renderer {
     pub(in super::super) fn prepare_base_layer(
         &mut self,
@@ -244,20 +247,28 @@ impl Renderer {
         );
     }
 
-    pub(in super::super) fn ensure_scratch_pixmap(&mut self, width: u32, height: u32) {
-        if self.scratch_pixmap.width() < width || self.scratch_pixmap.height() < height {
-            let new_width = self.scratch_pixmap.width().max(width).max(1);
-            let new_height = self.scratch_pixmap.height().max(height).max(1);
+    pub(in super::super) fn ensure_scratch_pixmap(
+        scratch_pixmap: &mut Pixmap,
+        width: u32,
+        height: u32,
+    ) {
+        if scratch_pixmap.width() < width || scratch_pixmap.height() < height {
+            let new_width = scratch_pixmap.width().max(width).max(1);
+            let new_height = scratch_pixmap.height().max(height).max(1);
             if let Some(new_pixmap) = Pixmap::new(new_width, new_height) {
-                self.scratch_pixmap = new_pixmap;
+                *scratch_pixmap = new_pixmap;
             }
         }
     }
 
-    pub(in super::super) fn clear_scratch_region(&mut self, width: u32, height: u32) {
-        let stride = self.scratch_pixmap.width() as usize * 4;
+    pub(in super::super) fn clear_scratch_region(
+        scratch_pixmap: &mut Pixmap,
+        width: u32,
+        height: u32,
+    ) {
+        let stride = scratch_pixmap.width() as usize * 4;
         let row_bytes = width as usize * 4;
-        let data = self.scratch_pixmap.data_mut();
+        let data = scratch_pixmap.data_mut();
         for row in 0..height as usize {
             let offset = row * stride;
             data[offset..offset + row_bytes].fill(0);
@@ -295,6 +306,38 @@ impl Renderer {
         }
     }
 
+    pub(in super::super) fn composite_scratch_region_src_over(
+        dst: &mut PixmapMut,
+        src: &Pixmap,
+        src_width: u32,
+        src_height: u32,
+        dst_x: u32,
+        dst_y: u32,
+    ) {
+        if src_width == 0 || src_height == 0 {
+            return;
+        }
+
+        let copy_width = src_width.min(dst.width().saturating_sub(dst_x));
+        let copy_height = src_height.min(dst.height().saturating_sub(dst_y));
+        if copy_width == 0 || copy_height == 0 {
+            return;
+        }
+
+        let src_stride = src.width() as usize * 4;
+        let dst_stride = dst.width() as usize * 4;
+        let row_bytes = copy_width as usize * 4;
+        let src_data = src.data();
+        let dst_data = dst.data_mut();
+        for row in 0..copy_height as usize {
+            let src_offset = row * src_stride;
+            let dst_offset = (dst_y as usize + row) * dst_stride + dst_x as usize * 4;
+            let src_slice = &src_data[src_offset..src_offset + row_bytes];
+            let dst_slice = &mut dst_data[dst_offset..dst_offset + row_bytes];
+            blend_row_src_over(src_slice, dst_slice);
+        }
+    }
+
     pub(in super::super) fn render_background_phase_clipped(
         &mut self,
         background_pixmap: &mut Pixmap,
@@ -314,8 +357,16 @@ impl Renderer {
 
         let clipped_layout_rect = pixel_rect.to_layout_rect(scale);
         let origin = Point::new(clipped_layout_rect.x, clipped_layout_rect.y);
-        self.ensure_scratch_pixmap(pixel_rect.width, pixel_rect.height);
-        self.clear_scratch_region(pixel_rect.width, pixel_rect.height);
+        Self::ensure_scratch_pixmap(
+            &mut self.scratch_pixmap,
+            pixel_rect.width,
+            pixel_rect.height,
+        );
+        Self::clear_scratch_region(
+            &mut self.scratch_pixmap,
+            pixel_rect.width,
+            pixel_rect.height,
+        );
         {
             let mut tile = self.scratch_pixmap.as_mut();
             Self::render_background_phase(

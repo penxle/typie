@@ -3,6 +3,7 @@ impl Renderer {
     pub(in super::super) fn render_overlay_layers(
         pixmap: &mut PixmapMut,
         glyph_renderer: &mut GlyphRenderer,
+        scratch_pixmap: &mut Pixmap,
         scale_factor: f64,
         theme: &Theme,
         is_focused: bool,
@@ -55,6 +56,7 @@ impl Renderer {
         Self::render_selection_overlay(
             pixmap,
             glyph_renderer,
+            scratch_pixmap,
             scale_factor,
             theme,
             is_focused,
@@ -192,6 +194,7 @@ impl Renderer {
     pub(in super::super) fn render_selection_overlay(
         pixmap: &mut PixmapMut,
         glyph_renderer: &mut GlyphRenderer,
+        scratch_pixmap: &mut Pixmap,
         scale_factor: f64,
         theme: &Theme,
         is_focused: bool,
@@ -212,11 +215,7 @@ impl Renderer {
         let canvas_width = pixmap.width() as f32 / scale;
         let canvas_height = pixmap.height() as f32 / scale;
         if !selection_data.has_non_text_selection && !selection_data.text_paint_rects.is_empty() {
-            let color = if is_focused {
-                theme.color_with_alpha("selection", 77)
-            } else {
-                theme.color_with_alpha("selection", 48)
-            };
+            let color = selection_overlay_color(theme, is_focused);
             Self::fill_layout_rects_src_over(
                 pixmap,
                 &selection_data.text_paint_rects,
@@ -252,6 +251,7 @@ impl Renderer {
             Self::render_selection_phase_clipped(
                 pixmap,
                 glyph_renderer,
+                scratch_pixmap,
                 scale_factor,
                 theme,
                 is_focused,
@@ -339,6 +339,7 @@ impl Renderer {
     pub(in super::super) fn render_selection_phase_clipped(
         pixmap: &mut PixmapMut,
         glyph_renderer: &mut GlyphRenderer,
+        scratch_pixmap: &mut Pixmap,
         scale_factor: f64,
         theme: &Theme,
         is_focused: bool,
@@ -355,24 +356,11 @@ impl Renderer {
         };
         let clipped_layout_rect = pixel_rect.to_layout_rect(scale);
         let origin = Point::new(clipped_layout_rect.x, clipped_layout_rect.y);
-        let Some(mut tile_pixmap) = Pixmap::new(pixel_rect.width, pixel_rect.height) else {
-            Self::render_selection_phase(
-                pixmap,
-                glyph_renderer,
-                scale_factor,
-                theme,
-                is_focused,
-                page,
-                selections,
-                doc,
-                Some(clipped_layout_rect),
-                origin,
-            );
-            return;
-        };
+        Self::ensure_scratch_pixmap(scratch_pixmap, pixel_rect.width, pixel_rect.height);
+        Self::clear_scratch_region(scratch_pixmap, pixel_rect.width, pixel_rect.height);
 
         {
-            let mut tile = tile_pixmap.as_mut();
+            let mut tile = scratch_pixmap.as_mut();
             Self::render_selection_phase(
                 &mut tile,
                 glyph_renderer,
@@ -387,14 +375,13 @@ impl Renderer {
             );
         }
 
-        let paint = PixmapPaint::default();
-        pixmap.draw_pixmap(
-            pixel_rect.x as i32,
-            pixel_rect.y as i32,
-            tile_pixmap.as_ref(),
-            &paint,
-            Transform::identity(),
-            None,
+        Self::composite_scratch_region_src_over(
+            pixmap,
+            scratch_pixmap,
+            pixel_rect.width,
+            pixel_rect.height,
+            pixel_rect.x,
+            pixel_rect.y,
         );
     }
 
@@ -450,8 +437,16 @@ impl Renderer {
         let clipped_layout_rect = pixel_rect.to_layout_rect(scale);
         let origin = Point::new(clipped_layout_rect.x, clipped_layout_rect.y);
 
-        self.ensure_scratch_pixmap(pixel_rect.width, pixel_rect.height);
-        self.clear_scratch_region(pixel_rect.width, pixel_rect.height);
+        Self::ensure_scratch_pixmap(
+            &mut self.scratch_pixmap,
+            pixel_rect.width,
+            pixel_rect.height,
+        );
+        Self::clear_scratch_region(
+            &mut self.scratch_pixmap,
+            pixel_rect.width,
+            pixel_rect.height,
+        );
         {
             let mut tile = self.scratch_pixmap.as_mut();
             Self::render_content_phase(

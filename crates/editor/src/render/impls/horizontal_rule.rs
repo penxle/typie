@@ -1,5 +1,5 @@
 use crate::layout::elements::HorizontalRuleElement;
-use crate::model::{HorizontalRuleVariant, SelectionDecor};
+use crate::model::HorizontalRuleVariant;
 use crate::render::outline::ElementSink;
 use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, Transform};
@@ -17,6 +17,14 @@ impl Render for HorizontalRuleElement {
         transform: Transform,
         ctx: &RenderContext,
     ) {
+        if matches!(ctx.phase, RenderPhase::Selection)
+            && ctx.is_block_selected(self.node_id)
+            && let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
+            && ctx.fill_selection_rect_fast(pixmap, rect, transform)
+        {
+            return;
+        }
+
         let mut sink = RasterSink::new(pixmap, glyph_renderer);
         self.paint_to(&mut sink, transform, ctx);
     }
@@ -30,12 +38,7 @@ impl Outline for HorizontalRuleElement {
 
 impl HorizontalRuleElement {
     fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
-        let is_selected = ctx.selections.iter().any(|selection| {
-            matches!(
-                selection,
-                SelectionDecor::Block { node_id } if *node_id == self.node_id
-            )
-        });
+        let is_selected = ctx.is_block_selected(self.node_id);
 
         match ctx.phase {
             RenderPhase::Background => {
@@ -68,13 +71,7 @@ impl HorizontalRuleElement {
             }
             RenderPhase::Selection => {
                 if is_selected {
-                    let color = if ctx.is_focused {
-                        ctx.theme.color_with_alpha("selection", 77)
-                    } else {
-                        ctx.theme.color_with_alpha("selection", 48)
-                    };
-                    let mut paint = Paint::default();
-                    paint.set_color(color);
+                    let paint = ctx.selection_paint();
 
                     if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
                     {
