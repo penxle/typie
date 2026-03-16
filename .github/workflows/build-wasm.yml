@@ -9,7 +9,7 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: linux-arm64-4vcpu
+    runs-on: arc-8x
 
     steps:
       - name: Checkout repository
