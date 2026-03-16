@@ -526,7 +526,7 @@ mod tests {
     use super::*;
     use crate::layout::elements::{ClusterMetric, LineMetric};
     use crate::layout::{Element, Layout, LayoutCache, LayoutContext, LayoutNode};
-    use crate::model::{Decorations, NodeId, SelectionDecor};
+    use crate::model::{Attr, Decorations, FontFamilyStyle, NodeId, SelectionDecor, Style};
     use crate::runtime::{State, ViewStates};
     use crate::state::build_selection_decorations;
     use crate::state::selection_helpers::collect_blocks_in_range;
@@ -574,6 +574,36 @@ mod tests {
         let mut hasher = FxHasher::default();
         line.hash_render_cache_signature(&mut hasher);
         hasher.finish()
+    }
+
+    fn first_line(layout: &LayoutNode) -> &LineElement {
+        layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("line should exist")
+    }
+
+    fn nth_line(layout: &LayoutNode, line_idx: usize) -> &LineElement {
+        layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) if line.line_idx == line_idx => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("line should exist")
     }
 
     #[test]
@@ -1085,6 +1115,172 @@ mod tests {
                 .abs()
                 <= eps,
             "line box height should stay stable when box drawing char is present"
+        );
+    }
+
+    #[test]
+    fn line_metrics_do_not_shift_with_cjk_ideograph_in_same_declared_font() {
+        let mut plain = id!();
+        let plain_state = state! {
+            doc {
+                @plain paragraph {
+                    text(styles: [font_family("Pretendard")]) { "가나다라" }
+                }
+            }
+            selection { (plain, 0) }
+        };
+        let plain_layout = layout_for_paragraph(&plain_state, plain);
+        let plain_line = first_line(&plain_layout);
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text(styles: [font_family("Pretendard")]) { "가나漢다라" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_line = first_line(&mixed_layout);
+
+        let eps = 0.01;
+        assert!(
+            (plain_line.metric.top - mixed_line.metric.top).abs() <= eps,
+            "line top should stay stable when a CJK ideograph is added in the same declared font: plain={}, mixed={}",
+            plain_line.metric.top,
+            mixed_line.metric.top
+        );
+        assert!(
+            (plain_line.metric.ascent - mixed_line.metric.ascent).abs() <= eps,
+            "line ascent should stay stable when a CJK ideograph is added in the same declared font: plain={}, mixed={}",
+            plain_line.metric.ascent,
+            mixed_line.metric.ascent
+        );
+        assert!(
+            ((plain_line.metric.height + plain_line.metric.leading)
+                - (mixed_line.metric.height + mixed_line.metric.leading))
+                .abs()
+                <= eps,
+            "line box height should stay stable when a CJK ideograph is added in the same declared font"
+        );
+    }
+
+    #[test]
+    fn hidden_paragraph_cascade_font_does_not_shift_visible_text_line_metrics() {
+        let mut plain = id!();
+        let plain_state = state! {
+            doc {
+                @plain paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (plain, 0) }
+        };
+        let plain_layout = layout_for_paragraph(&plain_state, plain);
+        let plain_line = first_line(&plain_layout);
+
+        let mut hidden = id!();
+        let hidden_state = state! {
+            doc {
+                @hidden paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (hidden, 0) }
+        };
+        let hidden_state = transact!(hidden_state, |tr| {
+            tr.set_cascade_attrs(
+                hidden,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "Paperlogy".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+        let hidden_layout = layout_for_paragraph(&hidden_state, hidden);
+        let hidden_line = first_line(&hidden_layout);
+
+        let eps = 0.01;
+        assert!(
+            (plain_line.metric.top - hidden_line.metric.top).abs() <= eps,
+            "hidden paragraph cascade font should not shift visible text line top: plain={}, hidden={}",
+            plain_line.metric.top,
+            hidden_line.metric.top
+        );
+        assert!(
+            (plain_line.metric.ascent - hidden_line.metric.ascent).abs() <= eps,
+            "hidden paragraph cascade font should not shift visible text ascent: plain={}, hidden={}",
+            plain_line.metric.ascent,
+            hidden_line.metric.ascent
+        );
+        assert!(
+            ((plain_line.metric.height + plain_line.metric.leading)
+                - (hidden_line.metric.height + hidden_line.metric.leading))
+                .abs()
+                <= eps,
+            "hidden paragraph cascade font should not change visible text line box height"
+        );
+    }
+
+    #[test]
+    fn second_line_uses_its_own_declared_font_metrics_after_hard_break() {
+        let mut pretendard = id!();
+        let pretendard_state = state! {
+            doc {
+                @pretendard paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (pretendard, 0) }
+        };
+        let pretendard_layout = layout_for_paragraph(&pretendard_state, pretendard);
+        let pretendard_line = first_line(&pretendard_layout);
+
+        let mut paperlogy = id!();
+        let paperlogy_state = state! {
+            doc {
+                @paperlogy paragraph {
+                    text(styles: [font_family("Paperlogy")]) { "페이퍼로지" }
+                }
+            }
+            selection { (paperlogy, 0) }
+        };
+        let paperlogy_layout = layout_for_paragraph(&paperlogy_state, paperlogy);
+        let paperlogy_line = first_line(&paperlogy_layout);
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                    hard_break {}
+                    text(styles: [font_family("Paperlogy")]) { "페이퍼로지" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_first_line = nth_line(&mixed_layout, 0);
+        let mixed_second_line = nth_line(&mixed_layout, 1);
+
+        let eps = 0.01;
+        assert!(
+            (pretendard_line.metric.ascent - mixed_first_line.metric.ascent).abs() <= eps,
+            "first line should keep Pretendard metrics in mixed paragraph"
+        );
+        assert!(
+            (paperlogy_line.metric.ascent - mixed_second_line.metric.ascent).abs() <= eps,
+            "second line should use Paperlogy metrics after hard break: standalone={}, mixed={}",
+            paperlogy_line.metric.ascent,
+            mixed_second_line.metric.ascent
+        );
+        assert!(
+            ((paperlogy_line.metric.height + paperlogy_line.metric.leading)
+                - (mixed_second_line.metric.height + mixed_second_line.metric.leading))
+                .abs()
+                <= eps,
+            "second line should use Paperlogy line box height after hard break"
         );
     }
 

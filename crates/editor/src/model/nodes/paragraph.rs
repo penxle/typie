@@ -1,13 +1,16 @@
 use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::{BackgroundSegment, LineElement, RubySegment, build_metrics};
-use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
+use crate::layout::{
+    Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode, StrutMetrics,
+    measure_strut, measure_strut_with_styles,
+};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
 use crate::model::{Annotation, Node, PendingStylesDecor, PreeditDecor, Style};
 use crate::schema::Expand;
 use crate::types::{BoxConstraints, Point, Size};
 use crate::utils::{
-    LengthUnit, build_char_to_byte_offsets, char_to_byte_offset, char_to_byte_offset_with_map,
-    convert_length,
+    LengthUnit, build_char_to_byte_offsets, byte_to_char_offset_with_map, char_to_byte_offset,
+    char_to_byte_offset_with_map, convert_length,
 };
 use macros::Codec;
 use parley::style::*;
@@ -56,6 +59,119 @@ fn pending_styles_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a Pending
         Some(ps)
     } else {
         None
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct StrutFontDefaults {
+    family: String,
+    weight: u16,
+    font_size: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DeclaredStrutRun {
+    start_offset: usize,
+    end_offset: usize,
+    defaults: StrutFontDefaults,
+}
+
+fn resolve_strut_font_defaults(
+    ctx: &LayoutContext,
+    has_preedit: bool,
+    is_text_empty: bool,
+    cascade_family: &str,
+    cascade_weight: u16,
+    cascade_font_size: u32,
+) -> StrutFontDefaults {
+    let cascade_defaults = StrutFontDefaults {
+        family: cascade_family.to_string(),
+        weight: cascade_weight,
+        font_size: cascade_font_size,
+    };
+
+    if has_preedit || is_text_empty {
+        return cascade_defaults;
+    }
+
+    for child in ctx.node.children() {
+        match child.node() {
+            Some(Node::HardBreak(_)) => break,
+            Some(Node::Text(node)) => {
+                for segment in node.text.get_segments() {
+                    if segment.text.is_empty() {
+                        continue;
+                    }
+
+                    let family = segment
+                        .styles
+                        .iter()
+                        .find_map(|style| match style {
+                            Style::FontFamily(family) => Some(family.family.clone()),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| cascade_defaults.family.clone());
+                    let weight = segment
+                        .styles
+                        .iter()
+                        .find_map(|style| match style {
+                            Style::FontWeight(weight) => Some(weight.weight),
+                            _ => None,
+                        })
+                        .unwrap_or(cascade_defaults.weight);
+                    let font_size = segment
+                        .styles
+                        .iter()
+                        .find_map(|style| match style {
+                            Style::FontSize(size) => Some(size.size),
+                            _ => None,
+                        })
+                        .unwrap_or(cascade_defaults.font_size);
+
+                    return StrutFontDefaults {
+                        family,
+                        weight,
+                        font_size,
+                    };
+                }
+            }
+            _ => {}
+        }
+    }
+
+    cascade_defaults
+}
+
+fn resolve_declared_segment_strut_defaults(
+    styles: &[Style],
+    cascade_defaults: &StrutFontDefaults,
+) -> StrutFontDefaults {
+    let family = styles
+        .iter()
+        .find_map(|style| match style {
+            Style::FontFamily(family) => Some(family.family.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| cascade_defaults.family.clone());
+    let weight = styles
+        .iter()
+        .find_map(|style| match style {
+            Style::FontWeight(weight) => Some(weight.weight),
+            _ => None,
+        })
+        .unwrap_or(cascade_defaults.weight);
+    let font_size = styles
+        .iter()
+        .find_map(|style| match style {
+            Style::FontSize(size) => Some(size.size),
+            _ => None,
+        })
+        .unwrap_or(cascade_defaults.font_size);
+
+    StrutFontDefaults {
+        family,
+        weight,
+        font_size,
     }
 }
 
@@ -502,6 +618,7 @@ impl Layout for ParagraphNode {
 
         let layout = GLOBALS.with(|globals| {
             use parley::style::*;
+            use rustc_hash::FxHashMap;
 
             let globals = globals.borrow();
 
@@ -533,6 +650,12 @@ impl Layout for ParagraphNode {
 
             let font_mappings = globals.font_mappings.borrow();
             let font_interner = globals.font_family_interner.borrow();
+            let mut declared_strut_runs = Vec::new();
+            let cascade_defaults = StrutFontDefaults {
+                family: cascade_family.clone(),
+                weight: cascade_weight,
+                font_size: cascade_font_size,
+            };
 
             let mut offset = 0;
             for child in ctx.node.children() {
@@ -545,18 +668,19 @@ impl Layout for ParagraphNode {
                             let segment_len = segment.text.chars().count();
                             let base_start = offset + segment_offset;
                             let base_end = base_start + segment_len;
+                            let segment_defaults = resolve_declared_segment_strut_defaults(
+                                &segment.styles,
+                                &cascade_defaults,
+                            );
+                            let segment_font_size = segment_defaults.font_size;
 
-                            let segment_font_size = segment
-                                .styles
-                                .iter()
-                                .find_map(|s| {
-                                    if let Style::FontSize(fs) = s {
-                                        Some(fs.size)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or(1200);
+                            if segment_len > 0 {
+                                declared_strut_runs.push(DeclaredStrutRun {
+                                    start_offset: base_start,
+                                    end_offset: base_end,
+                                    defaults: segment_defaults.clone(),
+                                });
+                            }
 
                             // Build TextBrush from segment styles (color + embolden)
                             let has_embolden =
@@ -609,23 +733,8 @@ impl Layout for ParagraphNode {
                             }
 
                             // Mapping-based font family resolution (single pass)
-                            let segment_family = segment
-                                .styles
-                                .iter()
-                                .find_map(|s| match s {
-                                    Style::FontFamily(m) => Some(m.family.as_str()),
-                                    _ => None,
-                                })
-                                .unwrap_or(&cascade_family);
-
-                            let segment_weight = segment
-                                .styles
-                                .iter()
-                                .find_map(|s| match s {
-                                    Style::FontWeight(w) => Some(w.weight),
-                                    _ => None,
-                                })
-                                .unwrap_or(cascade_weight);
+                            let segment_family = segment_defaults.family.as_str();
+                            let segment_weight = segment_defaults.weight;
 
                             let interned_primary = font_interner
                                 .get(segment_family)
@@ -776,75 +885,97 @@ impl Layout for ParagraphNode {
                 );
             }
 
-            let (strut_ascent, strut_descent, strut_font_size) = {
-                let ps_styles = if preedit.is_some() || is_text_empty {
-                    pending_styles.map(|ps| &ps.styles[..])
-                } else {
-                    None
-                };
-
-                let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
-                dummy_builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
-                    FontFamilyName::Named(cascade_family.clone().into()),
-                )));
-                dummy_builder.push_default(StyleProperty::FontWeight(FontWeight::new(
-                    cascade_weight as f32,
-                )));
-                dummy_builder.push_default(StyleProperty::FontSize(convert_length(
-                    cascade_font_size as f32 / 100.0,
+            let (default_strut, per_line_struts) = {
+                let ps_styles = pending_styles.map(|ps| &ps.styles[..]);
+                let strut_defaults = resolve_strut_font_defaults(
+                    ctx,
+                    preedit.is_some(),
+                    is_text_empty,
+                    &cascade_family,
+                    cascade_weight,
+                    cascade_font_size,
+                );
+                let default_font_size_px = convert_length(
+                    strut_defaults.font_size as f32 / 100.0,
                     LengthUnit::Pt,
                     LengthUnit::Px,
-                )));
-                dummy_builder.push_default(StyleProperty::LineHeight(
-                    LineHeight::FontSizeRelative(line_height),
-                ));
-                dummy_builder.push_default(StyleProperty::FontFeatures(FontFeatures::Source(
-                    Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
-                )));
+                );
+                let default_strut = if let Some(styles) =
+                    ps_styles.filter(|_| preedit.is_some() || is_text_empty)
+                {
+                    measure_strut_with_styles(
+                        &mut lcx,
+                        &mut fcx,
+                        &strut_defaults.family,
+                        strut_defaults.weight,
+                        default_font_size_px,
+                        line_height,
+                        styles,
+                        strut_defaults.font_size,
+                        apply_style_to_builder,
+                    )
+                } else {
+                    measure_strut(
+                        &mut lcx,
+                        &mut fcx,
+                        &strut_defaults.family,
+                        strut_defaults.weight,
+                        default_font_size_px,
+                        line_height,
+                    )
+                };
 
-                if let Some(styles) = ps_styles {
-                    let range = 0.."\u{200B}".len();
-                    let font_size = styles
-                        .iter()
-                        .find_map(|s| {
-                            if let Style::FontSize(fs) = s {
-                                Some(fs.size)
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or(1200);
-                    for style in styles {
-                        apply_style_to_builder(&mut dummy_builder, style, range.clone(), font_size);
-                    }
-                }
+                let per_line_struts: Option<Vec<StrutMetrics>> =
+                    if preedit.is_some() || is_text_empty {
+                        None
+                    } else {
+                        let mut cache: FxHashMap<StrutFontDefaults, StrutMetrics> =
+                            FxHashMap::default();
+                        let metrics = layout
+                            .lines()
+                            .map(|line| {
+                                let text_range = line.text_range();
+                                let line_start =
+                                    byte_to_char_offset_with_map(&char_to_byte, text_range.start);
+                                let line_end =
+                                    byte_to_char_offset_with_map(&char_to_byte, text_range.end);
 
-                let mut dummy_layout = dummy_builder.build("\u{200B}");
-                dummy_layout.break_all_lines(None);
-                let dummy_line = dummy_layout.lines().next().unwrap();
-                let dummy_metrics = dummy_line.metrics();
-                let dummy_font_size = dummy_line
-                    .items()
-                    .find_map(|item| match item {
-                        parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
-                            Some(glyph_run.run().font_size())
-                        }
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| {
-                        convert_length(
-                            cascade_font_size as f32 / 100.0,
-                            LengthUnit::Pt,
-                            LengthUnit::Px,
-                        )
-                    });
-                (dummy_metrics.ascent, dummy_metrics.descent, dummy_font_size)
+                                let Some(run) = declared_strut_runs.iter().find(|run| {
+                                    run.start_offset < line_end && run.end_offset > line_start
+                                }) else {
+                                    return default_strut;
+                                };
+
+                                if let Some(metrics) = cache.get(&run.defaults) {
+                                    return *metrics;
+                                }
+
+                                let metrics = measure_strut(
+                                    &mut lcx,
+                                    &mut fcx,
+                                    &run.defaults.family,
+                                    run.defaults.weight,
+                                    convert_length(
+                                        run.defaults.font_size as f32 / 100.0,
+                                        LengthUnit::Pt,
+                                        LengthUnit::Px,
+                                    ),
+                                    line_height,
+                                );
+                                cache.insert(run.defaults.clone(), metrics);
+                                metrics
+                            })
+                            .collect::<Vec<_>>();
+                        Some(metrics)
+                    };
+
+                (default_strut, per_line_struts)
             };
 
-            (layout, strut_ascent, strut_descent, strut_font_size)
+            (layout, default_strut, per_line_struts)
         });
 
-        let (layout, strut_ascent, strut_descent, strut_font_size) = layout;
+        let (layout, default_strut, per_line_struts) = layout;
         let layout = Rc::new(layout);
         let metrics = {
             let _s = mark_span_as_active(TRACER.start("layout.paragraph.build_metrics"));
@@ -852,9 +983,8 @@ impl Layout for ParagraphNode {
                 &layout,
                 &text,
                 ctx.scale_factor,
-                strut_ascent,
-                strut_descent,
-                strut_font_size,
+                default_strut,
+                per_line_struts.as_deref(),
                 line_height,
             )
         };
@@ -937,8 +1067,8 @@ mod tests {
     use super::*;
     use crate::layout::{Element, LayoutCache, LayoutNode};
     use crate::model::{
-        BackgroundColorStyle, Decorations, DefaultAttrs, FontSizeStyle, FontWeightStyle,
-        PendingStylesDecor, PreeditDecor,
+        Attr, BackgroundColorStyle, Decorations, DefaultAttrs, FontFamilyStyle, FontSizeStyle,
+        FontWeightStyle, PendingStylesDecor, PreeditDecor,
     };
     use crate::runtime::ViewStates;
     use crate::types::BoxConstraints;
@@ -1102,6 +1232,113 @@ mod tests {
             baseline_first_line_height,
             pending_first_line_height
         );
+    }
+
+    #[test]
+    fn strut_defaults_prefer_visible_text_styles_over_hidden_cascade_font() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "Paperlogy".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+
+        let doc = &state.doc;
+        let para = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = doc.default_attrs();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+        let (cascade_family, cascade_weight, cascade_font_size) = ctx.resolve_cascade_font();
+
+        let strut_defaults = resolve_strut_font_defaults(
+            &ctx,
+            false,
+            false,
+            &cascade_family,
+            cascade_weight,
+            cascade_font_size,
+        );
+
+        assert_eq!(strut_defaults.family, "Pretendard");
+        assert_eq!(strut_defaults.weight, cascade_weight);
+        assert_eq!(strut_defaults.font_size, cascade_font_size);
+    }
+
+    #[test]
+    fn strut_defaults_ignore_later_text_after_leading_hard_break() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    hard_break {}
+                    text(styles: [font_family("Pretendard"), font_size(1800)]) { "가나다" }
+                }
+            }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "Paperlogy".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+
+        let doc = &state.doc;
+        let para = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = doc.default_attrs();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+        let (cascade_family, cascade_weight, cascade_font_size) = ctx.resolve_cascade_font();
+
+        let strut_defaults = resolve_strut_font_defaults(
+            &ctx,
+            false,
+            false,
+            &cascade_family,
+            cascade_weight,
+            cascade_font_size,
+        );
+
+        assert_eq!(strut_defaults.family, "Paperlogy");
+        assert_eq!(strut_defaults.weight, cascade_weight);
+        assert_eq!(strut_defaults.font_size, cascade_font_size);
     }
 
     #[test]

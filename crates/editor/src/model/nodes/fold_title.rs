@@ -1,6 +1,8 @@
 use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::{FoldTitleIconElement, LineElement, build_metrics};
-use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode};
+use crate::layout::{
+    Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode, measure_strut,
+};
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::model::{Node, PreeditDecor};
 use crate::types::{BoxConstraints, Point, Size};
@@ -177,40 +179,27 @@ impl Layout for FoldTitleNode {
                 parley::AlignmentOptions::default(),
             );
 
-            let mut dummy_builder = lcx.ranged_builder(&mut fcx, "\u{200B}", 1.0, false);
-            setup_defaults(&mut dummy_builder);
-
-            let mut dummy_layout = dummy_builder.build("\u{200B}");
-            dummy_layout.break_all_lines(None);
-            let dummy_line = dummy_layout.lines().next().unwrap();
-            let dummy_metrics = dummy_line.metrics();
-            let strut_font_size = dummy_line
-                .items()
-                .find_map(|item| match item {
-                    parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
-                        Some(glyph_run.run().font_size())
-                    }
-                    _ => None,
-                })
-                .unwrap_or(14.0);
-
             (
                 layout,
-                dummy_metrics.ascent,
-                dummy_metrics.descent,
-                strut_font_size,
+                measure_strut(
+                    &mut lcx,
+                    &mut fcx,
+                    &cascade_family,
+                    FOLD_TITLE_FONT_WEIGHT,
+                    14.0,
+                    line_height,
+                ),
             )
         });
 
-        let (layout, strut_ascent, strut_descent, strut_font_size) = layout;
+        let (layout, strut_metrics) = layout;
         let layout = Rc::new(layout);
         let metrics = build_metrics(
             &layout,
             &text,
             ctx.scale_factor,
-            strut_ascent,
-            strut_descent,
-            strut_font_size,
+            strut_metrics,
+            None,
             line_height,
         );
 

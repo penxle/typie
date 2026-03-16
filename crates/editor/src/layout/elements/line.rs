@@ -1,4 +1,5 @@
 use crate::global::{TextBrush, font_version};
+use crate::layout::StrutMetrics;
 use crate::layout::cursor::{CursorNavigable, CursorNavigation, NavigationContext};
 use crate::model::{NodeId, PreeditDecor, SelectionDecor};
 use crate::state::{Position, Selection};
@@ -1339,9 +1340,8 @@ pub fn build_metrics(
     layout: &parley::Layout<TextBrush>,
     text: &str,
     scale_factor: f64,
-    strut_ascent: f32,
-    strut_descent: f32,
-    strut_font_size: f32,
+    default_strut: StrutMetrics,
+    per_line_struts: Option<&[StrutMetrics]>,
     line_height_ratio: f32,
 ) -> Vec<LineMetric> {
     let mut lines = Vec::new();
@@ -1350,22 +1350,16 @@ pub fn build_metrics(
     let global_grapheme_offsets = compute_grapheme_boundaries(text);
 
     let mut top = 0.0;
-    let safe_strut_font_size = if strut_font_size > 0.0 {
-        strut_font_size
-    } else {
-        1.0
-    };
-    let ascent_ratio = (strut_ascent.max(0.0)) / safe_strut_font_size;
-    let descent_ratio = (strut_descent.max(0.0)) / safe_strut_font_size;
-    let fallback_ascent = strut_ascent.max(0.0);
-    let fallback_descent = strut_descent.max(0.0);
     let safe_line_height_ratio = if line_height_ratio > 0.0 {
         line_height_ratio
     } else {
         1.0
     };
 
-    for line in layout.lines() {
+    for (line_idx, line) in layout.lines().enumerate() {
+        let line_strut = per_line_struts
+            .and_then(|metrics| metrics.get(line_idx).copied())
+            .unwrap_or(default_strut);
         let line_metrics = line.metrics();
 
         let mut clusters = Vec::new();
@@ -1448,6 +1442,16 @@ pub fn build_metrics(
                 }
             }
         }
+
+        let safe_strut_font_size = if line_strut.font_size > 0.0 {
+            line_strut.font_size
+        } else {
+            1.0
+        };
+        let ascent_ratio = (line_strut.ascent.max(0.0)) / safe_strut_font_size;
+        let descent_ratio = (line_strut.descent.max(0.0)) / safe_strut_font_size;
+        let fallback_ascent = line_strut.ascent.max(0.0);
+        let fallback_descent = line_strut.descent.max(0.0);
 
         let line_font_size = if max_run_font_size > 0.0 {
             max_run_font_size
