@@ -182,7 +182,7 @@
                 mixpanel.track('logout', { via: 'header' });
 
                 location.href = qs.stringifyUrl({
-                  url: `${env.PUBLIC_AUTH_URL}/logout`,
+                  url: '/logout',
                   query: {
                     redirect_uri: page.url.href,
                   },
