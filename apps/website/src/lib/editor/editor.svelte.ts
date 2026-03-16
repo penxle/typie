@@ -58,6 +58,7 @@ import type {
   Rect,
   Selection,
   SpellcheckError,
+  TextAlign,
 } from './types';
 
 let initPromise: Promise<void> | null = null;
@@ -221,6 +222,7 @@ export class Editor {
     backgroundColor: string;
     letterSpacing: number;
     lineHeight: number;
+    textAlign: TextAlign;
   } | null>(null);
 
   externalElements = $state<ExternalElement[]>([]);
@@ -562,6 +564,10 @@ export class Editor {
           }
           case 'line_height': {
             ds.lineHeight = v as number;
+            break;
+          }
+          case 'text_align': {
+            ds.textAlign = v as TextAlign;
             break;
           }
         }
