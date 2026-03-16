@@ -10,7 +10,7 @@ jobs:
       github.event.pull_request.draft == false &&
       (github.event.action != 'review_requested' || github.event.requested_reviewer.login == 'claude[bot]')
 
-    runs-on: arc-2x
+    runs-on: arc-4x
     permissions:
       contents: read
       pull-requests: write
