@@ -1,8 +1,6 @@
-use crate::global::TextBrush;
-use crate::model::Style;
-use parley::style::*;
-use std::borrow::Cow;
-use std::ops::Range;
+use fontique::{Attributes, FontStyle, FontWeight, FontWidth, QueryFamily, QueryStatus};
+use skrifa::instance::{LocationRef, Size as SkrifaSize};
+use skrifa::{FontRef, MetadataProvider};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StrutMetrics {
@@ -11,113 +9,61 @@ pub struct StrutMetrics {
     pub font_size: f32,
 }
 
-pub fn measure_strut(
-    lcx: &mut parley::LayoutContext<TextBrush>,
-    fcx: &mut parley::FontContext,
-    family: &str,
-    weight: u16,
-    font_size_px: f32,
-    line_height: f32,
-) -> StrutMetrics {
-    measure_strut_inner(
-        lcx,
-        fcx,
-        family,
-        weight,
-        font_size_px,
-        line_height,
-        None,
-        0,
-        |_builder, _style, _range, _font_size| {},
-    )
+#[derive(Debug, Clone, Copy)]
+pub struct StrutRequest<'a> {
+    pub family: &'a str,
+    pub weight: u16,
+    pub font_size_px: f32,
+    pub style: FontStyle,
 }
 
-pub fn measure_strut_with_styles<ApplyStyle>(
-    lcx: &mut parley::LayoutContext<TextBrush>,
-    fcx: &mut parley::FontContext,
-    family: &str,
-    weight: u16,
-    font_size_px: f32,
-    line_height: f32,
-    extra_styles: &[Style],
-    extra_style_default_font_size: u32,
-    apply_style: ApplyStyle,
-) -> StrutMetrics
-where
-    ApplyStyle: for<'a> FnMut(&mut parley::RangedBuilder<'a, TextBrush>, &Style, Range<usize>, u32),
-{
-    measure_strut_inner(
-        lcx,
-        fcx,
-        family,
-        weight,
-        font_size_px,
-        line_height,
-        Some(extra_styles),
-        extra_style_default_font_size,
-        apply_style,
-    )
+pub fn measure_strut(fcx: &mut parley::FontContext, request: StrutRequest<'_>) -> StrutMetrics {
+    measure_font_metrics(fcx, request).unwrap_or(StrutMetrics {
+        ascent: 0.0,
+        descent: 0.0,
+        font_size: request.font_size_px,
+    })
 }
 
-fn measure_strut_inner<ApplyStyle>(
-    lcx: &mut parley::LayoutContext<TextBrush>,
+fn measure_font_metrics(
     fcx: &mut parley::FontContext,
-    family: &str,
-    weight: u16,
-    font_size_px: f32,
-    line_height: f32,
-    extra_styles: Option<&[Style]>,
-    extra_style_default_font_size: u32,
-    mut apply_style: ApplyStyle,
-) -> StrutMetrics
-where
-    ApplyStyle: for<'a> FnMut(&mut parley::RangedBuilder<'a, TextBrush>, &Style, Range<usize>, u32),
-{
-    let mut dummy_builder = lcx.ranged_builder(fcx, "\u{200B}", 1.0, false);
-    dummy_builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
-        FontFamilyName::Named(family.to_string().into()),
-    )));
-    dummy_builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight as f32)));
-    dummy_builder.push_default(StyleProperty::FontSize(font_size_px));
-    dummy_builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(
-        line_height,
-    )));
-    dummy_builder.push_default(StyleProperty::FontFeatures(FontFeatures::Source(
-        Cow::Owned("\"ss05\" 1, \"cv12\" 1, \"ss18\" 1".to_string()),
-    )));
+    request: StrutRequest<'_>,
+) -> Option<StrutMetrics> {
+    let mut query = fcx.collection.query(&mut fcx.source_cache);
+    query.set_families([QueryFamily::Named(request.family)]);
+    query.set_attributes(Attributes::new(
+        FontWidth::NORMAL,
+        request.style,
+        FontWeight::new(request.weight as f32),
+    ));
 
-    if let Some(styles) = extra_styles {
-        let range = 0.."\u{200B}".len();
-        let font_size = styles
-            .iter()
-            .find_map(|style| {
-                if let Style::FontSize(font_size) = style {
-                    Some(font_size.size)
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(extra_style_default_font_size);
-        for style in styles {
-            apply_style(&mut dummy_builder, style, range.clone(), font_size);
+    let mut measured = None;
+    query.matches_with(|font| {
+        measured = font_metrics_from_query(font, request.font_size_px);
+        if measured.is_some() {
+            QueryStatus::Stop
+        } else {
+            QueryStatus::Continue
         }
-    }
+    });
 
-    let mut dummy_layout = dummy_builder.build("\u{200B}");
-    dummy_layout.break_all_lines(None);
-    let dummy_line = dummy_layout.lines().next().unwrap();
-    let dummy_metrics = dummy_line.metrics();
-    let dummy_font_size = dummy_line
-        .items()
-        .find_map(|item| match item {
-            parley::PositionedLayoutItem::GlyphRun(glyph_run) => Some(glyph_run.run().font_size()),
-            _ => None,
-        })
-        .unwrap_or(font_size_px);
+    measured
+}
 
-    StrutMetrics {
-        ascent: dummy_metrics.ascent,
-        descent: dummy_metrics.descent,
-        font_size: dummy_font_size,
-    }
+fn font_metrics_from_query(font: &fontique::QueryFont, font_size_px: f32) -> Option<StrutMetrics> {
+    let font_ref = FontRef::from_index(font.blob.as_ref(), font.index).ok()?;
+    let location = font_ref
+        .axes()
+        .location(font.synthesis.variation_settings().iter().copied());
+    let metrics = skrifa::metrics::Metrics::new(
+        &font_ref,
+        SkrifaSize::new(font_size_px),
+        LocationRef::new(location.coords()),
+    );
+
+    Some(StrutMetrics {
+        ascent: metrics.ascent.max(0.0),
+        descent: (-metrics.descent).max(0.0),
+        font_size: font_size_px,
+    })
 }

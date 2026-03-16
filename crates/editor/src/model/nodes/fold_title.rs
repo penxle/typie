@@ -1,7 +1,8 @@
 use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::{FoldTitleIconElement, LineElement, build_metrics};
 use crate::layout::{
-    Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode, measure_strut,
+    Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode, StrutRequest,
+    measure_strut,
 };
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
 use crate::model::{Node, PreeditDecor};
@@ -182,12 +183,13 @@ impl Layout for FoldTitleNode {
             (
                 layout,
                 measure_strut(
-                    &mut lcx,
                     &mut fcx,
-                    &cascade_family,
-                    FOLD_TITLE_FONT_WEIGHT,
-                    14.0,
-                    line_height,
+                    StrutRequest {
+                        family: &cascade_family,
+                        weight: FOLD_TITLE_FONT_WEIGHT,
+                        font_size_px: 14.0,
+                        style: FontStyle::Normal,
+                    },
                 ),
             )
         });

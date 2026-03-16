@@ -2,7 +2,7 @@ use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::{BackgroundSegment, LineElement, RubySegment, build_metrics};
 use crate::layout::{
     Element, Layout, LayoutContext, LayoutNode, PageBreakPolicy, PositionedNode, StrutMetrics,
-    measure_strut, measure_strut_with_styles,
+    StrutRequest, measure_strut,
 };
 use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule, parse_styles};
 use crate::model::{Annotation, Node, PendingStylesDecor, PreeditDecor, Style};
@@ -173,6 +173,53 @@ fn resolve_declared_segment_strut_defaults(
         weight,
         font_size,
     }
+}
+
+fn resolve_strut_request<'a>(
+    defaults: &'a StrutFontDefaults,
+    extra_styles: Option<&[Style]>,
+    extra_style_default_font_size: u32,
+) -> StrutRequest<'a> {
+    let mut request = StrutRequest {
+        family: &defaults.family,
+        weight: defaults.weight,
+        font_size_px: convert_length(
+            defaults.font_size as f32 / 100.0,
+            LengthUnit::Pt,
+            LengthUnit::Px,
+        ),
+        style: FontStyle::Normal,
+    };
+
+    let Some(styles) = extra_styles else {
+        return request;
+    };
+
+    let effective_font_size = styles
+        .iter()
+        .find_map(|style| {
+            if let Style::FontSize(font_size) = style {
+                Some(font_size.size)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(extra_style_default_font_size);
+    request.font_size_px = convert_length(
+        effective_font_size as f32 / 100.0,
+        LengthUnit::Pt,
+        LengthUnit::Px,
+    );
+
+    for style in styles {
+        match style {
+            Style::FontWeight(font_weight) => request.weight = font_weight.weight,
+            Style::Italic(_) => request.style = FontStyle::Italic,
+            _ => {}
+        }
+    }
+
+    request
 }
 
 fn extract_ruby_segments(ctx: &LayoutContext) -> Vec<RubySegment> {
@@ -895,34 +942,19 @@ impl Layout for ParagraphNode {
                     cascade_weight,
                     cascade_font_size,
                 );
-                let default_font_size_px = convert_length(
-                    strut_defaults.font_size as f32 / 100.0,
-                    LengthUnit::Pt,
-                    LengthUnit::Px,
-                );
                 let default_strut = if let Some(styles) =
                     ps_styles.filter(|_| preedit.is_some() || is_text_empty)
                 {
-                    measure_strut_with_styles(
-                        &mut lcx,
+                    measure_strut(
                         &mut fcx,
-                        &strut_defaults.family,
-                        strut_defaults.weight,
-                        default_font_size_px,
-                        line_height,
-                        styles,
-                        strut_defaults.font_size,
-                        apply_style_to_builder,
+                        resolve_strut_request(
+                            &strut_defaults,
+                            Some(styles),
+                            strut_defaults.font_size,
+                        ),
                     )
                 } else {
-                    measure_strut(
-                        &mut lcx,
-                        &mut fcx,
-                        &strut_defaults.family,
-                        strut_defaults.weight,
-                        default_font_size_px,
-                        line_height,
-                    )
+                    measure_strut(&mut fcx, resolve_strut_request(&strut_defaults, None, 0))
                 };
 
                 let per_line_struts: Option<Vec<StrutMetrics>> =
@@ -951,16 +983,8 @@ impl Layout for ParagraphNode {
                                 }
 
                                 let metrics = measure_strut(
-                                    &mut lcx,
                                     &mut fcx,
-                                    &run.defaults.family,
-                                    run.defaults.weight,
-                                    convert_length(
-                                        run.defaults.font_size as f32 / 100.0,
-                                        LengthUnit::Pt,
-                                        LengthUnit::Px,
-                                    ),
-                                    line_height,
+                                    resolve_strut_request(&run.defaults, None, 0),
                                 );
                                 cache.insert(run.defaults.clone(), metrics);
                                 metrics

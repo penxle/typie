@@ -15,4 +15,4 @@ pub use element::{
 };
 pub use page::Page;
 pub use paginator::Paginator;
-pub use strut::{StrutMetrics, measure_strut, measure_strut_with_styles};
+pub use strut::{StrutMetrics, StrutRequest, measure_strut};
