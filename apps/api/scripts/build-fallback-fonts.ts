@@ -8,6 +8,10 @@ const S3_PREFIX = 'editor/fonts';
 
 const FALLBACK_FONTS = [
   {
+    familyName: 'Twemoji',
+    fonts: [{ weight: 400, path: 'Twemoji' }],
+  },
+  {
     familyName: 'Noto Sans',
     fonts: [
       { weight: 400, path: 'NotoSans-Regular' },
@@ -46,10 +50,6 @@ const FALLBACK_FONTS = [
   {
     familyName: 'Noto Sans Symbols 2',
     fonts: [{ weight: 400, path: 'NotoSansSymbols2-Regular' }],
-  },
-  {
-    familyName: 'NotoColorEmoji',
-    fonts: [{ weight: 400, path: 'NotoColorEmoji' }],
   },
 ];
 
