@@ -34,8 +34,8 @@
         color: 'text.subtle',
         transition: 'common',
         _enabled: {
-          _hover: { color: 'text.brand' },
-          _pressed: { color: 'text.brand' },
+          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
         },
         _disabled: { opacity: '50' },
         flexShrink: '0',
@@ -67,8 +67,8 @@
         color: 'text.subtle',
         transition: 'common',
         _enabled: {
-          _hover: { color: 'text.brand' },
-          _pressed: { color: 'text.brand' },
+          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
         },
         _disabled: { opacity: '50' },
         flexShrink: '0',
@@ -100,8 +100,8 @@
         size: '24px',
         color: 'text.subtle',
         _enabled: {
-          _hover: { color: 'text.brand' },
-          _pressed: { color: 'text.brand' },
+          _hover: { color: 'text.default', backgroundColor: 'surface.muted' },
+          _pressed: { color: 'text.brand', backgroundColor: 'surface.muted' },
         },
         _disabled: { opacity: '50' },
         flexShrink: '0',
