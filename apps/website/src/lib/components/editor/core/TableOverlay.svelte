@@ -167,6 +167,14 @@
     return lo;
   }
 
+  function clampOverlayIndex(index: number | null, length: number): number | null {
+    if (index === null || length <= 0) {
+      return null;
+    }
+
+    return clamp(index, 0, length - 1);
+  }
+
   function getColLeft(colIndex: number): number {
     if (colIndex === 0) {
       return 0;
@@ -230,17 +238,20 @@
   }
 
   function handleWindowPointerMove(event: PointerEvent): void {
+    lastWindowPointer = { clientX: event.clientX, clientY: event.clientY };
     syncHoverFromWindowPointer(event.clientX, event.clientY);
   }
 
   function handleWindowPointerLeave(): void {
     isTableHovered = false;
     hoveredPointer = null;
+    lastWindowPointer = null;
   }
 
   let isTableHovered = $state(false);
   let menuOpen = $state(false);
   let buttonHovered = $state(false);
+  let lastWindowPointer = $state<{ clientX: number; clientY: number } | null>(null);
 
   const isButtonVisible = $derived(isTableHovered || overlay.isFocused || menuOpen || buttonHovered);
   const isAlignButtonVisible = $derived.by(() => {
@@ -251,18 +262,29 @@
     return overlay.proportion < 1 - 0.001;
   });
   const activeColIndex = $derived.by(() => {
-    const idx = menuOpenColIndex ?? hoveredColIndex;
-    if (idx === null || idx < 0 || idx >= overlay.colWidthsAsPx.length) {
-      return null;
-    }
-    return idx;
+    return clampOverlayIndex(menuOpenColIndex ?? hoveredColIndex, overlay.colWidthsAsPx.length);
   });
   const activeRowIndex = $derived.by(() => {
-    const idx = menuOpenRowIndex ?? hoveredRowIndex;
-    if (idx === null || idx < 0 || idx >= overlay.rowHeights.length) {
-      return null;
+    return clampOverlayIndex(menuOpenRowIndex ?? hoveredRowIndex, overlay.rowHeights.length);
+  });
+
+  $effect(() => {
+    // NOTE: 포인터는 안 움직였는데 테이블이 바뀐 경우 hover 상태를 다시 계산
+    const pointer = lastWindowPointer;
+    const root = tableOverlayRoot;
+    const overlayRevision = `${overlay.bounds.x}:${overlay.bounds.y}:${overlay.bounds.width}:${overlay.bounds.height}:${
+      overlay.colWidthsAsPx.length
+    }:${overlay.rowHeights.length}:${menuOpenColIndex ?? -1}:${menuOpenRowIndex ?? -1}:${displayZoom}`;
+
+    if (!pointer || !root || overlayRevision.length === 0) {
+      return;
     }
-    return idx;
+
+    const frame = requestAnimationFrame(() => {
+      syncHoverFromWindowPointer(pointer.clientX, pointer.clientY);
+    });
+
+    return () => cancelAnimationFrame(frame);
   });
 
   $effect(() => {
