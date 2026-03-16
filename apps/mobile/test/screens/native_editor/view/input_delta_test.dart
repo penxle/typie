@@ -75,51 +75,48 @@ List<(String name, File file)> _discoverFixtures() {
   }).toList()..sort((a, b) => a.$1.compareTo(b.$1));
 }
 
-List<TextEditingDelta> _synthesizeKeyEventDeltas(Map<String, dynamic> entry) {
-  final before = entry['before'] as Map<String, dynamic>;
-  final after = entry['after'] as Map<String, dynamic>;
-  final oldText = before['text'] as String;
-  final newText = after['text'] as String;
-  final selection = _parseSelection(after['selection'] as Map<String, dynamic>);
-  final composing = _parseRange(after['composing'] as Map<String, dynamic>);
-
-  if (newText.length < oldText.length) {
-    final beforeSel = before['selection'] as Map<String, dynamic>;
-    final deletedEnd = beforeSel['baseOffset'] as int;
-    final deletedStart = deletedEnd - (oldText.length - newText.length);
-    return [
-      TextEditingDeltaDeletion(
-        oldText: oldText,
-        deletedRange: TextRange(start: deletedStart, end: deletedEnd),
-        selection: selection,
-        composing: composing,
-      ),
-    ];
-  }
-
-  return [TextEditingDeltaNonTextUpdate(oldText: oldText, selection: selection, composing: composing)];
-}
-
-typedef _Entry = ({TextEditingValue before, List<TextEditingDelta> deltas, List<Map<String, dynamic>> dispatches});
+typedef _Entry = ({
+  TextEditingValue? before,
+  TextEditingValue? after,
+  TextEditingValue? value,
+  List<TextEditingDelta> deltas,
+  List<Map<String, dynamic>> dispatches,
+});
 
 List<_Entry> _loadEntries(File file) {
   final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
   final entries = json['entries'] as List<dynamic>;
   return entries.map((e) {
     final entry = e as Map<String, dynamic>;
-    final before = _parseValue(entry['before'] as Map<String, dynamic>);
-    final dispatches = (entry['dispatches'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+    final type = entry['type'] as String;
 
-    if (entry['type'] == 'keyEvent') {
-      return (before: before, deltas: _synthesizeKeyEventDeltas(entry), dispatches: dispatches);
-    }
-
-    final deltas = (entry['deltas'] as List<dynamic>).map((d) {
-      final map = d as Map<String, dynamic>;
-      return _deserializeDelta(map['delta'] as Map<String, dynamic>);
-    }).toList();
-
-    return (before: before, deltas: deltas, dispatches: dispatches);
+    return switch (type) {
+      'reconcile' => (
+        before: null,
+        after: null,
+        value: _parseValue(entry['currentValue'] as Map<String, dynamic>),
+        deltas: <TextEditingDelta>[],
+        dispatches: <Map<String, dynamic>>[],
+      ),
+      'setEditingState' => (
+        before: null,
+        after: null,
+        value: _parseValue(entry['value'] as Map<String, dynamic>),
+        deltas: <TextEditingDelta>[],
+        dispatches: <Map<String, dynamic>>[],
+      ),
+      'batch' => (
+        before: _parseValue(entry['before'] as Map<String, dynamic>),
+        after: _parseValue(entry['after'] as Map<String, dynamic>),
+        value: null,
+        deltas: (entry['deltas'] as List<dynamic>).map((d) {
+          final map = d as Map<String, dynamic>;
+          return _deserializeDelta(map['delta'] as Map<String, dynamic>);
+        }).toList(),
+        dispatches: (entry['dispatches'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [],
+      ),
+      _ => throw ArgumentError('Unsupported fixture entry type: $type'),
+    };
   }).toList();
 }
 
@@ -170,23 +167,19 @@ void main() {
       final state = await pumpAndActivate(tester);
       final entries = _loadEntries(file);
 
-      if (entries.isNotEmpty) {
-        final firstBefore = entries.first.before;
-        final selection = firstBefore.selection;
-        final text = firstBefore.text;
-        final splitOffsetRaw = selection.isValid && selection.isCollapsed ? selection.baseOffset : text.length;
-        final splitOffset = splitOffsetRaw < 0
-            ? 0
-            : splitOffsetRaw > text.length
-            ? text.length
-            : splitOffsetRaw;
-        state.reconcile('fixture:$name', splitOffset, text.substring(0, splitOffset), text.substring(splitOffset));
-      }
-
       for (var i = 0; i < entries.length; i++) {
+        final entry = entries[i];
+
+        if (entry.value case final value?) {
+          state.syncCurrentValueForTest(value);
+          continue;
+        }
+
+        state.syncCurrentValueForTest(entry.before!);
         dispatched.clear();
-        state.updateEditingValueWithDeltas(entries[i].deltas);
-        expect(dispatched, entries[i].dispatches, reason: 'entry $i');
+        state.updateEditingValueWithDeltas(entry.deltas);
+        expect(dispatched, entry.dispatches, reason: 'entry $i dispatches');
+        expect(state.currentTextEditingValue, entry.after, reason: 'entry $i value');
       }
     });
   }

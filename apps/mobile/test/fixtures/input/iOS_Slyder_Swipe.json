@@ -1,0 +1,1875 @@
+{
+  "name": "slyder swipe fixture",
+  "timestamp": "2026-03-16T13:48:17.830265Z",
+  "device": {
+    "os": "iOS 26.3.1",
+    "model": "iPhone 16 (iPhone)",
+    "keyboard": null
+  },
+  "entries": [
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆a",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆a",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "insertion",
+            "textInserted": "a",
+            "insertionOffset": 1
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "input",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆a",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆a",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆a",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆a",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "insertion",
+            "textInserted": "b",
+            "insertionOffset": 2
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "input",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "setEditingState",
+      "source": "newline",
+      "value": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab\n",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "insertion",
+            "textInserted": "\n",
+            "insertionOffset": 3
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "insertNewline"
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "updated",
+      "currentValue": {
+        "text": "◆",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆c",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆c",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "insertion",
+            "textInserted": "c",
+            "insertionOffset": 1
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "input",
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆c",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆c",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆c",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆c",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "insertion",
+            "textInserted": "d",
+            "insertionOffset": 2
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "input",
+          "text": "d"
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆cd",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆cd",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "setEditingState",
+      "source": "sentinel",
+      "value": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆cd",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "updated",
+      "currentValue": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 0,
+          "extentOffset": 0
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 0,
+          "extentOffset": 0
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "ab",
+        "selection": {
+          "baseOffset": 0,
+          "extentOffset": 0
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        },
+        {
+          "before": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": []
+    },
+    {
+      "type": "reconcile",
+      "result": "updated",
+      "currentValue": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "setEditingState",
+      "source": "sentinel",
+      "value": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "setEditingState",
+      "source": "sentinel",
+      "value": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "setEditingState",
+      "source": "sentinel",
+      "value": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "setEditingState",
+      "source": "sentinel",
+      "value": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 0,
+              "extentOffset": 0
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "left",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "right",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "right",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆ab",
+        "selection": {
+          "baseOffset": 4,
+          "extentOffset": 4
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆ab",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆ab",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "right",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "updated",
+      "currentValue": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 1,
+          "extentOffset": 1
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 1,
+              "extentOffset": 1
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆cd",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "right",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 2,
+          "extentOffset": 2
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 2,
+              "extentOffset": 2
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆cd",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "right",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    },
+    {
+      "type": "batch",
+      "before": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 3,
+          "extentOffset": 3
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "after": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 4,
+          "extentOffset": 4
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      },
+      "deltas": [
+        {
+          "before": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 3,
+              "extentOffset": 3
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "after": {
+            "text": "◆cd",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            }
+          },
+          "delta": {
+            "oldText": "◆cd",
+            "selection": {
+              "baseOffset": 4,
+              "extentOffset": 4
+            },
+            "composing": {
+              "start": -1,
+              "end": -1
+            },
+            "type": "nonTextUpdate"
+          }
+        }
+      ],
+      "dispatches": [
+        {
+          "type": "navigate",
+          "direction": "right",
+          "extend": false
+        }
+      ]
+    },
+    {
+      "type": "reconcile",
+      "result": "unchanged",
+      "currentValue": {
+        "text": "◆cd",
+        "selection": {
+          "baseOffset": 4,
+          "extentOffset": 4
+        },
+        "composing": {
+          "start": -1,
+          "end": -1
+        }
+      }
+    }
+  ]
+}

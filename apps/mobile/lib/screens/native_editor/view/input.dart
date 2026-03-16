@@ -503,34 +503,46 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
         _controller.onDeleteBackward();
       }
     } else if (oldValue.selection.isCollapsed && newValue.selection.isCollapsed) {
-      final delta = max(newValue.selection.baseOffset, 1) - oldValue.selection.baseOffset;
+      final oldMinOffset = oldValue.text.startsWith(_sentinel) ? _sentinel.length : 0;
+      final newMinOffset = newValue.text.startsWith(_sentinel) ? _sentinel.length : 0;
+      final effectiveOldOffset = max(oldValue.selection.baseOffset, oldMinOffset);
+      final effectiveNewOffset = max(newValue.selection.baseOffset, newMinOffset);
+      final delta = effectiveNewOffset - effectiveOldOffset;
       if (delta != 0) {
         for (var i = 0; i < delta.abs(); i++) {
           _controller.navigate(delta > 0 ? 'right' : 'left');
         }
+      }
 
-        if (newValue.selection.baseOffset == 0) {
-          final dispatches = _stopCollectingDispatches();
-          _setCurrentValue(TextEditingValue(text: newValue.text, selection: const TextSelection.collapsed(offset: 1)));
-          if (_connection != null && _connection!.attached) {
-            _addRecordingEntry({
-              'type': 'setEditingState',
-              'source': 'sentinel',
-              'value': _serializeValue(_currentValue),
-            });
-            _connection!.setEditingState(_currentValue);
-          }
-          if (serializedDeltas.isNotEmpty) {
-            _addRecordingEntry({
-              'type': 'batch',
-              'before': _serializeValue(oldValue),
-              'after': _serializeValue(_currentValue),
-              'deltas': serializedDeltas,
-              'dispatches': dispatches,
-            });
-          }
-          return;
+      if (newValue.selection.baseOffset < newMinOffset) {
+        final crossedSentinelLeft = oldValue.selection.baseOffset >= oldMinOffset;
+        if (crossedSentinelLeft) {
+          _controller.navigate('left');
         }
+
+        final dispatches = _stopCollectingDispatches();
+        _setCurrentValue(
+          newValue.copyWith(selection: TextSelection.collapsed(offset: newMinOffset)),
+          allowSentinel: false,
+        );
+        if (_connection != null && _connection!.attached) {
+          _addRecordingEntry({
+            'type': 'setEditingState',
+            'source': 'sentinel',
+            'value': _serializeValue(_currentValue),
+          });
+          _connection!.setEditingState(_currentValue);
+        }
+        if (serializedDeltas.isNotEmpty) {
+          _addRecordingEntry({
+            'type': 'batch',
+            'before': _serializeValue(oldValue),
+            'after': _serializeValue(_currentValue),
+            'deltas': serializedDeltas,
+            'dispatches': dispatches,
+          });
+        }
+        return;
       }
     }
 
@@ -864,6 +876,16 @@ class EditorTextInputState extends State<EditorTextInput> with DeltaTextInputCli
     } else {
       _currentValue = value;
     }
+  }
+
+  @visibleForTesting
+  void syncCurrentValueForTest(TextEditingValue value) {
+    _currentValue = value;
+    _sentinelLost = false;
+    _hadDeltaSinceReconcile = false;
+    _extendedComposingStart = null;
+    _reconcileNodeId = null;
+    _reconcileCursorOffset = null;
   }
 }
 
