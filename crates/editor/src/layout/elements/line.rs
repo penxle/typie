@@ -1464,10 +1464,20 @@ pub fn build_metrics(
             ascent = fallback_ascent;
             descent = fallback_descent;
         }
+
+        // fallback: Parley의 metric을 쓴다
+        if (!ascent.is_finite() || ascent <= 0.0) && line_metrics.ascent > 0.0 {
+            ascent = line_metrics.ascent;
+        }
+        if (!descent.is_finite() || descent <= 0.0) && line_metrics.descent > 0.0 {
+            descent = line_metrics.descent;
+        }
+
         let mut height = (ascent + descent).max(0.0);
         if height <= 0.0 {
             height = (line_metrics.ascent + line_metrics.descent).max(0.0);
         }
+
         let mut line_box_height = (line_font_size * safe_line_height_ratio).max(height);
         if !line_box_height.is_finite() || line_box_height <= 0.0 {
             line_box_height = height;
@@ -1540,5 +1550,73 @@ fn snap_to_pixel(logical: f32, scale: f64) -> f32 {
         (logical * scale as f32).floor() / scale as f32
     } else {
         logical
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::global::GLOBALS;
+    use crate::test_utils::init_test_env;
+    use parley::style::*;
+
+    fn build_test_layout(text: &str) -> parley::Layout<TextBrush> {
+        init_test_env();
+        GLOBALS.with(|globals| {
+            let globals = globals.borrow();
+            let mut lcx = globals.parley_layout_context.borrow_mut();
+            let mut fcx = globals.parley_font_context.borrow_mut();
+
+            let mut builder = lcx.ranged_builder(&mut fcx, text, 1.0, false);
+            builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+                FontFamilyName::Named("Noto Sans".into()),
+            )));
+            builder.push_default(StyleProperty::FontSize(16.0));
+            builder.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(1.6)));
+
+            let mut layout = builder.build(text);
+            layout.break_all_lines(Some(400.0));
+            layout
+        })
+    }
+
+    #[test]
+    fn build_metrics_falls_back_to_parley_ascent_and_descent_when_strut_is_zero() {
+        let text = "hello";
+        let layout = build_test_layout(text);
+        let parley_line = layout.lines().next().expect("line should exist");
+        let parley_metrics = parley_line.metrics();
+
+        let metrics = build_metrics(
+            &layout,
+            text,
+            1.0,
+            StrutMetrics {
+                ascent: 0.0,
+                descent: 0.0,
+                font_size: 0.0,
+            },
+            None,
+            1.6,
+        );
+
+        let line = metrics.first().expect("line metric should exist");
+        let eps = 0.01;
+        assert!(
+            line.ascent > 0.0,
+            "line ascent should recover from zero strut using Parley metrics"
+        );
+        assert!(
+            (line.ascent - snap_to_pixel(parley_metrics.ascent, 1.0)).abs() <= eps,
+            "line ascent should fall back to Parley ascent: build_metrics={}, parley={}",
+            line.ascent,
+            parley_metrics.ascent
+        );
+        assert!(
+            (line.height - (parley_metrics.ascent + parley_metrics.descent)).abs() <= eps,
+            "line height should reflect Parley ascent/descent when strut metrics are zero: build_metrics={}, parley={}",
+            line.height,
+            parley_metrics.ascent + parley_metrics.descent
+        );
     }
 }
