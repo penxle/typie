@@ -11,6 +11,8 @@
   import { getContext, tick } from 'svelte';
   import BlendIcon from '~icons/lucide/blend';
   import CheckIcon from '~icons/lucide/check';
+  import ClipboardCopyIcon from '~icons/lucide/clipboard-copy';
+  import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
   import CopyIcon from '~icons/lucide/copy';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
@@ -18,10 +20,12 @@
   import GlobeIcon from '~icons/lucide/globe';
   import InfoIcon from '~icons/lucide/info';
   import PencilIcon from '~icons/lucide/pencil-line';
+  import ScissorsIcon from '~icons/lucide/scissors';
   import SquarePenIcon from '~icons/lucide/square-pen';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { goto } from '$app/navigation';
+  import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { maxDepth } from '../@tree/utils';
@@ -36,6 +40,10 @@
       url: string;
       depth: number;
       visibility: EntityVisibility;
+      lastChild?: {
+        id: string;
+        order: string;
+      } | null;
       site: {
         id: string;
       };
@@ -219,6 +227,123 @@
     `),
   );
 
+  const [copyEntities] = createMutation(
+    graphql(`
+      mutation FolderMenu_CopyEntities_Mutation($input: CopyEntitiesInput!) {
+        copyEntities(input: $input) {
+          id
+
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+          }
+
+          container {
+            ... on Site {
+              id
+
+              entities {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+
+            ... on Entity {
+              id
+
+              children {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  const [moveEntities] = createMutation(
+    graphql(`
+      mutation FolderMenu_MoveEntities_Mutation($input: MoveEntitiesInput!) {
+        moveEntities(input: $input) {
+          id
+
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+          }
+
+          container {
+            ... on Site {
+              id
+
+              entities {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+
+            ... on Entity {
+              id
+
+              children {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+          }
+
+          children {
+            id
+
+            node {
+              __typename
+            }
+
+            ...DashboardLayout_EntityTree_Entity_entity
+          }
+
+          ancestors {
+            id
+
+            node {
+              __typename
+
+              ... on Folder {
+                id
+                name
+              }
+            }
+          }
+
+          parent {
+            id
+          }
+        }
+      }
+    `),
+  );
+
   const close = getContext<undefined | (() => void)>('close');
   const app = getAppContext();
   const paneGroup = getPaneGroup();
@@ -251,6 +376,84 @@
 >
   공유 및 게시
 </MenuItem>
+
+<MenuItem
+  icon={ClipboardCopyIcon}
+  onclick={() => {
+    app.state.clipboard = {
+      mode: 'copy',
+      entityIds: [entity.id],
+      sourceSiteId: entity.site.id,
+    };
+  }}
+>
+  복사
+</MenuItem>
+
+<MenuItem
+  icon={ScissorsIcon}
+  onclick={() => {
+    app.state.clipboard = {
+      mode: 'cut',
+      entityIds: [entity.id],
+      sourceSiteId: entity.site.id,
+    };
+  }}
+>
+  잘라내기
+</MenuItem>
+
+{#if app.state.clipboard}
+  <MenuItem
+    icon={ClipboardPasteIcon}
+    onclick={() => {
+      const clipboard = app.state.clipboard;
+      if (!clipboard) return;
+
+      const lowerOrder = entity.lastChild?.order ?? null;
+      const count = clipboard.entityIds.length;
+
+      const promise = (async () => {
+        if (clipboard.mode === 'cut') {
+          const isCrossSite = clipboard.sourceSiteId !== entity.site.id;
+          await moveEntities({
+            input: {
+              entityIds: clipboard.entityIds,
+              parentEntityId: entity.id,
+              lowerOrder,
+              upperOrder: null,
+              ...(isCrossSite && { targetSiteId: entity.site.id }),
+            },
+          });
+          if (isCrossSite) {
+            cache.invalidate({ __typename: 'Site', id: clipboard.sourceSiteId, $field: 'entities' });
+          }
+          app.state.clipboard = undefined;
+        } else {
+          await copyEntities({
+            input: {
+              entityIds: clipboard.entityIds,
+              targetSiteId: entity.site.id,
+              parentEntityId: entity.id,
+              lowerOrder,
+              upperOrder: null,
+            },
+          });
+        }
+      })();
+
+      if (count >= 2) {
+        Toast.promise(promise, {
+          loading: `${count}개의 항목을 붙여넣는 중이에요`,
+          success: `${count}개의 항목을 붙여넣었어요`,
+          error: '붙여넣기 중 오류가 발생했어요',
+        });
+      }
+    }}
+  >
+    여기에 붙여넣기
+  </MenuItem>
+{/if}
 
 <HorizontalDivider color="secondary" />
 

@@ -39,6 +39,11 @@
           visibility
           url
 
+          lastChild {
+            id
+            order
+          }
+
           site {
             id
           }
@@ -85,6 +90,7 @@
   const treeState = getTreeContext();
   const active = $derived(app.state.ancestors.includes(folder.data.entity.id));
   const selected = $derived(treeState.selectedEntityIds.has(folder.data.entity.id));
+  const isCut = $derived(app.state.clipboard?.mode === 'cut' && app.state.clipboard.entityIds.includes(folder.data.entity.id));
 
   let detailsEl = $state<HTMLDetailsElement>();
   let inputEl = $state<HTMLInputElement>();
@@ -150,6 +156,7 @@
 
 <details
   bind:this={detailsEl}
+  style:opacity={isCut ? 0.5 : 1}
   data-id={folder.data.entity.id}
   data-name={folder.data.name}
   data-order={folder.data.entity.order}

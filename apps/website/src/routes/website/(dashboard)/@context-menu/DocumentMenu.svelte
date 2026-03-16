@@ -11,6 +11,8 @@
   import dayjs from 'dayjs';
   import mixpanel from 'mixpanel-browser';
   import BlendIcon from '~icons/lucide/blend';
+  import ClipboardCopyIcon from '~icons/lucide/clipboard-copy';
+  import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
   import Columns2Icon from '~icons/lucide/columns-2';
   import CopyIcon from '~icons/lucide/copy';
   import DotIcon from '~icons/lucide/dot';
@@ -19,9 +21,10 @@
   import InfoIcon from '~icons/lucide/info';
   import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Rows2Icon from '~icons/lucide/rows-2';
+  import ScissorsIcon from '~icons/lucide/scissors';
   import TrashIcon from '~icons/lucide/trash';
   import { goto } from '$app/navigation';
-  import { unwrapError } from '$lib/graphql';
+  import { cache, unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
   import type { Snippet } from 'svelte';
@@ -38,9 +41,11 @@
     entity: {
       id: string;
       slug: string;
+      order?: string;
       url: string;
       visibility: EntityVisibility;
       availability: EntityAvailability;
+      parent?: { id: string } | null;
     };
     via: 'tree' | 'editor';
     children?: Snippet;
@@ -176,6 +181,134 @@
     `),
   );
 
+  const [moveEntities] = createMutation(
+    graphql(`
+      mutation DocumentMenu_MoveEntities_Mutation($input: MoveEntitiesInput!) {
+        moveEntities(input: $input) {
+          id
+
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+          }
+
+          container {
+            ... on Site {
+              id
+
+              entities {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+
+            ... on Entity {
+              id
+
+              children {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+          }
+
+          children {
+            id
+
+            node {
+              __typename
+            }
+
+            ...DashboardLayout_EntityTree_Entity_entity
+          }
+
+          ancestors {
+            id
+
+            node {
+              __typename
+
+              ... on Folder {
+                id
+                name
+              }
+            }
+          }
+
+          parent {
+            id
+          }
+        }
+      }
+    `),
+  );
+
+  const [copyEntities] = createMutation(
+    graphql(`
+      mutation DocumentMenu_CopyEntities_Mutation($input: CopyEntitiesInput!) {
+        copyEntities(input: $input) {
+          id
+
+          site {
+            id
+            ...DashboardLayout_EntityTree_site
+          }
+
+          container {
+            ... on Site {
+              id
+
+              entities {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+
+            ... on Entity {
+              id
+
+              children {
+                id
+
+                node {
+                  __typename
+                }
+
+                ...DashboardLayout_EntityTree_Entity_entity
+              }
+            }
+          }
+        }
+      }
+    `),
+  );
+
+  const getUpperOrder = () => {
+    const el = globalThis.document.querySelector<HTMLElement>(`[data-id="${entity.id}"]`);
+    if (!el) return;
+
+    let nextEl = el.nextElementSibling as HTMLElement | null;
+    while (nextEl && !Object.hasOwn(nextEl.dataset, 'id')) {
+      nextEl = nextEl.nextElementSibling as HTMLElement | null;
+    }
+    return nextEl?.dataset.order;
+  };
+
   const handleDuplicate = async () => {
     try {
       const resp = await duplicateDocument({ input: { documentId: document.id } });
@@ -298,6 +431,94 @@
 </MenuItem>
 
 <MenuItem icon={CopyIcon} onclick={handleDuplicate}>복제</MenuItem>
+
+{#if via === 'tree'}
+  <MenuItem
+    icon={ClipboardCopyIcon}
+    onclick={() => {
+      const currentSiteId = app.preference.current.currentSiteId;
+      if (!currentSiteId) return;
+
+      app.state.clipboard = {
+        mode: 'copy',
+        entityIds: [entity.id],
+        sourceSiteId: currentSiteId,
+      };
+    }}
+  >
+    복사
+  </MenuItem>
+
+  <MenuItem
+    icon={ScissorsIcon}
+    onclick={() => {
+      const currentSiteId = app.preference.current.currentSiteId;
+      if (!currentSiteId) return;
+
+      app.state.clipboard = {
+        mode: 'cut',
+        entityIds: [entity.id],
+        sourceSiteId: currentSiteId,
+      };
+    }}
+  >
+    잘라내기
+  </MenuItem>
+
+  {#if app.state.clipboard && entity.order}
+    <MenuItem
+      icon={ClipboardPasteIcon}
+      onclick={() => {
+        const clipboard = app.state.clipboard;
+        if (!clipboard) return;
+        const currentSiteId = app.preference.current.currentSiteId;
+        if (!currentSiteId) return;
+
+        const upperOrder = getUpperOrder() ?? null;
+        const count = clipboard.entityIds.length;
+
+        const promise = (async () => {
+          if (clipboard.mode === 'cut') {
+            const isCrossSite = clipboard.sourceSiteId !== currentSiteId;
+            await moveEntities({
+              input: {
+                entityIds: clipboard.entityIds,
+                parentEntityId: entity.parent?.id ?? null,
+                lowerOrder: entity.order,
+                upperOrder,
+                ...(isCrossSite && { targetSiteId: currentSiteId }),
+              },
+            });
+            if (isCrossSite) {
+              cache.invalidate({ __typename: 'Site', id: clipboard.sourceSiteId, $field: 'entities' });
+            }
+            app.state.clipboard = undefined;
+          } else {
+            await copyEntities({
+              input: {
+                entityIds: clipboard.entityIds,
+                targetSiteId: currentSiteId,
+                parentEntityId: entity.parent?.id ?? null,
+                lowerOrder: entity.order,
+                upperOrder,
+              },
+            });
+          }
+        })();
+
+        if (count >= 2) {
+          Toast.promise(promise, {
+            loading: `${count}개의 항목을 붙여넣는 중이에요`,
+            success: `${count}개의 항목을 붙여넣었어요`,
+            error: '붙여넣기 중 오류가 발생했어요',
+          });
+        }
+      }}
+    >
+      아래에 붙여넣기
+    </MenuItem>
+  {/if}
+{/if}
 
 {#if document.documentType === DocumentType.NORMAL}
   <MenuItem icon={LayoutTemplateIcon} onclick={() => handleTypeChange(DocumentType.TEMPLATE)}>템플릿으로 전환</MenuItem>

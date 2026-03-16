@@ -644,8 +644,6 @@
       bind:this={treeScrollEl}
       class={css({
         flexGrow: '1',
-        paddingX: '12px',
-        paddingY: '4px',
         overflowY: 'auto',
         borderTopWidth: canScrollUp ? '1px' : '0',
         borderBottomWidth: canScrollDown ? '1px' : '0',

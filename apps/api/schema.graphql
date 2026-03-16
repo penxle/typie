@@ -66,6 +66,14 @@ input CheckSpellingDocumentInput {
   text: String!
 }
 
+input CopyEntitiesInput {
+  entityIds: [ID!]!
+  lowerOrder: String
+  parentEntityId: ID
+  targetSiteId: ID!
+  upperOrder: String
+}
+
 enum CouponState {
   ACTIVE
   DISABLED
@@ -365,7 +373,9 @@ type Entity implements IEntity {
   deletedChildren: [Entity!]!
   depth: Int!
   descendants: [Entity!]!
+  firstChild: Entity
   id: ID!
+  lastChild: Entity
   node: EntityNode!
   notes: [Note!]!
   notesCount: Int!
@@ -637,6 +647,7 @@ input MoveEntitiesInput {
   entityIds: [ID!]!
   lowerOrder: String
   parentEntityId: ID
+  targetSiteId: ID
   upperOrder: String
 }
 
@@ -679,6 +690,7 @@ type Mutation {
   cancelPlanChange: Subscription_!
   cancelSubscriptionCancellation: Subscription_!
   checkSpellingDocument(input: CheckSpellingDocumentInput!): [DocumentSpellingError!]!
+  copyEntities(input: CopyEntitiesInput!): [Entity!]!
   createDocument(input: CreateDocumentInput!): Document!
   createDocumentReaction(input: CreateDocumentReactionInput!): DocumentReaction!
   createFolder(input: CreateFolderInput!): Folder!
@@ -1136,6 +1148,7 @@ type Site implements ISite {
   firstEntity(type: EntityType!): Entity
   folderCount: Int!
   id: ID!
+  lastRootEntity: Entity
   logo: Image!
   name: String!
   slug: String!

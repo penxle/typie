@@ -7,9 +7,11 @@
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import BlendIcon from '~icons/lucide/blend';
+  import ClipboardCopyIcon from '~icons/lucide/clipboard-copy';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import InfoIcon from '~icons/lucide/info';
+  import ScissorsIcon from '~icons/lucide/scissors';
   import TrashIcon from '~icons/lucide/trash';
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { cache } from '$lib/graphql';
@@ -136,6 +138,38 @@
     문서 {documentIds.length}개 공유 및 게시
   </MenuItem>
 {/if}
+
+<MenuItem
+  icon={ClipboardCopyIcon}
+  onclick={() => {
+    const currentSiteId = app.preference.current.currentSiteId;
+    if (!currentSiteId) return;
+
+    app.state.clipboard = {
+      mode: 'copy',
+      entityIds: [...tree.selectedEntityIds],
+      sourceSiteId: currentSiteId,
+    };
+  }}
+>
+  복사
+</MenuItem>
+
+<MenuItem
+  icon={ScissorsIcon}
+  onclick={() => {
+    const currentSiteId = app.preference.current.currentSiteId;
+    if (!currentSiteId) return;
+
+    app.state.clipboard = {
+      mode: 'cut',
+      entityIds: [...tree.selectedEntityIds],
+      sourceSiteId: currentSiteId,
+    };
+  }}
+>
+  잘라내기
+</MenuItem>
 
 <MenuItem
   icon={TrashIcon}

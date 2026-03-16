@@ -40,6 +40,10 @@
           visibility
           availability
           url
+
+          parent {
+            id
+          }
         }
       }
     `),
@@ -50,6 +54,7 @@
   const treeState = getTreeContext();
   const active = $derived(app.state.current === document.data.entity.slug);
   const selected = $derived(treeState.selectedEntityIds.has(document.data.entity.id));
+  const isCut = $derived(app.state.clipboard?.mode === 'cut' && app.state.clipboard.entityIds.includes(document.data.entity.id));
 
   let element = $state<HTMLAnchorElement>();
 
@@ -62,6 +67,7 @@
 
 <a
   bind:this={element}
+  style:opacity={isCut ? 0.5 : 1}
   class={cx(
     'group',
     css(

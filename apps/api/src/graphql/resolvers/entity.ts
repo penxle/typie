@@ -22,9 +22,11 @@ import {
   validateDbId,
 } from '#/db/index.ts';
 import { env } from '#/env.ts';
+import { enqueueJob } from '#/mq/index.ts';
 import { pubsub } from '#/pubsub.ts';
-import { generateFractionalOrder } from '#/utils/index.ts';
+import { copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { assertPlanRule } from '#/utils/plan.ts';
 import { builder } from '../builder.ts';
 import {
   Entity,
@@ -124,6 +126,58 @@ Entity.implement({
         });
 
         return await loader.load(self.id);
+      },
+    }),
+
+    firstChild: t.field({
+      type: Entity,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Entity.firstChild',
+          many: true,
+          load: async (ids) => {
+            return await db.execute<{ id: string; parent_id: string }>(sql`
+              SELECT id, parent_id FROM (
+                SELECT id, parent_id, ROW_NUMBER() OVER (PARTITION BY parent_id ORDER BY "order" ASC) AS rn
+                FROM ${Entities}
+                WHERE ${inArray(Entities.parentId, ids)}
+                AND ${eq(Entities.state, EntityState.ACTIVE)}
+                AND ${ne(Entities.type, EntityType.POST)}
+              ) sq WHERE rn = 1
+            `);
+          },
+          key: (row) => row.parent_id,
+        });
+
+        const rows = await loader.load(self.id);
+        return rows[0]?.id ?? null;
+      },
+    }),
+
+    lastChild: t.field({
+      type: Entity,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Entity.lastChild',
+          many: true,
+          load: async (ids) => {
+            return await db.execute<{ id: string; parent_id: string }>(sql`
+              SELECT id, parent_id FROM (
+                SELECT id, parent_id, ROW_NUMBER() OVER (PARTITION BY parent_id ORDER BY "order" DESC) AS rn
+                FROM ${Entities}
+                WHERE ${inArray(Entities.parentId, ids)}
+                AND ${eq(Entities.state, EntityState.ACTIVE)}
+                AND ${ne(Entities.type, EntityType.POST)}
+              ) sq WHERE rn = 1
+            `);
+          },
+          key: (row) => row.parent_id,
+        });
+
+        const rows = await loader.load(self.id);
+        return rows[0]?.id ?? null;
       },
     }),
 
@@ -700,6 +754,7 @@ builder.mutationFields((t) => ({
       parentEntityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES), required: false }),
       lowerOrder: t.input.string({ required: false }),
       upperOrder: t.input.string({ required: false }),
+      targetSiteId: t.input.id({ validate: validateDbId(TableCode.SITES), required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const entities = await db.execute<{ id: string; site_id: string; depth: number; parent_id: string | null }>(sql`
@@ -717,6 +772,7 @@ builder.mutationFields((t) => ({
         WHERE ${inArray(Entities.id, input.entityIds)}
         AND ${eq(Entities.state, EntityState.ACTIVE)}
         AND ${Entities.id} NOT IN (SELECT id FROM descendants)
+        ORDER BY ${Entities.order} ASC
       `);
 
       if (entities.length === 0) {
@@ -734,6 +790,17 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'site_mismatch' });
       }
 
+      const isCrossSite = !!(input.targetSiteId && input.targetSiteId !== siteId);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const targetSiteId = isCrossSite ? input.targetSiteId! : siteId;
+
+      if (isCrossSite) {
+        await assertSitePermission({
+          userId: ctx.session.userId,
+          siteId: targetSiteId,
+        });
+      }
+
       const targetParentId: string | null = input.parentEntityId ?? null;
       let targetDepth = 0;
 
@@ -744,7 +811,7 @@ builder.mutationFields((t) => ({
           .where(and(eq(Entities.id, targetParentId), eq(Entities.state, EntityState.ACTIVE)))
           .then(firstOrThrowWith(new NotFoundError()));
 
-        if (parentEntity.siteId !== siteId) {
+        if (parentEntity.siteId !== targetSiteId) {
           throw new TypieError({ code: 'site_mismatch' });
         }
 
@@ -752,25 +819,27 @@ builder.mutationFields((t) => ({
           throw new TypieError({ code: 'circular_reference' });
         }
 
-        const [hasCycle] = await db.execute<{ exists: boolean }>(
-          sql`
-            WITH RECURSIVE sq AS (
-              SELECT ${Entities.id}, ${Entities.parentId}
-              FROM ${Entities}
-              WHERE ${eq(Entities.id, targetParentId)}
-              UNION ALL
-              SELECT ${Entities.id}, ${Entities.parentId}
-              FROM ${Entities}
-              JOIN sq ON ${Entities.id} = sq.parent_id
-            )
-            SELECT EXISTS (
-              SELECT 1 FROM sq WHERE ${inArray(sql`id`, input.entityIds)}
-            ) as exists
-          `,
-        );
+        if (!isCrossSite) {
+          const [hasCycle] = await db.execute<{ exists: boolean }>(
+            sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                WHERE ${eq(Entities.id, targetParentId)}
+                UNION ALL
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                JOIN sq ON ${Entities.id} = sq.parent_id
+              )
+              SELECT EXISTS (
+                SELECT 1 FROM sq WHERE ${inArray(sql`id`, input.entityIds)}
+              ) as exists
+            `,
+          );
 
-        if (hasCycle.exists) {
-          throw new TypieError({ code: 'circular_reference' });
+          if (hasCycle.exists) {
+            throw new TypieError({ code: 'circular_reference' });
+          }
         }
 
         targetDepth = parentEntity.depth + 1;
@@ -778,7 +847,6 @@ builder.mutationFields((t) => ({
 
       return await db.transaction(async (tx) => {
         const movedEntities: (typeof Entities.$inferSelect | string)[] = [];
-
         let lastOrder = input.lowerOrder ?? null;
 
         for (const entity of entities) {
@@ -792,6 +860,7 @@ builder.mutationFields((t) => ({
           const movedEntity = await tx
             .update(Entities)
             .set({
+              ...(isCrossSite && { siteId: targetSiteId }),
               parentId: targetParentId,
               depth: targetDepth,
               order,
@@ -801,25 +870,29 @@ builder.mutationFields((t) => ({
             .then(firstOrThrow);
 
           movedEntities.push(movedEntity);
-
           lastOrder = order;
 
-          if (depthDelta !== 0) {
+          // 자손 업데이트 (depth 변경 또는 cross-site siteId 변경)
+          if (depthDelta !== 0 || isCrossSite) {
             movedEntities.push(
               ...(await tx
                 .execute<{ id: string }>(
                   sql`
                     WITH RECURSIVE sq AS (
-                      SELECT ${Entities.id}, ${Entities.depth}
+                      SELECT ${Entities.id}
                       FROM ${Entities}
                       WHERE ${eq(Entities.parentId, entity.id)}
                       UNION ALL
-                      SELECT ${Entities.id}, ${Entities.depth}
+                      SELECT ${Entities.id}
                       FROM ${Entities}
                       JOIN sq ON ${Entities.parentId} = sq.id
                     )
                     UPDATE ${Entities}
-                    SET depth = depth + ${depthDelta}
+                    SET ${sql.raw(
+                      [isCrossSite ? `site_id = '${targetSiteId}'` : null, depthDelta === 0 ? null : `depth = depth + ${depthDelta}`]
+                        .filter(Boolean)
+                        .join(', '),
+                    )}
                     WHERE id IN (SELECT id FROM sq)
                     RETURNING ${Entities.id}
                   `,
@@ -829,28 +902,29 @@ builder.mutationFields((t) => ({
           }
         }
 
+        // 대상 pubsub
         if (targetParentId) {
-          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: targetParentId });
+          pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: targetParentId });
         } else {
-          pubsub.publish('site:update', siteId, { scope: 'site' });
+          pubsub.publish('site:update', targetSiteId, { scope: 'site' });
         }
 
-        const hasRootSourceEntity = entities.some((entity) => entity.parent_id === null);
-        if (hasRootSourceEntity && targetParentId) {
-          pubsub.publish('site:update', siteId, { scope: 'site' });
-        }
-
+        // 소스 pubsub (소스와 대상이 다르거나, 소스 위치가 달라진 경우)
         const sourceParentIds = new Set(
           entities.map((entity) => entity.parent_id).filter((id): id is string => id !== null && id !== targetParentId),
         );
-
         for (const parentId of sourceParentIds) {
           pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
           movedEntities.push(parentId);
         }
 
+        const hasRootSourceEntity = entities.some((entity) => entity.parent_id === null);
+        if (hasRootSourceEntity && (targetParentId || isCrossSite)) {
+          pubsub.publish('site:update', siteId, { scope: 'site' });
+        }
+
         for (const entity of entities) {
-          pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
+          pubsub.publish('site:update', targetSiteId, { scope: 'entity', entityId: entity.id });
         }
 
         return movedEntities;
@@ -943,6 +1017,121 @@ builder.mutationFields((t) => ({
 
         return deletedEntities;
       });
+    },
+  }),
+
+  copyEntities: t.withAuth({ session: true }).fieldWithInput({
+    type: [Entity],
+    input: {
+      entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      targetSiteId: t.input.id({ validate: validateDbId(TableCode.SITES) }),
+      parentEntityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES), required: false }),
+      lowerOrder: t.input.string({ required: false }),
+      upperOrder: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      // 자손 필터링 (moveEntities 패턴)
+      const entities = await db.execute<{ id: string; site_id: string; depth: number }>(sql`
+        WITH RECURSIVE descendants AS (
+          SELECT ${Entities.id}
+          FROM ${Entities}
+          WHERE ${inArray(Entities.parentId, input.entityIds)}
+          UNION ALL
+          SELECT ${Entities.id}
+          FROM ${Entities}
+          JOIN descendants ON ${Entities.parentId} = descendants.id
+        )
+        SELECT ${Entities.id}, ${Entities.siteId}, ${Entities.depth}
+        FROM ${Entities}
+        WHERE ${inArray(Entities.id, input.entityIds)}
+        AND ${eq(Entities.state, EntityState.ACTIVE)}
+        AND ${Entities.id} NOT IN (SELECT id FROM descendants)
+        ORDER BY ${Entities.order} ASC
+      `);
+
+      if (entities.length === 0) {
+        return [];
+      }
+
+      // 원본 사이트 권한 확인
+      const sourceSiteId = entities[0].site_id;
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: sourceSiteId,
+      });
+
+      // 대상 사이트 권한 확인
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: input.targetSiteId,
+      });
+
+      // 플랜 제한 사전 검증
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalCharacterCount' });
+      await assertPlanRule({ userId: ctx.session.userId, rule: 'maxTotalBlobSize' });
+
+      // 대상 depth 계산
+      let targetDepth = 0;
+      if (input.parentEntityId) {
+        const parentEntity = await db
+          .select({ depth: Entities.depth, siteId: Entities.siteId })
+          .from(Entities)
+          .where(and(eq(Entities.id, input.parentEntityId), eq(Entities.state, EntityState.ACTIVE)))
+          .then(firstOrThrowWith(new NotFoundError()));
+
+        if (parentEntity.siteId !== input.targetSiteId) {
+          throw new TypieError({ code: 'site_mismatch' });
+        }
+
+        targetDepth = parentEntity.depth + 1;
+      }
+
+      const newEntityIds = await db.transaction(async (tx) => {
+        const ids: string[] = [];
+        let lastOrder = input.lowerOrder ?? null;
+
+        for (const entity of entities) {
+          const order = generateFractionalOrder({
+            lower: lastOrder,
+            upper: input.upperOrder ?? null,
+          });
+          const newId = await copyEntityRecursive(
+            tx,
+            entity.id,
+            input.targetSiteId,
+            input.parentEntityId ?? null,
+            targetDepth,
+            order,
+            ctx.session.userId,
+          );
+          ids.push(newId);
+          lastOrder = order;
+        }
+
+        return ids;
+      });
+
+      // Pubsub 발행
+      if (input.parentEntityId) {
+        pubsub.publish('site:update', input.targetSiteId, { scope: 'entity', entityId: input.parentEntityId });
+      } else {
+        pubsub.publish('site:update', input.targetSiteId, { scope: 'site' });
+      }
+      pubsub.publish('user:usage:update', ctx.session.userId, null);
+
+      // 검색 인덱스 enqueue
+      const newDocuments = await db
+        .select({ id: Documents.id })
+        .from(Documents)
+        .innerJoin(Entities, eq(Documents.entityId, Entities.id))
+        .where(inArray(Entities.id, newEntityIds));
+
+      for (const doc of newDocuments) {
+        await enqueueJob('search:index:document', doc.id);
+      }
+
+      // 새 엔티티 반환
+      return await db.select().from(Entities).where(inArray(Entities.id, newEntityIds));
     },
   }),
 

@@ -1,9 +1,26 @@
 import { faker } from '@faker-js/faker';
 import { defaultValues } from '@typie/lib/const';
-import { inArray, sql } from 'drizzle-orm';
+import { EntityState, EntityType, NoteState } from '@typie/lib/enums';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
-import { db, Files, Images } from '#/db/index.ts';
+import {
+  db,
+  DocumentContents,
+  Documents,
+  DocumentVersionContributors,
+  DocumentVersions,
+  Entities,
+  Files,
+  firstOrThrow,
+  Folders,
+  Images,
+  NoteEntities,
+  Notes,
+} from '#/db/index.ts';
+import { compressZstd } from '#/utils/compression.ts';
+import { generateFractionalOrder } from '#/utils/order.ts';
 import { wasm } from '#/utils/wasm.ts';
+import type { Transaction } from '#/db/index.ts';
 
 export const generateSlug = () => faker.string.hexadecimal({ length: 32, casing: 'lower', prefix: '' });
 export const generatePermalink = () => faker.string.alphanumeric({ length: 6, casing: 'mixed' });
@@ -256,6 +273,216 @@ export const extractLoroDocLayoutMode = (snapshot: Uint8Array): LoroLayoutMode =
     pageMarginLeft: (layoutMode.get('page_margin_left') as number) ?? 96,
     pageMarginRight: (layoutMode.get('page_margin_right') as number) ?? 96,
   };
+};
+
+export const resolveNameConflict = async (
+  tx: Transaction,
+  name: string,
+  parentEntityId: string | null,
+  siteId: string,
+  entityType: 'DOCUMENT' | 'FOLDER',
+): Promise<string> => {
+  const parentCondition = parentEntityId ? eq(Entities.parentId, parentEntityId) : isNull(Entities.parentId);
+
+  let siblingNames: string[];
+
+  if (entityType === 'DOCUMENT') {
+    const rows = await tx
+      .select({ title: Documents.title })
+      .from(Entities)
+      .innerJoin(Documents, eq(Entities.id, Documents.entityId))
+      .where(and(parentCondition, eq(Entities.siteId, siteId), eq(Entities.state, EntityState.ACTIVE)));
+    siblingNames = rows.map((r) => r.title ?? '');
+  } else {
+    const rows = await tx
+      .select({ name: Folders.name })
+      .from(Entities)
+      .innerJoin(Folders, eq(Entities.id, Folders.entityId))
+      .where(and(parentCondition, eq(Entities.siteId, siteId), eq(Entities.state, EntityState.ACTIVE)));
+    siblingNames = rows.map((r) => r.name);
+  }
+
+  if (!siblingNames.includes(name)) return name;
+
+  let n = 1;
+  while (siblingNames.includes(`${name} (${n})`)) {
+    n++;
+  }
+  return `${name} (${n})`;
+};
+
+const copyDocument = async (
+  tx: Transaction,
+  sourceEntityId: string,
+  newEntityId: string,
+  targetParentId: string | null,
+  targetSiteId: string,
+  userId: string,
+) => {
+  const sourceDoc = await tx.select().from(Documents).where(eq(Documents.entityId, sourceEntityId)).then(firstOrThrow);
+
+  const sourceContent = await tx.select().from(DocumentContents).where(eq(DocumentContents.documentId, sourceDoc.id)).then(firstOrThrow);
+
+  const resolvedTitle = await resolveNameConflict(tx, sourceDoc.title ?? '(제목 없음)', targetParentId, targetSiteId, 'DOCUMENT');
+
+  const newDoc = await tx
+    .insert(Documents)
+    .values({
+      entityId: newEntityId,
+      title: resolvedTitle,
+      subtitle: sourceDoc.subtitle,
+      password: sourceDoc.password,
+      contentRating: sourceDoc.contentRating,
+      allowReaction: sourceDoc.allowReaction,
+      protectContent: sourceDoc.protectContent,
+      locked: sourceDoc.locked,
+      thumbnailId: sourceDoc.thumbnailId,
+      type: sourceDoc.type,
+    })
+    .returning()
+    .then(firstOrThrow);
+
+  const json = await wasm.snapshotToJson(new Uint8Array(sourceContent.snapshot));
+  const freshSnapshot = await wasm.jsonToSnapshot(json);
+  const freshDoc = new LoroDoc();
+  freshDoc.import(freshSnapshot);
+  const freshVersion = freshDoc.version().encode();
+
+  await tx.insert(DocumentContents).values({
+    documentId: newDoc.id,
+    json,
+    text: sourceContent.text,
+    characterCount: sourceContent.characterCount,
+    blobSize: sourceContent.blobSize,
+    snapshot: freshSnapshot,
+    version: freshVersion,
+  });
+
+  const documentVersion = await tx
+    .insert(DocumentVersions)
+    .values({
+      documentId: newDoc.id,
+      version: await compressZstd(freshVersion),
+    })
+    .returning({ id: DocumentVersions.id })
+    .then(firstOrThrow);
+
+  await tx.insert(DocumentVersionContributors).values({
+    versionId: documentVersion.id,
+    userId,
+  });
+
+  return newDoc;
+};
+
+const copyFolder = async (
+  tx: Transaction,
+  sourceEntityId: string,
+  newEntityId: string,
+  newName: string,
+  targetSiteId: string,
+  parentDepth: number,
+  userId: string,
+) => {
+  const sourceFolder = await tx.select().from(Folders).where(eq(Folders.entityId, sourceEntityId)).then(firstOrThrow);
+
+  await tx.insert(Folders).values({
+    entityId: newEntityId,
+    name: newName,
+    thumbnailId: sourceFolder.thumbnailId,
+  });
+
+  const children = await tx
+    .select()
+    .from(Entities)
+    .where(and(eq(Entities.parentId, sourceEntityId), eq(Entities.state, EntityState.ACTIVE)))
+    .orderBy(asc(Entities.order));
+
+  let prevOrder: string | undefined;
+  for (const child of children) {
+    const childOrder = generateFractionalOrder({ lower: prevOrder, upper: undefined });
+    await copyEntityRecursive(tx, child.id, targetSiteId, newEntityId, parentDepth + 1, childOrder, userId);
+    prevOrder = childOrder;
+  }
+};
+
+export const copyEntityRecursive = async (
+  tx: Transaction,
+  sourceEntityId: string,
+  targetSiteId: string,
+  targetParentId: string | null,
+  targetDepth: number,
+  order: string,
+  userId: string,
+): Promise<string> => {
+  const sourceEntity = await tx.select().from(Entities).where(eq(Entities.id, sourceEntityId)).then(firstOrThrow);
+
+  const newEntity = await tx
+    .insert(Entities)
+    .values({
+      userId,
+      siteId: targetSiteId,
+      parentId: targetParentId,
+      slug: generateSlug(),
+      permalink: generatePermalink(),
+      type: sourceEntity.type,
+      order,
+      depth: targetDepth,
+      state: sourceEntity.state,
+      visibility: sourceEntity.visibility,
+      availability: sourceEntity.availability,
+    })
+    .returning()
+    .then(firstOrThrow);
+
+  if (sourceEntity.type === EntityType.DOCUMENT) {
+    await copyDocument(tx, sourceEntityId, newEntity.id, targetParentId, targetSiteId, userId);
+  } else if (sourceEntity.type === EntityType.FOLDER) {
+    const sourceFolder = await tx.select().from(Folders).where(eq(Folders.entityId, sourceEntityId)).then(firstOrThrow);
+    const resolvedName = await resolveNameConflict(tx, sourceFolder.name, targetParentId, targetSiteId, 'FOLDER');
+    await copyFolder(tx, sourceEntityId, newEntity.id, resolvedName, targetSiteId, targetDepth, userId);
+  }
+
+  // Notes 복제
+  const noteRows = await tx
+    .select({
+      content: Notes.content,
+      color: Notes.color,
+      status: Notes.status,
+    })
+    .from(NoteEntities)
+    .innerJoin(Notes, eq(NoteEntities.noteId, Notes.id))
+    .where(and(eq(NoteEntities.entityId, sourceEntityId), eq(Notes.state, NoteState.ACTIVE)));
+
+  if (noteRows.length > 0) {
+    let prevNoteOrder: string | null = null;
+
+    for (const row of noteRows) {
+      const noteOrder = generateFractionalOrder({ lower: prevNoteOrder, upper: null });
+
+      const newNote = await tx
+        .insert(Notes)
+        .values({
+          userId,
+          siteId: targetSiteId,
+          content: row.content,
+          color: row.color,
+          status: row.status,
+          order: noteOrder,
+        })
+        .returning({ id: Notes.id })
+        .then(firstOrThrow);
+
+      await tx.insert(NoteEntities).values({
+        noteId: newNote.id,
+        entityId: newEntity.id,
+      });
+
+      prevNoteOrder = noteOrder;
+    }
+  }
+
+  return newEntity.id;
 };
 
 export const getAncestorEntityIds = async (entityId: string): Promise<string[]> => {

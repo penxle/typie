@@ -3,7 +3,7 @@
   import { DocumentType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { portal } from '@typie/ui/actions';
+  import { contextMenu, portal } from '@typie/ui/actions';
   import { Icon } from '@typie/ui/components';
   import { Toast } from '@typie/ui/notification';
   import { elementScrollViewport, handleDragScroll } from '@typie/ui/utils';
@@ -18,6 +18,7 @@
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
+  import TreeRootMenu from '../@context-menu/TreeRootMenu.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
   import { setupTreeContext } from './state.svelte';
@@ -44,6 +45,11 @@
     graphql(`
       fragment DashboardLayout_EntityTree_site on Site {
         id
+
+        lastRootEntity {
+          id
+          order
+        }
 
         entities {
           id
@@ -861,6 +867,10 @@
   });
 </script>
 
+{#snippet treeRootMenuContent()}
+  <TreeRootMenu lastRootEntityOrder={site.data.lastRootEntity?.order ?? null} siteId={site.data.id} />
+{/snippet}
+
 <svelte:window
   oncontextmenu={(e) => {
     if (pointerType === 'mouse') {
@@ -884,6 +894,8 @@
   class={flex({
     flexDirection: 'column',
     minHeight: 'full',
+    paddingX: '12px',
+    paddingY: '4px',
     userSelect: 'none',
     touchAction: 'none',
   })}
@@ -894,6 +906,7 @@
   onpointermovecapture={handlePointerMove}
   onpointerupcapture={handlePointerUp}
   role="tree"
+  use:contextMenu={{ content: treeRootMenuContent }}
 >
   {#each site.data.entities as entity (entity.id)}
     <Entity entity$key={entity} />

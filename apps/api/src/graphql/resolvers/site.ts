@@ -96,6 +96,33 @@ Site.implement({
       },
     }),
 
+    lastRootEntity: t.field({
+      type: Entity,
+      nullable: true,
+      resolve: async (self, _, ctx) => {
+        const loader = ctx.loader({
+          name: 'Site.lastRootEntity',
+          many: true,
+          load: async (ids) => {
+            return await db.execute<{ id: string; site_id: string }>(sql`
+              SELECT id, site_id FROM (
+                SELECT id, site_id, ROW_NUMBER() OVER (PARTITION BY site_id ORDER BY "order" DESC) AS rn
+                FROM ${Entities}
+                WHERE ${inArray(Entities.siteId, ids)}
+                AND ${eq(Entities.state, EntityState.ACTIVE)}
+                AND ${ne(Entities.type, EntityType.POST)}
+                AND ${isNull(Entities.parentId)}
+              ) sq WHERE rn = 1
+            `);
+          },
+          key: (row) => row.site_id,
+        });
+
+        const rows = await loader.load(self.id);
+        return rows[0]?.id ?? null;
+      },
+    }),
+
     templates: t.field({
       type: [Post],
       resolve: async () => [],

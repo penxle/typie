@@ -62,6 +62,12 @@ type AppState = {
   nextCurrentSiteId?: string;
 
   openMenuCount: number;
+
+  clipboard?: {
+    mode: 'copy' | 'cut';
+    entityIds: string[];
+    sourceSiteId: string;
+  };
 };
 
 type AppTimerState = {
