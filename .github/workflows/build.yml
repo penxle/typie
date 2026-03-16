@@ -19,7 +19,7 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: arc-8x
+    runs-on: arc-4x
 
     outputs:
       version: ${{ steps.meta.outputs.version }}
