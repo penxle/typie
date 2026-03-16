@@ -11,15 +11,14 @@ const handler: RequestHandler = async ({ url, request, params }) => {
   const response = await fetch(`${env.PRIVATE_API_URL}/auth/${params.rest}${url.search}`, {
     method: request.method,
     headers: requestHeaders,
-    body: request.method === 'POST' ? request.body : undefined,
+    body: request.method === 'POST' ? await request.arrayBuffer() : undefined,
     redirect: 'manual',
-    // @ts-expect-error -- required for streaming request bodies
-    duplex: 'half',
   });
 
   const responseHeaders = new Headers(response.headers);
+  const responseBody = await response.arrayBuffer();
 
-  return new Response(response.body, {
+  return new Response(responseBody, {
     status: response.status,
     statusText: response.statusText,
     headers: responseHeaders,
