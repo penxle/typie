@@ -279,6 +279,7 @@
 
     await createNote({
       input: {
+        siteId: app.preference.current.currentSiteId,
         color: selectedColor,
         content: inputValue,
       },
