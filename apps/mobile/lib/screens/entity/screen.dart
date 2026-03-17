@@ -190,7 +190,7 @@ class _WithSiteId extends HookWidget {
   }
 }
 
-class _WithEntityId extends HookWidget {
+class _WithEntityId extends StatelessWidget {
   const _WithEntityId(this.entityId);
 
   final String entityId;

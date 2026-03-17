@@ -158,72 +158,62 @@ class _SearchHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final topPadding = OverlayHeading.overlayHeight(context);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: EdgeInsets.only(top: topPadding),
-          decoration: BoxDecoration(color: context.colors.surfaceSubtle),
-          child: SizedBox(
-            height: 56,
-            child: Padding(
-              padding: const Pad(horizontal: 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 44,
-                      padding: const Pad(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: context.colors.surfaceDefault,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(LucideLightIcons.search, size: 16, color: context.colors.accentBrand),
-                          const Gap(10),
-                          Expanded(
-                            child: TextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              onChanged: onChanged,
-                              style: const TextStyle(fontSize: 15),
-                              decoration: const InputDecoration(
-                                hintText: '문서 검색...',
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+    return Container(
+      padding: EdgeInsets.only(top: topPadding),
+      decoration: BoxDecoration(color: context.colors.surfaceSubtle),
+      child: SizedBox(
+        height: 56,
+        child: Padding(
+          padding: const Pad(horizontal: 20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 44,
+                  padding: const Pad(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: context.colors.surfaceDefault,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  Tappable(
-                    onTap: onCancel,
-                    padding: const Pad(left: 14),
-                    child: SizedBox(
-                      height: 44,
-                      child: Center(
-                        child: Text(
-                          '취소',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: context.colors.accentBrand,
+                  child: Row(
+                    children: [
+                      Icon(LucideLightIcons.search, size: 16, color: context.colors.accentBrand),
+                      const Gap(10),
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          onChanged: onChanged,
+                          style: const TextStyle(fontSize: 15),
+                          decoration: const InputDecoration(
+                            hintText: '문서 검색...',
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              Tappable(
+                onTap: onCancel,
+                padding: const Pad(left: 14),
+                child: SizedBox(
+                  height: 44,
+                  child: Center(
+                    child: Text(
+                      '취소',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.colors.accentBrand),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

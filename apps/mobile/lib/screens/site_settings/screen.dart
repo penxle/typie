@@ -525,15 +525,11 @@ class _DangerZone extends HookWidget {
             child: Tappable.scale(
               child: SizedBox(
                 height: settingsListRowHeight,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '스페이스 삭제',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDanger),
-                      ),
-                    ),
-                  ],
+                child: Expanded(
+                  child: Text(
+                    '스페이스 삭제',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: context.colors.textDanger),
+                  ),
                 ),
               ),
             ),

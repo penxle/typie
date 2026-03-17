@@ -21,7 +21,7 @@ const _cardRadius = 12.0;
 const _sectionGap = 16.0;
 
 @RoutePage()
-class CurrentPlanScreen extends HookWidget {
+class CurrentPlanScreen extends StatelessWidget {
   const CurrentPlanScreen({super.key});
 
   @override

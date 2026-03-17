@@ -30,7 +30,7 @@ const _cardRadius = 12.0;
 const _sectionGap = 16.0;
 
 @RoutePage()
-class StatsScreen extends HookWidget {
+class StatsScreen extends StatelessWidget {
   const StatsScreen({super.key});
 
   @override

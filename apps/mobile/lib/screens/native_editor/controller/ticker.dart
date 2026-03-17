@@ -57,7 +57,7 @@ class EditorTicker {
       return;
     }
 
-    // TODO: once Dart OTel SDK supports injecting external spans,
+    // XXX: once Dart OTel SDK supports injecting external spans,
     // parse and forward drained Rust spans to the OTel pipeline.
     editor.drainTraces();
   }

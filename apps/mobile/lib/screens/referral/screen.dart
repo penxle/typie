@@ -21,7 +21,7 @@ const _cardRadius = 12.0;
 const _sectionGap = 16.0;
 
 @RoutePage()
-class ReferralScreen extends HookWidget {
+class ReferralScreen extends StatelessWidget {
   const ReferralScreen({super.key});
 
   @override
