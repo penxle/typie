@@ -1,4 +1,4 @@
-import icuPostcardUrl from '@typie/editor/icu/data.postcard?url';
+import icuUrl from '@typie/editor/icu.zst?url';
 import { defaultValues } from '@typie/lib/const';
 import { Tip } from '@typie/ui/notification';
 import { nanoid } from 'nanoid';
@@ -67,7 +67,7 @@ function ensureInitialized(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       await initWasm();
-      const icuPostcard = await fetch(icuPostcardUrl).then((res) => res.arrayBuffer());
+      const icuPostcard = await fetch(icuUrl).then((res) => res.arrayBuffer());
       wasm.loadIcuData(new Uint8Array(icuPostcard));
       await initFonts(wasm);
     })();

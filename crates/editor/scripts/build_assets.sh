@@ -15,26 +15,19 @@ generate_icu_data() {
     cargo install icu4x-datagen
   fi
 
-  local dest="$ASSETS_DIR/icu_data.postcard"
-  local tmp="$ASSETS_DIR/icu_data.postcard.tmp"
-  local log="$ASSETS_DIR/icu_data.log"
+  local postcard="$ASSETS_DIR/icu_data.postcard"
+  local zst="$ASSETS_DIR/icu.zst"
 
   echo "Generating ICU data..."
-  rm -f "$tmp"
+  rm -f "$postcard"
   CLICOLOR_FORCE=1 icu4x-datagen \
     --markers-for-bin "$PKG_DIR/editor_bg.wasm" \
     --format blob \
-    --out "$tmp" > "$log" 2>&1
+    --out "$postcard"
 
-  if [ -f "$dest" ] && cmp -s "$tmp" "$dest"; then
-    echo "ICU data is up to date."
-    rm -f "$tmp" "$log"
-  else
-    mv "$tmp" "$dest"
-    cat "$log"
-    rm -f "$log"
-    echo "ICU data generated: $(du -h "$dest" | cut -f1)"
-  fi
+  echo "Compressing ICU data with zstd..."
+  zstd -19 -f --rm "$postcard" -o "$zst"
+  echo "ICU data generated: $(du -h "$zst" | cut -f1)"
 }
 
 copy_if_changed() {
@@ -60,7 +53,7 @@ generate_icu_data
 
 echo ""
 echo "Copying assets to mobile..."
-copy_if_changed "$ASSETS_DIR/icu_data.postcard" "$MOBILE_ASSETS_DIR/icu_data.postcard"
+copy_if_changed "$ASSETS_DIR/icu.zst" "$MOBILE_ASSETS_DIR/icu.zst"
 copy_if_changed "$ASSETS_DIR/Noto-Phantom.bin" "$MOBILE_ASSETS_DIR/Noto-Phantom.bin"
 copy_if_changed "$ASSETS_DIR/Noto-Phantom-Emoji.bin" "$MOBILE_ASSETS_DIR/Noto-Phantom-Emoji.bin"
 copy_if_changed "$ASSETS_DIR/fallbacks.json" "$MOBILE_ASSETS_DIR/fallbacks.json"

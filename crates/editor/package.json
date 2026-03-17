@@ -12,7 +12,7 @@
     "./font/fallbacks.json": "./assets/fallbacks.json",
     "./font/Noto-Phantom.bin": "./assets/Noto-Phantom.bin",
     "./font/Noto-Phantom-Emoji.bin": "./assets/Noto-Phantom-Emoji.bin",
-    "./icu/data.postcard": "./assets/icu_data.postcard",
+    "./icu.zst": "./assets/icu.zst",
     "./theme.json": "./assets/theme.json"
   },
   "main": "pkg/editor.js",

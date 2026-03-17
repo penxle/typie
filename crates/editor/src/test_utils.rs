@@ -59,7 +59,7 @@ pub fn init_test_env() {
     static ICU_INIT: std::sync::Once = std::sync::Once::new();
     ICU_INIT.call_once(|| {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let icu_path = std::path::Path::new(&manifest_dir).join("assets/icu_data.postcard");
+        let icu_path = std::path::Path::new(&manifest_dir).join("assets/icu.zst");
         if icu_path.exists() {
             let data = std::fs::read(&icu_path).expect("Failed to read ICU data");
             let _ = load_icu_data(&data);
@@ -108,7 +108,7 @@ pub fn init_bench_env() {
     static ICU_INIT: std::sync::Once = std::sync::Once::new();
     ICU_INIT.call_once(|| {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let icu_path = std::path::Path::new(&manifest_dir).join("assets/icu_data.postcard");
+        let icu_path = std::path::Path::new(&manifest_dir).join("assets/icu.zst");
         if icu_path.exists() {
             let data = std::fs::read(&icu_path).expect("Failed to read ICU data");
             let _ = load_icu_data(&data);

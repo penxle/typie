@@ -33,7 +33,7 @@ void setAvailableFonts(Map<String, List<int>> fonts) {
 }
 
 Future<(NativeEditorApplication, FontManager)> _initApplication() async {
-  final icuData = await rootBundle.load('assets/native/icu_data.postcard');
+  final icuData = await rootBundle.load('assets/native/icu.zst');
 
   final app = NativeEditorApplication()..loadIcuData(icuData.buffer.asUint8List());
 
