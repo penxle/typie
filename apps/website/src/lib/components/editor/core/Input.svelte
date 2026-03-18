@@ -3,6 +3,19 @@
   import { IS_IOS_SAFARI, IS_MAC } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { handleKeyEvent } from '$lib/editor/keyboard';
+  import {
+    clearBlockedRecomposition,
+    clearReconversionCandidate,
+    clearReconversionState,
+    clearReplacementSourceText,
+    countTextChars,
+    createReconversionState,
+    getCommonSuffix,
+    markBlockedRecompositionDelete,
+    setReconversionCandidate,
+    startBlockedRecomposition,
+    suppressBlockedRecomposition,
+  } from './ime-reconversion';
 
   type Props = {
     onFocus?: (e: FocusEvent) => void;
@@ -22,6 +35,21 @@
   let lastHandledBackspaceAt = 0;
   let windowFocused = typeof document === 'undefined' ? true : document.hasFocus();
   let documentVisible = typeof document === 'undefined' ? true : document.visibilityState === 'visible';
+  let keyEventSerial = 0;
+  let lastKeydownWasProcess = false;
+  let lastKeydownLooksLikeTypingInput = false;
+  let suppressNextBlurCallback = false;
+  let pendingCommittedInputSync: string | null = null;
+  let compositionStartedFromTypingKey = false;
+
+  let reconversion = $state(createReconversionState());
+
+  const looksLikeTypingInputKeydown = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return false;
+    if (e.key.length === 1) return true;
+    if (e.key !== 'Process' && e.key !== 'Unidentified') return false;
+    return /^(Key[A-Z]|Digit[0-9]|Numpad\d)$/.test(e.code);
+  };
 
   const clearInputBuffer = () => {
     if (!inputEl) return;
@@ -29,6 +57,28 @@
     inputEl.value = '';
     lastInputValue = '';
     pendingImeDelete = false;
+    pendingCommittedInputSync = null;
+    clearBlockedRecomposition(reconversion);
+  };
+
+  const resetNativeInputSession = () => {
+    if (!inputEl) return;
+
+    clearReconversionCandidate(reconversion);
+    clearReplacementSourceText(reconversion);
+    clearInputBuffer();
+
+    suppressNextBlurCallback = true;
+    inputEl.blur();
+    inputEl.focus({ preventScroll: true });
+  };
+
+  const cancelBlockedRecompositionUi = () => {
+    if (!inputEl) return;
+    if (typeof document !== 'undefined' && document.activeElement !== inputEl) return;
+
+    suppressNextBlurCallback = true;
+    inputEl.blur();
   };
 
   const resetInputState = () => {
@@ -76,6 +126,18 @@
   }
 
   const handleBeforeInput = (e: InputEvent) => {
+    const shouldPreventBlockedRecompositionDelete =
+      reconversion.blocked !== null &&
+      lastKeydownWasProcess &&
+      e.inputType === 'deleteContentBackward' &&
+      (inputEl?.value ?? '') === reconversion.blocked.inputValue;
+    if (shouldPreventBlockedRecompositionDelete) {
+      e.preventDefault();
+      pendingImeDelete = false;
+      markBlockedRecompositionDelete(reconversion, keyEventSerial, true);
+      return;
+    }
+
     if (editor.readOnly || !IS_IOS_SAFARI) return;
     if (e.inputType !== 'deleteContentBackward') return;
 
@@ -87,12 +149,53 @@
   };
 
   const handleInput = (e: Event) => {
-    if (editor.readOnly) return;
-
     const inputEvent = e as InputEvent;
+
+    if (editor.readOnly) return;
     if (inputEvent.isComposing) return;
 
     const value = inputEl?.value || '';
+    if (pendingCommittedInputSync !== null && value === pendingCommittedInputSync) {
+      pendingCommittedInputSync = null;
+      pendingImeDelete = false;
+      lastInputValue = value;
+      return;
+    }
+    pendingCommittedInputSync = null;
+
+    const appendedText = value.startsWith(lastInputValue) ? value.slice(lastInputValue.length) : '';
+    const shouldReopenCandidateAfterDelete = reconversion.candidate !== null && inputEvent.inputType === 'deleteContentBackward';
+    if (shouldReopenCandidateAfterDelete) {
+      pendingImeDelete = false;
+      if (reconversion.candidate) {
+        reconversion.candidate.reopenDeleteKeyEventSerial = keyEventSerial;
+      }
+      lastInputValue = value;
+      return;
+    }
+
+    const shouldSuppressRecompositionAfterDelete =
+      reconversion.blocked !== null &&
+      inputEvent.inputType === 'deleteContentBackward' &&
+      lastInputValue === reconversion.blocked.inputValue;
+    if (shouldSuppressRecompositionAfterDelete) {
+      pendingImeDelete = false;
+      markBlockedRecompositionDelete(reconversion, keyEventSerial);
+      lastInputValue = value;
+      return;
+    }
+
+    const shouldCreateBlockedRecomposition = reconversion.candidate !== null && appendedText.length > 0;
+    if (shouldCreateBlockedRecomposition) {
+      startBlockedRecomposition(reconversion, value);
+    } else if (reconversion.candidate) {
+      clearReconversionCandidate(reconversion);
+    }
+
+    if (!shouldCreateBlockedRecomposition) {
+      clearBlockedRecomposition(reconversion);
+    }
+    clearReplacementSourceText(reconversion);
 
     if (!inputEl) return;
 
@@ -100,6 +203,7 @@
       if (pendingImeDelete && lastInputValue.length > 0) {
         editor.dispatch({ type: 'replaceBackward', length: lastInputValue.length, text: '' }).scrollIntoView({ mode: 'typewriter' });
       }
+      pendingCommittedInputSync = null;
       pendingImeDelete = false;
       lastInputValue = '';
       return;
@@ -111,6 +215,10 @@
       // Append
       const newText = value.slice(lastInputValue.length);
       editor.dispatch({ type: 'input', text: newText }).scrollIntoView({ mode: 'typewriter' });
+      if (shouldCreateBlockedRecomposition) {
+        resetNativeInputSession();
+        return;
+      }
     } else if (lastInputValue.length > 0 && value !== lastInputValue) {
       // Replace (macOS accent popup / text replacement)
       const deleteLength = lastInputValue.length;
@@ -126,6 +234,12 @@
   let pendingKeyEvent: KeyboardEvent | undefined;
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    keyEventSerial += 1;
+    lastKeydownWasProcess = e.key === 'Process' || e.keyCode === 229;
+    lastKeydownLooksLikeTypingInput = looksLikeTypingInputKeydown(e);
+
+    const isModifierOnly = e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta';
+
     if (e.isComposing) {
       if (e.metaKey || e.ctrlKey) {
         pendingKeyEvent = e;
@@ -160,6 +274,7 @@
     }
 
     if (handleKeyEvent(editor, e)) {
+      clearReconversionState(reconversion);
       if (IS_IOS_SAFARI && (e.key === 'Backspace' || e.key === 'Delete')) {
         lastHandledBackspaceAt = Date.now();
         pendingImeDelete = false;
@@ -167,6 +282,13 @@
 
       e.preventDefault();
       resetInputState();
+      return;
+    }
+
+    const shouldPrimeBlockedRecompositionShortcut =
+      reconversion.blocked !== null && !compositionActive && !e.isComposing && !isModifierOnly && e.key !== 'Process' && e.key.length > 1;
+    if (shouldPrimeBlockedRecompositionShortcut && reconversion.blocked) {
+      reconversion.blocked.shortcutPrimed = true;
     }
   };
 
@@ -206,18 +328,46 @@
   };
 
   const handleBlur = (e: FocusEvent) => {
-    if (!compositionActive) {
+    const suppressBlurCallback = suppressNextBlurCallback;
+    suppressNextBlurCallback = false;
+
+    if (reconversion.blocked?.suppressing) {
+      compositionActive = false;
+      clearReconversionCandidate(reconversion);
+      clearReplacementSourceText(reconversion);
+      clearInputBuffer();
+      requestAnimationFrame(() => {
+        if (!inputEl) return;
+        if (!windowFocused || !documentVisible) return;
+        inputEl.focus({ preventScroll: true });
+      });
+    } else if (!compositionActive) {
+      clearReconversionState(reconversion);
       clearInputBuffer();
     }
+
     pendingImeDelete = false;
-    onBlur?.(e);
+    if (!suppressBlurCallback) {
+      onBlur?.(e);
+    }
   };
 
   const handleCompositionStart = (e: CompositionEvent) => {
     if (editor.readOnly) return;
 
+    if (suppressBlockedRecomposition(reconversion, keyEventSerial)) {
+      compositionActive = true;
+      cancelBlockedRecompositionUi();
+      return;
+    }
+
+    if (reconversion.blocked) {
+      clearBlockedRecomposition(reconversion);
+    }
+
     const text = e.data || '';
     compositionActive = true;
+    compositionStartedFromTypingKey = lastKeydownLooksLikeTypingInput;
     editor.dispatch({ type: 'compositionStart', text }).scrollIntoView({ mode: 'typewriter' });
   };
 
@@ -227,25 +377,70 @@
     const text = e.data || '';
     compositionActive = true;
 
+    if (suppressBlockedRecomposition(reconversion, keyEventSerial)) {
+      cancelBlockedRecompositionUi();
+      return;
+    }
+
+    const candidateText = reconversion.candidate?.text ?? '';
+    const candidateDeleteSerial = reconversion.candidate?.reopenDeleteKeyEventSerial ?? null;
+    const shouldReplaceCommittedCandidate =
+      candidateText.length > 0 &&
+      (keyEventSerial === candidateDeleteSerial || (!compositionStartedFromTypingKey && text === candidateText));
+    if (shouldReplaceCommittedCandidate) {
+      pendingKeyEvent = undefined;
+      editor.dispatch({ type: 'compositionUpdate', text, replaceLength: countTextChars(candidateText) }).scrollIntoView({
+        mode: 'typewriter',
+      });
+      reconversion.replacementSourceText = candidateText;
+      clearReconversionCandidate(reconversion);
+      return;
+    }
+
     editor.dispatch({ type: 'compositionUpdate', text }).scrollIntoView({ mode: 'typewriter' });
   };
 
-  const handleCompositionEnd = () => {
+  const handleCompositionEnd = (e: CompositionEvent) => {
     if (editor.readOnly) return;
 
+    const committedText = e.data || inputEl?.value || '';
+    const replacementSourceText = reconversion.replacementSourceText;
+    if (suppressBlockedRecomposition(reconversion, keyEventSerial)) {
+      compositionActive = false;
+      compositionStartedFromTypingKey = false;
+      pendingKeyEvent = undefined;
+      pendingCommittedInputSync = null;
+      clearBlockedRecomposition(reconversion);
+      clearReplacementSourceText(reconversion);
+      clearInputBuffer();
+      return;
+    }
+
     editor.dispatch({ type: 'commitPreedit' });
+    pendingCommittedInputSync = committedText.length > 0 ? committedText : null;
+    if (committedText.length > 0) {
+      const nextCandidateText =
+        replacementSourceText === null
+          ? (reconversion.candidate?.text ?? '') + committedText
+          : getCommonSuffix(replacementSourceText, committedText);
+      setReconversionCandidate(reconversion, nextCandidateText, keyEventSerial);
+    } else if (replacementSourceText !== null) {
+      clearReconversionCandidate(reconversion);
+    }
+    clearReplacementSourceText(reconversion);
+    clearBlockedRecomposition(reconversion);
 
     if (inputEl) {
-      inputEl.value = lastInputValue.slice(-64);
+      inputEl.value = (replacementSourceText === null ? lastInputValue : (reconversion.candidate?.text ?? '')).slice(-64);
       lastInputValue = inputEl.value;
     }
+    compositionActive = false;
+    compositionStartedFromTypingKey = false;
 
     if (pendingKeyEvent) {
       handleKeyEvent(editor, pendingKeyEvent);
       pendingKeyEvent = undefined;
     }
-
-    compositionActive = false;
   };
 
   let pointerDownOutsideEditor = false;
