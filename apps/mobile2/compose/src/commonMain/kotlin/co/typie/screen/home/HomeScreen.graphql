@@ -1,0 +1,12 @@
+query HomeScreen_Query {
+  me @nonnull {
+    id
+    sites {
+      id
+      logo {
+        id
+        ...Img_image
+      }
+    }
+  }
+}

@@ -1,28 +1,28 @@
 {
-  "images" : [
+  "images": [
     {
-      "filename" : "SplashIcon.svg",
-      "idiom" : "universal",
-      "appearances" : [
+      "filename": "SplashIcon.svg",
+      "idiom": "universal",
+      "appearances": [
         {
-          "appearance" : "luminosity",
-          "value" : "light"
+          "appearance": "luminosity",
+          "value": "light"
         }
       ]
     },
     {
-      "filename" : "SplashIconDark.svg",
-      "idiom" : "universal",
-      "appearances" : [
+      "filename": "SplashIconDark.svg",
+      "idiom": "universal",
+      "appearances": [
         {
-          "appearance" : "luminosity",
-          "value" : "dark"
+          "appearance": "luminosity",
+          "value": "dark"
         }
       ]
     }
   ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
+  "info": {
+    "author": "xcode",
+    "version": 1
   }
 }

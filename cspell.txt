@@ -79,6 +79,7 @@ ktor
 kubeconfig
 kubelet
 lbipam
+lerp
 libx
 llen
 loro

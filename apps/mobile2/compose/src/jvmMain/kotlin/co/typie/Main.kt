@@ -26,6 +26,7 @@ import com.sun.jna.Pointer
 import com.sun.jna.Structure
 import java.awt.Taskbar
 import java.awt.Toolkit
+import java.util.prefs.Preferences
 import javax.imageio.ImageIO
 import javax.swing.SwingUtilities
 
@@ -104,19 +105,28 @@ fun main() {
   }
 
   val physicalScale = physicalSizeScale()
+  val preferPhysical = physicalScale >= 0.7
   val pointAccurateSize = DpSize(DEVICE_POINT_WIDTH.dp, DEVICE_POINT_HEIGHT.dp)
   val physicalSize = DpSize(
     (DEVICE_POINT_WIDTH * physicalScale).dp,
     (DEVICE_POINT_HEIGHT * physicalScale).dp,
   )
 
+  val prefs = Preferences.userRoot().node("co/typie")
+  val savedWindowX = prefs.getInt("windowX", -1)
+  val savedWindowY = prefs.getInt("windowY", -1)
+
   application {
-    var usePhysicalScale by remember { mutableStateOf(true) }
-    val windowState = remember { WindowState(size = physicalSize) }
+    var usePhysicalScale by remember { mutableStateOf(preferPhysical) }
+    val windowState = remember {
+      WindowState(size = if (preferPhysical) physicalSize else pointAccurateSize)
+    }
 
     Window(
       onCloseRequest = ::exitApplication,
       alwaysOnTop = true,
+      transparent = true,
+      undecorated = true,
       title = "Typie",
       state = windowState,
       onPreviewKeyEvent = { event ->
@@ -138,7 +148,17 @@ fun main() {
       },
     ) {
       LaunchedEffect(Unit) {
-        SwingUtilities.invokeLater { disableWindowFullScreen() }
+        SwingUtilities.invokeLater {
+          disableWindowFullScreen()
+          if (savedWindowX >= 0 && savedWindowY >= 0) {
+            val screens = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
+            val visible =
+              screens.any { it.defaultConfiguration.bounds.contains(savedWindowX, savedWindowY) }
+            if (visible) {
+              window.setLocation(savedWindowX, savedWindowY)
+            }
+          }
+        }
       }
       val currentDensity = LocalDensity.current
       val scale = if (usePhysicalScale) physicalScale.toFloat() else 1f

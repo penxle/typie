@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,11 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
+import co.typie.ext.clickable
+import co.typie.ext.navigationBarsPadding
 import co.typie.icons.Lucide
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
 import co.typie.route.Route
-import co.typie.ui.clickable
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
@@ -93,8 +93,6 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 
 @Composable
 private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Modifier = Modifier) {
-  val pillColor =
-    if (AppTheme.colors.isDark) AppTheme.colors.surfaceSubtle else AppTheme.colors.surfaceDefault
   val pillShape = RoundedCornerShape(30.dp)
 
   Box(
@@ -107,7 +105,8 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
     ) {
       // Pill
       Row(
-        Modifier.weight(1f).shadow(12.dp, pillShape).clip(pillShape).background(pillColor)
+        Modifier.weight(1f).shadow(12.dp, pillShape).clip(pillShape)
+          .background(AppTheme.colors.surfaceElevated)
           .border(1.dp, AppTheme.colors.borderDefault, pillShape).height(60.dp),
       ) {
         Tab.entries.forEach { tab ->
@@ -139,15 +138,16 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
       Spacer(Modifier.width(FAB_GAP.dp))
 
       // FAB
-      Fab(pillColor = pillColor)
+      Fab()
     }
   }
 }
 
 @Composable
-private fun Fab(pillColor: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+private fun Fab(modifier: Modifier = Modifier) {
   Box(
-    modifier.size(FAB_SIZE.dp).shadow(12.dp, CircleShape).clip(CircleShape).background(pillColor)
+    modifier.size(FAB_SIZE.dp).shadow(12.dp, CircleShape).clip(CircleShape)
+      .background(AppTheme.colors.surfaceElevated)
       .border(1.dp, AppTheme.colors.borderDefault, CircleShape).clickable { /* TODO */ },
     contentAlignment = Alignment.Center,
   ) {

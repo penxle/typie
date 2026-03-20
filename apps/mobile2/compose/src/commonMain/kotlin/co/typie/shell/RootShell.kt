@@ -10,10 +10,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import co.typie.auth.AuthService
 import co.typie.auth.AuthState
-import co.typie.route.AuthRoutes
-import co.typie.route.MainRoutes
 import co.typie.overlay.LoaderOverlay
 import co.typie.overlay.ToastOverlay
+import co.typie.route.AuthRoutes
+import co.typie.route.MainRoutes
 import co.typie.screen.splash.SplashScreen
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.koinInject

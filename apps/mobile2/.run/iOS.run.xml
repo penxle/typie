@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration name="iOS" APPLICATION_LANGUAGE="IDELaunchSchemeLanguageUseSystemLanguage"
+    APPLICATION_REGION="" CONFIG_NAME="Debug" DEVELOPMENT_TEAM="${TEAM_ID}" ELEVATE="false"
+    EMULATE_TERMINAL="false" IS_LOCATION_SIMULATION_ALLOWED="true"
+    IS_LOCATION_SIMULATION_SUPPORTED="true"
+    LOCATION_SCENARIO_ID="com.apple.dt.IDEFoundation.CurrentLocationScenarioIdentifier"
+    LOCATION_SCENARIO_TYPE="1" MAKE_ACTIVE="TRUE" PASS_PARENT_ENVS_2="true" PROJECT_NAME="App"
+    REDIRECT_INPUT="false" RUN_TARGET_NAME="App" RUN_TARGET_PROJECT_NAME="App" SCHEME_NAME="iOS"
+    SHOULD_DEBUG_EXTENSIONS="false" TARGET_NAME="App" USE_EXTERNAL_CONSOLE="false" default="false"
+    factoryName="Application" type="AppleRunConfiguration">
+    <embedded_app_extension_list />
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask"
+        enabled="true" />
+    </method>
+  </configuration>
+</component>

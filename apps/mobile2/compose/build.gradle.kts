@@ -115,12 +115,14 @@ kotlin {
     implementation(libs.koin.compose.viewmodel)
     implementation(libs.koin.core)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)
     implementation(libs.apollo.runtime)
     implementation(libs.apollo.engine.ktor)
     implementation(libs.apollo.normalized.cache)
     implementation(libs.ksafe)
+    implementation(libs.haze)
 
     testImplementation(libs.kotlin.test)
   }

@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -29,11 +27,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import co.typie.ext.ime
+import co.typie.ext.safeDrawing
+import co.typie.ext.toDp
 import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.ui.component.Text
@@ -50,15 +48,15 @@ fun ToastOverlay() {
   val toastState by toast.state.collectAsState()
 
   val density = LocalDensity.current
-  val imeBottom = WindowInsets.ime.getBottom(density)
-  val safeBottom = WindowInsets.safeDrawing.getBottom(density)
-  val bottomOffsetPx = imeBottom + safeBottom + with(density) { 12.dp.toPx() }.toInt()
+  val imeBottom = WindowInsets.ime.getBottom(density).toDp(density)
+  val safeBottom = WindowInsets.safeDrawing.getBottom(density).toDp(density)
+  val bottomOffset = imeBottom + safeBottom + 12.dp
 
   Box(Modifier.fillMaxSize()) {
     toastState?.let { state ->
       AnimatedToast(
         state = state,
-        bottomOffsetPx = bottomOffsetPx,
+        bottomOffset = bottomOffset,
         onDismiss = { toast.dismiss() },
       )
     }
@@ -68,7 +66,7 @@ fun ToastOverlay() {
 @Composable
 private fun AnimatedToast(
   state: ToastState,
-  bottomOffsetPx: Int,
+  bottomOffset: Dp,
   onDismiss: () -> Unit,
 ) {
   val alpha = remember { Animatable(0f) }
@@ -106,7 +104,7 @@ private fun AnimatedToast(
   ) {
     Box(
       modifier = Modifier
-        .offset { IntOffset(0, -bottomOffsetPx) }
+        .offset(y = -bottomOffset)
         .padding(horizontal = 24.dp)
         .fillMaxWidth()
         .background(AppTheme.colors.surfaceDark, RoundedCornerShape(22.dp))
@@ -140,11 +138,8 @@ private fun AnimatedToast(
         Spacer(Modifier.width(8.dp))
         Text(
           text = state.message,
-          style = TextStyle(
-            fontSize = 14.sp,
-            fontWeight = FontWeight.W500,
-            color = AppTheme.colors.textBright,
-          ),
+          style = AppTheme.typography.body,
+          color = AppTheme.colors.textBright,
         )
       }
     }

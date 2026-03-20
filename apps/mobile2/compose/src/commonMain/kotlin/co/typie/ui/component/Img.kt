@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
+import co.typie.ext.toPx
 import co.typie.graphql.fragment.Img_image
 import coil3.compose.AsyncImage
 import kotlin.math.ceil
@@ -24,9 +25,7 @@ fun Img(
   if (image == null) return
 
   val density = LocalDensity.current
-  val fetchSize = with(density) {
-    2.0.pow(ceil(log2((size.toPx() * density.density).toDouble()))).toInt()
-  }
+  val fetchSize = 2.0.pow(ceil(log2((size.toPx(density) * density.density).toDouble()))).toInt()
 
   AsyncImage(
     model = "${image.url}?s=$fetchSize&q=75",

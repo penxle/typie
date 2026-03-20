@@ -34,6 +34,7 @@ data class AppColors(
   val surfaceSubtle: Color,
   val surfaceMuted: Color,
   val surfaceDark: Color,
+  val surfaceElevated: Color,
 
   // Interactive
   val interactiveHover: Color,
@@ -69,6 +70,7 @@ data class AppColors(
   val borderSubtle: Color,
   val borderBrand: Color,
   val borderDanger: Color,
+  val borderElevated: Color,
 
   // Shadow
   val shadowDefault: Color,
@@ -76,6 +78,7 @@ data class AppColors(
 
 val LightColors = AppColors(
   isDark = false,
+
   textDefault = AppColor.light.gray.s900,
   textSubtle = AppColor.light.gray.s700,
   textMuted = AppColor.light.gray.s600,
@@ -91,6 +94,7 @@ val LightColors = AppColors(
   surfaceSubtle = AppColor.light.gray.s50,
   surfaceMuted = AppColor.light.gray.s100,
   surfaceDark = AppColor.light.gray.s700,
+  surfaceElevated = AppColor.white,
 
   interactiveHover = AppColor.light.gray.s200,
   interactiveDisabled = AppColor.light.gray.s200,
@@ -119,12 +123,14 @@ val LightColors = AppColors(
   borderSubtle = AppColor.light.gray.s100,
   borderBrand = AppColor.light.brand.s600,
   borderDanger = AppColor.light.red.s600,
+  borderElevated = AppColor.light.gray.s100,
 
   shadowDefault = AppColor.light.gray.s950,
 )
 
 val DarkColors = AppColors(
   isDark = true,
+
   textDefault = AppColor.dark.gray.s50,
   textSubtle = AppColor.dark.gray.s100,
   textMuted = AppColor.dark.gray.s200,
@@ -140,6 +146,7 @@ val DarkColors = AppColors(
   surfaceSubtle = AppColor.dark.gray.s800,
   surfaceMuted = AppColor.dark.gray.s700,
   surfaceDark = AppColor.dark.gray.s700,
+  surfaceElevated = AppColor.dark.gray.s800,
 
   interactiveHover = AppColor.dark.gray.s600,
   interactiveDisabled = AppColor.dark.gray.s800,
@@ -168,6 +175,7 @@ val DarkColors = AppColors(
   borderSubtle = AppColor.dark.gray.s800,
   borderBrand = AppColor.dark.brand.s400,
   borderDanger = AppColor.dark.red.s400,
+  borderElevated = AppColor.dark.gray.s700,
 
   shadowDefault = AppColor.dark.gray.s950,
 )
@@ -199,4 +207,7 @@ object AppTheme {
 
   val themeMode: ThemeMode
     @Composable get() = LocalThemeMode.current.value
+
+  val typography: AppTypography
+    get() = AppTypography
 }

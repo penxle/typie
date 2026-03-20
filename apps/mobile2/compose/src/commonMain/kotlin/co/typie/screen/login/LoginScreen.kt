@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,17 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import co.typie.auth.sso.activityContext
 import co.typie.di.Platform
+import co.typie.ext.clickable
+import co.typie.ext.safeDrawing
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.navigation.Nav
 import co.typie.route.Route
-import co.typie.ui.clickable
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppTheme
@@ -46,7 +43,7 @@ fun LoginScreen() {
   val platform = koinInject<Platform>()
   val ctx = activityContext()
 
-  Screen {
+  Screen { _ ->
     Column(
       modifier = Modifier
         .fillMaxSize()
@@ -65,11 +62,11 @@ fun LoginScreen() {
           colorFilter = ColorFilter.tint(AppTheme.colors.textDefault),
         )
         Spacer(Modifier.height(24.dp))
-        Text("작성, 정리, 공유까지.", style = TextStyle(fontSize = 16.sp))
+        Text("작성, 정리, 공유까지.")
         Spacer(Modifier.height(4.dp))
-        Text("글쓰기의 모든 과정을", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.W700))
+        Text("글쓰기의 모든 과정을", style = AppTheme.typography.title)
         Spacer(Modifier.height(4.dp))
-        Text("타이피 하나로 해결해요.", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.W700))
+        Text("타이피 하나로 해결해요.", style = AppTheme.typography.title)
       }
 
       Column(
@@ -117,7 +114,8 @@ fun LoginScreen() {
 
         Text(
           "이메일로 가입하셨나요?",
-          style = TextStyle(fontSize = 14.sp, color = AppTheme.colors.textSubtle),
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textSubtle,
           modifier = Modifier
             .padding(horizontal = 24.dp, vertical = 8.dp)
             .clickable { nav.navigate(Route.LoginWithEmail) },
@@ -158,12 +156,8 @@ private fun Button(
     )
     Text(
       text,
-      style = TextStyle(
-        fontSize = 15.sp,
-        lineHeight = 15.sp,
-        fontWeight = FontWeight.W600,
-        color = foregroundColor
-      ),
+      style = AppTheme.typography.action,
+      color = foregroundColor,
       modifier = Modifier.align(Alignment.Center),
     )
   }

@@ -5,25 +5,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import co.typie.ext.clickable
 import co.typie.navigation.Nav
-import co.typie.ui.clickable
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.theme.AppTheme
 
 @Composable
 fun DetailScreen(id: String) {
   val nav = Nav.current
-  Screen {
+  Screen { _ ->
     Column(Modifier.fillMaxSize().padding(16.dp)) {
       Text(
         "< Back",
-        style = TextStyle(fontSize = 16.sp),
         modifier = Modifier.clickable { nav.pop() }.padding(bottom = 16.dp),
       )
-      Text("Detail: $id", style = TextStyle(fontSize = 20.sp))
+      Text("Detail: $id", style = AppTheme.typography.display)
     }
   }
 }

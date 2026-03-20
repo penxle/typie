@@ -25,12 +25,12 @@ fun SplashScreen() {
     modifier = Modifier.fillMaxSize().background(backgroundColor),
     contentAlignment = Alignment.Center,
   ) {
-      AsyncImage(
-        model = Res.getUri("files/logos/full.svg"),
-        contentDescription = null,
-        modifier = Modifier.size(64.dp),
-        contentScale = ContentScale.Fit,
-        colorFilter = ColorFilter.tint(iconTint),
-      )
+    AsyncImage(
+      model = Res.getUri("files/logos/full.svg"),
+      contentDescription = null,
+      modifier = Modifier.size(64.dp),
+      contentScale = ContentScale.Fit,
+      colorFilter = ColorFilter.tint(iconTint),
+    )
   }
 }

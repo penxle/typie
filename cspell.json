@@ -24,6 +24,7 @@
     "*.py",
     "*.sh",
     "*.bak",
+    "**/.run/**",
     "justfile",
     "**/vendor/**",
     "**/pkg/**",
