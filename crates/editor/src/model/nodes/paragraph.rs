@@ -130,7 +130,6 @@ struct DeclaredStrutRun {
 
 fn resolve_strut_font_defaults(
     ctx: &LayoutContext,
-    has_preedit: bool,
     is_text_empty: bool,
     cascade_family: &str,
     cascade_weight: u16,
@@ -142,7 +141,7 @@ fn resolve_strut_font_defaults(
         font_size: cascade_font_size,
     };
 
-    if has_preedit || is_text_empty {
+    if is_text_empty {
         return cascade_defaults;
     }
 
@@ -229,7 +228,7 @@ fn resolve_declared_segment_strut_defaults(
 
 fn resolve_strut_request<'a>(
     defaults: &'a StrutFontDefaults,
-    extra_styles: Option<&[Style]>,
+    extra_styles: Option<&'a [Style]>,
     extra_style_default_font_size: u32,
 ) -> StrutRequest<'a> {
     let mut request = StrutRequest {
@@ -265,6 +264,7 @@ fn resolve_strut_request<'a>(
 
     for style in styles {
         match style {
+            Style::FontFamily(font_family) => request.family = &font_family.family,
             Style::FontWeight(font_weight) => request.weight = font_weight.weight,
             Style::Italic(_) => request.style = FontStyle::Italic,
             _ => {}
@@ -501,6 +501,29 @@ fn apply_pending_styles_to_builder(
             continue;
         }
         apply_style_to_builder(builder, style, range.clone(), font_size);
+    }
+}
+
+fn apply_text_brush_to_builder(
+    builder: &mut parley::RangedBuilder<'_, TextBrush>,
+    styles: &[Style],
+    range: std::ops::Range<usize>,
+) {
+    if range.start >= range.end {
+        return;
+    }
+
+    let embolden = styles.iter().any(|style| matches!(style, Style::Bold(_)));
+    let color = styles
+        .iter()
+        .find_map(|style| match style {
+            Style::TextColor(text_color) => Some(format!("text.{}", text_color.color)),
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    if embolden || !color.is_empty() {
+        builder.push(StyleProperty::Brush(TextBrush { color, embolden }), range);
     }
 }
 
@@ -779,18 +802,6 @@ impl Layout for ParagraphNode {
                                 });
                             }
 
-                            // Build TextBrush from segment styles (color + embolden)
-                            let has_embolden =
-                                segment.styles.iter().any(|s| matches!(s, Style::Bold(_)));
-                            let text_color = segment
-                                .styles
-                                .iter()
-                                .find_map(|s| match s {
-                                    Style::TextColor(m) => Some(format!("text.{}", m.color)),
-                                    _ => None,
-                                })
-                                .unwrap_or_default();
-
                             {
                                 let (start, end) = map_range_with_preedit(
                                     (base_start, base_end),
@@ -799,16 +810,7 @@ impl Layout for ParagraphNode {
                                 );
                                 let range = char_to_byte_offset_with_map(&char_to_byte, start)
                                     ..char_to_byte_offset_with_map(&char_to_byte, end);
-
-                                if has_embolden || !text_color.is_empty() {
-                                    builder.push(
-                                        StyleProperty::Brush(TextBrush {
-                                            color: text_color,
-                                            embolden: has_embolden,
-                                        }),
-                                        range,
-                                    );
-                                }
+                                apply_text_brush_to_builder(&mut builder, &segment.styles, range);
                             }
 
                             // Push remaining styles (FontSize, FontWeight, LetterSpacing, etc.)
@@ -895,6 +897,7 @@ impl Layout for ParagraphNode {
                 let preedit_end = preedit_start + preedit.text.chars().count();
                 let range = char_to_byte_offset_with_map(&char_to_byte, preedit_start)
                     ..char_to_byte_offset_with_map(&char_to_byte, preedit_end);
+                apply_text_brush_to_builder(&mut builder, &ps.styles, range.clone());
                 apply_pending_styles_to_builder(&mut builder, &ps.styles, range, 1200);
 
                 let preedit_defaults =
@@ -930,6 +933,7 @@ impl Layout for ParagraphNode {
             drop(font_interner);
 
             if is_text_empty && let Some(ps) = pending_styles {
+                apply_text_brush_to_builder(&mut builder, &ps.styles, 0..text.len());
                 apply_pending_styles_to_builder(&mut builder, &ps.styles, 0..text.len(), 1200);
             }
 
@@ -972,7 +976,6 @@ impl Layout for ParagraphNode {
                 let ps_styles = pending_styles.map(|ps| &ps.styles[..]);
                 let strut_defaults = resolve_strut_font_defaults(
                     ctx,
-                    preedit.is_some(),
                     is_text_empty,
                     &cascade_family,
                     cascade_weight,
@@ -1128,7 +1131,7 @@ mod tests {
     use crate::layout::{Element, LayoutCache, LayoutNode};
     use crate::model::{
         Attr, BackgroundColorStyle, Decorations, DefaultAttrs, FontFamilyStyle, FontSizeStyle,
-        FontWeightStyle, PendingStylesDecor, PreeditDecor,
+        FontWeightStyle, PendingStylesDecor, PreeditDecor, TextColorStyle,
     };
     use crate::runtime::ViewStates;
     use crate::types::BoxConstraints;
@@ -1364,6 +1367,57 @@ mod tests {
         let strut_defaults = resolve_strut_font_defaults(
             &ctx,
             false,
+            &cascade_family,
+            cascade_weight,
+            cascade_font_size,
+        );
+
+        assert_eq!(strut_defaults.family, "Pretendard");
+        assert_eq!(strut_defaults.weight, cascade_weight);
+        assert_eq!(strut_defaults.font_size, cascade_font_size);
+    }
+
+    #[test]
+    fn strut_defaults_with_preedit_prefer_visible_text_styles_over_hidden_cascade_font() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (p, 0) }
+        };
+        let state = transact!(state, |tr| {
+            tr.set_cascade_attrs(
+                p,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "Paperlogy".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+
+        let doc = &state.doc;
+        let para = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = doc.default_attrs();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+        let (cascade_family, cascade_weight, cascade_font_size) = ctx.resolve_cascade_font();
+
+        let strut_defaults = resolve_strut_font_defaults(
+            &ctx,
             false,
             &cascade_family,
             cascade_weight,
@@ -1373,6 +1427,23 @@ mod tests {
         assert_eq!(strut_defaults.family, "Pretendard");
         assert_eq!(strut_defaults.weight, cascade_weight);
         assert_eq!(strut_defaults.font_size, cascade_font_size);
+    }
+
+    #[test]
+    fn resolve_strut_request_uses_pending_font_family() {
+        let defaults = StrutFontDefaults {
+            family: "Paperlogy".to_string(),
+            weight: 400,
+            font_size: 1200,
+        };
+        let styles = vec![Style::FontFamily(FontFamilyStyle {
+            family: "Pretendard".to_string(),
+        })];
+
+        let request = resolve_strut_request(&defaults, Some(&styles), 1200);
+
+        assert_eq!(request.family, "Pretendard");
+        assert_eq!(request.weight, 400);
     }
 
     #[test]
@@ -1417,7 +1488,6 @@ mod tests {
 
         let strut_defaults = resolve_strut_font_defaults(
             &ctx,
-            false,
             false,
             &cascade_family,
             cascade_weight,
@@ -1594,6 +1664,86 @@ mod tests {
         assert_eq!(segments[1].start_offset, 1);
         assert_eq!(segments[1].end_offset, 3);
         assert_eq!(segments[1].color_key, "blue");
+    }
+
+    #[test]
+    fn preedit_applies_pending_text_color_brush() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {}
+            }
+            selection { (p, 0) }
+        };
+
+        let mut decorations = Decorations::default();
+        decorations.preedit = Some(PreeditDecor {
+            node_id: p,
+            offset: 0,
+            text: "한".into(),
+        });
+        decorations.pending_styles = PendingStylesDecor {
+            node_id: p,
+            styles: vec![Style::TextColor(TextColorStyle {
+                color: "red".into(),
+            })],
+        };
+
+        let doc = &state.doc;
+        let para = doc.node(p).unwrap();
+        let settings = doc.settings();
+        let default_attrs = DefaultAttrs::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+        let ctx = LayoutContext::new(
+            &para,
+            &settings,
+            &default_attrs,
+            &decorations,
+            1.0,
+            &view_states,
+            &cache,
+        );
+        let constraints = BoxConstraints::new(0.0, 800.0, 0.0, f32::INFINITY);
+
+        let layout = if let Some(Node::Paragraph(paragraph)) = para.node() {
+            paragraph.layout(&ctx, constraints)
+        } else {
+            panic!("paragraph node expected");
+        };
+
+        let line = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("line element expected");
+        let parley_line = line
+            .layout
+            .get(line.line_idx)
+            .expect("parley line expected");
+
+        let colors = parley_line
+            .items()
+            .filter_map(|item| match item {
+                parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                    Some(glyph_run.style().brush.color.clone())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            colors.iter().any(|color| color == "text.red"),
+            "preedit should use pending text color brush, got: {:?}",
+            colors
+        );
     }
 
     #[test]
