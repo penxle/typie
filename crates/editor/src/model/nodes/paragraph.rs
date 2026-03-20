@@ -14,9 +14,11 @@ use crate::utils::{
 };
 use macros::Codec;
 use parley::style::*;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn map_range_with_preedit(
     (start, end): (usize, usize),
@@ -60,6 +62,56 @@ fn pending_styles_for_node<'a>(ctx: &'a LayoutContext<'a>) -> Option<&'a Pending
     } else {
         None
     }
+}
+
+fn collect_mapped_font_runs(
+    text: &str,
+    start_offset: usize,
+    family: &str,
+    weight: u16,
+    font_mappings: &FxHashMap<(Arc<str>, u16, u32), (Arc<str>, u16)>,
+    font_interner: &std::collections::HashMap<String, Arc<str>>,
+) -> Vec<(usize, usize, Arc<str>, u16)> {
+    let interned_primary = font_interner
+        .get(family)
+        .cloned()
+        .unwrap_or_else(|| Arc::from(family));
+
+    let mut runs = Vec::new();
+    let mut current_resolved: Option<(Arc<str>, u16)> = None;
+    let mut range_start = start_offset;
+
+    for (i, ch) in text.chars().enumerate() {
+        let char_idx = start_offset + i;
+        let cp = ch as u32;
+        let resolved = font_mappings
+            .get(&(interned_primary.clone(), weight, cp))
+            .cloned()
+            .unwrap_or_else(|| (interned_primary.clone(), weight));
+
+        let is_same = current_resolved
+            .as_ref()
+            .is_some_and(|prev| prev.0 == resolved.0 && prev.1 == resolved.1);
+
+        if !is_same {
+            if let Some((prev_family, prev_weight)) = current_resolved.take() {
+                runs.push((range_start, char_idx, prev_family, prev_weight));
+            }
+            current_resolved = Some(resolved);
+            range_start = char_idx;
+        }
+    }
+
+    if let Some((prev_family, prev_weight)) = current_resolved {
+        runs.push((
+            range_start,
+            start_offset + text.chars().count(),
+            prev_family,
+            prev_weight,
+        ));
+    }
+
+    runs
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -665,8 +717,6 @@ impl Layout for ParagraphNode {
 
         let layout = GLOBALS.with(|globals| {
             use parley::style::*;
-            use rustc_hash::FxHashMap;
-
             let globals = globals.borrow();
 
             let mut lcx = globals.parley_layout_context.borrow_mut();
@@ -783,62 +833,18 @@ impl Layout for ParagraphNode {
                             let segment_family = segment_defaults.family.as_str();
                             let segment_weight = segment_defaults.weight;
 
-                            let interned_primary = font_interner
-                                .get(segment_family)
-                                .cloned()
-                                .unwrap_or_else(|| std::sync::Arc::from(segment_family));
-
-                            let mut current_resolved: Option<(std::sync::Arc<str>, u16)> = None;
-                            let mut range_start_char = base_start;
-
-                            for (i, ch) in segment.text.chars().enumerate() {
-                                let char_idx = base_start + i;
-                                let cp = ch as u32;
-
-                                let resolved = font_mappings
-                                    .get(&(interned_primary.clone(), segment_weight, cp))
-                                    .cloned()
-                                    .unwrap_or_else(|| (interned_primary.clone(), segment_weight));
-
-                                let is_same = current_resolved.as_ref().map_or(false, |prev| {
-                                    prev.0 == resolved.0 && prev.1 == resolved.1
-                                });
-
-                                if !is_same {
-                                    // Flush previous range
-                                    if let Some(ref prev) = current_resolved {
-                                        let (start, end) = map_range_with_preedit(
-                                            (range_start_char, char_idx),
-                                            preedit_info,
-                                            &Expand::None,
-                                        );
-                                        let byte_range =
-                                            char_to_byte_offset_with_map(&char_to_byte, start)
-                                                ..char_to_byte_offset_with_map(&char_to_byte, end);
-                                        builder.push(
-                                            StyleProperty::FontFamily(FontFamily::Single(
-                                                FontFamilyName::Named(prev.0.to_string().into()),
-                                            )),
-                                            byte_range.clone(),
-                                        );
-                                        if prev.1 != segment_weight {
-                                            builder.push(
-                                                StyleProperty::FontWeight(FontWeight::new(
-                                                    prev.1 as f32,
-                                                )),
-                                                byte_range,
-                                            );
-                                        }
-                                    }
-                                    current_resolved = Some(resolved);
-                                    range_start_char = char_idx;
-                                }
-                            }
-
-                            // Flush last range
-                            if let Some(ref prev) = current_resolved {
+                            for (run_start, run_end, resolved_family, resolved_weight) in
+                                collect_mapped_font_runs(
+                                    &segment.text,
+                                    base_start,
+                                    segment_family,
+                                    segment_weight,
+                                    &font_mappings,
+                                    &font_interner,
+                                )
+                            {
                                 let (start, end) = map_range_with_preedit(
-                                    (range_start_char, base_end),
+                                    (run_start, run_end),
                                     preedit_info,
                                     &Expand::None,
                                 );
@@ -846,13 +852,15 @@ impl Layout for ParagraphNode {
                                     ..char_to_byte_offset_with_map(&char_to_byte, end);
                                 builder.push(
                                     StyleProperty::FontFamily(FontFamily::Single(
-                                        FontFamilyName::Named(prev.0.to_string().into()),
+                                        FontFamilyName::Named(resolved_family.to_string().into()),
                                     )),
                                     byte_range.clone(),
                                 );
-                                if prev.1 != segment_weight {
+                                if resolved_weight != segment_weight {
                                     builder.push(
-                                        StyleProperty::FontWeight(FontWeight::new(prev.1 as f32)),
+                                        StyleProperty::FontWeight(FontWeight::new(
+                                            resolved_weight as f32,
+                                        )),
                                         byte_range,
                                     );
                                 }
@@ -882,16 +890,44 @@ impl Layout for ParagraphNode {
                 }
             }
 
-            drop(font_mappings);
-            drop(font_interner);
-
             if let (Some(preedit), Some(ps)) = (preedit, pending_styles) {
                 let preedit_start = preedit.offset;
                 let preedit_end = preedit_start + preedit.text.chars().count();
                 let range = char_to_byte_offset_with_map(&char_to_byte, preedit_start)
                     ..char_to_byte_offset_with_map(&char_to_byte, preedit_end);
                 apply_pending_styles_to_builder(&mut builder, &ps.styles, range, 1200);
+
+                let preedit_defaults =
+                    resolve_declared_segment_strut_defaults(&ps.styles, &cascade_defaults);
+                for (run_start, run_end, resolved_family, resolved_weight) in
+                    collect_mapped_font_runs(
+                        &preedit.text,
+                        preedit_start,
+                        &preedit_defaults.family,
+                        preedit_defaults.weight,
+                        &font_mappings,
+                        &font_interner,
+                    )
+                {
+                    let byte_range = char_to_byte_offset_with_map(&char_to_byte, run_start)
+                        ..char_to_byte_offset_with_map(&char_to_byte, run_end);
+                    builder.push(
+                        StyleProperty::FontFamily(FontFamily::Single(FontFamilyName::Named(
+                            resolved_family.to_string().into(),
+                        ))),
+                        byte_range.clone(),
+                    );
+                    if resolved_weight != preedit_defaults.weight {
+                        builder.push(
+                            StyleProperty::FontWeight(FontWeight::new(resolved_weight as f32)),
+                            byte_range,
+                        );
+                    }
+                }
             }
+
+            drop(font_mappings);
+            drop(font_interner);
 
             if is_text_empty && let Some(ps) = pending_styles {
                 apply_pending_styles_to_builder(&mut builder, &ps.styles, 0..text.len(), 1200);
@@ -1096,7 +1132,35 @@ mod tests {
     };
     use crate::runtime::ViewStates;
     use crate::types::BoxConstraints;
-    use std::cell::RefCell;
+    use rustc_hash::FxHashMap;
+    use std::{cell::RefCell, collections::HashMap, sync::Arc};
+
+    #[test]
+    fn mapped_font_runs_include_preedit_codepoints() {
+        let mut font_mappings = FxHashMap::default();
+        font_mappings.insert(
+            (Arc::<str>::from("Pretendard"), 400, '한' as u32),
+            (Arc::<str>::from("Paperlogy"), 700),
+        );
+
+        let font_interner = HashMap::from([
+            ("Pretendard".to_string(), Arc::<str>::from("Pretendard")),
+            ("Paperlogy".to_string(), Arc::<str>::from("Paperlogy")),
+        ]);
+
+        let runs =
+            collect_mapped_font_runs("한글", 3, "Pretendard", 400, &font_mappings, &font_interner);
+
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].0, 3);
+        assert_eq!(runs[0].1, 4);
+        assert_eq!(&*runs[0].2, "Paperlogy");
+        assert_eq!(runs[0].3, 700);
+        assert_eq!(runs[1].0, 4);
+        assert_eq!(runs[1].1, 5);
+        assert_eq!(&*runs[1].2, "Pretendard");
+        assert_eq!(runs[1].3, 400);
+    }
 
     #[test]
     fn layout_handles_multibyte_style_ranges() {
