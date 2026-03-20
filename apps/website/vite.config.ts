@@ -1,3 +1,5 @@
+/// <reference types="vitest/config" />
+
 import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -6,7 +8,7 @@ import mearie from 'mearie/vite';
 import { FileSystemIconLoader } from 'unplugin-icons/loaders';
 import icons from 'unplugin-icons/vite';
 import { defineConfig } from 'vite';
-import type { Plugin } from 'vite';
+import type { Plugin, UserConfig } from 'vite';
 
 const currentDir = fileURLToPath(new URL('.', import.meta.url));
 const editorPkgDir = path.resolve(currentDir, '../../crates/editor/pkg');
@@ -46,7 +48,7 @@ const wasmReloadPlugin = (): Plugin => {
   };
 };
 
-export default defineConfig({
+const config = {
   clearScreen: false,
   plugins: [
     svg(),
@@ -71,4 +73,10 @@ export default defineConfig({
       allow: ['../..'],
     },
   },
-});
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
+  },
+};
+
+export default defineConfig(config as UserConfig);

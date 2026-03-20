@@ -63,6 +63,16 @@ export type Selection = {
   head: Position;
   anchorBounds: SelectionEndpointBounds | null;
   headBounds: SelectionEndpointBounds | null;
+  precedingText: string;
+  followingText: string;
+};
+
+export type EditorInputSnapshot = {
+  collapsed: boolean;
+  nodeId: string | null;
+  cursorOffset: number;
+  precedingText: string;
+  followingText: string;
 };
 
 export type Attribute =

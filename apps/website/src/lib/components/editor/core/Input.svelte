@@ -1,21 +1,25 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
-  import { IS_IOS_SAFARI, IS_MAC } from '$lib/editor/constants';
+  import { IS_MAC } from '$lib/editor/constants';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { handleKeyEvent } from '$lib/editor/keyboard';
   import {
-    clearBlockedRecomposition,
-    clearReconversionCandidate,
-    clearReconversionState,
-    clearReplacementSourceText,
-    countTextChars,
-    createReconversionState,
-    getCommonSuffix,
-    markBlockedRecompositionDelete,
-    setReconversionCandidate,
-    startBlockedRecomposition,
-    suppressBlockedRecomposition,
-  } from './ime-reconversion';
+    createBeforeInputState,
+    createCompositionTrackingState,
+    createPendingDeltaState,
+    createSyntheticTextInputState,
+    inferSyntheticTextEditingDeltas,
+    invalidateSyntheticTextInputState,
+    readDomTextEditingValue,
+    reconcileSyntheticTextInputState,
+    reduceEditingDeltas,
+    resetCompositionTracking,
+    startCompositionTracking,
+    syncTextEditingValueToElement,
+    updateCompositionTracking,
+  } from '$lib/editor/synthetic-text-input';
+  import type { SyntheticInputMessage } from '$lib/editor/synthetic-text-input';
+  import type { Message } from '$lib/editor/types';
 
   type Props = {
     onFocus?: (e: FocusEvent) => void;
@@ -27,68 +31,140 @@
   const ctx = getEditorContext();
   const { editor } = ctx;
 
-  let inputEl = $state<HTMLInputElement>();
+  let inputEl = $state<HTMLTextAreaElement>();
+  let windowFocused = $state(typeof document === 'undefined' ? true : document.hasFocus());
+  let documentVisible = $state(typeof document === 'undefined' ? true : document.visibilityState === 'visible');
 
+  let sessionState = createSyntheticTextInputState();
+  let pendingDeltaState = createPendingDeltaState();
+  let compositionTracking = createCompositionTrackingState();
   let compositionActive = false;
-  let lastInputValue = '';
-  let pendingImeDelete = false;
-  let lastHandledBackspaceAt = 0;
-  let windowFocused = typeof document === 'undefined' ? true : document.hasFocus();
-  let documentVisible = typeof document === 'undefined' ? true : document.visibilityState === 'visible';
-  let keyEventSerial = 0;
-  let lastKeydownWasProcess = false;
-  let lastKeydownLooksLikeTypingInput = false;
-  let suppressNextBlurCallback = false;
-  let pendingCommittedInputSync: string | null = null;
-  let compositionStartedFromTypingKey = false;
+  let pendingKeyEvent: KeyboardEvent | undefined;
+  let pointerDownOutsideEditor = false;
+  let imeDebugSequence = 0;
 
-  let reconversion = $state(createReconversionState());
+  const MARKER_CODE_START = 0xe0_00;
+  const MARKER_CODE_END = 0xf0_00;
+  const IME_DEBUG_QUERY_PARAM = 'ime-debug';
 
-  const looksLikeTypingInputKeydown = (e: KeyboardEvent) => {
-    if (e.ctrlKey || e.metaKey || e.altKey) return false;
-    if (e.key.length === 1) return true;
-    if (e.key !== 'Process' && e.key !== 'Unidentified') return false;
-    return /^(Key[A-Z]|Digit[0-9]|Numpad\d)$/.test(e.code);
+  type DebugGlobal = typeof globalThis & {
+    __typieImeDebug?: boolean;
+    __typieImeLog?: unknown[];
   };
 
-  const clearInputBuffer = () => {
-    if (!inputEl) return;
-
-    inputEl.value = '';
-    lastInputValue = '';
-    pendingImeDelete = false;
-    pendingCommittedInputSync = null;
-    clearBlockedRecomposition(reconversion);
-  };
-
-  const resetNativeInputSession = () => {
-    if (!inputEl) return;
-
-    clearReconversionCandidate(reconversion);
-    clearReplacementSourceText(reconversion);
-    clearInputBuffer();
-
-    suppressNextBlurCallback = true;
-    inputEl.blur();
-    inputEl.focus({ preventScroll: true });
-  };
-
-  const cancelBlockedRecompositionUi = () => {
-    if (!inputEl) return;
-    if (typeof document !== 'undefined' && document.activeElement !== inputEl) return;
-
-    suppressNextBlurCallback = true;
-    inputEl.blur();
-  };
-
-  const resetInputState = () => {
-    if (inputEl) {
-      clearInputBuffer();
-
-      // 강제로 일본어 조합을 끝냄
-      inputEl.blur();
-      inputEl.focus({ preventScroll: true });
+  const imeDebugEnabled = () => {
+    if (typeof window === 'undefined') {
+      return false;
     }
+
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has(IME_DEBUG_QUERY_PARAM)) {
+      return false;
+    }
+
+    const value = params.get(IME_DEBUG_QUERY_PARAM);
+    return value == null || value === '' || value === '1' || value.toLowerCase() === 'true';
+  };
+
+  const debugText = (text: string) =>
+    [...text]
+      .map((char) => {
+        const codePoint = char.codePointAt(0) ?? 0;
+        if (char === '◆' || char === '\u200B') {
+          return '⟪S⟫';
+        }
+
+        if (codePoint >= MARKER_CODE_START && codePoint < MARKER_CODE_END) {
+          return `⟪M:${codePoint.toString(16)}⟫`;
+        }
+
+        return char;
+      })
+      .join('');
+
+  const serializeValue = (value: {
+    text: string;
+    selection: { baseOffset: number; extentOffset: number };
+    composing: { start: number; end: number };
+  }) => ({
+    text: debugText(value.text),
+    rawText: value.text,
+    selection: {
+      baseOffset: value.selection.baseOffset,
+      extentOffset: value.selection.extentOffset,
+    },
+    composing: {
+      start: value.composing.start,
+      end: value.composing.end,
+    },
+  });
+
+  const serializePendingDelta = () => ({
+    inputType: pendingDeltaState.inputType,
+    data: pendingDeltaState.data,
+    deltaText: debugText(pendingDeltaState.deltaText),
+    deltaStart: pendingDeltaState.deltaStart,
+    deltaEnd: pendingDeltaState.deltaEnd,
+  });
+
+  const serializeCompositionTracking = () => ({
+    active: compositionTracking.active,
+    text: compositionTracking.text == null ? null : debugText(compositionTracking.text),
+    base: compositionTracking.base,
+    replaceStart: compositionTracking.replaceStart,
+    replaceEnd: compositionTracking.replaceEnd,
+  });
+
+  const serializeDomSnapshot = () =>
+    inputEl
+      ? {
+          value: debugText(inputEl.value),
+          rawValue: inputEl.value,
+          selectionStart: inputEl.selectionStart,
+          selectionEnd: inputEl.selectionEnd,
+          selectionDirection: inputEl.selectionDirection,
+        }
+      : null;
+
+  const serializeEditorSelection = () =>
+    editor.selection
+      ? {
+          collapsed: editor.selection.collapsed,
+          anchor: editor.selection.anchor,
+          head: editor.selection.head,
+          precedingText: debugText(editor.selection.precedingText),
+          followingText: debugText(editor.selection.followingText),
+        }
+      : null;
+
+  const pushImeDebugLog = (phase: string, detail: Record<string, unknown> = {}) => {
+    const enabled = imeDebugEnabled();
+    const debugGlobal = globalThis as DebugGlobal;
+    debugGlobal.__typieImeDebug = enabled;
+    if (!enabled) {
+      return;
+    }
+
+    const entry = {
+      seq: ++imeDebugSequence,
+      phase,
+      time: typeof performance === 'undefined' ? Date.now() : performance.now(),
+      compositionActive,
+      pendingDelta: serializePendingDelta(),
+      compositionTracking: serializeCompositionTracking(),
+      dom: serializeDomSnapshot(),
+      currentValue: serializeValue(sessionState.currentValue),
+      editorSelection: serializeEditorSelection(),
+      ...detail,
+    };
+
+    const buffer = (debugGlobal.__typieImeLog ??= []);
+    buffer.push(entry);
+    if (buffer.length > 500) {
+      buffer.splice(0, buffer.length - 500);
+    }
+
+    console.log('[typie-ime]', entry);
   };
 
   const setClipboardData = (clipboardData: DataTransfer | null, data: { html: string; text: string }) => {
@@ -114,7 +190,104 @@
         files.push(file);
       }
     }
+
     return files;
+  };
+
+  const dispatchMessages = (messages: SyntheticInputMessage[]) => {
+    for (const message of messages) {
+      editor.dispatch(message as Message).scrollIntoView({ mode: 'typewriter' });
+    }
+  };
+
+  const hasComposingRange = (value: {
+    composing: {
+      start: number;
+      end: number;
+    };
+  }) => value.composing.start >= 0 && value.composing.end > value.composing.start;
+
+  const syncInputToState = () => {
+    if (!inputEl) return;
+    syncTextEditingValueToElement(inputEl, sessionState.currentValue);
+  };
+
+  const processDomInputChange = () => {
+    if (!inputEl || editor.readOnly) return;
+
+    pushImeDebugLog('process:start');
+    const readResult = readDomTextEditingValue(inputEl, compositionTracking, sessionState.currentValue);
+    compositionTracking = readResult.tracking;
+    const shouldDeferDomSync = compositionActive || hasComposingRange(readResult.value) || hasComposingRange(sessionState.currentValue);
+
+    const deltas = inferSyntheticTextEditingDeltas(sessionState.currentValue, readResult.value, pendingDeltaState);
+    pushImeDebugLog('process:inferred', {
+      readValue: serializeValue(readResult.value),
+      shouldSyncDom: readResult.shouldSyncDom,
+      deltas: deltas.map((delta) => ({
+        ...delta,
+        oldText: debugText(delta.oldText),
+        textInserted: 'textInserted' in delta ? debugText(delta.textInserted) : undefined,
+        replacementText: 'replacementText' in delta ? debugText(delta.replacementText) : undefined,
+      })),
+    });
+    pendingDeltaState = createPendingDeltaState();
+    if (deltas.length === 0) {
+      pushImeDebugLog('process:no-delta', { shouldSyncDom: readResult.shouldSyncDom });
+      if (readResult.shouldSyncDom && !shouldDeferDomSync) {
+        syncTextEditingValueToElement(inputEl, readResult.value);
+        pushImeDebugLog('process:sync-normalized', {
+          reason: 'no-delta',
+          syncedValue: serializeValue(readResult.value),
+        });
+      }
+      return;
+    }
+
+    const reduceResult = reduceEditingDeltas(sessionState, deltas);
+    sessionState = reduceResult.state;
+    pushImeDebugLog('process:reduced', {
+      messages: reduceResult.messages,
+      nextValue: serializeValue(reduceResult.state.currentValue),
+      domValue: serializeValue(reduceResult.domValue),
+    });
+    dispatchMessages(reduceResult.messages);
+
+    if (compositionActive || hasComposingRange(readResult.value) || hasComposingRange(reduceResult.state.currentValue)) {
+      pushImeDebugLog('process:sync-skipped', { shouldSyncDom: readResult.shouldSyncDom });
+      return;
+    }
+
+    syncTextEditingValueToElement(inputEl, reduceResult.domValue);
+    pushImeDebugLog('process:sync');
+  };
+
+  const resetInputState = () => {
+    if (!inputEl) return;
+
+    sessionState = invalidateSyntheticTextInputState(sessionState);
+    pendingDeltaState = createPendingDeltaState();
+    compositionTracking = resetCompositionTracking();
+    compositionActive = false;
+    const reconcileResult = reconcileSyntheticTextInputState(sessionState, editor.selection);
+    sessionState = reconcileResult.state;
+    syncTextEditingValueToElement(inputEl, reconcileResult.domValue);
+
+    if (reconcileResult.shouldCommitPreedit) {
+      editor.dispatch({ type: 'commitPreedit' }).scrollIntoView({ mode: 'typewriter' });
+    }
+  };
+
+  const replayDeferredKeyEvent = () => {
+    if (!pendingKeyEvent) {
+      return;
+    }
+
+    const deferredEvent = pendingKeyEvent;
+    pendingKeyEvent = undefined;
+    if (handleKeyEvent(editor, deferredEvent)) {
+      resetInputState();
+    }
   };
 
   export function focus() {
@@ -126,126 +299,39 @@
   }
 
   const handleBeforeInput = (e: InputEvent) => {
-    const shouldPreventBlockedRecompositionDelete =
-      reconversion.blocked !== null &&
-      lastKeydownWasProcess &&
-      e.inputType === 'deleteContentBackward' &&
-      (inputEl?.value ?? '') === reconversion.blocked.inputValue;
-    if (shouldPreventBlockedRecompositionDelete) {
-      e.preventDefault();
-      pendingImeDelete = false;
-      markBlockedRecompositionDelete(reconversion, keyEventSerial, true);
-      return;
-    }
-
-    if (editor.readOnly || !IS_IOS_SAFARI) return;
-    if (e.inputType !== 'deleteContentBackward') return;
-
-    // iOS Safari 한글이 composition* 대신 deleteContentBackward + insertText 를 보냄
-    const fromBackspaceKey = Date.now() - lastHandledBackspaceAt < 120;
-    if (!fromBackspaceKey) {
-      pendingImeDelete = true;
-    }
-  };
-
-  const handleInput = (e: Event) => {
-    const inputEvent = e as InputEvent;
-
     if (editor.readOnly) return;
-    if (inputEvent.isComposing) return;
 
-    const value = inputEl?.value || '';
-    if (pendingCommittedInputSync !== null && value === pendingCommittedInputSync) {
-      pendingCommittedInputSync = null;
-      pendingImeDelete = false;
-      lastInputValue = value;
-      return;
-    }
-    pendingCommittedInputSync = null;
-
-    const appendedText = value.startsWith(lastInputValue) ? value.slice(lastInputValue.length) : '';
-    const shouldReopenCandidateAfterDelete = reconversion.candidate !== null && inputEvent.inputType === 'deleteContentBackward';
-    if (shouldReopenCandidateAfterDelete) {
-      pendingImeDelete = false;
-      if (reconversion.candidate) {
-        reconversion.candidate.reopenDeleteKeyEventSerial = keyEventSerial;
-      }
-      lastInputValue = value;
-      return;
-    }
-
-    const shouldSuppressRecompositionAfterDelete =
-      reconversion.blocked !== null &&
-      inputEvent.inputType === 'deleteContentBackward' &&
-      lastInputValue === reconversion.blocked.inputValue;
-    if (shouldSuppressRecompositionAfterDelete) {
-      pendingImeDelete = false;
-      markBlockedRecompositionDelete(reconversion, keyEventSerial);
-      lastInputValue = value;
-      return;
-    }
-
-    const shouldCreateBlockedRecomposition = reconversion.candidate !== null && appendedText.length > 0;
-    if (shouldCreateBlockedRecomposition) {
-      startBlockedRecomposition(reconversion, value);
-    } else if (reconversion.candidate) {
-      clearReconversionCandidate(reconversion);
-    }
-
-    if (!shouldCreateBlockedRecomposition) {
-      clearBlockedRecomposition(reconversion);
-    }
-    clearReplacementSourceText(reconversion);
-
-    if (!inputEl) return;
-
-    if (!value) {
-      if (pendingImeDelete && lastInputValue.length > 0) {
-        editor.dispatch({ type: 'replaceBackward', length: lastInputValue.length, text: '' }).scrollIntoView({ mode: 'typewriter' });
-      }
-      pendingCommittedInputSync = null;
-      pendingImeDelete = false;
-      lastInputValue = '';
-      return;
-    }
-
-    pendingImeDelete = false;
-
-    if (value.startsWith(lastInputValue) && value.length > lastInputValue.length) {
-      // Append
-      const newText = value.slice(lastInputValue.length);
-      editor.dispatch({ type: 'input', text: newText }).scrollIntoView({ mode: 'typewriter' });
-      if (shouldCreateBlockedRecomposition) {
-        resetNativeInputSession();
-        return;
-      }
-    } else if (lastInputValue.length > 0 && value !== lastInputValue) {
-      // Replace (macOS accent popup / text replacement)
-      const deleteLength = lastInputValue.length;
-      editor.dispatch({ type: 'replaceBackward', length: deleteLength, text: value }).scrollIntoView({ mode: 'typewriter' });
-    }
-
-    if (value.length > 64) {
-      inputEl.value = value.slice(-64);
-    }
-    lastInputValue = inputEl.value;
+    pendingDeltaState = createBeforeInputState(sessionState.currentValue, e.inputType ?? null, e.data ?? null);
+    pushImeDebugLog('event:beforeinput', {
+      inputType: e.inputType ?? null,
+      data: e.data ?? null,
+      isComposing: e.isComposing,
+    });
   };
 
-  let pendingKeyEvent: KeyboardEvent | undefined;
+  const handleInput = () => {
+    if (editor.readOnly) return;
+    pushImeDebugLog('event:input');
+    processDomInputChange();
+  };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    keyEventSerial += 1;
-    lastKeydownWasProcess = e.key === 'Process' || e.keyCode === 229;
-    lastKeydownLooksLikeTypingInput = looksLikeTypingInputKeydown(e);
-
-    const isModifierOnly = e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta';
+    pushImeDebugLog('event:keydown', {
+      key: e.key,
+      code: e.code,
+      isComposing: e.isComposing,
+      ctrlKey: e.ctrlKey,
+      metaKey: e.metaKey,
+      altKey: e.altKey,
+      shiftKey: e.shiftKey,
+    });
 
     if (e.isComposing) {
-      if (e.metaKey || e.ctrlKey) {
+      const isModifierOnly = e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta';
+      if ((e.metaKey || e.ctrlKey) && !isModifierOnly) {
         pendingKeyEvent = e;
+        e.preventDefault();
       }
-
-      e.preventDefault();
       return;
     }
 
@@ -273,23 +359,12 @@
       }
     }
 
-    if (handleKeyEvent(editor, e)) {
-      clearReconversionState(reconversion);
-      if (IS_IOS_SAFARI && (e.key === 'Backspace' || e.key === 'Delete')) {
-        lastHandledBackspaceAt = Date.now();
-        pendingImeDelete = false;
-      }
-
-      e.preventDefault();
-      resetInputState();
+    if (!handleKeyEvent(editor, e)) {
       return;
     }
 
-    const shouldPrimeBlockedRecompositionShortcut =
-      reconversion.blocked !== null && !compositionActive && !e.isComposing && !isModifierOnly && e.key !== 'Process' && e.key.length > 1;
-    if (shouldPrimeBlockedRecompositionShortcut && reconversion.blocked) {
-      reconversion.blocked.shortcutPrimed = true;
-    }
+    e.preventDefault();
+    resetInputState();
   };
 
   const handleCopy = (e: ClipboardEvent) => {
@@ -328,122 +403,110 @@
   };
 
   const handleBlur = (e: FocusEvent) => {
-    const suppressBlurCallback = suppressNextBlurCallback;
-    suppressNextBlurCallback = false;
-
-    if (reconversion.blocked?.suppressing) {
-      compositionActive = false;
-      clearReconversionCandidate(reconversion);
-      clearReplacementSourceText(reconversion);
-      clearInputBuffer();
-      requestAnimationFrame(() => {
-        if (!inputEl) return;
-        if (!windowFocused || !documentVisible) return;
-        inputEl.focus({ preventScroll: true });
-      });
-    } else if (!compositionActive) {
-      clearReconversionState(reconversion);
-      clearInputBuffer();
+    if (compositionActive) {
+      pushImeDebugLog('event:blur:commit-preedit');
+      processDomInputChange();
+      editor.dispatch({ type: 'commitPreedit' }).scrollIntoView({ mode: 'typewriter' });
     }
 
-    pendingImeDelete = false;
-    if (!suppressBlurCallback) {
-      onBlur?.(e);
-    }
+    sessionState = invalidateSyntheticTextInputState(sessionState);
+    pendingDeltaState = createPendingDeltaState();
+    compositionTracking = resetCompositionTracking();
+    compositionActive = false;
+    pushImeDebugLog('event:blur', {
+      relatedTarget: e.relatedTarget instanceof HTMLElement ? e.relatedTarget.tagName : null,
+    });
+
+    onBlur?.(e);
   };
 
-  const handleCompositionStart = (e: CompositionEvent) => {
+  const handleFocus = (e: FocusEvent) => {
+    syncInputToState();
+    pushImeDebugLog('event:focus');
+    onFocus?.(e);
+  };
+
+  const handleCompositionStart = () => {
     if (editor.readOnly) return;
 
-    if (suppressBlockedRecomposition(reconversion, keyEventSerial)) {
-      compositionActive = true;
-      cancelBlockedRecompositionUi();
-      return;
-    }
-
-    if (reconversion.blocked) {
-      clearBlockedRecomposition(reconversion);
-    }
-
-    const text = e.data || '';
     compositionActive = true;
-    compositionStartedFromTypingKey = lastKeydownLooksLikeTypingInput;
-    editor.dispatch({ type: 'compositionStart', text }).scrollIntoView({ mode: 'typewriter' });
+    const selectionStart = inputEl?.selectionStart;
+    const selectionEnd = inputEl?.selectionEnd;
+    compositionTracking =
+      selectionStart == null || selectionEnd == null
+        ? startCompositionTracking()
+        : startCompositionTracking({
+            start: Math.min(selectionStart, selectionEnd),
+            end: Math.max(selectionStart, selectionEnd),
+          });
+    pushImeDebugLog('event:compositionstart');
   };
 
   const handleCompositionUpdate = (e: CompositionEvent) => {
     if (editor.readOnly) return;
 
-    const text = e.data || '';
     compositionActive = true;
-
-    if (suppressBlockedRecomposition(reconversion, keyEventSerial)) {
-      cancelBlockedRecompositionUi();
-      return;
-    }
-
-    const candidateText = reconversion.candidate?.text ?? '';
-    const candidateDeleteSerial = reconversion.candidate?.reopenDeleteKeyEventSerial ?? null;
-    const shouldReplaceCommittedCandidate =
-      candidateText.length > 0 &&
-      (keyEventSerial === candidateDeleteSerial || (!compositionStartedFromTypingKey && text === candidateText));
-    if (shouldReplaceCommittedCandidate) {
-      pendingKeyEvent = undefined;
-      editor.dispatch({ type: 'compositionUpdate', text, replaceLength: countTextChars(candidateText) }).scrollIntoView({
-        mode: 'typewriter',
-      });
-      reconversion.replacementSourceText = candidateText;
-      clearReconversionCandidate(reconversion);
-      return;
-    }
-
-    editor.dispatch({ type: 'compositionUpdate', text }).scrollIntoView({ mode: 'typewriter' });
+    compositionTracking = updateCompositionTracking(compositionTracking, e.data);
+    pushImeDebugLog('event:compositionupdate', {
+      data: e.data == null ? null : debugText(e.data),
+    });
   };
 
-  const handleCompositionEnd = (e: CompositionEvent) => {
+  const handleCompositionEnd = () => {
     if (editor.readOnly) return;
 
-    const committedText = e.data || inputEl?.value || '';
-    const replacementSourceText = reconversion.replacementSourceText;
-    if (suppressBlockedRecomposition(reconversion, keyEventSerial)) {
-      compositionActive = false;
-      compositionStartedFromTypingKey = false;
-      pendingKeyEvent = undefined;
-      pendingCommittedInputSync = null;
-      clearBlockedRecomposition(reconversion);
-      clearReplacementSourceText(reconversion);
-      clearInputBuffer();
+    compositionActive = false;
+    compositionTracking = resetCompositionTracking();
+    syncInputToState();
+    pushImeDebugLog('event:compositionend');
+
+    queueMicrotask(() => {
+      pushImeDebugLog('event:compositionend:microtask');
+      processDomInputChange();
+      replayDeferredKeyEvent();
+    });
+  };
+
+  const handleSelectionChange = () => {
+    if (editor.readOnly || !inputEl) return;
+    if (document.activeElement !== inputEl) return;
+
+    // IME-driven selection updates inside the preedit range should not dispatch editor messages.
+    if (compositionActive || hasActiveCompositionInState()) {
+      pushImeDebugLog('event:selectionchange:skipped');
       return;
     }
 
-    editor.dispatch({ type: 'commitPreedit' });
-    pendingCommittedInputSync = committedText.length > 0 ? committedText : null;
-    if (committedText.length > 0) {
-      const nextCandidateText =
-        replacementSourceText === null
-          ? (reconversion.candidate?.text ?? '') + committedText
-          : getCommonSuffix(replacementSourceText, committedText);
-      setReconversionCandidate(reconversion, nextCandidateText, keyEventSerial);
-    } else if (replacementSourceText !== null) {
-      clearReconversionCandidate(reconversion);
-    }
-    clearReplacementSourceText(reconversion);
-    clearBlockedRecomposition(reconversion);
-
-    if (inputEl) {
-      inputEl.value = (replacementSourceText === null ? lastInputValue : (reconversion.candidate?.text ?? '')).slice(-64);
-      lastInputValue = inputEl.value;
-    }
-    compositionActive = false;
-    compositionStartedFromTypingKey = false;
-
-    if (pendingKeyEvent) {
-      handleKeyEvent(editor, pendingKeyEvent);
-      pendingKeyEvent = undefined;
-    }
+    pushImeDebugLog('event:selectionchange');
+    processDomInputChange();
   };
 
-  let pointerDownOutsideEditor = false;
+  const hasActiveCompositionInState = () =>
+    sessionState.currentValue.composing.start >= 0 && sessionState.currentValue.composing.end > sessionState.currentValue.composing.start;
+
+  $effect(() => {
+    if (!inputEl) return;
+
+    // During IME composition, the browser owns the live DOM value.
+    // Reconcile is only safe once composition has settled.
+    if (compositionActive || hasActiveCompositionInState()) {
+      pushImeDebugLog('reconcile:skip');
+      return;
+    }
+
+    const selection = editor.selection;
+    const reconcileResult = reconcileSyntheticTextInputState(sessionState, selection);
+    sessionState = reconcileResult.state;
+    pushImeDebugLog('reconcile:apply', {
+      shouldCommitPreedit: reconcileResult.shouldCommitPreedit,
+      reconciledValue: serializeValue(reconcileResult.state.currentValue),
+    });
+    syncTextEditingValueToElement(inputEl, reconcileResult.domValue);
+
+    if (reconcileResult.shouldCommitPreedit) {
+      editor.dispatch({ type: 'commitPreedit' }).scrollIntoView({ mode: 'typewriter' });
+    }
+  });
 
   $effect(() => {
     const paneEl = editor.scrollContainerEl?.closest('[data-pane-id]') as HTMLElement | null;
@@ -469,6 +532,7 @@
     if (typeof document !== 'undefined' && document.activeElement === inputEl) return;
 
     inputEl?.focus({ preventScroll: true });
+    syncInputToState();
   });
 
   const handleWindowBlur = () => {
@@ -486,12 +550,22 @@
 </script>
 
 <svelte:window onblur={handleWindowBlur} onfocus={handleWindowFocus} />
-<svelte:document onvisibilitychange={handleVisibilityChange} />
+<svelte:document onselectionchange={handleSelectionChange} onvisibilitychange={handleVisibilityChange} />
 
-<input
+<textarea
   bind:this={inputEl}
   name="input"
-  class={css({ pointerEvents: 'none', position: 'fixed', top: '0', left: '0', height: '1px', width: '1px', opacity: '0' })}
+  class={css({
+    pointerEvents: 'none',
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    height: '1px',
+    width: '1px',
+    opacity: '0',
+    resize: 'none',
+    overflow: 'hidden',
+  })}
   autocapitalize="off"
   autocomplete="off"
   autocorrect="off"
@@ -502,9 +576,9 @@
   oncompositionupdate={handleCompositionUpdate}
   oncopy={handleCopy}
   oncut={handleCut}
-  onfocus={onFocus}
+  onfocus={handleFocus}
   oninput={handleInput}
   onkeydown={handleKeyDown}
   onpaste={handlePaste}
   spellcheck={false}
-/>
+></textarea>

@@ -9,7 +9,8 @@
     "dev": "doppler run -- vite dev",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:svelte": "svelte-check --fail-on-warnings",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",
@@ -47,6 +48,7 @@
     "graphql-request": "^7.4.0",
     "graphql-ws": "^6.0.7",
     "hono": "^4.12.8",
+    "jsdom": "^28.1.0",
     "ky": "^1.14.3",
     "lean-qr": "^2.7.1",
     "marked": "^17.0.4",
@@ -63,6 +65,7 @@
     "typescript": "^6.0.1-rc",
     "unplugin-icons": "^23.0.1",
     "vite": "^8.0.0",
+    "vitest": "^3.2.4",
     "zod": "^4.3.6"
   }
 }

@@ -76,7 +76,7 @@
       if (inputEl && editor.isFocused) {
         const rect = element.getBoundingClientRect();
         inputEl.style.left = `${rect.left}px`;
-        inputEl.style.top = `${rect.top + rect.height / 2}px`;
+        inputEl.style.top = `${rect.top + rect.height}px`;
       }
 
       if (!prevCursorPos || prevCursorPos.x !== bounds.x || prevCursorPos.y !== bounds.y) {

@@ -262,7 +262,7 @@ export class Editor {
     cursor: { pageIdx: number; bounds: Rect | null; visible: boolean };
   } | null = null;
 
-  inputElement = $state<HTMLInputElement | null>(null);
+  inputElement = $state<HTMLTextAreaElement | null>(null);
 
   pointer = $state({
     isPressed: false,

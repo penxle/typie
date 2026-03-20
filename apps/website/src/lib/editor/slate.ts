@@ -277,6 +277,9 @@ export class SlateReader {
             },
           };
 
+    const { value: precedingText } = readStr(this.#slabView, this.#slabPtr + this.#u32('preceding_text_offset'));
+    const { value: followingText } = readStr(this.#slabView, this.#slabPtr + this.#u32('following_text_offset'));
+
     return {
       collapsed,
       cmp,
@@ -285,6 +288,8 @@ export class SlateReader {
       head,
       anchorBounds,
       headBounds,
+      precedingText,
+      followingText,
     };
   }
 
