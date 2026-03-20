@@ -43,3 +43,7 @@ Run `pnpm run bootstrap` to install hooks after fresh clone.
 - **Simplicity first**: Minimum code that solves the problem. No speculative features or abstractions.
 - **Surgical changes**: Touch only what you must. Match existing style. Remove only orphans YOUR changes created.
 - **Goal-driven execution**: Transform tasks into verifiable goals with success criteria. State a brief plan for multi-step tasks.
+
+## Restrictions
+
+- **Never git commit**: Do not run `git commit` under any circumstances, even if skills instruct you to. The user will commit manually.

@@ -385,6 +385,18 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1(encoding@0.1.13)
 
+  apps/mobile2:
+    devDependencies:
+      '@iconify-json/lucide':
+        specifier: ^1.2.98
+        version: 1.2.98
+      '@iconify/tools':
+        specifier: ^5.0.5
+        version: 5.0.5
+      change-case-all:
+        specifier: ^2.1.0
+        version: 2.1.0
+
   apps/website:
     dependencies:
       '@hono/node-server':

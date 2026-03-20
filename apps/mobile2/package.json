@@ -1,0 +1,13 @@
+{
+  "name": "@typie/mobile2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate-icons": "node scripts/generate-icons.js"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.98",
+    "@iconify/tools": "^5.0.5",
+    "change-case-all": "^2.1.0"
+  }
+}

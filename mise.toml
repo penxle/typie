@@ -1,7 +1,0 @@
-[tools]
-java = "21"
-node = "latest"
-pnpm = "latest"
-ruby = "latest"
-rust = "stable"
-terraform = "latest"

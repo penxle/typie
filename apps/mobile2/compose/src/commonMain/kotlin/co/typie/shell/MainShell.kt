@@ -1,0 +1,159 @@
+package co.typie.shell
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.ui.unit.dp
+import co.typie.icons.Lucide
+import co.typie.navigation.NavigationStack
+import co.typie.navigation.Navigator
+import co.typie.route.Route
+import co.typie.ui.clickable
+import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppTheme
+
+private enum class Tab(val route: Route) {
+  Home(Route.Home), Space(Route.Space), Notes(Route.Notes), Profile(Route.Profile),
+}
+
+private const val FAB_SIZE = 60
+private const val FAB_GAP = 8
+
+@Composable
+fun MainShell(content: @Composable (Route) -> Unit) {
+  var currentTab by remember { mutableStateOf(Tab.entries.first()) }
+  val navigators = remember {
+    Tab.entries.associateWith { Navigator(it.route) }
+  }
+  val activeNavigator = navigators[currentTab]!!
+  val showBottomBar = activeNavigator.stack.size == 1
+
+  Box(Modifier.fillMaxSize().background(AppTheme.colors.surfaceDefault)) {
+    Crossfade(
+      targetState = currentTab,
+      modifier = Modifier.fillMaxSize(),
+      animationSpec = tween(200),
+    ) { tab ->
+      NavigationStack(
+        navigator = navigators[tab]!!,
+        content = content,
+      )
+    }
+
+    AnimatedVisibility(
+      visible = showBottomBar,
+      modifier = Modifier.align(Alignment.BottomCenter),
+      enter = slideInVertically(
+        initialOffsetY = { it * 2 },
+        animationSpec = tween(300, easing = EaseOutCubic),
+      ) + fadeIn(animationSpec = tween(200)),
+      exit = slideOutVertically(
+        targetOffsetY = { it * 2 },
+        animationSpec = tween(300, easing = EaseOutCubic),
+      ) + fadeOut(animationSpec = tween(200)),
+    ) {
+      BottomBar(
+        currentTab = currentTab,
+        onSelectTab = { currentTab = it },
+      )
+    }
+  }
+}
+
+@Composable
+private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Modifier = Modifier) {
+  val pillColor =
+    if (AppTheme.colors.isDark) AppTheme.colors.surfaceSubtle else AppTheme.colors.surfaceDefault
+  val pillShape = RoundedCornerShape(30.dp)
+
+  Box(
+    modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp),
+    contentAlignment = Alignment.Center,
+  ) {
+    Row(
+      Modifier.widthIn(max = 488.dp).fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      // Pill
+      Row(
+        Modifier.weight(1f).shadow(12.dp, pillShape).clip(pillShape).background(pillColor)
+          .border(1.dp, AppTheme.colors.borderDefault, pillShape).height(60.dp),
+      ) {
+        Tab.entries.forEach { tab ->
+          val selected = tab == currentTab
+          val bgColor by animateColorAsState(
+            targetValue = if (selected) AppTheme.colors.surfaceMuted else AppTheme.colors.surfaceMuted.copy(
+              alpha = 0f
+            ),
+            animationSpec = tween(200),
+          )
+          Box(
+            modifier = Modifier.weight(1f).fillMaxHeight().padding(4.dp)
+              .background(bgColor, RoundedCornerShape(26.dp)).clickable { onSelectTab(tab) },
+            contentAlignment = Alignment.Center,
+          ) {
+            Icon(
+              icon = when (tab) {
+                Tab.Home -> Lucide.House
+                Tab.Space -> Lucide.FolderOpen
+                Tab.Notes -> Lucide.StickyNote
+                Tab.Profile -> Lucide.CircleUserRound
+              },
+              tint = AppTheme.colors.textSubtle,
+            )
+          }
+        }
+      }
+
+      Spacer(Modifier.width(FAB_GAP.dp))
+
+      // FAB
+      Fab(pillColor = pillColor)
+    }
+  }
+}
+
+@Composable
+private fun Fab(pillColor: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+  Box(
+    modifier.size(FAB_SIZE.dp).shadow(12.dp, CircleShape).clip(CircleShape).background(pillColor)
+      .border(1.dp, AppTheme.colors.borderDefault, CircleShape).clickable { /* TODO */ },
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(
+      icon = Lucide.SquarePen,
+      tint = AppTheme.colors.textSubtle,
+    )
+  }
+}
