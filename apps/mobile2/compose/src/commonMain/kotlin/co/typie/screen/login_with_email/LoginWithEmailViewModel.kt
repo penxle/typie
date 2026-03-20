@@ -39,6 +39,7 @@ class LoginWithEmailViewModel(
 
   fun submit() {
     val current = _state.value
+    if (current.isLoading) return
 
     val emailError = validateEmail(current.email)
     val passwordError = validatePassword(current.password)

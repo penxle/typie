@@ -15,14 +15,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -43,6 +53,7 @@ fun LoginWithEmailScreen() {
   val nav = Nav.current
   val viewModel = koinViewModel<LoginWithEmailViewModel>()
   val state by viewModel.state.collectAsState()
+  val passwordFocusRequester = remember { FocusRequester() }
 
   Screen {
     Column(
@@ -84,6 +95,9 @@ fun LoginWithEmailScreen() {
           onValueChange = viewModel::setEmail,
           placeholder = "me@example.com",
           keyboardType = KeyboardType.Email,
+          imeAction = ImeAction.Next,
+          onNext = { passwordFocusRequester.requestFocus() },
+          onEnter = { passwordFocusRequester.requestFocus() },
           error = state.emailError,
           enabled = !state.isLoading,
         )
@@ -97,8 +111,12 @@ fun LoginWithEmailScreen() {
           placeholder = "********",
           keyboardType = KeyboardType.Password,
           isPassword = true,
+          imeAction = ImeAction.Done,
+          onDone = viewModel::submit,
+          onEnter = viewModel::submit,
           error = state.passwordError,
           enabled = !state.isLoading,
+          modifier = Modifier.focusRequester(passwordFocusRequester),
         )
 
       }
@@ -142,8 +160,13 @@ private fun FormField(
   placeholder: String,
   keyboardType: KeyboardType = KeyboardType.Text,
   isPassword: Boolean = false,
+  imeAction: ImeAction = ImeAction.Default,
+  onNext: (() -> Unit)? = null,
+  onDone: (() -> Unit)? = null,
+  onEnter: (() -> Unit)? = null,
   error: String? = null,
   enabled: Boolean = true,
+  modifier: Modifier = Modifier,
 ) {
   val shape = RoundedCornerShape(12.dp)
   val borderColor =
@@ -159,12 +182,32 @@ private fun FormField(
       value = value,
       onValueChange = onValueChange,
       enabled = enabled,
+      modifier = modifier.onPreviewKeyEvent {
+        if (!enabled || it.type != KeyEventType.KeyDown) {
+          false
+        } else {
+          when (it.key) {
+            Key.Enter -> {
+              onEnter?.invoke()
+              onEnter != null
+            }
+            else -> false
+          }
+        }
+      },
       textStyle = TextStyle(
         fontFamily = SuitFontFamily,
         fontSize = 15.sp,
         color = AppTheme.colors.textDefault,
       ),
-      keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+      keyboardOptions = KeyboardOptions(
+        keyboardType = keyboardType,
+        imeAction = imeAction,
+      ),
+      keyboardActions = KeyboardActions(
+        onNext = { onNext?.invoke() },
+        onDone = { onDone?.invoke() },
+      ),
       visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
       singleLine = true,
       decorationBox = { innerTextField ->
