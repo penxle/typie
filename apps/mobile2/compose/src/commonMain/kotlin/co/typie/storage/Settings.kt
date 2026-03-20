@@ -9,12 +9,18 @@ import kotlin.properties.ReadWriteProperty
 
 @Single
 class Prefs(@Named("ksafe.prefs") val prefs: KSafe) {
-  inline operator fun <reified T> invoke(defaultValue: T, key: String? = null): ReadWriteProperty<Any?, T> =
+  inline operator fun <reified T> invoke(
+    defaultValue: T,
+    key: String? = null
+  ): ReadWriteProperty<Any?, T> =
     prefs.invoke(defaultValue, key, mode = KSafeWriteMode.Plain)
 }
 
 @Single
 class Vault(@Named("ksafe.vault") val vault: KSafe) {
-  inline operator fun <reified T> invoke(defaultValue: T, key: String? = null): ReadWriteProperty<Any?, T> =
+  inline operator fun <reified T> invoke(
+    defaultValue: T,
+    key: String? = null
+  ): ReadWriteProperty<Any?, T> =
     vault.invoke(defaultValue, key)
 }

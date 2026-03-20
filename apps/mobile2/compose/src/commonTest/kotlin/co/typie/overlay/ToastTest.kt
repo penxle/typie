@@ -1,4 +1,4 @@
-package co.typie.toast
+package co.typie.overlay
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

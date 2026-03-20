@@ -106,8 +106,10 @@ fun LoginWithEmailScreen() {
       Spacer(Modifier.weight(1f))
 
       // Bottom button
-      val buttonColor = if (state.isLoading) AppTheme.colors.interactiveDisabled else AppTheme.colors.accentBrand
-      val buttonTextColor = if (state.isLoading) AppTheme.colors.textDisabled else AppTheme.colors.textBright
+      val buttonColor =
+        if (state.isLoading) AppTheme.colors.interactiveDisabled else AppTheme.colors.accentBrand
+      val buttonTextColor =
+        if (state.isLoading) AppTheme.colors.textDisabled else AppTheme.colors.textBright
 
       Box(
         modifier = Modifier
@@ -144,7 +146,8 @@ private fun FormField(
   enabled: Boolean = true,
 ) {
   val shape = RoundedCornerShape(12.dp)
-  val borderColor = if (error != null) AppTheme.colors.borderDanger else AppTheme.colors.borderDefault
+  val borderColor =
+    if (error != null) AppTheme.colors.borderDanger else AppTheme.colors.borderDefault
 
   Column {
     Text(

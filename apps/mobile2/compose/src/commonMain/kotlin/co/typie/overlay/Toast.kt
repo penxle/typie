@@ -1,4 +1,4 @@
-package co.typie.toast
+package co.typie.overlay
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

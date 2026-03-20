@@ -10,28 +10,22 @@ import co.typie.auth.sso.NaverSingleSignOnProvider
 import co.typie.auth.sso.SingleSignOnCredential
 import co.typie.graphql.LoginScreen_AuthorizeSingleSignOn_Mutation
 import co.typie.graphql.type.AuthorizeSingleSignOnInput
-import co.typie.toast.Toast
-import co.typie.toast.ToastType
+import co.typie.overlay.Loader
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
-data class LoginState(
-  val isLoading: Boolean = false,
-)
+private class UserFacingException(message: String) : Exception(message)
 
 @KoinViewModel
 class LoginViewModel(
   private val apolloClient: ApolloClient,
   private val toast: Toast,
+  private val loader: Loader,
 ) : ViewModel() {
-
-  private val _state = MutableStateFlow(LoginState())
-  val state: StateFlow<LoginState> = _state
 
   fun loginWithGoogle(ctx: Any? = null) = loginWith(GoogleSingleSignOnProvider(), ctx)
   fun loginWithKakao(ctx: Any? = null) = loginWith(KakaoSingleSignOnProvider(), ctx)
@@ -40,16 +34,17 @@ class LoginViewModel(
 
   private fun loginWith(provider: co.typie.auth.sso.SingleSignOnAdapter, ctx: Any?) {
     viewModelScope.launch {
-      _state.update { it.copy(isLoading = true) }
-
       try {
-        val credential = provider.authenticate(ctx)
-        executeMutation(credential)
+        loader.runWith {
+          val credential = provider.authenticate(ctx)
+          executeMutation(credential)
+        }
       } catch (e: CancellationException) {
         throw e
+      } catch (e: UserFacingException) {
+        toast.show(ToastType.Error, e.message!!)
       } catch (e: Exception) {
         Logger.e(e) { "Failed to login with $provider" }
-        _state.update { it.copy(isLoading = false) }
         toast.show(ToastType.Error, "로그인에 실패했어요. 다시 시도해주세요.")
       }
     }
@@ -78,10 +73,7 @@ class LoginViewModel(
         "오류가 발생했어요. 잠시 후 다시 시도해주세요."
       }
 
-      _state.update { it.copy(isLoading = false) }
-      toast.show(ToastType.Error, message)
-    } else {
-      _state.update { it.copy(isLoading = false) }
+      throw UserFacingException(message)
     }
   }
 }

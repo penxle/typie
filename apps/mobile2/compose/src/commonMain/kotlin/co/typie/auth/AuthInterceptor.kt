@@ -23,8 +23,12 @@ class AuthInterceptor(
 
     val response = chain.proceed(authedRequest)
 
-    response.headers
-      .firstOrNull { it.name.equals("set-cookie", ignoreCase = true) && it.value.startsWith("typie-st=") }
+    response.headers.firstOrNull {
+      it.name.equals(
+        "set-cookie",
+        ignoreCase = true
+      ) && it.value.startsWith("typie-st=")
+    }
       ?.let { cookie ->
         val sessionToken = cookie.value.substringAfter("typie-st=").substringBefore(";")
         authService.login(sessionToken)

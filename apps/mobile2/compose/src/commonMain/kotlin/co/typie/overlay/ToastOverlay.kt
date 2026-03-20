@@ -1,4 +1,4 @@
-package co.typie.toast
+package co.typie.overlay
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseIn

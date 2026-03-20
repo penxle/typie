@@ -26,9 +26,8 @@ import com.sun.jna.Pointer
 import com.sun.jna.Structure
 import java.awt.Taskbar
 import java.awt.Toolkit
-import javax.swing.SwingUtilities
-// spell-checker:disable-next-line
 import javax.imageio.ImageIO
+import javax.swing.SwingUtilities
 
 // iPhone 16 Pro Max: 440×956 pt, @3x, 460 PPI
 private const val DEVICE_POINT_WIDTH = 440

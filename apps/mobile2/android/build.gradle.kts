@@ -17,6 +17,7 @@ kotlin {
     implementation(projects.compose)
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.splashscreen)
     implementation(libs.compose.uiToolingPreview)
     implementation(libs.koin.android)
     implementation(libs.ktor.client.okhttp)

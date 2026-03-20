@@ -5,8 +5,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring.StiffnessMediumLow
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,6 +76,7 @@ fun NavigationStack(
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
           visibleRoute = navigator.current
         }
+
         else -> {
           // Pop: visibleRoute(현재 화면)가 앞에서 나가고, navigator.current(이전 화면)가 뒤에서 나타남
           behindRoute = navigator.current
@@ -88,10 +89,6 @@ fun NavigationStack(
       behindRoute = null
       animState = AnimState.Idle
     }
-  }
-
-  DisposableEffect(navigator) {
-    onDispose { navigator.clear() }
   }
 
   CompositionLocalProvider(Nav provides navigator) {

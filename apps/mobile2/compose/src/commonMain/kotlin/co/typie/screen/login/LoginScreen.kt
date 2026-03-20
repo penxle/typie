@@ -16,11 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +42,6 @@ import org.koin.compose.viewmodel.koinViewModel
 fun LoginScreen() {
   val nav = Nav.current
   val viewModel = koinViewModel<LoginViewModel>()
-  val state by viewModel.state.collectAsState()
   val platform = koinInject<Platform>()
   val ctx = activityContext()
 
@@ -87,7 +83,6 @@ fun LoginScreen() {
             foregroundColor = Color(0xFF000000),
             backgroundColor = Color(0xFFFFFFFF),
             borderColor = AppTheme.colors.borderDefault,
-            enabled = !state.isLoading,
             onClick = { viewModel.loginWithGoogle(ctx) },
           )
           SsoButton(
@@ -96,7 +91,6 @@ fun LoginScreen() {
             iconTint = Color(0xFF000000),
             foregroundColor = Color(0xFF000000),
             backgroundColor = Color(0xFFFEE500),
-            enabled = !state.isLoading,
             onClick = { viewModel.loginWithKakao(ctx) },
           )
           SsoButton(
@@ -105,7 +99,6 @@ fun LoginScreen() {
             iconTint = Color(0xFFFFFFFF),
             foregroundColor = Color(0xFFFFFFFF),
             backgroundColor = Color(0xFF03C75A),
-            enabled = !state.isLoading,
             onClick = { viewModel.loginWithNaver(ctx) },
           )
 
@@ -116,7 +109,6 @@ fun LoginScreen() {
               iconTint = Color(0xFFFFFFFF),
               foregroundColor = Color(0xFFFFFFFF),
               backgroundColor = Color(0xFF000000),
-              enabled = !state.isLoading,
               onClick = { viewModel.loginWithApple(ctx) },
             )
           }
@@ -142,20 +134,17 @@ private fun SsoButton(
   backgroundColor: Color,
   borderColor: Color? = null,
   iconTint: Color? = null,
-  enabled: Boolean = true,
   onClick: () -> Unit = {},
 ) {
   val shape = RoundedCornerShape(999.dp)
-  val alpha = if (enabled) 1f else 0.5f
 
   Box(
     modifier = Modifier
       .fillMaxWidth()
       .height(48.dp)
-      .alpha(alpha)
       .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
       .background(backgroundColor, shape)
-      .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+      .clickable(onClick = onClick),
   ) {
     AsyncImage(
       model = Res.getUri(svgPath),
@@ -168,7 +157,12 @@ private fun SsoButton(
     )
     Text(
       text,
-      style = TextStyle(fontSize = 15.sp, lineHeight = 15.sp, fontWeight = FontWeight.W600, color = foregroundColor),
+      style = TextStyle(
+        fontSize = 15.sp,
+        lineHeight = 15.sp,
+        fontWeight = FontWeight.W600,
+        color = foregroundColor
+      ),
       modifier = Modifier.align(Alignment.Center),
     )
   }

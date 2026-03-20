@@ -3,7 +3,6 @@ package co.typie.ui.theme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import org.jetbrains.compose.resources.Font
 import co.typie.generated.resources.Res
 import co.typie.generated.resources.suit_bold
 import co.typie.generated.resources.suit_extrabold
@@ -14,6 +13,7 @@ import co.typie.generated.resources.suit_medium
 import co.typie.generated.resources.suit_regular
 import co.typie.generated.resources.suit_semibold
 import co.typie.generated.resources.suit_thin
+import org.jetbrains.compose.resources.Font
 
 val SuitFontFamily: FontFamily
   @Composable get() = FontFamily(

@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.LoginWithEmailScreen_LoginWithEmail_Mutation
 import co.typie.graphql.type.LoginWithEmailInput
-import co.typie.toast.Toast
-import co.typie.toast.ToastType
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
