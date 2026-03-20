@@ -99,7 +99,6 @@ fun LoginWithEmailScreen() {
           onNext = { passwordFocusRequester.requestFocus() },
           onEnter = { passwordFocusRequester.requestFocus() },
           error = state.emailError,
-          enabled = !state.isLoading,
         )
 
         Spacer(Modifier.height(16.dp))
@@ -115,7 +114,6 @@ fun LoginWithEmailScreen() {
           onDone = viewModel::submit,
           onEnter = viewModel::submit,
           error = state.passwordError,
-          enabled = !state.isLoading,
           modifier = Modifier.focusRequester(passwordFocusRequester),
         )
 
@@ -124,27 +122,22 @@ fun LoginWithEmailScreen() {
       Spacer(Modifier.weight(1f))
 
       // Bottom button
-      val buttonColor =
-        if (state.isLoading) AppTheme.colors.interactiveDisabled else AppTheme.colors.accentBrand
-      val buttonTextColor =
-        if (state.isLoading) AppTheme.colors.textDisabled else AppTheme.colors.textBright
-
       Box(
         modifier = Modifier
           .fillMaxWidth()
           .padding(horizontal = 20.dp)
           .padding(bottom = 16.dp)
           .height(48.dp)
-          .background(buttonColor, RoundedCornerShape(999.dp))
-          .then(if (!state.isLoading) Modifier.clickable { viewModel.submit() } else Modifier),
+          .background(AppTheme.colors.accentBrand, RoundedCornerShape(999.dp))
+          .clickable { viewModel.submit() },
         contentAlignment = Alignment.Center,
       ) {
         Text(
-          if (state.isLoading) "로그인 중..." else "로그인",
+          "로그인",
           style = TextStyle(
             fontSize = 15.sp,
             fontWeight = FontWeight.W600,
-            color = buttonTextColor,
+            color = AppTheme.colors.textBright,
           ),
         )
       }
@@ -165,7 +158,6 @@ private fun FormField(
   onDone: (() -> Unit)? = null,
   onEnter: (() -> Unit)? = null,
   error: String? = null,
-  enabled: Boolean = true,
   modifier: Modifier = Modifier,
 ) {
   val shape = RoundedCornerShape(12.dp)
@@ -181,9 +173,8 @@ private fun FormField(
     BasicTextField(
       value = value,
       onValueChange = onValueChange,
-      enabled = enabled,
       modifier = modifier.onPreviewKeyEvent {
-        if (!enabled || it.type != KeyEventType.KeyDown) {
+        if (it.type != KeyEventType.KeyDown) {
           false
         } else {
           when (it.key) {

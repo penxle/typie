@@ -3,6 +3,8 @@ package co.typie.screen.login_with_email
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.LoginWithEmailScreen_LoginWithEmail_Mutation
+import co.typie.graphql.MutationResult
+import co.typie.graphql.executeMutation
 import co.typie.graphql.type.LoginWithEmailInput
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
@@ -16,7 +18,6 @@ import org.koin.core.annotation.KoinViewModel
 data class LoginWithEmailState(
   val email: String = "",
   val password: String = "",
-  val isLoading: Boolean = false,
   val emailError: String? = null,
   val passwordError: String? = null,
 )
@@ -39,7 +40,6 @@ class LoginWithEmailViewModel(
 
   fun submit() {
     val current = _state.value
-    if (current.isLoading) return
 
     val emailError = validateEmail(current.email)
     val passwordError = validatePassword(current.password)
@@ -50,38 +50,25 @@ class LoginWithEmailViewModel(
     }
 
     viewModelScope.launch {
-      _state.update { it.copy(isLoading = true) }
+      val result = apolloClient.executeMutation(
+        LoginWithEmailScreen_LoginWithEmail_Mutation(
+          LoginWithEmailInput(email = current.email, password = current.password),
+        ),
+      )
 
-      try {
-        val response = apolloClient.mutation(
-          LoginWithEmailScreen_LoginWithEmail_Mutation(
-            LoginWithEmailInput(email = current.email, password = current.password),
-          ),
-        ).execute()
-
-        val gqlError = response.errors?.firstOrNull()
-        if (gqlError != null) {
-          val type = gqlError.extensions?.get("type") as? String
-          val code = gqlError.extensions?.get("code") as? String
-
-          val message = if (type == "TypieError") {
-            when (code) {
-              "invalid_credentials" -> "이메일 또는 비밀번호가 올바르지 않아요."
-              "password_not_set" -> "비밀번호가 설정되지 않았어요."
-              else -> "오류가 발생했어요. 잠시 후 다시 시도해주세요."
-            }
-          } else {
-            "오류가 발생했어요. 잠시 후 다시 시도해주세요."
+      when (result) {
+        is MutationResult.Success -> {}
+        is MutationResult.Failure -> {
+          val message = when (result.error.code) {
+            "invalid_credentials" -> "이메일 또는 비밀번호가 올바르지 않아요."
+            "password_not_set" -> "비밀번호가 설정되지 않았어요."
+            else -> "오류가 발생했어요. 잠시 후 다시 시도해주세요."
           }
-
-          _state.update { it.copy(isLoading = false) }
           toast.show(ToastType.Error, message)
-        } else {
-          _state.update { it.copy(isLoading = false) }
         }
-      } catch (_: Exception) {
-        _state.update { it.copy(isLoading = false) }
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+        is MutationResult.Error -> {
+          toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+        }
       }
     }
   }

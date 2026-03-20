@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import co.typie.auth.sso.activityContext
 import co.typie.di.Platform
 import co.typie.generated.resources.Res
+import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.ui.clickable
@@ -77,39 +78,39 @@ fun LoginScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
       ) {
         if (platform != Platform.Jvm) {
-          SsoButton(
+          Button(
             text = "구글로 시작하기",
             svgPath = "files/brands/google.svg",
             foregroundColor = Color(0xFF000000),
             backgroundColor = Color(0xFFFFFFFF),
             borderColor = AppTheme.colors.borderDefault,
-            onClick = { viewModel.loginWithGoogle(ctx) },
+            onClick = { viewModel.loginWith(SingleSignOnProvider.GOOGLE, ctx) },
           )
-          SsoButton(
+          Button(
             text = "카카오로 시작하기",
             svgPath = "files/brands/kakao.svg",
             iconTint = Color(0xFF000000),
             foregroundColor = Color(0xFF000000),
             backgroundColor = Color(0xFFFEE500),
-            onClick = { viewModel.loginWithKakao(ctx) },
+            onClick = { viewModel.loginWith(SingleSignOnProvider.KAKAO, ctx) },
           )
-          SsoButton(
+          Button(
             text = "네이버로 시작하기",
             svgPath = "files/brands/naver.svg",
             iconTint = Color(0xFFFFFFFF),
             foregroundColor = Color(0xFFFFFFFF),
             backgroundColor = Color(0xFF03C75A),
-            onClick = { viewModel.loginWithNaver(ctx) },
+            onClick = { viewModel.loginWith(SingleSignOnProvider.NAVER, ctx) },
           )
 
           if (platform == Platform.iOS) {
-            SsoButton(
+            Button(
               text = "애플로 시작하기",
               svgPath = "files/brands/apple.svg",
               iconTint = Color(0xFFFFFFFF),
               foregroundColor = Color(0xFFFFFFFF),
               backgroundColor = Color(0xFF000000),
-              onClick = { viewModel.loginWithApple(ctx) },
+              onClick = { viewModel.loginWith(SingleSignOnProvider.APPLE, ctx) },
             )
           }
         }
@@ -127,7 +128,7 @@ fun LoginScreen() {
 }
 
 @Composable
-private fun SsoButton(
+private fun Button(
   text: String,
   svgPath: String,
   foregroundColor: Color,
