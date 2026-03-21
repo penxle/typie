@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.IntOffset
 import co.typie.ext.toDp
 import co.typie.ui.shape.SquircleShape
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class PopoverListItem(
@@ -44,9 +46,11 @@ fun PopoverScope.PopoverList(
 ) {
   val haptic = LocalHapticFeedback.current
   val density = LocalDensity.current
+  val gestureScope = rememberCoroutineScope()
   val itemRadius = PopoverDefaults.ExpandedRadius - PopoverDefaults.PanePadding
 
   var activeIndex by remember { mutableStateOf<Int?>(null) }
+  var isLocalTracking by remember { mutableStateOf(false) }
   val itemBounds = remember { mutableStateMapOf<Int, Rect>() }
   var listWindowOffset by remember { mutableStateOf(Offset.Zero) }
 
@@ -85,6 +89,10 @@ fun PopoverScope.PopoverList(
   // Scope pointer tracking (drag from anchor)
   val currentPointerState = pointerState
   LaunchedEffect(currentPointerState) {
+    if (isLocalTracking) {
+      return@LaunchedEffect
+    }
+
     val state = currentPointerState ?: run {
       activeIndex = null
       return@LaunchedEffect
@@ -149,32 +157,53 @@ fun PopoverScope.PopoverList(
                   val event = awaitPointerEvent()
                   when (event.type) {
                     PointerEventType.Press -> {
-                      activeIndex = index
-                      haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                      val press = event.changes.firstOrNull() ?: continue
+                      val pointerId = press.id
+                      var currentWindowPos =
+                        press.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
+                      var isSelectionArmed = false
+                      isLocalTracking = true
+                      activeIndex = null
 
-                      val pointerId = event.changes.first().id
+                      val armJob = gestureScope.launch {
+                        delay(PopoverDefaults.ArmDelayMs)
+                        isSelectionArmed = true
+                        val hitIndex = hitTestItems(currentWindowPos, itemBounds)
+                        if (hitIndex != null && hitIndex != activeIndex) {
+                          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        activeIndex = hitIndex
+                      }
 
                       while (true) {
                         val moveEvent = awaitPointerEvent()
                         val change = moveEvent.changes.find { it.id == pointerId } ?: break
 
-                        val windowPos =
+                        currentWindowPos =
                           change.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
-                        val hitIndex = hitTestItems(windowPos, itemBounds)
-                        if (hitIndex != null && hitIndex != activeIndex) {
-                          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (isSelectionArmed) {
+                          val hitIndex = hitTestItems(currentWindowPos, itemBounds)
+                          if (hitIndex != null && hitIndex != activeIndex) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                          }
+                          activeIndex = hitIndex
                         }
-                        activeIndex = hitIndex
 
                         if (!change.pressed) {
-                          val selectedIndex = hitIndex
+                          armJob.cancel()
+                          val selectedIndex = hitTestItems(currentWindowPos, itemBounds)
                           activeIndex = null
+                          isLocalTracking = false
                           if (selectedIndex != null) {
                             items[selectedIndex].onSelected()
                           }
                           break
                         }
                       }
+
+                      armJob.cancel()
+                      activeIndex = null
+                      isLocalTracking = false
                     }
 
                     else -> {}

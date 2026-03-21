@@ -40,6 +40,8 @@ import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPosition
 import co.typie.ui.component.popover.PopoverScope
+import co.typie.ui.component.popover.PopoverTransitionElement
+import co.typie.ui.component.popover.PopoverTransitionFrame
 import co.typie.ui.component.topbar.TopBar
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -133,21 +135,7 @@ private fun PopoverScope.SpacePopoverPane(
   Column(
     modifier = Modifier.padding(panePadding),
   ) {
-    // Header
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      modifier = Modifier.height(TopBarDefaults.ButtonSize),
-    ) {
-      Spacer(Modifier.width(8.dp))
-      SpacePopoverLogo(logo = logo, size = 26.dp)
-      Spacer(Modifier.width(12.dp))
-      Text(
-        "내 스페이스",
-        style = AppTheme.typography.title,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
+    SpacePopoverHeader(logo = logo)
 
     Spacer(Modifier.height(4.dp))
 
@@ -200,6 +188,46 @@ private fun PopoverScope.SpacePopoverPane(
         )
       },
     )
+  }
+}
+
+@Composable
+private fun SpacePopoverHeader(logo: Img_image?) {
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(TopBarDefaults.ButtonSize),
+  ) {
+    Box(
+      contentAlignment = Alignment.CenterStart,
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(start = 46.dp, end = 16.dp),
+    ) {
+      Text(
+        "내 스페이스",
+        style = AppTheme.typography.title,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+
+    PopoverTransitionElement(
+      collapsedFrame = PopoverTransitionFrame(
+        left = 9.dp,
+        top = (TopBarDefaults.ButtonSize - 26.dp) / 2,
+        width = 26.dp,
+        height = 26.dp,
+      ),
+      expandedFrame = PopoverTransitionFrame(
+        left = 8.dp,
+        top = (TopBarDefaults.ButtonSize - 26.dp) / 2,
+        width = 26.dp,
+        height = 26.dp,
+      ),
+    ) {
+      SpacePopoverLogo(logo = logo, size = 26.dp)
+    }
   }
 }
 
