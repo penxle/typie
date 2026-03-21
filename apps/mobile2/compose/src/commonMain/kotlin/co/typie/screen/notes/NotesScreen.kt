@@ -7,10 +7,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 
 @Composable
 fun NotesScreen() {
+  ProvideTopBar(
+    leading = null,
+    center = { Text("노트", style = AppTheme.typography.title) },
+  )
+
   Screen { _ ->
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
       Text("Notes", style = AppTheme.typography.display)

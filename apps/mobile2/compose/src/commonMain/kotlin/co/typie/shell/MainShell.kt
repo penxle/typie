@@ -33,15 +33,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
+import co.typie.ext.toPx
 import co.typie.ext.navigationBarsPadding
 import co.typie.icons.Lucide
+import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
 import co.typie.overlay.Toast
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
+import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.koinInject
@@ -63,12 +67,37 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   val showBottomBar = activeNavigator.stack.size == 1 ||
     (activeNavigator.stack.size == 2 && activeNavigator.popRequested)
 
+  val topBarState = remember { TopBarState() }
+
+  val density = LocalDensity.current
   val toast = koinInject<Toast>()
   LaunchedEffect(activeNavigator.current) {
     toast.bottomInset = activeNavigator.current.toastBottomInset
   }
 
-  Box(Modifier.fillMaxSize()) {
+  NavigationScaffold(
+    navigator = activeNavigator,
+    topBarState = topBarState,
+    overlay = {
+      AnimatedVisibility(
+        visible = showBottomBar,
+        modifier = Modifier.align(Alignment.BottomCenter),
+        enter = slideInVertically(
+          initialOffsetY = { 32.dp.toPx(density).toInt() },
+          animationSpec = tween(300, easing = EaseOutCubic),
+        ) + fadeIn(animationSpec = tween(200)),
+        exit = slideOutVertically(
+          targetOffsetY = { 32.dp.toPx(density).toInt() },
+          animationSpec = tween(300, easing = EaseOutCubic),
+        ) + fadeOut(animationSpec = tween(200)),
+      ) {
+        BottomBar(
+          currentTab = currentTab,
+          onSelectTab = { currentTab = it },
+        )
+      }
+    },
+  ) {
     Crossfade(
       targetState = currentTab,
       modifier = Modifier.fillMaxSize(),
@@ -76,25 +105,8 @@ fun MainShell(content: @Composable (Route) -> Unit) {
     ) { tab ->
       NavigationStack(
         navigator = navigators[tab]!!,
+        topBarState = topBarState,
         content = content,
-      )
-    }
-
-    AnimatedVisibility(
-      visible = showBottomBar,
-      modifier = Modifier.align(Alignment.BottomCenter),
-      enter = slideInVertically(
-        initialOffsetY = { it * 2 },
-        animationSpec = tween(300, easing = EaseOutCubic),
-      ) + fadeIn(animationSpec = tween(200)),
-      exit = slideOutVertically(
-        targetOffsetY = { it * 2 },
-        animationSpec = tween(300, easing = EaseOutCubic),
-      ) + fadeOut(animationSpec = tween(200)),
-    ) {
-      BottomBar(
-        currentTab = currentTab,
-        onSelectTab = { currentTab = it },
       )
     }
   }

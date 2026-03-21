@@ -1,5 +1,5 @@
 query ProfileScreen_Query {
-  me @nonnull {
+  me @catch(to: THROW) {
     id
     name
     email

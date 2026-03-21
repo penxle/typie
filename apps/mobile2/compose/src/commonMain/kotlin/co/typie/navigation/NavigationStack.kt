@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -30,8 +31,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.route.Route
+import co.typie.ui.component.topbar.LocalTopBarState
+import co.typie.ui.component.topbar.NavDirection
+import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.theme.AppTheme
-import androidx.compose.runtime.snapshotFlow
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 
 private enum class AnimState { Idle, Push, Pop, Dragging }
@@ -39,9 +43,12 @@ private enum class AnimState { Idle, Push, Pop, Dragging }
 @Composable
 fun NavigationStack(
   navigator: Navigator,
+  topBarState: TopBarState,
   modifier: Modifier = Modifier,
   content: @Composable (Route) -> Unit,
 ) {
+  val exitTopBarState = remember { TopBarState() }
+
   @Composable
   fun RouteContent(route: Route) {
     val owner = remember(route) {
@@ -49,7 +56,10 @@ fun NavigationStack(
         override val viewModelStore = navigator.viewModelStoreFor(route)
       }
     }
-    CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+    CompositionLocalProvider(
+      LocalViewModelStoreOwner provides owner,
+      LocalRoute provides route,
+    ) {
       content(route)
     }
   }
@@ -74,11 +84,14 @@ fun NavigationStack(
           animState = AnimState.Pop
           progress.snapTo(0f)
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
+          val poppedRoute = visibleRoute
           navigator.pop()
           navigator.consumePopRequest()
           visibleRoute = navigator.current
           behindRoute = null
           animState = AnimState.Idle
+          topBarState.clearRoute(poppedRoute)
+          exitTopBarState.clearRoute(poppedRoute)
         }
       }
   }
@@ -98,11 +111,14 @@ fun NavigationStack(
 
         else -> {
           // Pop: visibleRoute(현재 화면)가 앞에서 나가고, navigator.current(이전 화면)가 뒤에서 나타남
+          val poppedRoute = visibleRoute
           behindRoute = navigator.current
           animState = AnimState.Pop
           progress.snapTo(0f)
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
           visibleRoute = navigator.current
+          topBarState.clearRoute(poppedRoute)
+          exitTopBarState.clearRoute(poppedRoute)
         }
       }
       behindRoute = null
@@ -119,12 +135,19 @@ fun NavigationStack(
         .fillMaxSize()
         .onSizeChanged { containerWidth = it.width.toFloat() }
     ) {
+      // 전환 progress에 연동: 0→1f, 0.5→0f, 1→1f
+      topBarState.blurFactor = if (animState == AnimState.Idle) 1f else abs(progress.value * 2f - 1f)
+
       when (animState) {
         AnimState.Idle -> {
-          RouteContent(visibleRoute)
+          topBarState.navDirection = NavDirection.Switch
+          CompositionLocalProvider(LocalTopBarState provides topBarState) {
+            RouteContent(visibleRoute)
+          }
         }
 
         AnimState.Push -> {
+          topBarState.navDirection = NavDirection.Push
           val p = progress.value
           val behindOffset = -containerWidth / 6f * p
           val frontOffset = containerWidth * (1f - p)
@@ -132,7 +155,11 @@ fun NavigationStack(
           // 뒤: 이전 화면 (왼쪽으로 밀림)
           Box(Modifier.fillMaxSize().graphicsLayer {
             translationX = behindOffset
-          }) { RouteContent(behindRoute!!) }
+          }) {
+            CompositionLocalProvider(LocalTopBarState provides exitTopBarState) {
+              RouteContent(behindRoute!!)
+            }
+          }
 
           // Dim overlay
           Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
@@ -144,19 +171,28 @@ fun NavigationStack(
             shadowElevation = 12.dp.toPx()
             shape = RoundedCornerShape(cornerRadius(p))
             clip = true
-          }) { RouteContent(navigator.current) }
+          }) {
+            CompositionLocalProvider(LocalTopBarState provides topBarState) {
+              RouteContent(navigator.current)
+            }
+          }
         }
 
         AnimState.Pop -> {
+          topBarState.navDirection = NavDirection.Pop
           val p = progress.value
           val behindOffset = -containerWidth / 6f * (1f - p)
           val frontOffset = containerWidth * p
 
-          // 뒤: 돌아갈 화면 (왼쪽에서 복귀)
           behindRoute?.let { behind ->
+            // 뒤: 돌아갈 화면 (왼쪽에서 복귀)
             Box(Modifier.fillMaxSize().graphicsLayer {
               translationX = behindOffset
-            }) { RouteContent(behind) }
+            }) {
+              CompositionLocalProvider(LocalTopBarState provides topBarState) {
+                RouteContent(behind)
+              }
+            }
 
             // Dim overlay
             Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
@@ -168,20 +204,31 @@ fun NavigationStack(
               shadowElevation = 12.dp.toPx()
               shape = RoundedCornerShape(cornerRadius(1f - p))
               clip = true
-            }) { RouteContent(visibleRoute) }
+            }) {
+              CompositionLocalProvider(LocalTopBarState provides exitTopBarState) {
+                RouteContent(visibleRoute)
+              }
+            }
           }
         }
 
         AnimState.Dragging -> {
+          // popRequested = commit 확정 → TopBar를 목적지로 전환
+          val committed = navigator.popRequested
+          if (committed) topBarState.navDirection = NavDirection.Pop
           val p = progress.value
           val behindOffset = -containerWidth / 6f * (1f - p)
           val frontOffset = containerWidth * p
 
-          // 뒤: 돌아갈 화면
           behindRoute?.let { behind ->
+            // 뒤: 돌아갈 화면
             Box(Modifier.fillMaxSize().graphicsLayer {
               translationX = behindOffset
-            }) { RouteContent(behind) }
+            }) {
+              CompositionLocalProvider(LocalTopBarState provides if (committed) topBarState else exitTopBarState) {
+                RouteContent(behind)
+              }
+            }
 
             // Dim overlay
             Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
@@ -193,7 +240,11 @@ fun NavigationStack(
               shadowElevation = 12.dp.toPx()
               shape = RoundedCornerShape(cornerRadius(1f - p))
               clip = true
-            }) { RouteContent(visibleRoute) }
+            }) {
+              CompositionLocalProvider(LocalTopBarState provides if (committed) exitTopBarState else topBarState) {
+                RouteContent(visibleRoute)
+              }
+            }
           }
         }
       }
@@ -217,11 +268,14 @@ fun NavigationStack(
                   val velocity = lastDragAmount * 1000f / 16f
                   scope.launch {
                     if (progress.value > 0.5f || velocity > 1000f) {
+                      val poppedRoute = visibleRoute
                       navigator.requestPop()
                       progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
                       navigator.pop()
                       navigator.consumePopRequest()
                       visibleRoute = navigator.current
+                      topBarState.clearRoute(poppedRoute)
+                      exitTopBarState.clearRoute(poppedRoute)
                     } else {
                       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
                     }

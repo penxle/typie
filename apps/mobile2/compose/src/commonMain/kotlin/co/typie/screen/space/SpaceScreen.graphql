@@ -1,4 +1,4 @@
-query HomeScreen_Query {
+query SpaceScreen_Query {
   me @catch(to: THROW) {
     id
   }

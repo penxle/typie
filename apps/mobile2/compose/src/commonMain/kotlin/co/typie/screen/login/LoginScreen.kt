@@ -29,6 +29,7 @@ import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import coil3.compose.AsyncImage
 import org.koin.compose.koinInject
@@ -40,6 +41,10 @@ fun LoginScreen() {
   val viewModel = koinViewModel<LoginViewModel>()
   val platform = koinInject<Platform>()
   val ctx = activityContext()
+
+  ProvideTopBar(
+    enabled = false
+  )
 
   Screen { contentPadding ->
     Column(

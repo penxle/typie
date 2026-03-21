@@ -2,38 +2,29 @@ package co.typie.ui.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import co.typie.ext.plus
 import co.typie.ext.statusBars
+import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.theme.AppTheme
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
 
 @Composable
 fun Screen(
   modifier: Modifier = Modifier,
-  topBar: (@Composable () -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
-  val colors = AppTheme.colors
-  val hazeState = remember { HazeState() }
+  val topBarState = LocalTopBarState.current
+  val hasTopBar = topBarState != null && topBarState.enabled && topBarState.visible
   val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-  val adjustedContentPadding = if (topBar != null) {
+  val adjustedContentPadding = if (hasTopBar) {
     contentPadding + PaddingValues(top = statusBarTop + TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing)
   } else {
     contentPadding
@@ -42,30 +33,8 @@ fun Screen(
   Box(
     modifier
       .fillMaxSize()
-      .background(colors.surfaceSubtle),
+      .background(AppTheme.colors.surfaceSubtle),
   ) {
-    Box(
-      Modifier
-        .fillMaxSize()
-        .then(if (topBar != null) Modifier.hazeSource(hazeState) else Modifier),
-    ) {
-      content(adjustedContentPadding)
-    }
-
-    if (topBar != null) {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .align(Alignment.TopStart)
-          .hazeEffect(hazeState) {
-            backgroundColor = colors.surfaceSubtle
-            blurRadius = TopBarDefaults.BlurRadius
-            progressive = TopBarDefaults.hazeProgressive()
-          },
-      ) {
-        topBar()
-        Spacer(Modifier.height(TopBarDefaults.BlurFadeHeight))
-      }
-    }
+    content(adjustedContentPadding)
   }
 }

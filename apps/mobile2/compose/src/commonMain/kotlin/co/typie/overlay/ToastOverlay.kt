@@ -120,11 +120,11 @@ private fun AnimatedToast(
     ) {
       Row(verticalAlignment = Alignment.Top) {
         Box(
-          modifier = Modifier.size(18.dp).background(
+          modifier = Modifier.size(20.dp).background(
             when (state.type) {
               ToastType.Success -> AppTheme.colors.accentSuccess
               ToastType.Error -> AppTheme.colors.accentDanger
-              ToastType.Notification -> AppTheme.colors.accentSuccess
+              ToastType.Notification -> AppTheme.colors.accentBrand
             },
             CircleShape,
           ),
@@ -139,10 +139,10 @@ private fun AnimatedToast(
             strokeWidth = when (state.type) {
               ToastType.Success -> 4f
               ToastType.Error -> 1.75f
-              ToastType.Notification -> 1.75f
+              ToastType.Notification -> 2.5f
             },
             tint = AppTheme.colors.textBright,
-            modifier = Modifier.size(10.dp),
+            modifier = Modifier.size(12.dp),
           )
         }
         Spacer(Modifier.width(8.dp))

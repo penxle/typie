@@ -161,7 +161,10 @@ apollo {
   service("typie") {
     packageName.set("co.typie.graphql")
     srcDir("src/commonMain/kotlin")
-    schemaFile.set(file("src/commonMain/graphql/schema.graphqls"))
+    schemaFiles.from(
+      "src/commonMain/graphql/schema.graphqls",
+      "src/commonMain/graphql/apollo.graphqls"
+    )
   }
 }
 

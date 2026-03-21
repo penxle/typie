@@ -35,23 +35,21 @@ import co.typie.navigation.Nav
 import co.typie.ui.component.Button
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
-import co.typie.ui.component.topbar.TopBar
+import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun LoginWithEmailScreen() {
-  Nav.current
   val viewModel = koinViewModel<LoginWithEmailViewModel>()
   val form = viewModel.state.form
   val passwordFocusRequester = remember { FocusRequester() }
 
-  Screen(
-    topBar = {
-      TopBar(
-        center = { Text("이메일로 로그인", style = AppTheme.typography.title) },
-      )
-    }) { contentPadding ->
+  ProvideTopBar(
+    center = { Text("이메일로 로그인", style = AppTheme.typography.title) },
+  )
+
+  Screen { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding).navigationBarsPadding()) {
       EmailFormField(
         label = "이메일",

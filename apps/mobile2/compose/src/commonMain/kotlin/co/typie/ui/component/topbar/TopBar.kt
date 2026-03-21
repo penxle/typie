@@ -1,17 +1,21 @@
 package co.typie.ui.component.topbar
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,47 +28,43 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import co.typie.ext.statusBars
 import co.typie.ext.toDp
 import co.typie.ext.toPx
-import kotlin.math.roundToInt
 
 @Composable
 fun TopBar(
+  state: TopBarState,
   modifier: Modifier = Modifier,
-  leading: (@Composable () -> Unit)? = { TopBarBackButton() },
-  center: (@Composable () -> Unit)? = null,
-  trailing: (@Composable () -> Unit)? = null,
-  visible: Boolean = true,
-  scrollOffset: (() -> Int)? = null,
   onTap: (() -> Unit)? = null,
 ) {
   val density = LocalDensity.current
-  val centerRevealed by remember(scrollOffset, density) {
+  val centerSlideOffset = 16.dp.toPx(density).toInt()
+  val hasScrollReveal = state.scrollOffset != null
+  val centerRevealed by remember(state.scrollOffset, density) {
     derivedStateOf {
-      val offsetDp = (scrollOffset?.invoke() ?: Int.MAX_VALUE).toDp(density)
-      offsetDp > TopBarDefaults.RevealOffset
+      val offset = state.scrollOffset?.invoke() ?: return@derivedStateOf true
+      offset.toDp(density) > TopBarDefaults.RevealOffset
     }
   }
 
   val visibilityAlpha by animateFloatAsState(
-    targetValue = if (visible) 1f else 0f,
+    targetValue = if (state.visible) 1f else 0f,
     animationSpec = tween(TopBarDefaults.VisibilityFadeDuration),
   )
   val visibilityOffsetY by animateFloatAsState(
-    targetValue = if (visible) 0f else -1f,
+    targetValue = if (state.visible) 0f else -1f,
     animationSpec = tween(
       TopBarDefaults.VisibilityAnimationDuration,
       easing = EaseOutCubic,
@@ -72,58 +72,93 @@ fun TopBar(
   )
 
   Box(
-    modifier = modifier
-      .fillMaxWidth()
-      .graphicsLayer {
-        alpha = visibilityAlpha
-        translationY = visibilityOffsetY * size.height
-      }
-      .windowInsetsPadding(WindowInsets.statusBars)
-      .then(
-        if (onTap != null) Modifier.pointerInput(onTap) {
-          detectTapGestures { onTap() }
-        } else Modifier
-      ),
+    modifier = modifier.fillMaxWidth().graphicsLayer {
+      alpha = visibilityAlpha
+      translationY = visibilityOffsetY * size.height
+    }.windowInsetsPadding(WindowInsets.statusBars)
+      .then(if (onTap != null) Modifier.pointerInput(onTap) {
+        detectTapGestures { onTap() }
+      } else Modifier),
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(TopBarDefaults.Height)
+      modifier = Modifier.fillMaxWidth().height(TopBarDefaults.Height)
         .padding(horizontal = TopBarDefaults.HorizontalPadding),
     ) {
-      // Leading slot
+      // Leading slot — slide + fade
       Box(
         contentAlignment = Alignment.CenterStart,
-        modifier = Modifier
-          .width(TopBarDefaults.SlotWidth)
-          .height(TopBarDefaults.Height),
+        modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
       ) {
-        leading?.invoke()
+        AnimatedContent(
+          targetState = state.leadingKey,
+          contentAlignment = Alignment.CenterStart,
+          transitionSpec = {
+            (slideInHorizontally { -it / 2 } + fadeIn(tween(200))).togetherWith(slideOutHorizontally { -it / 2 } + fadeOut(
+              tween(150)
+            )).using(SizeTransform(clip = false) { _, _ -> snap() })
+          },
+        ) { key ->
+          state.leadingEntries[key]?.invoke()
+        }
       }
 
       Spacer(Modifier.width(TopBarDefaults.SlotGap))
 
-      // Center slot with reveal animation
+      // Center slot — crossfade (per route) + scroll-based reveal (per entry, independent)
       Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
-          .weight(1f)
-          .height(TopBarDefaults.Height),
+        modifier = Modifier.weight(1f).height(TopBarDefaults.Height),
       ) {
-        TopBarCenterReveal(visible = centerRevealed, content = center)
+        AnimatedContent(
+          targetState = state.centerKey,
+          modifier = Modifier.fillMaxWidth(),
+          contentAlignment = Alignment.Center,
+          transitionSpec = {
+            when {
+              initialState == TopBarState.NullKey || targetState == TopBarState.NullKey ->
+                fadeIn(tween(200)).togetherWith(fadeOut(tween(150)))
+              state.navDirection == NavDirection.Switch ->
+                fadeIn(tween(200)).togetherWith(fadeOut(tween(150)))
+              else -> {
+                val direction = if (state.navDirection == NavDirection.Push) 1 else -1
+                (slideInVertically { centerSlideOffset * direction } + fadeIn(tween(200))).togetherWith(
+                  slideOutVertically { -centerSlideOffset * direction } + fadeOut(tween(150)))
+              }
+            }.using(SizeTransform(clip = false) { _, _ -> snap() })
+          },
+        ) { key ->
+          // Per-entry reveal state: updated only while this key is current, frozen on exit.
+          val isCurrentKey = key == state.centerKey
+          var revealed by remember { mutableStateOf(!hasScrollReveal || centerRevealed) }
+          if (isCurrentKey) {
+            revealed = !hasScrollReveal || centerRevealed
+          }
+
+          TopBarCenterReveal(visible = revealed) {
+            state.centerEntries[key]?.invoke()
+          }
+        }
       }
 
       Spacer(Modifier.width(TopBarDefaults.SlotGap))
 
-      // Trailing slot
+      // Trailing slot — slide + fade (오른쪽, leading의 반대)
       Box(
         contentAlignment = Alignment.CenterEnd,
-        modifier = Modifier
-          .width(TopBarDefaults.SlotWidth)
-          .height(TopBarDefaults.Height),
+        modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
       ) {
-        trailing?.invoke()
+        AnimatedContent(
+          targetState = state.trailingKey,
+          contentAlignment = Alignment.CenterEnd,
+          transitionSpec = {
+            (slideInHorizontally { it / 2 } + fadeIn(tween(200)))
+              .togetherWith(slideOutHorizontally { it / 2 } + fadeOut(tween(150)))
+              .using(SizeTransform(clip = false) { _, _ -> snap() })
+          },
+        ) { key ->
+          state.trailingEntries[key]?.invoke()
+        }
       }
     }
   }
@@ -132,28 +167,29 @@ fun TopBar(
 @Composable
 private fun TopBarCenterReveal(
   visible: Boolean,
-  content: (@Composable () -> Unit)?,
+  content: @Composable () -> Unit,
 ) {
   AnimatedVisibility(
     visible = visible,
-    enter = fadeIn(tween(TopBarDefaults.RevealFadeDuration)) +
-      slideInVertically(
-        animationSpec = tween(
-          TopBarDefaults.RevealAnimationDuration,
-          easing = EaseOut,
-        ),
-        initialOffsetY = { (it * 0.4f).toInt() },
+    modifier = Modifier.fillMaxWidth(),
+    enter = fadeIn(tween(TopBarDefaults.RevealFadeDuration)) + slideInVertically(
+      animationSpec = tween(
+        TopBarDefaults.RevealAnimationDuration,
+        easing = EaseOut,
       ),
-    exit = fadeOut(tween(TopBarDefaults.RevealFadeDuration)) +
-      slideOutVertically(
-        animationSpec = tween(
-          TopBarDefaults.RevealAnimationDuration,
-          easing = EaseOut,
-        ),
-        targetOffsetY = { (it * 0.4f).toInt() },
+      initialOffsetY = { (it * 0.4f).toInt() },
+    ),
+    exit = fadeOut(tween(TopBarDefaults.RevealFadeDuration)) + slideOutVertically(
+      animationSpec = tween(
+        TopBarDefaults.RevealAnimationDuration,
+        easing = EaseOut,
       ),
+      targetOffsetY = { (it * 0.4f).toInt() },
+    ),
   ) {
-    content?.invoke()
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+      content()
+    }
   }
 }
 
@@ -162,49 +198,4 @@ fun ScrollState.topBarScrollOffset(): () -> Int = { value }
 fun LazyListState.topBarScrollOffset(): () -> Int = {
   if (firstVisibleItemIndex > 0) Int.MAX_VALUE
   else firstVisibleItemScrollOffset
-}
-
-@Stable
-class TopBarScrollBehavior internal constructor(
-  val modifier: Modifier,
-  val scrollOffset: () -> Int,
-)
-
-@Composable
-fun rememberTopBarScrollBehavior(scrollState: ScrollState): TopBarScrollBehavior {
-  val density = LocalDensity.current
-  val revealThresholdPx = TopBarDefaults.RevealOffset.toPx(density)
-  var overscrollPx by remember { mutableFloatStateOf(0f) }
-
-  val modifier = Modifier.pointerInput(scrollState, revealThresholdPx) {
-    awaitEachGesture {
-      awaitFirstDown(requireUnconsumed = false)
-      overscrollPx = 0f
-
-      while (true) {
-        val event = awaitPointerEvent()
-        val change = event.changes.firstOrNull { it.pressed } ?: break
-        val dragY = change.positionChangeIgnoreConsumed().y
-
-        if (scrollState.value >= scrollState.maxValue) {
-          overscrollPx = when {
-            dragY < 0f -> (overscrollPx - dragY * 0.4f).coerceIn(0f, revealThresholdPx * 2f)
-            dragY > 0f -> (overscrollPx - dragY * 0.4f).coerceAtLeast(0f)
-            else -> overscrollPx
-          }
-        } else if (overscrollPx != 0f) {
-          overscrollPx = 0f
-        }
-      }
-
-      overscrollPx = 0f
-    }
-  }
-
-  return remember(scrollState, modifier) {
-    TopBarScrollBehavior(
-      modifier = modifier,
-      scrollOffset = { scrollState.value + overscrollPx.roundToInt() },
-    )
-  }
 }

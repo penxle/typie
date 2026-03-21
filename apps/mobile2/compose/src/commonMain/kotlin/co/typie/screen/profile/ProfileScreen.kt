@@ -22,6 +22,7 @@ import co.typie.overlay.ToastType
 import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
@@ -34,6 +35,11 @@ fun ProfileScreen() {
   val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val query = rememberQuery(ProfileScreen_Query())
+
+  ProvideTopBar(
+    leading = null,
+    center = { Text("프로필", style = AppTheme.typography.title) },
+  )
 
   Screen { _ ->
     GraphQLContent(query) { data ->

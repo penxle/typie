@@ -1,0 +1,13 @@
+query SpacePopover_Query {
+  me @catch(to: THROW) {
+    id
+    sites {
+      id
+      name
+      logo {
+        id
+        ...Img_image
+      }
+    }
+  }
+}

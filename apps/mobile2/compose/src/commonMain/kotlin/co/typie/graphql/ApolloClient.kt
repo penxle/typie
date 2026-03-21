@@ -16,7 +16,7 @@ fun apolloClient(httpClient: HttpClient, authInterceptor: AuthInterceptor): Apol
   ApolloClient.Builder()
     .serverUrl("${Konfig.API_URL}/graphql")
     .ktorClient(httpClient)
-    .fetchPolicy(FetchPolicy.NetworkFirst)
+    .fetchPolicy(FetchPolicy.CacheAndNetwork)
     .normalizedCache(MemoryCacheFactory(maxSizeBytes = 10 * 1024 * 1024))
     .addHttpInterceptor(authInterceptor)
     .build()

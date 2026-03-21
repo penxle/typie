@@ -12,6 +12,7 @@ import co.touchlab.kermit.Logger
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Query
 import com.apollographql.apollo.cache.normalized.watch
+import com.apollographql.apollo.exception.CacheMissException
 import org.koin.compose.koinInject
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -51,6 +52,8 @@ fun <D : Query.Data> rememberQuery(query: Query<D>): QueryResult<D> {
         val data = response.data
         if (data != null) {
           state = QueryState.Success(data)
+        } else if (response.exception is CacheMissException) {
+          // CacheAndNetwork 정책에서 캐시가 비어있을 때 발생 — 네트워크 응답을 기다림
         } else {
           val error =
             response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
