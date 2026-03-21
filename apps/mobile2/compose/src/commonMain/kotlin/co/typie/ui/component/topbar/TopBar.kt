@@ -10,6 +10,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -22,16 +24,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.platform.LocalDensity
 import co.typie.ext.statusBars
 import co.typie.ext.toDp
+import co.typie.ext.toPx
+import kotlin.math.roundToInt
 
 @Composable
 fun TopBar(
@@ -154,4 +162,49 @@ fun ScrollState.topBarScrollOffset(): () -> Int = { value }
 fun LazyListState.topBarScrollOffset(): () -> Int = {
   if (firstVisibleItemIndex > 0) Int.MAX_VALUE
   else firstVisibleItemScrollOffset
+}
+
+@Stable
+class TopBarScrollBehavior internal constructor(
+  val modifier: Modifier,
+  val scrollOffset: () -> Int,
+)
+
+@Composable
+fun rememberTopBarScrollBehavior(scrollState: ScrollState): TopBarScrollBehavior {
+  val density = LocalDensity.current
+  val revealThresholdPx = TopBarDefaults.RevealOffset.toPx(density)
+  var overscrollPx by remember { mutableFloatStateOf(0f) }
+
+  val modifier = Modifier.pointerInput(scrollState, revealThresholdPx) {
+    awaitEachGesture {
+      awaitFirstDown(requireUnconsumed = false)
+      overscrollPx = 0f
+
+      while (true) {
+        val event = awaitPointerEvent()
+        val change = event.changes.firstOrNull { it.pressed } ?: break
+        val dragY = change.positionChangeIgnoreConsumed().y
+
+        if (scrollState.value >= scrollState.maxValue) {
+          overscrollPx = when {
+            dragY < 0f -> (overscrollPx - dragY * 0.4f).coerceIn(0f, revealThresholdPx * 2f)
+            dragY > 0f -> (overscrollPx - dragY * 0.4f).coerceAtLeast(0f)
+            else -> overscrollPx
+          }
+        } else if (overscrollPx != 0f) {
+          overscrollPx = 0f
+        }
+      }
+
+      overscrollPx = 0f
+    }
+  }
+
+  return remember(scrollState, modifier) {
+    TopBarScrollBehavior(
+      modifier = modifier,
+      scrollOffset = { scrollState.value + overscrollPx.roundToInt() },
+    )
+  }
 }
