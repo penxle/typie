@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import co.typie.ext.plus
 import co.typie.ext.statusBars
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.theme.AppTheme
@@ -25,17 +27,17 @@ import dev.chrisbanes.haze.hazeSource
 fun Screen(
   modifier: Modifier = Modifier,
   topBar: (@Composable () -> Unit)? = null,
+  contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
   val colors = AppTheme.colors
   val hazeState = remember { HazeState() }
   val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-  val contentPadding = if (topBar != null) {
-    PaddingValues(top = statusBarTop + TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing)
+  val adjustedContentPadding = if (topBar != null) {
+    contentPadding + PaddingValues(top = statusBarTop + TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing)
   } else {
-    PaddingValues()
+    contentPadding
   }
-
 
   Box(
     modifier
@@ -47,7 +49,7 @@ fun Screen(
         .fillMaxSize()
         .then(if (topBar != null) Modifier.hazeSource(hazeState) else Modifier),
     ) {
-      content(contentPadding)
+      content(adjustedContentPadding)
     }
 
     if (topBar != null) {
@@ -57,8 +59,6 @@ fun Screen(
           .align(Alignment.TopStart)
           .hazeEffect(hazeState) {
             backgroundColor = colors.surfaceDefault
-            blurRadius = TopBarDefaults.BlurRadius
-            noiseFactor = 0f
             progressive = TopBarDefaults.hazeProgressive()
           },
       ) {

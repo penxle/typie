@@ -125,6 +125,7 @@ kotlin {
     implementation(libs.haze)
 
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
   }
 }
 

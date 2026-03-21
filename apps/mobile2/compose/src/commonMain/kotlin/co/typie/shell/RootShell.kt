@@ -16,6 +16,8 @@ import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.splash.SplashScreen
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.LocalHazeState
+import dev.chrisbanes.haze.hazeSource
 import org.koin.compose.koinInject
 
 @Composable
@@ -24,7 +26,12 @@ fun RootShell() {
   val authState by authService.state.collectAsState()
 
   Box(Modifier.fillMaxSize()) {
-    Crossfade(authState, modifier = Modifier.background(AppTheme.colors.surfaceDefault)) { state ->
+    Crossfade(
+      authState,
+      modifier = Modifier
+        .background(AppTheme.colors.surfaceDefault)
+        .hazeSource(LocalHazeState.current),
+    ) { state ->
       when (state) {
         is AuthState.Initializing -> SplashScreen()
         is AuthState.Authenticated -> MainShell { route -> MainRoutes(route) }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,9 +40,12 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.icons.Lucide
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
+import co.typie.overlay.Toast
 import co.typie.route.Route
+import co.typie.route.toastBottomInset
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
+import org.koin.compose.koinInject
 
 private enum class Tab(val route: Route) {
   Home(Route.Home), Space(Route.Space), Notes(Route.Notes), Profile(Route.Profile),
@@ -58,6 +62,11 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   }
   val activeNavigator = navigators[currentTab]!!
   val showBottomBar = activeNavigator.stack.size == 1
+
+  val toast = koinInject<Toast>()
+  LaunchedEffect(activeNavigator.current) {
+    toast.bottomInset = activeNavigator.current.toastBottomInset
+  }
 
   Box(Modifier.fillMaxSize().background(AppTheme.colors.surfaceDefault)) {
     Crossfade(
@@ -96,7 +105,8 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
   val pillShape = RoundedCornerShape(30.dp)
 
   Box(
-    modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 12.dp),
+    modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp)
+      .padding(bottom = 12.dp),
     contentAlignment = Alignment.Center,
   ) {
     Row(

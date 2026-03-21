@@ -56,10 +56,12 @@ builder.mutationFields((t) => ({
         .then(first);
 
       if (!user) {
+        await argon2.hash(input.password);
         throw new TypieError({ code: 'invalid_credentials' });
       }
 
       if (!user.password) {
+        await argon2.hash(input.password);
         throw new TypieError({ code: 'password_not_set' });
       }
 

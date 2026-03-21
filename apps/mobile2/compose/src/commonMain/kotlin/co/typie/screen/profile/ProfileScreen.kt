@@ -17,6 +17,8 @@ import co.typie.ext.clickable
 import co.typie.graphql.GraphQLContent
 import co.typie.graphql.ProfileScreen_Query
 import co.typie.graphql.rememberQuery
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
@@ -29,6 +31,7 @@ import org.koin.compose.koinInject
 @Composable
 fun ProfileScreen() {
   val authService = koinInject<AuthService>()
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val query = rememberQuery(ProfileScreen_Query())
 
@@ -56,7 +59,10 @@ fun ProfileScreen() {
               color = if (isSelected) AppTheme.colors.textBrand else AppTheme.colors.textMuted,
               modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .clickable { themeMode.value = mode },
+                .clickable {
+                  themeMode.value = mode
+                  toast.show(ToastType.Success, "Theme mode changed to ${mode.name}")
+                },
             )
           }
         }

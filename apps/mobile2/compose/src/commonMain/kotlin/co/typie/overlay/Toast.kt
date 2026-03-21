@@ -1,5 +1,10 @@
 package co.typie.overlay
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +27,7 @@ class Toast {
   private var nextId = 0L
   private val _state = MutableStateFlow<ToastState?>(null)
   val state: StateFlow<ToastState?> = _state.asStateFlow()
+  var bottomInset: Dp by mutableStateOf(0.dp)
 
   fun show(
     type: ToastType,

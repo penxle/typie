@@ -27,7 +27,7 @@ class LoginViewModel(
 ) : ViewModel() {
   fun loginWith(provider: SingleSignOnProvider, ctx: Any?) {
     viewModelScope.launch {
-      try {
+      val result = try {
         loader.runWith {
           val provider = when (provider) {
             SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
@@ -39,35 +39,28 @@ class LoginViewModel(
 
           val credential = provider.authenticate(ctx)
 
-          val result =
-            apolloClient.executeMutation(
-              LoginScreen_AuthorizeSingleSignOn_Mutation(
-                AuthorizeSingleSignOnInput(
-                  provider = credential.provider,
-                  params = credential.params,
-                )
+          apolloClient.executeMutation(
+            LoginScreen_AuthorizeSingleSignOn_Mutation(
+              AuthorizeSingleSignOnInput(
+                provider = credential.provider,
+                params = credential.params,
               )
             )
-
-          when (result) {
-            is MutationResult.Success -> {}
-            is MutationResult.Failure -> {
-              val message = when (result.error.code) {
-                else -> "로그인에 실패했어요. 다시 시도해주세요."
-              }
-              toast.show(ToastType.Error, message)
-            }
-
-            is MutationResult.Error -> {
-              toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-            }
-          }
+          )
         }
       } catch (e: CancellationException) {
         throw e
-      } catch (e: Exception) {
-        toast.show(ToastType.Error, "로그인에 실패했어요. 다시 시도해주세요.")
+      } catch (_: Exception) {
+        null
       }
+
+      val message = when (result) {
+        is MutationResult.Success -> null
+        is MutationResult.Error -> "오류가 발생했어요. 잠시 후 다시 시도해주세요."
+        else -> "로그인에 실패했어요. 다시 시도해주세요."
+      }
+
+      message?.let { toast.show(ToastType.Error, it) }
     }
   }
 }

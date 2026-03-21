@@ -6,13 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.auth.sso.activityContext
 import co.typie.di.Platform
 import co.typie.ext.clickable
-import co.typie.ext.safeDrawing
+import co.typie.ext.safeDrawingPadding
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.navigation.Nav
@@ -43,11 +41,12 @@ fun LoginScreen() {
   val platform = koinInject<Platform>()
   val ctx = activityContext()
 
-  Screen { _ ->
+  Screen { contentPadding ->
     Column(
       modifier = Modifier
         .fillMaxSize()
-        .windowInsetsPadding(WindowInsets.safeDrawing),
+        .padding(contentPadding)
+        .safeDrawingPadding()
     ) {
       Column(
         modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -62,54 +61,52 @@ fun LoginScreen() {
           colorFilter = ColorFilter.tint(AppTheme.colors.textDefault),
         )
         Spacer(Modifier.height(24.dp))
-        Text("작성, 정리, 공유까지.")
+        Text("작성, 정리, 공유까지.", style = AppTheme.typography.action)
         Spacer(Modifier.height(4.dp))
-        Text("글쓰기의 모든 과정을", style = AppTheme.typography.title)
+        Text("글쓰기의 모든 과정을", style = AppTheme.typography.action)
         Spacer(Modifier.height(4.dp))
-        Text("타이피 하나로 해결해요.", style = AppTheme.typography.title)
+        Text("타이피 하나로 해결해요.", style = AppTheme.typography.action)
       }
 
       Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
       ) {
-        if (platform != Platform.Jvm) {
-          Button(
-            text = "구글로 시작하기",
-            svgPath = "files/brands/google.svg",
-            foregroundColor = Color(0xFF000000),
-            backgroundColor = Color(0xFFFFFFFF),
-            borderColor = AppTheme.colors.borderDefault,
-            onClick = { viewModel.loginWith(SingleSignOnProvider.GOOGLE, ctx) },
-          )
-          Button(
-            text = "카카오로 시작하기",
-            svgPath = "files/brands/kakao.svg",
-            iconTint = Color(0xFF000000),
-            foregroundColor = Color(0xFF000000),
-            backgroundColor = Color(0xFFFEE500),
-            onClick = { viewModel.loginWith(SingleSignOnProvider.KAKAO, ctx) },
-          )
-          Button(
-            text = "네이버로 시작하기",
-            svgPath = "files/brands/naver.svg",
+        SingleSignOnButton(
+          text = "구글로 시작하기",
+          svgPath = "files/brands/google.svg",
+          foregroundColor = Color(0xFF000000),
+          backgroundColor = Color(0xFFFFFFFF),
+          borderColor = AppTheme.colors.borderDefault,
+          onClick = { viewModel.loginWith(SingleSignOnProvider.GOOGLE, ctx) },
+        )
+        SingleSignOnButton(
+          text = "카카오로 시작하기",
+          svgPath = "files/brands/kakao.svg",
+          iconTint = Color(0xFF000000),
+          foregroundColor = Color(0xFF000000),
+          backgroundColor = Color(0xFFFEE500),
+          onClick = { viewModel.loginWith(SingleSignOnProvider.KAKAO, ctx) },
+        )
+        SingleSignOnButton(
+          text = "네이버로 시작하기",
+          svgPath = "files/brands/naver.svg",
+          iconTint = Color(0xFFFFFFFF),
+          foregroundColor = Color(0xFFFFFFFF),
+          backgroundColor = Color(0xFF03C75A),
+          onClick = { viewModel.loginWith(SingleSignOnProvider.NAVER, ctx) },
+        )
+
+        if (platform != Platform.Android) {
+          SingleSignOnButton(
+            text = "애플로 시작하기",
+            svgPath = "files/brands/apple.svg",
             iconTint = Color(0xFFFFFFFF),
             foregroundColor = Color(0xFFFFFFFF),
-            backgroundColor = Color(0xFF03C75A),
-            onClick = { viewModel.loginWith(SingleSignOnProvider.NAVER, ctx) },
+            backgroundColor = Color(0xFF000000),
+            onClick = { viewModel.loginWith(SingleSignOnProvider.APPLE, ctx) },
           )
-
-          if (platform == Platform.iOS) {
-            Button(
-              text = "애플로 시작하기",
-              svgPath = "files/brands/apple.svg",
-              iconTint = Color(0xFFFFFFFF),
-              foregroundColor = Color(0xFFFFFFFF),
-              backgroundColor = Color(0xFF000000),
-              onClick = { viewModel.loginWith(SingleSignOnProvider.APPLE, ctx) },
-            )
-          }
         }
 
         Text(
@@ -117,7 +114,7 @@ fun LoginScreen() {
           style = AppTheme.typography.caption,
           color = AppTheme.colors.textSubtle,
           modifier = Modifier
-            .padding(horizontal = 24.dp, vertical = 8.dp)
+            .padding(vertical = 8.dp)
             .clickable { nav.navigate(Route.LoginWithEmail) },
         )
       }
@@ -126,7 +123,7 @@ fun LoginScreen() {
 }
 
 @Composable
-private fun Button(
+private fun SingleSignOnButton(
   text: String,
   svgPath: String,
   foregroundColor: Color,
@@ -135,7 +132,7 @@ private fun Button(
   iconTint: Color? = null,
   onClick: () -> Unit = {},
 ) {
-  val shape = RoundedCornerShape(999.dp)
+  val shape = RoundedCornerShape(16.dp)
 
   Box(
     modifier = Modifier

@@ -4,14 +4,28 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import co.typie.serialization.EnumSerializer
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.LocalHazeStyle
+import kotlinx.serialization.Serializable
+import org.koin.compose.koinInject
 
-enum class ThemeMode { System, Light, Dark }
+@Serializable(with = ThemeMode.Serializer::class)
+enum class ThemeMode {
+  System, Light, Dark;
+
+  data object Serializer : EnumSerializer<ThemeMode>(entries, String::lowercase)
+}
 
 @Immutable
 data class AppColors(
@@ -93,7 +107,7 @@ val LightColors = AppColors(
   surfaceDefault = AppColor.white,
   surfaceSubtle = AppColor.light.gray.s50,
   surfaceMuted = AppColor.light.gray.s100,
-  surfaceDark = AppColor.light.gray.s700,
+  surfaceDark = AppColor.light.gray.s600,
   surfaceElevated = AppColor.white,
 
   interactiveHover = AppColor.light.gray.s200,
@@ -107,15 +121,15 @@ val LightColors = AppColors(
   accentInfo = AppColor.light.blue.s500,
   accentInfoSubtle = AppColor.light.blue.s50,
 
-  accentDanger = AppColor.light.red.s600,
-  accentDangerHover = AppColor.light.red.s500,
+  accentDanger = AppColor.light.red.s500,
+  accentDangerHover = AppColor.light.red.s600,
   accentDangerActive = AppColor.light.red.s700,
   accentDangerSubtle = AppColor.light.red.s50,
 
   accentWarning = AppColor.light.amber.s600,
   accentWarningSubtle = AppColor.light.amber.s50,
 
-  accentSuccess = AppColor.light.green.s700,
+  accentSuccess = AppColor.light.green.s400,
   accentSuccessSubtle = AppColor.light.green.s50,
 
   borderDefault = AppColor.light.gray.s200,
@@ -145,7 +159,7 @@ val DarkColors = AppColors(
   surfaceDefault = AppColor.dark.gray.s900,
   surfaceSubtle = AppColor.dark.gray.s800,
   surfaceMuted = AppColor.dark.gray.s700,
-  surfaceDark = AppColor.dark.gray.s700,
+  surfaceDark = AppColor.dark.gray.s500,
   surfaceElevated = AppColor.dark.gray.s800,
 
   interactiveHover = AppColor.dark.gray.s600,
@@ -159,7 +173,7 @@ val DarkColors = AppColors(
   accentInfo = AppColor.dark.blue.s200,
   accentInfoSubtle = AppColor.dark.blue.s900,
 
-  accentDanger = AppColor.dark.red.s400,
+  accentDanger = AppColor.dark.red.s300,
   accentDangerHover = AppColor.dark.red.s500,
   accentDangerActive = AppColor.dark.red.s600,
   accentDangerSubtle = AppColor.dark.red.s900,
@@ -167,7 +181,7 @@ val DarkColors = AppColors(
   accentWarning = AppColor.dark.amber.s300,
   accentWarningSubtle = AppColor.dark.amber.s900,
 
-  accentSuccess = AppColor.dark.green.s300,
+  accentSuccess = AppColor.dark.green.s200,
   accentSuccessSubtle = AppColor.dark.green.s900,
 
   borderDefault = AppColor.dark.gray.s700,
@@ -181,21 +195,30 @@ val DarkColors = AppColors(
 )
 
 val LocalAppColors = staticCompositionLocalOf { LightColors }
+val LocalHazeState = staticCompositionLocalOf { HazeState() }
 val LocalThemeMode = compositionLocalOf<MutableState<ThemeMode>> {
   error("No ThemeMode provided. Wrap your content with AppTheme.")
 }
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-  val themeMode = remember { mutableStateOf(ThemeMode.System) }
+  val themeService = koinInject<ThemeService>()
+  val themeMode = remember { mutableStateOf(themeService.themeMode) }
+  LaunchedEffect(Unit) {
+    snapshotFlow { themeMode.value }
+      .collect { themeService.themeMode = it }
+  }
+
   val isDark = when (themeMode.value) {
     ThemeMode.System -> isSystemInDarkTheme()
     ThemeMode.Light -> false
     ThemeMode.Dark -> true
   }
+
   CompositionLocalProvider(
     LocalAppColors provides if (isDark) DarkColors else LightColors,
     LocalThemeMode provides themeMode,
+    LocalHazeStyle provides HazeStyle(blurRadius = 20.dp, noiseFactor = 0f, tints = listOf()),
   ) {
     content()
   }

@@ -1,0 +1,165 @@
+package co.typie.form
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+
+class FieldConfig<V> {
+  internal val rules = mutableListOf<Rule<V>>()
+  internal val deferredRules = mutableListOf<DeferredRule<V>>()
+  internal var validateOn: ValidateOn? = null
+
+  fun rules(vararg rules: Rule<V>) {
+    this.rules.addAll(rules)
+  }
+
+  fun validateOn(timing: ValidateOn) {
+    this.validateOn = timing
+  }
+
+  fun required(message: String = "필수 항목입니다") { rules.add(co.typie.form.required(message)) }
+  fun rule(validate: suspend (V) -> String?) { rules.add(co.typie.form.rule(validate)) }
+  fun defer(debounce: Duration = 300.milliseconds, validate: suspend (V) -> String?) {
+    deferredRules.add(DeferredRule(Rule { validate(it) }, debounce))
+  }
+}
+
+// String-specific convenience methods
+fun FieldConfig<String>.email(message: String = "올바른 이메일 형식을 입력해주세요") { rules.add(co.typie.form.email(message)) }
+fun FieldConfig<String>.minLength(min: Int, message: String = "${min}자 이상 입력해주세요") { rules.add(co.typie.form.minLength(min, message)) }
+fun FieldConfig<String>.maxLength(max: Int, message: String = "${max}자 이하로 입력해주세요") { rules.add(co.typie.form.maxLength(max, message)) }
+fun FieldConfig<String>.pattern(regex: Regex, message: String = "올바른 형식을 입력해주세요") { rules.add(co.typie.form.pattern(regex, message)) }
+
+// Comparable-specific convenience methods
+fun <V : Comparable<V>> FieldConfig<V>.min(min: V, message: String = "최솟값은 ${min}입니다") { rules.add(co.typie.form.min(min, message)) }
+fun <V : Comparable<V>> FieldConfig<V>.max(max: V, message: String = "최댓값은 ${max}입니다") { rules.add(co.typie.form.max(max, message)) }
+
+open class FormState(
+  private val defaultValidateOn: ValidateOn = ValidateOn.OnSubmit,
+) {
+  private val registeredFields = mutableListOf<FieldState<*>>()
+  private val debounceJobs = mutableMapOf<FieldState<*>, Job>()
+  private var validationScope: CoroutineScope? = null
+
+  var isSubmitting: Boolean by mutableStateOf(false)
+    private set
+
+  protected fun <V> field(
+    initialValue: V,
+    config: FieldConfig<V>.() -> Unit = {},
+  ): FieldState<V> {
+    val fieldConfig = FieldConfig<V>().apply(config)
+    val fieldState = FieldState(
+      initialValue = initialValue,
+      rules = fieldConfig.rules,
+      deferredRules = fieldConfig.deferredRules,
+      validateOn = fieldConfig.validateOn ?: defaultValidateOn,
+    )
+    fieldState.onValueChanged = { onFieldValueChanged(fieldState) }
+    fieldState.onBlurCallback = {
+      if (fieldState.validateOn == ValidateOn.OnBlur) {
+        validationScope?.launch {
+          fieldState.isValidating = true
+          fieldState.errors = fieldState.validate()
+          fieldState.isValidating = false
+        }
+      }
+    }
+    registeredFields.add(fieldState)
+    return fieldState
+  }
+
+  val isDirty: Boolean
+    get() = registeredFields.any { it.isDirty }
+
+  val isValid: Boolean
+    get() = registeredFields.all { it.errors.isEmpty() }
+
+  val isValidating: Boolean
+    get() = registeredFields.any { it.isValidating }
+
+  val isProcessing: Boolean
+    get() = isValidating || isSubmitting
+
+  val errors: Map<FieldState<*>, List<String>>
+    get() = registeredFields
+      .filter { it.errors.isNotEmpty() }
+      .associateWith { it.errors }
+
+  suspend fun validateAll(): Boolean {
+    var allValid = true
+    for (field in registeredFields) {
+      field.isValidating = true
+      val errors = field.validate()
+      field.errors = errors
+      field.isValidating = false
+      if (errors.isNotEmpty()) allValid = false
+    }
+    return allValid
+  }
+
+  private var submitLock = false
+
+  fun submit(scope: CoroutineScope, block: suspend () -> Unit) {
+    if (submitLock) return
+    submitLock = true
+    scope.launch {
+      try {
+        if (!validateAll()) return@launch
+        isSubmitting = true
+        block()
+      } finally {
+        isSubmitting = false
+        submitLock = false
+      }
+    }
+  }
+
+  fun reset() {
+    for (field in registeredFields) {
+      field.reset()
+    }
+    isSubmitting = false
+    debounceJobs.values.forEach { it.cancel() }
+    debounceJobs.clear()
+  }
+
+  fun setValidationScope(scope: CoroutineScope) {
+    validationScope = scope
+  }
+
+  private fun onFieldValueChanged(field: FieldState<*>) {
+    when (field.validateOn) {
+      ValidateOn.OnChange -> {
+        debounceJobs[field]?.cancel()
+        val scope = validationScope ?: return
+
+        debounceJobs[field] = scope.launch {
+          // Phase 1: sync rules (no delay)
+          val syncErrors = mutableListOf<String>()
+          for (rule in field.rules) {
+            @Suppress("UNCHECKED_CAST")
+            (rule as Rule<Any?>).validate(field.value)?.let { syncErrors.add(it) }
+          }
+          field.errors = syncErrors
+
+          // Phase 2: deferred rules (with delay)
+          if (field.deferredRules.isNotEmpty()) {
+            val debounce = field.deferredRules.maxOf { it.debounce }
+            delay(debounce)
+            field.isValidating = true
+            field.errors = field.validate() // ALL rules (sync + deferred)
+            field.isValidating = false
+          }
+        }
+      }
+      else -> {}
+    }
+  }
+}

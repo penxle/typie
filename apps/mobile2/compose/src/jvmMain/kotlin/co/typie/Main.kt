@@ -160,6 +160,7 @@ fun main() {
           }
         }
       }
+
       val currentDensity = LocalDensity.current
       val scale = if (usePhysicalScale) physicalScale.toFloat() else 1f
       val adjustedDensity = remember(currentDensity, scale) {
@@ -168,6 +169,7 @@ fun main() {
           fontScale = currentDensity.fontScale,
         )
       }
+
       CompositionLocalProvider(LocalDensity provides adjustedDensity) {
         App()
       }
