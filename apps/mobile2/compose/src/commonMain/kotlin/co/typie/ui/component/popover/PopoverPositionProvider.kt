@@ -13,7 +13,7 @@ enum class PopoverPosition {
 
 internal class PopoverPositionProvider(
   private val position: PopoverPosition,
-  private val screenPaddingPx: Int,
+  private val screenPadding: PopoverScreenPadding,
 ) : PopupPositionProvider {
 
   var lastShowBelow: Boolean = true
@@ -30,7 +30,7 @@ internal class PopoverPositionProvider(
       childHeight = popupContentSize.height,
       windowHeight = windowSize.height,
       anchorRect = anchorBounds,
-      screenPadding = screenPaddingPx,
+      screenPadding = screenPadding,
     )
 
     val unclampedX = when (position) {
@@ -49,18 +49,18 @@ internal class PopoverPositionProvider(
 
     val minX = when (position) {
       PopoverPosition.BottomLeft, PopoverPosition.TopLeft -> 0
-      else -> screenPaddingPx
+      else -> screenPadding.left
     }
     val maxX = when (position) {
       PopoverPosition.BottomRight, PopoverPosition.TopRight ->
         windowSize.width - popupContentSize.width
 
       else ->
-        windowSize.width - screenPaddingPx - popupContentSize.width
+        windowSize.width - screenPadding.right - popupContentSize.width
     }
-    val minY = if (showBelow) 0 else screenPaddingPx
+    val minY = if (showBelow) 0 else screenPadding.top
     val maxY = if (showBelow) {
-      windowSize.height - screenPaddingPx - popupContentSize.height
+      windowSize.height - screenPadding.bottom - popupContentSize.height
     } else {
       windowSize.height - popupContentSize.height
     }
@@ -79,10 +79,10 @@ internal fun shouldShowBelow(
   childHeight: Int,
   windowHeight: Int,
   anchorRect: IntRect,
-  screenPadding: Int,
+  screenPadding: PopoverScreenPadding,
 ): Boolean {
-  val bottomSpace = windowHeight - screenPadding - anchorRect.top
-  val topSpace = anchorRect.bottom - screenPadding
+  val bottomSpace = windowHeight - screenPadding.bottom - anchorRect.top
+  val topSpace = anchorRect.bottom - screenPadding.top
   val prefersBottom = position == PopoverPosition.BottomLeft ||
     position == PopoverPosition.BottomCenter ||
     position == PopoverPosition.BottomRight

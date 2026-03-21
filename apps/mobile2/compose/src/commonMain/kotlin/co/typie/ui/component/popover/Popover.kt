@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,7 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -40,9 +43,15 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
+import co.typie.ext.EdgeAutoScrollState
+import co.typie.ext.edgeAutoScroll
+import co.typie.ext.safeDrawing
 import androidx.compose.ui.window.Popup
+import co.typie.ext.overscroll
+import co.typie.ext.rememberEdgeAutoScrollState
 import co.typie.ext.toDp
 import co.typie.ext.toPx
+import co.typie.ext.verticalScroll
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.shape.SquircleShape
 import co.typie.ui.theme.AppTheme
@@ -57,6 +66,7 @@ data class PopoverPaneTransition(
 )
 
 val LocalPopoverPaneTransition = staticCompositionLocalOf<PopoverPaneTransition?> { null }
+val LocalPopoverPaneEdgeAutoScrollState = staticCompositionLocalOf<EdgeAutoScrollState?> { null }
 
 data class AnchorPointerState(
   val position: Offset,
@@ -77,9 +87,17 @@ class PopoverScope internal constructor(
 }
 
 private enum class PopoverSlot {
-  MeasurePane,
+  InitialMeasurePane,
+  FinalMeasurePane,
   Surface,
 }
+
+internal data class PopoverScreenPadding(
+  val left: Int,
+  val top: Int,
+  val right: Int,
+  val bottom: Int,
+)
 
 @Composable
 fun Popover(
@@ -90,7 +108,16 @@ fun Popover(
   collapsedCornerRadius: Dp = 0.dp,
 ) {
   val density = LocalDensity.current
+  val layoutDirection = LocalLayoutDirection.current
   val screenPaddingPx = PopoverDefaults.ScreenPadding.toPx(density).toInt()
+  val armDistancePx = PopoverDefaults.ArmDistance.toPx(density)
+  val safeDrawing = WindowInsets.safeDrawing
+  val screenPadding = PopoverScreenPadding(
+    left = screenPaddingPx + safeDrawing.getLeft(density, layoutDirection),
+    top = screenPaddingPx + safeDrawing.getTop(density),
+    right = screenPaddingPx + safeDrawing.getRight(density, layoutDirection),
+    bottom = screenPaddingPx + safeDrawing.getBottom(density),
+  )
 
   var isExpanded by remember { mutableStateOf(false) }
   var isOverlayVisible by remember { mutableStateOf(false) }
@@ -161,7 +188,7 @@ fun Popover(
                 val elapsed = armStartMark.elapsedNow().inWholeMilliseconds
                 val distance = (currentPos - origin).getDistance()
 
-                if (!isArmed && elapsed >= PopoverDefaults.ArmDelayMs && distance > PopoverDefaults.ArmDistance) {
+                if (!isArmed && elapsed >= PopoverDefaults.ArmDelayMs && distance > armDistancePx) {
                   isArmed = true
                 }
 
@@ -189,23 +216,22 @@ fun Popover(
     }
 
     if (isOverlayVisible) {
-      val positionProvider = remember(position, screenPaddingPx) {
-        PopoverPositionProvider(position, screenPaddingPx)
+      val positionProvider = remember(position, screenPadding) {
+        PopoverPositionProvider(position, screenPadding)
       }
 
       Popup(
         popupPositionProvider = positionProvider,
         onDismissRequest = { isExpanded = false },
       ) {
-        val effective = effectivePosition(position, positionProvider.lastShowBelow)
-
         PopoverPanePopup(
           anchor = anchor,
           pane = { scope.pane() },
-          anchorSize = anchorBounds.size,
-          effectivePosition = effective,
+          anchorBounds = anchorBounds,
+          position = position,
           progress = progress,
           collapsedCornerRadius = collapsedCornerRadius,
+          screenPadding = screenPadding,
           maxWidth = maxWidth,
         )
       }
@@ -217,22 +243,53 @@ fun Popover(
 private fun PopoverPanePopup(
   anchor: @Composable () -> Unit,
   pane: @Composable () -> Unit,
-  anchorSize: IntSize,
-  effectivePosition: PopoverPosition,
+  anchorBounds: IntRect,
+  position: PopoverPosition,
   progress: Float,
   collapsedCornerRadius: Dp,
+  screenPadding: PopoverScreenPadding,
   maxWidth: Dp?,
 ) {
   SubcomposeLayout(
     modifier = Modifier.then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier),
   ) { constraints ->
-    val panePlaceables = subcompose(PopoverSlot.MeasurePane) {
-      ShrinkWrappedPane(content = pane)
-    }.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+    val paneConstraints = constraints.copy(
+      minWidth = 0,
+      minHeight = 0,
+      maxWidth = shrinkBounded(constraints.maxWidth, screenPadding.left + screenPadding.right),
+      maxHeight = shrinkBounded(constraints.maxHeight, screenPadding.top + screenPadding.bottom),
+    )
 
-    val paneWidth = panePlaceables.maxOfOrNull { it.width } ?: anchorSize.width
-    val paneHeight = panePlaceables.maxOfOrNull { it.height } ?: anchorSize.height
+    val initialPanePlaceables = subcompose(PopoverSlot.InitialMeasurePane) {
+      ShrinkWrappedPane(content = pane)
+    }.map { it.measure(paneConstraints) }
+
+    val initiallyMeasuredWidth = initialPanePlaceables.maxOfOrNull { it.width } ?: anchorBounds.width
+    val initiallyMeasuredHeight = initialPanePlaceables.maxOfOrNull { it.height } ?: anchorBounds.height
+    val showBelow = shouldShowBelow(
+      position = position,
+      childHeight = initiallyMeasuredHeight,
+      windowHeight = constraints.maxHeight,
+      anchorRect = anchorBounds,
+      screenPadding = screenPadding,
+    )
+    val finalPaneConstraints = paneConstraints.copy(
+      maxHeight = availableHeightForPlacement(
+        windowHeight = constraints.maxHeight,
+        anchorBounds = anchorBounds,
+        screenPadding = screenPadding,
+        showBelow = showBelow,
+      ),
+    )
+    val finalPanePlaceables = subcompose(PopoverSlot.FinalMeasurePane) {
+      ShrinkWrappedPane(content = pane)
+    }.map { it.measure(finalPaneConstraints) }
+
+    val paneWidth = finalPanePlaceables.maxOfOrNull { it.width } ?: initiallyMeasuredWidth
+    val paneHeight = finalPanePlaceables.maxOfOrNull { it.height } ?: initiallyMeasuredHeight
     val paneSize = IntSize(paneWidth, paneHeight)
+    val anchorSize = anchorBounds.size
+    val effectivePosition = effectivePosition(position, showBelow)
     val transition = PopoverPaneTransition(
       progress = progress,
       anchorContentRect = anchorContentRect(paneSize, anchorSize, effectivePosition),
@@ -260,8 +317,21 @@ private fun PopoverPanePopup(
 
 @Composable
 private fun ShrinkWrappedPane(content: @Composable () -> Unit) {
-  Box(modifier = Modifier.width(IntrinsicSize.Max)) {
-    content()
+  val scrollState = rememberScrollState()
+  val edgeAutoScrollState = rememberEdgeAutoScrollState(verticalScrollableState = scrollState)
+
+  CompositionLocalProvider(
+    LocalPopoverPaneEdgeAutoScrollState provides edgeAutoScrollState,
+  ) {
+    Box(
+      modifier = Modifier
+        .width(IntrinsicSize.Max)
+        .edgeAutoScroll(edgeAutoScrollState)
+        .verticalScroll(scrollState)
+        .overscroll(),
+    ) {
+      content()
+    }
   }
 }
 
@@ -292,7 +362,7 @@ private fun PopoverPaneSurface(
     progress,
   )
   val shape = SquircleShape(cornerRadius.toDp(density))
-  val shadowElevation = (12f * progress).toDp(density)
+  val shadowElevation = (12f * progress).dp
 
   Box(
     modifier = Modifier.size(
@@ -411,4 +481,29 @@ private fun alignedOffset(
   }
 
   return IntOffset(x, y)
+}
+
+private fun shrinkBounded(value: Int, inset: Int): Int {
+  if (value == Constraints.Infinity) {
+    return value
+  }
+
+  return max(0, value - inset)
+}
+
+private fun availableHeightForPlacement(
+  windowHeight: Int,
+  anchorBounds: IntRect,
+  screenPadding: PopoverScreenPadding,
+  showBelow: Boolean,
+): Int {
+  if (windowHeight == Constraints.Infinity) {
+    return windowHeight
+  }
+
+  return if (showBelow) {
+    max(0, windowHeight - screenPadding.bottom - anchorBounds.top)
+  } else {
+    max(0, anchorBounds.bottom - screenPadding.top)
+  }
 }

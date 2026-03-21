@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -47,6 +48,7 @@ fun PopoverScope.PopoverList(
   val haptic = LocalHapticFeedback.current
   val density = LocalDensity.current
   val gestureScope = rememberCoroutineScope()
+  val edgeAutoScrollState = LocalPopoverPaneEdgeAutoScrollState.current
   val itemRadius = PopoverDefaults.ExpandedRadius - PopoverDefaults.PanePadding
 
   var activeIndex by remember { mutableStateOf<Int?>(null) }
@@ -62,6 +64,27 @@ fun PopoverScope.PopoverList(
   var indicatorVisible by remember { mutableStateOf(false) }
 
   val animSpec = tween<Float>(PopoverDefaults.IndicatorDuration, easing = EaseOutCubic)
+
+  fun updateActiveIndex(windowPosition: Offset) {
+    val index = hitTestItems(windowPosition, itemBounds)
+    if (index != null && index != activeIndex) {
+      haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+    activeIndex = index
+  }
+
+  fun updateEdgeAutoScroll(windowPosition: Offset) {
+    edgeAutoScrollState?.update(
+      pointerPosition = windowPosition,
+      onAutoScroll = { updateActiveIndex(windowPosition) },
+    )
+  }
+
+  DisposableEffect(edgeAutoScrollState) {
+    onDispose {
+      edgeAutoScrollState?.stop()
+    }
+  }
 
   LaunchedEffect(activeIndex) {
     val index = activeIndex
@@ -94,22 +117,24 @@ fun PopoverScope.PopoverList(
     }
 
     val state = currentPointerState ?: run {
+      edgeAutoScrollState?.stop()
       activeIndex = null
       return@LaunchedEffect
     }
 
     if (!state.isSelectionArmed) {
+      edgeAutoScrollState?.stop()
       activeIndex = null
       return@LaunchedEffect
     }
 
-    val index = hitTestItems(state.position, itemBounds)
-    if (index != null && index != activeIndex) {
-      haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    updateActiveIndex(state.position)
+    if (!state.isUp) {
+      updateEdgeAutoScroll(state.position)
     }
-    activeIndex = index
 
     if (state.isUp && state.isSelectionArmed) {
+      edgeAutoScrollState?.stop()
       val selectedIndex = activeIndex
       activeIndex = null
       if (selectedIndex != null) {
@@ -159,20 +184,24 @@ fun PopoverScope.PopoverList(
                     PointerEventType.Press -> {
                       val press = event.changes.firstOrNull() ?: continue
                       val pointerId = press.id
-                      var currentWindowPos =
+                      val originWindowPos =
                         press.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
+                      val touchSlop = viewConfiguration.touchSlop
+                      var currentWindowPos =
+                        originWindowPos
                       var isSelectionArmed = false
+                      var isPanScroll = false
                       isLocalTracking = true
                       activeIndex = null
 
                       val armJob = gestureScope.launch {
                         delay(PopoverDefaults.ArmDelayMs)
-                        isSelectionArmed = true
-                        val hitIndex = hitTestItems(currentWindowPos, itemBounds)
-                        if (hitIndex != null && hitIndex != activeIndex) {
-                          haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (isPanScroll) {
+                          return@launch
                         }
-                        activeIndex = hitIndex
+                        isSelectionArmed = true
+                        updateActiveIndex(currentWindowPos)
+                        updateEdgeAutoScroll(currentWindowPos)
                       }
 
                       while (true) {
@@ -181,17 +210,29 @@ fun PopoverScope.PopoverList(
 
                         currentWindowPos =
                           change.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
-                        if (isSelectionArmed) {
-                          val hitIndex = hitTestItems(currentWindowPos, itemBounds)
-                          if (hitIndex != null && hitIndex != activeIndex) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (!isSelectionArmed && !isPanScroll) {
+                          val distance = (currentWindowPos - originWindowPos).getDistance()
+                          if (distance > touchSlop) {
+                            isPanScroll = true
+                            armJob.cancel()
+                            edgeAutoScrollState?.stop()
+                            activeIndex = null
                           }
-                          activeIndex = hitIndex
+                        }
+                        if (isSelectionArmed) {
+                          change.consume()
+                          updateActiveIndex(currentWindowPos)
+                          updateEdgeAutoScroll(currentWindowPos)
                         }
 
                         if (!change.pressed) {
                           armJob.cancel()
-                          val selectedIndex = hitTestItems(currentWindowPos, itemBounds)
+                          edgeAutoScrollState?.stop()
+                          val selectedIndex = when {
+                            isPanScroll -> null
+                            isSelectionArmed -> hitTestItems(currentWindowPos, itemBounds)
+                            else -> hitTestItems(currentWindowPos, itemBounds)
+                          }
                           activeIndex = null
                           isLocalTracking = false
                           if (selectedIndex != null) {
@@ -202,6 +243,7 @@ fun PopoverScope.PopoverList(
                       }
 
                       armJob.cancel()
+                      edgeAutoScrollState?.stop()
                       activeIndex = null
                       isLocalTracking = false
                     }
