@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,8 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
@@ -61,14 +60,15 @@ fun MainShell(content: @Composable (Route) -> Unit) {
     Tab.entries.associateWith { Navigator(it.route) }
   }
   val activeNavigator = navigators[currentTab]!!
-  val showBottomBar = activeNavigator.stack.size == 1
+  val showBottomBar = activeNavigator.stack.size == 1 ||
+    (activeNavigator.stack.size == 2 && activeNavigator.popRequested)
 
   val toast = koinInject<Toast>()
   LaunchedEffect(activeNavigator.current) {
     toast.bottomInset = activeNavigator.current.toastBottomInset
   }
 
-  Box(Modifier.fillMaxSize().background(AppTheme.colors.surfaceDefault)) {
+  Box(Modifier.fillMaxSize()) {
     Crossfade(
       targetState = currentTab,
       modifier = Modifier.fillMaxSize(),
@@ -102,7 +102,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 
 @Composable
 private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Modifier = Modifier) {
-  val pillShape = RoundedCornerShape(30.dp)
+  val colors = AppTheme.colors
 
   Box(
     modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp)
@@ -115,9 +115,23 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
     ) {
       // Pill
       Row(
-        Modifier.weight(1f).shadow(12.dp, pillShape).clip(pillShape)
-          .background(AppTheme.colors.surfaceElevated)
-          .border(1.dp, AppTheme.colors.borderDefault, pillShape).height(60.dp),
+        Modifier.weight(1f)
+          .dropShadow(CircleShape) {
+            color = colors.shadowAmbient
+            radius = 8f
+          }
+          .dropShadow(CircleShape) {
+            color = colors.shadowDefault
+            offset = Offset(0f, 4f)
+            radius = 12f
+          }
+          .dropShadow(CircleShape) {
+            color = colors.shadowDefault
+            offset = Offset(0f, 12f)
+            radius = 32f
+          }
+          .background(AppTheme.colors.surfaceElevated, CircleShape)
+          .border(1.dp, AppTheme.colors.borderDefault, CircleShape).height(60.dp),
       ) {
         Tab.entries.forEach { tab ->
           val selected = tab == currentTab
@@ -129,7 +143,7 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
           )
           Box(
             modifier = Modifier.weight(1f).fillMaxHeight().padding(4.dp)
-              .background(bgColor, RoundedCornerShape(26.dp)).clickable { onSelectTab(tab) },
+              .background(bgColor, CircleShape).clickable { onSelectTab(tab) },
             contentAlignment = Alignment.Center,
           ) {
             Icon(
@@ -155,9 +169,25 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
 
 @Composable
 private fun Fab(modifier: Modifier = Modifier) {
+  val colors = AppTheme.colors
+
   Box(
-    modifier.size(FAB_SIZE.dp).shadow(12.dp, CircleShape).clip(CircleShape)
-      .background(AppTheme.colors.surfaceElevated)
+    modifier.size(FAB_SIZE.dp)
+      .dropShadow(CircleShape) {
+        color = colors.shadowAmbient
+        radius = 8f
+      }
+      .dropShadow(CircleShape) {
+        color = colors.shadowDefault
+        offset = Offset(0f, 4f)
+        radius = 12f
+      }
+      .dropShadow(CircleShape) {
+        color = colors.shadowDefault
+        offset = Offset(0f, 12f)
+        radius = 32f
+      }
+      .background(AppTheme.colors.surfaceElevated, CircleShape)
       .border(1.dp, AppTheme.colors.borderDefault, CircleShape).clickable { /* TODO */ },
     contentAlignment = Alignment.Center,
   ) {

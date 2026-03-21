@@ -1,7 +1,10 @@
 package co.typie.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModelStore
 import co.typie.route.Route
 
@@ -23,6 +26,9 @@ class Navigator(startRoute: Route) {
   var lastOperation: NavOperation = NavOperation.None
     private set
 
+  var popRequested: Boolean by mutableStateOf(false)
+    private set
+
   fun viewModelStoreFor(route: Route): ViewModelStore {
     return viewModelStores.getOrPut(route) { ViewModelStore() }
   }
@@ -30,6 +36,14 @@ class Navigator(startRoute: Route) {
   fun navigate(route: Route) {
     _stack.add(route)
     lastOperation = NavOperation.Push
+  }
+
+  fun requestPop() {
+    if (canPop) popRequested = true
+  }
+
+  internal fun consumePopRequest() {
+    popRequested = false
   }
 
   fun pop(): Boolean {

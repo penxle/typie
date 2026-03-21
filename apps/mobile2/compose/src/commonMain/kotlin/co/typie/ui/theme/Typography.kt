@@ -92,7 +92,7 @@ object AppTypography {
       )
     }
 
-  /** 헬퍼 텍스트, 플레이스홀더, 타임스탬프, 서브타이틀 */
+  /** 헬퍼 텍스트, 플레이스홀더, 타임스탬프. 서브타이틀 */
   val caption: TextStyle
     @Composable get() {
       val fontFamily = rememberSuitFontFamily()
@@ -101,6 +101,18 @@ object AppTypography {
         fontSize = 13.sp,
         fontWeight = FontWeight.W400,
         lineHeight = 18.sp,
+      )
+    }
+
+  /** 배지 카운트, 인라인 태그, 법적 고지문 */
+  val micro: TextStyle
+    @Composable get() {
+      val fontFamily = rememberSuitFontFamily()
+      return TextStyle(
+        fontFamily = fontFamily,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.W400,
+        lineHeight = 16.sp,
       )
     }
 }

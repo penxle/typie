@@ -31,6 +31,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.route.Route
 import co.typie.ui.theme.AppTheme
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 
 private enum class AnimState { Idle, Push, Pop, Dragging }
@@ -64,6 +65,25 @@ fun NavigationStack(
 
   val progress = remember { Animatable(0f) }
 
+  // requestPop: 애니메이션 먼저, 그 다음 상태 변경
+  LaunchedEffect(Unit) {
+    snapshotFlow { navigator.popRequested }
+      .collect { requested ->
+        if (requested && animState == AnimState.Idle) {
+          behindRoute = navigator.previous
+          animState = AnimState.Pop
+          progress.snapTo(0f)
+          progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
+          navigator.pop()
+          navigator.consumePopRequest()
+          visibleRoute = navigator.current
+          behindRoute = null
+          animState = AnimState.Idle
+        }
+      }
+  }
+
+  // Push 및 직접 pop() 호출 처리
   LaunchedEffect(navigator.current) {
     if (navigator.current != visibleRoute) {
       when (navigator.lastOperation) {
@@ -92,7 +112,7 @@ fun NavigationStack(
 
   CompositionLocalProvider(Nav provides navigator) {
     PlatformBackHandler(enabled = navigator.canPop) {
-      navigator.pop()
+      navigator.requestPop()
     }
     Box(
       modifier
@@ -197,8 +217,10 @@ fun NavigationStack(
                   val velocity = lastDragAmount * 1000f / 16f
                   scope.launch {
                     if (progress.value > 0.5f || velocity > 1000f) {
+                      navigator.requestPop()
                       progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
                       navigator.pop()
+                      navigator.consumePopRequest()
                       visibleRoute = navigator.current
                     } else {
                       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))

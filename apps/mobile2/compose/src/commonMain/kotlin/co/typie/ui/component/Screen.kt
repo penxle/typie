@@ -42,7 +42,7 @@ fun Screen(
   Box(
     modifier
       .fillMaxSize()
-      .background(colors.surfaceDefault),
+      .background(colors.surfaceSubtle),
   ) {
     Box(
       Modifier
@@ -58,7 +58,8 @@ fun Screen(
           .fillMaxWidth()
           .align(Alignment.TopStart)
           .hazeEffect(hazeState) {
-            backgroundColor = colors.surfaceDefault
+            backgroundColor = colors.surfaceSubtle
+            blurRadius = TopBarDefaults.BlurRadius
             progressive = TopBarDefaults.hazeProgressive()
           },
       ) {

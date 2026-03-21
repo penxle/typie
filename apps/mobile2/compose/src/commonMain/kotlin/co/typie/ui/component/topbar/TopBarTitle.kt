@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -64,15 +65,15 @@ fun TopBarTitle(
         text = title,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        style = AppTheme.typography.title,
+        style = AppTheme.typography.title.copy(fontSize = 15.sp),
       )
       if (hasSubtitle) {
         Spacer(Modifier.height(1.dp))
         Text(
-          text = subtitle.orEmpty(),
+          text = subtitle,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
-          style = AppTheme.typography.caption,
+          style = AppTheme.typography.caption.copy(fontSize = 12.sp),
           color = AppTheme.colors.textFaint,
         )
       }

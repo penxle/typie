@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -140,7 +141,7 @@ private fun StatusBar(modifier: Modifier = Modifier) {
         .align(Alignment.TopCenter)
         .padding(top = DynamicIslandTop)
         .size(DynamicIslandWidth, DynamicIslandHeight)
-        .background(Color.Black, RoundedCornerShape(50)),
+        .background(Color.Black, CircleShape),
     )
 
     // Status bar content (vertically centered with the dynamic island)
@@ -225,6 +226,6 @@ private fun HomeIndicator(modifier: Modifier = Modifier) {
     modifier
       .padding(bottom = HomeIndicatorBottom)
       .size(HomeIndicatorWidth, HomeIndicatorHeight)
-      .background(color.copy(alpha = 0.6f), RoundedCornerShape(50)),
+      .background(color.copy(alpha = 0.6f), CircleShape),
   )
 }

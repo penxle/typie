@@ -29,7 +29,7 @@ fun RootShell() {
     Crossfade(
       authState,
       modifier = Modifier
-        .background(AppTheme.colors.surfaceDefault)
+        .background(AppTheme.colors.surfaceSubtle)
         .hazeSource(LocalHazeState.current),
     ) { state ->
       when (state) {

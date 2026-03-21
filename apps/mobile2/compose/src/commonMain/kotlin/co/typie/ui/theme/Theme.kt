@@ -88,6 +88,7 @@ data class AppColors(
 
   // Shadow
   val shadowDefault: Color,
+  val shadowAmbient: Color,
 )
 
 val LightColors = AppColors(
@@ -139,7 +140,8 @@ val LightColors = AppColors(
   borderDanger = AppColor.light.red.s600,
   borderElevated = AppColor.light.gray.s100,
 
-  shadowDefault = AppColor.light.gray.s950,
+  shadowDefault = Color(0x1409090C),
+  shadowAmbient = Color(0x0509090C),
 )
 
 val DarkColors = AppColors(
@@ -191,7 +193,8 @@ val DarkColors = AppColors(
   borderDanger = AppColor.dark.red.s400,
   borderElevated = AppColor.dark.gray.s700,
 
-  shadowDefault = AppColor.dark.gray.s950,
+  shadowDefault = Color(0x660A0B0E),
+  shadowAmbient = Color(0x1A0A0B0E),
 )
 
 val LocalAppColors = staticCompositionLocalOf { LightColors }

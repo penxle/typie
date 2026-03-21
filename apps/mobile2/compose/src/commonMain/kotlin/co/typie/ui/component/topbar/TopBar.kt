@@ -44,7 +44,7 @@ import kotlin.math.roundToInt
 @Composable
 fun TopBar(
   modifier: Modifier = Modifier,
-  leading: (@Composable () -> Unit)? = null,
+  leading: (@Composable () -> Unit)? = { TopBarBackButton() },
   center: (@Composable () -> Unit)? = null,
   trailing: (@Composable () -> Unit)? = null,
   visible: Boolean = true,
