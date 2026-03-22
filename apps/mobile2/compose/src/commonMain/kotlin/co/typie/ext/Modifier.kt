@@ -26,8 +26,8 @@ fun InteractionScope(content: @Composable () -> Unit) {
   }
 }
 
-expect fun Modifier.verticalScroll(state: ScrollState): Modifier
-expect fun Modifier.horizontalScroll(state: ScrollState): Modifier
+expect fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier
+expect fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier
 expect fun Modifier.overscroll(): Modifier
 
 fun Modifier.clickable(onClick: () -> Unit): Modifier = composed {
