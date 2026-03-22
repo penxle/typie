@@ -34,8 +34,10 @@ import co.typie.graphql.ProfileScreen_Query
 import co.typie.graphql.rememberQuery
 import co.typie.icons.Lucide
 import co.typie.generated.resources.Res
+import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.route.Route
 import co.typie.ui.component.ActivityGrid
 import co.typie.ui.component.ActivityGridChange
 import co.typie.ui.component.CardActionTile
@@ -62,6 +64,7 @@ import org.koin.compose.koinInject
 @Composable
 fun ProfileScreen() {
   val authService = koinInject<AuthService>()
+  val nav = Nav.current
   val toast = koinInject<Toast>()
   val query = rememberQuery(ProfileScreen_Query())
   val scrollState = rememberScrollState()
@@ -108,12 +111,10 @@ fun ProfileScreen() {
             modifier = Modifier
               .fillMaxWidth(),
           ) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 18.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(16.dp),
+            CardRow(
+              onClick = { nav.navigate(Route.UpdateProfile) },
+              contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 18.dp),
+              spacing = 16.dp,
             ) {
               Img(
                 image = data.me.avatar.img_image,

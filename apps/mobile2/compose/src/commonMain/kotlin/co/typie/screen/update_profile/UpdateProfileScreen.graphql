@@ -1,0 +1,29 @@
+query UpdateProfileScreen_Query {
+  me @catch(to: THROW) {
+    id
+    name
+    avatar {
+      id
+      ...Img_image
+    }
+  }
+}
+
+mutation UpdateProfileScreen_UpdateUser_Mutation($input: UpdateUserInput!) {
+  updateUser(input: $input) {
+    id
+    name
+    avatar {
+      id
+      ...Img_image
+    }
+  }
+}
+
+mutation UpdateProfileScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+  persistBlobAsImage(input: $input) {
+    id
+    url
+    ...Img_image
+  }
+}

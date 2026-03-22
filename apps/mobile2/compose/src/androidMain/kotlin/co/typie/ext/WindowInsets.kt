@@ -1,3 +1,5 @@
+@file:kotlin.jvm.JvmName("AndroidWindowInsetsExt")
+
 package co.typie.ext
 
 import androidx.compose.foundation.layout.WindowInsets

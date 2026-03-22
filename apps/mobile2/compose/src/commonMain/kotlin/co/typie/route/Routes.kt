@@ -8,6 +8,7 @@ import co.typie.screen.login_with_email.LoginWithEmailScreen
 import co.typie.screen.notes.NotesScreen
 import co.typie.screen.profile.ProfileScreen
 import co.typie.screen.space.SpaceScreen
+import co.typie.screen.update_profile.UpdateProfileScreen
 
 @Composable
 fun MainRoutes(route: Route) {
@@ -16,6 +17,7 @@ fun MainRoutes(route: Route) {
     is Route.Space -> SpaceScreen()
     is Route.Notes -> NotesScreen()
     is Route.Profile -> ProfileScreen()
+    is Route.UpdateProfile -> UpdateProfileScreen()
     is Route.Detail -> DetailScreen(id = route.id)
     else -> {}
   }

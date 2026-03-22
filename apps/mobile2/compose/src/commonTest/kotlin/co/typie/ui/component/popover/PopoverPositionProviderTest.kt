@@ -12,7 +12,12 @@ import kotlin.test.assertTrue
 class PopoverPositionProviderTest {
 
   private val windowSize = IntSize(390, 844)
-  private val screenPadding = 48
+  private val screenPadding = PopoverScreenPadding(
+    left = 48,
+    top = 48,
+    right = 48,
+    bottom = 48,
+  )
 
   private val topAnchor = IntRect(16, 100, 116, 144)
   private val bottomAnchor = IntRect(16, 700, 116, 744)

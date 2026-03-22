@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.math.floor
@@ -752,12 +753,12 @@ private fun generateMonthSpans(activities: List<ActivityGridActivity>): List<Act
       if (activity.level == -1) continue
 
       if (weekMonth == -1) {
-        weekMonth = activity.date.monthNumber
+        weekMonth = activity.date.month.number
       }
 
-      if (activity.date.dayOfMonth == 1) {
+      if (activity.date.day == 1) {
         hasFirstOfMonth = true
-        weekMonth = activity.date.monthNumber
+        weekMonth = activity.date.month.number
         break
       }
     }
@@ -811,7 +812,7 @@ private fun activityLevelColors(isDark: Boolean): List<Color> {
 
 private fun CellSizePx(density: androidx.compose.ui.unit.Density): Float = with(density) { CellSize.toPx() }
 
-private fun formatTooltipDate(date: LocalDate): String = "${date.year}년 ${date.monthNumber}월 ${date.dayOfMonth}일"
+private fun formatTooltipDate(date: LocalDate): String = "${date.year}년 ${date.month.number}월 ${date.day}일"
 
 private fun Int.formatComma(): String {
   val raw = toString()

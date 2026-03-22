@@ -41,6 +41,8 @@
     <string>$(NAVER_CLIENT_ID)</string>
     <key>NAVER_CLIENT_SECRET</key>
     <string>$(NAVER_CLIENT_SECRET)</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Allow access to your photo library to add post images and update your profile picture.</string>
     <key>UILaunchStoryboardName</key>
     <string>LaunchScreen</string>
     <key>LSApplicationQueriesSchemes</key>

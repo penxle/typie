@@ -1,3 +1,5 @@
+@file:kotlin.jvm.JvmName("AndroidModifierExt")
+
 package co.typie.ext
 
 import androidx.compose.foundation.ScrollState
