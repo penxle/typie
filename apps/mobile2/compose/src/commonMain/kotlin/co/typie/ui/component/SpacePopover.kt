@@ -18,12 +18,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.QueryState
 import co.typie.graphql.SpacePopover_Query
 import co.typie.graphql.fragment.Img_image
-import co.typie.graphql.rememberQuery
 import co.typie.icons.Lucide
+import co.typie.service.SiteService
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -35,28 +37,46 @@ import co.typie.ui.component.popover.PopoverTransitionFrame
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.shape.SquircleShape
+import co.typie.ui.skeleton.Skeleton
+import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppTheme
+import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.annotation.KoinViewModel
 
 val SpacePopoverLeadingKey = Any()
 
-@Composable
-fun SpacePopover() {
-  val query = rememberQuery(SpacePopover_Query())
-  val me = (query.state as? QueryState.Success)?.data?.me
-
-  val logo = me?.sites?.firstOrNull()?.logo?.img_image
-  val otherSites = me?.sites?.drop(1) ?: emptyList()
-
-  Popover(
-    position = PopoverPosition.BottomLeft,
-    collapsedCornerRadius = 14.dp,
-    anchor = { SpacePopoverAnchor(logo = logo) },
-    pane = { SpacePopoverPane(logo = logo, otherSites = otherSites) },
-  )
+@KoinViewModel
+class SpacePopoverViewModel : GraphQLViewModel() {
+  val query = watchQuery { SpacePopover_Query() }
 }
 
 @Composable
-private fun SpacePopoverAnchor(logo: Img_image?) {
+fun SpacePopover() {
+  val model = koinViewModel<SpacePopoverViewModel>()
+  val siteService = koinInject<SiteService>()
+
+  Skeleton(enabled = model.query.state !is QueryState.Success) {
+    when (val state = model.query.state) {
+      is QueryState.Success -> {
+        val currentSite = state.data.me.sites.first { it.id == siteService.siteId }
+        val otherSites = state.data.me.sites.filter { it.id != currentSite.id }
+
+        Popover(
+          position = PopoverPosition.BottomLeft,
+          collapsedCornerRadius = 14.dp,
+          anchor = { SpacePopoverAnchor(currentSite) },
+          pane = { SpacePopoverPane(currentSite, otherSites) },
+        )
+      }
+
+      else -> SpacePopoverSkeleton()
+    }
+  }
+}
+
+@Composable
+fun SpacePopoverSkeleton() {
   val outerShape = SquircleShape(14.dp)
   val logoShape = RoundedCornerShape(6.dp)
 
@@ -67,33 +87,41 @@ private fun SpacePopoverAnchor(logo: Img_image?) {
       .background(TopBarDefaults.controlBackgroundColor(), outerShape)
       .border(1.dp, TopBarDefaults.controlBorderColor(), outerShape),
   ) {
-    if (logo != null) {
-      Img(
-        image = logo,
-        size = 26.dp,
-        modifier = Modifier.clip(logoShape),
-      )
-    } else {
-      Icon(
-        icon = Lucide.FolderOpen,
-        modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.textDefault,
-      )
-    }
+    SkeletonBone(modifier = Modifier.size(26.dp), shape = logoShape)
+  }
+}
+
+@Composable
+private fun SpacePopoverAnchor(site: SpacePopover_Query.Site) {
+  val outerShape = SquircleShape(14.dp)
+  val logoShape = RoundedCornerShape(6.dp)
+
+  Box(
+    contentAlignment = Alignment.Center,
+    modifier = Modifier.size(TopBarDefaults.ButtonSize)
+      .then(TopBarDefaults.controlShadowModifier(outerShape)).clip(outerShape)
+      .background(TopBarDefaults.controlBackgroundColor(), outerShape)
+      .border(1.dp, TopBarDefaults.controlBorderColor(), outerShape),
+  ) {
+    Img(
+      image = site.logo.img_image,
+      modifier = Modifier.size(26.dp).clip(logoShape),
+    )
   }
 }
 
 @Composable
 private fun PopoverScope.SpacePopoverPane(
-  logo: Img_image?,
+  currentSite: SpacePopover_Query.Site,
   otherSites: List<SpacePopover_Query.Site>,
 ) {
+  val siteService = koinInject<SiteService>()
   val panePadding = PopoverDefaults.PanePadding
 
   Column(
     modifier = Modifier.padding(panePadding),
   ) {
-    SpacePopoverHeader(logo = logo)
+    SpacePopoverHeader(currentSite)
 
     Spacer(Modifier.height(4.dp))
 
@@ -133,8 +161,11 @@ private fun PopoverScope.SpacePopoverPane(
         for (site in otherSites) {
           add(
             PopoverListItem(
-              content = { SpacePopoverSiteItem(logo = site.logo.img_image, name = site.name) },
-              onSelected = { close() },
+              content = { SpacePopoverSiteItem(site) },
+              onSelected = {
+                siteService.siteId = site.id
+                close()
+              },
             ),
           )
         }
@@ -150,7 +181,7 @@ private fun PopoverScope.SpacePopoverPane(
 }
 
 @Composable
-private fun SpacePopoverHeader(logo: Img_image?) {
+private fun SpacePopoverHeader(site: SpacePopover_Query.Site) {
   Box(
     modifier = Modifier
       .fillMaxWidth()
@@ -163,7 +194,7 @@ private fun SpacePopoverHeader(logo: Img_image?) {
         .padding(start = 46.dp, end = 16.dp),
     ) {
       Text(
-        "내 스페이스",
+        site.name,
         style = AppTheme.typography.title,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -184,45 +215,31 @@ private fun SpacePopoverHeader(logo: Img_image?) {
         height = 26.dp,
       ),
     ) {
-      SpacePopoverLogo(logo = logo, size = 26.dp)
+      SpacePopoverLogo(logo = site.logo.img_image, size = 26.dp)
     }
   }
 }
 
 @Composable
-private fun SpacePopoverLogo(logo: Img_image?, size: androidx.compose.ui.unit.Dp) {
+private fun SpacePopoverLogo(logo: Img_image, size: Dp) {
   val logoShape = RoundedCornerShape(6.dp)
 
-  if (logo != null) {
-    Img(
-      image = logo,
-      size = size,
-      modifier = Modifier.clip(logoShape),
-    )
-  } else {
-    Box(
-      contentAlignment = Alignment.Center,
-      modifier = Modifier.size(size),
-    ) {
-      Icon(
-        icon = Lucide.FolderOpen,
-        modifier = Modifier.size(size * 0.75f),
-        tint = AppTheme.colors.textDefault,
-      )
-    }
-  }
+  Img(
+    image = logo,
+    modifier = Modifier.size(size).clip(logoShape),
+  )
 }
 
 @Composable
-private fun SpacePopoverSiteItem(logo: Img_image?, name: String) {
+private fun SpacePopoverSiteItem(site: SpacePopover_Query.Site) {
   Row(
     verticalAlignment = Alignment.CenterVertically,
     modifier = Modifier.height(48.dp).padding(horizontal = 16.dp),
   ) {
-    SpacePopoverLogo(logo = logo, size = 28.dp)
+    SpacePopoverLogo(logo = site.logo.img_image, size = 28.dp)
     Spacer(Modifier.width(12.dp))
     Text(
-      name,
+      site.name,
       style = AppTheme.typography.action,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,

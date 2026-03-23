@@ -32,6 +32,7 @@ plugins {
 kotlin {
   compilerOptions {
     freeCompilerArgs.add("-Xexpect-actual-classes")
+    freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
   }
 
   android {
@@ -160,12 +161,24 @@ rootProject.file("ios/Configuration/Config.local.xcconfig").writeText(
 
 apollo {
   service("typie") {
-    packageName.set("co.typie.graphql")
+    packageName = "co.typie.graphql"
+
     srcDir("src/commonMain/kotlin")
     schemaFiles.from(
       "src/commonMain/graphql/schema.graphqls",
       "src/commonMain/graphql/apollo.graphqls"
     )
+
+    mapScalar("DateTime", "kotlin.time.Instant", "co.typie.graphql.adapter.InstantAdapter")
+    mapScalar(
+      "JSON",
+      "kotlinx.serialization.json.JsonElement",
+      "co.typie.graphql.adapter.JsonElementAdapter"
+    )
+
+    generateDataBuilders = true
+    generateInputBuilders = true
+    generateFragmentImplementations = true
   }
 }
 

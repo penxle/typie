@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.dp
+import co.typie.ui.skeleton.LocalSkeleton
+import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -21,9 +23,16 @@ fun Icon(
   strokeWidth: Float = 2f,
   tint: Color = AppTheme.colors.textDefault,
 ) {
+  val skeleton = LocalSkeleton.current
+  if (skeleton.enabled) {
+    SkeletonBone(modifier)
+    return
+  }
+
   val vector = remember(icon, strokeWidth) {
     icon.toImageVector(strokeWidth)
   }
+
   Image(
     painter = rememberVectorPainter(vector),
     contentDescription = contentDescription,

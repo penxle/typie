@@ -5,5 +5,5 @@ import org.koin.core.annotation.Single
 
 @Single
 class ThemeService(prefs: Prefs) {
-  var themeMode: ThemeMode by prefs(ThemeMode.System, "theme_mode")
+  var themeMode: ThemeMode by prefs("theme_mode", ThemeMode.System)
 }

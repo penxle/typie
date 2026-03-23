@@ -69,7 +69,7 @@ fun CardActionTile(
           .fillMaxWidth()
           .heightIn(min = minHeight)
           .padding(contentPadding)
-          .pressScale(0.98f),
+          .pressScale(),
         verticalArrangement = Arrangement.SpaceBetween,
         content = content,
       )
@@ -91,7 +91,7 @@ fun CardRow(
         .fillMaxWidth()
         .clickable(onClick)
         .padding(contentPadding)
-        .pressScale(0.98f),
+        .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(spacing),
       content = content,

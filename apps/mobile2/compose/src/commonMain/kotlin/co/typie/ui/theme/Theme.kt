@@ -38,10 +38,6 @@ data class AppColors(
   val textFaint: Color,
   val textDisabled: Color,
   val textBright: Color,
-  val textDanger: Color,
-  val textSuccess: Color,
-  val textLink: Color,
-  val textBrand: Color,
 
   // Surface
   val surfaceDefault: Color,
@@ -56,8 +52,6 @@ data class AppColors(
 
   // Accent — Brand
   val accentBrand: Color,
-  val accentBrandHover: Color,
-  val accentBrandActive: Color,
   val accentBrandSubtle: Color,
 
   // Accent — Info
@@ -66,8 +60,6 @@ data class AppColors(
 
   // Accent — Danger
   val accentDanger: Color,
-  val accentDangerHover: Color,
-  val accentDangerActive: Color,
   val accentDangerSubtle: Color,
 
   // Accent — Warning
@@ -82,8 +74,7 @@ data class AppColors(
   val borderDefault: Color,
   val borderStrong: Color,
   val borderSubtle: Color,
-  val borderBrand: Color,
-  val borderDanger: Color,
+  val borderInverse: Color,
   val borderElevated: Color,
 
   // Shadow
@@ -100,10 +91,6 @@ val LightColors = AppColors(
   textFaint = AppColor.light.gray.s500,
   textDisabled = AppColor.light.gray.s400,
   textBright = AppColor.white,
-  textDanger = AppColor.light.red.s500,
-  textSuccess = AppColor.light.green.s700,
-  textLink = AppColor.light.blue.s600,
-  textBrand = AppColor.light.brand.s500,
 
   surfaceDefault = AppColor.white,
   surfaceSubtle = AppColor.light.gray.s50,
@@ -115,17 +102,13 @@ val LightColors = AppColors(
   interactiveDisabled = AppColor.light.gray.s200,
 
   accentBrand = AppColor.light.brand.s500,
-  accentBrandHover = AppColor.light.brand.s600,
-  accentBrandActive = AppColor.light.brand.s700,
   accentBrandSubtle = AppColor.light.brand.s100,
 
   accentInfo = AppColor.light.blue.s500,
   accentInfoSubtle = AppColor.light.blue.s50,
 
   accentDanger = AppColor.light.red.s500,
-  accentDangerHover = AppColor.light.red.s600,
-  accentDangerActive = AppColor.light.red.s700,
-  accentDangerSubtle = AppColor.light.red.s50,
+  accentDangerSubtle = AppColor.light.red.s400,
 
   accentWarning = AppColor.light.amber.s600,
   accentWarningSubtle = AppColor.light.amber.s50,
@@ -136,8 +119,7 @@ val LightColors = AppColors(
   borderDefault = AppColor.light.gray.s200,
   borderStrong = AppColor.light.gray.s300,
   borderSubtle = AppColor.light.gray.s100,
-  borderBrand = AppColor.light.brand.s600,
-  borderDanger = AppColor.light.red.s600,
+  borderInverse = AppColor.light.gray.s900,
   borderElevated = AppColor.light.gray.s100,
 
   shadowDefault = Color(0x1409090C),
@@ -153,32 +135,24 @@ val DarkColors = AppColors(
   textFaint = AppColor.dark.gray.s300,
   textDisabled = AppColor.dark.gray.s400,
   textBright = AppColor.dark.gray.s50,
-  textDanger = AppColor.dark.red.s300,
-  textSuccess = AppColor.dark.green.s300,
-  textLink = AppColor.dark.blue.s400,
-  textBrand = AppColor.dark.brand.s300,
 
-  surfaceDefault = AppColor.dark.gray.s900,
-  surfaceSubtle = AppColor.dark.gray.s800,
+  surfaceDefault = AppColor.dark.gray.s950,
+  surfaceSubtle = AppColor.dark.gray.s900,
   surfaceMuted = AppColor.dark.gray.s700,
   surfaceDark = AppColor.dark.gray.s500,
-  surfaceElevated = AppColor.dark.gray.s800,
+  surfaceElevated = AppColor.dark.gray.s900,
 
   interactiveHover = AppColor.dark.gray.s600,
   interactiveDisabled = AppColor.dark.gray.s800,
 
   accentBrand = AppColor.dark.brand.s400,
-  accentBrandHover = AppColor.dark.brand.s500,
-  accentBrandActive = AppColor.dark.brand.s600,
   accentBrandSubtle = AppColor.dark.brand.s900,
 
   accentInfo = AppColor.dark.blue.s200,
   accentInfoSubtle = AppColor.dark.blue.s900,
 
   accentDanger = AppColor.dark.red.s300,
-  accentDangerHover = AppColor.dark.red.s500,
-  accentDangerActive = AppColor.dark.red.s600,
-  accentDangerSubtle = AppColor.dark.red.s900,
+  accentDangerSubtle = AppColor.dark.red.s200,
 
   accentWarning = AppColor.dark.amber.s300,
   accentWarningSubtle = AppColor.dark.amber.s900,
@@ -189,8 +163,7 @@ val DarkColors = AppColors(
   borderDefault = AppColor.dark.gray.s700,
   borderStrong = AppColor.dark.gray.s600,
   borderSubtle = AppColor.dark.gray.s800,
-  borderBrand = AppColor.dark.brand.s400,
-  borderDanger = AppColor.dark.red.s400,
+  borderInverse = AppColor.dark.gray.s50,
   borderElevated = AppColor.dark.gray.s700,
 
   shadowDefault = Color(0x660A0B0E),

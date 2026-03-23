@@ -1,5 +1,28 @@
-query HomeScreen_Query {
+query HomeScreen_Query($siteId: ID!) {
   me @catch(to: THROW) {
     id
+
+    recentlyViewedEntities(siteId: $siteId) {
+      id
+      slug
+      type
+      node {
+        __typename
+        ... on Document {
+          id
+          type
+          title
+          excerpt
+          updatedAt
+          entity { id slug }
+        }
+        ... on Folder {
+          id
+          name
+          documentCount
+          entity { id slug }
+        }
+      }
+    }
   }
 }

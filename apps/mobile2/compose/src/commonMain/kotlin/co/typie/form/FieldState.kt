@@ -3,12 +3,13 @@ package co.typie.form
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
 import kotlin.time.Duration
 
 data class DeferredRule<V>(val rule: Rule<V>, val debounce: Duration)
 
 class FieldState<V>(
-  private val initialValue: V,
+  initialValue: V,
   internal val rules: List<Rule<V>>,
   internal val deferredRules: List<DeferredRule<V>> = emptyList(),
   internal val validateOn: ValidateOn,
@@ -16,14 +17,25 @@ class FieldState<V>(
   internal var onValueChanged: (() -> Unit)? = null
   internal var onBlurCallback: (() -> Unit)? = null
 
+  private var _initialValue by mutableStateOf(initialValue)
+
+  var initialValue: V
+    get() = _initialValue
+    set(newValue) {
+      _initialValue = newValue
+      value = newValue
+      errors = emptyList()
+      isTouched = false
+    }
+
   var value: V by mutableStateOf(initialValue)
     internal set
 
   var errors: List<String> by mutableStateOf(emptyList())
     internal set
 
-  var isDirty: Boolean by mutableStateOf(false)
-    private set
+  val isDirty: Boolean
+    get() = value != _initialValue
 
   var isTouched: Boolean by mutableStateOf(false)
     private set
@@ -31,12 +43,15 @@ class FieldState<V>(
   var isValidating: Boolean by mutableStateOf(false)
     internal set
 
+  val focusRequester = FocusRequester()
+
+  internal var form: FormState? = null
+
   fun setValue(newValue: V) {
     value = newValue
     if (validateOn != ValidateOn.OnChange) {
       errors = emptyList()
     }
-    isDirty = newValue != initialValue
     onValueChanged?.invoke()
   }
 
@@ -50,11 +65,14 @@ class FieldState<V>(
   }
 
   fun reset() {
-    value = initialValue
+    value = _initialValue
     errors = emptyList()
-    isDirty = false
     isTouched = false
     isValidating = false
+  }
+
+  fun commit() {
+    _initialValue = value
   }
 
   internal suspend fun validate(): List<String> {

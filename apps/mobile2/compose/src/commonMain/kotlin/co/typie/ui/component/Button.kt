@@ -92,7 +92,7 @@ fun Button(
       val spinnerWidth by animateDpAsState(if (debouncedLoading) 24.dp else 0.dp, tween(200))
 
       Row(
-        modifier = Modifier.pressScale(0.95f),
+        modifier = Modifier.pressScale(),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {

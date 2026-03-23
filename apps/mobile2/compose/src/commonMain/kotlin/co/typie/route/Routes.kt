@@ -2,9 +2,10 @@ package co.typie.route
 
 import androidx.compose.runtime.Composable
 import co.typie.screen.detail.DetailScreen
+import co.typie.screen.editor.EditorScreen
+import co.typie.screen.folder.FolderScreen
 import co.typie.screen.home.HomeScreen
 import co.typie.screen.login.LoginScreen
-import co.typie.screen.login_with_email.LoginWithEmailScreen
 import co.typie.screen.notes.NotesScreen
 import co.typie.screen.profile.ProfileScreen
 import co.typie.screen.space.SpaceScreen
@@ -19,6 +20,8 @@ fun MainRoutes(route: Route) {
     is Route.Profile -> ProfileScreen()
     is Route.UpdateProfile -> UpdateProfileScreen()
     is Route.Detail -> DetailScreen(id = route.id)
+    is Route.Folder -> FolderScreen(entityId = route.entityId)
+    is Route.Editor -> EditorScreen(slug = route.slug)
     else -> {}
   }
 }
@@ -27,7 +30,6 @@ fun MainRoutes(route: Route) {
 fun AuthRoutes(route: Route) {
   when (route) {
     is Route.Login -> LoginScreen()
-    is Route.LoginWithEmail -> LoginWithEmailScreen()
     else -> {}
   }
 }

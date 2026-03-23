@@ -14,6 +14,8 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 fun SpaceScreen() {
+//  val model = koinViewModel<SpaceViewModel>()
+
   ProvideTopBar(
     leadingKey = SpacePopoverLeadingKey,
     leading = { SpacePopover() },

@@ -1,7 +1,7 @@
 package co.typie.form
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import androidx.compose.ui.text.input.ImeAction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -134,103 +134,20 @@ class FormStateTest {
   }
 
   @Test
-  fun submitCallsBlockWhenValid() = runTest {
+  fun validateReturnsFalseAndFocusesFirstError() = runTest {
     val form = TestLoginForm()
-    form.email.setValue("test@test.com")
-    form.password.setValue("secret123")
-
-    var called = false
-    form.submit(scope = this) {
-      called = true
-    }
-    testScheduler.advanceUntilIdle()
-
-    assertTrue(called)
-  }
-
-  @Test
-  fun submitDoesNotCallBlockWhenInvalid() = runTest {
-    val form = TestLoginForm()
-
-    var called = false
-    form.submit(scope = this) {
-      called = true
-    }
-    testScheduler.advanceUntilIdle()
-
-    assertFalse(called)
+    val valid = form.validate()
+    assertFalse(valid)
     assertEquals(listOf("필수 항목입니다"), form.email.errors)
   }
 
   @Test
-  fun submitSetsIsSubmitting() = runTest {
+  fun validateReturnsTrueWhenValid() = runTest {
     val form = TestLoginForm()
     form.email.setValue("test@test.com")
     form.password.setValue("secret123")
-
-    var wasSubmitting = false
-    form.submit(scope = this) {
-      wasSubmitting = form.isSubmitting
-    }
-    testScheduler.advanceUntilIdle()
-
-    assertTrue(wasSubmitting)
-    assertFalse(form.isSubmitting)
-  }
-
-  @Test
-  fun submitPreventsDoubleSubmit() = runTest {
-    val form = TestLoginForm()
-    form.email.setValue("test@test.com")
-    form.password.setValue("secret123")
-
-    var callCount = 0
-    form.submit(scope = this) {
-      callCount++
-      delay(1000)
-    }
-    form.submit(scope = this) {
-      callCount++
-    }
-    testScheduler.advanceUntilIdle()
-
-    assertEquals(1, callCount)
-  }
-
-  @Test
-  fun isProcessingDuringSubmit() = runTest {
-    val form = TestLoginForm()
-    form.email.setValue("test@test.com")
-    form.password.setValue("secret123")
-
-    var wasProcessing = false
-    form.submit(scope = this) {
-      wasProcessing = form.isProcessing
-    }
-    testScheduler.advanceUntilIdle()
-
-    assertTrue(wasProcessing)
-    assertFalse(form.isProcessing)
-  }
-
-  @Test
-  fun submitIsSubmittingFalseAfterException() = runTest {
-    val form = TestLoginForm()
-    form.email.setValue("test@test.com")
-    form.password.setValue("secret123")
-
-    var exceptionCaught = false
-    form.submit(scope = this) {
-      try {
-        throw RuntimeException("서버 에러")
-      } catch (_: RuntimeException) {
-        exceptionCaught = true
-      }
-    }
-    testScheduler.advanceUntilIdle()
-
-    assertTrue(exceptionCaught)
-    assertFalse(form.isSubmitting)
+    val valid = form.validate()
+    assertTrue(valid)
   }
 
   // --- Validation Timing Tests ---
@@ -367,5 +284,97 @@ class FormStateTest {
     form.email.setValue("taken@test.com")
     testScheduler.advanceUntilIdle()
     assertEquals(listOf("이미 사용 중"), form.email.errors)
+  }
+
+  @Test
+  fun isLastField_returns_true_for_last_registered_field() {
+    val form = object : FormState() {
+      val first = field("")
+      val second = field("")
+    }
+    assertFalse(form.isLastField(form.first))
+    assertTrue(form.isLastField(form.second))
+  }
+
+  @Test
+  fun imeActionFor_returns_next_for_non_last_field() {
+    val form = object : FormState() {
+      val first = field("")
+      val second = field("")
+    }
+    assertEquals(ImeAction.Next, form.imeActionFor(form.first))
+    assertEquals(ImeAction.Done, form.imeActionFor(form.second))
+  }
+
+  @Test
+  fun field_has_form_back_reference() {
+    val form = object : FormState() {
+      val first = field("")
+    }
+    assertEquals(form, form.first.form)
+  }
+
+  // --- initialValue setter ---
+
+  @Test
+  fun initialValueSetterUpdatesValueAndResetsState() {
+    val form = TestProfileForm(nickname = "기존닉네임", bio = "기존소개")
+    form.nickname.setValue("변경됨")
+    assertTrue(form.nickname.isDirty)
+
+    form.nickname.initialValue = "서버값"
+    assertEquals("서버값", form.nickname.value)
+    assertEquals("서버값", form.nickname.initialValue)
+    assertFalse(form.nickname.isDirty)
+    assertFalse(form.nickname.isTouched)
+    assertEquals(emptyList(), form.nickname.errors)
+  }
+
+  @Test
+  fun initialValueSetterDoesNotAffectOtherFields() {
+    val form = TestProfileForm(nickname = "닉", bio = "소개")
+    form.bio.setValue("변경됨")
+    assertTrue(form.bio.isDirty)
+
+    form.nickname.initialValue = "새닉네임"
+    assertTrue(form.bio.isDirty)
+  }
+
+  // --- commit ---
+
+  @Test
+  fun commitUpdatesInitialValueToCurrentValue() {
+    val form = TestProfileForm(nickname = "기존", bio = "기존소개")
+    form.nickname.setValue("변경됨")
+    assertTrue(form.nickname.isDirty)
+
+    form.nickname.commit()
+    assertEquals("변경됨", form.nickname.initialValue)
+    assertFalse(form.nickname.isDirty)
+  }
+
+  @Test
+  fun formCommitCommitsAllFields() {
+    val form = TestProfileForm(nickname = "기존", bio = "기존소개")
+    form.nickname.setValue("새닉네임")
+    form.bio.setValue("새소개")
+    assertTrue(form.isDirty)
+
+    form.commit()
+    assertFalse(form.isDirty)
+    assertEquals("새닉네임", form.nickname.initialValue)
+    assertEquals("새소개", form.bio.initialValue)
+  }
+
+  @Test
+  fun resetAfterInitialValueChangeUsesNewInitialValue() {
+    val form = TestProfileForm(nickname = "기존", bio = "기존소개")
+    form.nickname.initialValue = "서버값"
+    form.nickname.setValue("사용자입력")
+    assertTrue(form.nickname.isDirty)
+
+    form.nickname.reset()
+    assertEquals("서버값", form.nickname.value)
+    assertFalse(form.nickname.isDirty)
   }
 }

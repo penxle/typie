@@ -8,16 +8,20 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import co.typie.ext.plus
 import co.typie.ext.statusBars
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.TopBarDefaults
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 
 @Composable
 fun Screen(
   modifier: Modifier = Modifier,
+  loading: Boolean = false,
+  background: Color = AppTheme.colors.surfaceDefault,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
@@ -31,10 +35,13 @@ fun Screen(
   }
 
   Box(
-    modifier
+    Modifier
       .fillMaxSize()
-      .background(AppTheme.colors.surfaceSubtle),
+      .background(background)
+      .then(modifier),
   ) {
-    content(adjustedContentPadding)
+    Skeleton(enabled = loading) {
+      content(adjustedContentPadding)
+    }
   }
 }

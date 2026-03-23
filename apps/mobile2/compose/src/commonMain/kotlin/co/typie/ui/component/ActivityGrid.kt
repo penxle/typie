@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,16 +19,17 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -47,6 +49,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.typie.datetime.toLocalDate
 import co.typie.ext.clickable
 import co.typie.ext.horizontalScroll
 import co.typie.icons.Lucide
@@ -56,11 +59,8 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
-import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
@@ -78,7 +78,7 @@ fun ActivityGrid(
   modifier: Modifier = Modifier,
   onVerticalScrollDelta: (Float) -> Unit = {},
 ) {
-  val endDate = remember { Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date }
+  val endDate = remember { Clock.System.now().toLocalDate() }
   val startDate = remember(endDate) { LocalDate.fromEpochDays(endDate.toEpochDays() - 364) }
   val activities = remember(changes, startDate, endDate) {
     generateActivities(changes = changes, startDate = startDate, endDate = endDate)
@@ -152,12 +152,19 @@ fun ActivityGrid(
     }
 
     fun scrollToMonth(span: ActivityGridMonthSpan) {
-      val monthWidth = ((span.end - span.start + 1) * cellStridePx) - with(density) { CellGap.toPx() }
+      val monthWidth =
+        ((span.end - span.start + 1) * cellStridePx) - with(density) { CellGap.toPx() }
       val monthStart = span.start * cellStridePx
-      val targetOffset = monthStart + (monthWidth / 2f) - with(density) { viewportWidth.toPx() } / 2f
+      val targetOffset =
+        monthStart + (monthWidth / 2f) - with(density) { viewportWidth.toPx() } / 2f
 
       scope.launch {
-        scrollState.animateScrollBy(targetOffset.coerceIn(0f, scrollState.maxValue.toFloat()) - scrollState.value)
+        scrollState.animateScrollBy(
+          targetOffset.coerceIn(
+            0f,
+            scrollState.maxValue.toFloat()
+          ) - scrollState.value
+        )
       }
     }
 
@@ -292,9 +299,11 @@ fun ActivityGrid(
               hideAfterDelay()
               return@awaitEachGesture
             }
+
             ActivityGridPreGestureResult.Cancel -> {
               return@awaitEachGesture
             }
+
             null -> {
               isTooltipGesture = true
               tooltipAutoHideArmed = false
@@ -429,7 +438,7 @@ fun ActivityGrid(
             .padding(horizontal = HorizontalPadding)
             .padding(bottom = BottomPadding),
         ) {
-          androidx.compose.foundation.layout.Column(
+          Column(
             modifier = Modifier.width(totalWidth),
           ) {
             Box(
@@ -440,7 +449,8 @@ fun ActivityGrid(
               for ((index, span) in monthSpans.withIndex()) {
                 if (span.end - span.start < 1 && index != monthSpans.lastIndex) continue
 
-                val spanWidth = (CellSize * (span.end - span.start + 1)) + (CellGap * (span.end - span.start))
+                val spanWidth =
+                  (CellSize * (span.end - span.start + 1)) + (CellGap * (span.end - span.start))
 
                 Text(
                   text = "${span.month}월",
@@ -493,7 +503,10 @@ fun ActivityGrid(
                       drawRoundRect(
                         color = selectionBorderColor,
                         topLeft = Offset(topLeft.x - 1.5f, topLeft.y - 1.5f),
-                        size = androidx.compose.ui.geometry.Size(CellSize.toPx() + 3f, CellSize.toPx() + 3f),
+                        size = androidx.compose.ui.geometry.Size(
+                          CellSize.toPx() + 3f,
+                          CellSize.toPx() + 3f
+                        ),
                         cornerRadius = CornerRadius(radiusPx + 1.5f, radiusPx + 1.5f),
                         style = androidx.compose.ui.graphics.drawscope.Stroke(width = selectionStrokePx),
                       )
@@ -587,12 +600,16 @@ fun ActivityGrid(
                 .background(AppTheme.colors.surfaceDark)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-              androidx.compose.foundation.layout.Column(
+              Column(
                 verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
               ) {
                 Text(
                   text = formatTooltipDate(tooltip.activity.date),
-                  style = AppTheme.typography.micro.copy(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.W500),
+                  style = AppTheme.typography.micro.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.W500
+                  ),
                   color = AppTheme.colors.textBright,
                 )
                 Text(
@@ -601,7 +618,11 @@ fun ActivityGrid(
                   } else {
                     "기록이 없어요"
                   },
-                  style = AppTheme.typography.micro.copy(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.W700),
+                  style = AppTheme.typography.micro.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.W700
+                  ),
                   color = AppTheme.colors.textBright,
                 )
               }
@@ -665,13 +686,15 @@ private val BottomPadding = 8.dp
 private val GridContainerHeight = LabelHeight + 12.dp + CellGap + GridHeight + BottomPadding
 private val CellRadius = 2.dp
 private val SelectionStrokeWidth = 1.5.dp
-private val TooltipShape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+private val TooltipShape = RoundedCornerShape(6.dp)
 private const val TooltipMinXPx = 8f
 private const val TooltipHorizontalGapPx = 2f
 private const val TooltipVerticalAdjustPx = 2f
 private const val TooltipScrollVelocityThresholdPxPerSecond = 700f
 private const val TapGestureMovementTolerancePx = 6f
 private const val ScrollEdgeVisibilityThresholdPx = 1
+
+val ActivityGridHeight = GridContainerHeight
 
 private fun generateActivities(
   changes: List<ActivityGridChange>,
@@ -810,9 +833,11 @@ private fun activityLevelColors(isDark: Boolean): List<Color> {
   }
 }
 
-private fun CellSizePx(density: androidx.compose.ui.unit.Density): Float = with(density) { CellSize.toPx() }
+private fun CellSizePx(density: androidx.compose.ui.unit.Density): Float =
+  with(density) { CellSize.toPx() }
 
-private fun formatTooltipDate(date: LocalDate): String = "${date.year}년 ${date.month.number}월 ${date.day}일"
+private fun formatTooltipDate(date: LocalDate): String =
+  "${date.year}년 ${date.month.number}월 ${date.day}일"
 
 private fun Int.formatComma(): String {
   val raw = toString()

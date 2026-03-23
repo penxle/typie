@@ -1,3 +1,0 @@
-mutation LoginWithEmailScreen_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
-  loginWithEmail(input: $input)
-}

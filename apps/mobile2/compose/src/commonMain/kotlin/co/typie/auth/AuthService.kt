@@ -1,7 +1,14 @@
 package co.typie.auth
 
+import co.touchlab.kermit.Logger
 import co.typie.Konfig
+import co.typie.graphql.AuthService_Query
+import co.typie.service.SiteService
 import co.typie.storage.Vault
+import com.apollographql.apollo.ApolloClient
+import com.apollographql.apollo.cache.normalized.FetchPolicy
+import com.apollographql.apollo.cache.normalized.apolloStore
+import com.apollographql.apollo.cache.normalized.fetchPolicy
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.forms.submitForm
@@ -24,13 +31,17 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.koin.core.annotation.Single
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 @Single(createdAtStart = true)
 class AuthService(
   private val vault: Vault,
   private val httpClient: HttpClient,
-) {
-  var tokens: AuthTokens? by vault(null)
+  private val siteService: SiteService,
+) : KoinComponent {
+  private val apolloClient: ApolloClient by inject()
+  var tokens: AuthTokens? by vault("tokens", null)
     private set
 
   private val mutex = Mutex()
@@ -53,7 +64,8 @@ class AuthService(
 
     try {
       refreshTokensInternal(currentTokens.sessionToken)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+      Logger.e(e) { "Failed to refresh tokens" }
       if (tokens?.sessionToken != null) {
         _state.value = AuthState.Offline
       } else {
@@ -70,7 +82,8 @@ class AuthService(
     mutex.withLock {
       try {
         refreshTokensInternal(sessionToken)
-      } catch (_: Exception) {
+      } catch (e: Exception) {
+        Logger.e(e) { "Failed to refresh tokens" }
         tokens = null
         _state.value = AuthState.Unauthenticated
       }
@@ -83,7 +96,8 @@ class AuthService(
     try {
       refreshTokensInternal(currentSessionToken)
       return@withLock tokens?.accessToken
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+      Logger.e(e) { "Failed to refresh tokens" }
       tokens = null
       _state.value = AuthState.Unauthenticated
       return@withLock null
@@ -104,6 +118,7 @@ class AuthService(
     }
 
     tokens = null
+    apolloClient.apolloStore.clearAll()
     _state.value = AuthState.Unauthenticated
   }
 
@@ -116,7 +131,21 @@ class AuthService(
     val accessToken = exchangeToken(sessionToken)
     validateToken(accessToken)
     tokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
+    ensureValidSiteId()
     _state.value = AuthState.Authenticated
+  }
+
+  private suspend fun ensureValidSiteId() {
+    val data = apolloClient.query(AuthService_Query())
+      .fetchPolicy(FetchPolicy.NetworkOnly)
+      .execute().dataOrThrow()
+    val siteIds = data.me.sites.map { it.id }
+    if (siteIds.isNotEmpty()) {
+      val currentSiteId = siteService.siteId
+      if (currentSiteId.isEmpty() || currentSiteId !in siteIds) {
+        siteService.siteId = siteIds.first()
+      }
+    }
   }
 
   private suspend fun exchangeToken(sessionToken: String): String {

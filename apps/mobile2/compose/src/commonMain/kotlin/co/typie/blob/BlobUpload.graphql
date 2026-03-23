@@ -1,7 +1,0 @@
-mutation Blob_IssueBlobUploadUrl_Mutation($input: IssueBlobUploadUrlInput!) {
-  issueBlobUploadUrl(input: $input) {
-    url
-    path
-    fields
-  }
-}

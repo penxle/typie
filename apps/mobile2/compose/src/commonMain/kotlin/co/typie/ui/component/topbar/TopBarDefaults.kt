@@ -44,8 +44,7 @@ object TopBarDefaults {
 
   @Composable
   fun controlBackgroundColor(): Color =
-    if (AppTheme.colors.isDark) AppTheme.colors.surfaceSubtle
-    else AppTheme.colors.surfaceDefault
+    AppTheme.colors.surfaceElevated
 
   @Composable
   fun controlBorderColor(): Color =
@@ -56,7 +55,7 @@ object TopBarDefaults {
     Modifier.shadow(
       elevation = 4.dp,
       shape = shape,
-      ambientColor = AppTheme.colors.shadowDefault.copy(alpha = 0.06f),
-      spotColor = AppTheme.colors.shadowDefault.copy(alpha = 0.06f),
+      ambientColor = AppTheme.colors.shadowAmbient,
+      spotColor = AppTheme.colors.shadowDefault,
     )
 }

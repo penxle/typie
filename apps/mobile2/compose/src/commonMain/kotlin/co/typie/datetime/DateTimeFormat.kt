@@ -16,8 +16,6 @@ enum class DateTimeStyle {
   FULL,
 }
 
-fun String.toInstantOrNull(): Instant? = Instant.parseOrNull(this)
-
 fun Instant.timeAgo(now: Instant = Clock.System.now()): String {
   val duration = now - this
   val isPast = duration.isPositive()

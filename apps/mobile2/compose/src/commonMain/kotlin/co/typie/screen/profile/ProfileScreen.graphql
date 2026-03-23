@@ -3,6 +3,7 @@ query ProfileScreen_Query {
     id
     name
     email
+
     subscription {
       id
       plan {
@@ -10,10 +11,12 @@ query ProfileScreen_Query {
         name
       }
     }
+
     characterCountChanges {
       date
       additions
     }
+
     avatar {
       id
       ...Img_image

@@ -6,14 +6,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import co.typie.ui.component.Screen
+import co.typie.ui.component.SpacePopover
+import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 
 @Composable
 fun NotesScreen() {
+//  val model = koinViewModel<NotesViewModel>()
+
   ProvideTopBar(
-    leading = null,
+    leadingKey = SpacePopoverLeadingKey,
+    leading = { SpacePopover() },
     center = { Text("노트", style = AppTheme.typography.title) },
   )
 

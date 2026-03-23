@@ -1,3 +1,7 @@
 mutation LoginScreen_AuthorizeSingleSignOn_Mutation($input: AuthorizeSingleSignOnInput!) {
   authorizeSingleSignOn(input: $input)
 }
+
+mutation LoginWithEmailScreen_LoginWithEmail_Mutation($input: LoginWithEmailInput!) {
+  loginWithEmail(input: $input)
+}

@@ -1,5 +1,9 @@
 package co.typie.screen.login
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,34 +17,44 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import co.typie.auth.sso.activityContext
 import co.typie.di.Platform
+import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.safeDrawingPadding
+import co.typie.ext.navigationBarsPadding
+import co.typie.ext.pressScale
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
-import co.typie.navigation.Nav
-import co.typie.route.Route
+import co.typie.ui.component.Button
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.TextField
+import co.typie.ui.component.bottomsheet.BottomSheetScope
+import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
+import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun LoginScreen() {
-  val nav = Nav.current
-  val viewModel = koinViewModel<LoginViewModel>()
-  val platform = koinInject<Platform>()
-  val ctx = activityContext()
+  val bottomSheetHost = LocalBottomSheetHost.current
+  val scope = rememberCoroutineScope()
 
   ProvideTopBar(
     enabled = false
@@ -51,7 +65,7 @@ fun LoginScreen() {
       modifier = Modifier
         .fillMaxSize()
         .padding(contentPadding)
-        .safeDrawingPadding()
+        .navigationBarsPadding(),
     ) {
       Column(
         modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -78,52 +92,162 @@ fun LoginScreen() {
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
       ) {
-        SingleSignOnButton(
-          text = "구글로 시작하기",
-          svgPath = "files/brands/google.svg",
-          foregroundColor = Color(0xFF000000),
-          backgroundColor = Color(0xFFFFFFFF),
-          borderColor = AppTheme.colors.borderDefault,
-          onClick = { viewModel.loginWith(SingleSignOnProvider.GOOGLE, ctx) },
-        )
-        SingleSignOnButton(
-          text = "카카오로 시작하기",
-          svgPath = "files/brands/kakao.svg",
-          iconTint = Color(0xFF000000),
-          foregroundColor = Color(0xFF000000),
-          backgroundColor = Color(0xFFFEE500),
-          onClick = { viewModel.loginWith(SingleSignOnProvider.KAKAO, ctx) },
-        )
-        SingleSignOnButton(
-          text = "네이버로 시작하기",
-          svgPath = "files/brands/naver.svg",
-          iconTint = Color(0xFFFFFFFF),
-          foregroundColor = Color(0xFFFFFFFF),
-          backgroundColor = Color(0xFF03C75A),
-          onClick = { viewModel.loginWith(SingleSignOnProvider.NAVER, ctx) },
-        )
-
-        if (platform != Platform.Android) {
-          SingleSignOnButton(
-            text = "애플로 시작하기",
-            svgPath = "files/brands/apple.svg",
-            iconTint = Color(0xFFFFFFFF),
-            foregroundColor = Color(0xFFFFFFFF),
-            backgroundColor = Color(0xFF000000),
-            onClick = { viewModel.loginWith(SingleSignOnProvider.APPLE, ctx) },
-          )
-        }
-
-        Text(
-          "이메일로 가입하셨나요?",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textSubtle,
-          modifier = Modifier
-            .padding(vertical = 8.dp)
-            .clickable { nav.navigate(Route.LoginWithEmail) },
+        Button(
+          text = "시작하기",
+          onClick = {
+            scope.launch {
+              bottomSheetHost.show { LoginBottomSheet() }
+            }
+          },
         )
       }
     }
+  }
+}
+
+private enum class LoginStep { SingleSignOn, Email }
+
+@Composable
+fun BottomSheetScope<Unit>.LoginBottomSheet() {
+  var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
+
+  AnimatedContent(
+    targetState = step,
+    transitionSpec = {
+      if (targetState == LoginStep.Email) {
+        slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
+      } else {
+        slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
+      }
+    },
+  ) { currentStep ->
+    when (currentStep) {
+      LoginStep.SingleSignOn -> LoginSSOContent(
+        onEmailClick = { step = LoginStep.Email },
+        onSuccess = { dismiss() },
+      )
+
+      LoginStep.Email -> LoginEmailContent(
+        onBack = { step = LoginStep.SingleSignOn },
+        onSuccess = { dismiss() },
+      )
+    }
+  }
+}
+
+@Composable
+private fun LoginSSOContent(
+  onEmailClick: () -> Unit,
+  onSuccess: () -> Unit,
+) {
+  val model = koinViewModel<LoginSingleSignOnViewModel>()
+  val platform = koinInject<Platform>()
+  val ctx = activityContext()
+
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Column(
+      modifier = Modifier.fillMaxWidth(),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      SingleSignOnButton(
+        text = "구글로 시작하기",
+        svgPath = "files/brands/google.svg",
+        foregroundColor = Color(0xFF000000),
+        backgroundColor = Color(0xFFFFFFFF),
+        borderColor = AppTheme.colors.borderDefault,
+        onClick = { model.loginWith(SingleSignOnProvider.GOOGLE, ctx, onSuccess) },
+      )
+
+      SingleSignOnButton(
+        text = "카카오로 시작하기",
+        svgPath = "files/brands/kakao.svg",
+        iconTint = Color(0xFF000000),
+        foregroundColor = Color(0xFF000000),
+        backgroundColor = Color(0xFFFEE500),
+        onClick = { model.loginWith(SingleSignOnProvider.KAKAO, ctx, onSuccess) },
+      )
+
+      SingleSignOnButton(
+        text = "네이버로 시작하기",
+        svgPath = "files/brands/naver.svg",
+        iconTint = Color(0xFFFFFFFF),
+        foregroundColor = Color(0xFFFFFFFF),
+        backgroundColor = Color(0xFF03C75A),
+        onClick = { model.loginWith(SingleSignOnProvider.NAVER, ctx, onSuccess) },
+      )
+
+      if (platform != Platform.Android) {
+        SingleSignOnButton(
+          text = "애플로 시작하기",
+          svgPath = "files/brands/apple.svg",
+          iconTint = Color(0xFFFFFFFF),
+          foregroundColor = Color(0xFFFFFFFF),
+          backgroundColor = Color(0xFF000000),
+          onClick = { model.loginWith(SingleSignOnProvider.APPLE, ctx, onSuccess) },
+        )
+      }
+    }
+
+    Text(
+      "이메일로 가입하셨나요?",
+      style = AppTheme.typography.caption,
+      color = AppTheme.colors.textSubtle,
+      modifier = Modifier
+        .padding(vertical = 16.dp)
+        .clickable { onEmailClick() },
+    )
+  }
+}
+
+@Composable
+private fun LoginEmailContent(
+  onBack: () -> Unit,
+  onSuccess: () -> Unit,
+) {
+  val model = koinViewModel<LoginWithEmailViewModel>()
+  val form = model.state.form
+
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+  ) {
+    TextField(
+      field = form.email,
+      label = "이메일",
+      placeholder = "me@example.com",
+      keyboardType = KeyboardType.Email,
+    )
+
+    Spacer(Modifier.height(8.dp))
+
+    TextField(
+      field = form.password,
+      label = "비밀번호",
+      placeholder = "********",
+      isPassword = true,
+      onImeAction = { model.submit(onSuccess) },
+    )
+
+    Spacer(Modifier.height(8.dp))
+
+    Button(
+      text = "로그인",
+      onClick = { model.submit(onSuccess) },
+      loading = model.state.isSubmitting,
+      loadingText = "로그인 중...",
+    )
+
+    Text(
+      "다른 방법으로 로그인",
+      style = AppTheme.typography.caption,
+      color = AppTheme.colors.textSubtle,
+      modifier = Modifier
+        .align(Alignment.CenterHorizontally)
+        .padding(vertical = 16.dp)
+        .clickable { onBack() },
+    )
   }
 }
 
@@ -139,28 +263,31 @@ private fun SingleSignOnButton(
 ) {
   val shape = RoundedCornerShape(16.dp)
 
-  Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .height(48.dp)
-      .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
-      .background(backgroundColor, shape)
-      .clickable(onClick = onClick),
-  ) {
-    AsyncImage(
-      model = Res.getUri(svgPath),
-      contentDescription = null,
+  InteractionScope {
+    Box(
       modifier = Modifier
-        .align(Alignment.CenterStart)
-        .padding(start = 24.dp)
-        .size(20.dp),
-      colorFilter = iconTint?.let { ColorFilter.tint(it) },
-    )
-    Text(
-      text,
-      style = AppTheme.typography.action,
-      color = foregroundColor,
-      modifier = Modifier.align(Alignment.Center),
-    )
+        .fillMaxWidth()
+        .height(48.dp)
+        .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
+        .background(backgroundColor, shape)
+        .clickable(onClick = onClick),
+    ) {
+      AsyncImage(
+        model = Res.getUri(svgPath),
+        contentDescription = null,
+        modifier = Modifier
+          .align(Alignment.CenterStart)
+          .padding(start = 24.dp)
+          .size(20.dp),
+        colorFilter = iconTint?.let { ColorFilter.tint(it) },
+      )
+
+      Text(
+        text,
+        style = AppTheme.typography.action,
+        color = foregroundColor,
+        modifier = Modifier.align(Alignment.Center).pressScale(),
+      )
+    }
   }
 }

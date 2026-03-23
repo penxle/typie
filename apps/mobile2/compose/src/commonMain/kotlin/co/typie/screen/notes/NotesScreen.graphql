@@ -1,0 +1,5 @@
+query NotesScreen_Query {
+  me @catch(to: THROW) {
+    id
+  }
+}

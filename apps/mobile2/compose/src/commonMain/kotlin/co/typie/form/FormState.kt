@@ -3,6 +3,7 @@ package co.typie.form
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -47,9 +48,6 @@ open class FormState(
   private val debounceJobs = mutableMapOf<FieldState<*>, Job>()
   private var validationScope: CoroutineScope? = null
 
-  var isSubmitting: Boolean by mutableStateOf(false)
-    private set
-
   protected fun <V> field(
     initialValue: V,
     config: FieldConfig<V>.() -> Unit = {},
@@ -71,6 +69,7 @@ open class FormState(
         }
       }
     }
+    fieldState.form = this
     registeredFields.add(fieldState)
     return fieldState
   }
@@ -83,9 +82,6 @@ open class FormState(
 
   val isValidating: Boolean
     get() = registeredFields.any { it.isValidating }
-
-  val isProcessing: Boolean
-    get() = isValidating || isSubmitting
 
   val errors: Map<FieldState<*>, List<String>>
     get() = registeredFields
@@ -104,30 +100,45 @@ open class FormState(
     return allValid
   }
 
-  private var submitLock = false
-
-  fun submit(scope: CoroutineScope, block: suspend () -> Unit) {
-    if (submitLock) return
-    submitLock = true
-    scope.launch {
-      try {
-        if (!validateAll()) return@launch
-        isSubmitting = true
-        block()
-      } finally {
-        isSubmitting = false
-        submitLock = false
-      }
-    }
+  suspend fun validate(): Boolean {
+    val valid = validateAll()
+    if (!valid) focusFirstError()
+    return valid
   }
+
 
   fun reset() {
     for (field in registeredFields) {
       field.reset()
     }
-    isSubmitting = false
     debounceJobs.values.forEach { it.cancel() }
     debounceJobs.clear()
+  }
+
+  fun commit() {
+    for (field in registeredFields) {
+      field.commit()
+    }
+  }
+
+  fun isFirstField(field: FieldState<*>): Boolean =
+    registeredFields.firstOrNull() == field
+
+  fun isLastField(field: FieldState<*>): Boolean =
+    registeredFields.lastOrNull() == field
+
+  fun focusNext(field: FieldState<*>) {
+    val index = registeredFields.indexOf(field)
+    if (index < 0 || index == registeredFields.lastIndex) return
+    registeredFields[index + 1].focusRequester.requestFocus()
+  }
+
+  fun imeActionFor(field: FieldState<*>): ImeAction =
+    if (isLastField(field)) ImeAction.Done else ImeAction.Next
+
+  fun focusFirstError() {
+    registeredFields.firstOrNull { it.errors.isNotEmpty() }
+      ?.focusRequester?.requestFocus()
   }
 
   fun setValidationScope(scope: CoroutineScope) {

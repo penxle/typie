@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import co.typie.dev.NetworkPreset
+import co.typie.dev.NetworkSimulator
+import co.typie.dev.createDevToolsWindow
 import co.typie.di.initKoin
 import com.sun.jna.Library
 import com.sun.jna.Native
@@ -28,6 +31,7 @@ import java.awt.Taskbar
 import java.awt.Toolkit
 import java.util.prefs.Preferences
 import javax.imageio.ImageIO
+import org.koin.mp.KoinPlatform.getKoin
 import javax.swing.SwingUtilities
 
 // iPhone 16 Pro Max: 440×956 pt, @3x, 460 PPI
@@ -99,6 +103,8 @@ fun main() {
     printLogger()
   }
 
+  val networkSimulator = getKoin().get<NetworkSimulator>()
+
   if (Taskbar.isTaskbarSupported()) {
     Taskbar.getTaskbar().iconImage =
       ImageIO.read(Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png"))
@@ -115,6 +121,14 @@ fun main() {
   val prefs = Preferences.userRoot().node("co/typie")
   val savedWindowX = prefs.getInt("windowX", -1)
   val savedWindowY = prefs.getInt("windowY", -1)
+
+  // Restore saved network preset
+  val savedPreset = prefs.get("networkPreset", null)
+  if (savedPreset != null) {
+    runCatching { NetworkPreset.valueOf(savedPreset) }.getOrNull()?.let {
+      networkSimulator.select(it)
+    }
+  }
 
   application {
     var usePhysicalScale by remember { mutableStateOf(preferPhysical) }
@@ -172,6 +186,13 @@ fun main() {
 
       CompositionLocalProvider(LocalDensity provides adjustedDensity) {
         App()
+      }
+    }
+
+    LaunchedEffect(Unit) {
+      SwingUtilities.invokeLater {
+        val mainWindow = java.awt.Window.getWindows().first()
+        createDevToolsWindow(mainWindow, networkSimulator)
       }
     }
   }

@@ -20,21 +20,22 @@ import co.typie.ext.clickable
 import co.typie.navigation.Nav
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppTheme
+import com.apollographql.apollo.api.Query
 
 @Composable
-fun <D> GraphQLContent(
-  result: QueryResult<D>,
+fun <D : Query.Data> GraphQLContent(
+  query: WatchQuery<D, *>,
   modifier: Modifier = Modifier,
   content: @Composable (data: D) -> Unit,
 ) {
-  when (val state = result.state) {
+  when (val state = query.state) {
     is QueryState.Loading -> {
       Box(modifier.fillMaxSize())
     }
 
     is QueryState.Error -> {
       GraphQLErrorContent(
-        onRetry = result.refetch,
+        onRetry = query::refetch,
         modifier = modifier,
       )
     }
