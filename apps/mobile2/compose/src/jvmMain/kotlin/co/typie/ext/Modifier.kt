@@ -39,10 +39,12 @@ private const val SPRING_STIFFNESS = 400f
 private const val FLING_VELOCITY_MULTIPLIER = 0.72f
 
 actual fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean): Modifier = composed {
+  val isLocked = LocalScrollGestureLockState.current.isLocked
+  val dragEnabled = enabled && !isLocked
   val overscrollState = rememberElasticOverscrollState()
-  foundationVerticalScroll(state, enabled = enabled)
-    .then(if (enabled) Modifier.dragScroll(state, ElasticAxis.Vertical, overscrollState) else Modifier)
-    .then(if (enabled) Modifier.elasticOverscroll(ElasticAxis.Vertical, overscrollState) else Modifier)
+  foundationVerticalScroll(state, enabled = dragEnabled)
+    .then(if (dragEnabled) Modifier.dragScroll(state, ElasticAxis.Vertical, overscrollState) else Modifier)
+    .then(if (dragEnabled) Modifier.elasticOverscroll(ElasticAxis.Vertical, overscrollState) else Modifier)
 }
 
 actual fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean): Modifier = if (!enabled) {
@@ -68,6 +70,10 @@ actual fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean): Modi
       }
   }
 } else composed {
+  val isLocked = LocalScrollGestureLockState.current.isLocked
+  if (isLocked) {
+    return@composed foundationHorizontalScroll(state, enabled = false)
+  }
   val overscrollState = rememberElasticOverscrollState()
   foundationHorizontalScroll(state)
     .then(Modifier.dragScroll(state, ElasticAxis.Horizontal, overscrollState))

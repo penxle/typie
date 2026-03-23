@@ -40,12 +40,17 @@ fun CardSurface(
   modifier: Modifier = Modifier,
   shape: Shape = CardDefaults.Shape,
   color: Color = AppTheme.colors.surfaceDefault,
+  clipContent: Boolean = true,
   content: @Composable BoxScope.() -> Unit,
 ) {
   Box(
-    modifier = modifier
-      .clip(shape)
-      .background(color, shape),
+    modifier = if (clipContent) {
+      modifier
+        .clip(shape)
+        .background(color, shape)
+    } else {
+      modifier.background(color, shape)
+    },
     content = content,
   )
 }

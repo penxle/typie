@@ -630,23 +630,24 @@ fun ActivityGrid(
           },
         ) { measurables, constraints ->
           val placeable = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
-          val tooltipX = (
-            with(density) { HorizontalPadding.toPx() } +
-              (tooltip.weekIndex * cellStridePx) -
-              scrollState.value -
-              placeable.width -
-              TooltipHorizontalGapPx
-            ).coerceAtLeast(TooltipMinXPx)
-          val tooltipY = (
-            with(density) { (LabelHeight + CellGap).toPx() } +
-              (tooltip.dayIndex * cellStridePx) -
-              placeable.height +
-              CellSizePx(density) -
-              TooltipVerticalAdjustPx
-            ).coerceAtLeast(0f)
+          val tooltipOffset = calculateActivityGridTooltipOffset(
+            cellOffset = Offset(
+              x = with(density) { HorizontalPadding.toPx() } +
+                (tooltip.weekIndex * cellStridePx) -
+                scrollState.value,
+              y = with(density) { (LabelHeight + CellGap).toPx() } +
+                (tooltip.dayIndex * cellStridePx),
+            ),
+            tooltipWidthPx = placeable.width.toFloat(),
+            tooltipHeightPx = placeable.height.toFloat(),
+            cellSizePx = CellSizePx(density),
+          )
 
           layout(constraints.maxWidth, constraints.maxHeight) {
-            placeable.placeRelative(tooltipX.roundToInt(), tooltipY.roundToInt())
+            placeable.placeRelative(
+              tooltipOffset.x.roundToInt(),
+              tooltipOffset.y.roundToInt(),
+            )
           }
         }
       }
@@ -690,8 +691,6 @@ private val TooltipShape = RoundedCornerShape(6.dp)
 private const val TooltipMinXPx = 8f
 private const val TooltipHorizontalGapPx = 2f
 private const val TooltipVerticalAdjustPx = 2f
-private const val TooltipScrollVelocityThresholdPxPerSecond = 700f
-private const val TapGestureMovementTolerancePx = 6f
 private const val ScrollEdgeVisibilityThresholdPx = 1
 
 val ActivityGridHeight = GridContainerHeight
@@ -743,6 +742,20 @@ private fun generateActivities(
       currentDate = LocalDate.fromEpochDays(currentDate.toEpochDays() + 1)
     }
   }
+}
+
+internal fun calculateActivityGridTooltipOffset(
+  cellOffset: Offset,
+  tooltipWidthPx: Float,
+  tooltipHeightPx: Float,
+  cellSizePx: Float,
+  horizontalGapPx: Float = TooltipHorizontalGapPx,
+  verticalAdjustPx: Float = TooltipVerticalAdjustPx,
+): Offset {
+  return Offset(
+    x = (cellOffset.x - tooltipWidthPx - horizontalGapPx).coerceAtLeast(TooltipMinXPx),
+    y = cellOffset.y - tooltipHeightPx + cellSizePx - verticalAdjustPx,
+  )
 }
 
 private fun generateWeeks(activities: List<ActivityGridActivity>): List<List<ActivityGridActivity>> {

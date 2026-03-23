@@ -7,8 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import co.typie.ext.EdgeAutoScrollState
 import co.typie.ext.edgeAutoScroll
+import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.safeDrawing
 import androidx.compose.ui.window.Popup
 import co.typie.ext.overscroll
@@ -123,6 +124,7 @@ fun Popover(
   var isOverlayVisible by remember { mutableStateOf(false) }
   var anchorBounds by remember { mutableStateOf(IntRect.Zero) }
   val animationProgress = remember { Animatable(0f) }
+  val scrollGestureLockState = LocalScrollGestureLockState.current
 
   val scope = remember {
     PopoverScope(onClose = { isExpanded = false })
@@ -168,37 +170,44 @@ fun Popover(
               val press = event.changes.firstOrNull() ?: continue
               val anchorWindowOffset =
                 Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
-
-              isExpanded = true
-              scope.pointerState = AnchorPointerState(
-                position = press.position + anchorWindowOffset,
-                isSelectionArmed = false,
-                isUp = false,
-              )
-
-              val armStartMark = TimeSource.Monotonic.markNow()
               val origin = press.position + anchorWindowOffset
-              var isArmed = false
+              val gestureTracker = PopoverAnchorGestureTracker(
+                origin = origin,
+                armDistancePx = armDistancePx,
+              )
+              val scrollLockHandle = scrollGestureLockState.acquire()
 
-              while (true) {
-                val moveEvent = awaitPointerEvent()
-                val change = moveEvent.changes.find { it.id == press.id } ?: break
-
-                val currentPos = change.position + anchorWindowOffset
-                val elapsed = armStartMark.elapsedNow().inWholeMilliseconds
-                val distance = (currentPos - origin).getDistance()
-
-                if (!isArmed && elapsed >= PopoverDefaults.ArmDelayMs && distance > armDistancePx) {
-                  isArmed = true
+              try {
+                isExpanded = true
+                val startUpdate = gestureTracker.start()
+                scope.pointerState = startUpdate.pointerState
+                if (startUpdate.consumeChange) {
+                  // Anchor-originated scrub should own the gesture so parent scroll containers stay still.
+                  press.consume()
                 }
 
-                scope.pointerState = AnchorPointerState(
-                  position = currentPos,
-                  isSelectionArmed = isArmed,
-                  isUp = !change.pressed,
-                )
+                val armStartMark = TimeSource.Monotonic.markNow()
 
-                if (!change.pressed) break
+                while (true) {
+                  val moveEvent = awaitPointerEvent()
+                  val change = moveEvent.changes.find { it.id == press.id } ?: break
+
+                  val currentPos = change.position + anchorWindowOffset
+                  val elapsed = armStartMark.elapsedNow().inWholeMilliseconds
+                  val update = gestureTracker.update(
+                    currentPosition = currentPos,
+                    elapsedMillis = elapsed,
+                    isPressed = change.pressed,
+                  )
+                  scope.pointerState = update.pointerState
+                  if (update.consumeChange) {
+                    change.consume()
+                  }
+
+                  if (!change.pressed) break
+                }
+              } finally {
+                scrollLockHandle.release()
               }
             }
           }

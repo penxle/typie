@@ -8,6 +8,7 @@ sealed interface Route {
   data object Space : Route
   data object Notes : Route
   data object Profile : Route
+  data object Stats : Route
   data object UpdateProfile : Route
   data class Detail(val id: String) : Route
   data class Folder(val entityId: String) : Route

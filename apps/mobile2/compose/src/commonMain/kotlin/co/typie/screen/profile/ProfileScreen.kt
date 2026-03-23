@@ -116,7 +116,7 @@ fun ProfileScreen() {
           onClick = { nav.navigate(Route.UpdateProfile) },
           contentPadding = PaddingValues(
             horizontal = 18.dp,
-            vertical = 18.dp
+            vertical = 18.dp,
           ),
           spacing = 16.dp,
         ) {
@@ -181,9 +181,9 @@ fun ProfileScreen() {
                 Modifier
                   .padding(horizontal = 16.dp)
                   .fillMaxWidth()
-                  .height(ActivityGridHeight)
+                  .height(ActivityGridHeight),
               )
-            }
+            },
           ) {
             ActivityGrid(
               changes = activityChanges,
@@ -195,7 +195,7 @@ fun ProfileScreen() {
           CardDivider()
 
           CardRow(
-            onClick = {},
+            onClick = { nav.navigate(Route.Stats) },
           ) {
             Skeleton.Unite {
               Icon(

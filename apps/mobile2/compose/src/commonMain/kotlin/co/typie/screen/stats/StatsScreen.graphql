@@ -1,0 +1,19 @@
+query StatsScreen_Query {
+  me @catch(to: THROW) {
+    id
+    name
+    documentCount
+    usage {
+      totalCharacterCount
+    }
+    characterCountChanges {
+      date
+      additions
+      deletions
+    }
+  }
+}
+
+mutation StatsScreen_GenerateActivityImage_Mutation {
+  generateActivityImage
+}
