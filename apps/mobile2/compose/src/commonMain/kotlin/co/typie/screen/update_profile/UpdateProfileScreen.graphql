@@ -15,7 +15,6 @@ mutation UpdateProfileScreen_UpdateUser_Mutation($input: UpdateUserInput!) {
     name
     avatar {
       id
-      ...Img_image
     }
   }
 }

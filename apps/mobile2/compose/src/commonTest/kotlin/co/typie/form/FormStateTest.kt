@@ -1,19 +1,20 @@
 package co.typie.form
 
-import kotlinx.coroutines.test.runTest
 import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-class TestLoginForm : FormState() {
+class TestLoginForm(scope: TestScope = TestScope()) : FormState(scope) {
   val email = field("") { required(); email() }
   val password = field("") { required(); minLength(6) }
 }
 
-class TestProfileForm(nickname: String, bio: String) : FormState() {
+class TestProfileForm(nickname: String, bio: String, scope: TestScope = TestScope()) : FormState(scope) {
   val nickname = field(nickname) { required() }
   val bio = field(bio) { maxLength(500) }
 }
@@ -103,7 +104,7 @@ class FormStateTest {
 
   @Test
   fun validateAllFieldsOnSubmit() = runTest {
-    val form = TestLoginForm()
+    val form = TestLoginForm(this)
     val isValid = form.validateAll()
     assertFalse(isValid)
     assertEquals(listOf("필수 항목입니다"), form.email.errors)
@@ -112,7 +113,7 @@ class FormStateTest {
 
   @Test
   fun validateAllPassesWhenValid() = runTest {
-    val form = TestLoginForm()
+    val form = TestLoginForm(this)
     form.email.setValue("test@test.com")
     form.password.setValue("secret123")
     val isValid = form.validateAll()
@@ -123,19 +124,47 @@ class FormStateTest {
 
   @Test
   fun defaultValidateOnPropagates() {
-    class OnBlurForm : FormState(defaultValidateOn = ValidateOn.OnBlur) {
+    val scope = TestScope()
+    class OnBlurForm : FormState(scope, defaultValidateOn = ValidateOn.Blur) {
       val name = field("") { required() }
-      val overridden = field("") { required(); validateOn(ValidateOn.OnChange) }
+      val overridden = field("") { required(); validateOn(ValidateOn.Change) }
     }
 
     val form = OnBlurForm()
-    assertEquals(ValidateOn.OnBlur, form.name.validateOn)
-    assertEquals(ValidateOn.OnChange, form.overridden.validateOn)
+    assertTrue(ValidateOn.Blur in form.name.rulesByTiming)
+    assertTrue(ValidateOn.Change in form.overridden.rulesByTiming)
+  }
+
+  @Test
+  fun perRuleValidateOn() = runTest {
+    val form = object : FormState(this) {
+      val name = field("") {
+        required("닉네임을 입력해주세요.")
+        validateOn(ValidateOn.Change) {
+          maxLength(20, "닉네임은 20자를 넘을 수 없어요.")
+        }
+      }
+    }
+
+    // OnChange rule triggers on value change
+    form.name.setValue("a".repeat(21))
+    testScheduler.advanceUntilIdle()
+    assertEquals(listOf("닉네임은 20자를 넘을 수 없어요."), form.name.errors)
+
+    // OnSubmit rule (required) doesn't trigger on change
+    form.name.setValue("")
+    testScheduler.advanceUntilIdle()
+    assertEquals(emptyList(), form.name.errors)
+
+    // On submit, all rules trigger
+    val valid = form.validateAll()
+    assertFalse(valid)
+    assertEquals(listOf("닉네임을 입력해주세요."), form.name.errors)
   }
 
   @Test
   fun validateReturnsFalseAndFocusesFirstError() = runTest {
-    val form = TestLoginForm()
+    val form = TestLoginForm(this)
     val valid = form.validate()
     assertFalse(valid)
     assertEquals(listOf("필수 항목입니다"), form.email.errors)
@@ -143,7 +172,7 @@ class FormStateTest {
 
   @Test
   fun validateReturnsTrueWhenValid() = runTest {
-    val form = TestLoginForm()
+    val form = TestLoginForm(this)
     form.email.setValue("test@test.com")
     form.password.setValue("secret123")
     val valid = form.validate()
@@ -154,15 +183,14 @@ class FormStateTest {
 
   @Test
   fun onBlurTriggersValidation() = runTest {
-    class BlurForm : FormState() {
+    class BlurForm : FormState(this) {
       val email = field("") {
         required()
-        validateOn(ValidateOn.OnBlur)
+        validateOn(ValidateOn.Blur)
       }
     }
 
     val form = BlurForm()
-    form.setValidationScope(this)
 
     form.email.onBlur()
     testScheduler.advanceUntilIdle()
@@ -171,23 +199,8 @@ class FormStateTest {
   }
 
   @Test
-  fun onBlurWithoutScopeDoesNotCrash() {
-    class BlurForm : FormState() {
-      val email = field("") {
-        required()
-        validateOn(ValidateOn.OnBlur)
-      }
-    }
-
-    val form = BlurForm()
-    form.email.onBlur()
-    assertEquals(emptyList(), form.email.errors)
-  }
-
-  @Test
   fun onBlurDoesNotTriggerForOnSubmitFields() = runTest {
-    val form = TestLoginForm()
-    form.setValidationScope(this)
+    val form = TestLoginForm(this)
     form.email.onBlur()
     testScheduler.advanceUntilIdle()
 
@@ -196,15 +209,14 @@ class FormStateTest {
 
   @Test
   fun onChangeTriggersValidation() = runTest {
-    class ChangeForm : FormState() {
+    class ChangeForm : FormState(this) {
       val email = field("") {
         email()
-        validateOn(ValidateOn.OnChange)
+        validateOn(ValidateOn.Change)
       }
     }
 
     val form = ChangeForm()
-    form.setValidationScope(this)
 
     form.email.setValue("invalid")
     testScheduler.advanceUntilIdle()
@@ -222,15 +234,14 @@ class FormStateTest {
 
   @Test
   fun onChangeDoesNotAutoClear() = runTest {
-    class ChangeForm : FormState() {
+    class ChangeForm : FormState(this) {
       val email = field("") {
         required()
-        validateOn(ValidateOn.OnChange)
+        validateOn(ValidateOn.Change)
       }
     }
 
     val form = ChangeForm()
-    form.setValidationScope(this)
 
     form.email.setErrors(listOf("이전 에러"))
     form.email.setValue("new value")
@@ -243,16 +254,15 @@ class FormStateTest {
   @Test
   fun onChangeDeferRulesDebounced() = runTest {
     var deferCallCount = 0
-    val form = object : FormState() {
+    val form = object : FormState(this) {
       val email = field("") {
         defer {
           deferCallCount++
           null
         }
-        validateOn(ValidateOn.OnChange)
+        validateOn(ValidateOn.Change)
       }
     }
-    form.setValidationScope(this)
 
     form.email.setValue("a")
     form.email.setValue("ab")
@@ -265,17 +275,16 @@ class FormStateTest {
   @Test
   fun onChangeSyncAndDeferCombined() = runTest {
     var deferCallCount = 0
-    val form = object : FormState() {
+    val form = object : FormState(this) {
       val email = field("") {
         email()
         defer {
           deferCallCount++
           if (it == "taken@test.com") "이미 사용 중" else null
         }
-        validateOn(ValidateOn.OnChange)
+        validateOn(ValidateOn.Change)
       }
     }
-    form.setValidationScope(this)
 
     form.email.setValue("invalid")
     testScheduler.advanceUntilIdle()
@@ -288,7 +297,7 @@ class FormStateTest {
 
   @Test
   fun isLastField_returns_true_for_last_registered_field() {
-    val form = object : FormState() {
+    val form = object : FormState(TestScope()) {
       val first = field("")
       val second = field("")
     }
@@ -298,7 +307,7 @@ class FormStateTest {
 
   @Test
   fun imeActionFor_returns_next_for_non_last_field() {
-    val form = object : FormState() {
+    val form = object : FormState(TestScope()) {
       val first = field("")
       val second = field("")
     }
@@ -308,7 +317,7 @@ class FormStateTest {
 
   @Test
   fun field_has_form_back_reference() {
-    val form = object : FormState() {
+    val form = object : FormState(TestScope()) {
       val first = field("")
     }
     assertEquals(form, form.first.form)

@@ -23,7 +23,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.pointer.pointerInput
+import co.typie.ext.pointerIgnore
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.unit.dp
 import co.typie.ui.theme.AppTheme
@@ -136,15 +136,7 @@ object Skeleton {
 
       // 터치 차단 레이어 (최상단)
       if (enabled) {
-        Box(
-          Modifier.matchParentSize().pointerInput(Unit) {
-            awaitPointerEventScope {
-              while (true) {
-                awaitPointerEvent().changes.forEach { it.consume() }
-              }
-            }
-          },
-        )
+        Box(Modifier.matchParentSize().pointerIgnore())
       }
     }
   }

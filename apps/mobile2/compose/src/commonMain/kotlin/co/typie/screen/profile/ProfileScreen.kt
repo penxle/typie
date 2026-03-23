@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +44,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
@@ -53,7 +53,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
-import kotlinx.coroutines.launch
+
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -68,11 +68,11 @@ fun ProfileScreen() {
   val toast = koinInject<Toast>()
 
   val scrollState = rememberScrollState()
-  val scope = rememberCoroutineScope()
 
   ProvideTopBar(
     leading = null,
     center = { Text("프로필", style = AppTheme.typography.title) },
+    trailing = { TopBarButton(Lucide.Settings, onClick = {}) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
@@ -165,7 +165,7 @@ fun ProfileScreen() {
           ) {
             Text(
               "나의 글쓰기 활동",
-              style = AppTheme.typography.title,
+              style = AppTheme.typography.label,
             )
 
             Text(
@@ -206,7 +206,7 @@ fun ProfileScreen() {
 
               Text(
                 "통계",
-                style = AppTheme.typography.title,
+                style = AppTheme.typography.label,
               )
             }
 
@@ -245,12 +245,12 @@ fun ProfileScreen() {
               ) {
                 Text(
                   "현재 이용권",
-                  style = AppTheme.typography.title,
+                  style = AppTheme.typography.label,
                 )
 
                 Text(
                   subscriptionName,
-                  style = AppTheme.typography.action,
+                  style = AppTheme.typography.caption,
                   color = AppTheme.colors.textFaint,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
@@ -266,7 +266,7 @@ fun ProfileScreen() {
               Skeleton.Unite {
                 Text(
                   subscriptionActionLabel,
-                  style = AppTheme.typography.action,
+                  style = AppTheme.typography.caption,
                   color = AppTheme.colors.textFaint,
                 )
 
@@ -293,7 +293,7 @@ fun ProfileScreen() {
 
               Text(
                 "초대",
-                style = AppTheme.typography.title,
+                style = AppTheme.typography.label,
               )
             }
 
@@ -325,7 +325,7 @@ fun ProfileScreen() {
 
             Text(
               "설정",
-              style = AppTheme.typography.title,
+              style = AppTheme.typography.label,
             )
           }
 
@@ -377,7 +377,7 @@ fun ProfileScreen() {
 
           Text(
             "고객센터",
-            style = AppTheme.typography.title,
+            style = AppTheme.typography.label,
           )
         }
 
@@ -403,7 +403,7 @@ fun ProfileScreen() {
 
           Text(
             "의견 보내기",
-            style = AppTheme.typography.title,
+            style = AppTheme.typography.label,
           )
         }
       }
@@ -425,7 +425,7 @@ fun ProfileScreen() {
 
                 Text(
                   "타이피 유저 커뮤니티",
-                  style = AppTheme.typography.title,
+                  style = AppTheme.typography.label,
                 )
               }
 
@@ -455,7 +455,7 @@ fun ProfileScreen() {
 
               Text(
                 "타이피 공식 X",
-                style = AppTheme.typography.title,
+                style = AppTheme.typography.label,
               )
             }
 
@@ -484,7 +484,7 @@ fun ProfileScreen() {
 
               Text(
                 "업데이트 노트",
-                style = AppTheme.typography.title,
+                style = AppTheme.typography.label,
               )
             }
 
@@ -531,7 +531,7 @@ fun ProfileScreen() {
           "로그아웃",
           style = AppTheme.typography.action,
           color = AppTheme.colors.accentDanger,
-          modifier = Modifier.clickable { scope.launch { authService.logout() } },
+          modifier = Modifier.clickable { authService.logout() },
         )
       }
 

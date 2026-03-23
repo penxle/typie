@@ -79,7 +79,7 @@ fun CardActionTile(
 
 @Composable
 fun CardRow(
-  onClick: () -> Unit,
+  onClick: suspend () -> Unit,
   modifier: Modifier = Modifier,
   contentPadding: PaddingValues = CardDefaults.RowPadding,
   spacing: Dp = 10.dp,

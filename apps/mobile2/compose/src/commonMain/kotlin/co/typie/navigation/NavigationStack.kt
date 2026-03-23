@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import co.typie.ext.pointerIgnore
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -85,13 +87,14 @@ fun NavigationStack(
           progress.snapTo(0f)
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
           val poppedRoute = visibleRoute
-          navigator.pop()
+          navigator.performPop()
           navigator.consumePopRequest()
           visibleRoute = navigator.current
           behindRoute = null
           animState = AnimState.Idle
           topBarState.clearRoute(poppedRoute)
           exitTopBarState.clearRoute(poppedRoute)
+          navigator.completeTransition()
         }
       }
   }
@@ -107,6 +110,7 @@ fun NavigationStack(
           progress.snapTo(0f)
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
           visibleRoute = navigator.current
+          navigator.completeTransition()
         }
 
         else -> {
@@ -119,6 +123,7 @@ fun NavigationStack(
           visibleRoute = navigator.current
           topBarState.clearRoute(poppedRoute)
           exitTopBarState.clearRoute(poppedRoute)
+          navigator.completeTransition()
         }
       }
       behindRoute = null
@@ -128,7 +133,7 @@ fun NavigationStack(
 
   CompositionLocalProvider(Nav provides navigator) {
     PlatformBackHandler(enabled = navigator.canPop) {
-      navigator.requestPop()
+      scope.launch { navigator.pop() }
     }
     Box(
       modifier
@@ -139,113 +144,83 @@ fun NavigationStack(
       topBarState.blurFactor = if (animState == AnimState.Idle) 1f else abs(progress.value * 2f - 1f)
 
       when (animState) {
-        AnimState.Idle -> {
-          topBarState.navDirection = NavDirection.Switch
-          CompositionLocalProvider(LocalTopBarState provides topBarState) {
-            RouteContent(visibleRoute)
-          }
+        AnimState.Idle -> topBarState.navDirection = NavDirection.Switch
+        AnimState.Push -> topBarState.navDirection = NavDirection.Push
+        AnimState.Pop -> topBarState.navDirection = NavDirection.Pop
+        AnimState.Dragging -> if (navigator.popRequested) topBarState.navDirection = NavDirection.Pop
+      }
+
+      val p = progress.value
+
+      // Behind layer (애니메이션 중 뒤에 깔리는 화면)
+      if (behindRoute != null) {
+        val behindOffset = when (animState) {
+          // Push: 이전 화면이 왼쪽으로 밀림
+          AnimState.Push -> -containerWidth / 6f * p
+          // Pop/Dragging: 돌아갈 화면이 왼쪽에서 복귀
+          else -> -containerWidth / 6f * (1f - p)
         }
-
-        AnimState.Push -> {
-          topBarState.navDirection = NavDirection.Push
-          val p = progress.value
-          val behindOffset = -containerWidth / 6f * p
-          val frontOffset = containerWidth * (1f - p)
-
-          // 뒤: 이전 화면 (왼쪽으로 밀림)
-          Box(Modifier.fillMaxSize().graphicsLayer {
-            translationX = behindOffset
-          }) {
-            CompositionLocalProvider(LocalTopBarState provides exitTopBarState) {
-              RouteContent(behindRoute!!)
-            }
-          }
-
-          // Dim overlay
-          Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
-            .background(AppTheme.colors.shadowDefault.copy(alpha = 0.5f * p)))
-
-          // 앞: 새 화면 (오른쪽에서 슬라이드 in)
-          Box(Modifier.fillMaxSize().graphicsLayer {
-            translationX = frontOffset
-            shadowElevation = 12.dp.toPx()
-            shape = RoundedCornerShape(cornerRadius(p))
-            clip = true
-          }) {
-            CompositionLocalProvider(LocalTopBarState provides topBarState) {
-              RouteContent(navigator.current)
-            }
-          }
+        val dimAlpha = when (animState) {
+          AnimState.Push -> 0.5f * p
+          else -> 0.5f * (1f - p)
         }
-
-        AnimState.Pop -> {
-          topBarState.navDirection = NavDirection.Pop
-          val p = progress.value
-          val behindOffset = -containerWidth / 6f * (1f - p)
-          val frontOffset = containerWidth * p
-
-          behindRoute?.let { behind ->
-            // 뒤: 돌아갈 화면 (왼쪽에서 복귀)
-            Box(Modifier.fillMaxSize().graphicsLayer {
-              translationX = behindOffset
-            }) {
-              CompositionLocalProvider(LocalTopBarState provides topBarState) {
-                RouteContent(behind)
-              }
-            }
-
-            // Dim overlay
-            Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
-              .background(AppTheme.colors.shadowDefault.copy(alpha = 0.5f * (1f - p))))
-
-            // 앞: 나가는 화면 (오른쪽으로 슬라이드 out)
-            Box(Modifier.fillMaxSize().graphicsLayer {
-              translationX = frontOffset
-              shadowElevation = 12.dp.toPx()
-              shape = RoundedCornerShape(cornerRadius(1f - p))
-              clip = true
-            }) {
-              CompositionLocalProvider(LocalTopBarState provides exitTopBarState) {
-                RouteContent(visibleRoute)
-              }
-            }
-          }
-        }
-
-        AnimState.Dragging -> {
+        val behindTopBar = when (animState) {
+          AnimState.Push -> exitTopBarState
           // popRequested = commit 확정 → TopBar를 목적지로 전환
-          val committed = navigator.popRequested
-          if (committed) topBarState.navDirection = NavDirection.Pop
-          val p = progress.value
-          val behindOffset = -containerWidth / 6f * (1f - p)
-          val frontOffset = containerWidth * p
+          AnimState.Dragging -> if (navigator.popRequested) topBarState else exitTopBarState
+          else -> topBarState
+        }
 
-          behindRoute?.let { behind ->
-            // 뒤: 돌아갈 화면
-            Box(Modifier.fillMaxSize().graphicsLayer {
-              translationX = behindOffset
-            }) {
-              CompositionLocalProvider(LocalTopBarState provides if (committed) topBarState else exitTopBarState) {
-                RouteContent(behind)
-              }
-            }
-
-            // Dim overlay
-            Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
-              .background(AppTheme.colors.shadowDefault.copy(alpha = 0.5f * (1f - p))))
-
-            // 앞: 손가락 따라 움직이는 현재 화면
-            Box(Modifier.fillMaxSize().graphicsLayer {
-              translationX = frontOffset
-              shadowElevation = 12.dp.toPx()
-              shape = RoundedCornerShape(cornerRadius(1f - p))
-              clip = true
-            }) {
-              CompositionLocalProvider(LocalTopBarState provides if (committed) exitTopBarState else topBarState) {
-                RouteContent(visibleRoute)
-              }
-            }
+        Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }) {
+          CompositionLocalProvider(LocalTopBarState provides behindTopBar) {
+            RouteContent(behindRoute!!)
           }
+        }
+        // Dim overlay — 전환 중 behind 화면 터치 차단
+        Box(
+          Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
+            .background(AppTheme.colors.shadowDefault.copy(alpha = dimAlpha))
+            .pointerIgnore()
+        )
+      }
+
+      // Main layer (현재 화면 — 항상 같은 composition slot을 유지하여
+      // Push→Idle 전환 시 remember 등 composition 상태가 보존됨)
+      val mainRoute = when (animState) {
+        // Push: 새 화면 (오른쪽에서 슬라이드 in)
+        AnimState.Push -> navigator.current
+        // Idle/Pop/Dragging: 현재 보이는 화면
+        else -> visibleRoute
+      }
+      val mainTopBar = when (animState) {
+        // Pop: 나가는 화면은 exitTopBarState
+        AnimState.Pop -> exitTopBarState
+        AnimState.Dragging -> if (navigator.popRequested) exitTopBarState else topBarState
+        else -> topBarState
+      }
+
+      Box(Modifier.fillMaxSize().graphicsLayer {
+        if (animState != AnimState.Idle) {
+          translationX = when (animState) {
+            // Push: 오른쪽에서 왼쪽으로 슬라이드 in
+            AnimState.Push -> containerWidth * (1f - p)
+            // Pop/Dragging: 오른쪽으로 슬라이드 out
+            else -> containerWidth * p
+          }
+          shadowElevation = 12.dp.toPx()
+          shape = RoundedCornerShape(
+            cornerRadius(
+              when (animState) {
+                AnimState.Push -> p
+                else -> 1f - p
+              }
+            )
+          )
+          clip = true
+        }
+      }) {
+        CompositionLocalProvider(LocalTopBarState provides mainTopBar) {
+          RouteContent(mainRoute)
         }
       }
 
@@ -271,7 +246,7 @@ fun NavigationStack(
                       val poppedRoute = visibleRoute
                       navigator.requestPop()
                       progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
-                      navigator.pop()
+                      navigator.performPop()
                       navigator.consumePopRequest()
                       visibleRoute = navigator.current
                       topBarState.clearRoute(poppedRoute)

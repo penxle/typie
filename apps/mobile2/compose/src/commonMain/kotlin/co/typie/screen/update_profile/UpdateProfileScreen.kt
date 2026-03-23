@@ -17,10 +17,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.graphql.QueryState
@@ -31,13 +31,13 @@ import co.typie.navigation.Nav
 import co.typie.ui.component.Button
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Img
+import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -46,6 +46,15 @@ fun UpdateProfileScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdateProfileViewModel>()
   val scope = rememberCoroutineScope()
+
+  val imagePicker = rememberImagePicker { image ->
+    if (image == null) return@rememberImagePicker
+
+    scope.launch {
+      val avatarId = model.uploadAvatar(image) ?: return@launch
+      model.state.form.avatarId.setValue(avatarId)
+    }
+  }
 
   ProvideTopBar(
     center = { Text("프로필 변경", style = AppTheme.typography.title) },
@@ -57,27 +66,13 @@ fun UpdateProfileScreen() {
 
   Screen(
     loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceSubtle,
   ) { contentPadding ->
-    val data = model.query.data
-
-    val imagePicker = rememberImagePicker { image ->
-      if (image == null || model.state.isUploadingAvatar) {
-        return@rememberImagePicker
-      }
-
-      scope.launch {
-        val avatarId = model.uploadAvatar(image) ?: return@launch
-        model.state.form.avatarId.setValue(avatarId)
-      }
-    }
-
     Column(
       modifier = Modifier
         .fillMaxSize()
         .padding(contentPadding)
         .navigationBarsPadding()
-        .padding(horizontal = 20.dp, vertical = 16.dp),
+        .imePadding()
     ) {
       Column(
         modifier = Modifier.fillMaxWidth(),
@@ -85,14 +80,13 @@ fun UpdateProfileScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         ProfileAvatar(
-          image = data.me.avatar.img_image,
+          image = model.query.data.me.avatar.img_image,
           previewUrl = model.state.avatarPreviewUrl,
-          uploading = model.state.isUploadingAvatar,
           onClick = imagePicker,
         )
 
         Text(
-          if (model.state.isUploadingAvatar) "프로필 사진 업로드 중..." else "프로필 사진",
+          "프로필 사진",
           style = AppTheme.typography.caption,
           color = AppTheme.colors.textFaint,
         )
@@ -103,6 +97,8 @@ fun UpdateProfileScreen() {
       TextField(
         field = model.state.form.name,
         label = "닉네임",
+        labelPosition = LabelPosition.Internal,
+        onImeAction = { model.submit { nav.pop() } }
       )
 
       Spacer(Modifier.weight(1f))
@@ -110,7 +106,6 @@ fun UpdateProfileScreen() {
       Button(
         text = "변경",
         modifier = Modifier.padding(bottom = 16.dp),
-        enabled = !model.state.isUploadingAvatar,
         loading = model.state.isSubmitting,
         loadingText = "변경 중...",
         onClick = { model.submit { nav.pop() } },
@@ -121,9 +116,8 @@ fun UpdateProfileScreen() {
 
 @Composable
 private fun ProfileAvatar(
-  image: Img_image?,
+  image: Img_image,
   previewUrl: String?,
-  uploading: Boolean,
   onClick: () -> Unit,
 ) {
   InteractionScope {
@@ -141,24 +135,14 @@ private fun ProfileAvatar(
         contentAlignment = Alignment.Center,
       ) {
         if (previewUrl != null) {
-          AsyncImage(
-            model = previewUrl,
-            contentDescription = null,
-            modifier = Modifier
-              .size(104.dp)
-              .clip(CircleShape),
-            contentScale = ContentScale.Crop,
-          )
-        } else if (image != null) {
           Img(
-            image = image,
+            url = previewUrl,
             modifier = Modifier.size(104.dp).clip(CircleShape),
           )
         } else {
-          Icon(
-            icon = Lucide.UserRound,
-            modifier = Modifier.size(36.dp),
-            tint = AppTheme.colors.textDisabled,
+          Img(
+            image = image,
+            modifier = Modifier.size(104.dp).clip(CircleShape),
           )
         }
       }
@@ -175,7 +159,7 @@ private fun ProfileAvatar(
         Icon(
           icon = Lucide.Camera,
           modifier = Modifier.size(18.dp),
-          tint = if (uploading) AppTheme.colors.textDisabled else AppTheme.colors.textSubtle,
+          tint = AppTheme.colors.textSubtle,
         )
       }
     }

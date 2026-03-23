@@ -59,7 +59,7 @@ private fun AppColors.buttonColors(variant: ButtonVariant): ButtonColors = when 
 @Composable
 fun Button(
   text: String,
-  onClick: () -> Unit,
+  onClick: suspend () -> Unit,
   modifier: Modifier = Modifier,
   loadingText: String? = null,
   variant: ButtonVariant = ButtonVariant.Primary,
@@ -92,7 +92,7 @@ fun Button(
       val spinnerWidth by animateDpAsState(if (debouncedLoading) 24.dp else 0.dp, tween(200))
 
       Row(
-        modifier = Modifier.pressScale(),
+        modifier = Modifier.pressScale(0.95f),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {

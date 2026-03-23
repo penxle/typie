@@ -9,11 +9,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import co.typie.generated.resources.Res
-import coil3.compose.AsyncImage
+import co.typie.ui.component.Img
 
 @Composable
 fun SplashScreen() {
@@ -25,12 +24,11 @@ fun SplashScreen() {
     modifier = Modifier.fillMaxSize().background(backgroundColor),
     contentAlignment = Alignment.Center,
   ) {
-    AsyncImage(
-      model = Res.getUri("files/logos/full.svg"),
-      contentDescription = null,
+    Img(
+      url = Res.getUri("files/logos/full.svg"),
       modifier = Modifier.size(64.dp),
       contentScale = ContentScale.Fit,
-      colorFilter = ColorFilter.tint(iconTint),
+      color = iconTint,
     )
   }
 }

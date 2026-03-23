@@ -20,12 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -38,6 +36,7 @@ import co.typie.ext.pressScale
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.ui.component.Button
+import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
@@ -46,15 +45,12 @@ import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
-import coil3.compose.AsyncImage
-import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun LoginScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
-  val scope = rememberCoroutineScope()
 
   ProvideTopBar(
     enabled = false
@@ -72,19 +68,18 @@ fun LoginScreen() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
       ) {
-        AsyncImage(
-          model = Res.getUri("files/logos/full.svg"),
-          contentDescription = null,
+        Img(
+          url = Res.getUri("files/logos/full.svg"),
           modifier = Modifier.height(32.dp),
           contentScale = ContentScale.FillHeight,
-          colorFilter = ColorFilter.tint(AppTheme.colors.textDefault),
+          color = AppTheme.colors.textDefault,
         )
         Spacer(Modifier.height(24.dp))
-        Text("작성, 정리, 공유까지.", style = AppTheme.typography.action)
+        Text("작성, 정리, 공유까지.", style = AppTheme.typography.label)
         Spacer(Modifier.height(4.dp))
-        Text("글쓰기의 모든 과정을", style = AppTheme.typography.action)
+        Text("글쓰기의 모든 과정을", style = AppTheme.typography.label)
         Spacer(Modifier.height(4.dp))
-        Text("타이피 하나로 해결해요.", style = AppTheme.typography.action)
+        Text("타이피 하나로 해결해요.", style = AppTheme.typography.label)
       }
 
       Column(
@@ -94,11 +89,7 @@ fun LoginScreen() {
       ) {
         Button(
           text = "시작하기",
-          onClick = {
-            scope.launch {
-              bottomSheetHost.show { LoginBottomSheet() }
-            }
-          },
+          onClick = { bottomSheetHost.show { LoginBottomSheet() } },
         )
       }
     }
@@ -272,14 +263,13 @@ private fun SingleSignOnButton(
         .background(backgroundColor, shape)
         .clickable(onClick = onClick),
     ) {
-      AsyncImage(
-        model = Res.getUri(svgPath),
-        contentDescription = null,
+      Img(
+        url = Res.getUri(svgPath),
         modifier = Modifier
           .align(Alignment.CenterStart)
           .padding(start = 24.dp)
           .size(20.dp),
-        colorFilter = iconTint?.let { ColorFilter.tint(it) },
+        color = iconTint,
       )
 
       Text(

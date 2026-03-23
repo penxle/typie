@@ -10,10 +10,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable as foundationClickable
 
 val LocalInteractionSource = compositionLocalOf<MutableInteractionSource?> { null }
@@ -30,13 +36,30 @@ expect fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true):
 expect fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier
 expect fun Modifier.overscroll(): Modifier
 
-fun Modifier.clickable(onClick: () -> Unit): Modifier = composed {
+fun Modifier.clickable(onClick: suspend () -> Unit): Modifier = composed {
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
+  var handling by remember { mutableStateOf(false) }
+  val scope = rememberCoroutineScope()
   foundationClickable(
     interactionSource = interactionSource,
     indication = null,
-    onClick = onClick,
+    onClick = {
+      if (!handling) {
+        handling = true
+        scope.launch {
+          try {
+            onClick()
+          } finally {
+            handling = false
+          }
+        }
+      }
+    },
   )
+}
+
+fun Modifier.pointerIgnore(): Modifier = pointerInput(Unit) {
+  awaitPointerEventScope { while (true) { awaitPointerEvent().changes.forEach { it.consume() } } }
 }
 
 fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier = composed {

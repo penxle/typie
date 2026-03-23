@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import co.typie.blob.BlobService
 import co.typie.form.FormState
+import co.typie.form.ValidateOn
 import co.typie.form.maxLength
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver
@@ -21,24 +22,27 @@ import co.typie.media.PickedImage
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
-class UpdateProfileForm : FormState() {
+class UpdateProfileForm(scope: CoroutineScope) : FormState(scope) {
   val name = field("") {
     required("닉네임을 입력해주세요.")
-    maxLength(20, "닉네임은 20자를 넘을 수 없어요.")
+    validateOn(ValidateOn.Change) {
+      maxLength(20, "닉네임은 20자를 넘을 수 없어요.")
+    }
   }
 
   val avatarId = field("") {
+    focusable = false
     required("프로필 사진을 선택해주세요.")
   }
 }
 
-class UpdateProfileScreenState {
-  val form = UpdateProfileForm()
+class UpdateProfileScreenState(scope: CoroutineScope) {
+  val form = UpdateProfileForm(scope)
   var avatarPreviewUrl: String? by mutableStateOf(null)
-  var isUploadingAvatar by mutableStateOf(false)
   var isSubmitting by mutableStateOf(false)
 }
 
@@ -47,7 +51,7 @@ class UpdateProfileViewModel(
   private val blobService: BlobService,
   private val toast: Toast,
 ) : GraphQLViewModel() {
-  val state = UpdateProfileScreenState()
+  val state = UpdateProfileScreenState(viewModelScope)
 
   val query =
     watchQuery(
@@ -59,33 +63,35 @@ class UpdateProfileViewModel(
     ) { UpdateProfileScreen_Query() }
 
   suspend fun uploadAvatar(image: PickedImage): String? {
-    state.isUploadingAvatar = true
-
     return try {
-      val path = blobService.uploadBytes(
-        bytes = image.bytes,
-        filename = image.filename,
-        mimeType = image.mimeType,
-      )
+      toast.withLoading(
+        message = "프로필 사진 업로드 중...",
+        errorMessage = "프로필 사진 업로드에 실패했어요. 다시 시도해주세요.",
+      ) {
+        val path = blobService.uploadBytes(
+          bytes = image.bytes,
+          filename = image.filename,
+          mimeType = image.mimeType,
+        )
 
-      val result = executeMutation(
-        UpdateProfileScreen_PersistBlobAsImage_Mutation(
-          input = PersistBlobAsImageInput(path = path),
-        ),
-      )
+        val result = executeMutation(
+          UpdateProfileScreen_PersistBlobAsImage_Mutation(
+            input = PersistBlobAsImageInput(path = path),
+          ),
+        )
 
-      state.avatarPreviewUrl = result.persistBlobAsImage.url
-      result.persistBlobAsImage.id
+        state.avatarPreviewUrl = result.persistBlobAsImage.url
+        success("프로필 사진이 업로드되었어요.")
+
+        result.persistBlobAsImage.id
+      }
     } catch (e: Exception) {
       Logger.e(e) { "Failed to upload avatar" }
-      toast.show(ToastType.Error, "프로필 사진 업로드에 실패했어요. 다시 시도해주세요.")
       null
-    } finally {
-      state.isUploadingAvatar = false
     }
   }
 
-  fun submit(onSubmit: () -> Unit) {
+  fun submit(onSubmit: suspend () -> Unit) {
     viewModelScope.launch {
       state.isSubmitting = true
       try {
@@ -99,6 +105,8 @@ class UpdateProfileViewModel(
             ),
           ),
         )
+
+        toast.show(ToastType.Success, "프로필이 변경되었어요.")
 
         state.form.commit()
         onSubmit()

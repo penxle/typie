@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
 
 class NavigatorTest {
 
@@ -19,7 +20,7 @@ class NavigatorTest {
   }
 
   @Test
-  fun navigate() {
+  fun navigate() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Detail("1"))
     assertEquals(Route.Detail("1"), nav.current)
@@ -29,25 +30,23 @@ class NavigatorTest {
   }
 
   @Test
-  fun pop() {
+  fun pop() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Detail("1"))
-    val result = nav.pop()
-    assertTrue(result)
+    nav.pop()
     assertEquals(Route.Home, nav.current)
     assertFalse(nav.canPop)
   }
 
   @Test
-  fun popAtRoot() {
+  fun popAtRoot() = runTest {
     val nav = Navigator(Route.Home)
-    val result = nav.pop()
-    assertFalse(result)
+    nav.pop()
     assertEquals(Route.Home, nav.current)
   }
 
   @Test
-  fun popTo() {
+  fun popTo() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Space)
     nav.navigate(Route.Detail("1"))
@@ -58,7 +57,7 @@ class NavigatorTest {
   }
 
   @Test
-  fun popToNotInStack() {
+  fun popToNotInStack() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Detail("1"))
     nav.popTo(Route.Notes)
@@ -67,7 +66,7 @@ class NavigatorTest {
   }
 
   @Test
-  fun popToRoot() {
+  fun popToRoot() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Space)
     nav.navigate(Route.Detail("1"))
@@ -95,7 +94,7 @@ class NavigatorTest {
   }
 
   @Test
-  fun popDismissesModalFirst() {
+  fun popDismissesModalFirst() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Detail("1"))
     nav.showModal {}
@@ -106,14 +105,14 @@ class NavigatorTest {
   }
 
   @Test
-  fun lastOperationOnNavigate() {
+  fun lastOperationOnNavigate() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Detail("1"))
     assertEquals(NavOperation.Push, nav.lastOperation)
   }
 
   @Test
-  fun lastOperationOnPop() {
+  fun lastOperationOnPop() = runTest {
     val nav = Navigator(Route.Home)
     nav.navigate(Route.Detail("1"))
     nav.pop()

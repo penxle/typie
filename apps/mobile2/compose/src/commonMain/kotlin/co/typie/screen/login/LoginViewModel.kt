@@ -22,6 +22,7 @@ import co.typie.overlay.Loader
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -67,7 +68,7 @@ class LoginSingleSignOnViewModel(
   }
 }
 
-class LoginWithEmailForm : FormState() {
+class LoginWithEmailForm(scope: CoroutineScope) : FormState(scope) {
   val email = field("") {
     required("이메일을 입력해주세요.")
     email("올바른 이메일 형식을 입력해주세요.")
@@ -78,8 +79,8 @@ class LoginWithEmailForm : FormState() {
   }
 }
 
-class LoginWithEmailState {
-  val form = LoginWithEmailForm()
+class LoginWithEmailState(scope: CoroutineScope) {
+  val form = LoginWithEmailForm(scope)
   var isSubmitting by mutableStateOf(false)
 }
 
@@ -87,7 +88,7 @@ class LoginWithEmailState {
 class LoginWithEmailViewModel(
   private val toast: Toast,
 ) : GraphQLViewModel() {
-  val state = LoginWithEmailState()
+  val state = LoginWithEmailState(viewModelScope)
 
   fun submit(onSubmit: () -> Unit) {
     viewModelScope.launch {

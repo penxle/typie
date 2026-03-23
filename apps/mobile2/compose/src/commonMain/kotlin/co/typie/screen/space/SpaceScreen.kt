@@ -1,5 +1,6 @@
 package co.typie.screen.space
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -22,7 +23,9 @@ fun SpaceScreen() {
     center = { Text("스페이스", style = AppTheme.typography.title) },
   )
 
-  Screen { _ ->
+  Screen(
+    modifier = Modifier.background(AppTheme.colors.surfaceSubtle),
+  ) { _ ->
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
       Text("Space", style = AppTheme.typography.display)
     }

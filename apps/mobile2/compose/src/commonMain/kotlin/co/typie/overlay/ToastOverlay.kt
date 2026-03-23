@@ -1,12 +1,26 @@
 package co.typie.overlay
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,16 +38,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import co.typie.ext.ime
 import co.typie.ext.safeDrawing
 import co.typie.ext.toDp
 import co.typie.ext.toPx
@@ -55,20 +72,29 @@ fun ToastOverlay() {
   val toastState by toast.state.collectAsState()
 
   val density = LocalDensity.current
-  val imeBottom = WindowInsets.ime.getBottom(density).toDp(density)
-  val safeBottom = WindowInsets.safeDrawing.getBottom(density).toDp(density)
+  val safeDrawingBottom = WindowInsets.safeDrawing.getBottom(density).toDp(density)
   val animatedBottomInset by animateDpAsState(
     toast.bottomInset,
     spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)
   )
-  val bottomOffset = imeBottom + safeBottom + 12.dp + animatedBottomInset
+  val bottomOffset = safeDrawingBottom + 12.dp + animatedBottomInset
+
+  var visibleState by remember { mutableStateOf<ToastState?>(null) }
+
+  if (toastState != null) {
+    visibleState = toastState
+  }
 
   Box(Modifier.fillMaxSize()) {
-    toastState?.let { state ->
+    visibleState?.let { state ->
       AnimatedToast(
         state = state,
         bottomOffset = bottomOffset,
-        onDismiss = { toast.dismiss() },
+        dismissed = toastState == null,
+        onDismiss = {
+          visibleState = null
+          toast.dismiss()
+        },
       )
     }
   }
@@ -78,6 +104,7 @@ fun ToastOverlay() {
 private fun AnimatedToast(
   state: ToastState,
   bottomOffset: Dp,
+  dismissed: Boolean,
   onDismiss: () -> Unit,
 ) {
   val colors = AppTheme.colors
@@ -85,25 +112,34 @@ private fun AnimatedToast(
   val alpha = remember { Animatable(0f) }
   val slideOffset = remember { Animatable(1f) }
 
-  LaunchedEffect(state) {
-    // Enter (simultaneous fade + slide)
+  LaunchedEffect(state.id) {
     alpha.snapTo(0f)
     slideOffset.snapTo(1f)
     coroutineScope {
       launch { alpha.animateTo(1f, tween(200, easing = EaseOut)) }
       launch { slideOffset.animateTo(0f, tween(200, easing = EaseOut)) }
     }
+  }
 
-    // Wait
-    delay(state.duration.inWholeMilliseconds)
-
-    // Exit (simultaneous fade + slide)
-    coroutineScope {
-      launch { alpha.animateTo(0f, tween(200, easing = EaseIn)) }
-      launch { slideOffset.animateTo(1f, tween(200, easing = EaseIn)) }
+  LaunchedEffect(state.id, state.type) {
+    if (state.type != ToastType.Loading) {
+      delay(state.duration.inWholeMilliseconds)
+      coroutineScope {
+        launch { alpha.animateTo(0f, tween(200, easing = EaseIn)) }
+        launch { slideOffset.animateTo(1f, tween(200, easing = EaseIn)) }
+      }
+      onDismiss()
     }
+  }
 
-    onDismiss()
+  LaunchedEffect(dismissed) {
+    if (dismissed) {
+      coroutineScope {
+        launch { alpha.animateTo(0f, tween(200, easing = EaseIn)) }
+        launch { slideOffset.animateTo(1f, tween(200, easing = EaseIn)) }
+      }
+      onDismiss()
+    }
   }
 
   Box(
@@ -118,41 +154,81 @@ private fun AnimatedToast(
         .background(colors.surfaceDark.copy(alpha = .6f))
         .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
-      Row(verticalAlignment = Alignment.Top) {
-        Box(
-          modifier = Modifier.size(20.dp).background(
-            when (state.type) {
-              ToastType.Success -> AppTheme.colors.accentSuccess
-              ToastType.Error -> AppTheme.colors.accentDanger
-              ToastType.Notification -> AppTheme.colors.accentBrand
-            },
-            CircleShape,
-          ),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(
-            icon = when (state.type) {
-              ToastType.Success -> Lucide.Check
-              ToastType.Error -> Typie.ExclamationSvg
-              ToastType.Notification -> Lucide.Bell
-            },
-            strokeWidth = when (state.type) {
-              ToastType.Success -> 4f
-              ToastType.Error -> 1.75f
-              ToastType.Notification -> 2.5f
-            },
-            tint = AppTheme.colors.textBright,
-            modifier = Modifier.size(12.dp),
-          )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Crossfade(targetState = state.type, animationSpec = tween(200)) { type ->
+          when (type) {
+            ToastType.Loading -> ToastSpinner()
+            else -> {
+              Box(
+                modifier = Modifier.size(20.dp).background(
+                  when (type) {
+                    ToastType.Success -> AppTheme.colors.accentSuccess
+                    ToastType.Error -> AppTheme.colors.accentDanger
+                    else -> AppTheme.colors.accentBrand
+                  },
+                  CircleShape,
+                ),
+                contentAlignment = Alignment.Center,
+              ) {
+                Icon(
+                  icon = when (type) {
+                    ToastType.Success -> Lucide.Check
+                    ToastType.Error -> Typie.ExclamationSvg
+                    else -> Lucide.Bell
+                  },
+                  strokeWidth = when (type) {
+                    ToastType.Success -> 4f
+                    ToastType.Error -> 1.75f
+                    else -> 2.5f
+                  },
+                  tint = AppTheme.colors.textBright,
+                  modifier = Modifier.size(12.dp),
+                )
+              }
+            }
+          }
         }
         Spacer(Modifier.width(8.dp))
-        Text(
-          text = state.message,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textBright,
-          modifier = Modifier.align(Alignment.CenterVertically),
-        )
+        AnimatedContent(
+          targetState = state.message,
+          transitionSpec = {
+            (slideInVertically { it } + fadeIn(tween(200))) togetherWith
+              (slideOutVertically { -it } + fadeOut(tween(200))) using
+              SizeTransform(clip = false)
+          },
+        ) { message ->
+          Text(
+            text = message,
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.textBright,
+          )
+        }
       }
+    }
+  }
+}
+
+@Composable
+private fun ToastSpinner() {
+  val color = AppTheme.colors.textBright
+  val transition = rememberInfiniteTransition()
+  val rotation by transition.animateFloat(
+    initialValue = 0f,
+    targetValue = 360f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(1000, easing = LinearEasing),
+      repeatMode = RepeatMode.Restart,
+    ),
+  )
+  Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+    Canvas(Modifier.size(14.dp)) {
+      drawArc(
+        color = color,
+        startAngle = rotation,
+        sweepAngle = 270f,
+        useCenter = false,
+        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
+      )
     }
   }
 }

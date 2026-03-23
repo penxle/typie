@@ -12,7 +12,7 @@ fun TopBarBackButton(
   val navigator = Nav.current
   TopBarButton(
     icon = Lucide.ChevronLeft,
-    onClick = { navigator.requestPop() },
+    onClick = { navigator.pop() },
     modifier = modifier,
   )
 }

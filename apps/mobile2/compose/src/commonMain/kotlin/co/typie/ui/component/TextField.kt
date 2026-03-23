@@ -1,10 +1,10 @@
 package co.typie.ui.component
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.EaseInOutExpo
+import androidx.compose.animation.core.EaseOutExpo
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -41,14 +42,17 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import co.typie.form.FieldState
 import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
+import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.theme.AppTheme
 
 enum class LabelPosition {
@@ -78,11 +82,20 @@ fun TextField(
 ) {
   val shape = RoundedCornerShape(12.dp)
   var isFocused by remember { mutableStateOf(false) }
+
+  var textFieldValue by remember {
+    mutableStateOf(TextFieldValue(value, TextRange(value.length)))
+  }
+
+  if (textFieldValue.text != value) {
+    textFieldValue = TextFieldValue(value, TextRange(value.length))
+  }
+
   val hasError = error != null
   val isInternal = labelPosition == LabelPosition.Internal
   val resolvedImeAction = imeAction ?: ImeAction.Default
 
-  val colorSpec = tween<androidx.compose.ui.graphics.Color>(220)
+  val colorSpec = tween<Color>(220)
 
   val containerColor by animateColorAsState(
     when {
@@ -104,14 +117,17 @@ fun TextField(
 
   val borderWidth by animateDpAsState(
     if (isFocused || hasError) 1.5.dp else 1.dp,
-    spring(stiffness = Spring.StiffnessMediumLow),
+    tween(durationMillis = 220, easing = EaseInOutExpo),
   )
 
   val horizontalPadding = 16.dp
+  val verticalPadding = 8.dp
+  val labelTopPadding = 10.dp
 
   val labelColor by animateColorAsState(
     when {
       hasError -> AppTheme.colors.accentDanger
+      isInternal -> AppTheme.colors.textFaint
       isFocused -> AppTheme.colors.textDefault
       else -> AppTheme.colors.textSubtle
     },
@@ -123,7 +139,7 @@ fun TextField(
 
   val labelProgress by animateFloatAsState(
     if (labelActive) 1f else 0f,
-    spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
+    tween(durationMillis = 220, easing = EaseOutExpo)
   )
 
   Column(modifier = modifier) {
@@ -138,8 +154,11 @@ fun TextField(
     }
 
     BasicTextField(
-      value = value,
-      onValueChange = onValueChange,
+      value = textFieldValue,
+      onValueChange = { newValue ->
+        textFieldValue = newValue
+        onValueChange(newValue.text)
+      },
       enabled = enabled,
       readOnly = readOnly,
       modifier = Modifier
@@ -184,7 +203,8 @@ fun TextField(
             modifier = Modifier
               .fillMaxWidth()
               .align(if (isInternal) Alignment.BottomCenter else Alignment.Center)
-              .then(if (isInternal) Modifier.padding(bottom = 10.dp) else Modifier),
+              .then(if (isInternal) Modifier.padding(bottom = verticalPadding) else Modifier)
+              .then(if (hasError || success) Modifier.padding(end = 28.dp) else Modifier),
           ) {
             if (leadingIcon != null) {
               leadingIcon()
@@ -194,15 +214,21 @@ fun TextField(
             Box(modifier = Modifier.weight(1f)) {
               if (isInternal) {
                 val scale = 1f - (labelProgress * 0.23f)
-                val translationY = labelProgress * -20f
                 Text(
                   label,
-                  style = AppTheme.typography.body,
+                  style = if (labelActive) AppTheme.typography.action else AppTheme.typography.body,
                   color = if (labelActive) labelColor else AppTheme.colors.textDisabled,
                   modifier = Modifier.graphicsLayer {
+                    val fieldHeightPx = fieldHeight.toPx()
+                    val paddingPx = verticalPadding.toPx()
+                    val contentCenterY = fieldHeightPx - paddingPx - size.height / 2
+                    val boxCenterY = fieldHeightPx / 2
+                    val topTargetY = labelTopPadding.toPx() + size.height * scale / 2
+                    val centerOffset = -(contentCenterY - boxCenterY)
+                    val topOffset = -(contentCenterY - topTargetY)
                     scaleX = scale
                     scaleY = scale
-                    this.translationY = translationY
+                    translationY = centerOffset + labelProgress * (topOffset - centerOffset)
                     transformOrigin = TransformOrigin(0f, 0.5f)
                   },
                 )
@@ -225,24 +251,23 @@ fun TextField(
               innerTextField()
             }
 
-            if (hasError) {
-              Spacer(Modifier.width(10.dp))
-              Icon(
-                icon = Lucide.CircleAlert,
-                modifier = Modifier.size(18.dp),
-                tint = AppTheme.colors.accentDangerSubtle,
-                contentDescription = "오류",
-              )
-            } else if (success) {
-              Spacer(Modifier.width(10.dp))
-              Icon(
-                icon = Lucide.Check,
-                modifier = Modifier.size(18.dp),
-                tint = AppTheme.colors.accentSuccess,
-                strokeWidth = 2.5f,
-                contentDescription = "확인됨",
-              )
-            }
+          }
+
+          if (hasError) {
+            Icon(
+              icon = Lucide.CircleAlert,
+              modifier = Modifier.size(18.dp).align(Alignment.CenterEnd),
+              tint = AppTheme.colors.accentDangerSubtle,
+              contentDescription = "오류",
+            )
+          } else if (success) {
+            Icon(
+              icon = Lucide.Check,
+              modifier = Modifier.size(18.dp).align(Alignment.CenterEnd),
+              tint = AppTheme.colors.accentSuccess,
+              strokeWidth = 2.5f,
+              contentDescription = "확인됨",
+            )
           }
         }
       },
@@ -284,6 +309,7 @@ fun TextField(
   leadingIcon: @Composable (() -> Unit)? = null,
 ) {
   val form = field.form
+  val isSkeleton = LocalSkeleton.current.enabled
 
   val resolvedImeAction = imeAction ?: form?.imeActionFor(field)
 
@@ -296,7 +322,7 @@ fun TextField(
     else -> null
   }
 
-  if (form != null && form.isFirstField(field)) {
+  if (form != null && form.isFirstField(field) && !isSkeleton) {
     LaunchedEffect(Unit) {
       field.focusRequester.requestFocus()
     }
@@ -306,7 +332,7 @@ fun TextField(
     value = field.value,
     onValueChange = { field.setValue(it) },
     label = label,
-    modifier = if (form != null) {
+    modifier = if (form != null && !isSkeleton) {
       modifier.focusRequester(field.focusRequester)
     } else {
       modifier

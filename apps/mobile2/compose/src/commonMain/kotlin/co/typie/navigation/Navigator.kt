@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModelStore
 import co.typie.route.Route
+import kotlinx.coroutines.CompletableDeferred
 
 enum class NavOperation { None, Push, Pop }
 
@@ -29,24 +30,58 @@ class Navigator(startRoute: Route) {
   var popRequested: Boolean by mutableStateOf(false)
     private set
 
+  private var transitionCompletion: CompletableDeferred<Unit>? = null
+
+  val isTransitioning: Boolean get() = transitionCompletion?.isActive == true
+
   fun viewModelStoreFor(route: Route): ViewModelStore {
     return viewModelStores.getOrPut(route) { ViewModelStore() }
   }
 
-  fun navigate(route: Route) {
+  suspend fun navigate(route: Route) {
+    if (isTransitioning) return
+    if (route == current) return
+    // 이미 스택에 있는 Route면 해당 위치까지 pop
+    val existingIndex = _stack.indexOf(route)
+    if (existingIndex >= 0) {
+      // 중간 Route 제거 (target과 current만 남김)
+      while (_stack.size > existingIndex + 2) {
+        val removed = _stack.removeAt(existingIndex + 1)
+        viewModelStores.remove(removed)?.clear()
+      }
+      pop()
+      return
+    }
+    val deferred = CompletableDeferred<Unit>()
+    transitionCompletion = deferred
     _stack.add(route)
     lastOperation = NavOperation.Push
+    deferred.await()
   }
 
-  fun requestPop() {
+  suspend fun pop() {
+    if (!canPop) return
+    if (isTransitioning) return
+    val deferred = CompletableDeferred<Unit>()
+    transitionCompletion = deferred
+    popRequested = true
+    deferred.await()
+  }
+
+  internal fun requestPop() {
     if (canPop) popRequested = true
+  }
+
+  internal fun completeTransition() {
+    transitionCompletion?.complete(Unit)
+    transitionCompletion = null
   }
 
   internal fun consumePopRequest() {
     popRequested = false
   }
 
-  fun pop(): Boolean {
+  internal fun performPop(): Boolean {
     if (_modals.isNotEmpty()) return dismissModal()
     if (_stack.size <= 1) return false
     val removed = _stack.removeLast()

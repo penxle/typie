@@ -140,7 +140,7 @@ val DarkColors = AppColors(
   surfaceSubtle = AppColor.dark.gray.s900,
   surfaceMuted = AppColor.dark.gray.s700,
   surfaceDark = AppColor.dark.gray.s500,
-  surfaceElevated = AppColor.dark.gray.s900,
+  surfaceElevated = AppColor.dark.gray.s800,
 
   interactiveHover = AppColor.dark.gray.s600,
   interactiveDisabled = AppColor.dark.gray.s800,

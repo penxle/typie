@@ -185,7 +185,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
 
               Text(
                 folder.name,
-                style = AppTheme.typography.title,
+                style = AppTheme.typography.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
               )
@@ -207,6 +207,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
 
 @Composable
 private fun RecentDocuments(data: HomeScreen_Query.Data) {
+  val nav = Nav.current
   val documents = data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument }
 
   Column {
@@ -253,64 +254,57 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
             )
           },
         ) { doc ->
-          DocumentRow(doc)
+          InteractionScope {
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .clickable { nav.navigate(Route.Editor(doc.entity.slug)) }
+                .pressScale()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  icon = when (doc.type) {
+                    DocumentType.NORMAL -> Lucide.File
+                    DocumentType.TEMPLATE -> Lucide.LayoutTemplate
+                    DocumentType.UNKNOWN__ -> Lucide.FileQuestionMark
+                  },
+                  modifier = Modifier.size(16.dp),
+                  tint = AppTheme.colors.textFaint,
+                )
+
+                Spacer(Modifier.width(12.dp))
+
+                Text(
+                  doc.title,
+                  style = AppTheme.typography.label,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.weight(1f),
+                )
+
+                Spacer(Modifier.width(8.dp))
+
+                Text(
+                  doc.updatedAt.timeAgo(),
+                  style = AppTheme.typography.caption,
+                  color = AppTheme.colors.textDisabled,
+                )
+              }
+
+              if (doc.excerpt.isNotEmpty()) {
+                Text(
+                  doc.excerpt,
+                  style = AppTheme.typography.caption,
+                  color = AppTheme.colors.textFaint,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.padding(start = 28.dp),
+                )
+              }
+            }
+          }
         }
-      }
-    }
-  }
-}
-
-@Composable
-private fun DocumentRow(doc: HomeScreen_Query.OnDocument) {
-  val nav = Nav.current
-
-  InteractionScope {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clickable { nav.navigate(Route.Editor(doc.entity.slug)) }
-        .pressScale()
-        .padding(horizontal = 16.dp, vertical = 14.dp),
-    ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          icon = when (doc.type) {
-            DocumentType.NORMAL -> Lucide.File
-            DocumentType.TEMPLATE -> Lucide.LayoutTemplate
-            DocumentType.UNKNOWN__ -> Lucide.FileQuestionMark
-          },
-          modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.textFaint,
-        )
-
-        Spacer(Modifier.width(12.dp))
-
-        Text(
-          doc.title,
-          style = AppTheme.typography.title,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.weight(1f),
-        )
-
-        Spacer(Modifier.width(8.dp))
-
-        Text(
-          doc.updatedAt.timeAgo(),
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textDisabled,
-        )
-      }
-
-      if (doc.excerpt.isNotEmpty()) {
-        Text(
-          doc.excerpt,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textFaint,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.padding(start = 28.dp),
-        )
       }
     }
   }

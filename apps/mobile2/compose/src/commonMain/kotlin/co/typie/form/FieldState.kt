@@ -10,9 +10,8 @@ data class DeferredRule<V>(val rule: Rule<V>, val debounce: Duration)
 
 class FieldState<V>(
   initialValue: V,
-  internal val rules: List<Rule<V>>,
+  internal val rulesByTiming: Map<ValidateOn, List<Rule<V>>>,
   internal val deferredRules: List<DeferredRule<V>> = emptyList(),
-  internal val validateOn: ValidateOn,
 ) {
   internal var onValueChanged: (() -> Unit)? = null
   internal var onBlurCallback: (() -> Unit)? = null
@@ -45,11 +44,12 @@ class FieldState<V>(
 
   val focusRequester = FocusRequester()
 
+  internal var focusable: Boolean = true
   internal var form: FormState? = null
 
   fun setValue(newValue: V) {
     value = newValue
-    if (validateOn != ValidateOn.OnChange) {
+    if (ValidateOn.Change !in rulesByTiming && deferredRules.isEmpty()) {
       errors = emptyList()
     }
     onValueChanged?.invoke()
@@ -77,10 +77,29 @@ class FieldState<V>(
 
   internal suspend fun validate(): List<String> {
     val result = mutableListOf<String>()
-    for (rule in rules + deferredRules.map { it.rule }) {
-      rule.validate(value)?.let { result.add(it) }
+    for (rules in rulesByTiming.values) {
+      for (rule in rules) {
+        rule.validate(value)?.let { result.add(it) }
+      }
+    }
+    for (deferred in deferredRules) {
+      deferred.rule.validate(value)?.let { result.add(it) }
     }
     return result
+  }
+
+  internal suspend fun validateForEvent(event: ValidateOn): List<String> {
+    val rules: List<Rule<V>> = when (event) {
+      ValidateOn.Change -> rulesByTiming[ValidateOn.Change].orEmpty()
+      ValidateOn.Blur -> rulesByTiming[ValidateOn.Change].orEmpty() + rulesByTiming[ValidateOn.Blur].orEmpty()
+      ValidateOn.Submit -> rulesByTiming.values.flatten()
+    }
+    return rules.mapNotNull { it.validate(value) }
+  }
+
+  internal suspend fun validateOnChangeWithDeferred(): List<String> {
+    val rules = rulesByTiming[ValidateOn.Change].orEmpty() + deferredRules.map { it.rule }
+    return rules.mapNotNull { it.validate(value) }
   }
 
   operator fun component1(): V = value

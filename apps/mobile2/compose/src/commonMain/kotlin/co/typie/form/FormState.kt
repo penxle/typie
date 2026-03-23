@@ -1,8 +1,5 @@
 package co.typie.form
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -12,63 +9,104 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 class FieldConfig<V> {
-  internal val rules = mutableListOf<Rule<V>>()
+  internal val taggedRules = mutableListOf<Pair<ValidateOn?, Rule<V>>>()
   internal val deferredRules = mutableListOf<DeferredRule<V>>()
   internal var validateOn: ValidateOn? = null
+  var focusable: Boolean = true
+  private var blockValidateOn: ValidateOn? = null
+
+  internal fun addRule(rule: Rule<V>) {
+    taggedRules.add(blockValidateOn to rule)
+  }
 
   fun rules(vararg rules: Rule<V>) {
-    this.rules.addAll(rules)
+    for (r in rules) addRule(r)
   }
 
   fun validateOn(timing: ValidateOn) {
     this.validateOn = timing
   }
 
-  fun required(message: String = "필수 항목입니다") { rules.add(co.typie.form.required(message)) }
-  fun rule(validate: suspend (V) -> String?) { rules.add(co.typie.form.rule(validate)) }
+  fun validateOn(timing: ValidateOn, block: FieldConfig<V>.() -> Unit) {
+    val previous = blockValidateOn
+    blockValidateOn = timing
+    block()
+    blockValidateOn = previous
+  }
+
+  fun required(message: String = "필수 항목입니다") {
+    addRule(co.typie.form.required(message))
+  }
+
+  fun rule(validate: suspend (V) -> String?) {
+    addRule(co.typie.form.rule(validate))
+  }
+
   fun defer(debounce: Duration = 300.milliseconds, validate: suspend (V) -> String?) {
     deferredRules.add(DeferredRule(Rule { validate(it) }, debounce))
   }
 }
 
 // String-specific convenience methods
-fun FieldConfig<String>.email(message: String = "올바른 이메일 형식을 입력해주세요") { rules.add(co.typie.form.email(message)) }
-fun FieldConfig<String>.minLength(min: Int, message: String = "${min}자 이상 입력해주세요") { rules.add(co.typie.form.minLength(min, message)) }
-fun FieldConfig<String>.maxLength(max: Int, message: String = "${max}자 이하로 입력해주세요") { rules.add(co.typie.form.maxLength(max, message)) }
-fun FieldConfig<String>.pattern(regex: Regex, message: String = "올바른 형식을 입력해주세요") { rules.add(co.typie.form.pattern(regex, message)) }
+fun FieldConfig<String>.email(message: String = "올바른 이메일 형식을 입력해주세요") {
+  addRule(co.typie.form.email(message))
+}
+
+fun FieldConfig<String>.minLength(min: Int, message: String = "${min}자 이상 입력해주세요") {
+  addRule(co.typie.form.minLength(min, message))
+}
+
+fun FieldConfig<String>.maxLength(max: Int, message: String = "${max}자 이하로 입력해주세요") {
+  addRule(co.typie.form.maxLength(max, message))
+}
+
+fun FieldConfig<String>.pattern(regex: Regex, message: String = "올바른 형식을 입력해주세요") {
+  addRule(co.typie.form.pattern(regex, message))
+}
 
 // Comparable-specific convenience methods
-fun <V : Comparable<V>> FieldConfig<V>.min(min: V, message: String = "최솟값은 ${min}입니다") { rules.add(co.typie.form.min(min, message)) }
-fun <V : Comparable<V>> FieldConfig<V>.max(max: V, message: String = "최댓값은 ${max}입니다") { rules.add(co.typie.form.max(max, message)) }
+fun <V : Comparable<V>> FieldConfig<V>.min(min: V, message: String = "최솟값은 ${min}입니다") {
+  addRule(co.typie.form.min(min, message))
+}
+
+fun <V : Comparable<V>> FieldConfig<V>.max(max: V, message: String = "최댓값은 ${max}입니다") {
+  addRule(co.typie.form.max(max, message))
+}
 
 open class FormState(
-  private val defaultValidateOn: ValidateOn = ValidateOn.OnSubmit,
+  private val scope: CoroutineScope,
+  private val defaultValidateOn: ValidateOn = ValidateOn.Submit,
 ) {
   private val registeredFields = mutableListOf<FieldState<*>>()
   private val debounceJobs = mutableMapOf<FieldState<*>, Job>()
-  private var validationScope: CoroutineScope? = null
 
   protected fun <V> field(
     initialValue: V,
     config: FieldConfig<V>.() -> Unit = {},
   ): FieldState<V> {
     val fieldConfig = FieldConfig<V>().apply(config)
+    val fieldDefault = fieldConfig.validateOn ?: defaultValidateOn
+    val rulesByTiming = fieldConfig.taggedRules
+      .groupBy(
+        keySelector = { (timing, _) -> timing ?: fieldDefault },
+        valueTransform = { (_, rule) -> rule },
+      )
     val fieldState = FieldState(
       initialValue = initialValue,
-      rules = fieldConfig.rules,
+      rulesByTiming = rulesByTiming,
       deferredRules = fieldConfig.deferredRules,
-      validateOn = fieldConfig.validateOn ?: defaultValidateOn,
     )
     fieldState.onValueChanged = { onFieldValueChanged(fieldState) }
     fieldState.onBlurCallback = {
-      if (fieldState.validateOn == ValidateOn.OnBlur) {
-        validationScope?.launch {
+      if (ValidateOn.Blur in fieldState.rulesByTiming) {
+        scope.launch {
           fieldState.isValidating = true
-          fieldState.errors = fieldState.validate()
+          fieldState.errors = fieldState.validateForEvent(ValidateOn.Blur)
           fieldState.isValidating = false
         }
       }
     }
+    fieldState.focusable = fieldConfig.focusable
     fieldState.form = this
     registeredFields.add(fieldState)
     return fieldState
@@ -79,9 +117,6 @@ open class FormState(
 
   val isValid: Boolean
     get() = registeredFields.all { it.errors.isEmpty() }
-
-  val isValidating: Boolean
-    get() = registeredFields.any { it.isValidating }
 
   val errors: Map<FieldState<*>, List<String>>
     get() = registeredFields
@@ -106,11 +141,11 @@ open class FormState(
     return valid
   }
 
-
   fun reset() {
     for (field in registeredFields) {
       field.reset()
     }
+
     debounceJobs.values.forEach { it.cancel() }
     debounceJobs.clear()
   }
@@ -121,56 +156,50 @@ open class FormState(
     }
   }
 
+  private val focusChain: List<FieldState<*>>
+    get() = registeredFields.filter { it.focusable }
+
   fun isFirstField(field: FieldState<*>): Boolean =
-    registeredFields.firstOrNull() == field
+    focusChain.firstOrNull() == field
 
   fun isLastField(field: FieldState<*>): Boolean =
-    registeredFields.lastOrNull() == field
+    focusChain.lastOrNull() == field
 
   fun focusNext(field: FieldState<*>) {
-    val index = registeredFields.indexOf(field)
-    if (index < 0 || index == registeredFields.lastIndex) return
-    registeredFields[index + 1].focusRequester.requestFocus()
+    val chain = focusChain
+    val index = chain.indexOf(field)
+    if (index < 0 || index == chain.lastIndex) return
+    chain[index + 1].focusRequester.requestFocus()
   }
 
   fun imeActionFor(field: FieldState<*>): ImeAction =
     if (isLastField(field)) ImeAction.Done else ImeAction.Next
 
   fun focusFirstError() {
-    registeredFields.firstOrNull { it.errors.isNotEmpty() }
-      ?.focusRequester?.requestFocus()
-  }
-
-  fun setValidationScope(scope: CoroutineScope) {
-    validationScope = scope
+    focusChain.firstOrNull { it.errors.isNotEmpty() }?.focusRequester?.requestFocus()
   }
 
   private fun onFieldValueChanged(field: FieldState<*>) {
-    when (field.validateOn) {
-      ValidateOn.OnChange -> {
-        debounceJobs[field]?.cancel()
-        val scope = validationScope ?: return
+    val hasOnChangeRules = ValidateOn.Change in field.rulesByTiming
+    val hasDeferredRules = field.deferredRules.isNotEmpty()
+    if (!hasOnChangeRules && !hasDeferredRules) return
 
-        debounceJobs[field] = scope.launch {
-          // Phase 1: sync rules (no delay)
-          val syncErrors = mutableListOf<String>()
-          for (rule in field.rules) {
-            @Suppress("UNCHECKED_CAST")
-            (rule as Rule<Any?>).validate(field.value)?.let { syncErrors.add(it) }
-          }
-          field.errors = syncErrors
+    debounceJobs[field]?.cancel()
 
-          // Phase 2: deferred rules (with delay)
-          if (field.deferredRules.isNotEmpty()) {
-            val debounce = field.deferredRules.maxOf { it.debounce }
-            delay(debounce)
-            field.isValidating = true
-            field.errors = field.validate() // ALL rules (sync + deferred)
-            field.isValidating = false
-          }
-        }
+    debounceJobs[field] = scope.launch {
+      // Phase 1: sync OnChange rules (no delay)
+      if (hasOnChangeRules) {
+        field.errors = field.validateForEvent(ValidateOn.Change)
       }
-      else -> {}
+
+      // Phase 2: deferred rules (with delay)
+      if (hasDeferredRules) {
+        val debounce = field.deferredRules.maxOf { it.debounce }
+        delay(debounce)
+        field.isValidating = true
+        field.errors = field.validateOnChangeWithDeferred()
+        field.isValidating = false
+      }
     }
   }
 }

@@ -9,7 +9,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import co.typie.auth.AuthService
 import co.typie.auth.AuthState
 import co.typie.overlay.LoaderOverlay
@@ -31,8 +34,14 @@ fun RootShell() {
   val authState by authService.state.collectAsState()
   val bottomSheetHost = remember { BottomSheetHostState() }
 
+  val focusManager = LocalFocusManager.current
+
   CompositionLocalProvider(LocalBottomSheetHost provides bottomSheetHost) {
-    Box(Modifier.fillMaxSize()) {
+    Box(
+      Modifier
+        .fillMaxSize()
+        .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
+    ) {
       Crossfade(
         authState,
         modifier = Modifier

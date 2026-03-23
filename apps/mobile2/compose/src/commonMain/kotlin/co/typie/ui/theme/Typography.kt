@@ -68,6 +68,18 @@ object AppTypography {
       )
     }
 
+  /** 메뉴 항목, 카드 row 레이블, 폼 필드 */
+  val label: TextStyle
+    @Composable get() {
+      val fontFamily = rememberSuitFontFamily()
+      return TextStyle(
+        fontFamily = fontFamily,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.W600,
+        lineHeight = 20.sp,
+      )
+    }
+
   /** 본문, 기본 텍스트 */
   val body: TextStyle
     @Composable get() {

@@ -1,5 +1,7 @@
 package co.typie.ui.component
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,9 +14,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -29,6 +37,21 @@ fun ErrorDialog(
   onRetry: () -> Unit,
 ) {
   val nav = Nav.current
+  var dismissed by remember { mutableStateOf(false) }
+
+  var visible by remember { mutableStateOf(false) }
+  LaunchedEffect(Unit) { visible = true }
+
+  if (dismissed) return
+
+  val alpha by animateFloatAsState(
+    targetValue = if (visible) 1f else 0f,
+    animationSpec = tween(200),
+  )
+  val scale by animateFloatAsState(
+    targetValue = if (visible) 1f else 0.9f,
+    animationSpec = tween(200),
+  )
 
   Dialog(
     onDismissRequest = {},
@@ -39,6 +62,7 @@ fun ErrorDialog(
   ) {
     Column(
       modifier = Modifier
+        .graphicsLayer(alpha = alpha, scaleX = scale, scaleY = scale)
         .width(280.dp)
         .clip(RoundedCornerShape(16.dp))
         .background(AppTheme.colors.surfaceElevated),
@@ -80,7 +104,14 @@ fun ErrorDialog(
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .clickable { if (nav.canPop) nav.pop() else onRetry() }
+          .clickable {
+            if (nav.canPop) {
+              dismissed = true
+              nav.pop()
+            } else {
+              onRetry()
+            }
+          }
           .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center,
       ) {

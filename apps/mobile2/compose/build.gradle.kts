@@ -176,6 +176,7 @@ apollo {
       "co.typie.graphql.adapter.JsonElementAdapter"
     )
 
+    addTypename = "always"
     generateDataBuilders = true
     generateInputBuilders = true
     generateFragmentImplementations = true
