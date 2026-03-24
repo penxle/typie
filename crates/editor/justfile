@@ -1,0 +1,97 @@
+workspace_dir := justfile_directory() / "../.."
+target_dir := workspace_dir / "target"
+mobile_dir := workspace_dir / "apps/mobile2"
+generated_dir := mobile_dir / "generated/uniffi"
+feature := "uniffi"
+
+mode := "release"
+profile := if mode == "debug" { "dev" } else { "release-native" }
+profile_dir := if mode == "debug" { "debug" } else { "release-native" }
+
+# Show available recipes
+[private]
+default:
+    @just --list
+
+# Build all platforms
+all: jvm android ios wasm
+
+# Build Android + iOS
+mobile: android ios
+
+# Build JVM
+jvm: bindings-kotlin
+    just icu-datagen {{target_dir}}/{{profile_dir}}/libeditor.dylib {{mobile_dir}}/compose/src/jvmMain/resources/icu.zst
+
+# Build Android
+android: bindings-kotlin (ensure "cargo-ndk")
+    rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android 2> /dev/null || true
+    cargo ndk \
+        -t arm64-v8a -t armeabi-v7a -t x86_64 \
+        -o {{mobile_dir}}/android/src/main/jniLibs \
+        build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}} --features {{feature}} --no-default-features
+    just icu-datagen {{mobile_dir}}/android/src/main/jniLibs/arm64-v8a/libeditor.so {{mobile_dir}}/android/src/main/assets/icu.zst
+
+# Build iOS
+ios: bindings-swift
+    #!/usr/bin/env bash
+    set -e
+    rustup target add aarch64-apple-ios aarch64-apple-ios-sim 2> /dev/null || true
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}} --target aarch64-apple-ios \
+        --features {{feature}} --no-default-features
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}} --target aarch64-apple-ios-sim \
+        --features {{feature}} --no-default-features
+    headers=$(mktemp -d)
+    cargo run -p uniffi-bindgen --bin uniffi-bindgen-swift -- {{target_dir}}/{{profile_dir}}/libeditor.dylib \
+        "$headers" --headers --modulemap --modulemap-filename module.modulemap --module-name EditorFFI
+    mkdir -p {{mobile_dir}}/ios/Frameworks
+    rm -rf {{mobile_dir}}/ios/Frameworks/Editor.xcframework
+    xcodebuild -create-xcframework \
+        -library {{target_dir}}/aarch64-apple-ios/{{profile_dir}}/libeditor.a -headers "$headers" \
+        -library {{target_dir}}/aarch64-apple-ios-sim/{{profile_dir}}/libeditor.a -headers "$headers" \
+        -output {{mobile_dir}}/ios/Frameworks/Editor.xcframework
+    rm -rf "$headers"
+    just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile_dir}}/libeditor.a {{mobile_dir}}/ios/Resources/icu.zst
+
+# Run tests
+test: host
+    just icu-datagen {{target_dir}}/{{profile_dir}}/libeditor.dylib {{target_dir}}/test-assets/icu.zst
+    cargo test --manifest-path {{justfile_directory()}}/Cargo.toml
+
+# Build WASM
+wasm: (ensure "wasm-pack")
+    RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target=web --no-pack {{ if mode == "debug" { "--dev" } else { "" } }}
+    just icu-datagen {{justfile_directory()}}/pkg/editor_bg.wasm {{justfile_directory()}}/pkg/icu.zst
+
+# Generate ICU data from a binary
+[private]
+icu-datagen binary output: (ensure "icu4x-datagen")
+    mkdir -p "$(dirname "{{output}}")"
+    RUST_LOG=off icu4x-datagen --markers-for-bin "{{binary}}" --format blob | zstd -19 -f -o "{{output}}"
+
+# Ensure a cargo binary is installed
+[private]
+ensure tool:
+    #!/usr/bin/env bash
+    command -v {{tool}} &> /dev/null || cargo install {{tool}}
+
+[private]
+host:
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}} --features {{feature}} --no-default-features
+
+[private]
+bindings-kotlin: host
+    mkdir -p {{generated_dir}}/kotlin
+    cargo run -p uniffi-bindgen --bin uniffi-bindgen -- generate \
+        --library {{target_dir}}/{{profile_dir}}/libeditor.dylib \
+        --language kotlin --out-dir {{generated_dir}}/kotlin/ --no-format
+
+[private]
+bindings-swift: host
+    mkdir -p {{generated_dir}}/swift
+    cargo run -p uniffi-bindgen --bin uniffi-bindgen-swift -- {{target_dir}}/{{profile_dir}}/libeditor.dylib \
+        {{generated_dir}}/swift --swift-sources

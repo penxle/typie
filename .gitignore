@@ -33,3 +33,5 @@ docs/superpowers/
 
 *.tsx.js
 *.tsx.d.ts
+
+icu.zst

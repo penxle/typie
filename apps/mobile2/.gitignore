@@ -18,3 +18,6 @@ captures
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
 Config.local.xcconfig
+generated/
+android/src/main/jniLibs/
+ios/Frameworks/

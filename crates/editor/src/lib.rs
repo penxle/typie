@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "native", allow(unused))]
+#![cfg_attr(any(feature = "native", feature = "uniffi"), allow(unused))]
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
 
 #[macro_use]
 mod utils;

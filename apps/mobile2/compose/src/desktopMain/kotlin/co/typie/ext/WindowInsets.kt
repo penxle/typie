@@ -1,4 +1,4 @@
-@file:JvmName("WindowInsetsJvmKt")
+@file:JvmName("WindowInsetsDesktopKt")
 
 package co.typie.ext
 

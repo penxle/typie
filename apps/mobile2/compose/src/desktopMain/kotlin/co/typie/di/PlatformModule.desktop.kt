@@ -7,6 +7,6 @@ import org.koin.dsl.module
 actual class PlatformContext
 
 actual fun platformModule() = module {
-  single { Platform.Jvm }
+  single { Platform.Desktop }
   single { PlatformContext() }
 }

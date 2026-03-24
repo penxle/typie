@@ -15,7 +15,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		3145D3115C023EB99DD41DF7 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		3145D3115C023EB99DD41DF7 /* Exceptions for "App" folder in "App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -28,9 +28,14 @@
 		894BE7AE129D19DACBC3AE03 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				3145D3115C023EB99DD41DF7 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				3145D3115C023EB99DD41DF7 /* Exceptions for "App" folder in "App" target */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		B606CE752F72BD82004E51AC /* Resources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		D9DF8733A6D024534604AFF0 /* Configuration */ = {
@@ -55,6 +60,7 @@
 		14F2D9768FB054BE6C33A34A = {
 			isa = PBXGroup;
 			children = (
+				B606CE752F72BD82004E51AC /* Resources */,
 				D9DF8733A6D024534604AFF0 /* Configuration */,
 				894BE7AE129D19DACBC3AE03 /* App */,
 				F0E2EDBC5D892DD3F91C268A /* Products */,
@@ -87,6 +93,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				894BE7AE129D19DACBC3AE03 /* App */,
+				B606CE752F72BD82004E51AC /* Resources */,
 			);
 			name = App;
 			packageProductDependencies = (

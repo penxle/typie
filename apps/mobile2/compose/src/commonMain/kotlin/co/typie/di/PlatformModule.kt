@@ -7,6 +7,6 @@ import org.koin.core.module.Module
 expect class PlatformContext
 
 @Provided
-enum class Platform { Android, iOS, Jvm }
+enum class Platform { Android, iOS, Desktop }
 
 expect fun platformModule(): Module

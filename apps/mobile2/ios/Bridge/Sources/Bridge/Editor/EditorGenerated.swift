@@ -1,0 +1,1 @@
+../../../../../generated/uniffi/swift/editor.swift

@@ -1,5 +1,6 @@
 @file:OptIn(ExperimentalKotlinGradlePluginApi::class)
 
+import com.android.build.api.withAndroid
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -30,9 +31,21 @@ plugins {
 }
 
 kotlin {
+  @OptIn(ExperimentalKotlinGradlePluginApi::class)
+  applyDefaultHierarchyTemplate {
+    common {
+      group("jna") {
+        withAndroid()
+        withJvm()
+      }
+    }
+  }
+
   compilerOptions {
     freeCompilerArgs.add("-Xexpect-actual-classes")
     freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
+    freeCompilerArgs.add("-opt-in=kotlinx.cinterop.BetaInteropApi")
+    freeCompilerArgs.add("-opt-in=kotlinx.cinterop.ExperimentalForeignApi")
   }
 
   android {
@@ -49,7 +62,7 @@ kotlin {
     }
   }
 
-  jvm()
+  jvm("desktop")
 
   listOf(
     iosArm64(),
@@ -73,6 +86,10 @@ kotlin {
   }
 
   sourceSets {
+    val jnaMain by getting {
+      kotlin.srcDir(rootProject.layout.projectDirectory.dir("generated/uniffi/kotlin"))
+    }
+
     androidMain {
       dependencies {
         implementation(libs.androidx.activity.compose)
@@ -81,6 +98,7 @@ kotlin {
         implementation(libs.googleid)
         implementation(libs.kakao.user)
         implementation(libs.naver.oauth)
+        implementation(libs.jna.map { "$it@aar" })
       }
     }
 
@@ -90,7 +108,7 @@ kotlin {
       }
     }
 
-    jvmMain {
+    val desktopMain by getting {
       dependencies {
         implementation(compose.desktop.currentOs)
         implementation(libs.jna)

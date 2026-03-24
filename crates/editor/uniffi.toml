@@ -1,0 +1,3 @@
+[bindings.swift]
+ffi_module_name = "EditorFFI"
+ffi_module_filename = "EditorFFI"

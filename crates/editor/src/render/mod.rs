@@ -17,7 +17,7 @@ mod tests;
 
 pub use glyph::GlyphRenderer;
 pub use outline::{ElementSink, RasterSink, VectorPage, VectorSink};
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", feature = "uniffi"))]
 pub use renderer::RenderInfo;
 pub use renderer::{
     DragImageResult, Outline, Render, RenderContext, RenderPhase, RenderResult, Renderer,

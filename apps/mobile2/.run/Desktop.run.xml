@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration name="JVM" default="false" factoryName="Gradle" type="GradleRunConfiguration">
+  <configuration default="false" name="Desktop" type="GradleRunConfiguration" factoryName="Gradle">
     <ExternalSystemSettings>
       <option name="executionName" />
       <option name="externalProjectPath" value="$PROJECT_DIR$/compose" />
@@ -10,7 +10,7 @@
       </option>
       <option name="taskNames">
         <list>
-          <option value="hotRunJvm" />
+          <option value="hotRunDesktop" />
           <option value="--mainClass" />
           <option value="&quot;co.typie.MainKt&quot;" />
         </list>
@@ -20,8 +20,7 @@
     <ExternalSystemDebugServerProcess>false</ExternalSystemDebugServerProcess>
     <ExternalSystemReattachDebugProcess>true</ExternalSystemReattachDebugProcess>
     <ExternalSystemDebugDisabled>false</ExternalSystemDebugDisabled>
-    <EXTENSION
-      ID="org.jetbrains.compose.desktop.ide.hotreload.ComposeHotReloadRunConfigurationExtension">
+    <EXTENSION ID="org.jetbrains.compose.desktop.ide.hotreload.ComposeHotReloadRunConfigurationExtension">
       <ComposeHotReload>
         <isHotReloadWarmupEnabled>true</isHotReloadWarmupEnabled>
         <useIntelliJJBR>true</useIntelliJJBR>

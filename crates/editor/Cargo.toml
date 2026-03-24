@@ -19,6 +19,7 @@ wasm = [
   "uuid/js",
 ]
 native = ["dep:jni"]
+uniffi = ["dep:uniffi"]
 bench = []
 
 [target.'cfg(target_os = "android")'.dependencies]
@@ -68,6 +69,7 @@ web-sys = { version = "0.3", features = [
   "Window",
   "Performance",
 ], optional = true }
+uniffi = { version = "0.31", optional = true }
 write-fonts = "0.45"
 yazi = "0.2"
 zeno = "0.3"

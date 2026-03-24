@@ -1,0 +1,15 @@
+[package]
+name = "uniffi-bindgen"
+version = "0.0.1"
+edition = "2024"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/main.rs"
+
+[[bin]]
+name = "uniffi-bindgen-swift"
+path = "src/swift.rs"
+
+[dependencies]
+uniffi = { version = "0.31", features = ["cli"] }

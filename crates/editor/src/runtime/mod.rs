@@ -24,7 +24,7 @@ use crate::layout::Page;
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::query::{find_drag_image_bounds, find_node_bounds, is_selectable_block_hit};
 use crate::model::*;
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", feature = "uniffi"))]
 use crate::render::RenderInfo;
 use crate::render::{DragImageResult, RenderResult, Renderer};
 use crate::runtime::history_state::RuntimeHistory;
@@ -1027,7 +1027,7 @@ impl Runtime {
         Some(crate::render::encode_vector_page(&vector_page))
     }
 
-    #[cfg(feature = "native")]
+    #[cfg(any(feature = "native", feature = "uniffi"))]
     pub fn get_render_info(&mut self, page_index: usize) -> Option<RenderInfo> {
         let layout_mode = self.doc().settings().layout_mode;
         let page = self.layout_engine.pages().get(page_index)?;
@@ -1048,7 +1048,7 @@ impl Runtime {
         })
     }
 
-    #[cfg(feature = "native")]
+    #[cfg(any(feature = "native", feature = "uniffi"))]
     pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
         use crate::tracing::TRACER;
         use opentelemetry::KeyValue;

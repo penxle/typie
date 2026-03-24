@@ -27,11 +27,11 @@ import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
+import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Taskbar
 import java.awt.Toolkit
 import java.util.prefs.Preferences
 import javax.imageio.ImageIO
-import org.koin.mp.KoinPlatform.getKoin
 import javax.swing.SwingUtilities
 
 // iPhone 16 Pro Max: 440×956 pt, @3x, 460 PPI
@@ -99,6 +99,13 @@ private fun disableWindowFullScreen() {
 }
 
 fun main() {
+  var dir = java.io.File(System.getProperty("user.dir"))
+  while (dir.parentFile != null && !java.io.File(dir, "Cargo.toml").exists()) {
+    dir = dir.parentFile
+  }
+
+  System.setProperty("jna.library.path", java.io.File(dir, "target/release-native").absolutePath)
+
   initKoin {
     printLogger()
   }

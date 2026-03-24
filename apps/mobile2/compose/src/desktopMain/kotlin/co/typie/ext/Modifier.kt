@@ -1,4 +1,4 @@
-@file:JvmName("ModifierJvmKt")
+@file:JvmName("ModifierDesktopKt")
 
 package co.typie.ext
 

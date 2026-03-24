@@ -17,19 +17,19 @@ import javax.imageio.ImageIO
 @Module
 actual class PlatformServiceModule {
   @Single
-  actual fun clipboard(ctx: PlatformContext): Clipboard = JvmClipboard()
+  actual fun clipboard(ctx: PlatformContext): Clipboard = DesktopClipboard()
 
   @Single
-  actual fun deviceInfo(ctx: PlatformContext): DeviceInfo = JvmDeviceInfo()
+  actual fun deviceInfo(ctx: PlatformContext): DeviceInfo = DesktopDeviceInfo()
 
   @Single
-  actual fun fileSystem(ctx: PlatformContext): FileSystem = JvmFileSystem()
+  actual fun fileSystem(ctx: PlatformContext): FileSystem = DesktopFileSystem()
 
   @Single
-  actual fun share(ctx: PlatformContext): Share = JvmShare()
+  actual fun share(ctx: PlatformContext): Share = DesktopShare()
 }
 
-private class JvmDeviceInfo : DeviceInfo {
+private class DesktopDeviceInfo : DeviceInfo {
   override suspend fun snapshot(): DeviceInfoSnapshot = withContext(Dispatchers.IO) {
     val osName = System.getProperty("os.name")?.takeIf { it.isNotBlank() } ?: "Desktop"
     val osVersion = System.getProperty("os.version")?.takeIf { it.isNotBlank() } ?: "unknown"
@@ -49,7 +49,7 @@ private class JvmDeviceInfo : DeviceInfo {
   }
 }
 
-private class JvmClipboard : Clipboard {
+private class DesktopClipboard : Clipboard {
   override suspend fun copy(bytes: ByteArray, mimeType: String): Boolean = withContext(Dispatchers.IO) {
     runCatching {
       if (mimeType.startsWith("image/")) {
@@ -81,7 +81,7 @@ private class ImageTransferable(
   }
 }
 
-private class JvmFileSystem : FileSystem {
+private class DesktopFileSystem : FileSystem {
   override suspend fun save(
     bytes: ByteArray,
     name: String,
@@ -103,8 +103,8 @@ private class JvmFileSystem : FileSystem {
   }
 }
 
-private class JvmShare : Share {
-  // NOTE: JVM desktop share flow is not supported yet.
+private class DesktopShare : Share {
+  // NOTE: Desktop share flow is not supported yet.
   override suspend fun share(bytes: ByteArray, mimeType: String): Boolean = false
   override suspend fun share(text: String): Boolean = false
 }

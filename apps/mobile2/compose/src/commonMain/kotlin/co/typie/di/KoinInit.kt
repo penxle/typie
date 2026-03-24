@@ -1,5 +1,6 @@
 package co.typie.di
 
+import co.typie.editor.EditorModule
 import co.typie.platform.PlatformServiceModule
 import co.typie.storage.StorageModule
 import org.koin.core.annotation.ComponentScan
@@ -9,7 +10,7 @@ import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.includes
 import org.koin.plugin.module.dsl.startKoin
 
-@Module(includes = [StorageModule::class, PlatformServiceModule::class])
+@Module(includes = [StorageModule::class, PlatformServiceModule::class, EditorModule::class])
 @ComponentScan("co.typie")
 class AppModule
 

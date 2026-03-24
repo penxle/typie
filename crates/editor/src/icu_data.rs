@@ -36,7 +36,7 @@ pub fn load_icu_data(data: &[u8]) -> Result<(), JsValue> {
     Ok(())
 }
 
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", feature = "uniffi"))]
 pub fn load_icu_data(data: &[u8]) -> Result<(), String> {
     if ICU_DATA_PROVIDER.get().is_some() {
         return Ok(());
