@@ -23,3 +23,7 @@ query ProfileScreen_Query {
     }
   }
 }
+
+mutation ProfileScreen_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
+  submitFeedback(input: $input)
+}

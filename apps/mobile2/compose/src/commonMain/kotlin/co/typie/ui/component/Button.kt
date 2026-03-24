@@ -15,6 +15,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -61,6 +62,7 @@ fun Button(
   text: String,
   onClick: suspend () -> Unit,
   modifier: Modifier = Modifier,
+  leading: (@Composable (Color) -> Unit)? = null,
   loadingText: String? = null,
   variant: ButtonVariant = ButtonVariant.Primary,
   enabled: Boolean = true,
@@ -104,6 +106,22 @@ fun Button(
           Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {
             ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
           }
+
+          if (leading != null) {
+            if (debouncedLoading) {
+              Spacer(Modifier.width(8.dp))
+            }
+
+            Box(
+              modifier = Modifier.size(16.dp),
+              contentAlignment = Alignment.Center,
+            ) {
+              leading(colors.text)
+            }
+
+            Spacer(Modifier.width(8.dp))
+          }
+
           val displayText = if (debouncedLoading && loadingText != null) loadingText else text
           AnimatedContent(
             targetState = displayText,

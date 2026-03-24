@@ -1190,8 +1190,12 @@ input SpellcheckTextMappingInput {
 }
 
 input SubmitFeedbackInput {
+  appVersion: String
   content: String!
+  deviceName: String
   mood: String
+  osVersion: String
+  platform: String
   topic: String
   url: String
 }

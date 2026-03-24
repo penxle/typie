@@ -20,10 +20,33 @@ actual class PlatformServiceModule {
   actual fun clipboard(ctx: PlatformContext): Clipboard = JvmClipboard()
 
   @Single
+  actual fun deviceInfo(ctx: PlatformContext): DeviceInfo = JvmDeviceInfo()
+
+  @Single
   actual fun fileSystem(ctx: PlatformContext): FileSystem = JvmFileSystem()
 
   @Single
   actual fun share(ctx: PlatformContext): Share = JvmShare()
+}
+
+private class JvmDeviceInfo : DeviceInfo {
+  override suspend fun snapshot(): DeviceInfoSnapshot = withContext(Dispatchers.IO) {
+    val osName = System.getProperty("os.name")?.takeIf { it.isNotBlank() } ?: "Desktop"
+    val osVersion = System.getProperty("os.version")?.takeIf { it.isNotBlank() } ?: "unknown"
+    val appVersion = System.getProperty("app.version")?.takeIf { it.isNotBlank() } ?: "dev"
+    val deviceName = sequenceOf(
+      System.getenv("COMPUTERNAME"),
+      System.getenv("HOSTNAME"),
+      System.getProperty("user.name"),
+    ).firstOrNull { !it.isNullOrBlank() }
+
+    DeviceInfoSnapshot(
+      platform = osName,
+      osVersion = osVersion,
+      appVersion = appVersion,
+      deviceName = deviceName,
+    )
+  }
 }
 
 private class JvmClipboard : Clipboard {
@@ -81,6 +104,7 @@ private class JvmFileSystem : FileSystem {
 }
 
 private class JvmShare : Share {
+  // NOTE: JVM desktop share flow is not supported yet.
   override suspend fun share(bytes: ByteArray, mimeType: String): Boolean = false
   override suspend fun share(text: String): Boolean = false
 }

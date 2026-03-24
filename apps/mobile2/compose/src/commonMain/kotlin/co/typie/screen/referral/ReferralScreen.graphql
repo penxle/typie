@@ -1,0 +1,13 @@
+query ReferralScreen_Query {
+  me @catch(to: THROW) {
+    id
+    referrals {
+      id
+      compensated
+    }
+  }
+}
+
+mutation ReferralScreen_IssueReferralUrl_Mutation {
+  issueReferralUrl
+}

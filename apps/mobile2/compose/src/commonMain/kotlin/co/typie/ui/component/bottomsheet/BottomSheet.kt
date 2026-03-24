@@ -227,8 +227,6 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
         )
         .clip(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius))
         .background(colors.surfaceRaised)
-        .navigationBarsPadding()
-        .imePadding(),
     ) {
       // Handle
       Spacer(modifier = Modifier.height(BottomSheetDefaults.HandleTopPadding))
@@ -249,7 +247,14 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
           .verticalScroll(scrollState),
       ) {
         CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
-          entry.content.invoke(sheetScope)
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .navigationBarsPadding()
+              .imePadding(),
+          ) {
+            entry.content.invoke(sheetScope)
+          }
         }
       }
     }

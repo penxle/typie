@@ -11,6 +11,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Module
 import org.koin.core.annotation.Single
+import platform.Foundation.NSBundle
 import platform.Foundation.NSData
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -25,6 +26,7 @@ import platform.Photos.PHAuthorizationStatusRestricted
 import platform.Photos.PHPhotoLibrary
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
+import platform.UIKit.UIDevice
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageWriteToSavedPhotosAlbum
 import platform.UIKit.UIPasteboard
@@ -37,10 +39,31 @@ actual class PlatformServiceModule {
   actual fun clipboard(ctx: PlatformContext): Clipboard = IOSClipboard()
 
   @Single
+  actual fun deviceInfo(ctx: PlatformContext): DeviceInfo = IOSDeviceInfo()
+
+  @Single
   actual fun fileSystem(ctx: PlatformContext): FileSystem = IOSFileSystem()
 
   @Single
   actual fun share(ctx: PlatformContext): Share = IOSShare()
+}
+
+private class IOSDeviceInfo : DeviceInfo {
+  override suspend fun snapshot(): DeviceInfoSnapshot = withContext(Dispatchers.Default) {
+    val device = UIDevice.currentDevice
+    val bundle = NSBundle.mainBundle
+    val versionName = (bundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String)
+      ?.takeIf { it.isNotBlank() } ?: "unknown"
+    val buildNumber = (bundle.objectForInfoDictionaryKey("CFBundleVersion") as? String)
+      ?.takeIf { it.isNotBlank() } ?: "unknown"
+
+    DeviceInfoSnapshot(
+      platform = device.systemName,
+      osVersion = device.systemVersion,
+      appVersion = "$versionName ($buildNumber)",
+      deviceName = device.name,
+    )
+  }
 }
 
 private class IOSClipboard : Clipboard {

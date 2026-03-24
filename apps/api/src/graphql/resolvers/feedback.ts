@@ -1,16 +1,9 @@
-import dedent from 'dedent';
 import { eq } from 'drizzle-orm';
 import { db, firstOrThrow, Users } from '#/db/index.ts';
 import { env } from '#/env.ts';
 import * as linear from '#/external/linear.ts';
 import { builder } from '../builder.ts';
-
-const moodLabels: Record<string, string> = {
-  angry: '😠 불만',
-  annoyed: '😟 아쉬움',
-  good: '🙂 만족',
-  great: '😄 매우 만족',
-};
+import { formatFeedbackDescription } from './feedback-format.ts';
 
 const labelMap: Record<string, string> = env.LINEAR_LABEL_MAP ? JSON.parse(env.LINEAR_LABEL_MAP) : {};
 
@@ -22,6 +15,10 @@ builder.mutationFields((t) => ({
       content: t.input.string(),
       mood: t.input.string({ required: false }),
       url: t.input.string({ required: false }),
+      platform: t.input.string({ required: false }),
+      osVersion: t.input.string({ required: false }),
+      appVersion: t.input.string({ required: false }),
+      deviceName: t.input.string({ required: false }),
     },
     resolve: async (_, { input }, ctx) => {
       const user = await db
@@ -32,16 +29,16 @@ builder.mutationFields((t) => ({
 
       const trimmed = input.content.trim();
       const title = trimmed.length > 50 ? `${trimmed.slice(0, 50)}…` : trimmed;
-      const description = dedent`
-        ${input.content}
-
-        ---
-
-        - **사용자:** ${user.name} (${user.email})
-        - **사용자 ID:** ${user.id}
-        - **기분:** ${(input.mood && moodLabels[input.mood]) ?? '(없음)'}
-        - **페이지:** ${input.url ?? '(없음)'}
-      `;
+      const description = formatFeedbackDescription({
+        content: input.content,
+        user,
+        mood: input.mood,
+        url: input.url,
+        platform: input.platform,
+        osVersion: input.osVersion,
+        appVersion: input.appVersion,
+        deviceName: input.deviceName,
+      });
 
       const labelId = input.topic ? labelMap[input.topic] : undefined;
 

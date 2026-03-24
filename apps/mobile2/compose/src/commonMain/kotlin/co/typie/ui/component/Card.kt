@@ -57,7 +57,7 @@ fun CardSurface(
 
 @Composable
 fun CardActionTile(
-  onClick: () -> Unit,
+  onClick: suspend () -> Unit,
   modifier: Modifier = Modifier,
   minHeight: Dp = CardDefaults.TileMinHeight,
   color: Color = AppTheme.colors.surfaceDefault,
