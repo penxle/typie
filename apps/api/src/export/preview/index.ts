@@ -2,39 +2,50 @@ import { parseVectorPageBinary } from '../core/codec.ts';
 import { computeDesiredSize, resolveAssets } from '../core/external.ts';
 import { nearestWeight } from '../core/fonts.ts';
 import { SlateReader } from '../core/slate.ts';
-import { LIGHT_THEME } from '../core/theme.ts';
+import { DARK_THEME, LIGHT_THEME } from '../core/theme.ts';
 import { ensureInstanceReady, SCALE_FACTOR, wasm } from '../core/wasm.ts';
-import { ensureRequiredFont, filterUncoveredCodepoints, resolveFallbackMappings } from './fonts.ts';
-import { createPdfFromVectorPages } from './index.ts';
+import { ensureRequiredFont, filterUncoveredCodepoints, resolveFallbackMappings } from '../pdf/fonts.ts';
+import { renderPreviewImage } from './layout.tsx.js';
+import { buildPageSvg } from './svg.ts';
 import type { Asset } from '../core/external.ts';
-import type { FontFamily } from './fonts.ts';
+import type { FontFamily } from '../pdf/fonts.ts';
 
-export type GenerateDocumentPdfParams = {
+const DEFAULT_PAGE_WIDTH = 665;
+const DEFAULT_PAGE_HEIGHT = 945;
+const DEFAULT_PAGE_MARGIN = 72;
+
+export type PreviewTheme = 'light' | 'dark';
+
+export type GeneratePreviewParams = {
   snapshot: Uint8Array;
   title: string;
-  author: string;
+  subtitle: string | null;
   fonts: FontFamily[];
-  layout: {
-    pageWidth: number;
-    pageHeight: number;
-    pageMarginTop: number;
-    pageMarginBottom: number;
-    pageMarginLeft: number;
-    pageMarginRight: number;
-  };
+  width: number;
+  theme: PreviewTheme;
 };
 
-export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Promise<Uint8Array> {
-  const { snapshot, title, author, fonts, layout } = params;
-  return wasm.use(async (wasm) => {
-    await ensureInstanceReady(wasm);
+export async function generateDocumentPreview(params: GeneratePreviewParams): Promise<Uint8Array> {
+  const { snapshot, title, subtitle, fonts, width, theme } = params;
 
-    const editor = wasm.createEditor(SCALE_FACTOR, snapshot);
+  const layout = {
+    pageWidth: DEFAULT_PAGE_WIDTH,
+    pageHeight: DEFAULT_PAGE_HEIGHT,
+    pageMarginTop: DEFAULT_PAGE_MARGIN,
+    pageMarginBottom: DEFAULT_PAGE_MARGIN,
+    pageMarginLeft: DEFAULT_PAGE_MARGIN,
+    pageMarginRight: DEFAULT_PAGE_MARGIN,
+  };
+
+  return wasm.use(async (app) => {
+    await ensureInstanceReady(app);
+
+    const editor = app.createEditor(SCALE_FACTOR, snapshot);
 
     try {
       editor.dispatch({
         type: 'initialize',
-        theme: LIGHT_THEME,
+        theme: theme === 'dark' ? DARK_THEME : LIGHT_THEME,
         viewportWidth: layout.pageWidth,
         viewportHeight: layout.pageHeight,
         scaleFactor: SCALE_FACTOR,
@@ -53,26 +64,27 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
         },
       });
 
+      editor.setMaxPages(1);
       editor.setAllFoldsExpanded(true);
 
       const offsets = Object.fromEntries(editor.getSlateOffsets());
-      const memory = wasm.getMemory() as WebAssembly.Memory;
+      const memory = app.getMemory() as WebAssembly.Memory;
       const slate = new SlateReader(memory, offsets, editor.getSlatePtr(), editor.getSlabPtr());
 
-      // Tick 1: 스냅샷/상태 변경 처리, 필요한 폰트·외부 요소 목록 산출
+      // Tick 1
       editor.tick();
       slate.refresh(editor.getSlatePtr(), editor.getSlabPtr());
 
       const tasks: Promise<void>[] = [];
 
-      // 폰트 요청 파싱 & 로드
+      // 폰트 요청
       for (const req of slate.readFontRequests()) {
         const familyFonts = fonts.find((f) => f.familyName === req.family)?.fonts ?? [];
         const font = nearestWeight(familyFonts, req.weight);
         tasks.push(
           (async () => {
             if (font) {
-              await ensureRequiredFont(wasm, req.family, font, req.codepoints);
+              await ensureRequiredFont(app, req.family, font, req.codepoints);
             }
 
             const uncovered = font ? await filterUncoveredCodepoints(font, req.codepoints) : req.codepoints;
@@ -85,7 +97,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
             }
 
             if (uncovered.length > 0) {
-              const fallbackMappings = await resolveFallbackMappings(wasm, req.weight, uncovered);
+              const fallbackMappings = await resolveFallbackMappings(app, req.weight, uncovered);
               mappings.push(...fallbackMappings);
             }
 
@@ -94,7 +106,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
         );
       }
 
-      // 외부 요소 asset 해석 & 높이 보정
+      // 외부 에셋
       let assets = new Map<string, Asset>();
       const externals = slate.readExternalElements();
       tasks.push(
@@ -109,27 +121,34 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
 
       await Promise.all(tasks);
 
-      // Tick 2: 폰트 + 외부 요소 높이 반영 후 최종 레이아웃
+      // Tick 2
       editor.tick();
       slate.refresh(editor.getSlatePtr(), editor.getSlabPtr());
 
-      const pageCount = slate.pagesCount;
-      if (pageCount === 0) {
-        throw new Error('Failed to layout document');
+      if (slate.pagesCount === 0) {
+        throw new Error('Empty document');
       }
 
-      const pages = Array.from({ length: pageCount }, (_, i) => {
-        const bytes = editor.exportPageVector(i);
-        if (!bytes) {
-          throw new Error(`Missing vector page payload for page index ${i}`);
-        }
-
-        return parseVectorPageBinary(bytes);
-      });
+      // 첫 페이지만 추출
+      const bytes = editor.exportPageVector(0);
+      if (!bytes) {
+        throw new Error('Missing vector page payload');
+      }
+      const page = parseVectorPageBinary(bytes);
 
       slate.refresh(editor.getSlatePtr(), editor.getSlabPtr());
       const laidExternals = slate.readExternalElements();
-      return await createPdfFromVectorPages(pages, title, author, laidExternals, assets);
+
+      // SVG 조립
+      const bodySvg = await buildPageSvg(page, laidExternals, assets, {
+        top: layout.pageMarginTop,
+        bottom: layout.pageMarginBottom,
+        left: layout.pageMarginLeft,
+        right: layout.pageMarginRight,
+      });
+
+      // satori 레이아웃 + 래스터화
+      return await renderPreviewImage({ title, subtitle, bodySvg, theme }, width);
     } finally {
       editor.free();
     }

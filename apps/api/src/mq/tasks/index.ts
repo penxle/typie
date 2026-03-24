@@ -1,4 +1,10 @@
-import { DocumentGCJob, DocumentGCScanCron, DocumentSyncCollectJob, DocumentSyncScanCron } from './document.ts';
+import {
+  DocumentGCJob,
+  DocumentGCScanCron,
+  DocumentPreviewInvalidateJob,
+  DocumentSyncCollectJob,
+  DocumentSyncScanCron,
+} from './document.ts';
 import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import {
@@ -11,6 +17,7 @@ import {
 
 export const jobs = [
   DocumentSyncCollectJob,
+  DocumentPreviewInvalidateJob,
   DocumentIndexJob,
   FolderIndexJob,
   DocumentGCJob,

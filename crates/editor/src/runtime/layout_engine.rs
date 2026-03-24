@@ -22,6 +22,7 @@ pub(crate) struct LayoutEngine {
     view_states: ViewStates,
     diagnostics: FrameDiagnostics,
     layout_debug_enabled: bool,
+    max_pages: Option<usize>,
 }
 
 impl LayoutEngine {
@@ -36,7 +37,12 @@ impl LayoutEngine {
             view_states: ViewStates::default(),
             diagnostics,
             layout_debug_enabled: false,
+            max_pages: None,
         }
+    }
+
+    pub(crate) fn set_max_pages(&mut self, max_pages: Option<usize>) {
+        self.max_pages = max_pages;
     }
 
     pub(crate) fn viewport_width(&self) -> f32 {
@@ -241,7 +247,7 @@ impl LayoutEngine {
             use crate::tracing::TRACER;
             use opentelemetry::trace::{Tracer, mark_span_as_active};
             let _s = mark_span_as_active(TRACER.start("layout.paginate"));
-            paginator.paginate_rc(root_layout)
+            paginator.paginate_rc(root_layout, self.max_pages)
         };
         if let Some(trace) = trace {
             self.diagnostics.commit_layout_pass(trace.into_inner());

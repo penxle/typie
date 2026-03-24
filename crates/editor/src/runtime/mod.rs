@@ -261,6 +261,10 @@ impl Runtime {
         self.pending.render = true;
     }
 
+    pub fn set_max_pages(&mut self, max_pages: Option<usize>) {
+        self.layout_engine.set_max_pages(max_pages);
+    }
+
     pub fn set_all_folds_expanded(&mut self, expanded: bool) {
         let fold_ids = self
             .doc()

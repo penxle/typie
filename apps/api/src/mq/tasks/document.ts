@@ -209,6 +209,13 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
         ttl: 60 * 1000,
       },
     });
+
+    await enqueueJob('document:preview:invalidate', documentId, {
+      deduplication: {
+        id: documentId,
+        ttl: 60 * 60 * 1000,
+      },
+    });
   }
 });
 
@@ -290,4 +297,11 @@ export const DocumentGCScanCron = defineCron('document:gc:scan', '0 * * * *', as
       }),
     ),
   );
+});
+
+export const DocumentPreviewInvalidateJob = defineJob('document:preview:invalidate', async (documentId: string) => {
+  const keys = await redis.keys(`document:preview:${documentId}:*`);
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
 });

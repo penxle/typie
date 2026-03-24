@@ -6,12 +6,12 @@ import sharp from 'sharp';
 import * as aws from '#/external/aws.ts';
 import { decompressZstd } from '#/utils/compression.ts';
 import { outlineTextToSvg } from '#/utils/font.ts';
-import { computeDesiredSize } from './external.ts';
+import { computeDesiredSize } from '../core/external.ts';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
+import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from '../core/codec.ts';
+import type { Asset } from '../core/external.ts';
+import type { ExternalElement } from '../core/slate.ts';
 import type { ImageAsset } from '../core/types.ts';
-import type { VectorOp, VectorPage, VectorPathCommand, VectorTextOp } from './codec.ts';
-import type { Asset } from './external.ts';
-import type { ExternalElement } from './slate.ts';
 
 const CSS_PX_TO_PDF_PT = 72 / 96;
 const PLACEHOLDER_BACKGROUND = rgb(0.965, 0.965, 0.969);

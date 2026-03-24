@@ -37,6 +37,7 @@ struct PaginationState {
     pages: Vec<Page>,
     parent_stack: Vec<ParentInfo>,
     explicit_page_break_pending: bool,
+    max_pages: Option<usize>,
 }
 
 impl PaginationState {
@@ -47,6 +48,7 @@ impl PaginationState {
         margin_bottom: f32,
         margin_left: f32,
         layout_mode: LayoutMode,
+        max_pages: Option<usize>,
     ) -> Self {
         Self {
             page_width,
@@ -61,7 +63,12 @@ impl PaginationState {
             pages: Vec::new(),
             parent_stack: Vec::new(),
             explicit_page_break_pending: false,
+            max_pages,
         }
+    }
+
+    fn reached_max_pages(&self) -> bool {
+        matches!(self.max_pages, Some(max) if self.pages.len() >= max)
     }
 
     fn start_new_page_at(&mut self, break_top_y: f32) {
@@ -124,6 +131,10 @@ impl PaginationState {
 
     fn create_page(&mut self) {
         if self.current_page_nodes.is_empty() {
+            return;
+        }
+
+        if self.reached_max_pages() {
             return;
         }
 
@@ -260,6 +271,10 @@ impl PaginationState {
             return;
         }
 
+        if self.reached_max_pages() {
+            return;
+        }
+
         let top = self.top_margin();
         let bottom = self.bottom_margin(true);
         let content_height = self.current_y - self.page_start_y;
@@ -325,7 +340,7 @@ impl Paginator {
         }
     }
 
-    pub fn paginate_rc(&self, root: Rc<LayoutNode>) -> Vec<Page> {
+    pub fn paginate_rc(&self, root: Rc<LayoutNode>, max_pages: Option<usize>) -> Vec<Page> {
         let content_height = self.content_height();
         let mut state = PaginationState::new(
             self.page_width,
@@ -334,6 +349,7 @@ impl Paginator {
             self.margin_bottom,
             self.margin_left,
             self.layout_mode,
+            max_pages,
         );
 
         let root_positioned = PositionedNode {
@@ -425,7 +441,11 @@ impl Paginator {
         positioned: &PositionedNode,
         offset: Point,
         state: &mut PaginationState,
-    ) {
+    ) -> bool {
+        if state.reached_max_pages() {
+            return true;
+        }
+
         let abs_x = offset.x + positioned.position.x;
         let abs_y = offset.y + positioned.position.y;
         let node = &positioned.node;
@@ -464,7 +484,9 @@ impl Paginator {
             });
 
             for child in children {
-                self.collect_nodes(child, Point::new(abs_x, abs_y), state);
+                if self.collect_nodes(child, Point::new(abs_x, abs_y), state) {
+                    break;
+                }
             }
             state.parent_stack.pop();
             state.current_y = state.current_y.max(node_bottom);
@@ -507,9 +529,10 @@ impl Paginator {
             if is_page_break {
                 state.create_page();
                 state.explicit_page_break_pending = true;
-                return;
+                return false;
             }
         }
+        false
     }
 }
 
@@ -617,7 +640,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 2);
 
@@ -689,7 +712,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 2);
 
@@ -760,7 +783,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 2);
 
@@ -844,7 +867,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 2);
 
@@ -929,7 +952,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 1);
     }
@@ -993,7 +1016,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert!(pages.len() >= 2);
         let p1 = &pages[0];
@@ -1096,7 +1119,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert!(pages.len() >= 2);
 
@@ -1173,7 +1196,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 2);
 
@@ -1290,7 +1313,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 2);
 
@@ -1447,7 +1470,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 1, "Continuous mode should ignore page break");
     }
@@ -1512,7 +1535,7 @@ mod tests {
         };
 
         let paginator = Paginator::new(100.0, 100.0, 0.0, 0.0, 0.0, layout_mode);
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
         assert_eq!(pages.len(), 2);
 
         let p1_children = pages[0].root.node.children.as_ref().unwrap();
@@ -1589,7 +1612,7 @@ mod tests {
         };
 
         let paginator = Paginator::new(100.0, 100.0, 0.0, 0.0, 0.0, layout_mode);
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
         assert_eq!(pages.len(), 2);
 
         let p1_children = pages[0].root.node.children.as_ref().unwrap();
@@ -1699,7 +1722,7 @@ mod tests {
         };
 
         let paginator = Paginator::new(100.0, 100.0, 0.0, 0.0, 0.0, layout_mode);
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
         assert_eq!(pages.len(), 2);
         assert!((pages[0].root.node.size.height - 40.0).abs() < 0.01);
     }
@@ -1769,7 +1792,7 @@ mod tests {
             page_margin,
             layout_mode,
         );
-        let pages = paginator.paginate_rc(Rc::new(root));
+        let pages = paginator.paginate_rc(Rc::new(root), None);
 
         assert_eq!(pages.len(), 2);
 

@@ -184,6 +184,7 @@ type Document implements IDocument {
   locked: Boolean!
   nullableTitle: String
   password: String
+  previewUrl: String!
   protectContent: Boolean!
   reactionCount: Int!
   snapshot: Binary!

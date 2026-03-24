@@ -1,8 +1,8 @@
 import DataLoader from 'dataloader';
 import { decodeDbId, TableCode } from '#/db/index.ts';
-import { loadImageAssets } from '../core/assets.ts';
-import type { ImageAsset } from '../core/types.ts';
+import { loadImageAssets } from './assets.ts';
 import type { ExternalElement } from './slate.ts';
+import type { ImageAsset } from './types.ts';
 
 export type Asset = ImageAsset;
 

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import {
   DocumentAvailableAction,
   DocumentContentRating,
@@ -18,6 +18,7 @@ import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, sum } from 'dr
 import { filter, pipe, Repeater } from 'graphql-yoga';
 import { LoroDoc, VersionVector } from 'loro-crdt';
 import { nanoid } from 'nanoid';
+import qs from 'query-string';
 import { match } from 'ts-pattern';
 import { redis } from '#/cache.ts';
 import {
@@ -254,6 +255,21 @@ Document.implement({
       type: Image,
       nullable: true,
       resolve: (self) => self.thumbnailId,
+    }),
+
+    previewUrl: t.string({
+      resolve: (self) => {
+        const now = Math.floor(Date.now() / 1000);
+        const expires = Math.ceil(now / 3600) * 3600;
+        const sig = createHmac('sha256', env.PREVIEW_SIGNING_SECRET).update(`${self.entityId}:${expires}`).digest('hex').slice(0, 16);
+        return qs.stringifyUrl({
+          url: `${env.API_URL}/entity/${self.entityId}/preview`,
+          query: {
+            expires,
+            sig,
+          },
+        });
+      },
     }),
 
     reactionCount: t.int({

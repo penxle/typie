@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const schema = z.object({
+  API_URL: z.string(),
   BMO_API_KEY: z.string(),
   APPLE_APP_APPLE_ID: z.coerce.number(),
   APPLE_APP_BUNDLE_ID: z.string(),
@@ -33,6 +34,7 @@ const schema = z.object({
   OIDC_CLIENT_SECRET: z.string(),
   OIDC_JWK: z.string(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
+  PREVIEW_SIGNING_SECRET: z.string(),
   PORTONE_API_SECRET: z.string(),
   PORTONE_CHANNEL_KEY: z.string(),
   REDIS_URL: z.string(),

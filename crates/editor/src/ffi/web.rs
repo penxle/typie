@@ -572,6 +572,11 @@ impl Editor {
         self.runtime.set_all_folds_expanded(expanded);
     }
 
+    #[wasm_bindgen(js_name = setMaxPages)]
+    pub fn set_max_pages(&mut self, max_pages: Option<u32>) {
+        self.runtime.set_max_pages(max_pages.map(|v| v as usize));
+    }
+
     #[wasm_bindgen(js_name = isReadOnly)]
     pub fn is_read_only(&self) -> bool {
         self.runtime.is_read_only()

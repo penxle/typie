@@ -184,6 +184,7 @@ xcodeproj
 xcworkspace
 xexpect
 xlarge
+xlink
 xsmall
 xxlarge
 zadd

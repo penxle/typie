@@ -87,6 +87,7 @@ export const editor_revealTrackedItem: (a: number, b: number, c: number, d: numb
 export const editor_revertTo: (a: number, b: number, c: number) => [number, number];
 export const editor_setAllFoldsExpanded: (a: number, b: number) => void;
 export const editor_setLayoutDebug: (a: number, b: number) => void;
+export const editor_setMaxPages: (a: number, b: number) => void;
 export const editor_setReadOnly: (a: number, b: number) => void;
 export const editor_setRenderDebug: (a: number, b: number) => void;
 export const editor_setTracing: (a: number, b: number, c: number, d: number, e: number) => void;

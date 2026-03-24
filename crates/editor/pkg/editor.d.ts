@@ -352,6 +352,7 @@ export class Editor {
     revertTo(version: Uint8Array): void;
     setAllFoldsExpanded(expanded: boolean): void;
     setLayoutDebug(enabled: boolean): void;
+    setMaxPages(max_pages?: number | null): void;
     setReadOnly(read_only: boolean): void;
     setRenderDebug(enabled: boolean): void;
     setTracing(trace_id: string, parent_span_id: string): void;
@@ -459,6 +460,7 @@ export interface InitOutput {
     readonly editor_revertTo: (a: number, b: number, c: number) => [number, number];
     readonly editor_setAllFoldsExpanded: (a: number, b: number) => void;
     readonly editor_setLayoutDebug: (a: number, b: number) => void;
+    readonly editor_setMaxPages: (a: number, b: number) => void;
     readonly editor_setReadOnly: (a: number, b: number) => void;
     readonly editor_setRenderDebug: (a: number, b: number) => void;
     readonly editor_setTracing: (a: number, b: number, c: number, d: number, e: number) => void;

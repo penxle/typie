@@ -117,7 +117,7 @@ builder.mutationFields((t) => ({
 }));
 
 /** ExportFontFamily[] 빌드 (기본 폰트 + 유저 업로드 폰트) */
-async function buildExportFonts(userId: string): Promise<ExportFontFamily[]> {
+export async function buildExportFonts(userId: string): Promise<ExportFontFamily[]> {
   const families: ExportFontFamily[] = [];
 
   // 기본 폰트

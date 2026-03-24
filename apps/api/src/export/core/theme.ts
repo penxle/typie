@@ -12,18 +12,27 @@ const colorToU32 = (color: string): number => {
   return ((r << 24) | (g << 16) | (b << 8) | 0xff) >>> 0;
 };
 
-const COLORS: Record<string, string> = {
+const LIGHT_COLORS: Record<string, string> = {
   ...themeData.shared,
   ...themeData.lightShared,
   ...themeData.variants['light-white'],
 };
 
+const DARK_COLORS: Record<string, string> = {
+  ...themeData.shared,
+  ...themeData.darkShared,
+  ...themeData.variants['dark-black'],
+};
+
 /** 테마 색상 키를 hex 문자열(# 없이)로 변환. 매칭 실패 시 undefined 반환. */
 export const resolveColorToHex = (colorKey: string): string | undefined => {
-  const hex = COLORS[colorKey];
+  const hex = LIGHT_COLORS[colorKey];
   return hex ? hex.replace('#', '') : undefined;
 };
 
-export const DEFAULT_THEME: Theme = {
-  colors: new Map(Object.entries(COLORS).map(([key, value]) => [key, colorToU32(value)])),
-};
+const buildTheme = (colors: Record<string, string>): Theme => ({
+  colors: new Map(Object.entries(colors).map(([key, value]) => [key, colorToU32(value)])),
+});
+
+export const LIGHT_THEME: Theme = buildTheme(LIGHT_COLORS);
+export const DARK_THEME: Theme = buildTheme(DARK_COLORS);
