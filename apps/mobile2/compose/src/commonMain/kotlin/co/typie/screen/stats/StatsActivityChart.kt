@@ -151,6 +151,14 @@ fun StatsActivityChart(
           scrollOffset = currentScrollOffset,
         )
       }
+      val additionsVisibilityProgress by animateFloatAsState(
+        targetValue = if (showAdditions) 1f else 0f,
+        animationSpec = tween(durationMillis = 180),
+      )
+      val deletionsVisibilityProgress by animateFloatAsState(
+        targetValue = if (showDeletions) 1f else 0f,
+        animationSpec = tween(durationMillis = 180),
+      )
       val maxValue = remember(daysData, showAdditions, showDeletions, visibleRange) {
         chartMaxValue(
           daysData = daysData,
@@ -161,7 +169,7 @@ fun StatsActivityChart(
         )
       }
       val animatedMaxValue by animateFloatAsState(
-        targetValue = maxValue.toFloat(),
+        targetValue = maxValue,
         animationSpec = tween(durationMillis = 180),
       )
       val canScrollLeft by remember(currentScrollOffset, hasHorizontalOverflow) {
@@ -561,19 +569,23 @@ fun StatsActivityChart(
                 daysData.forEachIndexed { index, day ->
                   val left = index * barWidthPx + 1f
                   val width = max(barWidthPx - 2f, 0f)
-                  val additions = if (showAdditions) day.additions else 0
-                  val deletions = if (showDeletions) day.deletions else 0
-                  val total = additions + deletions
+                  val additions = day.additions
+                  val deletions = day.deletions
+                  val displayedAdditions = additions * additionsVisibilityProgress
+                  val displayedDeletions = deletions * deletionsVisibilityProgress
+                  val total = displayedAdditions + displayedDeletions
                   val heights = calculateChartBarHeights(
                     additions = additions,
                     deletions = deletions,
                     maxValue = animatedMaxValue,
                     chartHeightPx = chartHeightPx,
+                    additionsScale = additionsVisibilityProgress,
+                    deletionsScale = deletionsVisibilityProgress,
                   )
                   val additionsHeight = heights.additionsHeightPx
                   val deletionsHeight = heights.deletionsHeightPx
 
-                  if (deletions > 0) {
+                  if (deletions > 0 && deletionsHeight > 0f) {
                     val height = max(deletionsHeight, 1f)
                     val bottom = if (additionsHeight > 0f) additionsHeight + 1f else 0f
                     drawRoundRect(
@@ -584,7 +596,7 @@ fun StatsActivityChart(
                     )
                   }
 
-                  if (additions > 0) {
+                  if (additions > 0 && additionsHeight > 0f) {
                     val height = max(additionsHeight, 1f)
                     drawRoundRect(
                       color = additionColor,
@@ -594,7 +606,7 @@ fun StatsActivityChart(
                     )
                   }
 
-                  if (total == 0) {
+                  if (total <= 0f) {
                     drawRoundRect(
                       color = zeroBarColor,
                       topLeft = Offset(left, chartHeightPx - 1f),
@@ -875,12 +887,16 @@ internal fun calculateChartBarHeights(
   deletions: Int,
   maxValue: Float,
   chartHeightPx: Float,
+  additionsScale: Float = 1f,
+  deletionsScale: Float = 1f,
 ): ChartBarHeights {
   val safeMaxValue = max(maxValue, 1f)
+  val scaledAdditions = (additions * additionsScale).coerceAtLeast(0f)
+  val scaledDeletions = (deletions * deletionsScale).coerceAtLeast(0f)
 
   return ChartBarHeights(
-    additionsHeightPx = if (additions > 0) (additions / safeMaxValue) * chartHeightPx else 0f,
-    deletionsHeightPx = if (deletions > 0) (deletions / safeMaxValue) * chartHeightPx else 0f,
+    additionsHeightPx = if (scaledAdditions > 0f) (scaledAdditions / safeMaxValue) * chartHeightPx else 0f,
+    deletionsHeightPx = if (scaledDeletions > 0f) (scaledDeletions / safeMaxValue) * chartHeightPx else 0f,
   )
 }
 
@@ -941,15 +957,15 @@ private fun chartMaxValue(
   showDeletions: Boolean,
   startIndex: Int,
   endIndex: Int,
-): Int {
+): Float {
   if (daysData.isEmpty() || endIndex <= startIndex) {
-    return 1_000
+    return 1_000f
   }
 
   val maxValue = daysData.subList(startIndex, endIndex).maxOfOrNull { day ->
     (if (showAdditions) day.additions else 0) + (if (showDeletions) day.deletions else 0)
-  } ?: 0
-  return max(maxValue, 1_000)
+  }?.toFloat() ?: 0f
+  return max(maxValue, 1_000f)
 }
 
 internal fun generateXAxisLabels(daysData: List<StatsActivityDay>, zoom: Float): List<ChartXAxisLabel> {
