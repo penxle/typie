@@ -10,9 +10,9 @@ import { buildPageSvg } from './svg.ts';
 import type { Asset } from '../core/external.ts';
 import type { FontFamily } from '../pdf/fonts.ts';
 
-const DEFAULT_PAGE_WIDTH = 665;
-const DEFAULT_PAGE_HEIGHT = 945;
-const DEFAULT_PAGE_MARGIN = 72;
+const DEFAULT_PAGE_WIDTH = 472;
+const DEFAULT_PAGE_HEIGHT = 665;
+const DEFAULT_PAGE_MARGIN = 38;
 
 export type PreviewTheme = 'light' | 'dark';
 

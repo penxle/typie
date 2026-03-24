@@ -316,7 +316,11 @@ builder.mutationFields((t) => ({
         siteId: input.siteId,
       });
 
-      const slugExistSite = await db.select({ id: Sites.id }).from(Sites).where(eq(Sites.slug, input.slug)).then(first);
+      const slugExistSite = await db
+        .select({ id: Sites.id })
+        .from(Sites)
+        .where(and(eq(Sites.slug, input.slug), ne(Sites.id, input.siteId)))
+        .then(first);
 
       if (slugExistSite) {
         throw new TypieError({ code: 'site_slug_already_exists' });

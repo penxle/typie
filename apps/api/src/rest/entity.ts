@@ -16,7 +16,6 @@ import type { PreviewTheme } from '#/export/preview/index.ts';
 export const entity = new Hono<Env>();
 
 const CACHE_TTL = 60 * 60 * 24 * 7; // 1주일
-const DEFAULT_WIDTH = 400;
 const MAX_WIDTH = 1200;
 
 function verifySignature(entityId: string, expires: string, sig: string): boolean {
@@ -46,7 +45,7 @@ entity.get('/:entityId/preview', async (c) => {
     throw new HTTPException(401);
   }
 
-  const width = Math.min(Math.max(Number.parseInt(widthParam ?? '', 10) || DEFAULT_WIDTH, 1), MAX_WIDTH);
+  const width = Math.min(Math.max(Number.parseInt(widthParam ?? '', 10) || 300, 1), MAX_WIDTH);
   const theme = c.req.query('theme') === 'dark' ? ('dark' as const) : ('light' as const);
 
   const entity = await db
@@ -132,7 +131,7 @@ async function renderDocumentPreview(
     await redis.set(cacheKey, Buffer.from(webp), 'EX', CACHE_TTL);
 
     const maxAge = Number.parseInt(expires, 10) - Math.floor(Date.now() / 1000);
-    return c.body(webp as unknown as string, {
+    return c.body(webp as Uint8Array<ArrayBuffer>, {
       headers: {
         'Content-Type': 'image/webp',
         'Cache-Control': `public, max-age=${Math.max(maxAge, 0)}`,

@@ -167,7 +167,7 @@ User.implement({
             ),
           )
           .orderBy(desc(Entities.viewedAt))
-          .limit(10);
+          .limit(20);
 
         const entityIds = new Set(entities.map((e) => e.id));
         const folderEntityIds = [

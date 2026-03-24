@@ -27,21 +27,21 @@ type PreviewTheme = 'light' | 'dark';
 
 const themeColors = {
   light: {
-    background: '#FFFFFF', // surface.default (lightWhite)
+    background: '#FFFFFF', // surface.default (white)
     title: '#09090c', // text.default (gray.950)
     subtitle: '#70717b', // text.faint (gray.500)
-    divider: '#e3e4eb', // border.default (gray.200)
+    divider: '#d3d4dd', // border.strong (gray.300)
   },
   dark: {
-    background: '#131317', // surface.default (darkBlack = dark.gray.900)
-    title: '#f1f1f7', // text.default (darkBlack = dark.gray.50)
-    subtitle: '#a3a4a9', // text.faint (darkBlack = dark.gray.300)
-    divider: '#2d2d31', // border.default (darkBlack = dark.gray.700)
+    background: '#121316', // surface.default (dark.gray.900) -- mobile
+    title: '#f1f1f7', // text.default (dark.gray.50)
+    subtitle: '#a3a4a9', // text.faint (dark.gray.300)
+    divider: '#414246', // border.strong (dark.gray.600)
   },
 };
 
 const RENDER_WIDTH = 1200;
-const RENDER_HEIGHT = (RENDER_WIDTH * 7) / 5;
+const RENDER_HEIGHT = 1600;
 
 type PreviewLayoutParams = {
   title: string;
@@ -74,13 +74,13 @@ export async function renderPreviewImage(params: PreviewLayoutParams, outputWidt
         height: `${RENDER_HEIGHT}px`,
         backgroundColor: c.background,
         fontFamily: 'Paperlogy',
-        padding: '80px',
+        padding: '160px',
       }}
     >
       <div
         style={{
           display: 'block',
-          fontSize: '72px',
+          fontSize: '96px',
           fontWeight: 700,
           color: c.title,
           lineHeight: '1.3',
@@ -95,7 +95,7 @@ export async function renderPreviewImage(params: PreviewLayoutParams, outputWidt
         <div
           style={{
             display: 'block',
-            fontSize: '42px',
+            fontSize: '72px',
             fontWeight: 400,
             color: c.subtitle,
             marginTop: '24px',
