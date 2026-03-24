@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class PopoverPositionProviderTest {
+class PopoverPlacementProviderTest {
 
   private val windowSize = IntSize(390, 844)
   private val screenPadding = PopoverScreenPadding(
@@ -27,10 +27,10 @@ class PopoverPositionProviderTest {
 
   private fun calculate(
     anchorBounds: IntRect,
-    position: PopoverPosition,
+    placement: PopoverPlacement,
     popupContentSize: IntSize = popupSize,
   ): IntOffset {
-    val provider = PopoverPositionProvider(position, screenPadding)
+    val provider = PopoverPlacementProvider(placement, screenPadding)
     return provider.calculatePosition(
       anchorBounds,
       windowSize,
@@ -39,58 +39,54 @@ class PopoverPositionProviderTest {
     )
   }
 
-  // --- shouldShowBelow ---
-
   @Test
   fun shouldShowBelow_prefersBottom_enoughSpace() {
-    assertTrue(shouldShowBelow(PopoverPosition.BottomRight, 200, 844, topAnchor, screenPadding))
+    assertTrue(shouldShowBelow(PopoverPlacement.BelowEnd, 200, 844, topAnchor, screenPadding))
   }
 
   @Test
   fun shouldShowBelow_prefersBottom_notEnoughBottom_flipsToTop() {
-    assertFalse(shouldShowBelow(PopoverPosition.BottomRight, 300, 844, bottomAnchor, screenPadding))
+    assertFalse(shouldShowBelow(PopoverPlacement.BelowEnd, 300, 844, bottomAnchor, screenPadding))
   }
 
   @Test
   fun shouldShowBelow_prefersTop_enoughSpace() {
-    assertFalse(shouldShowBelow(PopoverPosition.TopRight, 300, 844, centerAnchor, screenPadding))
+    assertFalse(shouldShowBelow(PopoverPlacement.AboveEnd, 300, 844, centerAnchor, screenPadding))
   }
 
   @Test
   fun shouldShowBelow_prefersTop_notEnoughTop_flipsToBottom() {
-    assertTrue(shouldShowBelow(PopoverPosition.TopRight, 300, 844, topAnchor, screenPadding))
+    assertTrue(shouldShowBelow(PopoverPlacement.AboveEnd, 300, 844, topAnchor, screenPadding))
   }
 
-  // --- calculatePosition ---
-
   @Test
-  fun bottomRight_positionsBelow() {
-    val offset = calculate(topAnchor, PopoverPosition.BottomRight)
+  fun belowEnd_positionsBelow() {
+    val offset = calculate(topAnchor, PopoverPlacement.BelowEnd)
     assertEquals(100, offset.y)
   }
 
   @Test
-  fun bottomLeft_anchorLeft() {
-    val offset = calculate(topAnchor, PopoverPosition.BottomLeft)
+  fun belowStart_anchorLeft() {
+    val offset = calculate(topAnchor, PopoverPlacement.BelowStart)
     assertEquals(IntOffset(16, 100), offset)
   }
 
   @Test
-  fun bottomCenter_centeredOnAnchor() {
-    val offset = calculate(centerAnchor, PopoverPosition.BottomCenter)
+  fun belowCenter_centeredOnAnchor() {
+    val offset = calculate(centerAnchor, PopoverPlacement.BelowCenter)
     assertEquals(IntOffset(95, 400), offset)
   }
 
   @Test
-  fun topRight_aboveAnchor() {
-    val offset = calculate(centerAnchor, PopoverPosition.TopRight)
+  fun aboveEnd_positionsAbove() {
+    val offset = calculate(centerAnchor, PopoverPlacement.AboveEnd)
     assertEquals(144, offset.y)
   }
 
   @Test
-  fun clampsRight_whenPopupExceedsScreen() {
+  fun belowStart_keepsAnchorLeft_whenPopupExceedsScreen() {
     val rightAnchor = IntRect(300, 100, 370, 144)
-    val offset = calculate(rightAnchor, PopoverPosition.BottomLeft)
-    assertEquals(142, offset.x)
+    val offset = calculate(rightAnchor, PopoverPlacement.BelowStart)
+    assertEquals(300, offset.x)
   }
 }

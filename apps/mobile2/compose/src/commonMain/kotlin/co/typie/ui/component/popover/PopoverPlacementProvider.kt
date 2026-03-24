@@ -36,9 +36,6 @@ internal class PopoverPlacementProvider(
   private val screenPadding: PopoverScreenPadding,
 ) : PopupPositionProvider {
 
-  var lastShowBelow: Boolean = true
-    private set
-
   override fun calculatePosition(
     anchorBounds: IntRect,
     windowSize: IntSize,
@@ -77,8 +74,6 @@ internal class PopoverPlacementProvider(
     } else {
       anchorBounds.bottom - popupContentSize.height
     }
-
-    lastShowBelow = showBelow
 
     return IntOffset(
       x = clamp(unclampedX, minX, maxX),
