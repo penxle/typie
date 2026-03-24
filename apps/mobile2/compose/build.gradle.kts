@@ -145,6 +145,7 @@ buildkonfig {
     buildConfigField(STRING, "KAKAO_NATIVE_APP_KEY", env("KAKAO_NATIVE_APP_KEY"))
     buildConfigField(STRING, "NAVER_CLIENT_ID", env("NAVER_CLIENT_ID"))
     buildConfigField(STRING, "NAVER_CLIENT_SECRET", env("NAVER_CLIENT_SECRET"))
+    buildConfigField(STRING, "USERSITE_HOST", env("USERSITE_HOST"))
   }
 }
 
@@ -180,6 +181,10 @@ apollo {
     generateDataBuilders = true
     generateInputBuilders = true
     generateFragmentImplementations = true
+
+    plugin("com.apollographql.cache:normalized-cache-apollo-compiler-plugin:${libs.versions.apollo.normalized.cache.get()}") {
+      argument("com.apollographql.cache.packageName", packageName.get())
+    }
   }
 }
 

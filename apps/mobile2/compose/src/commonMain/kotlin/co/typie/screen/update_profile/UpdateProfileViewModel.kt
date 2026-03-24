@@ -18,7 +18,7 @@ import co.typie.graphql.text
 import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.UpdateUserInput
 import co.typie.graphql.type.buildUser
-import co.typie.media.PickedImage
+import co.typie.platform.PlatformFile
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import kotlinx.coroutines.CancellationException
@@ -62,16 +62,16 @@ class UpdateProfileViewModel(
       },
     ) { UpdateProfileScreen_Query() }
 
-  suspend fun uploadAvatar(image: PickedImage): String? {
+  suspend fun uploadAvatar(file: PlatformFile): String? {
     return try {
       toast.withLoading(
         message = "프로필 사진 업로드 중...",
         errorMessage = "프로필 사진 업로드에 실패했어요. 다시 시도해주세요.",
       ) {
         val path = blobService.uploadBytes(
-          bytes = image.bytes,
-          filename = image.filename,
-          mimeType = image.mimeType,
+          bytes = file.bytes,
+          filename = file.filename,
+          mimeType = file.mimeType,
         )
 
         val result = executeMutation(

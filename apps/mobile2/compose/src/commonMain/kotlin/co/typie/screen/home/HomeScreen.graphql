@@ -6,21 +6,45 @@ query HomeScreen_Query($siteId: ID!) {
       id
       slug
       type
+
       node {
         __typename
+
         ... on Document {
           id
           type
           title
           excerpt
+          previewUrl
           updatedAt
-          entity { id slug }
+
+          entity {
+            id
+            slug
+            parent {
+              id
+
+              node {
+                __typename
+
+                ... on Folder {
+                  id
+                  name
+                }
+              }
+            }
+          }
         }
+
         ... on Folder {
           id
           name
           documentCount
-          entity { id slug }
+
+          entity {
+            id
+            slug
+          }
         }
       }
     }

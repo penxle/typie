@@ -179,7 +179,7 @@ fun NavigationStack(
         // Dim overlay — 전환 중 behind 화면 터치 차단
         Box(
           Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
-            .background(AppTheme.colors.shadowDefault.copy(alpha = dimAlpha))
+            .background(AppTheme.colors.shadow.copy(alpha = dimAlpha))
             .pointerIgnore()
         )
       }

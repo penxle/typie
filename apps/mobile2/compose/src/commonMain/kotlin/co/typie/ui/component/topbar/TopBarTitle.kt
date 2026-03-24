@@ -52,7 +52,7 @@ fun TopBarTitle(
       Icon(
         icon = icon,
         modifier = Modifier.size(TopBarDefaults.TitleIconSize),
-        tint = AppTheme.colors.textSubtle,
+        tint = AppTheme.colors.textSecondary,
       )
       Spacer(Modifier.width(TopBarDefaults.TitleIconGap))
     }
@@ -74,7 +74,7 @@ fun TopBarTitle(
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
           style = AppTheme.typography.caption.copy(fontSize = 12.sp),
-          color = AppTheme.colors.textFaint,
+          color = AppTheme.colors.textTertiary,
         )
       }
     }

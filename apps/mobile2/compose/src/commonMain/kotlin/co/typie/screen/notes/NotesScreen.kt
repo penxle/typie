@@ -24,7 +24,7 @@ fun NotesScreen() {
   )
 
   Screen(
-    modifier = Modifier.background(AppTheme.colors.surfaceSubtle),
+    modifier = Modifier.background(AppTheme.colors.surfaceBase),
   ) { _ ->
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
       Text("Notes", style = AppTheme.typography.display)

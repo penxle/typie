@@ -80,84 +80,106 @@ fun TopBar(
         detectTapGestures { onTap() }
       } else Modifier),
   ) {
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      modifier = Modifier.fillMaxWidth().height(TopBarDefaults.Height)
-        .padding(horizontal = TopBarDefaults.HorizontalPadding),
-    ) {
-      // Leading slot — slide + fade
-      Box(
-        contentAlignment = Alignment.CenterStart,
-        modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
-      ) {
-        AnimatedContent(
-          targetState = state.leadingKey,
-          contentAlignment = Alignment.CenterStart,
-          transitionSpec = {
-            (slideInHorizontally { -it / 2 } + fadeIn(tween(200))).togetherWith(slideOutHorizontally { -it / 2 } + fadeOut(
-              tween(150)
-            )).using(SizeTransform(clip = false) { _, _ -> snap() })
-          },
-        ) { key ->
-          state.leadingEntries[key]?.invoke()
-        }
-      }
+    val topBarMode = if (state.customKey != TopBarState.NullKey) state.customKey else TopBarState.NormalModeKey
 
-      Spacer(Modifier.width(TopBarDefaults.SlotGap))
+    AnimatedContent(
+      targetState = topBarMode,
+      transitionSpec = {
+        val direction = if (targetState != TopBarState.NormalModeKey) 1 else -1
+        (slideInVertically { it / 2 * direction } + fadeIn(tween(200)))
+          .togetherWith(slideOutVertically { -it / 2 * direction } + fadeOut(tween(150)))
+          .using(SizeTransform(clip = false) { _, _ -> snap() })
+      },
+    ) { mode ->
+      if (mode == TopBarState.NormalModeKey) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.fillMaxWidth().height(TopBarDefaults.Height)
+            .padding(horizontal = TopBarDefaults.HorizontalPadding),
+        ) {
+          // Leading slot — slide + fade
+          Box(
+            contentAlignment = Alignment.CenterStart,
+            modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
+          ) {
+            AnimatedContent(
+              targetState = state.leadingKey,
+              contentAlignment = Alignment.CenterStart,
+              transitionSpec = {
+                (slideInHorizontally { -it / 2 } + fadeIn(tween(200))).togetherWith(slideOutHorizontally { -it / 2 } + fadeOut(
+                  tween(150)
+                )).using(SizeTransform(clip = false) { _, _ -> snap() })
+              },
+            ) { key ->
+              state.leadingEntries[key]?.invoke()
+            }
+          }
 
-      // Center slot — crossfade (per route) + scroll-based reveal (per entry, independent)
-      Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.weight(1f).height(TopBarDefaults.Height),
-      ) {
-        AnimatedContent(
-          targetState = state.centerKey,
-          modifier = Modifier.fillMaxWidth(),
-          contentAlignment = Alignment.Center,
-          transitionSpec = {
-            when {
-              initialState == TopBarState.NullKey || targetState == TopBarState.NullKey ->
-                fadeIn(tween(200)).togetherWith(fadeOut(tween(150)))
-              state.navDirection == NavDirection.Switch ->
-                fadeIn(tween(200)).togetherWith(fadeOut(tween(150)))
-              else -> {
-                val direction = if (state.navDirection == NavDirection.Push) 1 else -1
-                (slideInVertically { centerSlideOffset * direction } + fadeIn(tween(200))).togetherWith(
-                  slideOutVertically { -centerSlideOffset * direction } + fadeOut(tween(150)))
+          Spacer(Modifier.width(TopBarDefaults.SlotGap))
+
+          // Center slot — crossfade (per route) + scroll-based reveal (per entry, independent)
+          Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.weight(1f).height(TopBarDefaults.Height),
+          ) {
+            AnimatedContent(
+              targetState = state.centerKey,
+              modifier = Modifier.fillMaxWidth(),
+              contentAlignment = Alignment.Center,
+              transitionSpec = {
+                when {
+                  initialState == TopBarState.NullKey || targetState == TopBarState.NullKey ->
+                    fadeIn(tween(200)).togetherWith(fadeOut(tween(150)))
+                  state.navDirection == NavDirection.Switch ->
+                    fadeIn(tween(200)).togetherWith(fadeOut(tween(150)))
+                  else -> {
+                    val direction = if (state.navDirection == NavDirection.Push) 1 else -1
+                    (slideInVertically { centerSlideOffset * direction } + fadeIn(tween(200))).togetherWith(
+                      slideOutVertically { -centerSlideOffset * direction } + fadeOut(tween(150)))
+                  }
+                }.using(SizeTransform(clip = false) { _, _ -> snap() })
+              },
+            ) { key ->
+              // Per-entry reveal state: updated only while this key is current, frozen on exit.
+              val isCurrentKey = key == state.centerKey
+              var revealed by remember { mutableStateOf(!hasScrollReveal || centerRevealed) }
+              if (isCurrentKey) {
+                revealed = !hasScrollReveal || centerRevealed
               }
-            }.using(SizeTransform(clip = false) { _, _ -> snap() })
-          },
-        ) { key ->
-          // Per-entry reveal state: updated only while this key is current, frozen on exit.
-          val isCurrentKey = key == state.centerKey
-          var revealed by remember { mutableStateOf(!hasScrollReveal || centerRevealed) }
-          if (isCurrentKey) {
-            revealed = !hasScrollReveal || centerRevealed
+
+              TopBarCenterReveal(visible = revealed) {
+                state.centerEntries[key]?.invoke()
+              }
+            }
           }
 
-          TopBarCenterReveal(visible = revealed) {
-            state.centerEntries[key]?.invoke()
+          Spacer(Modifier.width(TopBarDefaults.SlotGap))
+
+          // Trailing slot — slide + fade (오른쪽, leading의 반대)
+          Box(
+            contentAlignment = Alignment.CenterEnd,
+            modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
+          ) {
+            AnimatedContent(
+              targetState = state.trailingKey,
+              contentAlignment = Alignment.CenterEnd,
+              transitionSpec = {
+                (slideInHorizontally { it / 2 } + fadeIn(tween(200)))
+                  .togetherWith(slideOutHorizontally { it / 2 } + fadeOut(tween(150)))
+                  .using(SizeTransform(clip = false) { _, _ -> snap() })
+              },
+            ) { key ->
+              state.trailingEntries[key]?.invoke()
+            }
           }
         }
-      }
-
-      Spacer(Modifier.width(TopBarDefaults.SlotGap))
-
-      // Trailing slot — slide + fade (오른쪽, leading의 반대)
-      Box(
-        contentAlignment = Alignment.CenterEnd,
-        modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
-      ) {
-        AnimatedContent(
-          targetState = state.trailingKey,
-          contentAlignment = Alignment.CenterEnd,
-          transitionSpec = {
-            (slideInHorizontally { it / 2 } + fadeIn(tween(200)))
-              .togetherWith(slideOutHorizontally { it / 2 } + fadeOut(tween(150)))
-              .using(SizeTransform(clip = false) { _, _ -> snap() })
-          },
-        ) { key ->
-          state.trailingEntries[key]?.invoke()
+      } else {
+        Box(
+          modifier = Modifier.fillMaxWidth().height(TopBarDefaults.Height)
+            .padding(horizontal = TopBarDefaults.HorizontalPadding),
+          contentAlignment = Alignment.CenterStart,
+        ) {
+          state.customEntries[mode]?.invoke()
         }
       }
     }

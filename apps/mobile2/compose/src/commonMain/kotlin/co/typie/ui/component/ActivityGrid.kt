@@ -56,6 +56,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.ThemeMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -90,11 +91,13 @@ fun ActivityGrid(
     else (CellSize * weeks.size) + (CellGap * max(weeks.size - 1, 0))
   }
   val scope = rememberCoroutineScope()
-  val isDark = AppTheme.colors.isDark
+  val isDark = AppTheme.themeMode == ThemeMode.Dark
   val levelColors = remember(isDark) { activityLevelColors(isDark = isDark) }
   val density = LocalDensity.current
   val haptic = LocalHapticFeedback.current
-  val selectionBorderColor = AppTheme.colors.surfaceDark
+  val tooltipSurface = if (isDark) AppColor.dark.gray.s500 else AppColor.light.gray.s600
+  val tooltipText = AppColor.white
+  val selectionBorderColor = tooltipSurface
   var selectedCell by remember { mutableStateOf<ActivityGridSelection?>(null) }
   var tooltipData by remember { mutableStateOf<ActivityGridSelection?>(null) }
   var tooltipVisible by remember { mutableStateOf(false) }
@@ -461,7 +464,7 @@ fun ActivityGrid(
                     .then(Modifier.clickable { scrollToMonth(span) })
                     .offset(x = (CellSize + CellGap) * span.start),
                   style = AppTheme.typography.micro.copy(fontWeight = FontWeight.W500),
-                  color = AppTheme.colors.textFaint,
+                  color = AppTheme.colors.textTertiary,
                   maxLines = 1,
                 )
               }
@@ -544,7 +547,7 @@ fun ActivityGrid(
                 .align(Alignment.Center)
                 .padding(horizontal = 8.dp)
                 .width(20.dp),
-              tint = AppTheme.colors.textSubtle,
+              tint = AppTheme.colors.textSecondary,
             )
           }
         }
@@ -575,7 +578,7 @@ fun ActivityGrid(
                 .align(Alignment.Center)
                 .padding(horizontal = 8.dp)
                 .width(20.dp),
-              tint = AppTheme.colors.textSubtle,
+              tint = AppTheme.colors.textSecondary,
             )
           }
         }
@@ -597,7 +600,7 @@ fun ActivityGrid(
               modifier = Modifier
                 .alpha(tooltipAlpha)
                 .clip(TooltipShape)
-                .background(AppTheme.colors.surfaceDark)
+                .background(tooltipSurface)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
               Column(
@@ -610,7 +613,7 @@ fun ActivityGrid(
                     lineHeight = 16.sp,
                     fontWeight = FontWeight.W500
                   ),
-                  color = AppTheme.colors.textBright,
+                  color = tooltipText,
                 )
                 Text(
                   text = if (tooltip.activity.additions > 0) {
@@ -623,7 +626,7 @@ fun ActivityGrid(
                     lineHeight = 16.sp,
                     fontWeight = FontWeight.W700
                   ),
-                  color = AppTheme.colors.textBright,
+                  color = tooltipText,
                 )
               }
             }

@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.layout.onSizeChanged
@@ -181,7 +182,8 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
     Box(
       Modifier
         .fillMaxSize()
-        .background(AppTheme.colors.shadowDefault.copy(alpha = scrimAlpha))
+        .alpha(scrimAlpha)
+        .background(AppTheme.colors.scrim)
         .clickable { dismissWithoutResult() },
     )
 
@@ -202,7 +204,7 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
             radius = 8f
           }
           .dropShadow(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius)) {
-            color = colors.shadowDefault
+            color = colors.shadow
             offset = Offset(0f, -4f)
             radius = 12f
           }
@@ -224,7 +226,7 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
           },
         )
         .clip(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius))
-        .background(colors.surfaceElevated)
+        .background(colors.surfaceRaised)
         .navigationBarsPadding()
         .imePadding(),
     ) {

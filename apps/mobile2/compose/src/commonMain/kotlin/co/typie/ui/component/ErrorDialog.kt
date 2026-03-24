@@ -65,7 +65,7 @@ fun ErrorDialog(
         .graphicsLayer(alpha = alpha, scaleX = scale, scaleY = scale)
         .width(280.dp)
         .clip(RoundedCornerShape(16.dp))
-        .background(AppTheme.colors.surfaceElevated),
+        .background(AppTheme.colors.surfaceRaised),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       // Content area
@@ -77,10 +77,14 @@ fun ErrorDialog(
         Box(
           modifier = Modifier
             .size(48.dp)
-            .background(AppTheme.colors.accentDangerSubtle, CircleShape),
+            .background(AppTheme.colors.dangerSubtle, CircleShape),
           contentAlignment = Alignment.Center,
         ) {
-          Icon(Typie.ExclamationSvg, tint = AppTheme.colors.accentDanger)
+          Icon(
+            Typie.ExclamationSvg,
+            modifier = Modifier.size(20.dp),
+            tint = AppTheme.colors.textOnDangerSubtle
+          )
         }
         Spacer(Modifier.height(16.dp))
         Text("문제가 발생했어요", style = AppTheme.typography.title)
@@ -88,7 +92,7 @@ fun ErrorDialog(
         Text(
           "잠시 후 다시 시도해주세요.",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textFaint,
+          color = AppTheme.colors.textTertiary,
         )
       }
 

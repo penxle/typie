@@ -24,7 +24,7 @@ fun SpaceScreen() {
   )
 
   Screen(
-    modifier = Modifier.background(AppTheme.colors.surfaceSubtle),
+    modifier = Modifier.background(AppTheme.colors.surfaceBase),
   ) { _ ->
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
       Text("Space", style = AppTheme.typography.display)

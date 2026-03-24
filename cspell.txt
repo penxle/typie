@@ -108,6 +108,7 @@ nori
 noto
 nsis
 nsutf
+nsurl
 nums
 objc
 observablehq

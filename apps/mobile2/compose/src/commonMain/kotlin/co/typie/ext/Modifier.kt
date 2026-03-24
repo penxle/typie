@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable as foundationClickable
@@ -40,22 +41,23 @@ fun Modifier.clickable(onClick: suspend () -> Unit): Modifier = composed {
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
   var handling by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
-  foundationClickable(
-    interactionSource = interactionSource,
-    indication = null,
-    onClick = {
-      if (!handling) {
-        handling = true
-        scope.launch {
-          try {
-            onClick()
-          } finally {
-            handling = false
+  focusProperties { canFocus = false }
+    .foundationClickable(
+      interactionSource = interactionSource,
+      indication = null,
+      onClick = {
+        if (!handling) {
+          handling = true
+          scope.launch {
+            try {
+              onClick()
+            } finally {
+              handling = false
+            }
           }
         }
-      }
-    },
-  )
+      },
+    )
 }
 
 fun Modifier.pointerIgnore(): Modifier = pointerInput(Unit) {

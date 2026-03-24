@@ -21,7 +21,7 @@ fun Icon(
   contentDescription: String? = null,
   modifier: Modifier = Modifier,
   strokeWidth: Float = 2f,
-  tint: Color = AppTheme.colors.textDefault,
+  tint: Color = AppTheme.colors.textPrimary,
 ) {
   val skeleton = LocalSkeleton.current
   if (skeleton.enabled) {

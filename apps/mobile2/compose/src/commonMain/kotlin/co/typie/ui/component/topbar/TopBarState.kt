@@ -16,6 +16,17 @@ class TopBarState {
   internal val leadingEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
   internal val centerEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
   internal val trailingEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
+  internal val customEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
+  var customKey: Any by mutableStateOf(NullKey)
+
+  fun setCustom(key: Any, content: (@Composable () -> Unit)?) {
+    if (content != null) {
+      customEntries[key] = content
+    } else {
+      customEntries.remove(key)
+    }
+    customKey = if (content != null) key else NullKey
+  }
 
   var leadingKey: Any by mutableStateOf(NullKey)
   var centerKey: Any by mutableStateOf(NullKey)
@@ -52,11 +63,13 @@ class TopBarState {
     leadingEntries.remove(key)
     centerEntries.remove(key)
     trailingEntries.remove(key)
+    customEntries.remove(key)
   }
 
   companion object {
     val DefaultLeadingKey = Any()
     internal val NullKey = Any()
+    internal val NormalModeKey = Any()
   }
 }
 
@@ -73,6 +86,8 @@ fun ProvideTopBar(
   trailingKey: Any = LocalRoute.current,
   scrollOffset: (() -> Int)? = null,
   visible: Boolean = true,
+  custom: (@Composable () -> Unit)? = null,
+  customKey: Any = LocalRoute.current,
 ) {
   val state = LocalTopBarState.current ?: return
   state.enabled = enabled
@@ -82,10 +97,12 @@ fun ProvideTopBar(
     state.setTrailing(if (trailing != null) trailingKey else TopBarState.NullKey, trailing)
     state.scrollOffset = scrollOffset
     state.visible = visible
+    state.setCustom(customKey, custom)
   } else {
     state.setLeading(TopBarState.NullKey, null)
     state.setCenter(TopBarState.NullKey, null)
     state.setTrailing(TopBarState.NullKey, null)
     state.scrollOffset = null
+    state.setCustom(customKey, null)
   }
 }

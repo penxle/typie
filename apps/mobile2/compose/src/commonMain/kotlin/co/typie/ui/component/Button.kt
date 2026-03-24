@@ -30,12 +30,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppColors
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
@@ -51,9 +51,9 @@ private data class ButtonColors(
 )
 
 private fun AppColors.buttonColors(variant: ButtonVariant): ButtonColors = when (variant) {
-  ButtonVariant.Primary -> ButtonColors(background = accentBrand, text = textBright)
-  ButtonVariant.Secondary -> ButtonColors(background = surfaceMuted, text = textDefault)
-  ButtonVariant.Danger -> ButtonColors(background = accentDanger, text = textBright)
+  ButtonVariant.Primary -> ButtonColors(background = brand, text = textOnBrand)
+  ButtonVariant.Secondary -> ButtonColors(background = surfaceSunken, text = textPrimary)
+  ButtonVariant.Danger -> ButtonColors(background = danger, text = textOnDanger)
 }
 
 @Composable
@@ -80,34 +80,41 @@ fun Button(
   val interactive = enabled && !loading
   val alpha by animateFloatAsState(if (enabled) 1f else 0.4f)
 
-  InteractionScope {
-    Box(
-      modifier = modifier.fillMaxWidth().height(48.dp).alpha(alpha)
-        .shadow(2.dp, RoundedCornerShape(16.dp))
-        .background(colors.background, RoundedCornerShape(16.dp))
-        .then(if (interactive) Modifier.clickable(onClick) else Modifier),
-      contentAlignment = Alignment.Center,
-    ) {
-      val spinnerAlpha by animateFloatAsState(if (debouncedLoading) 1f else 0f, tween(150))
-      val spinnerWidth by animateDpAsState(if (debouncedLoading) 24.dp else 0.dp, tween(200))
-
-      Row(
-        modifier = Modifier.pressScale(0.95f),
-        verticalAlignment = Alignment.CenterVertically,
+  Skeleton.Bone(
+    modifier = modifier.fillMaxWidth().height(48.dp),
+    shape = RoundedCornerShape(16.dp),
+  ) {
+    InteractionScope {
+      Box(
+        modifier = modifier
+          .fillMaxWidth()
+          .height(48.dp)
+          .alpha(alpha)
+          .background(colors.background, RoundedCornerShape(16.dp))
+          .then(if (interactive) Modifier.clickable(onClick) else Modifier),
+        contentAlignment = Alignment.Center,
       ) {
-        Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {
-          ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
-        }
-        val displayText = if (debouncedLoading && loadingText != null) loadingText else text
-        AnimatedContent(
-          targetState = displayText,
-          transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
-        ) { label ->
-          Text(
-            text = label,
-            style = AppTheme.typography.action,
-            color = colors.text,
-          )
+        val spinnerAlpha by animateFloatAsState(if (debouncedLoading) 1f else 0f, tween(150))
+        val spinnerWidth by animateDpAsState(if (debouncedLoading) 24.dp else 0.dp, tween(200))
+
+        Row(
+          modifier = Modifier.pressScale(0.95f),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {
+            ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
+          }
+          val displayText = if (debouncedLoading && loadingText != null) loadingText else text
+          AnimatedContent(
+            targetState = displayText,
+            transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
+          ) { label ->
+            Text(
+              text = label,
+              style = AppTheme.typography.action,
+              color = colors.text,
+            )
+          }
         }
       }
     }

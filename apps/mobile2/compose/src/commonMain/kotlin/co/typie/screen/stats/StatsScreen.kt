@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,8 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.datetime.toInstantOrNull
-import co.typie.ext.clickable
+import co.typie.datetime.toLocalDate
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
@@ -37,6 +35,10 @@ import co.typie.graphql.executeMutation
 import co.typie.icons.Lucide
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.platform.Clipboard
+import co.typie.platform.FileSystem
+import co.typie.platform.FileSystemSaveLocation
+import co.typie.platform.FileSystemSaveResult
 import co.typie.ui.component.ActivityGrid
 import co.typie.ui.component.ActivityGridChange
 import co.typie.ui.component.CardDivider
@@ -56,20 +58,19 @@ import co.typie.ui.theme.AppTheme
 import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
-import kotlinx.datetime.toLocalDateTime
-import kotlin.io.encoding.Base64
-import kotlin.math.max
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.io.encoding.Base64
+import kotlin.math.max
 
 @Composable
 fun StatsScreen() {
   val model = koinViewModel<StatsViewModel>()
   val apolloClient = koinInject<ApolloClient>()
   val toast = koinInject<Toast>()
-  val exporter = rememberStatsImageExporter()
+  val clipboard = koinInject<Clipboard>()
+  val fileSystem = koinInject<FileSystem>()
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
 
@@ -85,19 +86,16 @@ fun StatsScreen() {
 
   Screen(
     loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceSubtle,
-    contentPadding = PaddingValues(0.dp),
+    background = AppTheme.colors.surfaceBase,
   ) { contentPadding ->
     val data = model.query.data
     val changes = remember(data.me.characterCountChanges) {
-      data.me.characterCountChanges.mapNotNull { change ->
-        change.date.toString().toStatsLocalDateOrNull()?.let { date ->
-          StatsCharacterCountChange(
-            date = date,
-            additions = change.additions,
-            deletions = change.deletions,
-          )
-        }
+      data.me.characterCountChanges.map { change ->
+        StatsCharacterCountChange(
+          date = change.date.toLocalDate(),
+          additions = change.additions,
+          deletions = change.deletions,
+        )
       }
     }
     val totalCharacterCount = data.me.usage.totalCharacterCount
@@ -125,10 +123,7 @@ fun StatsScreen() {
           return@launch
         }
 
-        val copied = exporter.copyPng(
-          bytes = bytes,
-          suggestedName = "${data.me.name}-나의-글쓰기-발자취.png",
-        )
+        val copied = clipboard.copy(bytes = bytes, mimeType = "image/png")
 
         if (copied) {
           toast.show(ToastType.Success, "이미지가 클립보드에 복사되었어요.")
@@ -147,14 +142,15 @@ fun StatsScreen() {
         }
 
         when (
-          exporter.savePng(
+          fileSystem.save(
             bytes = bytes,
-            suggestedName = "${data.me.name}-나의-글쓰기-발자취.png",
+            name = "${data.me.name}-나의-글쓰기-발자취.png",
+            location = FileSystemSaveLocation.Gallery,
           )
         ) {
-          StatsImageSaveResult.Success -> toast.show(ToastType.Success, "이미지가 기기에 저장되었어요.")
-          StatsImageSaveResult.PermissionDenied -> toast.show(ToastType.Error, "사진 접근 권한이 필요해요.")
-          StatsImageSaveResult.Error -> toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
+          FileSystemSaveResult.Success -> toast.show(ToastType.Success, "이미지가 기기에 저장되었어요.")
+          FileSystemSaveResult.PermissionDenied -> toast.show(ToastType.Error, "사진 접근 권한이 필요해요.")
+          FileSystemSaveResult.Error -> toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
         }
       }
     }
@@ -162,11 +158,10 @@ fun StatsScreen() {
     Column(
       modifier = Modifier
         .fillMaxSize()
-        .background(AppTheme.colors.surfaceSubtle)
+        .background(AppTheme.colors.surfaceBase)
         .verticalScroll(scrollState)
         .padding(contentPadding)
-        .navigationBarsPadding()
-        .padding(horizontal = 20.dp),
+        .navigationBarsPadding(),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text(
@@ -226,7 +221,7 @@ fun StatsScreen() {
               Text(
                 "지난 1년간의 기록",
                 style = AppTheme.typography.caption,
-                color = AppTheme.colors.textSubtle,
+                color = AppTheme.colors.textSecondary,
               )
             }
 
@@ -324,25 +319,29 @@ private fun SummaryCard(
       Text(
         label,
         style = AppTheme.typography.caption,
-        color = AppTheme.colors.textSubtle,
+        color = AppTheme.colors.textSecondary,
       )
+
       Spacer(Modifier.height(8.dp))
+
       Row(
         verticalAlignment = Alignment.Bottom,
       ) {
         Text(
           value,
           style = AppTheme.typography.heading,
-          color = AppTheme.colors.textDefault,
+          color = AppTheme.colors.textPrimary,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
           modifier = Modifier.alignBy(FirstBaseline),
         )
+
         Spacer(Modifier.width(4.dp))
+
         Text(
           unit,
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textFaint,
+          color = AppTheme.colors.textTertiary,
           modifier = Modifier.alignBy(FirstBaseline),
         )
       }
@@ -365,58 +364,69 @@ private fun StreakCard(
       Text(
         "연속 기록",
         style = AppTheme.typography.caption,
-        color = AppTheme.colors.textSubtle,
+        color = AppTheme.colors.textSecondary,
       )
+
       Spacer(Modifier.height(8.dp))
+
       Row(
         verticalAlignment = Alignment.Bottom,
       ) {
         Text(
           streakData.currentStreak.toString(),
           style = AppTheme.typography.display,
-          color = AppTheme.colors.textDefault,
+          color = AppTheme.colors.textPrimary,
           modifier = Modifier.alignBy(FirstBaseline),
         )
+
         Spacer(Modifier.width(4.dp))
+
         Text(
           "일째",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textFaint,
+          color = AppTheme.colors.textTertiary,
           modifier = Modifier.alignBy(FirstBaseline),
         )
       }
       Spacer(Modifier.height(12.dp))
+
       CardDivider(
         inset = 0.dp,
         color = AppTheme.colors.borderSubtle,
       )
+
       Spacer(Modifier.height(12.dp))
+
       Row(
         modifier = Modifier.fillMaxWidth(),
       ) {
         Text(
           "최장 ",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textFaint,
+          color = AppTheme.colors.textTertiary,
           modifier = Modifier.alignBy(FirstBaseline),
         )
+
         Text(
           "${streakData.longestStreak}일",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textSubtle,
+          color = AppTheme.colors.textSecondary,
           modifier = Modifier.alignBy(FirstBaseline),
         )
+
         Spacer(Modifier.width(12.dp))
+
         Text(
           "이번 달 ",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textFaint,
+          color = AppTheme.colors.textTertiary,
           modifier = Modifier.alignBy(FirstBaseline),
         )
+
         Text(
           "${streakData.thisMonthDays}일",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textSubtle,
+          color = AppTheme.colors.textSecondary,
           modifier = Modifier.alignBy(FirstBaseline),
         )
       }
@@ -445,14 +455,16 @@ private fun WeekdayCard(
         Text(
           "요일별 기록",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textSubtle,
+          color = AppTheme.colors.textSecondary,
         )
+
         Spacer(Modifier.weight(1f))
+
         if (bestWeekdayIndex >= 0) {
           Text(
             "${weekdayLabels[bestWeekdayIndex]}요일 최다",
             style = AppTheme.typography.micro,
-            color = AppTheme.colors.textFaint,
+            color = AppTheme.colors.textTertiary,
           )
         }
       }
@@ -477,18 +489,21 @@ private fun WeekdayCard(
             verticalArrangement = Arrangement.Bottom,
           ) {
             Spacer(Modifier.weight(1f))
+
             Box(
               modifier = Modifier
                 .fillMaxWidth()
                 .height(barHeight.dp)
                 .clip(RoundedCornerShape(3.dp))
-                .background(if (isBest) AppTheme.colors.textDefault else AppTheme.colors.borderStrong),
+                .background(if (isBest) AppTheme.colors.textPrimary else AppTheme.colors.borderStrong),
             )
+
             Spacer(Modifier.height(6.dp))
+
             Text(
               day.label,
               style = AppTheme.typography.micro,
-              color = if (isBest) AppTheme.colors.textDefault else AppTheme.colors.textFaint,
+              color = if (isBest) AppTheme.colors.textPrimary else AppTheme.colors.textTertiary,
             )
           }
         }
@@ -511,7 +526,7 @@ private fun StatsActionButton(
     Text(
       label,
       style = AppTheme.typography.action,
-      color = AppTheme.colors.textSubtle,
+      color = AppTheme.colors.textSecondary,
     )
   }
 }
@@ -529,12 +544,13 @@ private fun StatsActionItem(
     Icon(
       icon = icon,
       modifier = Modifier.size(18.dp),
-      tint = AppTheme.colors.textDefault,
+      tint = AppTheme.colors.textPrimary,
     )
+
     Text(
       label,
       style = AppTheme.typography.action,
-      color = AppTheme.colors.textDefault,
+      color = AppTheme.colors.textPrimary,
     )
   }
 }
@@ -555,9 +571,4 @@ internal fun Int.formatGrouped(): String {
 
 internal fun formatFullDate(date: LocalDate): String {
   return "${date.year}년 ${date.month.number}월 ${date.day}일"
-}
-
-internal fun String.toStatsLocalDateOrNull(): LocalDate? {
-  return runCatching { LocalDate.parse(this) }.getOrNull()
-    ?: toInstantOrNull()?.toLocalDateTime(TimeZone.currentSystemDefault())?.date
 }

@@ -1,16 +1,19 @@
-package co.typie.media
+package co.typie.platform
 
 import androidx.compose.runtime.Composable
 
-data class PickedImage(
+data class PlatformFile(
   val bytes: ByteArray,
   val filename: String,
   val mimeType: String?,
 )
 
-val imagePickerDialogTitle = "이미지 선택"
+@Composable
+expect fun rememberFilePicker(
+  onResult: (PlatformFile?) -> Unit,
+): (mimeType: String) -> Unit
 
-fun pickedImageFilename(
+internal fun pickedFilename(
   originalFilename: String?,
   mimeType: String?,
 ): String {
@@ -25,11 +28,6 @@ fun pickedImageFilename(
     "image/webp" -> "image.webp"
     "image/heic" -> "image.heic"
     "image/heif" -> "image.heif"
-    else -> "image"
+    else -> "file"
   }
 }
-
-@Composable
-expect fun rememberImagePicker(
-  onResult: (PickedImage?) -> Unit,
-): () -> Unit

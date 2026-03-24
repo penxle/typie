@@ -16,8 +16,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -143,8 +143,6 @@ fun PopoverScope.PopoverList(
     }
   }
 
-  val colors = AppTheme.colors
-
   Box(
     modifier = Modifier
       .onGloballyPositioned { coordinates ->
@@ -158,7 +156,7 @@ fun PopoverScope.PopoverList(
           .offset { IntOffset(indicatorX.value.toInt(), indicatorY.value.toInt()) }
           .width(indicatorW.value.toDp(density))
           .height(indicatorH.value.toDp(density))
-          .background(colors.surfaceMuted, SquircleShape(itemRadius)),
+          .background(AppTheme.colors.surfaceTinted, SquircleShape(itemRadius)),
       )
     }
 

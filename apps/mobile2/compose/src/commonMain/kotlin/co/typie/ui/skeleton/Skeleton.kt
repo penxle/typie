@@ -23,9 +23,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
-import co.typie.ext.pointerIgnore
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.unit.dp
+import co.typie.ext.pointerIgnore
 import co.typie.ui.theme.AppTheme
 
 data class SkeletonColors(
@@ -82,8 +82,8 @@ class SkeletonUniteGroup {
 object SkeletonDefaults {
   @Composable
   fun colors(
-    bone: Color = AppTheme.colors.surfaceSubtle,
-    highlight: Color = AppTheme.colors.surfaceMuted,
+    bone: Color = AppTheme.colors.skeletonBone,
+    highlight: Color = AppTheme.colors.skeletonHighlight,
   ): SkeletonColors = SkeletonColors(bone = bone, highlight = highlight)
 }
 

@@ -41,7 +41,7 @@ fun TopBarButton(
       Icon(
         icon = icon,
         modifier = Modifier.size(TopBarDefaults.ButtonIconSize).pressScale(0.92f),
-        tint = AppTheme.colors.textDefault,
+        tint = AppTheme.colors.textPrimary,
       )
     }
   }

@@ -7,8 +7,8 @@ import androidx.compose.runtime.snapshotFlow
 import co.touchlab.kermit.Logger
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Query
-import com.apollographql.apollo.cache.normalized.watch
 import com.apollographql.apollo.exception.CacheMissException
+import com.apollographql.cache.normalized.watch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -21,6 +21,8 @@ class WatchQuery<D : Query.Data, out R> private constructor(
   private val query: () -> Query<D>,
   private val placeholderData: D?,
   private val onInitialData: ((D) -> Unit)?,
+  private val skip: () -> Boolean = { false },
+  private val resetOnChange: Boolean = true,
 ) {
   var state: QueryState<D> by mutableStateOf(QueryState.Loading)
     private set
@@ -35,7 +37,10 @@ class WatchQuery<D : Query.Data, out R> private constructor(
       apolloClient: ApolloClient,
       query: () -> Query<D>,
       onInitialData: ((D) -> Unit)? = null,
-    ): WatchQuery<D, D?> = WatchQuery(scope, apolloClient, query, null, onInitialData)
+      skip: () -> Boolean = { false },
+      resetOnChange: Boolean = true,
+    ): WatchQuery<D, D?> =
+      WatchQuery(scope, apolloClient, query, null, onInitialData, skip, resetOnChange)
 
     operator fun <D : Query.Data> invoke(
       scope: CoroutineScope,
@@ -43,7 +48,10 @@ class WatchQuery<D : Query.Data, out R> private constructor(
       query: () -> Query<D>,
       placeholderData: D,
       onInitialData: ((D) -> Unit)? = null,
-    ): WatchQuery<D, D> = WatchQuery(scope, apolloClient, query, placeholderData, onInitialData)
+      skip: () -> Boolean = { false },
+      resetOnChange: Boolean = true,
+    ): WatchQuery<D, D> =
+      WatchQuery(scope, apolloClient, query, placeholderData, onInitialData, skip, resetOnChange)
   }
 
   private var job: Job? = null
@@ -51,9 +59,15 @@ class WatchQuery<D : Query.Data, out R> private constructor(
 
   init {
     scope.launch {
-      snapshotFlow { query() }
+      snapshotFlow { skip() to query() }
         .distinctUntilChanged()
-        .collect { query -> execute(query, resetState = true) }
+        .collect { (shouldSkip, query) ->
+          if (shouldSkip) {
+            job?.cancel()
+          } else {
+            execute(query, resetState = resetOnChange)
+          }
+        }
     }
   }
 

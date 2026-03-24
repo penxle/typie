@@ -8,14 +8,22 @@ import co.typie.shell.RootShell
 import co.typie.ui.theme.AppTheme
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import coil3.network.ktor3.KtorNetworkFetcherFactory
+import coil3.request.crossfade
 import com.hashsequence.coilresvg.ResvgDecoder
+import io.ktor.client.HttpClient
+import org.koin.compose.koinInject
 
 @Composable
 @Preview
 fun App() {
+  val httpClient = koinInject<HttpClient>()
+
   setSingletonImageLoaderFactory { context ->
     ImageLoader.Builder(context)
+      .crossfade(true)
       .components {
+        add(KtorNetworkFetcherFactory(httpClient))
         add(ResvgDecoder.Factory())
       }
       .build()

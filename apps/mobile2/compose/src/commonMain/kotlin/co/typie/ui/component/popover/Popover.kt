@@ -4,19 +4,19 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,23 +43,23 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
-import co.typie.ext.EdgeAutoScrollState
-import co.typie.ext.edgeAutoScroll
-import co.typie.ext.LocalScrollGestureLockState
-import co.typie.ext.safeDrawing
 import androidx.compose.ui.window.Popup
+import co.typie.ext.EdgeAutoScrollState
+import co.typie.ext.LocalScrollGestureLockState
+import co.typie.ext.edgeAutoScroll
 import co.typie.ext.overscroll
 import co.typie.ext.rememberEdgeAutoScrollState
+import co.typie.ext.safeDrawing
 import co.typie.ext.toDp
 import co.typie.ext.toPx
 import co.typie.ext.verticalScroll
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.shape.SquircleShape
 import co.typie.ui.theme.AppTheme
-import kotlin.time.TimeSource
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.time.TimeSource
 
 data class PopoverPaneTransition(
   val progress: Float,
@@ -273,8 +273,10 @@ private fun PopoverPanePopup(
       ShrinkWrappedPane(content = pane)
     }.map { it.measure(paneConstraints) }
 
-    val initiallyMeasuredWidth = initialPanePlaceables.maxOfOrNull { it.width } ?: anchorBounds.width
-    val initiallyMeasuredHeight = initialPanePlaceables.maxOfOrNull { it.height } ?: anchorBounds.height
+    val initiallyMeasuredWidth =
+      initialPanePlaceables.maxOfOrNull { it.width } ?: anchorBounds.width
+    val initiallyMeasuredHeight =
+      initialPanePlaceables.maxOfOrNull { it.height } ?: anchorBounds.height
     val showBelow = shouldShowBelow(
       position = position,
       childHeight = initiallyMeasuredHeight,
@@ -355,9 +357,10 @@ private fun PopoverPaneSurface(
   collapsedCornerRadius: Dp,
 ) {
   val density = LocalDensity.current
-  val colors = AppTheme.colors
-  val animatedWidth = sizeForProgress(anchorSize.width.toFloat(), paneSize.width.toFloat(), progress)
-  val animatedHeight = sizeForProgress(anchorSize.height.toFloat(), paneSize.height.toFloat(), progress)
+  val animatedWidth =
+    sizeForProgress(anchorSize.width.toFloat(), paneSize.width.toFloat(), progress)
+  val animatedHeight =
+    sizeForProgress(anchorSize.height.toFloat(), paneSize.height.toFloat(), progress)
   val animatedSurfaceSize = IntSize(
     width = max(1, animatedWidth.roundToInt()),
     height = max(1, animatedHeight.roundToInt()),
@@ -388,7 +391,7 @@ private fun PopoverPaneSurface(
         )
         .shadow(shadowElevation, shape)
         .clip(shape)
-        .background(colors.surfaceElevated, shape),
+        .background(AppTheme.colors.surfaceRaised, shape),
     ) {
       PopoverCropLayout(
         pane = {
@@ -427,7 +430,8 @@ private fun PopoverCropLayout(
     modifier = Modifier.fillMaxSize(),
   ) { measurables, constraints ->
     val panePlaceable = measurables[0].measure(Constraints.fixed(paneSize.width, paneSize.height))
-    val anchorPlaceable = measurables[1].measure(Constraints.fixed(anchorSize.width, anchorSize.height))
+    val anchorPlaceable =
+      measurables[1].measure(Constraints.fixed(anchorSize.width, anchorSize.height))
 
     layout(constraints.maxWidth, constraints.maxHeight) {
       panePlaceable.place(paneOffset.x, paneOffset.y)

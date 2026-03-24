@@ -1,0 +1,58 @@
+query SpaceSettingsScreen_Query($siteId: ID!) {
+  me @catch(to: THROW) {
+    id
+
+    subscription {
+      id
+    }
+
+    sites {
+      id
+    }
+  }
+
+  site(siteId: $siteId) @catch(to: THROW) {
+    id
+    name
+    slug
+    documentCount
+    folderCount
+
+    logo {
+      id
+      ...Img_image
+    }
+  }
+}
+
+mutation SpaceSettingsScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
+  updateSite(input: $input) {
+    id
+    name
+
+    logo {
+      id
+      ...Img_image
+    }
+  }
+}
+
+mutation SpaceSettingsScreen_UpdateSiteSlug_Mutation($input: UpdateSiteSlugInput!) {
+  updateSiteSlug(input: $input) {
+    id
+    slug
+  }
+}
+
+mutation SpaceSettingsScreen_DeleteSite_Mutation($input: DeleteSiteInput!) {
+  deleteSite(input: $input) {
+    id
+  }
+}
+
+mutation SpaceSettingsScreen_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+  persistBlobAsImage(input: $input) {
+    id
+    ...Img_image
+  }
+}

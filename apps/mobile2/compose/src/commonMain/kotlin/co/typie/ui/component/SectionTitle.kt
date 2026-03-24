@@ -13,6 +13,6 @@ fun SectionTitle(
     text = text,
     modifier = modifier,
     style = AppTheme.typography.title,
-    color = AppTheme.colors.textFaint,
+    color = AppTheme.colors.textTertiary,
   )
 }

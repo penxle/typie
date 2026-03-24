@@ -48,7 +48,7 @@ fun DetailScreen(id: String) {
       Text("Detail: $id", style = AppTheme.typography.body)
       Text(
         "Go to next detail",
-        color = AppTheme.colors.accentInfo,
+        color = AppTheme.colors.brand,
         style = AppTheme.typography.body,
         modifier = Modifier.clickable {
           nav.navigate(Route.Detail(id + 1))

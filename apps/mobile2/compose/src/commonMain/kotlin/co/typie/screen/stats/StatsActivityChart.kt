@@ -60,7 +60,9 @@ import co.typie.ui.component.TooltipGestureAction
 import co.typie.ui.component.TooltipGesturePhase
 import co.typie.ui.component.resolveTooltipGestureAction
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.ThemeMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -96,6 +98,13 @@ fun StatsActivityChart(
   val haptic = LocalHapticFeedback.current
   val textMeasurer = rememberTextMeasurer()
   val colors = AppTheme.colors
+  val isDark = when (AppTheme.themeMode) {
+    ThemeMode.System -> androidx.compose.foundation.isSystemInDarkTheme()
+    ThemeMode.Light -> false
+    ThemeMode.Dark -> true
+  }
+  val tooltipSurface = if (isDark) AppColor.dark.gray.s500 else AppColor.light.gray.s600
+  val tooltipText = AppColor.white
 
   LaunchedEffect(daysData.size) {
     selectedIndex = null
@@ -111,7 +120,7 @@ fun StatsActivityChart(
     Text(
       "지난 3개월간의 기록",
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textSubtle,
+      color = AppTheme.colors.textSecondary,
       modifier = Modifier.padding(horizontal = horizontalPadding.dp),
     )
 
@@ -527,10 +536,10 @@ fun StatsActivityChart(
                 modifier = Modifier.fillMaxSize(),
               ) {
                 val gridLineColor = colors.borderSubtle.copy(alpha = 0.7f)
-                val additionColor = colors.accentSuccess
-                val deletionColor = colors.surfaceDark
+                val additionColor = colors.success
+                val deletionColor = tooltipSurface
                 val zeroBarColor = colors.borderStrong
-                val selectionColor = colors.surfaceDark
+                val selectionColor = tooltipSurface
 
                 for (lineIndex in 1..5) {
                   val y = chartHeightPx - (lineIndex * (chartHeightPx / 5f))
@@ -609,7 +618,7 @@ fun StatsActivityChart(
                 Text(
                   label.text,
                   style = AppTheme.typography.caption,
-                  color = colors.textFaint,
+                  color = colors.textTertiary,
                   modifier = Modifier.offset { IntOffset(label.left.roundToInt(), 0) },
                 )
               }
@@ -631,7 +640,7 @@ fun StatsActivityChart(
               Box(
                 modifier = Modifier
                   .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                  .background(AppTheme.colors.surfaceDark)
+                  .background(tooltipSurface)
                   .padding(horizontal = 12.dp, vertical = 8.dp),
               ) {
                 Column(
@@ -640,27 +649,27 @@ fun StatsActivityChart(
                   Text(
                     formatFullDate(selectedDay.date),
                     style = AppTheme.typography.caption,
-                    color = colors.textBright,
+                    color = tooltipText,
                   )
                   if (selectedDay.additions > 0) {
                     Text(
                       "입력: ${selectedDay.additions.formatGrouped()}자",
                       style = AppTheme.typography.micro,
-                      color = colors.textBright,
+                      color = tooltipText,
                     )
                   }
                   if (selectedDay.deletions > 0) {
                     Text(
                       "지움: ${selectedDay.deletions.formatGrouped()}자",
                       style = AppTheme.typography.micro,
-                      color = colors.textBright,
+                      color = tooltipText,
                     )
                   }
                   if (selectedDay.total == 0) {
                     Text(
                       "기록이 없어요",
                       style = AppTheme.typography.micro,
-                      color = colors.textBright,
+                      color = tooltipText,
                     )
                   }
                 }
@@ -692,8 +701,8 @@ fun StatsActivityChart(
               .background(
                 Brush.horizontalGradient(
                   colors = listOf(
-                    colors.surfaceSubtle.copy(alpha = 0.88f),
-                    colors.surfaceSubtle.copy(alpha = 0f),
+                    colors.surfaceBase.copy(alpha = 0.88f),
+                    colors.surfaceBase.copy(alpha = 0f),
                   ),
                 ),
               )
@@ -706,7 +715,7 @@ fun StatsActivityChart(
           ) {
             Icon(
               icon = Lucide.ChevronLeft,
-              tint = colors.textSubtle,
+              tint = colors.textSecondary,
             )
           }
         }
@@ -720,8 +729,8 @@ fun StatsActivityChart(
               .background(
                 Brush.horizontalGradient(
                   colors = listOf(
-                    colors.surfaceSubtle.copy(alpha = 0f),
-                    colors.surfaceSubtle.copy(alpha = 0.88f),
+                    colors.surfaceBase.copy(alpha = 0f),
+                    colors.surfaceBase.copy(alpha = 0.88f),
                   ),
                 ),
               )
@@ -734,7 +743,7 @@ fun StatsActivityChart(
           ) {
             Icon(
               icon = Lucide.ChevronRight,
-              tint = colors.textSubtle,
+              tint = colors.textSecondary,
             )
           }
         }
@@ -751,14 +760,14 @@ fun StatsActivityChart(
     ) {
       ChartLegendToggle(
         label = "입력한 글자",
-        color = AppTheme.colors.accentSuccess,
+        color = AppTheme.colors.success,
         selected = showAdditions,
         onClick = { showAdditions = !showAdditions },
       )
       Spacer(Modifier.width(16.dp))
       ChartLegendToggle(
         label = "지운 글자",
-        color = AppTheme.colors.surfaceDark,
+        color = tooltipSurface,
         selected = showDeletions,
         onClick = { showDeletions = !showDeletions },
       )
@@ -788,7 +797,7 @@ private fun ChartLegendToggle(
     Text(
       label,
       style = AppTheme.typography.caption,
-      color = if (selected) AppTheme.colors.textSubtle else AppTheme.colors.textFaint,
+      color = if (selected) AppTheme.colors.textSecondary else AppTheme.colors.textTertiary,
     )
   }
 }

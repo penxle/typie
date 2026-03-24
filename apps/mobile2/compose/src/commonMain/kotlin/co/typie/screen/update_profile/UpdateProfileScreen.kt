@@ -26,8 +26,8 @@ import co.typie.ext.pressScale
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
-import co.typie.media.rememberImagePicker
 import co.typie.navigation.Nav
+import co.typie.platform.rememberFilePicker
 import co.typie.ui.component.Button
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Img
@@ -47,11 +47,11 @@ fun UpdateProfileScreen() {
   val model = koinViewModel<UpdateProfileViewModel>()
   val scope = rememberCoroutineScope()
 
-  val imagePicker = rememberImagePicker { image ->
-    if (image == null) return@rememberImagePicker
+  val filePicker = rememberFilePicker { file ->
+    if (file == null) return@rememberFilePicker
 
     scope.launch {
-      val avatarId = model.uploadAvatar(image) ?: return@launch
+      val avatarId = model.uploadAvatar(file) ?: return@launch
       model.state.form.avatarId.setValue(avatarId)
     }
   }
@@ -82,13 +82,13 @@ fun UpdateProfileScreen() {
         ProfileAvatar(
           image = model.query.data.me.avatar.img_image,
           previewUrl = model.state.avatarPreviewUrl,
-          onClick = imagePicker,
+          onClick = { filePicker("image/*") },
         )
 
         Text(
           "프로필 사진",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textFaint,
+          color = AppTheme.colors.textTertiary,
         )
       }
 
@@ -152,14 +152,14 @@ private fun ProfileAvatar(
           .align(Alignment.BottomEnd)
           .size(36.dp)
           .clip(CircleShape)
-          .background(AppTheme.colors.surfaceElevated)
+          .background(AppTheme.colors.surfaceRaised)
           .border(1.dp, AppTheme.colors.borderDefault, CircleShape),
         contentAlignment = Alignment.Center,
       ) {
         Icon(
           icon = Lucide.Camera,
           modifier = Modifier.size(18.dp),
-          tint = AppTheme.colors.textSubtle,
+          tint = AppTheme.colors.textSecondary,
         )
       }
     }

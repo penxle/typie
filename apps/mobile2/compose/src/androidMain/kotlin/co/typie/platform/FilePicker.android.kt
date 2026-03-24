@@ -1,4 +1,4 @@
-package co.typie.media
+package co.typie.platform
 
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -9,9 +9,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
-actual fun rememberImagePicker(
-  onResult: (PickedImage?) -> Unit,
-): () -> Unit {
+actual fun rememberFilePicker(
+  onResult: (PlatformFile?) -> Unit,
+): (mimeType: String) -> Unit {
   val context = LocalContext.current
   val currentOnResult = rememberUpdatedState(onResult)
   val launcher = rememberLauncherForActivityResult(
@@ -40,15 +40,15 @@ actual fun rememberImagePicker(
     }
 
     currentOnResult.value(
-      PickedImage(
+      PlatformFile(
         bytes = bytes,
-        filename = pickedImageFilename(filename, mimeType),
+        filename = pickedFilename(filename, mimeType),
         mimeType = mimeType,
       ),
     )
   }
 
   return remember(launcher) {
-    { launcher.launch("image/*") }
+    { mimeType: String -> launcher.launch(mimeType) }
   }
 }

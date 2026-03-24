@@ -49,7 +49,7 @@ fun NavigationScaffold(
           .fillMaxWidth()
           .align(Alignment.TopStart)
           .hazeEffect(hazeState) {
-            backgroundColor = colors.surfaceSubtle
+            backgroundColor = colors.surfaceDefault
             blurRadius = TopBarDefaults.BlurRadius * topBarState.blurFactor * enabledFactor
             progressive = TopBarDefaults.hazeProgressive()
           },

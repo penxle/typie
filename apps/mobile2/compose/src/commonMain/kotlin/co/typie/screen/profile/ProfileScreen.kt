@@ -82,7 +82,7 @@ fun ProfileScreen() {
 
   Screen(
     loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceSubtle,
+    background = AppTheme.colors.surfaceBase,
   ) { contentPadding ->
     val data = model.query.data
 
@@ -139,7 +139,7 @@ fun ProfileScreen() {
             Text(
               data.me.email,
               style = AppTheme.typography.action,
-              color = AppTheme.colors.textFaint,
+              color = AppTheme.colors.textTertiary,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
@@ -149,7 +149,7 @@ fun ProfileScreen() {
             Icon(
               icon = Lucide.ChevronRight,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textFaint,
+              tint = AppTheme.colors.textTertiary,
             )
           }
         }
@@ -171,7 +171,7 @@ fun ProfileScreen() {
             Text(
               "지난 1년 동안의 기록이에요",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textFaint,
+              color = AppTheme.colors.textTertiary,
             )
           }
 
@@ -201,7 +201,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.BarChart3,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSubtle,
+                tint = AppTheme.colors.textSecondary,
               )
 
               Text(
@@ -216,7 +216,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.ChevronRight,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textFaint,
+                tint = AppTheme.colors.textTertiary,
               )
             }
           }
@@ -236,7 +236,7 @@ fun ProfileScreen() {
                 modifier = Modifier
                   .size(18.dp)
                   .align(Alignment.Top),
-                tint = AppTheme.colors.textSubtle,
+                tint = AppTheme.colors.textSecondary,
               )
 
               Column(
@@ -251,7 +251,7 @@ fun ProfileScreen() {
                 Text(
                   subscriptionName,
                   style = AppTheme.typography.caption,
-                  color = AppTheme.colors.textFaint,
+                  color = AppTheme.colors.textTertiary,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
                 )
@@ -267,13 +267,13 @@ fun ProfileScreen() {
                 Text(
                   subscriptionActionLabel,
                   style = AppTheme.typography.caption,
-                  color = AppTheme.colors.textFaint,
+                  color = AppTheme.colors.textTertiary,
                 )
 
                 Icon(
                   icon = Lucide.ChevronRight,
                   modifier = Modifier.size(14.dp),
-                  tint = AppTheme.colors.textFaint,
+                  tint = AppTheme.colors.textTertiary,
                 )
               }
             }
@@ -288,7 +288,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.Gift,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSubtle,
+                tint = AppTheme.colors.textSecondary,
               )
 
               Text(
@@ -303,7 +303,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.ChevronRight,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textFaint,
+                tint = AppTheme.colors.textTertiary,
               )
             }
           }
@@ -320,7 +320,7 @@ fun ProfileScreen() {
             Icon(
               icon = Lucide.Settings,
               modifier = Modifier.size(20.dp),
-              tint = AppTheme.colors.textSubtle,
+              tint = AppTheme.colors.textSecondary,
             )
 
             Text(
@@ -335,7 +335,7 @@ fun ProfileScreen() {
             Icon(
               icon = Lucide.ChevronRight,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textFaint,
+              tint = AppTheme.colors.textTertiary,
             )
           }
         }
@@ -364,13 +364,13 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.Headphones,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSubtle,
+                tint = AppTheme.colors.textSecondary,
               )
 
               Icon(
                 icon = Lucide.ExternalLink,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textFaint,
+                tint = AppTheme.colors.textTertiary,
               )
             }
           }
@@ -394,7 +394,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.MessageSquare,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSubtle,
+                tint = AppTheme.colors.textSecondary,
               )
 
               Spacer(Modifier.size(16.dp))
@@ -420,7 +420,7 @@ fun ProfileScreen() {
                 Img(
                   url = Res.getUri("files/brands/discord.svg"),
                   modifier = Modifier.size(20.dp),
-                  color = AppTheme.colors.textSubtle,
+                  color = AppTheme.colors.textSecondary,
                 )
 
                 Text(
@@ -435,7 +435,7 @@ fun ProfileScreen() {
                 Icon(
                   icon = Lucide.ExternalLink,
                   modifier = Modifier.size(16.dp),
-                  tint = AppTheme.colors.textFaint,
+                  tint = AppTheme.colors.textTertiary,
                 )
               }
             }
@@ -450,7 +450,7 @@ fun ProfileScreen() {
               Img(
                 url = Res.getUri("files/brands/x.svg"),
                 modifier = Modifier.size(18.dp),
-                color = AppTheme.colors.textSubtle,
+                color = AppTheme.colors.textSecondary,
               )
 
               Text(
@@ -465,7 +465,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.ExternalLink,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textFaint,
+                tint = AppTheme.colors.textTertiary,
               )
             }
           }
@@ -479,7 +479,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.Newspaper,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSubtle,
+                tint = AppTheme.colors.textSecondary,
               )
 
               Text(
@@ -494,7 +494,7 @@ fun ProfileScreen() {
               Icon(
                 icon = Lucide.ExternalLink,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textFaint,
+                tint = AppTheme.colors.textTertiary,
               )
             }
           }
@@ -515,7 +515,7 @@ fun ProfileScreen() {
             Text(
               text = mode.name,
               style = AppTheme.typography.action,
-              color = if (isSelected) AppTheme.colors.accentBrand else AppTheme.colors.textMuted,
+              color = if (isSelected) AppTheme.colors.brand else AppTheme.colors.textTertiary,
               modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -530,7 +530,7 @@ fun ProfileScreen() {
         Text(
           "로그아웃",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.accentDanger,
+          color = AppTheme.colors.danger,
           modifier = Modifier.clickable { authService.logout() },
         )
       }

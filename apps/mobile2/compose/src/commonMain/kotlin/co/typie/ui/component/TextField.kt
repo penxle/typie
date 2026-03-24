@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -58,6 +59,7 @@ import co.typie.ui.theme.AppTheme
 enum class LabelPosition {
   External,
   Internal,
+  None,
 }
 
 @Composable
@@ -79,6 +81,7 @@ fun TextField(
   imeAction: ImeAction? = null,
   onImeAction: (() -> Unit)? = null,
   leadingIcon: @Composable (() -> Unit)? = null,
+  suffix: @Composable (() -> Unit)? = null,
 ) {
   val shape = RoundedCornerShape(12.dp)
   var isFocused by remember { mutableStateOf(false) }
@@ -99,17 +102,17 @@ fun TextField(
 
   val containerColor by animateColorAsState(
     when {
-      !enabled -> AppTheme.colors.surfaceMuted
+      !enabled -> AppTheme.colors.surfaceBase
       isFocused -> AppTheme.colors.surfaceDefault
-      else -> AppTheme.colors.surfaceSubtle
+      else -> AppTheme.colors.surfaceSunken
     },
     colorSpec,
   )
 
   val borderColor by animateColorAsState(
     when {
-      hasError -> AppTheme.colors.accentDangerSubtle
-      isFocused -> AppTheme.colors.borderInverse
+      hasError -> AppTheme.colors.dangerSubtle
+      isFocused -> AppTheme.colors.borderStrong
       else -> AppTheme.colors.borderSubtle
     },
     colorSpec,
@@ -126,10 +129,10 @@ fun TextField(
 
   val labelColor by animateColorAsState(
     when {
-      hasError -> AppTheme.colors.accentDanger
-      isInternal -> AppTheme.colors.textFaint
-      isFocused -> AppTheme.colors.textDefault
-      else -> AppTheme.colors.textSubtle
+      hasError -> AppTheme.colors.danger
+      isInternal -> AppTheme.colors.textTertiary
+      isFocused -> AppTheme.colors.textPrimary
+      else -> AppTheme.colors.textSecondary
     },
     colorSpec,
   )
@@ -143,11 +146,11 @@ fun TextField(
   )
 
   Column(modifier = modifier) {
-    if (!isInternal) {
+    if (!isInternal && labelPosition != LabelPosition.None) {
       Text(
         label,
         style = AppTheme.typography.caption,
-        color = AppTheme.colors.textSubtle,
+        color = AppTheme.colors.textSecondary,
       )
 
       Spacer(Modifier.height(8.dp))
@@ -176,9 +179,9 @@ fun TextField(
           }
         },
       textStyle = AppTheme.typography.body.copy(
-        color = if (enabled) AppTheme.colors.textDefault else AppTheme.colors.textDisabled,
+        color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted,
       ),
-      cursorBrush = SolidColor(AppTheme.colors.textDefault),
+      cursorBrush = SolidColor(AppTheme.colors.textPrimary),
       keyboardOptions = KeyboardOptions(
         keyboardType = keyboardType,
         imeAction = resolvedImeAction,
@@ -198,13 +201,16 @@ fun TextField(
             .background(containerColor, shape)
             .padding(horizontal = horizontalPadding),
         ) {
+          val hasSuffix = suffix != null
+          val showStatusIcon = hasError || success
+
           Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
               .fillMaxWidth()
               .align(if (isInternal) Alignment.BottomCenter else Alignment.Center)
               .then(if (isInternal) Modifier.padding(bottom = verticalPadding) else Modifier)
-              .then(if (hasError || success) Modifier.padding(end = 28.dp) else Modifier),
+              .then(if (showStatusIcon && !hasSuffix) Modifier.padding(end = 28.dp) else Modifier),
           ) {
             if (leadingIcon != null) {
               leadingIcon()
@@ -217,7 +223,7 @@ fun TextField(
                 Text(
                   label,
                   style = if (labelActive) AppTheme.typography.action else AppTheme.typography.body,
-                  color = if (labelActive) labelColor else AppTheme.colors.textDisabled,
+                  color = if (labelActive) labelColor else AppTheme.colors.textMuted,
                   modifier = Modifier.graphicsLayer {
                     val fieldHeightPx = fieldHeight.toPx()
                     val paddingPx = verticalPadding.toPx()
@@ -244,27 +250,87 @@ fun TextField(
                 Text(
                   placeholder,
                   style = AppTheme.typography.body,
-                  color = AppTheme.colors.textDisabled,
+                  color = AppTheme.colors.textMuted,
                   modifier = Modifier.alpha(placeholderAlpha),
                 )
               }
               innerTextField()
             }
 
+            if (suffix != null) {
+              val suffixVisible = !isInternal || value.isNotEmpty() || isFocused
+              val suffixAlpha by animateFloatAsState(
+                if (suffixVisible) 1f else 0f,
+                tween(150),
+              )
+
+              if (suffixAlpha > 0f) {
+                Spacer(Modifier.width(4.dp))
+                Box(Modifier.alpha(suffixAlpha)) {
+                  suffix()
+                }
+              }
+            }
+
+            // External label + suffix: icon inline after suffix
+            if (!isInternal && hasSuffix && showStatusIcon) {
+              Spacer(Modifier.width(8.dp))
+              if (hasError) {
+                Icon(
+                  icon = Lucide.CircleAlert,
+                  modifier = Modifier.size(18.dp),
+                  tint = AppTheme.colors.dangerSubtle,
+                  contentDescription = "오류",
+                )
+              } else {
+                Icon(
+                  icon = Lucide.Check,
+                  modifier = Modifier.size(18.dp),
+                  tint = AppTheme.colors.success,
+                  strokeWidth = 2.5f,
+                  contentDescription = "확인됨",
+                )
+              }
+            }
           }
 
-          if (hasError) {
+          // No suffix: original absolute positioning
+          if (!hasSuffix && hasError) {
             Icon(
               icon = Lucide.CircleAlert,
               modifier = Modifier.size(18.dp).align(Alignment.CenterEnd),
-              tint = AppTheme.colors.accentDangerSubtle,
+              tint = AppTheme.colors.dangerSubtle,
               contentDescription = "오류",
             )
-          } else if (success) {
+          } else if (!hasSuffix && success) {
             Icon(
               icon = Lucide.Check,
               modifier = Modifier.size(18.dp).align(Alignment.CenterEnd),
-              tint = AppTheme.colors.accentSuccess,
+              tint = AppTheme.colors.success,
+              strokeWidth = 2.5f,
+              contentDescription = "확인됨",
+            )
+          }
+
+          // Internal label + suffix: icon at top-end (above suffix)
+          if (isInternal && hasSuffix && hasError) {
+            Icon(
+              icon = Lucide.CircleAlert,
+              modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = labelTopPadding)
+                .size(18.dp),
+              tint = AppTheme.colors.dangerSubtle,
+              contentDescription = "오류",
+            )
+          } else if (isInternal && hasSuffix && success) {
+            Icon(
+              icon = Lucide.Check,
+              modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = labelTopPadding)
+                .size(18.dp),
+              tint = AppTheme.colors.success,
               strokeWidth = 2.5f,
               contentDescription = "확인됨",
             )
@@ -276,7 +342,7 @@ fun TextField(
     Spacer(Modifier.height(4.dp))
 
     val helpColor by animateColorAsState(
-      if (hasError) AppTheme.colors.accentDangerSubtle else AppTheme.colors.textMuted,
+      if (hasError) AppTheme.colors.dangerSubtle else AppTheme.colors.textTertiary,
       colorSpec,
     )
 
@@ -307,6 +373,7 @@ fun TextField(
   imeAction: ImeAction? = null,
   onImeAction: (() -> Unit)? = null,
   leadingIcon: @Composable (() -> Unit)? = null,
+  suffix: @Composable (() -> Unit)? = null,
 ) {
   val form = field.form
   val isSkeleton = LocalSkeleton.current.enabled
@@ -350,5 +417,6 @@ fun TextField(
     imeAction = resolvedImeAction,
     onImeAction = resolvedOnImeAction,
     leadingIcon = leadingIcon,
+    suffix = suffix,
   )
 }

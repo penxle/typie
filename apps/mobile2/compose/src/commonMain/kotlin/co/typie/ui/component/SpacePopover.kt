@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +26,8 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.SpacePopover_Query
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
+import co.typie.route.Route
 import co.typie.service.SiteService
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
@@ -36,10 +39,12 @@ import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
+import co.typie.ui.icon.IconData
 import co.typie.ui.shape.SquircleShape
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
@@ -115,6 +120,8 @@ private fun PopoverScope.SpacePopoverPane(
   currentSite: SpacePopover_Query.Site,
   otherSites: List<SpacePopover_Query.Site>,
 ) {
+  val nav = Nav.current
+  val scope = rememberCoroutineScope()
   val siteService = koinInject<SiteService>()
   val panePadding = PopoverDefaults.PanePadding
 
@@ -129,7 +136,10 @@ private fun PopoverScope.SpacePopoverPane(
       items = listOf(
         PopoverListItem(
           content = { SpacePopoverItem(icon = Lucide.Settings, label = "스페이스 설정") },
-          onSelected = { close() },
+          onSelected = {
+            close()
+            scope.launch { nav.navigate(Route.SpaceSettings) }
+          },
         ),
         PopoverListItem(
           content = { SpacePopoverItem(icon = Lucide.Trash2, label = "휴지통") },
@@ -142,7 +152,7 @@ private fun PopoverScope.SpacePopoverPane(
 
     Box(
       Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 8.dp)
-        .background(AppTheme.colors.borderElevated),
+        .background(AppTheme.colors.borderSubtle),
     )
 
     Spacer(Modifier.height(12.dp))
@@ -150,7 +160,7 @@ private fun PopoverScope.SpacePopoverPane(
     Text(
       "다른 스페이스",
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textFaint,
+      color = AppTheme.colors.textTertiary,
       modifier = Modifier.padding(horizontal = 8.dp),
     )
 
@@ -195,7 +205,7 @@ private fun SpacePopoverHeader(site: SpacePopover_Query.Site) {
     ) {
       Text(
         site.name,
-        style = AppTheme.typography.title,
+        style = AppTheme.typography.label,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
@@ -248,7 +258,7 @@ private fun SpacePopoverSiteItem(site: SpacePopover_Query.Site) {
 }
 
 @Composable
-private fun SpacePopoverItem(icon: co.typie.ui.icon.IconData, label: String) {
+private fun SpacePopoverItem(icon: IconData, label: String) {
   Row(
     verticalAlignment = Alignment.CenterVertically,
     modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
@@ -256,7 +266,7 @@ private fun SpacePopoverItem(icon: co.typie.ui.icon.IconData, label: String) {
     Icon(
       icon = icon,
       modifier = Modifier.size(18.dp),
-      tint = AppTheme.colors.textDefault,
+      tint = AppTheme.colors.textPrimary,
     )
     Spacer(Modifier.width(12.dp))
     Text(

@@ -22,6 +22,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,8 +59,10 @@ import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
+import co.typie.ui.theme.ThemeMode
 import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -107,7 +110,14 @@ private fun AnimatedToast(
   dismissed: Boolean,
   onDismiss: () -> Unit,
 ) {
-  val colors = AppTheme.colors
+  AppTheme.colors
+  val toastSurface = if (when (AppTheme.themeMode) {
+      ThemeMode.System -> isSystemInDarkTheme()
+      ThemeMode.Light -> false
+      ThemeMode.Dark -> true
+    }
+  ) AppColor.dark.gray.s500 else AppColor.light.gray.s600
+  val toastText = AppColor.white
   val density = LocalDensity.current
   val alpha = remember { Animatable(0f) }
   val slideOffset = remember { Animatable(1f) }
@@ -151,7 +161,7 @@ private fun AnimatedToast(
     Box(
       modifier = Modifier.offset(y = -bottomOffset).padding(horizontal = 16.dp).fillMaxWidth()
         .clip(RoundedCornerShape(16.dp)).hazeEffect(LocalHazeState.current)
-        .background(colors.surfaceDark.copy(alpha = .6f))
+        .background(toastSurface.copy(alpha = .6f))
         .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
@@ -162,9 +172,9 @@ private fun AnimatedToast(
               Box(
                 modifier = Modifier.size(20.dp).background(
                   when (type) {
-                    ToastType.Success -> AppTheme.colors.accentSuccess
-                    ToastType.Error -> AppTheme.colors.accentDanger
-                    else -> AppTheme.colors.accentBrand
+                    ToastType.Success -> AppTheme.colors.success
+                    ToastType.Error -> AppTheme.colors.danger
+                    else -> AppTheme.colors.brand
                   },
                   CircleShape,
                 ),
@@ -181,7 +191,7 @@ private fun AnimatedToast(
                     ToastType.Error -> 1.75f
                     else -> 2.5f
                   },
-                  tint = AppTheme.colors.textBright,
+                  tint = toastText,
                   modifier = Modifier.size(12.dp),
                 )
               }
@@ -200,7 +210,7 @@ private fun AnimatedToast(
           Text(
             text = message,
             style = AppTheme.typography.caption,
-            color = AppTheme.colors.textBright,
+            color = toastText,
           )
         }
       }
@@ -210,7 +220,7 @@ private fun AnimatedToast(
 
 @Composable
 private fun ToastSpinner() {
-  val color = AppTheme.colors.textBright
+  val color = AppColor.white
   val transition = rememberInfiniteTransition()
   val rotation by transition.animateFloat(
     initialValue = 0f,

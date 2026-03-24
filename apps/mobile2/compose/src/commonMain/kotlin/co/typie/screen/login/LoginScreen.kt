@@ -72,7 +72,7 @@ fun LoginScreen() {
           url = Res.getUri("files/logos/full.svg"),
           modifier = Modifier.height(32.dp),
           contentScale = ContentScale.FillHeight,
-          color = AppTheme.colors.textDefault,
+          color = AppTheme.colors.textPrimary,
         )
         Spacer(Modifier.height(24.dp))
         Text("작성, 정리, 공유까지.", style = AppTheme.typography.label)
@@ -185,7 +185,7 @@ private fun LoginSSOContent(
     Text(
       "이메일로 가입하셨나요?",
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textSubtle,
+      color = AppTheme.colors.textSecondary,
       modifier = Modifier
         .padding(vertical = 16.dp)
         .clickable { onEmailClick() },
@@ -233,7 +233,7 @@ private fun LoginEmailContent(
     Text(
       "다른 방법으로 로그인",
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textSubtle,
+      color = AppTheme.colors.textSecondary,
       modifier = Modifier
         .align(Alignment.CenterHorizontally)
         .padding(vertical = 16.dp)

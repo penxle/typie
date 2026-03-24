@@ -29,145 +29,132 @@ enum class ThemeMode {
 
 @Immutable
 data class AppColors(
-  val isDark: Boolean,
-
   // Text
-  val textDefault: Color,
-  val textSubtle: Color,
+  val textPrimary: Color,
+  val textSecondary: Color,
+  val textTertiary: Color,
   val textMuted: Color,
-  val textFaint: Color,
-  val textDisabled: Color,
-  val textBright: Color,
 
   // Surface
+  val surfaceBase: Color,
   val surfaceDefault: Color,
-  val surfaceSubtle: Color,
-  val surfaceMuted: Color,
-  val surfaceDark: Color,
-  val surfaceElevated: Color,
+  val surfaceSunken: Color,
+  val surfaceRaised: Color,
+  val surfaceTinted: Color,
 
-  // Interactive
-  val interactiveHover: Color,
-  val interactiveDisabled: Color,
+  // Brand
+  val brand: Color,
+  val brandSubtle: Color,
+  val textOnBrand: Color,
+  val textOnBrandSubtle: Color,
 
-  // Accent — Brand
-  val accentBrand: Color,
-  val accentBrandSubtle: Color,
+  // Danger
+  val danger: Color,
+  val dangerSubtle: Color,
+  val textOnDanger: Color,
+  val textOnDangerSubtle: Color,
 
-  // Accent — Info
-  val accentInfo: Color,
-  val accentInfoSubtle: Color,
-
-  // Accent — Danger
-  val accentDanger: Color,
-  val accentDangerSubtle: Color,
-
-  // Accent — Warning
-  val accentWarning: Color,
-  val accentWarningSubtle: Color,
-
-  // Accent — Success
-  val accentSuccess: Color,
-  val accentSuccessSubtle: Color,
+  // Success
+  val success: Color,
+  val successSubtle: Color,
+  val textOnSuccess: Color,
+  val textOnSuccessSubtle: Color,
 
   // Border
   val borderDefault: Color,
   val borderStrong: Color,
   val borderSubtle: Color,
-  val borderInverse: Color,
-  val borderElevated: Color,
 
   // Shadow
-  val shadowDefault: Color,
+  val shadow: Color,
   val shadowAmbient: Color,
+
+  // Skeleton
+  val skeletonBone: Color,
+  val skeletonHighlight: Color,
+
+  // Utility
+  val scrim: Color,
 )
 
 val LightColors = AppColors(
-  isDark = false,
+  textPrimary = AppColor.light.gray.s900,
+  textSecondary = AppColor.light.gray.s700,
+  textTertiary = AppColor.light.gray.s500,
+  textMuted = AppColor.light.gray.s400,
 
-  textDefault = AppColor.light.gray.s900,
-  textSubtle = AppColor.light.gray.s700,
-  textMuted = AppColor.light.gray.s600,
-  textFaint = AppColor.light.gray.s500,
-  textDisabled = AppColor.light.gray.s400,
-  textBright = AppColor.white,
-
+  surfaceBase = AppColor.light.gray.s50,
   surfaceDefault = AppColor.white,
-  surfaceSubtle = AppColor.light.gray.s50,
-  surfaceMuted = AppColor.light.gray.s100,
-  surfaceDark = AppColor.light.gray.s600,
-  surfaceElevated = AppColor.white,
+  surfaceSunken = AppColor.light.gray.s50,
+  surfaceRaised = AppColor.white,
+  surfaceTinted = AppColor.light.gray.s100,
 
-  interactiveHover = AppColor.light.gray.s200,
-  interactiveDisabled = AppColor.light.gray.s200,
+  brand = AppColor.light.brand.s500,
+  brandSubtle = AppColor.light.brand.s100,
+  textOnBrand = AppColor.white,
+  textOnBrandSubtle = AppColor.light.brand.s700,
 
-  accentBrand = AppColor.light.brand.s500,
-  accentBrandSubtle = AppColor.light.brand.s100,
+  danger = AppColor.light.red.s500,
+  dangerSubtle = AppColor.light.red.s100,
+  textOnDanger = AppColor.white,
+  textOnDangerSubtle = AppColor.light.red.s500,
 
-  accentInfo = AppColor.light.blue.s500,
-  accentInfoSubtle = AppColor.light.blue.s50,
-
-  accentDanger = AppColor.light.red.s500,
-  accentDangerSubtle = AppColor.light.red.s400,
-
-  accentWarning = AppColor.light.amber.s600,
-  accentWarningSubtle = AppColor.light.amber.s50,
-
-  accentSuccess = AppColor.light.green.s400,
-  accentSuccessSubtle = AppColor.light.green.s50,
+  success = AppColor.light.green.s400,
+  successSubtle = AppColor.light.green.s50,
+  textOnSuccess = AppColor.white,
+  textOnSuccessSubtle = AppColor.light.green.s800,
 
   borderDefault = AppColor.light.gray.s200,
   borderStrong = AppColor.light.gray.s300,
   borderSubtle = AppColor.light.gray.s100,
-  borderInverse = AppColor.light.gray.s900,
-  borderElevated = AppColor.light.gray.s100,
 
-  shadowDefault = Color(0x1409090C),
+  shadow = Color(0x1409090C),
   shadowAmbient = Color(0x0509090C),
+
+  skeletonBone = Color(0xFFF8F8FC),
+  skeletonHighlight = Color(0XFFf4F5FA),
+
+  scrim = Color(0x52000000),
 )
 
 val DarkColors = AppColors(
-  isDark = true,
+  textPrimary = AppColor.dark.gray.s50,
+  textSecondary = AppColor.dark.gray.s200,
+  textTertiary = AppColor.dark.gray.s300,
+  textMuted = AppColor.dark.gray.s400,
 
-  textDefault = AppColor.dark.gray.s50,
-  textSubtle = AppColor.dark.gray.s100,
-  textMuted = AppColor.dark.gray.s200,
-  textFaint = AppColor.dark.gray.s300,
-  textDisabled = AppColor.dark.gray.s400,
-  textBright = AppColor.dark.gray.s50,
+  surfaceBase = AppColor.dark.gray.s950,
+  surfaceDefault = AppColor.dark.gray.s900,
+  surfaceSunken = AppColor.dark.gray.s700,
+  surfaceRaised = AppColor.dark.gray.s800,
+  surfaceTinted = AppColor.dark.gray.s700,
 
-  surfaceDefault = AppColor.dark.gray.s950,
-  surfaceSubtle = AppColor.dark.gray.s900,
-  surfaceMuted = AppColor.dark.gray.s700,
-  surfaceDark = AppColor.dark.gray.s500,
-  surfaceElevated = AppColor.dark.gray.s800,
+  brand = AppColor.dark.brand.s400,
+  brandSubtle = AppColor.dark.brand.s900,
+  textOnBrand = AppColor.white,
+  textOnBrandSubtle = AppColor.dark.brand.s100,
 
-  interactiveHover = AppColor.dark.gray.s600,
-  interactiveDisabled = AppColor.dark.gray.s800,
+  danger = AppColor.dark.red.s300,
+  dangerSubtle = AppColor.dark.red.s200,
+  textOnDanger = AppColor.white,
+  textOnDangerSubtle = AppColor.dark.red.s900,
 
-  accentBrand = AppColor.dark.brand.s400,
-  accentBrandSubtle = AppColor.dark.brand.s900,
-
-  accentInfo = AppColor.dark.blue.s200,
-  accentInfoSubtle = AppColor.dark.blue.s900,
-
-  accentDanger = AppColor.dark.red.s300,
-  accentDangerSubtle = AppColor.dark.red.s200,
-
-  accentWarning = AppColor.dark.amber.s300,
-  accentWarningSubtle = AppColor.dark.amber.s900,
-
-  accentSuccess = AppColor.dark.green.s200,
-  accentSuccessSubtle = AppColor.dark.green.s900,
+  success = AppColor.dark.green.s200,
+  successSubtle = AppColor.dark.green.s900,
+  textOnSuccess = AppColor.white,
+  textOnSuccessSubtle = AppColor.dark.green.s100,
 
   borderDefault = AppColor.dark.gray.s700,
   borderStrong = AppColor.dark.gray.s600,
   borderSubtle = AppColor.dark.gray.s800,
-  borderInverse = AppColor.dark.gray.s50,
-  borderElevated = AppColor.dark.gray.s700,
 
-  shadowDefault = Color(0x660A0B0E),
+  shadow = Color(0x660A0B0E),
   shadowAmbient = Color(0x1A0A0B0E),
+
+  skeletonBone = Color(0xFF16161A),
+  skeletonHighlight = Color(0xFF1C1C20),
+
+  scrim = Color(0x52000000),
 )
 
 val LocalAppColors = staticCompositionLocalOf { LightColors }
