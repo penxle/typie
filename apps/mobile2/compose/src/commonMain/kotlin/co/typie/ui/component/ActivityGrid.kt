@@ -282,16 +282,22 @@ fun ActivityGrid(
 
               currentChange = change
 
-              if (change.isConsumed) {
-                return@withTimeoutOrNull ActivityGridPreGestureResult.Cancel
-              }
+              when (
+                resolveTooltipTapGestureAction(
+                  isPressed = change.pressed,
+                  isConsumed = change.isConsumed,
+                  movementDistancePx = (change.position - startPosition).getDistance(),
+                )
+              ) {
+                TooltipTapGestureAction.Cancel -> {
+                  return@withTimeoutOrNull ActivityGridPreGestureResult.Cancel
+                }
 
-              if (!change.pressed) {
-                return@withTimeoutOrNull ActivityGridPreGestureResult.Tap(change.position)
-              }
+                TooltipTapGestureAction.Tap -> {
+                  return@withTimeoutOrNull ActivityGridPreGestureResult.Tap(change.position)
+                }
 
-              if ((change.position - startPosition).getDistance() > TapGestureMovementTolerancePx) {
-                return@withTimeoutOrNull ActivityGridPreGestureResult.Cancel
+                TooltipTapGestureAction.Wait -> Unit
               }
             }
           }

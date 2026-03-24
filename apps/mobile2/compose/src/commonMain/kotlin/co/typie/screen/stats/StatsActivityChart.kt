@@ -54,11 +54,12 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
 import co.typie.ext.horizontalScroll
 import co.typie.icons.Lucide
-import co.typie.ui.component.TapGestureMovementTolerancePx
 import co.typie.ui.component.Text
 import co.typie.ui.component.TooltipGestureAction
 import co.typie.ui.component.TooltipGesturePhase
+import co.typie.ui.component.TooltipTapGestureAction
 import co.typie.ui.component.resolveTooltipGestureAction
+import co.typie.ui.component.resolveTooltipTapGestureAction
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
@@ -371,16 +372,22 @@ fun StatsActivityChart(
 
                 currentChange = change
 
-                if (change.isConsumed) {
-                  return@withTimeoutOrNull ChartPreGestureResult.Cancel
-                }
+                when (
+                  resolveTooltipTapGestureAction(
+                    isPressed = change.pressed,
+                    isConsumed = change.isConsumed,
+                    movementDistancePx = (change.position - startPosition).getDistance(),
+                  )
+                ) {
+                  TooltipTapGestureAction.Cancel -> {
+                    return@withTimeoutOrNull ChartPreGestureResult.Cancel
+                  }
 
-                if (!change.pressed) {
-                  return@withTimeoutOrNull ChartPreGestureResult.Tap(change.position)
-                }
+                  TooltipTapGestureAction.Tap -> {
+                    return@withTimeoutOrNull ChartPreGestureResult.Tap(change.position)
+                  }
 
-                if ((change.position - startPosition).getDistance() > TapGestureMovementTolerancePx) {
-                  return@withTimeoutOrNull ChartPreGestureResult.Cancel
+                  TooltipTapGestureAction.Wait -> Unit
                 }
               }
             }

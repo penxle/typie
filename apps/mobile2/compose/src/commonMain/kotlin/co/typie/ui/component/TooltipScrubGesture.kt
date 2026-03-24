@@ -17,6 +17,34 @@ internal enum class TooltipGestureAction {
   ContinueScrub,
 }
 
+internal enum class TooltipTapGestureAction {
+  Wait,
+  Tap,
+  Cancel,
+}
+
+internal fun resolveTooltipTapGestureAction(
+  isPressed: Boolean,
+  isConsumed: Boolean,
+  movementDistancePx: Float,
+  movementTolerancePx: Float = TapGestureMovementTolerancePx,
+): TooltipTapGestureAction {
+  if (movementDistancePx > movementTolerancePx) {
+    return TooltipTapGestureAction.Cancel
+  }
+
+  if (!isPressed) {
+    return TooltipTapGestureAction.Tap
+  }
+
+  // Desktop scrollables can consume mouse-up without owning the tap itself.
+  if (isConsumed) {
+    return TooltipTapGestureAction.Cancel
+  }
+
+  return TooltipTapGestureAction.Wait
+}
+
 internal fun resolveTooltipGestureAction(
   phase: TooltipGesturePhase,
   velocityX: Float,
