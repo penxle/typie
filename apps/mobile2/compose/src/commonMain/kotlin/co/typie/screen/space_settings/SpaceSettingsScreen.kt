@@ -53,7 +53,7 @@ import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPosition
+import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.icon.Icon
@@ -175,7 +175,7 @@ private fun MoreMenu(
   val bottomSheetHost = LocalBottomSheetHost.current
 
   Popover(
-    position = PopoverPosition.BottomRight,
+    placement = PopoverPlacement.BelowEnd,
     anchor = { TopBarButton(icon = Lucide.Ellipsis) },
     pane = {
       Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {

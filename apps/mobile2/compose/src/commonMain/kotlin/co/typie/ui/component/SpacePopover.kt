@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,10 +31,10 @@ import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.service.SiteService
 import co.typie.ui.component.popover.Popover
+import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPosition
 import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
@@ -50,6 +51,13 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 
 val SpacePopoverLeadingKey = Any()
+private val SpacePopoverVerticalOffset = (TopBarDefaults.Height - TopBarDefaults.ButtonSize) / 2
+private val SpacePopoverScreenPadding = PaddingValues(
+  start = TopBarDefaults.HorizontalPadding,
+  top = SpacePopoverVerticalOffset,
+  end = TopBarDefaults.HorizontalPadding,
+  bottom = SpacePopoverVerticalOffset + 100.dp,
+)
 
 @KoinViewModel
 class SpacePopoverViewModel : GraphQLViewModel() {
@@ -68,7 +76,8 @@ fun SpacePopover() {
         val otherSites = state.data.me.sites.filter { it.id != currentSite.id }
 
         Popover(
-          position = PopoverPosition.BottomLeft,
+          placement = PopoverPlacement.BelowStart,
+          screenPadding = SpacePopoverScreenPadding,
           collapsedCornerRadius = 14.dp,
           anchor = { SpacePopoverAnchor(currentSite) },
           pane = { SpacePopoverPane(currentSite, otherSites) },

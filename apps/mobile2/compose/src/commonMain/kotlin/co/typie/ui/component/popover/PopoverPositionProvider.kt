@@ -6,13 +6,33 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.PopupPositionProvider
 
-enum class PopoverPosition {
-  BottomLeft, BottomCenter, BottomRight,
-  TopLeft, TopCenter, TopRight,
+enum class PopoverAlign {
+  Start,
+  Center,
+  End,
 }
 
-internal class PopoverPositionProvider(
-  private val position: PopoverPosition,
+enum class PopoverSide {
+  Below,
+  Above,
+}
+
+data class PopoverPlacement(
+  val side: PopoverSide,
+  val align: PopoverAlign,
+) {
+  companion object {
+    val BelowStart = PopoverPlacement(side = PopoverSide.Below, align = PopoverAlign.Start)
+    val BelowCenter = PopoverPlacement(side = PopoverSide.Below, align = PopoverAlign.Center)
+    val BelowEnd = PopoverPlacement(side = PopoverSide.Below, align = PopoverAlign.End)
+    val AboveStart = PopoverPlacement(side = PopoverSide.Above, align = PopoverAlign.Start)
+    val AboveCenter = PopoverPlacement(side = PopoverSide.Above, align = PopoverAlign.Center)
+    val AboveEnd = PopoverPlacement(side = PopoverSide.Above, align = PopoverAlign.End)
+  }
+}
+
+internal class PopoverPlacementProvider(
+  private val placement: PopoverPlacement,
   private val screenPadding: PopoverScreenPadding,
 ) : PopupPositionProvider {
 
@@ -26,43 +46,36 @@ internal class PopoverPositionProvider(
     popupContentSize: IntSize,
   ): IntOffset {
     val showBelow = shouldShowBelow(
-      position = position,
+      placement = placement,
       childHeight = popupContentSize.height,
       windowHeight = windowSize.height,
       anchorRect = anchorBounds,
       screenPadding = screenPadding,
     )
 
-    val unclampedX = when (position) {
-      PopoverPosition.BottomLeft, PopoverPosition.TopLeft ->
-        anchorBounds.left
-
-      PopoverPosition.BottomCenter, PopoverPosition.TopCenter ->
-        anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
-
-      PopoverPosition.BottomRight, PopoverPosition.TopRight ->
-        anchorBounds.right - popupContentSize.width
+    val unclampedX = when (placement.align) {
+      PopoverAlign.Start -> anchorBounds.left
+      PopoverAlign.Center -> anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
+      PopoverAlign.End -> anchorBounds.right - popupContentSize.width
     }
 
     val unclampedY =
       if (showBelow) anchorBounds.top else anchorBounds.bottom - popupContentSize.height
 
-    val minX = when (position) {
-      PopoverPosition.BottomLeft, PopoverPosition.TopLeft -> 0
+    val minX = when (placement.align) {
+      PopoverAlign.Start -> anchorBounds.left
       else -> screenPadding.left
     }
-    val maxX = when (position) {
-      PopoverPosition.BottomRight, PopoverPosition.TopRight ->
-        windowSize.width - popupContentSize.width
-
+    val maxX = when (placement.align) {
+      PopoverAlign.End -> anchorBounds.right - popupContentSize.width
       else ->
         windowSize.width - screenPadding.right - popupContentSize.width
     }
-    val minY = if (showBelow) 0 else screenPadding.top
+    val minY = if (showBelow) anchorBounds.top else screenPadding.top
     val maxY = if (showBelow) {
       windowSize.height - screenPadding.bottom - popupContentSize.height
     } else {
-      windowSize.height - popupContentSize.height
+      anchorBounds.bottom - popupContentSize.height
     }
 
     lastShowBelow = showBelow
@@ -75,7 +88,7 @@ internal class PopoverPositionProvider(
 }
 
 internal fun shouldShowBelow(
-  position: PopoverPosition,
+  placement: PopoverPlacement,
   childHeight: Int,
   windowHeight: Int,
   anchorRect: IntRect,
@@ -83,9 +96,7 @@ internal fun shouldShowBelow(
 ): Boolean {
   val bottomSpace = windowHeight - screenPadding.bottom - anchorRect.top
   val topSpace = anchorRect.bottom - screenPadding.top
-  val prefersBottom = position == PopoverPosition.BottomLeft ||
-    position == PopoverPosition.BottomCenter ||
-    position == PopoverPosition.BottomRight
+  val prefersBottom = placement.side == PopoverSide.Below
 
   if (prefersBottom) {
     if (childHeight <= bottomSpace) return true
@@ -98,16 +109,10 @@ internal fun shouldShowBelow(
   return bottomSpace > topSpace
 }
 
-internal fun effectivePosition(position: PopoverPosition, showBelow: Boolean): PopoverPosition {
-  return when {
-    position == PopoverPosition.BottomLeft && !showBelow -> PopoverPosition.TopLeft
-    position == PopoverPosition.BottomCenter && !showBelow -> PopoverPosition.TopCenter
-    position == PopoverPosition.BottomRight && !showBelow -> PopoverPosition.TopRight
-    position == PopoverPosition.TopLeft && showBelow -> PopoverPosition.BottomLeft
-    position == PopoverPosition.TopCenter && showBelow -> PopoverPosition.BottomCenter
-    position == PopoverPosition.TopRight && showBelow -> PopoverPosition.BottomRight
-    else -> position
-  }
+internal fun resolvedPlacement(placement: PopoverPlacement, showBelow: Boolean): PopoverPlacement {
+  return placement.copy(
+    side = if (showBelow) PopoverSide.Below else PopoverSide.Above,
+  )
 }
 
 private fun clamp(value: Int, min: Int, max: Int): Int {
