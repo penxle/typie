@@ -32,7 +32,7 @@ fun EditorScreen(slug: String) {
     try {
       val editor = model.ensureEditor(scaleFactor = density.toDouble())
       editor.tick()
-      val snapshot = editor.exportSnapshot()
+      val snapshot = editor.export(mode = 0)
       snapshotSize = snapshot.size
     } catch (e: Exception) {
       snapshotSize = -1

@@ -1,18 +1,38 @@
 package co.typie.editor
 
 import co.typie.di.PlatformContext
+import kotlinx.cinterop.ObjCObjectVar
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
 import kotlinx.cinterop.allocArrayOf
 import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
 import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.value
 import org.koin.core.annotation.Module
 import org.koin.core.annotation.Single
 import platform.Foundation.NSBundle
 import platform.Foundation.NSData
+import platform.Foundation.NSError
+import platform.Foundation.NSNumber
 import platform.Foundation.create
 import platform.posix.memcpy
+import swiftPMImport.co.typie.compose.NativeCharacterCounts
+import swiftPMImport.co.typie.compose.NativeDragImageData
 import swiftPMImport.co.typie.compose.NativeEditor
 import swiftPMImport.co.typie.compose.NativeEditorEngine
+import swiftPMImport.co.typie.compose.NativeOptionalDragImageData
+import swiftPMImport.co.typie.compose.NativeOptionalPageRenderInfo
+import swiftPMImport.co.typie.compose.NativeOptionalString
+import swiftPMImport.co.typie.compose.NativePageRenderInfo
+
+private inline fun <T> throwingCall(block: (errorPtr: kotlinx.cinterop.CPointer<ObjCObjectVar<NSError?>>) -> T): T =
+  memScoped {
+    val error = alloc<ObjCObjectVar<NSError?>>()
+    val result = block(error.ptr)
+    error.value?.let { throw EditorException(it.localizedDescription) }
+    return result
+  }
 
 @Module
 actual class EditorModule {
@@ -20,16 +40,42 @@ actual class EditorModule {
   actual fun editorEngine(ctx: PlatformContext): EditorEngine {
     val path = NSBundle.mainBundle.pathForResource("icu", "zst")!!
     val icu = NSData.create(contentsOfFile = path)!!
-    return IosEditorEngine(NativeEditorEngine().also { it.loadIcuData(icu, null) })
+    return IosEditorEngine(NativeEditorEngine().also {
+      throwingCall { err -> it.loadIcuData(icu, err) }
+    })
   }
 }
 
 private class IosEditorEngine(private val native: NativeEditorEngine) : EditorEngine {
+  override fun validateRegex(pattern: String): Boolean {
+    return throwingCall { err -> native.validateRegexWithPattern(pattern, err) }!!.boolValue
+  }
+
   override fun createEditor(scaleFactor: Double, snapshot: ByteArray?): Editor {
-    val editor = native.createEditorWithScaleFactor(
-      scaleFactor, snapshot = snapshot?.toNSData(), error = null
-    )!!
+    val editor = throwingCall { err ->
+      native.createEditorWithScaleFactor(scaleFactor, snapshot = snapshot?.toNSData(), error = err)
+    }!!
     return IosEditor(editor)
+  }
+
+  override fun addFontBase(family: String, weight: Int, data: ByteArray) {
+    throwingCall { err -> native.addFontBaseWithFamily(family, weight = weight, data = data.toNSData(), error = err) }
+  }
+
+  override fun addFontChunk(family: String, weight: Int, data: ByteArray) {
+    throwingCall { err -> native.addFontChunkWithFamily(family, weight = weight, data = data.toNSData(), error = err) }
+  }
+
+  override fun setAvailableFonts(fontsJson: String) {
+    throwingCall { err -> native.setAvailableFontsWithFontsJson(fontsJson, err) }
+  }
+
+  override fun setTextReplacementRules(rulesJson: String) {
+    throwingCall { err -> native.setTextReplacementRulesWithRulesJson(rulesJson, err) }
+  }
+
+  override fun getSlateOffsets(): String {
+    return throwingCall { err -> native.getSlateOffsetsAndReturnError(err) }!!
   }
 
   override fun close() {}
@@ -37,15 +83,102 @@ private class IosEditorEngine(private val native: NativeEditorEngine) : EditorEn
 
 private class IosEditor(private val native: NativeEditor) : Editor {
   override fun dispatch(messageJson: String) {
-    native.dispatchWithMessageJson(messageJson, null)
+    throwingCall { err -> native.dispatchWithMessageJson(messageJson, err) }
   }
 
   override fun tick() {
-    native.tickAndReturnError(null)
+    throwingCall { err -> native.tickAndReturnError(err) }
   }
 
-  override fun exportSnapshot(): ByteArray {
-    return native.exportSnapshotAndReturnError(null)!!.toByteArray()
+  override fun flush() {
+    throwingCall { err -> native.flushAndReturnError(err) }
+  }
+
+  override fun getPageCount(): Int {
+    return throwingCall { err -> native.getPageCountAndReturnError(err) }!!.intValue
+  }
+
+  override fun getRenderInfo(pageIndex: Int): PageRenderInfo? {
+    return throwingCall { err -> native.getRenderInfoWithPageIndex(pageIndex, error = err) }!!.value?.toKotlin()
+  }
+
+  override fun renderDragImage(visiblePages: List<Int>, pageIdx: Int): DragImageData? {
+    val pages = visiblePages.map { NSNumber(it) }
+    return throwingCall { err -> native.renderDragImageWithVisiblePages(pages, pageIdx = pageIdx, error = err) }!!.value?.toKotlin()
+  }
+
+  override fun isSelectionHit(pageIdx: Int, x: Float, y: Float): Boolean {
+    return throwingCall { err -> native.isSelectionHitWithPageIdx(pageIdx, x = x, y = y, error = err) }!!.boolValue
+  }
+
+  override fun isCursorHit(pageIdx: Int, x: Float, y: Float): Boolean {
+    return throwingCall { err -> native.isCursorHitWithPageIdx(pageIdx, x = x, y = y, error = err) }!!.boolValue
+  }
+
+  override fun export(mode: Int, version: ByteArray?): ByteArray {
+    return throwingCall { err -> native.exportWithMode(mode, version = version?.toNSData(), error = err) }!!.toByteArray()
+  }
+
+  override fun importUpdates(data: ByteArray) {
+    throwingCall { err -> native.importUpdates(data.toNSData(), err) }
+  }
+
+  override fun importUpdatesBatch(updates: List<ByteArray>) {
+    throwingCall { err -> native.importUpdatesBatch(updates.map { it.toNSData() }, err) }
+  }
+
+  override fun getCharacterCounts(): CharacterCounts {
+    return throwingCall { err -> native.getCharacterCountsAndReturnError(err) }!!.toKotlin()
+  }
+
+  override fun getClipboardData(): String? {
+    return throwingCall { err -> native.getClipboardDataAndReturnError(err) }!!.value
+  }
+
+  override fun getTextWithMappings(): String {
+    return throwingCall { err -> native.getTextWithMappingsAndReturnError(err) }!!
+  }
+
+  override fun performSearch(query: String, matchWholeWord: Boolean): String {
+    return throwingCall { err -> native.performSearchWithQuery(query, matchWholeWord = matchWholeWord, error = err) }!!
+  }
+
+  override fun setTrackedItems(group: Int, itemsJson: String) {
+    throwingCall { err -> native.setTrackedItemsWithGroup(group, itemsJson = itemsJson, error = err) }
+  }
+
+  override fun removeTrackedItems(group: Int, idsJson: String) {
+    throwingCall { err -> native.removeTrackedItemsWithGroup(group, idsJson = idsJson, error = err) }
+  }
+
+  override fun revealTrackedItem(group: Int, id: String): Boolean {
+    return throwingCall { err -> native.revealTrackedItemWithGroup(group, id = id, error = err) }!!.boolValue
+  }
+
+  override fun replaceTextInBlock(blockId: String, startOffset: Int, endOffset: Int, replacement: String): Boolean {
+    return throwingCall { err ->
+      native.replaceTextInBlockWithBlockId(blockId, startOffset = startOffset, endOffset = endOffset, replacement = replacement, error = err)
+    }!!.boolValue
+  }
+
+  override fun replaceTextInBlocks(itemsJson: String) {
+    throwingCall { err -> native.replaceTextInBlocksWithItemsJson(itemsJson, err) }
+  }
+
+  override fun insertTemplateFragment(snapshot: ByteArray) {
+    throwingCall { err -> native.insertTemplateFragment(snapshot.toNSData(), err) }
+  }
+
+  override fun setTracing(traceId: String, parentSpanId: String) {
+    throwingCall { err -> native.setTracingWithTraceId(traceId, parentSpanId = parentSpanId, error = err) }
+  }
+
+  override fun clearTracing() {
+    throwingCall { err -> native.clearTracingAndReturnError(err) }
+  }
+
+  override fun drainTraces(): String {
+    return throwingCall { err -> native.drainTracesAndReturnError(err) }!!
   }
 
   override fun close() {}
@@ -62,3 +195,27 @@ private fun NSData.toByteArray(): ByteArray {
   }
   return byteArray
 }
+
+private fun NativePageRenderInfo.toKotlin() = PageRenderInfo(
+  width = width,
+  height = height,
+  bufferSize = bufferSize,
+)
+
+private fun NativeCharacterCounts.toKotlin() = CharacterCounts(
+  docWithWhitespace = docWithWhitespace,
+  docWithoutWhitespace = docWithoutWhitespace,
+  docWithoutWhitespaceAndPunctuation = docWithoutWhitespaceAndPunctuation,
+  selectionWithWhitespace = selectionWithWhitespace,
+  selectionWithoutWhitespace = selectionWithoutWhitespace,
+  selectionWithoutWhitespaceAndPunctuation = selectionWithoutWhitespaceAndPunctuation,
+)
+
+private fun NativeDragImageData.toKotlin() = DragImageData(
+  width = width,
+  height = height,
+  offsetX = offsetX,
+  offsetY = offsetY,
+  scaleFactor = scaleFactor,
+  pixels = pixels.toByteArray(),
+)
