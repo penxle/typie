@@ -20,22 +20,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: crates/editor/pkg/
-          key: wasm-${{ hashFiles('crates/**', 'Cargo.lock') }}
-
-      - name: Install pnpm
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node.js
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v6
-        with:
-          node-version: 25
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
-        run: pnpm install --frozen-lockfile
+          key: wasm-${{ hashFiles('crates/editor', 'Cargo.lock') }}
 
       - name: Setup Rust
         if: steps.wasm-cache.outputs.cache-hit != 'true'
@@ -46,14 +31,10 @@ jobs:
           cache-workspace-crates: 'true'
           rustflags: ''
 
-      - name: Install wasm-pack
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
-        run: cargo install wasm-pack
-
       - name: Build WASM
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         working-directory: crates/editor
-        run: RUSTFLAGS="-C target-feature=+simd128" wasm-pack build --target=web --no-pack
+        run: just wasm
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v7
