@@ -37,7 +37,7 @@ import {
 import * as appstore from '#/external/appstore.ts';
 import * as googleplay from '#/external/googleplay.ts';
 import * as portone from '#/external/portone.ts';
-import { getSubscriptionExpiresAt, payAmountWithBillingKey, payInvoiceWithBillingKey } from '#/utils/index.ts';
+import { getSubscriptionExpiresAt, hasBillableUsageDuring, payAmountWithBillingKey, payInvoiceWithBillingKey } from '#/utils/index.ts';
 import { delay } from '#/utils/promise.ts';
 import { builder } from '../builder.ts';
 import {
@@ -127,6 +127,11 @@ Subscription.implement({
     expiresAt: t.expose('expiresAt', { type: 'DateTime' }),
     state: t.expose('state', { type: SubscriptionState }),
     user: t.expose('userId', { type: User }),
+    hasBillableUsage: t.boolean({
+      resolve: async (self) => {
+        return await hasBillableUsageDuring(db, self.userId, self.renewedAt, self.expiresAt);
+      },
+    }),
   }),
 });
 
@@ -207,6 +212,7 @@ builder.mutationFields((t) => ({
             planId: PlanId.FULL_ACCESS_TRIAL,
             startsAt,
             expiresAt,
+            renewedAt: startsAt,
             state: SubscriptionState.WILL_EXPIRE,
           })
           .returning()
@@ -355,6 +361,7 @@ builder.mutationFields((t) => ({
             planId: plan.id,
             startsAt,
             expiresAt,
+            renewedAt: startsAt,
             state: SubscriptionState.ACTIVE,
           })
           .returning()
@@ -421,6 +428,7 @@ builder.mutationFields((t) => ({
             planId: plan.id,
             startsAt,
             expiresAt,
+            renewedAt: activeSubscription.expiresAt,
             state: SubscriptionState.WILL_ACTIVATE,
           })
           .returning()
@@ -568,12 +576,13 @@ builder.mutationFields((t) => ({
             planId,
             startsAt,
             expiresAt,
+            renewedAt: startsAt,
             state: SubscriptionState.ACTIVE,
           })
           .onConflictDoUpdate({
             target: [Subscriptions.userId],
             targetWhere: eq(Subscriptions.state, SubscriptionState.ACTIVE),
-            set: { planId, startsAt, expiresAt },
+            set: { planId, startsAt, expiresAt, renewedAt: startsAt },
           })
           .returning()
           .then(firstOrThrow);

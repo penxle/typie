@@ -2,10 +2,10 @@ import * as Sentry from '@sentry/node';
 import { SUBSCRIPTION_GRACE_DAYS } from '@typie/lib/const';
 import { PaymentInvoiceState, PlanAvailability, SubscriptionState } from '@typie/lib/enums';
 import dayjs from 'dayjs';
-import { and, eq, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, lte, ne, sql } from 'drizzle-orm';
 import { db, first, firstOrThrow, PaymentInvoices, Plans, Subscriptions, UserBillingKeys } from '#/db/index.ts';
 import * as portone from '#/external/portone.ts';
-import { getSubscriptionExpiresAt, payInvoiceWithBillingKey } from '#/utils/index.ts';
+import { getSubscriptionExpiresAt, hasBillableUsageDuring, payInvoiceWithBillingKey } from '#/utils/index.ts';
 import { enqueueJob } from '../index.ts';
 import { defineCron, defineJob } from '../types.ts';
 
@@ -67,6 +67,7 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
       .select({
         id: Subscriptions.id,
         userId: Subscriptions.userId,
+        renewedAt: Subscriptions.renewedAt,
         expiresAt: Subscriptions.expiresAt,
         plan: { fee: Plans.fee, interval: Plans.interval },
       })
@@ -75,6 +76,45 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
       .where(eq(Subscriptions.id, subscriptionId))
       .then(firstOrThrow);
 
+    const hasUsage = await hasBillableUsageDuring(tx, subscription.userId, subscription.renewedAt, subscription.expiresAt);
+
+    if (!hasUsage) {
+      // 미사용 면제
+      const waivedInvoice = await tx
+        .insert(PaymentInvoices)
+        .values({
+          userId: subscription.userId,
+          subscriptionId: subscription.id,
+          amount: 0,
+          state: PaymentInvoiceState.WAIVED,
+          dueAt: subscription.expiresAt,
+        })
+        .returning({ id: PaymentInvoices.id })
+        .then(firstOrThrow);
+
+      const newExpiresAt = getSubscriptionExpiresAt(subscription.expiresAt, subscription.plan.interval);
+      await tx
+        .update(Subscriptions)
+        .set({ renewedAt: subscription.expiresAt, expiresAt: newExpiresAt })
+        .where(eq(Subscriptions.id, subscriptionId));
+
+      // 연속 면제 여부 확인 — 직전 invoice가 WAIVED가 아니면 첫 면제
+      const previousInvoice = await tx
+        .select({ state: PaymentInvoices.state })
+        .from(PaymentInvoices)
+        .where(and(eq(PaymentInvoices.subscriptionId, subscriptionId), ne(PaymentInvoices.id, waivedInvoice.id)))
+        .orderBy(desc(PaymentInvoices.createdAt))
+        .limit(1)
+        .then(first);
+
+      if (!previousInvoice || previousInvoice.state !== PaymentInvoiceState.WAIVED) {
+        await enqueueJob('email:subscription-waived', subscriptionId, { delay: 5 * 60 * 1000 });
+      }
+
+      return;
+    }
+
+    // 기존 결제 플로우
     const invoice = await tx
       .insert(PaymentInvoices)
       .values({
@@ -90,7 +130,10 @@ export const SubscriptionRenewalInitialJob = defineJob('subscription:renewal:ini
     const success = await payInvoiceWithBillingKey(tx, invoice.id);
     if (success) {
       const newExpiresAt = getSubscriptionExpiresAt(subscription.expiresAt, subscription.plan.interval);
-      await tx.update(Subscriptions).set({ expiresAt: newExpiresAt }).where(eq(Subscriptions.id, subscriptionId));
+      await tx
+        .update(Subscriptions)
+        .set({ renewedAt: subscription.expiresAt, expiresAt: newExpiresAt })
+        .where(eq(Subscriptions.id, subscriptionId));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.PAID }).where(eq(PaymentInvoices.id, invoice.id));
     } else {
       await tx.update(Subscriptions).set({ state: SubscriptionState.IN_GRACE_PERIOD }).where(eq(Subscriptions.id, subscriptionId));
@@ -120,7 +163,7 @@ export const SubscriptionRenewalRetryJob = defineJob('subscription:renewal:retry
       const newExpiresAt = getSubscriptionExpiresAt(invoice.subscription.expiresAt, invoice.plan.interval);
       await tx
         .update(Subscriptions)
-        .set({ expiresAt: newExpiresAt, state: SubscriptionState.ACTIVE })
+        .set({ expiresAt: newExpiresAt, renewedAt: invoice.subscription.expiresAt, state: SubscriptionState.ACTIVE })
         .where(eq(Subscriptions.id, invoice.subscription.id));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.PAID }).where(eq(PaymentInvoices.id, invoice.id));
     } else {
@@ -166,7 +209,10 @@ export const SubscriptionRenewalPlanChangeJob = defineJob('subscription:renewal:
 
     const success = await payInvoiceWithBillingKey(tx, invoice.id);
     if (success) {
-      await tx.update(Subscriptions).set({ state: SubscriptionState.ACTIVE }).where(eq(Subscriptions.id, subscriptionId));
+      await tx
+        .update(Subscriptions)
+        .set({ state: SubscriptionState.ACTIVE, renewedAt: subscription.startsAt })
+        .where(eq(Subscriptions.id, subscriptionId));
       await tx.update(PaymentInvoices).set({ state: PaymentInvoiceState.PAID }).where(eq(PaymentInvoices.id, invoice.id));
     } else {
       await tx

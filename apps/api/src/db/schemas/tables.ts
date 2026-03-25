@@ -771,6 +771,7 @@ export const Subscriptions = pgTable(
       .references(() => Plans.id, { onUpdate: 'cascade', onDelete: 'restrict' }),
     startsAt: datetime('starts_at').notNull(),
     expiresAt: datetime('expires_at').notNull(),
+    renewedAt: datetime('renewed_at').notNull(),
     state: E._SubscriptionState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()

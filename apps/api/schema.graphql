@@ -810,6 +810,7 @@ enum PaymentInvoiceState {
   OVERDUE
   PAID
   UPCOMING
+  WAIVED
 }
 
 enum PaymentOutcome {
@@ -1227,6 +1228,7 @@ enum SubscriptionState {
 
 type Subscription_ {
   expiresAt: DateTime!
+  hasBillableUsage: Boolean!
   id: ID!
   plan: Plan!
   startsAt: DateTime!

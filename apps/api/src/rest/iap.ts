@@ -65,17 +65,20 @@ iap.post('/appstore', async (c) => {
           .update(Subscriptions)
           .set({
             state: SubscriptionState.ACTIVE,
+            renewedAt: dayjs(notification.data.transaction?.purchaseDate),
             expiresAt: dayjs(notification.data.transaction?.expiresDate),
           })
           .where(eq(Subscriptions.id, subscription.id));
       } else if (planId) {
         const plan = await db.select({ id: Plans.id }).from(Plans).where(eq(Plans.id, planId)).then(first);
         if (plan) {
+          const startsAt = dayjs(notification.data.transaction?.purchaseDate);
           await db.insert(Subscriptions).values({
             userId: inAppPurchase.userId,
             planId,
-            startsAt: dayjs(notification.data.transaction?.purchaseDate),
+            startsAt,
             expiresAt: dayjs(notification.data.transaction?.expiresDate),
+            renewedAt: startsAt,
             state: SubscriptionState.ACTIVE,
           });
         }
@@ -225,15 +228,18 @@ iap.post('/googleplay', async (c) => {
             .update(Subscriptions)
             .set({
               state: SubscriptionState.ACTIVE,
+              renewedAt: subscription.expiresAt,
               expiresAt: dayjs(item.expiryTime),
             })
             .where(eq(Subscriptions.id, subscription.id));
         } else {
+          const startsAt = dayjs(googlePlaySubscription.startTime);
           await db.insert(Subscriptions).values({
             userId: inAppPurchase.userId,
             planId,
-            startsAt: dayjs(googlePlaySubscription.startTime),
+            startsAt,
             expiresAt: dayjs(item.expiryTime),
+            renewedAt: startsAt,
             state: SubscriptionState.ACTIVE,
           });
         }

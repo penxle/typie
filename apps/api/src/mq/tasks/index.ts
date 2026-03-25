@@ -5,7 +5,12 @@ import {
   DocumentSyncCollectJob,
   DocumentSyncScanCron,
 } from './document.ts';
-import { SendSubscriptionExpiredEmailJob, SendSubscriptionExpiringEmailJob, SendSubscriptionGracePeriodEmailJob } from './email.ts';
+import {
+  SendSubscriptionExpiredEmailJob,
+  SendSubscriptionExpiringEmailJob,
+  SendSubscriptionGracePeriodEmailJob,
+  SendSubscriptionWaivedEmailJob,
+} from './email.ts';
 import { DocumentIndexJob, FolderIndexJob } from './search.ts';
 import {
   SubscriptionRenewalCancelJob,
@@ -28,6 +33,7 @@ export const jobs = [
   SendSubscriptionGracePeriodEmailJob,
   SendSubscriptionExpiringEmailJob,
   SendSubscriptionExpiredEmailJob,
+  SendSubscriptionWaivedEmailJob,
 ];
 
 export const crons = [DocumentSyncScanCron, DocumentGCScanCron, SubscriptionRenewalCron];

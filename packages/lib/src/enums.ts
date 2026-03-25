@@ -80,6 +80,7 @@ export const PaymentInvoiceState = {
   PAID: 'PAID',
   OVERDUE: 'OVERDUE',
   CANCELED: 'CANCELED',
+  WAIVED: 'WAIVED',
 } as const;
 
 export type PaymentOutcome = keyof typeof PaymentOutcome;

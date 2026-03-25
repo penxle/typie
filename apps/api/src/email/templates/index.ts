@@ -7,3 +7,4 @@ export { default as SignUpEmail } from './SignUpEmail.tsx.js';
 export { default as SubscriptionExpiredEmail } from './SubscriptionExpiredEmail.tsx.js';
 export { default as SubscriptionExpiringEmail } from './SubscriptionExpiringEmail.tsx.js';
 export { default as SubscriptionGracePeriodEmail } from './SubscriptionGracePeriodEmail.tsx.js';
+export { default as SubscriptionWaivedEmail } from './SubscriptionWaivedEmail.tsx.js';

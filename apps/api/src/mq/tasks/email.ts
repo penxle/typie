@@ -4,7 +4,12 @@ import dayjs from 'dayjs';
 import { and, desc, eq } from 'drizzle-orm';
 import { db, first, firstOrThrow, PaymentInvoices, PaymentRecords, Plans, Subscriptions, Users } from '#/db/index.ts';
 import { sendEmail } from '#/email/index.ts';
-import { SubscriptionExpiredEmail, SubscriptionExpiringEmail, SubscriptionGracePeriodEmail } from '#/email/templates/index.ts';
+import {
+  SubscriptionExpiredEmail,
+  SubscriptionExpiringEmail,
+  SubscriptionGracePeriodEmail,
+  SubscriptionWaivedEmail,
+} from '#/email/templates/index.ts';
 import { env } from '#/env.ts';
 import { defineJob } from '../types.ts';
 
@@ -122,6 +127,42 @@ export const SendSubscriptionExpiredEmailJob = defineJob('email:subscription-exp
       userName: subscription.user.name,
       planName: subscription.plan.name,
       expiredAt: dayjs.kst().format('YYYY년 M월 D일'),
+    }),
+  });
+});
+
+export const SendSubscriptionWaivedEmailJob = defineJob('email:subscription-waived', async (subscriptionId: string) => {
+  const subscription = await db
+    .select({
+      renewedAt: Subscriptions.renewedAt,
+      plan: { name: Plans.name, interval: Plans.interval },
+      user: { name: Users.name, email: Users.email },
+    })
+    .from(Subscriptions)
+    .innerJoin(Plans, eq(Subscriptions.planId, Plans.id))
+    .innerJoin(Users, eq(Subscriptions.userId, Users.id))
+    .where(eq(Subscriptions.id, subscriptionId))
+    .then(firstOrThrow);
+
+  // 이메일 job 실행 시점에 renewedAt은 이미 새 주기 시작점으로 업데이트됨
+  // 면제된 기간 = [renewedAt - interval, renewedAt)
+  const isYearly = subscription.plan.interval === 'YEARLY';
+  const waivedStart = isYearly ? subscription.renewedAt.subtract(1, 'year') : subscription.renewedAt.subtract(1, 'month');
+  const waivedEnd = subscription.renewedAt;
+  const period = isYearly ? '올해' : '이번 달';
+
+  const startStr = waivedStart.kst().format('YYYY년 M월 D일');
+  const endStr =
+    waivedStart.kst().year() === waivedEnd.kst().year() ? waivedEnd.kst().format('M월 D일') : waivedEnd.kst().format('YYYY년 M월 D일');
+
+  await sendEmail({
+    subject: `[타이피] ${period}은 구독료 결제를 건너뛰었어요`,
+    recipient: subscription.user.email,
+    body: SubscriptionWaivedEmail({
+      userName: subscription.user.name,
+      interval: subscription.plan.interval as 'MONTHLY' | 'YEARLY',
+      waivedStart: startStr,
+      waivedEnd: endStr,
     }),
   });
 });
