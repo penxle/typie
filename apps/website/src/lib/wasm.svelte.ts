@@ -1,7 +1,7 @@
-import type { Application } from '@typie/editor';
+import type { EditorEngine } from '@typie/editor';
 
-let instance: Application | undefined;
-let initPromise: Promise<Application> | undefined;
+let instance: EditorEngine | undefined;
+let initPromise: Promise<EditorEngine> | undefined;
 let panicked = $state(false);
 
 function wrapWithCrashDetection<T extends object>(target: T): T {
@@ -29,15 +29,16 @@ function wrapWithCrashDetection<T extends object>(target: T): T {
   });
 }
 
-export function initWasm(): Promise<Application> {
-  return (initPromise ??= import('@typie/editor').then(async ({ default: init, Application }) => {
+export function initWasm(): Promise<EditorEngine> {
+  return (initPromise ??= import('@typie/editor').then(async ({ default: init, EditorEngine }) => {
     await init();
-    instance = wrapWithCrashDetection(new Application());
+    instance = wrapWithCrashDetection(new EditorEngine());
+    await instance.initGpu();
     return instance;
   }));
 }
 
-export const wasm: Application & { readonly panicked: boolean } = new Proxy({} as Application & { readonly panicked: boolean }, {
+export const wasm: EditorEngine & { readonly panicked: boolean } = new Proxy({} as EditorEngine & { readonly panicked: boolean }, {
   get(_, prop) {
     if (prop === 'panicked') {
       return panicked;

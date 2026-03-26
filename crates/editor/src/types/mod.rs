@@ -2,7 +2,7 @@ mod affinity;
 mod constraints;
 mod geometry;
 mod pointer;
-mod theme;
+pub mod theme;
 
 pub use affinity::*;
 pub use constraints::*;

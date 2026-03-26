@@ -43,7 +43,7 @@ export async function generateDocumentPreview(params: GeneratePreviewParams): Pr
     const editor = app.createEditor(SCALE_FACTOR, snapshot);
 
     try {
-      editor.dispatch({
+      editor.enqueueMessage({
         type: 'initialize',
         theme: theme === 'dark' ? DARK_THEME : LIGHT_THEME,
         viewportWidth: layout.pageWidth,
@@ -51,7 +51,7 @@ export async function generateDocumentPreview(params: GeneratePreviewParams): Pr
         scaleFactor: SCALE_FACTOR,
       });
 
-      editor.dispatch({
+      editor.enqueueMessage({
         type: 'setLayoutMode',
         mode: {
           type: 'paginated',
@@ -101,7 +101,7 @@ export async function generateDocumentPreview(params: GeneratePreviewParams): Pr
               mappings.push(...fallbackMappings);
             }
 
-            editor.dispatch({ type: 'fontsLoaded', family: req.family, weight: req.weight, mappings });
+            editor.enqueueMessage({ type: 'fontsLoaded', family: req.family, weight: req.weight, mappings });
           })(),
         );
       }
@@ -114,7 +114,7 @@ export async function generateDocumentPreview(params: GeneratePreviewParams): Pr
           assets = resolved;
           for (const ext of externals) {
             const { height } = computeDesiredSize(ext, assets.get(ext.nodeId));
-            editor.dispatch({ type: 'setExternalElementHeight', nodeId: ext.nodeId, height });
+            editor.enqueueMessage({ type: 'setExternalElementHeight', nodeId: ext.nodeId, height });
           }
         }),
       );
@@ -130,7 +130,7 @@ export async function generateDocumentPreview(params: GeneratePreviewParams): Pr
       }
 
       // 첫 페이지만 추출
-      const bytes = editor.exportPageVector(0);
+      const bytes = editor.exportPage(0);
       if (!bytes) {
         throw new Error('Missing vector page payload');
       }

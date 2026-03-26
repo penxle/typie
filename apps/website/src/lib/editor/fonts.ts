@@ -1,7 +1,7 @@
 import fallbackFontFamilies from '@typie/editor/font/fallbacks.json' with { type: 'json' };
 import notoPhantomUrl from '@typie/editor/font/Noto-Phantom.bin?url';
 import notoPhantomEmojiUrl from '@typie/editor/font/Noto-Phantom-Emoji.bin?url';
-import type { Application } from '@typie/editor';
+import type { EditorEngine } from '@typie/editor';
 
 export type Font = { id: string; weight: number; subfamilyDisplayName?: string | null; url: string; state: string };
 export type FontFamily = { id: string; familyName: string; displayName: string; state: string; fonts: readonly Font[] };
@@ -231,7 +231,7 @@ function findChunkIndices(manifest: FontManifest, codepoints: number[]): number[
   return [...indices];
 }
 
-async function loadBase(app: Application, family: string, font: FontRef): Promise<void> {
+async function loadBase(app: EditorEngine, family: string, font: FontRef): Promise<void> {
   await loadOnce(`base:${family}:${font.weight}`, async () => {
     const manifest = await fetchManifest(font.url);
     const buffer = await fetchFont(`${font.url}/${manifest.hash}/base.bin`);
@@ -239,7 +239,7 @@ async function loadBase(app: Application, family: string, font: FontRef): Promis
   });
 }
 
-async function loadChunks(app: Application, family: string, font: FontRef, codepoints: number[]): Promise<void> {
+async function loadChunks(app: EditorEngine, family: string, font: FontRef, codepoints: number[]): Promise<void> {
   const manifest = await fetchManifest(font.url);
 
   await Promise.allSettled(
@@ -252,7 +252,7 @@ async function loadChunks(app: Application, family: string, font: FontRef, codep
   );
 }
 
-export async function initFonts(app: Application): Promise<void> {
+export async function initFonts(app: EditorEngine): Promise<void> {
   await Promise.all(
     phantomFontFamilies.map(async ({ familyName, url }) => {
       const response = await fetch(url);
@@ -273,12 +273,12 @@ export async function filterUncoveredCodepoints(font: FontRef, codepoints: numbe
   return codepoints.filter((cp) => !hasCodepoint(manifest, cp));
 }
 
-export async function ensureRequiredFont(app: Application, family: string, font: FontRef, codepoints: number[]): Promise<void> {
+export async function ensureRequiredFont(app: EditorEngine, family: string, font: FontRef, codepoints: number[]): Promise<void> {
   await loadBase(app, family, font);
   await loadChunks(app, family, font, codepoints);
 }
 
-export async function preloadRemainingChunks(app: Application, family: string, font: FontRef): Promise<void> {
+export async function preloadRemainingChunks(app: EditorEngine, family: string, font: FontRef): Promise<void> {
   try {
     const manifest = await fetchManifest(font.url);
 
@@ -303,7 +303,7 @@ export async function preloadRemainingChunks(app: Application, family: string, f
 }
 
 export async function resolveFallbackMappings(
-  app: Application,
+  app: EditorEngine,
   weight: number,
   uncovered: number[],
 ): Promise<{ family: string; weight: number; codepoints: number[] }[]> {

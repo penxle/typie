@@ -32,7 +32,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
     const editor = wasm.createEditor(SCALE_FACTOR, snapshot);
 
     try {
-      editor.dispatch({
+      editor.enqueueMessage({
         type: 'initialize',
         theme: LIGHT_THEME,
         viewportWidth: layout.pageWidth,
@@ -40,7 +40,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
         scaleFactor: SCALE_FACTOR,
       });
 
-      editor.dispatch({
+      editor.enqueueMessage({
         type: 'setLayoutMode',
         mode: {
           type: 'paginated',
@@ -89,7 +89,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
               mappings.push(...fallbackMappings);
             }
 
-            editor.dispatch({ type: 'fontsLoaded', family: req.family, weight: req.weight, mappings });
+            editor.enqueueMessage({ type: 'fontsLoaded', family: req.family, weight: req.weight, mappings });
           })(),
         );
       }
@@ -102,7 +102,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
           assets = resolved;
           for (const ext of externals) {
             const { height } = computeDesiredSize(ext, assets.get(ext.nodeId));
-            editor.dispatch({ type: 'setExternalElementHeight', nodeId: ext.nodeId, height });
+            editor.enqueueMessage({ type: 'setExternalElementHeight', nodeId: ext.nodeId, height });
           }
         }),
       );
@@ -119,7 +119,7 @@ export async function generateDocumentPdf(params: GenerateDocumentPdfParams): Pr
       }
 
       const pages = Array.from({ length: pageCount }, (_, i) => {
-        const bytes = editor.exportPageVector(i);
+        const bytes = editor.exportPage(i);
         if (!bytes) {
           throw new Error(`Missing vector page payload for page index ${i}`);
         }

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { initFonts } from '../pdf/fonts.ts';
-import type { Application } from '@typie/editor';
+import type { EditorEngine } from '@typie/editor';
 
 // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const ICU_DATA_PATH = new URL(import.meta.resolve!('@typie/editor/icu.zst')).pathname;
@@ -9,8 +9,8 @@ function getIcuData(): Promise<Uint8Array> {
   return (icuDataPromise ??= readFile(ICU_DATA_PATH).then((buf) => new Uint8Array(buf)));
 }
 
-const initialized = new WeakMap<Application, Promise<void>>();
-export async function ensureInstanceReady(app: Application): Promise<void> {
+const initialized = new WeakMap<EditorEngine, Promise<void>>();
+export async function ensureInstanceReady(app: EditorEngine): Promise<void> {
   let pending = initialized.get(app);
   if (!pending) {
     pending = (async () => {

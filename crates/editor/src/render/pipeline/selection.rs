@@ -1,5 +1,17 @@
 use super::*;
 
+pub(crate) fn selection_overlay_color(theme: &Theme, is_focused: bool) -> Color {
+    if is_focused {
+        theme.color_with_alpha("selection", 77)
+    } else {
+        theme.color_with_alpha("selection", 48)
+    }
+}
+
+pub(crate) fn selection_overlay_brush(theme: &Theme, is_focused: bool) -> Brush {
+    Brush::Solid(selection_overlay_color(theme, is_focused))
+}
+
 impl Renderer {
     pub(in super::super) fn collect_selection_clip_rects(
         positioned: &PositionedNode,
@@ -7,7 +19,7 @@ impl Renderer {
         selections: &[SelectionDecor],
         bounds_origin: Point,
         scale: f32,
-        out: &mut Vec<Rect>,
+        out: &mut Vec<LayoutRect>,
         selection_data: Option<&mut SelectionOverlayData>,
     ) {
         if selections.is_empty() {
@@ -47,7 +59,7 @@ impl Renderer {
         selections_by_node: &FxHashMap<NodeId, Vec<SelectionDecor>>,
         bounds_origin: Point,
         scale: f32,
-        out: &mut Vec<Rect>,
+        out: &mut Vec<LayoutRect>,
         selection_data: &mut Option<&mut SelectionOverlayData>,
     ) {
         let pos = Point::new(
@@ -68,7 +80,7 @@ impl Renderer {
                         for rect in line.compute_selection_rects(pos, node_selections) {
                             if let Some(data) = selection_data.as_deref_mut()
                                 && let Some(layout_rect) =
-                                    CacheRect::from_xywh(rect.x, rect.y, rect.width, rect.height)
+                                    LayoutRect::from_xywh(rect.x, rect.y, rect.width, rect.height)
                             {
                                 data.text_paint_rects.push(layout_rect);
                             }
@@ -84,7 +96,7 @@ impl Renderer {
                             data.has_non_text_selection = true;
                         }
                         let node_size = &positioned.node.size;
-                        if let Some(translated) = Rect::from_xywh(
+                        if let Some(translated) = LayoutRect::from_xywh(
                             (pos.x - bounds_origin.x) * scale,
                             (pos.y - bounds_origin.y) * scale,
                             node_size.width * scale,
@@ -116,9 +128,9 @@ impl Renderer {
         rect: crate::types::Rect,
         bounds_origin: Point,
         scale: f32,
-        out: &mut Vec<Rect>,
+        out: &mut Vec<LayoutRect>,
     ) {
-        if let Some(translated) = Rect::from_xywh(
+        if let Some(translated) = LayoutRect::from_xywh(
             (rect.x - bounds_origin.x) * scale,
             (rect.y - bounds_origin.y) * scale,
             rect.width * scale,

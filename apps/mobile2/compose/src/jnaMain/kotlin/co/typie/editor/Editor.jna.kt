@@ -4,6 +4,7 @@ import uniffi.editor.EditorEngine as NativeEditorEngine
 import uniffi.editor.Editor as NativeEditor
 import uniffi.editor.EditorException as NativeEditorException
 import uniffi.editor.PageRenderInfo as NativePageRenderInfo
+import uniffi.editor.PageTexture as NativePageTexture
 import uniffi.editor.CharacterCounts as NativeCharacterCounts
 import uniffi.editor.DragImageData as NativeDragImageData
 
@@ -16,6 +17,10 @@ private inline fun <T> wrapCall(block: () -> T): T {
 }
 
 class JnaEditorEngine(private val native: NativeEditorEngine) : EditorEngine {
+    override suspend fun initGpu(): Boolean {
+        return native.initGpu()
+    }
+
     override fun validateRegex(pattern: String): Boolean {
         return wrapCall { native.validateRegex(pattern) }
     }
@@ -60,6 +65,14 @@ class JnaEditor(private val native: NativeEditor) : Editor {
 
     override fun flush() {
         wrapCall { native.flush() }
+    }
+
+    override fun attachSurface(pageIndex: Int): PageTexture {
+        return wrapCall { JnaPageTexture(native.attachSurface(pageIndex.toUInt())) }
+    }
+
+    override fun detachSurface(pageIndex: Int) {
+        native.detachSurface(pageIndex.toUInt())
     }
 
     override fun getPageCount(): Int {
@@ -149,6 +162,14 @@ class JnaEditor(private val native: NativeEditor) : Editor {
     override fun close() {
         native.close()
     }
+}
+
+class JnaPageTexture(private val native: NativePageTexture) : PageTexture {
+    override val nativeHandle: Long = native.nativeHandle().toLong()
+    override val width: Int = native.width().toInt()
+    override val height: Int = native.height().toInt()
+    override fun pixelData(): ByteArray? = native.pixelData()
+    override fun close() = native.close()
 }
 
 private fun NativePageRenderInfo.toKotlin() = PageRenderInfo(

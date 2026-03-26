@@ -1,19 +1,19 @@
 use crate::layout::elements::LineElement;
 use crate::layout::{Element, Page, PositionedNode};
 use crate::model::NodeId;
-use crate::render::geometry::CacheRect;
+use crate::render::backend::cpu::pixel_buf::PixelBuf;
+use crate::render::geometry::LayoutRect;
 use crate::types::Point;
 use rustc_hash::{FxHashMap, FxHasher};
 use std::hash::{Hash, Hasher};
 use std::mem::Discriminant;
 use std::rc::Rc;
-use tiny_skia::Pixmap;
 
 const SCALE_FACTOR_MATCH_EPSILON: f64 = 1e-6;
 
 #[derive(Default, Clone, PartialEq)]
-pub(super) struct PageRenderSnapshot {
-    nodes: FxHashMap<SnapshotNodeKey, CacheRect>,
+pub(crate) struct PageSnapshot {
+    nodes: FxHashMap<SnapshotNodeKey, LayoutRect>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,15 +31,43 @@ enum SnapshotNodeKey {
     },
 }
 
-impl PageRenderSnapshot {
-    pub(super) fn from_page(page: &Page) -> Self {
+impl PageSnapshot {
+    pub(crate) fn from_page(page: &Page) -> Self {
         let mut nodes = FxHashMap::default();
         collect_snapshot(&page.root, Point::zero(), &mut nodes);
         Self { nodes }
     }
 
-    pub(super) fn dirty_rects(&self, next: &Self) -> Vec<CacheRect> {
+    pub(crate) fn dirty_rects(&self, next: &Self) -> Vec<LayoutRect> {
         dirty_rects_between(&self.nodes, &next.nodes)
+    }
+
+    /// snapshot 비교 기반 dirty rect 계산 (CPU/GPU 공용).
+    ///
+    /// `snapshot_initialized`가 false이면 전체 캔버스를 dirty로 처리한다.
+    /// 반환: (normalized_dirty_rects, should_full_repaint)
+    pub(crate) fn compute_dirty_rects(
+        prev: Option<(&Self, bool)>,
+        next: &Self,
+        canvas_width: f32,
+        canvas_height: f32,
+    ) -> (Vec<LayoutRect>, bool) {
+        use crate::render::renderer::{normalize_dirty_rects, should_promote_full_repaint};
+
+        let dirty_rects = match prev {
+            Some((prev_snapshot, true)) => prev_snapshot.dirty_rects(next),
+            _ => LayoutRect::from_canvas(canvas_width, canvas_height)
+                .map(|r| vec![r])
+                .unwrap_or_default(),
+        };
+
+        if dirty_rects.is_empty() {
+            return (Vec::new(), false);
+        }
+
+        let normalized = normalize_dirty_rects(dirty_rects, canvas_width, canvas_height);
+        let full_repaint = should_promote_full_repaint(&normalized, canvas_width, canvas_height);
+        (normalized, full_repaint)
     }
 }
 
@@ -109,7 +137,7 @@ fn stable_element_signature(element: &Element) -> u64 {
 fn collect_snapshot(
     positioned: &PositionedNode,
     offset: Point,
-    out: &mut FxHashMap<SnapshotNodeKey, CacheRect>,
+    out: &mut FxHashMap<SnapshotNodeKey, LayoutRect>,
 ) {
     let pos = Point::new(
         offset.x + positioned.position.x,
@@ -129,7 +157,7 @@ fn collect_snapshot(
     }
 }
 
-pub(super) fn node_paint_bounds(positioned: &PositionedNode, pos: Point) -> Option<CacheRect> {
+pub(super) fn node_paint_bounds(positioned: &PositionedNode, pos: Point) -> Option<LayoutRect> {
     let mut x = pos.x;
     let mut y = pos.y;
     let mut width = positioned.node.size.width;
@@ -150,13 +178,13 @@ pub(super) fn node_paint_bounds(positioned: &PositionedNode, pos: Point) -> Opti
         height += overflow.top + overflow.bottom;
     }
 
-    CacheRect::from_xywh(x, y, width, height)
+    LayoutRect::from_xywh(x, y, width, height)
 }
 
 fn dirty_rects_between<K: Eq + Hash>(
-    prev: &FxHashMap<K, CacheRect>,
-    next: &FxHashMap<K, CacheRect>,
-) -> Vec<CacheRect> {
+    prev: &FxHashMap<K, LayoutRect>,
+    next: &FxHashMap<K, LayoutRect>,
+) -> Vec<LayoutRect> {
     let mut dirty_rects = Vec::new();
 
     for (key, prev_bounds) in prev {
@@ -179,31 +207,28 @@ fn dirty_rects_between<K: Eq + Hash>(
     dirty_rects
 }
 
-pub(super) struct PageRenderCache {
+pub(super) struct PageCache {
     pub(super) width: u32,
     pub(super) height: u32,
     pub(super) scale_factor: f64,
-    pub(super) snapshot: PageRenderSnapshot,
+    pub(super) snapshot: PageSnapshot,
     pub(super) snapshot_initialized: bool,
-    pub(super) base_pixmap: Pixmap,
-    pub(super) background_pixmap: Pixmap,
-    pub(super) content_pixmap: Pixmap,
+    pub(super) background: PixelBuf,
+    pub(super) content: PixelBuf,
 }
 
-impl PageRenderCache {
+impl PageCache {
     pub(super) fn new(width: u32, height: u32, scale_factor: f64) -> Self {
-        let base_pixmap = Pixmap::new(width.max(1), height.max(1)).unwrap();
-        let background_pixmap = Pixmap::new(width.max(1), height.max(1)).unwrap();
-        let content_pixmap = Pixmap::new(width.max(1), height.max(1)).unwrap();
+        let background = PixelBuf::new(width.max(1), height.max(1)).unwrap();
+        let content = PixelBuf::new(width.max(1), height.max(1)).unwrap();
         Self {
             width,
             height,
             scale_factor,
-            snapshot: PageRenderSnapshot::default(),
+            snapshot: PageSnapshot::default(),
             snapshot_initialized: false,
-            base_pixmap,
-            background_pixmap,
-            content_pixmap,
+            background,
+            content,
         }
     }
 
@@ -224,9 +249,8 @@ impl PageRenderCache {
         scale_factor: f64,
     ) -> Self {
         let mut resized = Self::new(width, height, scale_factor);
-        copy_pixmap_overlap(&self.base_pixmap, &mut resized.base_pixmap);
-        copy_pixmap_overlap(&self.background_pixmap, &mut resized.background_pixmap);
-        copy_pixmap_overlap(&self.content_pixmap, &mut resized.content_pixmap);
+        copy_pixelbuf_overlap(&self.background, &mut resized.background);
+        copy_pixelbuf_overlap(&self.content, &mut resized.content);
         resized.snapshot = self.snapshot;
         resized.snapshot_initialized = self.snapshot_initialized;
         resized
@@ -237,7 +261,7 @@ impl PageRenderCache {
         new_width_px: u32,
         new_height_px: u32,
         scale: f32,
-    ) -> Vec<CacheRect> {
+    ) -> Vec<LayoutRect> {
         exposed_rects_for_resize(self.width, self.height, new_width_px, new_height_px, scale)
     }
 }
@@ -246,7 +270,7 @@ pub(super) fn same_scale_factor(a: f64, b: f64) -> bool {
     (a - b).abs() <= SCALE_FACTOR_MATCH_EPSILON
 }
 
-fn copy_pixmap_overlap(src: &Pixmap, dst: &mut Pixmap) {
+fn copy_pixelbuf_overlap(src: &PixelBuf, dst: &mut PixelBuf) {
     let copy_w = src.width().min(dst.width()) as usize;
     let copy_h = src.height().min(dst.height()) as usize;
     if copy_w == 0 || copy_h == 0 {
@@ -273,7 +297,7 @@ fn exposed_rects_for_resize(
     new_width_px: u32,
     new_height_px: u32,
     scale: f32,
-) -> Vec<CacheRect> {
+) -> Vec<LayoutRect> {
     if scale <= 0.0 {
         return Vec::new();
     }
@@ -284,7 +308,7 @@ fn exposed_rects_for_resize(
         let x = old_width_px as f32 / scale;
         let width = (new_width_px - old_width_px) as f32 / scale;
         let height = new_height_px as f32 / scale;
-        if let Some(rect) = CacheRect::from_xywh(x, 0.0, width, height) {
+        if let Some(rect) = LayoutRect::from_xywh(x, 0.0, width, height) {
             rects.push(rect);
         }
     }
@@ -293,7 +317,7 @@ fn exposed_rects_for_resize(
         let y = old_height_px as f32 / scale;
         let width = new_width_px as f32 / scale;
         let height = (new_height_px - old_height_px) as f32 / scale;
-        if let Some(rect) = CacheRect::from_xywh(0.0, y, width, height) {
+        if let Some(rect) = LayoutRect::from_xywh(0.0, y, width, height) {
             rects.push(rect);
         }
     }

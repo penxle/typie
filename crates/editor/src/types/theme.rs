@@ -1,8 +1,10 @@
 use crate::utils::rgba_from_u32;
+use peniko::color::{AlphaColor, Srgb};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use tiny_skia::Color;
+
+pub type Color = AlphaColor<Srgb>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]

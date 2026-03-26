@@ -8,11 +8,18 @@ pub(super) const PAGE_EDGE_OVERFLOW_BAND: f32 = 16.0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPhase {
     Background,
-    Content,
     Selection,
+    Content,
 }
 
-pub struct RenderContext<'a> {
+/// 렌더링 phase 순서. 모든 backend가 이 순서를 사용한다.
+pub const RENDER_PHASES: [RenderPhase; 3] = [
+    RenderPhase::Background,
+    RenderPhase::Selection,
+    RenderPhase::Content,
+];
+
+pub struct RenderParams<'a> {
     pub scale_factor: f64,
     pub selections: &'a [SelectionDecor],
     pub theme: &'a Theme,
@@ -23,13 +30,9 @@ pub struct RenderContext<'a> {
     pub render_origin: Point,
 }
 
-impl RenderContext<'_> {
-    pub(crate) fn selection_color(&self) -> Color {
-        selection_overlay_color(self.theme, self.is_focused)
-    }
-
-    pub(crate) fn selection_paint(&self) -> Paint<'static> {
-        selection_overlay_paint(self.theme, self.is_focused)
+impl<'a> RenderParams<'a> {
+    pub(crate) fn selection_paint(&self) -> Brush {
+        selection_overlay_brush(self.theme, self.is_focused)
     }
 
     pub(crate) fn is_block_selected(&self, node_id: NodeId) -> bool {
@@ -43,36 +46,10 @@ impl RenderContext<'_> {
             matches!(selection, SelectionDecor::TextRange { node_id: id, .. } if *id == node_id || self.doc.is_ancestor(node_id, *id))
         })
     }
-
-    pub(crate) fn fill_selection_rect_fast(
-        &self,
-        pixmap: &mut PixmapMut,
-        rect: Rect,
-        transform: Transform,
-    ) -> bool {
-        fill_rect_src_over_fast(pixmap, rect, transform, self.selection_color())
-    }
 }
 
 pub trait Render {
-    fn render(
-        &self,
-        pixmap: &mut PixmapMut,
-        glyph_renderer: &mut GlyphRenderer,
-        transform: Transform,
-        ctx: &RenderContext<'_>,
-    );
-}
-
-pub trait Outline {
-    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>);
-}
-
-pub struct RenderResult {
-    pub ptr: *const u8,
-    pub len: usize,
-    pub width: u16,
-    pub height: u16,
+    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>);
 }
 
 #[allow(dead_code)]
@@ -83,7 +60,7 @@ pub struct RenderInfo {
 }
 
 pub struct DragImageResult {
-    pub(super) pixmap: Pixmap,
+    pub(super) buf: PixelBuf,
     pub width: u16,
     pub height: u16,
     pub offset_x: f32,
@@ -98,8 +75,8 @@ pub(super) struct OverflowRenderCacheEntry {
     pub(super) pixel_rect: PixelRect,
     pub(super) next_root_ptr: usize,
     pub(super) next_snapshot: OverflowRenderSnapshot,
-    pub(super) tile_pixmap: Pixmap,
-    pub(super) debug_rects: Vec<CacheRect>,
+    pub(super) tile: PixelBuf,
+    pub(super) debug_rects: Vec<LayoutRect>,
 }
 
 #[derive(Default, Clone, PartialEq, Eq)]
@@ -114,55 +91,64 @@ pub(super) struct OverflowSnapshotItem {
 
 #[derive(Default)]
 pub(super) struct SelectionOverlayData {
-    pub(super) clip_rects: Vec<CacheRect>,
-    pub(super) text_paint_rects: Vec<CacheRect>,
+    pub(super) clip_rects: Vec<LayoutRect>,
+    pub(super) text_paint_rects: Vec<LayoutRect>,
     pub(super) has_non_text_selection: bool,
 }
 
 impl DragImageResult {
     pub fn ptr(&self) -> *const u8 {
-        self.pixmap.data().as_ptr()
+        self.buf.data().as_ptr()
     }
 
     pub fn len(&self) -> usize {
-        self.pixmap.data().len()
+        self.buf.data().len()
     }
 }
 
 pub struct Renderer {
+    pub(super) backend: backend::RenderBackend,
     pub(super) scale_factor: f64,
-    pub(super) pixmap: Pixmap,
-    pub(super) scratch_pixmap: Pixmap,
-    pub(super) glyph_renderer: GlyphRenderer,
     pub(super) theme: Theme,
     pub(super) is_focused: bool,
-    pub(super) page_cache: FxHashMap<usize, PageRenderCache>,
+    pub(super) page_cache: FxHashMap<usize, PageCache>,
     pub(super) overflow_cache: FxHashMap<usize, OverflowRenderCacheEntry>,
+    pub(super) attached_surfaces: FxHashMap<u32, super::surface::SurfaceSize>,
     pub(super) render_debug_enabled: bool,
     pub(super) layout_debug_enabled: bool,
-    pub(super) paint_diagnostics: PaintDiagnosticsState,
+    pub(super) diagnostics_state: DiagnosticsState,
     pub(super) diagnostics: FrameDiagnostics,
 }
 
 impl Renderer {
+    #[allow(dead_code)]
     pub fn new(scale_factor: f64, diagnostics: FrameDiagnostics) -> Self {
-        let pixmap = Pixmap::new(1, 1).unwrap();
-        let scratch_pixmap = Pixmap::new(1, 1).unwrap();
+        Self::with_backend(backend::RenderBackend::new_cpu(), scale_factor, diagnostics)
+    }
 
+    pub fn with_backend(
+        backend: backend::RenderBackend,
+        scale_factor: f64,
+        diagnostics: FrameDiagnostics,
+    ) -> Self {
         Self {
+            backend,
             scale_factor,
-            pixmap,
-            scratch_pixmap,
-            glyph_renderer: GlyphRenderer::new(),
             theme: Theme::default(),
             is_focused: true,
             page_cache: FxHashMap::default(),
             overflow_cache: FxHashMap::default(),
+            attached_surfaces: FxHashMap::default(),
             render_debug_enabled: false,
             layout_debug_enabled: false,
-            paint_diagnostics: PaintDiagnosticsState::default(),
+            diagnostics_state: DiagnosticsState::default(),
             diagnostics,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_gpu(&self) -> bool {
+        matches!(self.backend, backend::RenderBackend::Gpu { .. })
     }
 
     pub fn set_size(&mut self, width: f32, height: f32, scale_factor: f64) {
@@ -170,16 +156,27 @@ impl Renderer {
         let new_height = (height as f64 * scale_factor).round() as u32;
         let scale_changed = !same_scale_factor(self.scale_factor, scale_factor);
 
-        if self.pixmap.width() != new_width || self.pixmap.height() != new_height {
-            if let Some(new_pixmap) = Pixmap::new(new_width.max(1), new_height.max(1)) {
-                self.pixmap = new_pixmap;
+        match &mut self.backend {
+            backend::RenderBackend::Cpu { buf, .. } => {
+                if buf.width() != new_width || buf.height() != new_height {
+                    if let Some(new_buf) = PixelBuf::new(new_width.max(1), new_height.max(1)) {
+                        *buf = new_buf;
+                    }
+                }
+            }
+            backend::RenderBackend::Gpu { post_buf, .. } => {
+                if post_buf.width() != new_width || post_buf.height() != new_height {
+                    if let Some(new_buf) = PixelBuf::new(new_width.max(1), new_height.max(1)) {
+                        *post_buf = new_buf;
+                    }
+                }
             }
         }
         self.scale_factor = scale_factor;
         if scale_changed {
             self.page_cache.clear();
             self.overflow_cache.clear();
-            self.paint_diagnostics.clear();
+            self.diagnostics_state.clear();
         }
     }
 
@@ -188,7 +185,7 @@ impl Renderer {
             self.theme = theme;
             self.page_cache.clear();
             self.overflow_cache.clear();
-            self.paint_diagnostics.clear();
+            self.diagnostics_state.clear();
         }
     }
 
@@ -209,75 +206,118 @@ impl Renderer {
             .retain(|page_idx, _| *page_idx < valid_page_count);
         self.overflow_cache
             .retain(|page_idx, _| *page_idx < valid_page_count);
-        self.paint_diagnostics.retain_pages(valid_page_count);
+        self.diagnostics_state.retain_pages(valid_page_count);
     }
 
-    pub fn width(&self) -> u16 {
-        self.pixmap.width() as u16
-    }
-
-    pub fn height(&self) -> u16 {
-        self.pixmap.height() as u16
-    }
-
-    pub fn render(
+    /// Base layer 준비를 backend::cpu::layers에 위임한다.
+    #[allow(dead_code)]
+    pub(super) fn prepare_base_layer(
         &mut self,
         page: &Page,
         page_idx: usize,
-        next_page: Option<&Page>,
-        selections: &[SelectionDecor],
-        drop_indicator: Option<&DropIndicator>,
         doc: &Doc,
-    ) -> RenderResult {
-        let mut debug_frame = self.prepare_base_layer(page, page_idx, doc);
-
-        let mut background_layer = None;
-        let mut content_layer = None;
-        if let Some(cache) = self.page_cache.get(&page_idx) {
-            self.pixmap
-                .data_mut()
-                .copy_from_slice(cache.base_pixmap.data());
-            if !selections.is_empty() {
-                background_layer = Some(&cache.background_pixmap);
-                content_layer = Some(&cache.content_pixmap);
-            }
-        } else {
-            self.pixmap.data_mut().fill(0);
-        }
-
-        let mut pixmap = self.pixmap.as_mut();
-        Self::render_overlay_layers(
-            &mut pixmap,
-            &mut self.glyph_renderer,
-            &mut self.scratch_pixmap,
+    ) -> Option<DebugFrame> {
+        backend::cpu::layers::prepare_base_layer(
+            page,
+            page_idx,
+            doc,
+            &mut self.backend,
             self.scale_factor,
             &self.theme,
             self.is_focused,
+            &mut self.page_cache,
             self.render_debug_enabled,
             self.layout_debug_enabled,
-            background_layer,
-            content_layer,
-            &mut self.overflow_cache,
-            page,
-            page_idx,
-            next_page,
-            selections,
-            drop_indicator,
-            doc,
-            &mut debug_frame,
-        );
-
-        let data = self.pixmap.data();
-        RenderResult {
-            ptr: data.as_ptr(),
-            len: data.len(),
-            width: self.width(),
-            height: self.height(),
-        }
+            &mut self.diagnostics_state,
+            &self.diagnostics,
+        )
     }
 
-    #[allow(dead_code)]
-    pub fn render_to(
+    // ── Mount / Unmount API ───────────────────────────────────────────
+
+    /// 페이지에 렌더링 surface를 할당하고 크기를 반환한다.
+    /// page_width, page_height는 레이아웃 좌표(DPI 미적용).
+    pub fn attach_surface(
+        &mut self,
+        page_index: u32,
+        page_width: f32,
+        page_height: f32,
+    ) -> super::surface::SurfaceSize {
+        let width = (page_width as f64 * self.scale_factor).round().max(1.0) as u32;
+        let height = (page_height as f64 * self.scale_factor).round().max(1.0) as u32;
+        self.attached_surfaces
+            .insert(page_index, super::surface::SurfaceSize { width, height });
+        super::surface::SurfaceSize { width, height }
+    }
+
+    pub fn detach_surface(&mut self, page_index: u32) {
+        self.attached_surfaces.remove(&page_index);
+        self.page_cache.remove(&(page_index as usize));
+        self.overflow_cache.remove(&(page_index as usize));
+    }
+
+    /// 할당된 surface의 크기를 갱신한다.
+    /// 크기가 변경되면 Some(새 크기)를 반환하고 캐시를 무효화한다.
+    /// 변경 없으면 None.
+    pub fn resize_surface(
+        &mut self,
+        page_index: u32,
+        page_width: f32,
+        page_height: f32,
+    ) -> Option<super::surface::SurfaceSize> {
+        let width = (page_width as f64 * self.scale_factor).round().max(1.0) as u32;
+        let height = (page_height as f64 * self.scale_factor).round().max(1.0) as u32;
+        let surface = self.attached_surfaces.get_mut(&page_index)?;
+        if surface.width == width && surface.height == height {
+            return None;
+        }
+        surface.width = width;
+        surface.height = height;
+        self.page_cache.remove(&(page_index as usize));
+        self.overflow_cache.remove(&(page_index as usize));
+        Some(super::surface::SurfaceSize { width, height })
+    }
+
+    // ── Size / Query ────────────────────────────────────────────────────
+
+    /// 페이지의 전체 Vello scene을 빌드한다.
+    /// WASM GPU 경로에서 surface에 직접 렌더링할 때 사용한다.
+    pub fn build_surface_scene(
+        &mut self,
+        page: &Page,
+        selections: &[SelectionDecor],
+        doc: &Doc,
+    ) -> vello::Scene {
+        let scale = self.scale_factor as f32;
+        let transform = Affine::scale_non_uniform(scale as f64, scale as f64);
+        let mut sink = backend::gpu::GpuSink::new();
+
+        for phase in RENDER_PHASES {
+            let ctx = RenderParams {
+                scale_factor: self.scale_factor,
+                selections,
+                theme: &self.theme,
+                doc,
+                default_text_color: None,
+                is_focused: self.is_focused,
+                phase,
+                render_origin: Point::zero(),
+            };
+            Self::render_node(
+                &mut sink,
+                &page.root,
+                Point::zero(),
+                transform,
+                &ctx,
+                &RenderHints::default(),
+                None,
+            );
+        }
+
+        sink.into_scene()
+    }
+
+    pub fn render_into(
         &mut self,
         page: &Page,
         page_idx: usize,
@@ -287,41 +327,99 @@ impl Renderer {
         doc: &Doc,
         dst: &mut [u8],
     ) -> bool {
-        let expected_size = self.pixmap.width() as usize * self.pixmap.height() as usize * 4;
+        let backend::RenderBackend::Cpu { ref buf, .. } = self.backend else {
+            return false; // render_into는 CPU 전용
+        };
+        let w = buf.width();
+        let h = buf.height();
+        let expected_size = w as usize * h as usize * 4;
         if dst.len() < expected_size {
             return false;
         }
 
-        let Some(mut pixmap) =
-            PixmapMut::from_bytes(dst, self.pixmap.width(), self.pixmap.height())
-        else {
+        let Some(mut buf) = PixelBuf::from_bytes(dst, w, h) else {
             return false;
         };
 
-        let mut debug_frame = self.prepare_base_layer(page, page_idx, doc);
-        let mut background_layer = None;
-        let mut content_layer = None;
+        let mut debug_frame = backend::cpu::layers::prepare_base_layer(
+            page,
+            page_idx,
+            doc,
+            &mut self.backend,
+            self.scale_factor,
+            &self.theme,
+            self.is_focused,
+            &mut self.page_cache,
+            self.render_debug_enabled,
+            self.layout_debug_enabled,
+            &mut self.diagnostics_state,
+            &self.diagnostics,
+        );
+        let backend::RenderBackend::Cpu {
+            ref mut scratch_buf,
+            ..
+        } = self.backend
+        else {
+            unreachable!("render_into requires CPU backend");
+        };
+
         if let Some(cache) = self.page_cache.get(&page_idx) {
-            pixmap.data_mut().copy_from_slice(cache.base_pixmap.data());
+            // Phase 1: Background (cached)
+            buf.data_mut().copy_from_slice(cache.background.data());
+
+            // Phase 2: Selection (real-time)
             if !selections.is_empty() {
-                background_layer = Some(&cache.background_pixmap);
-                content_layer = Some(&cache.content_pixmap);
+                let pw = buf.width();
+                let ph = buf.height();
+                let canvas_width = pw as f32 / self.scale_factor as f32;
+                let canvas_height = ph as f32 / self.scale_factor as f32;
+                let selection_data = Self::collect_selection_overlay_data(
+                    page,
+                    selections,
+                    canvas_width,
+                    canvas_height,
+                );
+                backend::cpu::compose::render_selection_overlay(
+                    &mut buf,
+                    scratch_buf,
+                    self.scale_factor,
+                    &self.theme,
+                    self.is_focused,
+                    page,
+                    selections,
+                    doc,
+                    &selection_data,
+                );
+            }
+
+            // Phase 3: Content (cached, src-over)
+            {
+                let pw = buf.width();
+                let ph = buf.height();
+                backend::cpu::compose::composite_cached_content_layer_clipped(
+                    &mut buf,
+                    &cache.content,
+                    &LayoutRect::from_canvas(
+                        pw as f32 / self.scale_factor as f32,
+                        ph as f32 / self.scale_factor as f32,
+                    )
+                    .map(|r| vec![r])
+                    .unwrap_or_default(),
+                    self.scale_factor,
+                );
             }
         } else {
-            pixmap.data_mut().fill(0);
+            buf.data_mut().fill(0);
         }
 
-        Self::render_overlay_layers(
-            &mut pixmap,
-            &mut self.glyph_renderer,
-            &mut self.scratch_pixmap,
+        // Post-processing
+        backend::cpu::layers::render_post_layers(
+            &mut buf,
             self.scale_factor,
             &self.theme,
             self.is_focused,
             self.render_debug_enabled,
             self.layout_debug_enabled,
-            background_layer,
-            content_layer,
             &mut self.overflow_cache,
             page,
             page_idx,
@@ -335,18 +433,18 @@ impl Renderer {
         true
     }
 
-    pub fn export_page_vector(
+    pub fn export_page(
         &mut self,
         page: &Page,
         next_page: Option<&Page>,
         doc: &Doc,
         page_width: f32,
         page_height: f32,
-    ) -> VectorPage {
-        let mut sink = VectorSink::new();
+    ) -> ExportPage {
+        let mut sink = ExportSink::new();
 
         for phase in [RenderPhase::Background, RenderPhase::Content] {
-            let ctx = RenderContext {
+            let ctx = RenderParams {
                 scale_factor: 1.0,
                 selections: &[],
                 theme: &self.theme,
@@ -357,11 +455,11 @@ impl Renderer {
                 render_origin: Point::zero(),
             };
 
-            Self::outline_node(
+            Self::render_node(
                 &mut sink,
                 &page.root,
                 Point::zero(),
-                Transform::identity(),
+                Affine::IDENTITY,
                 &ctx,
                 &RenderHints::default(),
                 None,
@@ -371,7 +469,7 @@ impl Renderer {
         if let Some(next_page) = next_page
             && let Some(cull_clip) = next_page_overflow_cull_clip(page_width, page_height)
         {
-            let ctx = RenderContext {
+            let ctx = RenderParams {
                 scale_factor: 1.0,
                 selections: &[],
                 theme: &self.theme,
@@ -381,11 +479,11 @@ impl Renderer {
                 phase: RenderPhase::Content,
                 render_origin: Point::zero(),
             };
-            Self::outline_node_for_next_page_overflow(
+            Self::render_node_for_next_page_overflow(
                 &mut sink,
                 &next_page.root,
                 Point::new(0.0, page_height),
-                Transform::identity(),
+                Affine::IDENTITY,
                 &ctx,
                 &RenderHints::default(),
                 cull_clip,
@@ -393,7 +491,7 @@ impl Renderer {
         }
 
         let (ops, text_ops) = sink.into_parts();
-        VectorPage {
+        ExportPage {
             width: page_width,
             height: page_height,
             ops,
@@ -402,11 +500,11 @@ impl Renderer {
     }
 }
 
-pub(super) fn normalize_dirty_rects(
-    rects: Vec<CacheRect>,
+pub(crate) fn normalize_dirty_rects(
+    rects: Vec<LayoutRect>,
     canvas_width: f32,
     canvas_height: f32,
-) -> Vec<CacheRect> {
+) -> Vec<LayoutRect> {
     let mut merged = merge_and_clamp_rects(rects, canvas_width, canvas_height, DIRTY_RECT_EPSILON);
     if merged.len() > FULL_REPAINT_RECT_THRESHOLD {
         merged = merge_and_clamp_rects(
@@ -418,8 +516,8 @@ pub(super) fn normalize_dirty_rects(
     }
     merged
 }
-pub(super) fn should_promote_full_repaint(
-    rects: &[CacheRect],
+pub(crate) fn should_promote_full_repaint(
+    rects: &[LayoutRect],
     canvas_width: f32,
     canvas_height: f32,
 ) -> bool {
@@ -429,8 +527,11 @@ pub(super) fn should_promote_full_repaint(
         || (full_area > 0.0 && dirty_area / full_area >= FULL_REPAINT_COVERAGE_THRESHOLD)
 }
 
-pub(super) fn next_page_overflow_cull_clip(page_width: f32, page_height: f32) -> Option<CacheRect> {
-    CacheRect::from_xywh(
+pub(super) fn next_page_overflow_cull_clip(
+    page_width: f32,
+    page_height: f32,
+) -> Option<LayoutRect> {
+    LayoutRect::from_xywh(
         0.0,
         (page_height - PAGE_EDGE_OVERFLOW_BAND).max(0.0),
         page_width,

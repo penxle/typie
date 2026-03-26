@@ -35,7 +35,16 @@ data class DragImageData(
     val pixels: ByteArray,
 )
 
+interface PageTexture {
+    val nativeHandle: Long
+    val width: Int
+    val height: Int
+    fun pixelData(): ByteArray?
+    fun close()
+}
+
 interface EditorEngine {
+    suspend fun initGpu(): Boolean
     fun validateRegex(pattern: String): Boolean
     fun createEditor(scaleFactor: Double, snapshot: ByteArray? = null): Editor
     fun addFontBase(family: String, weight: Int, data: ByteArray)
@@ -50,6 +59,9 @@ interface Editor {
     fun dispatch(messageJson: String)
     fun tick()
     fun flush()
+
+    fun attachSurface(pageIndex: Int): PageTexture
+    fun detachSurface(pageIndex: Int)
 
     fun getPageCount(): Int
     fun getRenderInfo(pageIndex: Int): PageRenderInfo?

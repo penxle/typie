@@ -1,4 +1,6 @@
-#[cfg(feature = "wasm")]
+pub mod common;
+
+#[cfg(all(feature = "wasm", not(feature = "native"), not(feature = "uniffi")))]
 pub mod web;
 
 #[cfg(feature = "native")]

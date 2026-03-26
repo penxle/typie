@@ -892,19 +892,15 @@ fn selection_overlay_does_not_double_blend_selected_content() {
             .page_cache
             .get(&0)
             .expect("render cache should exist after render");
-        (
-            cache.background_pixmap.clone(),
-            cache.content_pixmap.clone(),
-        )
+        (cache.background.clone(), cache.content.clone())
     };
 
     let mut expected = background_layer.data().to_vec();
-    let mut expected_pixmap = PixmapMut::from_bytes(
+    let mut expected_buf = PixelBufMut::from_slice(
         &mut expected,
         renderer.width() as u32,
         renderer.height() as u32,
-    )
-    .expect("expected frame pixmap");
+    );
     let selection_data = Renderer::collect_selection_overlay_data(
         &page,
         &selections,
@@ -912,20 +908,22 @@ fn selection_overlay_does_not_double_blend_selected_content() {
         renderer.height() as f32,
     );
 
-    Renderer::render_selection_overlay(
-        &mut expected_pixmap,
-        &mut renderer.glyph_renderer,
-        &mut renderer.scratch_pixmap,
-        renderer.scale_factor,
-        &renderer.theme,
-        renderer.is_focused,
-        &page,
-        &selections,
-        &doc,
-        &selection_data,
-    );
-    Renderer::composite_cached_content_layer_clipped(
-        &mut expected_pixmap,
+    {
+        let mut scratch = PixelBuf::new(renderer.width() as u32, renderer.height() as u32).unwrap();
+        backend::cpu::compose::render_selection_overlay(
+            &mut expected_buf,
+            &mut scratch,
+            renderer.scale_factor,
+            &renderer.theme,
+            renderer.is_focused,
+            &page,
+            &selections,
+            &doc,
+            &selection_data,
+        );
+    }
+    backend::cpu::compose::composite_cached_content_layer_clipped(
+        &mut expected_buf,
         &content_layer,
         &selection_data.clip_rects,
         renderer.scale_factor,
@@ -1007,24 +1005,24 @@ fn full_table_selection_highlights_table_border_rect() {
 
 #[test]
 fn selection_fast_path_avoids_double_fill_for_pixel_snapped_overlap() {
-    let mut pixmap = Pixmap::new(32, 32).expect("pixmap");
-    let mut frame = pixmap.as_mut();
-    let color = tiny_skia::Color::from_rgba8(64, 128, 255, 77);
+    let mut data = vec![0u8; 32 * 32 * 4];
+    let mut frame = PixelBufMut::from_slice(&mut data, 32, 32);
+    let color = Color::from_rgba8(64, 128, 255, 77);
 
     // 두 rect는 layout 좌표에서는 분리돼 있지만, floor/ceil 후에는 (10, 10) 픽셀에서 겹친다.
     let rects = vec![
-        CacheRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
-        CacheRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
+        LayoutRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
+        LayoutRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
     ];
 
-    Renderer::fill_layout_rects_src_over(&mut frame, &rects, 1.0, color);
+    backend::cpu::compose::fill_layout_rects_src_over(&mut frame, &rects, 1.0, color);
 
-    let premul = color.premultiply().to_color_u8();
-    let overlap = rgba_at(pixmap.data(), 32, 10, 10);
+    let premul = color.premultiply().to_rgba8();
+    let overlap = rgba_at(&data, 32, 10, 10);
 
     assert_eq!(
         overlap,
-        [premul.red(), premul.green(), premul.blue(), premul.alpha()],
+        [premul.r, premul.g, premul.b, premul.a],
         "pixel snapping으로 rect가 겹쳐도 선택 강조는 한 번만 적용돼야 함"
     );
 }
@@ -1059,28 +1057,30 @@ fn selection_non_text_clipped_phase_avoids_double_fill_for_pixel_snapped_overlap
     renderer.set_theme(Theme { colors });
 
     let mut output = vec![0u8; 32 * 32 * 4];
-    let mut pixmap = PixmapMut::from_bytes(&mut output, 32, 32).expect("pixmap");
+    let mut buf = PixelBufMut::from_slice(&mut output, 32, 32);
     let selection_data = SelectionOverlayData {
         clip_rects: vec![
-            CacheRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
-            CacheRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
+            LayoutRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
+            LayoutRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
         ],
         text_paint_rects: vec![],
         has_non_text_selection: true,
     };
 
-    Renderer::render_selection_overlay(
-        &mut pixmap,
-        &mut renderer.glyph_renderer,
-        &mut renderer.scratch_pixmap,
-        renderer.scale_factor,
-        &renderer.theme,
-        renderer.is_focused,
-        &page,
-        &[SelectionDecor::Block { node_id: cell_id }],
-        &doc,
-        &selection_data,
-    );
+    {
+        let mut scratch = PixelBuf::new(32, 32).unwrap();
+        backend::cpu::compose::render_selection_overlay(
+            &mut buf,
+            &mut scratch,
+            renderer.scale_factor,
+            &renderer.theme,
+            renderer.is_focused,
+            &page,
+            &[SelectionDecor::Block { node_id: cell_id }],
+            &doc,
+            &selection_data,
+        );
+    }
 
     let expected = renderer
         .theme
@@ -1130,28 +1130,30 @@ fn selection_non_text_clipped_phase_respects_disjoint_clip_regions() {
     renderer.set_theme(Theme { colors });
 
     let mut output = vec![0u8; 32 * 32 * 4];
-    let mut pixmap = PixmapMut::from_bytes(&mut output, 32, 32).expect("pixmap");
+    let mut buf = PixelBufMut::from_slice(&mut output, 32, 32);
     let selection_data = SelectionOverlayData {
         clip_rects: vec![
-            CacheRect::from_xywh(0.0, 0.0, 8.0, 24.0).expect("left clip"),
-            CacheRect::from_xywh(16.0, 0.0, 8.0, 24.0).expect("right clip"),
+            LayoutRect::from_xywh(0.0, 0.0, 8.0, 24.0).expect("left clip"),
+            LayoutRect::from_xywh(16.0, 0.0, 8.0, 24.0).expect("right clip"),
         ],
         text_paint_rects: vec![],
         has_non_text_selection: true,
     };
 
-    Renderer::render_selection_overlay(
-        &mut pixmap,
-        &mut renderer.glyph_renderer,
-        &mut renderer.scratch_pixmap,
-        renderer.scale_factor,
-        &renderer.theme,
-        renderer.is_focused,
-        &page,
-        &[SelectionDecor::Block { node_id: cell_id }],
-        &doc,
-        &selection_data,
-    );
+    {
+        let mut scratch = PixelBuf::new(32, 32).unwrap();
+        backend::cpu::compose::render_selection_overlay(
+            &mut buf,
+            &mut scratch,
+            renderer.scale_factor,
+            &renderer.theme,
+            renderer.is_focused,
+            &page,
+            &[SelectionDecor::Block { node_id: cell_id }],
+            &doc,
+            &selection_data,
+        );
+    }
 
     let expected = renderer
         .theme

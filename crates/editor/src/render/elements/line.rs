@@ -1,89 +1,28 @@
 use crate::global::{GLOBALS, TextBrush};
 use crate::layout::elements::LineElement;
 use crate::render::glyph::Glyph;
-use crate::render::outline::ElementSink;
-use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
+use crate::render::sink::RenderSink;
+use crate::render::{Render, RenderParams, RenderPhase};
 use crate::types::Point;
+use crate::types::theme::Color;
+use kurbo::{Affine, Cap, Join, Stroke};
 use macros::svg_icon_path;
-use tiny_skia::{Color, Paint, PixmapMut, Rect, Stroke, Transform};
+use peniko::Brush;
 
-fn create_solid_paint(color: Color) -> Paint<'static> {
-    let mut paint = Paint::default();
-    paint.set_color(color);
-    paint.anti_alias = true;
-    paint
+fn create_solid_brush(color: Color) -> Brush {
+    Brush::Solid(color)
 }
 
-fn draw_text_layer_for_glyph_run(
-    sink: &mut dyn ElementSink,
-    source_text: &str,
-    run: &parley::layout::Run<'_, TextBrush>,
-    font_size: f32,
-    run_x: f32,
-    run_y: f32,
-    transform: Transform,
-) {
+fn text_for_run<'a>(source_text: &'a str, run: &parley::layout::Run<'_, TextBrush>) -> &'a str {
     let text_range = run.text_range();
     if text_range.start >= text_range.end {
-        return;
+        return "";
     }
-
-    let Some(text) = source_text.get(text_range) else {
-        return;
-    };
-
-    if text.is_empty() {
-        return;
-    }
-
-    let chars: Vec<char> = text.chars().collect();
-    if chars.is_empty() {
-        return;
-    }
-
-    let mut emitted = false;
-    let mut cluster_x = run_x;
-    for cluster in run.visual_clusters() {
-        let cluster_advance = cluster.advance();
-        let cluster_range = cluster.text_range();
-        if cluster_range.start < cluster_range.end
-            && let Some(cluster_text) = source_text.get(cluster_range)
-            && !cluster_text.is_empty()
-        {
-            let cluster_chars: Vec<char> = cluster_text.chars().collect();
-            if !cluster_chars.is_empty() {
-                let step = cluster_advance / cluster_chars.len() as f32;
-                for (idx, ch) in cluster_chars.into_iter().enumerate() {
-                    let x = cluster_x + step * idx as f32;
-                    let mut buf = [0u8; 4];
-                    let s = ch.encode_utf8(&mut buf);
-                    sink.draw_text_layer(s, font_size, x, run_y, transform);
-                    emitted = true;
-                }
-            }
-        }
-
-        cluster_x += cluster_advance;
-    }
-
-    if emitted {
-        return;
-    }
-
-    for ch in chars {
-        if ch.is_control() {
-            continue;
-        }
-        {
-            let mut buf = [0u8; 4];
-            let s = ch.encode_utf8(&mut buf);
-            sink.draw_text_layer(s, font_size, run_x, run_y, transform);
-        }
-    }
+    source_text.get(text_range).unwrap_or("")
 }
 
 impl LineElement {
-    fn preedit_underline_rect(&self, point: Point) -> Option<Rect> {
+    fn preedit_underline_rect(&self, point: Point) -> Option<kurbo::Rect> {
         let preedit = self.preedit.as_ref()?;
         if preedit.node_id != self.block_id {
             return None;
@@ -115,100 +54,98 @@ impl LineElement {
         }
 
         let width = (max_x - min_x).max(1.0);
-        Rect::from_xywh(
-            point.x + min_x,
-            point.y + self.metric.top + self.metric.height,
-            width,
-            1.0,
-        )
+        Some(kurbo::Rect::new(
+            (point.x + min_x) as f64,
+            (point.y + self.metric.top + self.metric.height) as f64,
+            (point.x + min_x + width) as f64,
+            (point.y + self.metric.top + self.metric.height + 1.0) as f64,
+        ))
     }
 
     fn render_line_selection(
         &self,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
         point: Point,
-        ctx: &RenderContext,
+        ctx: &RenderParams,
     ) {
-        let paint = ctx.selection_paint();
+        let brush = ctx.selection_paint();
         for rect in self.compute_selection_rects(point, ctx.selections) {
-            if let Some(rect) = Rect::from_xywh(rect.x, rect.y, rect.width, rect.height) {
-                sink.fill_rect(rect, &paint, transform);
-            }
+            let r = kurbo::Rect::new(
+                rect.x as f64,
+                rect.y as f64,
+                (rect.x + rect.width) as f64,
+                (rect.y + rect.height) as f64,
+            );
+            sink.fill_rect(r, &brush, transform);
         }
     }
 
     fn render_page_break(
         &self,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
         point: Point,
-        ctx: &RenderContext,
+        ctx: &RenderParams,
     ) {
         if !self.has_page_break {
             return;
         }
 
         if let Some(layout_rect) = self.page_break_indicator(point, ctx.selections) {
-            let Some(rect) = Rect::from_xywh(
-                layout_rect.x,
-                layout_rect.y,
-                layout_rect.width,
-                layout_rect.height,
-            ) else {
-                return;
-            };
+            let rect = kurbo::Rect::new(
+                layout_rect.x as f64,
+                layout_rect.y as f64,
+                (layout_rect.x + layout_rect.width) as f64,
+                (layout_rect.y + layout_rect.height) as f64,
+            );
 
             let accent_color = ctx.theme.color("ui.accent.brand.default");
-            let accent_paint = create_solid_paint(accent_color);
+            let accent_brush = create_solid_brush(accent_color);
 
-            if let Some(line_rect) = Rect::from_xywh(
-                rect.left(),
-                rect.top() + rect.height() / 2.0 - 0.75,
-                rect.width() - 20.0,
-                1.5,
-            ) {
-                sink.fill_rect(line_rect, &accent_paint, transform);
-            }
+            let line_rect = kurbo::Rect::new(
+                rect.x0,
+                rect.y0 + (rect.y1 - rect.y0) / 2.0 - 0.75,
+                rect.x0 + (rect.x1 - rect.x0) - 20.0,
+                rect.y0 + (rect.y1 - rect.y0) / 2.0 - 0.75 + 1.5,
+            );
+            sink.fill_rect(line_rect, &accent_brush, transform);
 
             let icon_size = 16.0;
-            let stroke = Stroke {
-                width: 1.5,
-                line_cap: tiny_skia::LineCap::Round,
-                line_join: tiny_skia::LineJoin::Round,
-                ..Stroke::default()
-            };
+            let stroke = Stroke::new(1.5)
+                .with_caps(Cap::Round)
+                .with_join(Join::Round);
 
-            let icon_x = rect.right() - icon_size / 2.0 - 2.0;
-            let icon_y = rect.top() + rect.height() / 2.0;
+            let icon_x = rect.x1 as f32 - icon_size / 2.0 - 2.0;
+            let icon_y = rect.y0 as f32 + (rect.y1 - rect.y0) as f32 / 2.0;
 
             if let Some(path) = svg_icon_path!("lucide/file", icon_size, icon_x, icon_y) {
-                sink.stroke_path(&path, &accent_paint, &stroke, transform);
+                sink.stroke_path(&path, &accent_brush, &stroke, transform);
             }
         }
     }
 
     fn render_preedit(
         &self,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
         point: Point,
-        ctx: &RenderContext,
+        ctx: &RenderParams,
     ) {
         let Some(rect) = self.preedit_underline_rect(point) else {
             return;
         };
 
         let color = ctx.theme.color("ui.text.muted");
-        let paint = create_solid_paint(color);
-        sink.fill_rect(rect, &paint, transform);
+        let brush = create_solid_brush(color);
+        sink.fill_rect(rect, &brush, transform);
     }
 
     fn render_background_segments(
         &self,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
-        ctx: &RenderContext<'_>,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        ctx: &RenderParams<'_>,
     ) {
         if self.background_segments.is_empty() {
             return;
@@ -238,19 +175,22 @@ impl LineElement {
                 continue;
             }
 
-            if let Some(rect) = Rect::from_xywh(min_x, self.metric.top, max_x - min_x, line_height)
-            {
-                let paint = create_solid_paint(color);
-                sink.fill_rect(rect, &paint, transform);
-            }
+            let rect = kurbo::Rect::new(
+                min_x as f64,
+                self.metric.top as f64,
+                max_x as f64,
+                (self.metric.top + line_height) as f64,
+            );
+            let brush = create_solid_brush(color);
+            sink.fill_rect(rect, &brush, transform);
         }
     }
 
     fn render_ruby_annotations(
         &self,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
-        ctx: &RenderContext<'_>,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        ctx: &RenderParams<'_>,
     ) {
         if self.ruby_segments.is_empty() {
             return;
@@ -314,7 +254,7 @@ impl LineElement {
                     let ruby_y_offset = run_y - ruby_height;
 
                     let color = ctx.theme.color("text.black");
-                    let ruby_paint = create_solid_paint(color);
+                    let ruby_brush = create_solid_brush(color);
                     let mut last_text_run_idx = None;
 
                     for item in ruby_line.items() {
@@ -323,18 +263,12 @@ impl LineElement {
                             let run_x = glyph_run.offset();
                             let run_index = run.index();
 
-                            if last_text_run_idx != Some(run_index) {
-                                draw_text_layer_for_glyph_run(
-                                    sink,
-                                    &ruby_seg.ruby_text,
-                                    run,
-                                    run.font_size() * scale,
-                                    ruby_x_offset + run_x,
-                                    ruby_y_offset,
-                                    transform,
-                                );
+                            let run_text = if last_text_run_idx != Some(run_index) {
                                 last_text_run_idx = Some(run_index);
-                            }
+                                text_for_run(&ruby_seg.ruby_text, run)
+                            } else {
+                                ""
+                            };
 
                             let mut x_advance = 0.0;
                             let glyphs: Vec<_> = glyph_run
@@ -350,10 +284,11 @@ impl LineElement {
                                 })
                                 .collect();
 
-                            sink.draw_glyphs(
+                            sink.draw_text(
+                                run_text,
                                 &run.font(),
                                 RUBY_FONT_SIZE * scale,
-                                &ruby_paint,
+                                &ruby_brush,
                                 transform,
                                 None,
                                 false,
@@ -368,26 +303,13 @@ impl LineElement {
 }
 
 impl Render for LineElement {
-    fn render(
-        &self,
-        pixmap: &mut PixmapMut,
-        glyph_renderer: &mut GlyphRenderer,
-        transform: Transform,
-        ctx: &RenderContext<'_>,
-    ) {
-        let mut sink = RasterSink::new(pixmap, glyph_renderer);
-        self.paint_to(&mut sink, transform, ctx);
-    }
-}
-
-impl Outline for LineElement {
-    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
 impl LineElement {
-    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn paint_to(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         let Some(line) = self.layout.get(self.line_idx) else {
             return;
         };
@@ -424,35 +346,23 @@ impl LineElement {
                             } else {
                                 ctx.theme.color(&style.brush.color)
                             };
-                            let text_paint = create_solid_paint(color);
+                            let text_brush = create_solid_brush(color);
 
                             let run_x = glyph_run.offset();
                             let run_index = run.index();
 
-                            if last_text_run_idx != Some(run_index) {
-                                draw_text_layer_for_glyph_run(
-                                    sink,
-                                    &self.text,
-                                    run,
-                                    run.font_size() * scale,
-                                    run_x,
-                                    run_y,
-                                    transform,
-                                );
+                            let run_text = if last_text_run_idx != Some(run_index) {
                                 last_text_run_idx = Some(run_index);
-                            }
+                                text_for_run(&self.text, run)
+                            } else {
+                                ""
+                            };
 
                             let synthesis = run.synthesis();
                             let skew_transform = if synthesis.skew() != Some(0.0) {
                                 synthesis.skew().map(|skew| {
-                                    Transform::from_row(
-                                        1.0,
-                                        0.0,
-                                        (skew as f64).to_radians().tan() as f32,
-                                        1.0,
-                                        0.0,
-                                        0.0,
-                                    )
+                                    let kx = (skew as f64).to_radians().tan();
+                                    Affine::new([1.0, 0.0, kx, 1.0, 0.0, 0.0])
                                 })
                             } else {
                                 None
@@ -474,10 +384,11 @@ impl LineElement {
 
                             let embolden = style.brush.embolden;
 
-                            sink.draw_glyphs(
+                            sink.draw_text(
+                                run_text,
                                 &run.font(),
                                 run.font_size() * scale,
-                                &text_paint,
+                                &text_brush,
                                 transform,
                                 skew_transform,
                                 embolden,
@@ -492,11 +403,13 @@ impl LineElement {
                                 let offset = underline_style.offset.unwrap_or(default_offset);
                                 let size = underline_style.size.unwrap_or(1.0);
 
-                                if let Some(rect) =
-                                    Rect::from_xywh(run_x, run_y + offset, run_width, size)
-                                {
-                                    sink.fill_rect(rect, &text_paint, transform);
-                                }
+                                let rect = kurbo::Rect::new(
+                                    run_x as f64,
+                                    (run_y + offset) as f64,
+                                    (run_x + run_width) as f64,
+                                    (run_y + offset + size) as f64,
+                                );
+                                sink.fill_rect(rect, &text_brush, transform);
                             }
 
                             if let Some(strikethrough_style) = &style.strikethrough {
@@ -504,11 +417,13 @@ impl LineElement {
                                 let offset = strikethrough_style.offset.unwrap_or(default_offset);
                                 let size = strikethrough_style.size.unwrap_or(1.0);
 
-                                if let Some(rect) =
-                                    Rect::from_xywh(run_x, run_y + offset, run_width, size)
-                                {
-                                    sink.fill_rect(rect, &text_paint, transform);
-                                }
+                                let rect = kurbo::Rect::new(
+                                    run_x as f64,
+                                    (run_y + offset) as f64,
+                                    (run_x + run_width) as f64,
+                                    (run_y + offset + size) as f64,
+                                );
+                                sink.fill_rect(rect, &text_brush, transform);
                             }
                         }
                     }

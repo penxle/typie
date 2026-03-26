@@ -105,7 +105,9 @@
       return;
     }
     if (width > 0 && containerClientHeight > 0 && scaleFactor > 0) {
-      editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor: scaleFactor * zoomRenderScale });
+      const effectiveScale = scaleFactor * zoomRenderScale;
+      editor.renderScaleFactor = effectiveScale;
+      editor.dispatch({ type: 'resize', width, height: containerClientHeight, scaleFactor: effectiveScale });
     }
   });
 

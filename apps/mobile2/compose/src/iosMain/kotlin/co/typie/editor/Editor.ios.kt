@@ -25,6 +25,7 @@ import swiftPMImport.co.typie.compose.NativeOptionalDragImageData
 import swiftPMImport.co.typie.compose.NativeOptionalPageRenderInfo
 import swiftPMImport.co.typie.compose.NativeOptionalString
 import swiftPMImport.co.typie.compose.NativePageRenderInfo
+import swiftPMImport.co.typie.compose.NativePageTexture
 
 private inline fun <T> throwingCall(block: (errorPtr: kotlinx.cinterop.CPointer<ObjCObjectVar<NSError?>>) -> T): T =
   memScoped {
@@ -47,6 +48,11 @@ actual class EditorModule {
 }
 
 private class IosEditorEngine(private val native: NativeEditorEngine) : EditorEngine {
+  override suspend fun initGpu(): Boolean {
+    // TODO: async Swift bridge — 현재는 CPU fallback
+    return false
+  }
+
   override fun validateRegex(pattern: String): Boolean {
     return throwingCall { err -> native.validateRegexWithPattern(pattern, err) }!!.boolValue
   }
@@ -82,6 +88,15 @@ private class IosEditorEngine(private val native: NativeEditorEngine) : EditorEn
 }
 
 private class IosEditor(private val native: NativeEditor) : Editor {
+  override fun attachSurface(pageIndex: Int): PageTexture {
+    val texture = throwingCall { err -> native.attachSurfaceWithPageIndex(pageIndex, error = err) }!!
+    return IosPageTexture(texture)
+  }
+
+  override fun detachSurface(pageIndex: Int) {
+    throwingCall { err -> native.detachSurfaceWithPageIndex(pageIndex, error = err) }
+  }
+
   override fun dispatch(messageJson: String) {
     throwingCall { err -> native.dispatchWithMessageJson(messageJson, err) }
   }
@@ -182,6 +197,14 @@ private class IosEditor(private val native: NativeEditor) : Editor {
   }
 
   override fun close() {}
+}
+
+private class IosPageTexture(private val native: NativePageTexture) : PageTexture {
+  override val nativeHandle: Long = native.nativeHandle
+  override val width: Int = native.width
+  override val height: Int = native.height
+  override fun pixelData(): ByteArray? = native.pixelData()?.toByteArray()
+  override fun close() = native.close()
 }
 
 private fun ByteArray.toNSData(): NSData = memScoped {

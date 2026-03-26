@@ -1,15 +1,15 @@
-use tiny_skia::Pixmap;
+use crate::render::backend::cpu::pixel_buf::PixelBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct CacheRect {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) width: f32,
-    pub(super) height: f32,
+pub(crate) struct LayoutRect {
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
 }
 
-impl CacheRect {
-    pub(super) fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
+impl LayoutRect {
+    pub(crate) fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
         if width <= 0.0 || height <= 0.0 {
             return None;
         }
@@ -22,37 +22,37 @@ impl CacheRect {
         })
     }
 
-    pub(super) fn from_canvas(width: f32, height: f32) -> Option<Self> {
+    pub(crate) fn from_canvas(width: f32, height: f32) -> Option<Self> {
         Self::from_xywh(0.0, 0.0, width, height)
     }
 
-    pub(super) fn right(self) -> f32 {
+    pub(crate) fn right(self) -> f32 {
         self.x + self.width
     }
 
-    pub(super) fn bottom(self) -> f32 {
+    pub(crate) fn bottom(self) -> f32 {
         self.y + self.height
     }
 
-    pub(super) fn area(self) -> f32 {
+    pub(crate) fn area(self) -> f32 {
         self.width * self.height
     }
 
-    pub(super) fn intersects(self, other: Self) -> bool {
+    pub(crate) fn intersects(self, other: Self) -> bool {
         self.x < other.right()
             && self.right() > other.x
             && self.y < other.bottom()
             && self.bottom() > other.y
     }
 
-    pub(super) fn touches_or_intersects(self, other: Self, epsilon: f32) -> bool {
+    pub(crate) fn touches_or_intersects(self, other: Self, epsilon: f32) -> bool {
         self.x <= other.right() + epsilon
             && self.right() + epsilon >= other.x
             && self.y <= other.bottom() + epsilon
             && self.bottom() + epsilon >= other.y
     }
 
-    pub(super) fn union(self, other: Self) -> Self {
+    pub(crate) fn union(self, other: Self) -> Self {
         let left = self.x.min(other.x);
         let top = self.y.min(other.y);
         let right = self.right().max(other.right());
@@ -65,7 +65,7 @@ impl CacheRect {
         }
     }
 
-    pub(super) fn approx_eq(self, other: Self) -> bool {
+    pub(crate) fn approx_eq(self, other: Self) -> bool {
         const EPSILON: f32 = 0.1;
         (self.x - other.x).abs() <= EPSILON
             && (self.y - other.y).abs() <= EPSILON
@@ -73,7 +73,7 @@ impl CacheRect {
             && (self.height - other.height).abs() <= EPSILON
     }
 
-    pub(super) fn clamp(self, width: f32, height: f32) -> Option<Self> {
+    pub(crate) fn clamp(self, width: f32, height: f32) -> Option<Self> {
         let left = self.x.max(0.0);
         let top = self.y.max(0.0);
         let right = self.right().min(width);
@@ -83,16 +83,16 @@ impl CacheRect {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct PixelRect {
-    pub(super) x: u32,
-    pub(super) y: u32,
-    pub(super) width: u32,
-    pub(super) height: u32,
+pub(crate) struct PixelRect {
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 impl PixelRect {
-    pub(super) fn from_layout_rect(
-        rect: CacheRect,
+    pub(crate) fn from_layout_rect(
+        rect: LayoutRect,
         scale: f32,
         max_width: u32,
         max_height: u32,
@@ -117,16 +117,16 @@ impl PixelRect {
         })
     }
 
-    pub(super) fn right(self) -> u32 {
+    pub(crate) fn right(self) -> u32 {
         self.x + self.width
     }
 
-    pub(super) fn bottom(self) -> u32 {
+    pub(crate) fn bottom(self) -> u32 {
         self.y + self.height
     }
 
-    pub(super) fn to_layout_rect(self, scale: f32) -> CacheRect {
-        CacheRect {
+    pub(crate) fn to_layout_rect(self, scale: f32) -> LayoutRect {
+        LayoutRect {
             x: self.x as f32 / scale,
             y: self.y as f32 / scale,
             width: self.width as f32 / scale,
@@ -135,12 +135,12 @@ impl PixelRect {
     }
 }
 
-pub(super) fn merge_and_clamp_rects(
-    rects: Vec<CacheRect>,
+pub(crate) fn merge_and_clamp_rects(
+    rects: Vec<LayoutRect>,
     canvas_width: f32,
     canvas_height: f32,
     epsilon: f32,
-) -> Vec<CacheRect> {
+) -> Vec<LayoutRect> {
     let mut merged = Vec::new();
 
     for rect in rects {
@@ -163,8 +163,8 @@ pub(super) fn merge_and_clamp_rects(
     merged
 }
 
-pub(super) fn collect_non_overlapping_pixel_rects(
-    rects: &[CacheRect],
+pub(crate) fn collect_non_overlapping_pixel_rects(
+    rects: &[LayoutRect],
     scale: f32,
     max_width: u32,
     max_height: u32,
@@ -251,15 +251,14 @@ fn subtract_pixel_rect(rect: PixelRect, overlap: PixelRect) -> Vec<PixelRect> {
     parts
 }
 
-pub(super) fn clear_layout_rect(pixmap: &mut Pixmap, rect: CacheRect, scale: f32) {
-    let Some(pixel_rect) =
-        PixelRect::from_layout_rect(rect, scale, pixmap.width(), pixmap.height())
+pub(crate) fn clear_layout_rect(buf: &mut PixelBuf, rect: LayoutRect, scale: f32) {
+    let Some(pixel_rect) = PixelRect::from_layout_rect(rect, scale, buf.width(), buf.height())
     else {
         return;
     };
 
-    let row_bytes = pixmap.width() as usize * 4;
-    let data = pixmap.data_mut();
+    let row_bytes = buf.width() as usize * 4;
+    let data = buf.data_mut();
     for y in pixel_rect.y..pixel_rect.bottom() {
         let start = y as usize * row_bytes + pixel_rect.x as usize * 4;
         let end = y as usize * row_bytes + pixel_rect.right() as usize * 4;

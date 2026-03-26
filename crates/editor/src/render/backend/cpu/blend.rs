@@ -1,6 +1,6 @@
 // tiny-skia의 hot path인 blend를 low level로 구현한 것
 
-pub(super) fn blend_row_src_over(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn blend_row_src_over(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(src.len(), dst.len());
     debug_assert_eq!(src.len() % 4, 0);
 
@@ -35,7 +35,7 @@ pub(super) fn blend_row_src_over(src: &[u8], dst: &mut [u8]) {
     }
 }
 
-pub(super) fn build_const_src_over_lut(
+pub(crate) fn build_const_src_over_lut(
     src: [u8; 4],
     lut_r: &mut [u8; 256],
     lut_g: &mut [u8; 256],
@@ -56,7 +56,7 @@ pub(super) fn build_const_src_over_lut(
     }
 }
 
-pub(super) fn blend_row_const_src_over_opaque(dst: &mut [u8], src: [u8; 4]) {
+pub(crate) fn blend_row_const_src_over_opaque(dst: &mut [u8], src: [u8; 4]) {
     debug_assert_eq!(dst.len() % 4, 0);
     let mut i = 0usize;
     while i < dst.len() {
@@ -68,7 +68,7 @@ pub(super) fn blend_row_const_src_over_opaque(dst: &mut [u8], src: [u8; 4]) {
     }
 }
 
-pub(super) fn blend_row_const_src_over_lut(
+pub(crate) fn blend_row_const_src_over_lut(
     dst: &mut [u8],
     lut_r: &[u8; 256],
     lut_g: &[u8; 256],

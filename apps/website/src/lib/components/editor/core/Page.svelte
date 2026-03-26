@@ -36,32 +36,43 @@
   const disableCanvasPointer = $derived(editor.readOnly); // TODO: 항상 disable 해도 안전한지 확인하기
 
   let ctx2d = $state<CanvasRenderingContext2D | null>(null);
+  let offscreen = $state<OffscreenCanvas | null>(null);
   let visible = $state(false);
 
-  function render() {
-    if (!ctx2d) return false;
-    return editor.renderPageToCanvas(page, ctx2d);
+  // render → drawImage
+  function drawPage(target: CanvasRenderingContext2D, source: OffscreenCanvas, renderVersion: number) {
+    const ctx = editor.span?.spanContext();
+
+    if (ctx) {
+      editor.setTracing(ctx.traceId, ctx.spanId);
+    }
+
+    const scale = editor.renderScaleFactor;
+    const cw = Math.round(pageWidth * scale);
+    const ch = Math.round(pageHeight * scale);
+
+    if (target.canvas.width !== cw || target.canvas.height !== ch) {
+      target.canvas.width = cw;
+      target.canvas.height = ch;
+    }
+
+    target.clearRect(0, 0, cw, ch);
+    target.drawImage(source, 0, 0, cw, ch, 0, 0, cw, ch);
+
+    if (ctx) {
+      editor.clearTracing();
+    }
+
+    editor.notifyPageRendered(page, renderVersion);
   }
 
   $effect(() => {
     const renderVersion = editor.renderVersion;
-    if (!visible || !ctx2d) return;
+    if (!visible || !ctx2d || !offscreen) return;
+    const target = ctx2d;
+    const source = offscreen;
     untrack(() => {
-      const ctx = editor.span?.spanContext();
-
-      if (ctx) {
-        editor.setTracing(ctx.traceId, ctx.spanId);
-      }
-
-      const rendered = render();
-
-      if (ctx) {
-        editor.clearTracing();
-      }
-
-      if (rendered) {
-        editor.notifyPageRendered(page, renderVersion);
-      }
+      drawPage(target, source, renderVersion);
     });
   });
 
@@ -143,8 +154,17 @@
         style:pointer-events={disableCanvasPointer ? 'none' : 'auto'}
         class={css({ height: 'full', width: 'full' })}
         {@attach (canvas) => {
-          ctx2d = canvas.getContext('2d');
+          const target = canvas.getContext('2d');
+          ctx2d = target;
+          const source = editor.attachSurface(page);
+          offscreen = source;
+          if (target && source) {
+            editor.renderSurface(page);
+            drawPage(target, source, editor.renderVersion);
+          }
           return () => {
+            editor.detachSurface(page);
+            offscreen = null;
             ctx2d = null;
           };
         }}

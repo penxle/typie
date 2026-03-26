@@ -35,7 +35,6 @@ import {
 import { TouchGestureController } from './touch-gesture.svelte';
 import { drainTraces, startFrameSpan } from './tracing';
 import { calculateImageDisplaySize, calculateRelativePosition, findNearestPageCoordinate, getPageElement, idleCallback } from './utils';
-import { WebGLRenderer } from './webgl';
 import type { Placement } from '@floating-ui/dom';
 import type { Span } from '@opentelemetry/api';
 import type { DocExportMode, Editor as WasmEditor, Modifier, PointerButton } from '@typie/editor';
@@ -175,7 +174,6 @@ export class Editor {
   #onSelectionChanged?: (anchor: Position, head: Position) => void;
   #pendingSelectAllShortcut = false;
   #readyResolve?: () => void;
-  #renderer: WebGLRenderer | null = null;
   ready: Promise<void>;
 
   constructor() {
@@ -189,6 +187,7 @@ export class Editor {
   containerResizing = $state(false);
 
   renderVersion = $state(0);
+  renderScaleFactor = $state(1);
 
   layout: { pages: { width: number; height: number }[]; layoutMode: LayoutMode } | null = $state(null);
 
@@ -383,6 +382,7 @@ export class Editor {
     await ensureInitialized();
 
     const scaleFactor = window.devicePixelRatio * (window.visualViewport?.scale || 1);
+    this.renderScaleFactor = scaleFactor;
     const wasmEditor = wasm.createEditor(scaleFactor, options.snapshot);
     this.#wasmEditor = wasmEditor;
     wasmEditor.setRenderDebug(this.#renderDebugEnabled);
@@ -517,6 +517,7 @@ export class Editor {
     }
 
     if (slate.isDirty(DIRTY_RENDER_REQUIRED)) {
+      this.renderAll();
       this.renderVersion++;
     }
 
@@ -854,32 +855,22 @@ export class Editor {
     }
   }
 
-  get renderer(): WebGLRenderer | null {
-    if (!this.#renderer) {
-      try {
-        this.#renderer = new WebGLRenderer(() => this.renderVersion++);
-      } catch (err) {
-        console.error('WebGL init failed:', err);
-      }
-    }
-    return this.#renderer;
+  /** mount된 모든 dirty 페이지를 렌더링한다. */
+  renderAll(): void {
+    this.#wasmEditor?.render();
   }
 
-  renderPage(pageIdx: number) {
-    return this.#wasmEditor?.renderPage(pageIdx);
+  /** 단일 surface를 렌더링한다. */
+  renderSurface(pageIdx: number): void {
+    this.#wasmEditor?.renderSurface(pageIdx);
   }
 
-  renderPageToCanvas(pageIdx: number, target: CanvasRenderingContext2D): boolean {
-    const renderer = this.renderer;
-    if (!renderer) return false;
-    const info = this.renderPage(pageIdx);
-    if (!info) return false;
-    const offscreen = renderer.render(info.ptr, info.len, info.width, info.height);
-    if (!offscreen) return false;
-    target.canvas.width = info.width;
-    target.canvas.height = info.height;
-    target.drawImage(offscreen, 0, 0);
-    return true;
+  attachSurface(pageIdx: number): OffscreenCanvas | null {
+    return this.#wasmEditor?.attachSurface(pageIdx) ?? null;
+  }
+
+  detachSurface(pageIdx: number): void {
+    this.#wasmEditor?.detachSurface(pageIdx);
   }
 
   export(mode: DocExportMode): Uint8Array | undefined {
@@ -2198,8 +2189,6 @@ export class Editor {
     }
 
     this.touchGesture.destroy();
-    this.#renderer?.dispose();
-    this.#renderer = null;
 
     this.#wasmEditor = null;
     this.#slateReader = null;

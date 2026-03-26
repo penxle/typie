@@ -1,13 +1,13 @@
 use crate::global::GLOBALS;
 use crate::model::{LIST_ITEM_MARKER_GAP, NodeId};
-use crate::render::outline::ElementSink;
-use crate::render::{
-    GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase, glyph::Glyph,
-};
+use crate::render::sink::RenderSink;
+use crate::render::{Render, RenderParams, RenderPhase, glyph::Glyph};
+use crate::types::theme::Color;
+use kurbo::{Affine, Rect};
 use parley::setting::{FontFeature, Tag};
 use parley::style::{FontFamily, FontFamilyName, FontFeatures, StyleProperty};
+use peniko::Brush;
 use std::fmt;
-use tiny_skia::{Paint, PixmapMut, Rect, Transform};
 
 const MARKER_FONT_SIZE: f32 = 14.0;
 const BULLET_SIZE: f32 = 4.0;
@@ -67,33 +67,13 @@ impl ListMarkerElement {
 }
 
 impl Render for ListMarkerElement {
-    fn render(
-        &self,
-        pixmap: &mut PixmapMut,
-        glyph_renderer: &mut GlyphRenderer,
-        transform: Transform,
-        ctx: &RenderContext<'_>,
-    ) {
-        if matches!(ctx.phase, RenderPhase::Selection)
-            && let Some(rect) = self.selection_background_rect(ctx)
-            && ctx.fill_selection_rect_fast(pixmap, rect, transform)
-        {
-            return;
-        }
-
-        let mut sink = RasterSink::new(pixmap, glyph_renderer);
-        self.paint_to(&mut sink, transform, ctx);
-    }
-}
-
-impl Outline for ListMarkerElement {
-    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
 impl ListMarkerElement {
-    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn paint_to(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         match ctx.phase {
             RenderPhase::Content => {
                 let color = ctx.theme.color("ui.text.default");
@@ -113,19 +93,19 @@ impl ListMarkerElement {
 
     fn render_selection_background(
         &self,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
-        ctx: &RenderContext<'_>,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        ctx: &RenderParams<'_>,
     ) {
         let Some(rect) = self.selection_background_rect(ctx) else {
             return;
         };
 
-        let paint = ctx.selection_paint();
-        sink.fill_rect(rect, &paint, transform);
+        let brush = ctx.selection_paint();
+        sink.fill_rect(rect, &brush, transform);
     }
 
-    fn selection_background_rect(&self, ctx: &RenderContext<'_>) -> Option<Rect> {
+    fn selection_background_rect(&self, ctx: &RenderParams<'_>) -> Option<Rect> {
         if !ctx.is_block_selected(self.selection_node_id) {
             return None;
         }
@@ -133,44 +113,41 @@ impl ListMarkerElement {
         let width = self
             .selection_width
             .max(self.marker_width + LIST_ITEM_MARKER_GAP);
-        Rect::from_xywh(0.0, 0.0, width, self.selection_height)
+        Some(Rect::new(
+            0.0,
+            0.0,
+            width as f64,
+            self.selection_height as f64,
+        ))
     }
 
-    fn render_bullet(
-        &self,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
-        color: tiny_skia::Color,
-    ) {
-        let paint = Paint {
-            shader: tiny_skia::Shader::SolidColor(color),
-            anti_alias: true,
-            ..Paint::default()
-        };
+    fn render_bullet(&self, sink: &mut dyn RenderSink, transform: Affine, color: Color) {
+        let brush = Brush::Solid(color);
 
         let x = self.marker_width - BULLET_SIZE - BULLET_OFFSET;
         let y = self.line_mid - BULLET_SIZE / 2.0;
-        let Some(rect) = tiny_skia::Rect::from_xywh(x, y, BULLET_SIZE, BULLET_SIZE) else {
-            return;
-        };
+        let rect = Rect::new(
+            x as f64,
+            y as f64,
+            (x + BULLET_SIZE) as f64,
+            (y + BULLET_SIZE) as f64,
+        );
 
-        sink.fill_rect(rect, &paint, transform);
+        sink.fill_rect(rect, &brush, transform);
     }
 
     fn render_ordered_marker(
         &self,
         index: usize,
-        sink: &mut dyn ElementSink,
-        transform: Transform,
-        ctx: &RenderContext,
-        color: tiny_skia::Color,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        ctx: &RenderParams,
+        color: Color,
     ) {
         let text = format!("{}.", index);
         let scale = ctx.scale_factor as f32;
 
-        let mut paint = Paint::default();
-        paint.set_color(color);
-        paint.anti_alias = true;
+        let brush = Brush::Solid(color);
 
         GLOBALS.with(|globals| {
             let globals = globals.borrow();
@@ -213,35 +190,11 @@ impl ListMarkerElement {
                         let align_offset = self.marker_width - run_x - run_width;
                         let text_range = run.text_range();
 
-                        if text_range.start < text_range.end
-                            && let Some(marker_text) = text.get(text_range)
-                            && !marker_text.is_empty()
-                        {
-                            let chars: Vec<char> = marker_text.chars().collect();
-                            if chars.len() == glyph_data.len() {
-                                for (ch, (_, glyph_x, glyph_y)) in
-                                    chars.into_iter().zip(glyph_data.iter())
-                                {
-                                    let mut buf = [0u8; 4];
-                                    let s = ch.encode_utf8(&mut buf);
-                                    sink.draw_text_layer(
-                                        s,
-                                        run.font_size() * scale,
-                                        run_x + align_offset + *glyph_x,
-                                        self.baseline + *glyph_y,
-                                        transform,
-                                    );
-                                }
-                            } else {
-                                sink.draw_text_layer(
-                                    marker_text,
-                                    run.font_size() * scale,
-                                    run_x + align_offset,
-                                    self.baseline,
-                                    transform,
-                                );
-                            }
-                        }
+                        let run_text = if text_range.start < text_range.end {
+                            text.get(text_range).unwrap_or("")
+                        } else {
+                            ""
+                        };
 
                         let glyphs: Vec<_> = glyph_data
                             .into_iter()
@@ -252,10 +205,11 @@ impl ListMarkerElement {
                             })
                             .collect();
 
-                        sink.draw_glyphs(
+                        sink.draw_text(
+                            run_text,
                             &run.font(),
                             run.font_size() * scale,
-                            &paint,
+                            &brush,
                             transform,
                             None,
                             false,

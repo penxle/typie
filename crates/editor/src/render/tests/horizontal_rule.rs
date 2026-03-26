@@ -1,13 +1,19 @@
 use super::*;
 use crate::layout::query::find_node_bounds;
 
-fn render_page_pixels(
+fn render_surface_pixels(
     runtime: &mut crate::runtime::Runtime,
     page_idx: usize,
 ) -> (Vec<u8>, usize, usize) {
-    let rendered = runtime.render_page(page_idx).expect("page should render");
-    let pixels = unsafe { std::slice::from_raw_parts(rendered.ptr, rendered.len) }.to_vec();
-    (pixels, rendered.width as usize, rendered.height as usize)
+    let info = runtime
+        .get_surface_info(page_idx)
+        .expect("surface info should exist");
+    let mut buf = vec![0u8; info.buffer_size];
+    assert!(
+        runtime.render_surface_into(page_idx, &mut buf),
+        "render_surface_into should succeed"
+    );
+    (buf, info.width as usize, info.height as usize)
 }
 
 #[test]
@@ -31,7 +37,7 @@ fn selected_horizontal_rule_paints_selection_overlay() {
     let plain_sample_y = (plain_bounds.y + 2.0).floor() as usize;
 
     let (plain_pixels, plain_width, plain_height) =
-        render_page_pixels(&mut plain_runtime, plain_bounds.page_idx);
+        render_surface_pixels(&mut plain_runtime, plain_bounds.page_idx);
     let plain_rgba = rgba_at(
         &plain_pixels,
         plain_width,
@@ -61,7 +67,7 @@ fn selected_horizontal_rule_paints_selection_overlay() {
     let selected_sample_y = (selected_bounds.y + 2.0).floor() as usize;
 
     let (selected_pixels, selected_width, selected_height) =
-        render_page_pixels(&mut selected_runtime, selected_bounds.page_idx);
+        render_surface_pixels(&mut selected_runtime, selected_bounds.page_idx);
     let selected_rgba = rgba_at(
         &selected_pixels,
         selected_width,

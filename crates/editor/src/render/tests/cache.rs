@@ -4,15 +4,9 @@ use super::*;
 fn prune_page_cache_removes_entries_outside_page_count() {
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
 
-    renderer
-        .page_cache
-        .insert(0, PageRenderCache::new(64, 64, 1.0));
-    renderer
-        .page_cache
-        .insert(1, PageRenderCache::new(64, 64, 1.0));
-    renderer
-        .page_cache
-        .insert(3, PageRenderCache::new(64, 64, 1.0));
+    renderer.page_cache.insert(0, PageCache::new(64, 64, 1.0));
+    renderer.page_cache.insert(1, PageCache::new(64, 64, 1.0));
+    renderer.page_cache.insert(3, PageCache::new(64, 64, 1.0));
 
     renderer.prune_page_cache(2);
 

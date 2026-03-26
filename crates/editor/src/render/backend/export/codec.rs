@@ -1,11 +1,12 @@
-use super::outline::{
-    VectorFillRule, VectorLineCap, VectorLineJoin, VectorOp, VectorPage, VectorPathCommand,
+use super::sink::{
+    ExportFillRule, ExportLineCap, ExportLineJoin, ExportOp, ExportPage, ExportPathCommand,
 };
 
 const MAGIC: u32 = 0x3156_4554; // TVE1
 
 const OP_FILL_PATH: u8 = 0;
 const OP_STROKE_PATH: u8 = 1;
+const OP_DRAW_IMAGE: u8 = 2;
 
 const FILL_RULE_WINDING: u8 = 0;
 const FILL_RULE_EVEN_ODD: u8 = 1;
@@ -24,7 +25,7 @@ const CMD_QUAD_TO: u8 = 2;
 const CMD_CUBIC_TO: u8 = 3;
 const CMD_CLOSE_PATH: u8 = 4;
 
-pub fn encode_vector_page(page: &VectorPage) -> Vec<u8> {
+pub fn encode_export_page(page: &ExportPage) -> Vec<u8> {
     let mut out = Vec::with_capacity(page.ops.len() * 128 + 32);
     write_u32(&mut out, MAGIC);
     write_f32(&mut out, page.width);
@@ -33,7 +34,7 @@ pub fn encode_vector_page(page: &VectorPage) -> Vec<u8> {
 
     for op in &page.ops {
         match op {
-            VectorOp::FillPath {
+            ExportOp::FillPath {
                 path,
                 color,
                 fill_rule,
@@ -45,12 +46,12 @@ pub fn encode_vector_page(page: &VectorPage) -> Vec<u8> {
                 write_u8(
                     &mut out,
                     match fill_rule {
-                        VectorFillRule::Winding => FILL_RULE_WINDING,
-                        VectorFillRule::EvenOdd => FILL_RULE_EVEN_ODD,
+                        ExportFillRule::Winding => FILL_RULE_WINDING,
+                        ExportFillRule::EvenOdd => FILL_RULE_EVEN_ODD,
                     },
                 );
             }
-            VectorOp::StrokePath {
+            ExportOp::StrokePath {
                 path,
                 color,
                 width,
@@ -65,19 +66,34 @@ pub fn encode_vector_page(page: &VectorPage) -> Vec<u8> {
                 write_u8(
                     &mut out,
                     match line_cap {
-                        VectorLineCap::Butt => LINE_CAP_BUTT,
-                        VectorLineCap::Round => LINE_CAP_ROUND,
-                        VectorLineCap::Square => LINE_CAP_SQUARE,
+                        ExportLineCap::Butt => LINE_CAP_BUTT,
+                        ExportLineCap::Round => LINE_CAP_ROUND,
+                        ExportLineCap::Square => LINE_CAP_SQUARE,
                     },
                 );
                 write_u8(
                     &mut out,
                     match line_join {
-                        VectorLineJoin::Miter => LINE_JOIN_MITER,
-                        VectorLineJoin::Round => LINE_JOIN_ROUND,
-                        VectorLineJoin::Bevel => LINE_JOIN_BEVEL,
+                        ExportLineJoin::Miter => LINE_JOIN_MITER,
+                        ExportLineJoin::Round => LINE_JOIN_ROUND,
+                        ExportLineJoin::Bevel => LINE_JOIN_BEVEL,
                     },
                 );
+            }
+            ExportOp::DrawImage {
+                data,
+                width,
+                height,
+                x,
+                y,
+            } => {
+                write_u8(&mut out, OP_DRAW_IMAGE);
+                write_u32(&mut out, *width);
+                write_u32(&mut out, *height);
+                write_f32(&mut out, *x);
+                write_f32(&mut out, *y);
+                write_u32(&mut out, data.len() as u32);
+                out.extend_from_slice(data);
             }
         }
     }
@@ -111,27 +127,27 @@ fn write_str(out: &mut Vec<u8>, value: &str) {
     out.extend_from_slice(bytes);
 }
 
-fn write_path_commands(out: &mut Vec<u8>, path: &[VectorPathCommand]) {
+fn write_path_commands(out: &mut Vec<u8>, path: &[ExportPathCommand]) {
     for command in path {
         match command {
-            VectorPathCommand::MoveTo { x, y } => {
+            ExportPathCommand::MoveTo { x, y } => {
                 write_u8(out, CMD_MOVE_TO);
                 write_f32(out, *x);
                 write_f32(out, *y);
             }
-            VectorPathCommand::LineTo { x, y } => {
+            ExportPathCommand::LineTo { x, y } => {
                 write_u8(out, CMD_LINE_TO);
                 write_f32(out, *x);
                 write_f32(out, *y);
             }
-            VectorPathCommand::QuadTo { cx, cy, x, y } => {
+            ExportPathCommand::QuadTo { cx, cy, x, y } => {
                 write_u8(out, CMD_QUAD_TO);
                 write_f32(out, *cx);
                 write_f32(out, *cy);
                 write_f32(out, *x);
                 write_f32(out, *y);
             }
-            VectorPathCommand::CubicTo {
+            ExportPathCommand::CubicTo {
                 c1x,
                 c1y,
                 c2x,
@@ -147,7 +163,7 @@ fn write_path_commands(out: &mut Vec<u8>, path: &[VectorPathCommand]) {
                 write_f32(out, *x);
                 write_f32(out, *y);
             }
-            VectorPathCommand::ClosePath => {
+            ExportPathCommand::ClosePath => {
                 write_u8(out, CMD_CLOSE_PATH);
             }
         }

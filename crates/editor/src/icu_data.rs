@@ -19,7 +19,7 @@ fn decompress_zstd(data: &[u8]) -> Result<Vec<u8>, String> {
     Ok(output)
 }
 
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", not(feature = "native"), not(feature = "uniffi")))]
 pub fn load_icu_data(data: &[u8]) -> Result<(), JsValue> {
     if ICU_DATA_PROVIDER.get().is_some() {
         return Ok(());

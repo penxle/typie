@@ -1,8 +1,9 @@
 use crate::layout::elements::{SplitEdges, TableBorderElement, TableCellElement};
 use crate::model::{LayoutMode, TABLE_BORDER_WIDTH, TableBorderStyle};
-use crate::render::outline::ElementSink;
-use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
-use tiny_skia::{Paint, PathBuilder, PixmapMut, Rect, Stroke, StrokeDash, Transform};
+use crate::render::sink::RenderSink;
+use crate::render::{Render, RenderParams, RenderPhase};
+use kurbo::{Affine, BezPath, Rect, Stroke};
+use peniko::Brush;
 
 #[derive(Debug, Clone, Copy)]
 struct BorderVisibility {
@@ -93,24 +94,27 @@ fn continuous_border_range(element: &TableBorderElement) -> ContinuousBorderRang
     }
 }
 
-fn border_dash(style: TableBorderStyle) -> Option<StrokeDash> {
+fn apply_border_dash(stroke: Stroke, style: TableBorderStyle) -> Stroke {
     match style {
-        TableBorderStyle::Dashed => StrokeDash::new(vec![4.0, 2.0], 0.0),
-        TableBorderStyle::Dotted => StrokeDash::new(vec![1.0, 2.0], 0.0),
-        _ => None,
+        TableBorderStyle::Dashed => stroke.with_dashes(0.0, [4.0, 2.0]),
+        TableBorderStyle::Dotted => stroke.with_dashes(0.0, [1.0, 2.0]),
+        _ => stroke,
     }
 }
 
-fn absolute_element_top(transform: Transform, render_origin_y: f32) -> Option<f32> {
-    if transform.sy.abs() <= f32::EPSILON {
+fn absolute_element_top(transform: Affine, render_origin_y: f32) -> Option<f32> {
+    let [_sx, _ky, _kx, sy, _tx, ty] = transform.as_coeffs();
+    let sy = sy as f32;
+    let ty = ty as f32;
+    if sy.abs() <= f32::EPSILON {
         return None;
     }
-    Some(transform.ty / transform.sy + render_origin_y)
+    Some(ty / sy + render_origin_y)
 }
 
 fn continuous_draw_spec(
     element: &TableBorderElement,
-    transform: Transform,
+    transform: Affine,
     render_origin_y: f32,
 ) -> BorderDrawSpec {
     let half = TABLE_BORDER_WIDTH / 2.0;
@@ -135,11 +139,11 @@ fn continuous_draw_spec(
     }
 }
 
-fn is_split_top_fragment(transform: Transform, render_origin_y: f32) -> bool {
+fn is_split_top_fragment(transform: Affine, render_origin_y: f32) -> bool {
     absolute_element_top(transform, render_origin_y).is_some_and(|top| top < -0.001)
 }
 
-fn top_clip_for_split_fragment(transform: Transform, render_origin_y: f32) -> Option<f32> {
+fn top_clip_for_split_fragment(transform: Affine, render_origin_y: f32) -> Option<f32> {
     let element_top = absolute_element_top(transform, render_origin_y)?;
     Some(-element_top + TABLE_BORDER_WIDTH / 2.0)
 }
@@ -161,24 +165,24 @@ fn paginated_draw_spec(element: &TableBorderElement, layout_mode: &LayoutMode) -
     }
 }
 
-fn draw_outer_lines(pb: &mut PathBuilder, spec: BorderDrawSpec) {
+fn draw_outer_lines(bp: &mut BezPath, spec: BorderDrawSpec) {
     if spec.draw_top {
-        pb.move_to(spec.left, spec.horizontal_top);
-        pb.line_to(spec.right, spec.horizontal_top);
+        bp.move_to((spec.left as f64, spec.horizontal_top as f64));
+        bp.line_to((spec.right as f64, spec.horizontal_top as f64));
     }
 
     if spec.draw_bottom {
-        pb.move_to(spec.left, spec.horizontal_bottom);
-        pb.line_to(spec.right, spec.horizontal_bottom);
+        bp.move_to((spec.left as f64, spec.horizontal_bottom as f64));
+        bp.line_to((spec.right as f64, spec.horizontal_bottom as f64));
     }
 
-    pb.move_to(spec.left, spec.vertical_top);
-    pb.line_to(spec.left, spec.vertical_bottom);
-    pb.move_to(spec.right, spec.vertical_top);
-    pb.line_to(spec.right, spec.vertical_bottom);
+    bp.move_to((spec.left as f64, spec.vertical_top as f64));
+    bp.line_to((spec.left as f64, spec.vertical_bottom as f64));
+    bp.move_to((spec.right as f64, spec.vertical_top as f64));
+    bp.line_to((spec.right as f64, spec.vertical_bottom as f64));
 }
 
-fn draw_row_lines(pb: &mut PathBuilder, spec: BorderDrawSpec, row_heights: &[f32]) {
+fn draw_row_lines(bp: &mut BezPath, spec: BorderDrawSpec, row_heights: &[f32]) {
     const EDGE_EPSILON: f32 = 0.001;
     let half = TABLE_BORDER_WIDTH / 2.0;
     let clip_top = if spec.draw_top {
@@ -198,14 +202,14 @@ fn draw_row_lines(pb: &mut PathBuilder, spec: BorderDrawSpec, row_heights: &[f32
             && visible_from_top
             && y < spec.vertical_bottom - EDGE_EPSILON
         {
-            pb.move_to(spec.left, y);
-            pb.line_to(spec.right, y);
+            bp.move_to((spec.left as f64, y as f64));
+            bp.line_to((spec.right as f64, y as f64));
         }
     }
 }
 
 fn draw_column_lines(
-    pb: &mut PathBuilder,
+    bp: &mut BezPath,
     x_offset: f32,
     col_widths: &[f32],
     vertical_top: f32,
@@ -216,54 +220,34 @@ fn draw_column_lines(
         x += *col_width;
         if idx < col_widths.len() - 1 {
             x += TABLE_BORDER_WIDTH;
-            pb.move_to(x - TABLE_BORDER_WIDTH / 2.0, vertical_top);
-            pb.line_to(x - TABLE_BORDER_WIDTH / 2.0, vertical_bottom);
+            bp.move_to(((x - TABLE_BORDER_WIDTH / 2.0) as f64, vertical_top as f64));
+            bp.line_to((
+                (x - TABLE_BORDER_WIDTH / 2.0) as f64,
+                vertical_bottom as f64,
+            ));
         }
     }
 }
 
 impl Render for TableBorderElement {
-    fn render(
-        &self,
-        pixmap: &mut PixmapMut,
-        glyph_renderer: &mut GlyphRenderer,
-        transform: Transform,
-        ctx: &RenderContext,
-    ) {
-        if matches!(ctx.phase, RenderPhase::Selection) {
-            let is_selected = ctx.is_block_selected(self.node_id);
-            if is_selected
-                && let Some(rect) =
-                    Rect::from_xywh(self.x_offset, 0.0, self.size.width, self.size.height)
-                && ctx.fill_selection_rect_fast(pixmap, rect, transform)
-            {
-                return;
-            }
-        }
-
-        let mut sink = RasterSink::new(pixmap, glyph_renderer);
-        self.paint_to(&mut sink, transform, ctx);
-    }
-}
-
-impl Outline for TableBorderElement {
-    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
 impl TableBorderElement {
-    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn paint_to(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         let is_selected = ctx.is_block_selected(self.node_id);
         match ctx.phase {
             RenderPhase::Background => {
-                let mut paint = Paint::default();
-                paint.set_color(ctx.theme.color("ui.surface.default"));
-                if let Some(rect) =
-                    Rect::from_xywh(self.x_offset, 0.0, self.size.width, self.size.height)
-                {
-                    sink.fill_rect(rect, &paint, transform);
-                }
+                let brush = Brush::Solid(ctx.theme.color("ui.surface.default"));
+                let rect = Rect::new(
+                    self.x_offset as f64,
+                    0.0,
+                    (self.x_offset + self.size.width) as f64,
+                    self.size.height as f64,
+                );
+                sink.fill_rect(rect, &brush, transform);
             }
             RenderPhase::Content => {
                 if matches!(self.border_style, TableBorderStyle::None) {
@@ -271,17 +255,12 @@ impl TableBorderElement {
                 }
 
                 let color = ctx.theme.color("ui.border.default");
-                let mut paint = Paint::default();
-                paint.set_color(color);
-                paint.anti_alias = true;
+                let brush = Brush::Solid(color);
 
-                let stroke = Stroke {
-                    width: TABLE_BORDER_WIDTH,
-                    dash: border_dash(self.border_style),
-                    ..Default::default()
-                };
+                let stroke =
+                    apply_border_dash(Stroke::new(TABLE_BORDER_WIDTH as f64), self.border_style);
 
-                let mut pb = PathBuilder::new();
+                let mut bp = BezPath::new();
 
                 let layout_mode = ctx.doc.settings().layout_mode;
                 let spec = match layout_mode {
@@ -291,79 +270,52 @@ impl TableBorderElement {
                     LayoutMode::Paginated { .. } => paginated_draw_spec(self, &layout_mode),
                 };
 
-                draw_outer_lines(&mut pb, spec);
-                draw_row_lines(&mut pb, spec, &self.row_heights);
+                draw_outer_lines(&mut bp, spec);
+                draw_row_lines(&mut bp, spec, &self.row_heights);
                 draw_column_lines(
-                    &mut pb,
+                    &mut bp,
                     self.x_offset,
                     &self.col_widths,
                     spec.vertical_top,
                     spec.vertical_bottom,
                 );
 
-                if let Some(path) = pb.finish() {
-                    sink.stroke_path(&path, &paint, &stroke, transform);
-                }
+                sink.stroke_path(&bp, &brush, &stroke, transform);
             }
             RenderPhase::Selection => {
                 if !is_selected {
                     return;
                 }
 
-                let paint = ctx.selection_paint();
-
-                if let Some(rect) =
-                    Rect::from_xywh(self.x_offset, 0.0, self.size.width, self.size.height)
-                {
-                    sink.fill_rect(rect, &paint, transform);
-                }
+                let brush = ctx.selection_paint();
+                let rect = Rect::new(
+                    self.x_offset as f64,
+                    0.0,
+                    (self.x_offset + self.size.width) as f64,
+                    self.size.height as f64,
+                );
+                sink.fill_rect(rect, &brush, transform);
             }
         }
     }
 }
 
 impl Render for TableCellElement {
-    fn render(
-        &self,
-        pixmap: &mut PixmapMut,
-        glyph_renderer: &mut GlyphRenderer,
-        transform: Transform,
-        ctx: &RenderContext,
-    ) {
-        if matches!(ctx.phase, RenderPhase::Selection) {
-            let is_selected = ctx.is_block_selected(self.node_id);
-            if is_selected
-                && let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
-                && ctx.fill_selection_rect_fast(pixmap, rect, transform)
-            {
-                return;
-            }
-        }
-
-        let mut sink = RasterSink::new(pixmap, glyph_renderer);
-        self.paint_to(&mut sink, transform, ctx);
-    }
-}
-
-impl Outline for TableCellElement {
-    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
 impl TableCellElement {
-    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+    fn paint_to(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
         let is_selected = ctx.is_block_selected(self.node_id);
         match ctx.phase {
             RenderPhase::Background => {}
             RenderPhase::Selection => {
                 if is_selected {
-                    let paint = ctx.selection_paint();
-
-                    if let Some(rect) = Rect::from_xywh(0.0, 0.0, self.size.width, self.size.height)
-                    {
-                        sink.fill_rect(rect, &paint, transform);
-                    }
+                    let brush = ctx.selection_paint();
+                    let rect = Rect::new(0.0, 0.0, self.size.width as f64, self.size.height as f64);
+                    sink.fill_rect(rect, &brush, transform);
                 }
             }
             RenderPhase::Content => {}
@@ -493,7 +445,7 @@ mod tests {
                 start_row_index: 0,
                 total_rows: 3,
             },
-            Transform::from_scale(2.0, 2.0).pre_translate(0.0, -501.0),
+            Affine::scale_non_uniform(2.0, 2.0) * Affine::translate((0.0, -501.0)),
             0.0,
         );
 
@@ -504,7 +456,7 @@ mod tests {
 
     #[test]
     fn top_clip_for_split_fragment_respects_transform_translation() {
-        let transform = Transform::from_scale(2.0, 2.0).pre_translate(0.0, -501.0);
+        let transform = Affine::scale_non_uniform(2.0, 2.0) * Affine::translate((0.0, -501.0));
         let top_clip = top_clip_for_split_fragment(transform, 0.0).unwrap();
 
         assert!((top_clip - 501.5).abs() < 0.01);
@@ -528,7 +480,7 @@ mod tests {
                 start_row_index: 0,
                 total_rows: 3,
             },
-            Transform::from_scale(2.0, 2.0).pre_translate(0.0, -120.0),
+            Affine::scale_non_uniform(2.0, 2.0) * Affine::translate((0.0, -120.0)),
             120.0,
         );
 
@@ -554,14 +506,14 @@ mod tests {
                 start_row_index: 0,
                 total_rows: 2,
             },
-            Transform::from_scale(1.0, 1.0).pre_translate(0.0, -501.0),
+            Affine::scale_non_uniform(1.0, 1.0) * Affine::translate((0.0, -501.0)),
             0.0,
         );
 
-        let mut pb = PathBuilder::new();
-        draw_row_lines(&mut pb, spec, &[500.0, 400.0]);
+        let mut bp = BezPath::new();
+        draw_row_lines(&mut bp, spec, &[500.0, 400.0]);
         assert!(
-            pb.finish().is_none(),
+            bp.is_empty(),
             "split top fragment should not draw a row line centered on the page seam"
         );
     }

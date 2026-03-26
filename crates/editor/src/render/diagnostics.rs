@@ -1,26 +1,26 @@
-use super::geometry::CacheRect;
+use super::geometry::LayoutRect;
 use crate::layout::{Page, PositionedNode};
 use crate::model::NodeId;
 use crate::types::Point;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Default)]
-pub(super) struct PaintDebugFrame {
-    pub(super) render_rects: Vec<CacheRect>,
-    pub(super) overflow_rects: Vec<CacheRect>,
+pub(super) struct DebugFrame {
+    pub(super) render_rects: Vec<LayoutRect>,
+    pub(super) overflow_rects: Vec<LayoutRect>,
     pub(super) full_repaint: bool,
     pub(super) cache_reused: bool,
-    pub(super) layout_rects: Vec<CacheRect>,
+    pub(super) layout_rects: Vec<LayoutRect>,
     pub(super) full_relayout: bool,
     pub(super) layout_reused: bool,
 }
 
 #[derive(Default)]
-pub(super) struct PaintDiagnosticsState {
+pub(super) struct DiagnosticsState {
     layout_revision_by_page: FxHashMap<usize, u64>,
 }
 
-impl PaintDiagnosticsState {
+impl DiagnosticsState {
     pub(super) fn clear(&mut self) {
         self.layout_revision_by_page.clear();
     }
@@ -42,7 +42,7 @@ impl PaintDiagnosticsState {
 pub(super) fn collect_layout_dirty_rects(
     page: &Page,
     recomputed_nodes: &FxHashSet<NodeId>,
-) -> Vec<CacheRect> {
+) -> Vec<LayoutRect> {
     let mut collector = LayoutDirtyCollector::new(recomputed_nodes);
     collector.visit(&page.root, Point::zero(), false);
     collector.rects
@@ -50,7 +50,7 @@ pub(super) fn collect_layout_dirty_rects(
 
 struct LayoutDirtyCollector<'a> {
     recomputed_nodes: &'a FxHashSet<NodeId>,
-    rects: Vec<CacheRect>,
+    rects: Vec<LayoutRect>,
 }
 
 impl<'a> LayoutDirtyCollector<'a> {
@@ -87,7 +87,7 @@ impl<'a> LayoutDirtyCollector<'a> {
     }
 
     fn push_node_rect(&mut self, positioned: &PositionedNode, pos: Point) {
-        if let Some(bounds) = CacheRect::from_xywh(
+        if let Some(bounds) = LayoutRect::from_xywh(
             pos.x,
             pos.y,
             positioned.node.size.width,

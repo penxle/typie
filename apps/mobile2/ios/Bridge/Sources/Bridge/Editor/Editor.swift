@@ -48,6 +48,29 @@ import Foundation
     }
 }
 
+@objc public class NativePageTexture: NSObject {
+    private let texture: PageTexture
+
+    @objc public let nativeHandle: Int64
+    @objc public let width: Int32
+    @objc public let height: Int32
+
+    init(_ texture: PageTexture) {
+        self.texture = texture
+        self.nativeHandle = Int64(texture.nativeHandle())
+        self.width = Int32(texture.width())
+        self.height = Int32(texture.height())
+    }
+
+    @objc public func pixelData() -> Data? {
+        return texture.pixelData()
+    }
+
+    @objc public func close() {
+        // UniFFI PageTexture는 deinit에서 자동 정리됨
+    }
+}
+
 @objc public class NativeOptionalPageRenderInfo: NSObject {
     @objc public let value: NativePageRenderInfo?
 
@@ -120,6 +143,14 @@ import Foundation
     init(editor: Editor) {
         self.editor = editor
         super.init()
+    }
+
+    @objc public func attachSurface(pageIndex: Int32) throws -> NativePageTexture {
+        return NativePageTexture(try editor.attachSurface(pageIndex: UInt32(pageIndex)))
+    }
+
+    @objc public func detachSurface(pageIndex: Int32) throws {
+        try editor.detachSurface(pageIndex: UInt32(pageIndex))
     }
 
     @objc public func dispatch(messageJson: String) throws {
