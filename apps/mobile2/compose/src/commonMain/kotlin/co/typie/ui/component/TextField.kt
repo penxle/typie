@@ -29,6 +29,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.autofill.contentType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -62,6 +64,21 @@ enum class LabelPosition {
   None,
 }
 
+internal fun resolveTextFieldKeyboardType(
+  isPassword: Boolean,
+  keyboardType: KeyboardType,
+): KeyboardType {
+  return if (isPassword && keyboardType == KeyboardType.Text) KeyboardType.Password else keyboardType
+}
+
+internal fun resolveTextFieldAutofillContentType(
+  isPassword: Boolean,
+  contentType: ContentType?,
+): ContentType? {
+  if (contentType != null) return contentType
+  return if (isPassword) ContentType.Password else null
+}
+
 @Composable
 fun TextField(
   value: String,
@@ -76,6 +93,7 @@ fun TextField(
   enabled: Boolean = true,
   readOnly: Boolean = false,
   isPassword: Boolean = false,
+  contentType: ContentType? = null,
   onBlur: (() -> Unit)? = null,
   keyboardType: KeyboardType = KeyboardType.Text,
   imeAction: ImeAction? = null,
@@ -97,6 +115,8 @@ fun TextField(
   val hasError = error != null
   val isInternal = labelPosition == LabelPosition.Internal
   val resolvedImeAction = imeAction ?: ImeAction.Default
+  val resolvedKeyboardType = resolveTextFieldKeyboardType(isPassword, keyboardType)
+  val resolvedContentType = resolveTextFieldAutofillContentType(isPassword, contentType)
 
   val colorSpec = tween<Color>(220)
 
@@ -165,6 +185,13 @@ fun TextField(
       enabled = enabled,
       readOnly = readOnly,
       modifier = Modifier
+        .then(
+          if (resolvedContentType != null) {
+            Modifier.contentType(resolvedContentType)
+          } else {
+            Modifier
+          }
+        )
         .onFocusChanged { state ->
           val wasFocused = isFocused
           isFocused = state.isFocused
@@ -183,7 +210,7 @@ fun TextField(
       ),
       cursorBrush = SolidColor(AppTheme.colors.textPrimary),
       keyboardOptions = KeyboardOptions(
-        keyboardType = keyboardType,
+        keyboardType = resolvedKeyboardType,
         imeAction = resolvedImeAction,
       ),
       keyboardActions = KeyboardActions(
@@ -369,6 +396,7 @@ fun TextField(
   enabled: Boolean = true,
   readOnly: Boolean = false,
   isPassword: Boolean = false,
+  contentType: ContentType? = null,
   keyboardType: KeyboardType = KeyboardType.Text,
   imeAction: ImeAction? = null,
   onImeAction: (() -> Unit)? = null,
@@ -412,6 +440,7 @@ fun TextField(
     enabled = enabled,
     readOnly = readOnly,
     isPassword = isPassword,
+    contentType = contentType,
     onBlur = { field.onBlur() },
     keyboardType = keyboardType,
     imeAction = resolvedImeAction,

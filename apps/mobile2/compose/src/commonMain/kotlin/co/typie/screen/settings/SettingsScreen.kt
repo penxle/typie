@@ -15,12 +15,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
+import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.route.Route
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
+import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
@@ -31,9 +35,11 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 
 data class SettingsItem(
   val label: String,
+  val route: Route? = null,
 )
 
 data class SettingsSection(
@@ -41,14 +47,22 @@ data class SettingsSection(
   val items: List<SettingsItem>,
 )
 
-internal fun settingsSections(): List<SettingsSection> {
+internal fun settingsRouteFor(item: SettingsItem): Route? {
+  return item.route
+}
+
+internal fun settingsPasswordItemLabel(hasPassword: Boolean): String {
+  return if (hasPassword) "비밀번호 변경" else "비밀번호 설정"
+}
+
+internal fun settingsSections(hasPassword: Boolean): List<SettingsSection> {
   return listOf(
     SettingsSection(
       title = "계정 설정",
       items = listOf(
-        SettingsItem("이메일 변경"),
-        SettingsItem("프로필 변경"),
-        SettingsItem("비밀번호 변경"),
+        SettingsItem("이메일 변경", route = Route.UpdateEmail),
+        SettingsItem("프로필 변경", route = Route.UpdateProfile),
+        SettingsItem(settingsPasswordItemLabel(hasPassword), route = Route.UpdatePassword),
         SettingsItem("연결된 SNS 계정"),
       ),
     ),
@@ -99,9 +113,12 @@ internal fun settingsSections(): List<SettingsSection> {
 
 @Composable
 fun SettingsScreen() {
+  val nav = Nav.current
+  val model = koinViewModel<SettingsViewModel>()
   val toast = koinInject<Toast>()
   val scrollState = rememberScrollState()
-  val sections = remember { settingsSections() }
+  val hasPassword = model.query.data.me.hasPassword
+  val sections = remember(hasPassword) { settingsSections(hasPassword) }
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -109,7 +126,12 @@ fun SettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
+  if (model.query.state is QueryState.Error) {
+    ErrorDialog { model.query.refetch() }
+  }
+
   Screen(
+    loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
   ) { contentPadding ->
     Column(
@@ -129,8 +151,14 @@ fun SettingsScreen() {
       sections.forEach { section ->
         SettingsSectionCard(
           section = section,
-          onItemClick = {
-            toast.show(ToastType.Notification, "준비 중인 기능이에요.")
+          onItemClick = { item ->
+            val route = settingsRouteFor(item)
+
+            if (route != null) {
+              nav.navigate(route)
+            } else {
+              toast.show(ToastType.Notification, "준비 중인 기능이에요.")
+            }
           },
         )
       }
@@ -143,7 +171,7 @@ fun SettingsScreen() {
 @Composable
 private fun SettingsSectionCard(
   section: SettingsSection,
-  onItemClick: (SettingsItem) -> Unit,
+  onItemClick: suspend (SettingsItem) -> Unit,
 ) {
   Column(
     modifier = Modifier.fillMaxWidth(),
@@ -176,7 +204,7 @@ private fun SettingsSectionCard(
 @Composable
 private fun SettingsRow(
   item: SettingsItem,
-  onClick: () -> Unit,
+  onClick: suspend () -> Unit,
 ) {
   CardRow(
     onClick = onClick,
