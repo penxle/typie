@@ -180,6 +180,7 @@ wbindgen
 webp
 wonka
 xact
+xcargs
 xcarchive
 xcconfig
 xcodeproj

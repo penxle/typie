@@ -1,4 +1,10 @@
+import java.util.Properties
+
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+val versionProps = Properties().apply {
+  load(rootProject.file("version.properties").reader())
+}
 
 plugins {
   alias(libs.plugins.android.application)
@@ -35,8 +41,8 @@ android {
     applicationId = "co.typie"
     minSdk = libs.versions.android.minSdk.get().toInt()
     targetSdk = libs.versions.android.targetSdk.get().toInt()
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = (findProperty("versionCode") as? String)?.toInt() ?: 1
+    versionName = versionProps["versionName"] as String
   }
 
   sourceSets["main"].jniLibs.srcDirs("src/main/jniLibs")
@@ -47,9 +53,19 @@ android {
     }
   }
 
+  signingConfigs {
+    create("release") {
+      storeFile = file("keystore-release.jks")
+      storePassword = System.getenv("KEYSTORE_PASSWORD")
+      keyAlias = "co.typie"
+      keyPassword = System.getenv("KEYSTORE_PASSWORD")
+    }
+  }
+
   buildTypes {
     getByName("release") {
       isMinifyEnabled = false
+      signingConfig = signingConfigs.getByName("release")
     }
   }
 

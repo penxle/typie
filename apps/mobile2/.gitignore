@@ -21,3 +21,6 @@ Config.local.xcconfig
 generated/
 android/src/main/jniLibs/
 ios/Frameworks/
+**/fastlane/README.md
+**/fastlane/report.xml
+*.jks

@@ -67,7 +67,7 @@ import Foundation
     }
 
     @objc public func close() {
-        // UniFFI PageTexture는 deinit에서 자동 정리됨
+        // iOS: ARC deinit으로 해제
     }
 }
 

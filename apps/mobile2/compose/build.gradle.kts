@@ -6,6 +6,7 @@ import com.apollographql.apollo.annotations.ApolloExperimental
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 val doppler: String = listOf("/opt/homebrew/bin/doppler", "/usr/local/bin/doppler")
   .firstOrNull { file(it).exists() } ?: "doppler"
@@ -168,8 +169,13 @@ buildkonfig {
   }
 }
 
+val versionProps = Properties().apply {
+  load(rootProject.file("version.properties").reader())
+}
+
 rootProject.file("ios/Configuration/Config.local.xcconfig").writeText(
   """
+  |MARKETING_VERSION=${versionProps["versionName"]}
   |GOOGLE_IOS_CLIENT_ID=${env("GOOGLE_IOS_CLIENT_ID")}
   |GOOGLE_DOT_REVERSED_IOS_CLIENT_ID=${env("GOOGLE_DOT_REVERSED_IOS_CLIENT_ID")}
   |GOOGLE_SERVER_CLIENT_ID=${env("GOOGLE_SERVER_CLIENT_ID")}

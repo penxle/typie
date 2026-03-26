@@ -204,7 +204,7 @@ private class IosPageTexture(private val native: NativePageTexture) : PageTextur
   override val width: Int = native.width
   override val height: Int = native.height
   override fun pixelData(): ByteArray? = native.pixelData()?.toByteArray()
-  override fun close() = native.close()
+  override fun close() {} // iOS: ARC deinit으로 해제
 }
 
 private fun ByteArray.toNSData(): NSData = memScoped {

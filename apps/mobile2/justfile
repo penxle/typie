@@ -1,0 +1,20 @@
+# Show available recipes
+[private]
+default:
+    @just --list
+
+# Sync signing credentials
+setup:
+    cd android && doppler run -c prod -- bundle exec fastlane setup
+    cd ios && doppler run -c prod -- bundle exec fastlane setup
+
+# Deploy Android beta to Google Play (internal track)
+android:
+    cd android && doppler run -c prod -- bundle exec fastlane beta
+
+# Deploy iOS beta to TestFlight
+ios:
+    cd ios && doppler run -c prod -- bundle exec fastlane beta
+
+# Deploy both platforms
+all: android ios

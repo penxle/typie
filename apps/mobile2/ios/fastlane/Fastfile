@@ -1,0 +1,39 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Set up signing credentials"
+  lane :setup do
+    app_store_connect_api_key
+
+    match(type: "development")
+    match(type: "appstore")
+  end
+
+  desc "Build and upload to beta"
+  lane :beta do
+    app_store_connect_api_key
+
+    match(type: "appstore", readonly: true)
+
+    latest_build_number = latest_testflight_build_number
+
+    gradle(
+      project_dir: "..",
+      task: "compose:linkReleaseFrameworkIosArm64"
+    )
+
+    build_app(
+      project: "App.xcodeproj",
+      scheme: "iOS",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "build",
+      xcargs: "CURRENT_PROJECT_VERSION=#{latest_build_number + 1}",
+    )
+
+    upload_to_testflight(
+      notify_external_testers: false,
+    )
+  end
+
+end
