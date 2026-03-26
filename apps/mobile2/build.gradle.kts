@@ -1,9 +1,3 @@
-//buildscript {
-//  dependencies.constraints {
-//    "classpath"("org.jetbrains.kotlin:kotlin-gradle-plugin:${libs.versions.kotlin.get()}")
-//  }
-//}
-
 buildscript {
   configurations.configureEach {
     resolutionStrategy {

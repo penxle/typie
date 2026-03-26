@@ -1,6 +1,8 @@
-@file:OptIn(ExperimentalKotlinGradlePluginApi::class)
+@file:OptIn(ExperimentalKotlinGradlePluginApi::class, ApolloExperimental::class)
+@file:Suppress("UnstableApiUsage", "ApolloEndpointNotConfigured")
 
 import com.android.build.api.withAndroid
+import com.apollographql.apollo.annotations.ApolloExperimental
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -31,7 +33,6 @@ plugins {
 }
 
 kotlin {
-  @OptIn(ExperimentalKotlinGradlePluginApi::class)
   applyDefaultHierarchyTemplate {
     common {
       group("jna") {
