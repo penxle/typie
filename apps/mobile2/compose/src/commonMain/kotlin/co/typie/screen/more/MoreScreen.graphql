@@ -1,4 +1,4 @@
-query ProfileScreen_Query {
+query MoreScreen_Query {
   me @catch(to: THROW) {
     id
     name
@@ -24,6 +24,6 @@ query ProfileScreen_Query {
   }
 }
 
-mutation ProfileScreen_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
+mutation MoreScreen_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
   submitFeedback(input: $input)
 }

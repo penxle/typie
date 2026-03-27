@@ -1,4 +1,4 @@
-package co.typie.screen.referral
+package co.typie.screen.subscription
 
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver

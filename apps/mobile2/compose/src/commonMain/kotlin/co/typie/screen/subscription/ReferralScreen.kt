@@ -1,4 +1,4 @@
-package co.typie.screen.referral
+package co.typie.screen.subscription
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

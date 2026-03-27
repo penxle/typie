@@ -60,7 +60,7 @@ import co.typie.ui.theme.AppTheme
 import org.koin.compose.koinInject
 
 private enum class Tab(val route: Route) {
-  Home(Route.Home), Space(Route.Space), Notes(Route.Notes), Profile(Route.Profile),
+  Home(Route.Home), Space(Route.Space), Notes(Route.Notes), More(Route.More),
 }
 
 @Stable
@@ -210,7 +210,7 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
                     Tab.Home -> Lucide.House
                     Tab.Space -> Lucide.FolderOpen
                     Tab.Notes -> Lucide.StickyNote
-                    Tab.Profile -> Lucide.CircleUserRound
+                    Tab.More -> Lucide.Ellipsis
                   },
                   tint = AppTheme.colors.textSecondary,
                 )

@@ -1,8 +1,12 @@
 package co.typie.ui.component
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -15,8 +19,7 @@ import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.SkeletonBone
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import coil3.compose.SubcomposeAsyncImage
-import coil3.compose.SubcomposeAsyncImageContent
+import coil3.compose.rememberAsyncImagePainter
 import kotlin.math.ceil
 import kotlin.math.log2
 import kotlin.math.pow
@@ -51,17 +54,12 @@ object Img {
       val model = if (fetchSize > 0) "${image.url}?s=$fetchSize&q=75" else image.url
 
       if (placeholder != null) {
-        SubcomposeAsyncImage(
+        PlaceholderAsyncImage(
           model = model,
-          contentDescription = null,
           modifier = Modifier.fillMaxSize(),
-        ) {
-          if (painter.state.value is AsyncImagePainter.State.Loading) {
-            placeholder()
-          } else {
-            SubcomposeAsyncImageContent(contentScale = contentScale)
-          }
-        }
+          contentScale = contentScale,
+          placeholder = placeholder,
+        )
       } else {
         AsyncImage(
           model = model,
@@ -91,20 +89,13 @@ object Img {
     }
 
     if (placeholder != null) {
-      SubcomposeAsyncImage(
+      PlaceholderAsyncImage(
         model = url,
-        contentDescription = null,
         modifier = modifier,
-      ) {
-        if (painter.state.value is AsyncImagePainter.State.Loading) {
-          placeholder()
-        } else {
-          SubcomposeAsyncImageContent(
-            contentScale = contentScale,
-            colorFilter = color?.let { ColorFilter.tint(it) },
-          )
-        }
-      }
+        contentScale = contentScale,
+        colorFilter = color?.let { ColorFilter.tint(it) },
+        placeholder = placeholder,
+      )
     } else {
       AsyncImage(
         model = url,
@@ -115,5 +106,31 @@ object Img {
         placeholder = placeholderColor?.let { ColorPainter(it) },
       )
     }
+  }
+}
+
+@Composable
+private fun PlaceholderAsyncImage(
+  model: Any,
+  modifier: Modifier,
+  contentScale: ContentScale,
+  colorFilter: ColorFilter? = null,
+  placeholder: @Composable () -> Unit,
+) {
+  val painter = rememberAsyncImagePainter(model = model)
+  val painterState by painter.state.collectAsState()
+
+  if (painterState is AsyncImagePainter.State.Loading || painterState is AsyncImagePainter.State.Empty) {
+    Box(modifier = modifier) {
+      placeholder()
+    }
+  } else {
+    Image(
+      painter = painter,
+      contentDescription = null,
+      modifier = modifier,
+      contentScale = contentScale,
+      colorFilter = colorFilter,
+    )
   }
 }

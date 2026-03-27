@@ -1,0 +1,48 @@
+query FontSettingsScreen_Query {
+  me @catch(to: THROW) {
+    subscription {
+      id
+    }
+
+    documentFontFamilies {
+      id
+      familyName
+      displayName
+      source
+      state
+
+      fonts {
+        id
+        weight
+        state
+        subfamilyDisplayName
+        url
+      }
+    }
+  }
+}
+
+mutation FontSettingsScreen_PersistBlobAsFont_Mutation($input: PersistBlobAsFontInput!) {
+  persistBlobAsFont(input: $input) {
+    id
+    weight
+    subfamilyDisplayName
+
+    family {
+      id
+      displayName
+    }
+  }
+}
+
+mutation FontSettingsScreen_ArchiveFontFamily_Mutation($input: ArchiveFontFamilyInput!) {
+  archiveFontFamily(input: $input) {
+    id
+  }
+}
+
+mutation FontSettingsScreen_ArchiveFont_Mutation($input: ArchiveFontInput!) {
+  archiveFont(input: $input) {
+    id
+  }
+}

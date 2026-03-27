@@ -19,122 +19,52 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import co.touchlab.kermit.Logger
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
-import co.typie.graphql.EditorSettingsScreen_Query
-import co.typie.graphql.EditorSettingsScreen_UpdatePreferences_Mutation
-import co.typie.graphql.GraphQLViewModel
-import co.typie.graphql.PlaceholderResolver
-import co.typie.graphql.QueryState
-import co.typie.graphql.executeMutation
-import co.typie.graphql.type.UpdatePreferencesInput
-import co.typie.graphql.type.buildUser
-import co.typie.overlay.Loader
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
 import co.typie.service.EditorPreferencesService
-import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingControlRow
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
-import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.CancellationException
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.jsonPrimitive
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
-import org.koin.core.annotation.KoinViewModel
 import kotlin.math.roundToInt
+import org.koin.compose.koinInject
 
 @Composable
 fun EditorSettingsScreen() {
-  val model = koinViewModel<EditorSettingsViewModel>()
   val editorPreferences = koinInject<EditorPreferencesService>()
-  val bottomSheetHost = LocalBottomSheetHost.current
   val scrollState = rememberScrollState()
 
   val typewriterEnabled = editorPreferences.typewriterEnabled
   val typewriterPosition = editorPreferences.typewriterPosition
   val lineHighlightEnabled = editorPreferences.lineHighlightEnabled
   val autoSurroundEnabled = editorPreferences.autoSurroundEnabled
-  val characterCountFloatingEnabled = editorPreferences.characterCountFloatingEnabled
-  val widgetAutoFadeEnabled = editorPreferences.widgetAutoFadeEnabled
   // TODO: 에디터 설정 트래킹
-
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Success) {
-      model.initializeAiOptIn(model.query.data.me.preferences.aiOptIn())
-    }
-  }
-
-  val aiOptIn = model.aiOptIn
-  var showAiOptInSheet by remember { mutableStateOf(false) }
-
-  LaunchedEffect(showAiOptInSheet) {
-    if (!showAiOptInSheet) return@LaunchedEffect
-
-    showAiOptInSheet = false
-    bottomSheetHost.show {
-      AiOptInSheet(
-        isSubmitting = model.isUpdatingAiOptIn,
-        onConfirm = {
-          model.updateAiOptIn(true) {
-            dismiss()
-          }
-        },
-      )
-    }
-  }
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
-    center = { Text("에디터 설정", style = AppTheme.typography.title) },
+    center = { Text("에디터", style = AppTheme.typography.title) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
-  }
-
   Screen(
-    loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
   ) { contentPadding ->
     Column(
@@ -146,7 +76,7 @@ fun EditorSettingsScreen() {
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text(
-        "에디터 설정",
+        "에디터",
         style = AppTheme.typography.display,
         modifier = Modifier.padding(top = 4.dp),
       )
@@ -156,8 +86,7 @@ fun EditorSettingsScreen() {
           label = "타자기 모드",
           description = "현재 작성 중인 줄을 항상 화면의 특정 위치에 고정합니다.",
           onClick = {
-            val next = !typewriterEnabled
-            editorPreferences.typewriterEnabled = next
+            editorPreferences.typewriterEnabled = !typewriterEnabled
           },
           trailing = {
             SettingSwitch(
@@ -217,8 +146,7 @@ fun EditorSettingsScreen() {
           label = "현재 줄 강조",
           description = "현재 작성 중인 줄을 강조하여 화면에 표시합니다.",
           onClick = {
-            val next = !lineHighlightEnabled
-            editorPreferences.lineHighlightEnabled = next
+            editorPreferences.lineHighlightEnabled = !lineHighlightEnabled
           },
           trailing = {
             SettingSwitch(
@@ -236,8 +164,7 @@ fun EditorSettingsScreen() {
           label = "선택 영역 둘러싸기",
           description = "따옴표나 괄호를 입력하면 선택 영역을 둘러쌉니다.",
           onClick = {
-            val next = !autoSurroundEnabled
-            editorPreferences.autoSurroundEnabled = next
+            editorPreferences.autoSurroundEnabled = !autoSurroundEnabled
           },
           trailing = {
             SettingSwitch(
@@ -250,125 +177,7 @@ fun EditorSettingsScreen() {
         )
       }
 
-      EditorSettingsSection(title = "위젯 설정") {
-        SettingControlRow(
-          label = "글자 수 위젯",
-          description = "에디터에서 글자 수를 표시합니다.",
-          onClick = {
-            val next = !characterCountFloatingEnabled
-            editorPreferences.characterCountFloatingEnabled = next
-          },
-          trailing = {
-            SettingSwitch(
-              checked = characterCountFloatingEnabled,
-              onCheckedChange = { next ->
-                editorPreferences.characterCountFloatingEnabled = next
-              },
-            )
-          },
-        )
-
-        if (characterCountFloatingEnabled) {
-          CardDivider(inset = 20.dp)
-          SettingControlRow(
-            label = "위젯 자동 페이드 인/아웃",
-            description = "타이핑, 스크롤 시 위젯이 잠시 사라집니다.",
-            onClick = {
-              val next = !widgetAutoFadeEnabled
-              editorPreferences.widgetAutoFadeEnabled = next
-            },
-            trailing = {
-              SettingSwitch(
-                checked = widgetAutoFadeEnabled,
-                onCheckedChange = { next ->
-                  editorPreferences.widgetAutoFadeEnabled = next
-                },
-              )
-            },
-          )
-        }
-      }
-
-      EditorSettingsSection(title = "AI 설정") {
-        SettingControlRow(
-          label = "AI 기능 활성화",
-          description = "활성화하면 AI 피드백 등 타이피가 제공하는 AI 기능을 사용할 수 있어요.",
-          enabled = !model.isUpdatingAiOptIn,
-          onClick = {
-            if (aiOptIn) {
-              model.updateAiOptIn(false)
-            } else {
-              showAiOptInSheet = true
-            }
-          },
-          trailing = {
-            SettingSwitch(
-              checked = aiOptIn,
-              enabled = !model.isUpdatingAiOptIn,
-              onCheckedChange = { next ->
-                if (next) {
-                  showAiOptInSheet = true
-                } else {
-                  model.updateAiOptIn(false)
-                }
-              },
-            )
-          },
-        )
-      }
-
       Spacer(Modifier.height(72.dp))
-    }
-  }
-}
-
-@KoinViewModel
-class EditorSettingsViewModel(
-  private val loader: Loader,
-  private val toast: Toast,
-) : GraphQLViewModel() {
-  val query = watchQuery(placeholderData()) { EditorSettingsScreen_Query() }
-
-  var aiOptIn by mutableStateOf(false)
-    private set
-  private var hasInitializedAiOptIn by mutableStateOf(false)
-
-  var isUpdatingAiOptIn by mutableStateOf(false)
-    private set
-
-  fun initializeAiOptIn(enabled: Boolean) {
-    if (!hasInitializedAiOptIn) {
-      aiOptIn = enabled
-      hasInitializedAiOptIn = true
-    }
-  }
-
-  fun updateAiOptIn(enabled: Boolean, onSuccess: (() -> Unit)? = null) {
-    if (isUpdatingAiOptIn) return
-
-    viewModelScope.launch {
-      isUpdatingAiOptIn = true
-      try {
-        loader.runWith {
-          executeMutation(
-            EditorSettingsScreen_UpdatePreferences_Mutation(
-              input = UpdatePreferencesInput(
-                value = JsonObject(mapOf("aiOptIn" to JsonPrimitive(enabled))),
-              ),
-            ),
-          )
-        }
-        aiOptIn = enabled
-        query.refetch()
-        onSuccess?.invoke()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to update aiOptIn" }
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      } finally {
-        isUpdatingAiOptIn = false
-      }
     }
   }
 }
@@ -414,8 +223,8 @@ private fun QuietSlider(
     val travelPx = with(density) { travel.toPx() }
     val sliderWidthPx = with(density) { maxWidth.toPx() }
     val thumbRadiusPx = with(density) { (thumbSize / 2).toPx() }
-    val onValueChangeState by rememberUpdatedState(onValueChange)
-    val hapticState by rememberUpdatedState(haptic)
+    val onValueChangeState = rememberUpdatedState(onValueChange)
+    val hapticState = rememberUpdatedState(haptic)
     val thumbOffset = travel * value.toFloat().coerceIn(0f, 1f)
     val filledFraction = value.toFloat().coerceIn(0f, 1f)
 
@@ -456,8 +265,8 @@ private fun QuietSlider(
               val next = valueAtTouch(x)
               if (next == gestureValue) return
               gestureValue = next
-              hapticState.performHapticFeedback(HapticFeedbackType.SegmentTick)
-              onValueChangeState(next)
+              hapticState.value.performHapticFeedback(HapticFeedbackType.SegmentTick)
+              onValueChangeState.value(next)
             }
 
             updateGestureValue(down.position.x)
@@ -491,103 +300,5 @@ private fun QuietSlider(
         .background(colors.surfaceRaised, CircleShape)
         .border(1.dp, colors.borderDefault, CircleShape),
     )
-  }
-}
-
-@Composable
-private fun BottomSheetScope<Unit>.AiOptInSheet(
-  isSubmitting: Boolean,
-  onConfirm: suspend () -> Unit,
-) {
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text("AI 기능을 활성화하시겠어요?", style = AppTheme.typography.title)
-
-    Text(
-      "타이피는 사용자의 프라이버시를 최우선으로 생각해요. 사용자가 작성한 글은 어떠한 경우에도 AI 모델 학습에 사용되지 않아요.",
-      style = AppTheme.typography.body,
-      color = AppTheme.colors.textSecondary,
-    )
-
-    CardSurface(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Column(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-      ) {
-        AiOptInNoticeItem(
-          title = "학습 금지",
-          description = "사용자의 글은 AI 모델 학습이나 개선에 절대 사용되지 않아요.",
-        )
-        AiOptInNoticeItem(
-          title = "요청 시에만",
-          description = "사용자가 요청하지 않는 한 타이피가 임의로 AI를 사용하지 않아요.",
-        )
-        AiOptInNoticeItem(
-          title = "투명한 처리",
-          description = "AI가 언제, 어떻게 사용되는지 사용자가 항상 알 수 있어요.",
-        )
-        AiOptInNoticeItem(
-          title = "완전한 통제",
-          description = "AI 기능은 언제든 끌 수 있고, 비활성화하면 어떤 AI 처리도 일어나지 않아요.",
-        )
-        AiOptInNoticeItem(
-          title = "권리 보장",
-          description = "타이피는 사용자 창작물에 대한 어떤 권리도 주장하지 않아요.",
-        )
-      }
-    }
-
-    Button(
-      text = "활성화",
-      enabled = !isSubmitting,
-      loading = isSubmitting,
-      onClick = onConfirm,
-    )
-  }
-}
-
-@Composable
-private fun AiOptInNoticeItem(
-  title: String,
-  description: String,
-) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-    verticalAlignment = Alignment.Top,
-  ) {
-    Text(
-      "•",
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
-    )
-    Text(
-      buildAnnotatedString {
-        withStyle(SpanStyle(fontWeight = FontWeight.W600)) {
-          append("$title: ")
-        }
-        append(description)
-      },
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
-      modifier = Modifier.weight(1f),
-    )
-  }
-}
-
-private fun JsonElement.aiOptIn(): Boolean {
-  val json = this as? JsonObject ?: return false
-  return json["aiOptIn"]?.jsonPrimitive?.booleanOrNull ?: false
-}
-
-private fun placeholderData() = EditorSettingsScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    preferences = JsonObject(emptyMap())
   }
 }

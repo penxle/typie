@@ -1,4 +1,4 @@
-package co.typie.screen.profile
+package co.typie.screen.more
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,7 +25,7 @@ import co.touchlab.kermit.Logger
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
-import co.typie.graphql.ProfileScreen_SubmitFeedback_Mutation
+import co.typie.graphql.MoreScreen_SubmitFeedback_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.SubmitFeedbackInput
 import co.typie.icons.Lucide
@@ -115,7 +115,7 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
       val metadata = buildFeedbackMetadata(deviceSnapshot)
 
       apolloClient.executeMutation(
-        ProfileScreen_SubmitFeedback_Mutation(
+        MoreScreen_SubmitFeedback_Mutation(
           input = SubmitFeedbackInput(
             topic = topic.toOptionalInput(),
             content = trimmedContent,

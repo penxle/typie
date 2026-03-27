@@ -32,7 +32,7 @@ val SuitFontFamily: FontFamily
   )
 
 object AppTypography {
-  /** 화면 최상단 대제목 (홈, 프로필 등) */
+  /** 화면 최상단 대제목 (홈, 더 보기 등) */
   val display: TextStyle
     @Composable get() {
       val fontFamily = rememberSuitFontFamily()

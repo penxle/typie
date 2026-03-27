@@ -1,0 +1,13 @@
+query AiSettingsScreen_Query {
+  me @catch(to: THROW) {
+    id
+    preferences
+  }
+}
+
+mutation AiSettingsScreen_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+  updatePreferences(input: $input) {
+    id
+    preferences
+  }
+}

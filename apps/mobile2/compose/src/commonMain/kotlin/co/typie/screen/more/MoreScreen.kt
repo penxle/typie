@@ -1,4 +1,4 @@
-package co.typie.screen.profile
+package co.typie.screen.more
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -58,13 +58,13 @@ import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
-fun ProfileScreen() {
+fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val themeMode = LocalThemeMode.current
   val bottomSheetHost = LocalBottomSheetHost.current
 
-  val model = koinViewModel<ProfileViewModel>()
+  val model = koinViewModel<MoreViewModel>()
   val authService = koinInject<AuthService>()
   val toast = koinInject<Toast>()
 
@@ -72,7 +72,7 @@ fun ProfileScreen() {
 
   ProvideTopBar(
     leading = null,
-    center = { Text("프로필", style = AppTheme.typography.title) },
+    center = { Text("더 보기", style = AppTheme.typography.title) },
     trailing = { TopBarButton(Lucide.Settings, onClick = { nav.navigate(Route.Settings) }) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
@@ -107,7 +107,7 @@ fun ProfileScreen() {
       }
 
       Skeleton.Keep {
-        Text("프로필", style = AppTheme.typography.display)
+        Text("더 보기", style = AppTheme.typography.display)
       }
 
       CardSurface(
@@ -280,34 +280,6 @@ fun ProfileScreen() {
             }
           }
 
-          CardDivider()
-
-          CardRow(
-            onClick = { nav.navigate(Route.Referral) },
-          ) {
-            Skeleton.Unite {
-              Icon(
-                icon = Lucide.Gift,
-                modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSecondary,
-              )
-
-              Text(
-                "초대",
-                style = AppTheme.typography.label,
-              )
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            Skeleton.Ignore {
-              Icon(
-                icon = Lucide.ChevronRight,
-                modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textTertiary,
-              )
-            }
-          }
         }
       }
 

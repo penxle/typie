@@ -1,0 +1,5 @@
+query SecuritySettingsScreen_Query {
+  me @catch(to: THROW) {
+    hasPassword
+  }
+}

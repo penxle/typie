@@ -1,0 +1,13 @@
+query ProfileSettingsScreen_Query {
+  me @catch(to: THROW) {
+    id
+    marketingConsent
+  }
+}
+
+mutation ProfileSettingsScreen_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
+  updateMarketingConsent(input: $input) {
+    id
+    marketingConsent
+  }
+}
