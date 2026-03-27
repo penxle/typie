@@ -10,12 +10,13 @@ import org.koin.core.annotation.Single
 class AuthInterceptor(
   private val authService: AuthService,
 ) : HttpInterceptor {
-
   override suspend fun intercept(
     request: HttpRequest,
     chain: HttpInterceptorChain,
   ): HttpResponse {
-    val authedRequest = authService.tokens?.accessToken?.let { token ->
+    val currentAccessToken = authService.tokens?.accessToken
+
+    val authedRequest = currentAccessToken?.let { token ->
       request.newBuilder()
         .addHeader("Authorization", "Bearer $token")
         .build()
@@ -31,7 +32,7 @@ class AuthInterceptor(
     }
       ?.let { cookie ->
         val sessionToken = cookie.value.substringAfter("typie-st=").substringBefore(";")
-        authService.login(sessionToken)
+        authService.loginAsync(sessionToken)
       }
 
     if (response.statusCode == 401) {

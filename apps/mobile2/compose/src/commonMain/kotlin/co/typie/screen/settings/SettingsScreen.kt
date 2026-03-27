@@ -10,11 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.auth.AuthService
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
@@ -24,12 +30,16 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.platform.DeviceInfo
 import co.typie.route.Route
+import co.typie.service.DeveloperPreferencesService
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
+import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
+import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -49,6 +59,7 @@ data class SettingsItem(
   val label: String,
   val route: Route? = null,
   val action: SettingsItemAction? = null,
+  val externalUrl: String? = null,
 )
 
 data class SettingsSection(
@@ -58,6 +69,9 @@ data class SettingsSection(
 
 enum class SettingsItemAction {
   Theme,
+  DeveloperMode,
+  Logout,
+  VersionInfo,
 }
 
 data class SettingsThemeOption(
@@ -73,8 +87,21 @@ data class SettingsThemeSelectionItem(
   val selected: Boolean,
 )
 
+data class SettingsVersionTapResult(
+  val nextTapCount: Int,
+  val enableDeveloperMode: Boolean,
+  val message: String? = null,
+)
+
+private const val SETTINGS_DEVELOPER_MODE_REQUIRED_TAP_COUNT = 7
+private const val SETTINGS_DEVELOPER_MODE_HINT_START_TAP_COUNT = 4
+
 internal fun settingsRouteFor(item: SettingsItem): Route? {
   return item.route
+}
+
+internal fun settingsTrailingIcon(item: SettingsItem): IconData {
+  return if (item.externalUrl != null) Lucide.ExternalLink else Lucide.ChevronRight
 }
 
 internal fun settingsThemeOptions(): List<SettingsThemeOption> {
@@ -100,78 +127,158 @@ internal fun settingsThemeSelectionItems(selectedMode: ThemeMode): List<Settings
   }
 }
 
-internal fun settingsSections(): List<SettingsSection> {
-  return listOf(
-    SettingsSection(
-      title = "계정",
-      items = listOf(
-        SettingsItem("프로필", route = Route.ProfileSettings),
-        SettingsItem("보안", route = Route.SecuritySettings),
-      ),
-    ),
-    SettingsSection(
-      title = "스페이스",
-      items = listOf(
-        // TODO: 스페이스 설정 진입 트래킹
-        SettingsItem("현재 스페이스 설정", route = Route.SpaceSettings),
-      ),
-    ),
-    SettingsSection(
-      title = "환경",
-      items = listOf(
-        SettingsItem("테마", action = SettingsItemAction.Theme),
-        SettingsItem("에디터", route = Route.EditorSettings),
-        SettingsItem("위젯", route = Route.WidgetSettings),
-        SettingsItem("폰트", route = Route.FontSettings),
-        // TODO: 프리셋 화면 연결
-        SettingsItem("프리셋"),
-        // TODO: 텍스트 대치 화면 연결
-        SettingsItem("텍스트 대치"),
-      ),
-    ),
-    SettingsSection(
-      title = "구독",
-      items = listOf(
-        // TODO: 플랜 화면 연결
-        SettingsItem("플랜"),
-        SettingsItem("초대", route = Route.Referral),
-      ),
-    ),
-    SettingsSection(
-      title = "고급",
-      items = listOf(
-        SettingsItem("AI", route = Route.AiSettings),
-      ),
-    ),
-    SettingsSection(
-      title = "서비스 정보",
-      items = listOf(
-        // TODO: 서비스 정보/버전/개발자 모드 연결
-        SettingsItem("이용약관"),
-        SettingsItem("개인정보처리방침"),
-        SettingsItem("사업자 정보"),
-        SettingsItem("오픈소스 라이센스"),
-        SettingsItem("버전 정보"),
-      ),
-    ),
-    SettingsSection(
-      title = "기타",
-      items = listOf(
-        // TODO: 로그아웃 확인 연결
-        SettingsItem("로그아웃"),
-      ),
-    ),
+internal suspend fun confirmSettingsLogout(
+  onDismiss: () -> Unit,
+  onLogout: suspend () -> Unit,
+) {
+  onLogout()
+  onDismiss()
+}
+
+internal fun settingsVersionTapResult(
+  devModeEnabled: Boolean,
+  tapCount: Int,
+): SettingsVersionTapResult {
+  if (devModeEnabled) {
+    return SettingsVersionTapResult(
+      nextTapCount = 0,
+      enableDeveloperMode = false,
+      message = "이미 개발자입니다.",
+    )
+  }
+
+  val nextTapCount = tapCount + 1
+
+  if (nextTapCount >= SETTINGS_DEVELOPER_MODE_REQUIRED_TAP_COUNT) {
+    return SettingsVersionTapResult(
+      nextTapCount = 0,
+      enableDeveloperMode = true,
+      message = "개발자가 되셨습니다.",
+    )
+  }
+
+  if (nextTapCount >= SETTINGS_DEVELOPER_MODE_HINT_START_TAP_COUNT) {
+    return SettingsVersionTapResult(
+      nextTapCount = nextTapCount,
+      enableDeveloperMode = false,
+      message = "개발자가 되기까지 ${SETTINGS_DEVELOPER_MODE_REQUIRED_TAP_COUNT - nextTapCount}번...",
+    )
+  }
+
+  return SettingsVersionTapResult(
+    nextTapCount = nextTapCount,
+    enableDeveloperMode = false,
   )
+}
+
+internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSection> {
+  return buildList {
+    add(
+      SettingsSection(
+        title = "계정",
+        items = listOf(
+          SettingsItem("프로필", route = Route.ProfileSettings),
+          SettingsItem("보안", route = Route.SecuritySettings),
+        ),
+      ),
+    )
+    add(
+      SettingsSection(
+        title = "스페이스",
+        items = listOf(
+          // TODO: 스페이스 설정 진입 트래킹
+          SettingsItem("현재 스페이스 설정", route = Route.SpaceSettings),
+        ),
+      ),
+    )
+    add(
+      SettingsSection(
+        title = "환경",
+        items = listOf(
+          SettingsItem("테마", action = SettingsItemAction.Theme),
+          SettingsItem("에디터", route = Route.EditorSettings),
+          SettingsItem("위젯", route = Route.WidgetSettings),
+          SettingsItem("폰트", route = Route.FontSettings),
+          // TODO: 프리셋 화면 연결
+          SettingsItem("프리셋"),
+          // TODO: 텍스트 대치 화면 연결
+          SettingsItem("텍스트 대치"),
+        ),
+      ),
+    )
+    add(
+      SettingsSection(
+        title = "구독",
+        items = listOf(
+          // TODO: 플랜 화면 연결
+          SettingsItem("플랜"),
+          SettingsItem("초대", route = Route.Referral),
+        ),
+      ),
+    )
+    add(
+      SettingsSection(
+        title = "고급",
+        items = listOf(
+          SettingsItem("AI", route = Route.AiSettings),
+        ),
+      ),
+    )
+    add(
+      SettingsSection(
+        title = "서비스 정보",
+        items = listOf(
+          SettingsItem("이용약관", externalUrl = "https://typie.co/legal/terms"),
+          SettingsItem("개인정보처리방침", externalUrl = "https://typie.co/legal/privacy"),
+          SettingsItem("사업자 정보", externalUrl = "https://www.ftc.go.kr/bizCommPop.do?wrkr_no=6108803078"),
+          SettingsItem("오픈소스 라이센스", route = Route.OssLicenses),
+          SettingsItem("버전 정보", action = SettingsItemAction.VersionInfo),
+        ),
+      ),
+    )
+    if (devModeEnabled) {
+      add(
+        SettingsSection(
+          title = "개발자",
+          items = listOf(
+            SettingsItem("개발자 모드", action = SettingsItemAction.DeveloperMode),
+          ),
+        ),
+      )
+    }
+    add(
+      SettingsSection(
+        title = "기타",
+        items = listOf(
+          SettingsItem("로그아웃", action = SettingsItemAction.Logout),
+        ),
+      ),
+    )
+  }
 }
 
 @Composable
 fun SettingsScreen() {
   val nav = Nav.current
+  val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
+  val authService = koinInject<AuthService>()
+  val deviceInfo = koinInject<DeviceInfo>()
+  val developerPreferences = koinInject<DeveloperPreferencesService>()
   val toast = koinInject<Toast>()
   val scrollState = rememberScrollState()
   val themeModeState = LocalThemeMode.current
-  val sections = remember { settingsSections() }
+  val devModeEnabled = developerPreferences.devMode
+  val sections = remember(devModeEnabled) { settingsSections(devModeEnabled = devModeEnabled) }
+  var appVersion by remember { mutableStateOf<String?>(null) }
+  var devModeTapCount by remember { mutableStateOf(0) }
+  var showLogoutConfirm by remember { mutableStateOf(false) }
+
+  LaunchedEffect(deviceInfo) {
+    appVersion = runCatching {
+      deviceInfo.snapshot().appVersion.trim().takeIf { it.isNotEmpty() }
+    }.getOrNull()
+  }
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -200,6 +307,8 @@ fun SettingsScreen() {
         SettingsSectionCard(
           section = section,
           themeMode = themeModeState.value,
+          appVersion = appVersion,
+          devModeEnabled = devModeEnabled,
           onThemeClick = {
             bottomSheetHost.show {
               SettingsThemeSheet(
@@ -211,11 +320,34 @@ fun SettingsScreen() {
               )
             }
           },
+          onVersionInfoClick = {
+            val result = settingsVersionTapResult(
+              devModeEnabled = devModeEnabled,
+              tapCount = devModeTapCount,
+            )
+
+            devModeTapCount = result.nextTapCount
+
+            if (result.enableDeveloperMode) {
+              developerPreferences.devMode = true
+            }
+
+            result.message?.let { message ->
+              toast.show(ToastType.Success, message)
+            }
+          },
+          onDeveloperModeChange = { next ->
+            developerPreferences.devMode = next
+          },
           onItemClick = { item ->
             val route = settingsRouteFor(item)
 
             if (route != null) {
               nav.navigate(route)
+            } else if (item.externalUrl != null) {
+              uriHandler.openUri(item.externalUrl)
+            } else if (item.action == SettingsItemAction.Logout) {
+              showLogoutConfirm = true
             } else {
               toast.show(ToastType.Notification, "준비 중인 기능이에요.")
             }
@@ -226,13 +358,33 @@ fun SettingsScreen() {
       Spacer(Modifier.size(72.dp))
     }
   }
+
+  if (showLogoutConfirm) {
+    ConfirmModal(
+      title = "로그아웃",
+      message = "정말 로그아웃하시겠어요?",
+      confirmText = "로그아웃",
+      confirmIsDestructive = true,
+      onConfirm = {
+        confirmSettingsLogout(
+          onDismiss = { showLogoutConfirm = false },
+          onLogout = { authService.logout() },
+        )
+      },
+      onDismiss = { showLogoutConfirm = false },
+    )
+  }
 }
 
 @Composable
 private fun SettingsSectionCard(
   section: SettingsSection,
   themeMode: ThemeMode,
+  appVersion: String?,
+  devModeEnabled: Boolean,
   onThemeClick: suspend () -> Unit,
+  onVersionInfoClick: suspend () -> Unit,
+  onDeveloperModeChange: (Boolean) -> Unit,
   onItemClick: suspend (SettingsItem) -> Unit,
 ) {
   Column(
@@ -254,6 +406,16 @@ private fun SettingsSectionCard(
               themeMode = themeMode,
               onClick = onThemeClick,
             )
+          } else if (item.action == SettingsItemAction.VersionInfo) {
+            SettingsVersionRow(
+              appVersion = appVersion,
+              onClick = onVersionInfoClick,
+            )
+          } else if (item.action == SettingsItemAction.DeveloperMode) {
+            SettingsDeveloperModeRow(
+              enabled = devModeEnabled,
+              onCheckedChange = onDeveloperModeChange,
+            )
           } else {
             SettingsRow(
               item = item,
@@ -271,6 +433,49 @@ private fun SettingsSectionCard(
 }
 
 @Composable
+private fun SettingsVersionRow(
+  appVersion: String?,
+  onClick: suspend () -> Unit,
+) {
+  CardRow(onClick = onClick) {
+    SettingsRowContent(
+      label = "버전 정보",
+      trailing = {
+        Text(
+          text = appVersion ?: "확인 중",
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textTertiary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      },
+    )
+  }
+}
+
+@Composable
+private fun SettingsDeveloperModeRow(
+  enabled: Boolean,
+  onCheckedChange: (Boolean) -> Unit,
+) {
+  CardRow(
+    onClick = {
+      onCheckedChange(!enabled)
+    },
+  ) {
+    SettingsRowContent(
+      label = "개발자 모드",
+      trailing = {
+        SettingSwitch(
+          checked = enabled,
+          onCheckedChange = onCheckedChange,
+        )
+      },
+    )
+  }
+}
+
+@Composable
 private fun SettingsRow(
   item: SettingsItem,
   onClick: suspend () -> Unit,
@@ -282,7 +487,7 @@ private fun SettingsRow(
       label = item.label,
       trailing = {
         Icon(
-          icon = Lucide.ChevronRight,
+          icon = settingsTrailingIcon(item),
           modifier = Modifier.size(16.dp),
           tint = AppTheme.colors.textTertiary,
         )

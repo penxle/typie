@@ -2,7 +2,6 @@ package co.typie.ui.component
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -93,11 +92,11 @@ fun Button(
           .height(48.dp)
           .alpha(alpha)
           .background(colors.background, RoundedCornerShape(16.dp))
-          .then(if (interactive) Modifier.clickable(onClick) else Modifier),
+          .clickable(enabled = interactive, onClick = onClick),
         contentAlignment = Alignment.Center,
       ) {
         val spinnerAlpha by animateFloatAsState(if (debouncedLoading) 1f else 0f, tween(150))
-        val spinnerWidth by animateDpAsState(if (debouncedLoading) 24.dp else 0.dp, tween(200))
+        val spinnerWidth = if (debouncedLoading) 16.dp else 0.dp
 
         Row(
           modifier = Modifier.pressScale(0.95f),
@@ -107,11 +106,11 @@ fun Button(
             ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
           }
 
-          if (leading != null) {
-            if (debouncedLoading) {
-              Spacer(Modifier.width(8.dp))
-            }
+          if (debouncedLoading) {
+            Spacer(Modifier.width(10.dp))
+          }
 
+          if (leading != null) {
             Box(
               modifier = Modifier.size(16.dp),
               contentAlignment = Alignment.Center,

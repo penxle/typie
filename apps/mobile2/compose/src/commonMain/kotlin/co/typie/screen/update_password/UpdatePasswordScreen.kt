@@ -1,15 +1,19 @@
 package co.typie.screen.update_password
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.ui.component.Button
@@ -19,6 +23,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -26,6 +31,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun UpdatePasswordScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdatePasswordViewModel>()
+  val scrollState = rememberScrollState()
   val hasPassword = model.query.data.me.hasPassword
   val buttonText = if (hasPassword) "변경" else "설정"
   val loadingText = if (hasPassword) "변경 중..." else "설정 중..."
@@ -41,48 +47,59 @@ fun UpdatePasswordScreen() {
   Screen(
     loading = model.query.state !is QueryState.Success,
   ) { contentPadding ->
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(contentPadding)
         .navigationBarsPadding()
         .imePadding(),
     ) {
-      if (hasPassword) {
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding),
+      ) {
+        if (hasPassword) {
+          TextField(
+            field = model.state.form.currentPassword,
+            label = "현재 비밀번호",
+            labelPosition = LabelPosition.Internal,
+            placeholder = "현재 비밀번호를 입력하세요",
+            isPassword = true,
+            contentType = ContentType.Password,
+          )
+        }
+
         TextField(
-          field = model.state.form.currentPassword,
-          label = "현재 비밀번호",
+          field = model.state.form.newPassword,
+          label = "새 비밀번호",
           labelPosition = LabelPosition.Internal,
-          placeholder = "현재 비밀번호를 입력하세요",
+          placeholder = "********",
           isPassword = true,
-          contentType = ContentType.Password,
+          contentType = ContentType.NewPassword,
         )
+
+        TextField(
+          field = model.state.form.confirmPassword,
+          label = "새 비밀번호 확인",
+          labelPosition = LabelPosition.Internal,
+          placeholder = "********",
+          isPassword = true,
+          contentType = ContentType.NewPassword,
+          onImeAction = { model.submit { nav.pop() } },
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        Spacer(Modifier.height(96.dp))
       }
-
-      TextField(
-        field = model.state.form.newPassword,
-        label = "새 비밀번호",
-        labelPosition = LabelPosition.Internal,
-        placeholder = "********",
-        isPassword = true,
-        contentType = ContentType.NewPassword,
-      )
-
-      TextField(
-        field = model.state.form.confirmPassword,
-        label = "새 비밀번호 확인",
-        labelPosition = LabelPosition.Internal,
-        placeholder = "********",
-        isPassword = true,
-        contentType = ContentType.NewPassword,
-        onImeAction = { model.submit { nav.pop() } },
-      )
-
-      Spacer(Modifier.weight(1f))
 
       Button(
         text = buttonText,
-        modifier = Modifier.padding(bottom = 16.dp),
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
         loading = model.state.isSubmitting,
         loadingText = loadingText,
         onClick = { model.submit { nav.pop() } },

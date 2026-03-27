@@ -23,6 +23,7 @@ import co.typie.ext.clickable
 import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
@@ -37,6 +38,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
+import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
@@ -46,9 +48,10 @@ fun UpdateProfileScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdateProfileViewModel>()
   val scope = rememberCoroutineScope()
+  val scrollState = rememberScrollState()
 
-  val filePicker = rememberFilePicker { file ->
-    if (file == null) return@rememberFilePicker
+  val filePicker = rememberFilePicker { files ->
+    val file = files.firstOrNull() ?: return@rememberFilePicker
 
     scope.launch {
       val avatarId = model.uploadAvatar(file) ?: return@launch
@@ -67,45 +70,56 @@ fun UpdateProfileScreen() {
   Screen(
     loading = model.query.state !is QueryState.Success,
   ) { contentPadding ->
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(contentPadding)
         .navigationBarsPadding()
-        .imePadding()
+        .imePadding(),
     ) {
       Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+          .fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding),
       ) {
-        ProfileAvatar(
-          image = model.query.data.me.avatar.img_image,
-          previewUrl = model.state.avatarPreviewUrl,
-          onClick = { filePicker("image/*") },
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          ProfileAvatar(
+            image = model.query.data.me.avatar.img_image,
+            previewUrl = model.state.avatarPreviewUrl,
+            onClick = { filePicker("image/*") },
+          )
+
+          Text(
+            "프로필 사진",
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.textTertiary,
+          )
+        }
+
+        Spacer(Modifier.height(32.dp))
+
+        TextField(
+          field = model.state.form.name,
+          label = "닉네임",
+          labelPosition = LabelPosition.Internal,
+          onImeAction = { model.submit { nav.pop() } },
         )
 
-        Text(
-          "프로필 사진",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
+        Spacer(Modifier.height(24.dp))
+
+        Spacer(Modifier.height(96.dp))
       }
-
-      Spacer(Modifier.height(32.dp))
-
-      TextField(
-        field = model.state.form.name,
-        label = "닉네임",
-        labelPosition = LabelPosition.Internal,
-        onImeAction = { model.submit { nav.pop() } }
-      )
-
-      Spacer(Modifier.weight(1f))
 
       Button(
         text = "변경",
-        modifier = Modifier.padding(bottom = 16.dp),
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
         loading = model.state.isSubmitting,
         loadingText = "변경 중...",
         onClick = { model.submit { nav.pop() } },

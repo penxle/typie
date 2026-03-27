@@ -95,9 +95,8 @@ fun SecuritySettingsScreen() {
 
           CardDivider()
 
-          // TODO: 회원 탈퇴 플로우 연결
           CardRow(
-            onClick = { },
+            onClick = { nav.navigate(Route.DeleteUser) },
           ) {
             SecurityRowContent(
               label = "회원 탈퇴",

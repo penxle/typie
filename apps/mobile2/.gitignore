@@ -19,6 +19,7 @@ captures
 node_modules/
 Config.local.xcconfig
 generated/
+compose/src/commonMain/composeResources/files/aboutlibraries.json
 android/src/main/jniLibs/
 ios/Frameworks/
 **/fastlane/README.md

@@ -37,12 +37,21 @@ expect fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true):
 expect fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier
 expect fun Modifier.overscroll(): Modifier
 
-fun Modifier.clickable(onClick: suspend () -> Unit): Modifier = composed {
+fun Modifier.clickable(onClick: suspend () -> Unit): Modifier = clickable(
+  enabled = true,
+  onClick = onClick,
+)
+
+fun Modifier.clickable(
+  enabled: Boolean = true,
+  onClick: suspend () -> Unit,
+): Modifier = composed {
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
   var handling by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
   focusProperties { canFocus = false }
     .foundationClickable(
+      enabled = enabled,
       interactionSource = interactionSource,
       indication = null,
       onClick = {

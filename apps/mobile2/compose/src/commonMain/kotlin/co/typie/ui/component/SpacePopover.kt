@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.auth.AuthService
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.QueryState
 import co.typie.graphql.SpacePopover_Query
@@ -66,14 +68,32 @@ class SpacePopoverViewModel : GraphQLViewModel() {
 
 @Composable
 fun SpacePopover() {
-  val model = koinViewModel<SpacePopoverViewModel>()
+  val authService = koinInject<AuthService>()
+  val sessionKey = authService.tokens?.sessionToken ?: "no-session"
+  val model = koinViewModel<SpacePopoverViewModel>(key = "space-popover:$sessionKey")
   val siteService = koinInject<SiteService>()
 
   Skeleton(enabled = model.query.state !is QueryState.Success) {
     when (val state = model.query.state) {
       is QueryState.Success -> {
-        val currentSite = state.data.me.sites.first { it.id == siteService.siteId }
-        val otherSites = state.data.me.sites.filter { it.id != currentSite.id }
+        val selection = resolveSpacePopoverSelection(
+          selectedSiteId = siteService.siteId,
+          availableSiteIds = state.data.me.sites.map { it.id },
+        )
+
+        if (selection == null) {
+          SpacePopoverSkeleton()
+          return@Skeleton
+        }
+
+        if (selection.currentSiteId != siteService.siteId) {
+          LaunchedEffect(selection.currentSiteId) {
+            siteService.siteId = selection.currentSiteId
+          }
+        }
+
+        val currentSite = state.data.me.sites.first { it.id == selection.currentSiteId }
+        val otherSites = state.data.me.sites.filter { it.id in selection.otherSiteIds }
 
         Popover(
           placement = PopoverPlacement.BelowStart,

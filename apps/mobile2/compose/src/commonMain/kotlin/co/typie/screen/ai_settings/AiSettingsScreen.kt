@@ -43,7 +43,6 @@ import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
-import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
@@ -79,7 +78,6 @@ fun AiSettingsScreen() {
   ProvideTopBar(
     leading = { TopBarBackButton() },
     center = { Text("AI", style = AppTheme.typography.title) },
-    scrollOffset = scrollState.topBarScrollOffset(),
   )
 
   if (model.query.state is QueryState.Error) {
@@ -93,17 +91,11 @@ fun AiSettingsScreen() {
     Column(
       modifier = Modifier
         .fillMaxSize()
+        .verticalScroll(scrollState)
         .padding(contentPadding)
-        .navigationBarsPadding()
-        .verticalScroll(scrollState),
+        .navigationBarsPadding(),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      Text(
-        "AI",
-        style = AppTheme.typography.display,
-        modifier = Modifier.padding(top = 4.dp),
-      )
-
       CardSurface(
         modifier = Modifier.fillMaxWidth(),
       ) {

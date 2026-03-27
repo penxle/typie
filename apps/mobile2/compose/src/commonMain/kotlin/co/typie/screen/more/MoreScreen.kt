@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,17 +18,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.auth.AuthService
 import co.typie.datetime.toLocalDate
-import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
 import co.typie.route.Route
 import co.typie.ui.component.ActivityGrid
 import co.typie.ui.component.ActivityGridChange
@@ -52,21 +47,15 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.LocalThemeMode
-import co.typie.ui.theme.ThemeMode
-import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
-  val themeMode = LocalThemeMode.current
   val bottomSheetHost = LocalBottomSheetHost.current
 
   val model = koinViewModel<MoreViewModel>()
-  val authService = koinInject<AuthService>()
-  val toast = koinInject<Toast>()
 
   val scrollState = rememberScrollState()
 
@@ -476,40 +465,6 @@ fun MoreScreen() {
             }
           }
         }
-      }
-
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          ThemeMode.entries.forEach { mode ->
-            val isSelected = themeMode.value == mode
-
-            Text(
-              text = mode.name,
-              style = AppTheme.typography.action,
-              color = if (isSelected) AppTheme.colors.brand else AppTheme.colors.textTertiary,
-              modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-                .clickable {
-                  themeMode.value = mode
-                  toast.show(ToastType.Success, "Theme mode changed to ${mode.name}")
-                },
-            )
-          }
-        }
-
-        Text(
-          "로그아웃",
-          style = AppTheme.typography.action,
-          color = AppTheme.colors.danger,
-          modifier = Modifier.clickable { authService.logout() },
-        )
       }
 
       Spacer(Modifier.height(140.dp))

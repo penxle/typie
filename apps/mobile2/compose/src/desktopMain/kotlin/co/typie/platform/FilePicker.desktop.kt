@@ -10,11 +10,12 @@ import java.nio.file.Files
 
 @Composable
 actual fun rememberFilePicker(
-  onResult: (PlatformFile?) -> Unit,
+  selectionMode: FilePickerSelectionMode,
+  onResult: (List<PlatformFile>) -> Unit,
 ): (mimeType: String) -> Unit {
   val currentOnResult = rememberUpdatedState(onResult)
 
-  return remember {
+  return remember(selectionMode) {
     { mimeType: String ->
       val title = if (mimeType.startsWith("image/")) "이미지 선택" else "파일 선택"
       val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD).apply {
@@ -25,22 +26,19 @@ actual fun rememberFilePicker(
               lower.endsWith(".webp") || lower.endsWith(".heic")
           }
         }
+        isMultipleMode = selectionMode == FilePickerSelectionMode.Multiple
         isVisible = true
       }
-      val file = dialog.files.firstOrNull()
+      val files = dialog.files
+        .map { file ->
+          PlatformFile(
+            bytes = file.readBytes(),
+            filename = file.name,
+            mimeType = file.probeContentType(),
+          )
+        }
 
-      if (file == null) {
-        currentOnResult.value(null)
-        return@remember
-      }
-
-      currentOnResult.value(
-        PlatformFile(
-          bytes = file.readBytes(),
-          filename = file.name,
-          mimeType = file.probeContentType(),
-        ),
-      )
+      currentOnResult.value(files)
     }
   }
 }

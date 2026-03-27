@@ -21,9 +21,19 @@ import co.typie.overlay.ToastType
 import co.typie.platform.PlatformFile
 import kotlinx.coroutines.CancellationException
 import org.koin.core.annotation.KoinViewModel
+import kotlin.time.Duration
 
-class FontSettingsScreenState {
+internal class FontSettingsScreenState {
   var isUploading by mutableStateOf(false)
+    internal set
+
+  var uploadCurrentIndex by mutableStateOf(0)
+    internal set
+
+  var uploadTotalCount by mutableStateOf(0)
+    internal set
+
+  var uploadSummary: FontUploadSummary? by mutableStateOf(null)
     internal set
 
   var deletingFamilyId: String? by mutableStateOf(null)
@@ -38,7 +48,7 @@ class FontSettingsViewModel(
   private val blobService: BlobService,
   private val toast: Toast,
 ) : GraphQLViewModel() {
-  val state = FontSettingsScreenState()
+  internal val state = FontSettingsScreenState()
 
   val query = watchQuery(placeholderData()) { FontSettingsScreen_Query() }
 
@@ -48,59 +58,104 @@ class FontSettingsViewModel(
   internal val userFontFamilies: List<FontSettingsFamily>
     get() = uploadedFontFamilies(query.data.me.documentFontFamilies.map { it.toModel() })
 
-  internal suspend fun uploadFont(file: PlatformFile) {
+  internal suspend fun uploadFonts(files: List<PlatformFile>) {
     if (state.isUploading) return
-
-    if (!isSupportedTtfFontFile(file.filename, file.mimeType)) {
-      toast.show(type = co.typie.overlay.ToastType.Error, message = "TTF 파일만 업로드할 수 있어요.")
-      return
-    }
+    if (files.isEmpty()) return
 
     state.isUploading = true
+    state.uploadSummary = null
+    state.uploadCurrentIndex = 0
+    state.uploadTotalCount = files.size
+
+    val successes = mutableListOf<FontUploadSuccess>()
+    val failures = mutableListOf<FontUploadFailure>()
+
     try {
-      toast.withLoading(
-        message = "폰트 업로드 중...",
-        errorMessage = "폰트 업로드에 실패했어요. 다시 시도해주세요.",
-      ) {
-        val path = blobService.uploadBytes(
-          bytes = file.bytes,
-          filename = file.filename,
-          mimeType = file.mimeType ?: "font/ttf",
+      files.forEachIndexed { index, file ->
+        state.uploadCurrentIndex = index + 1
+        toast.show(
+          type = ToastType.Loading,
+          message = "폰트 업로드 중... (${state.uploadCurrentIndex}/${state.uploadTotalCount})",
+          duration = Duration.ZERO,
         )
 
-        val result = executeMutation(
-          FontSettingsScreen_PersistBlobAsFont_Mutation(
-            input = PersistBlobAsFontInput(path = path),
-          ),
-        )
+        if (!isSupportedTtfFontFile(file.filename, file.mimeType)) {
+          failures += FontUploadFailure(
+            name = file.filename,
+            error = "TTF 파일만 업로드할 수 있어요.",
+          )
+          return@forEachIndexed
+        }
 
-        query.refetch()
+        try {
+          val path = blobService.uploadBytes(
+            bytes = file.bytes,
+            filename = file.filename,
+            mimeType = file.mimeType ?: "font/ttf",
+          )
 
-        val uploadedLabel = fontWeightLabel(
-          weight = result.persistBlobAsFont.weight,
-          subfamilyDisplayName = result.persistBlobAsFont.subfamilyDisplayName,
-        )
+          val result = executeMutation(
+            FontSettingsScreen_PersistBlobAsFont_Mutation(
+              input = PersistBlobAsFontInput(path = path),
+            ),
+          )
 
-        success("${result.persistBlobAsFont.family.displayName} $uploadedLabel 폰트가 업로드되었어요.")
-      }
-    } catch (e: TypieError) {
-      when (e.code) {
-        "invalid_font_style" -> toast.show(
-          type = co.typie.overlay.ToastType.Error,
-          message = "기울어진 폰트는 업로드할 수 없어요.",
-        )
-
-        else -> {
+          successes += FontUploadSuccess(
+            familyId = result.persistBlobAsFont.family.id,
+            familyDisplayName = result.persistBlobAsFont.family.displayName,
+            weight = result.persistBlobAsFont.weight,
+            subfamilyDisplayName = result.persistBlobAsFont.subfamilyDisplayName,
+          )
+        } catch (e: TypieError) {
+          val message = when (e.code) {
+            "invalid_font_style" -> "기울어진 폰트는 업로드할 수 없어요."
+            else -> "폰트 업로드에 실패했어요."
+          }
           Logger.e(e) { "Failed to upload font: ${e.code}" }
+          failures += FontUploadFailure(
+            name = file.filename,
+            error = message,
+          )
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          Logger.e(e) { "Failed to upload font" }
+          failures += FontUploadFailure(
+            name = file.filename,
+            error = "폰트 업로드에 실패했어요.",
+          )
+        }
+      }
+
+      if (successes.isNotEmpty()) {
+        try {
+          query.refetch()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          Logger.e(e) { "Failed to refetch font settings after upload" }
+          failures += FontUploadFailure(
+            name = "업로드 결과 반영",
+            error = "폰트 목록을 새로고침하지 못했어요. 화면을 다시 열어주세요.",
+          )
         }
       }
     } catch (e: CancellationException) {
       throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to upload font" }
     } finally {
+      toast.dismiss()
+      state.uploadSummary = summarizeFontUploadResults(
+        successes = successes,
+        failures = failures,
+      )
+      state.uploadCurrentIndex = 0
+      state.uploadTotalCount = 0
       state.isUploading = false
     }
+  }
+
+  internal fun dismissUploadSummary() {
+    state.uploadSummary = null
   }
 
   internal fun showUploadSubscriptionNotice() {

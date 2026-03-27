@@ -8,9 +8,15 @@ data class PlatformFile(
   val mimeType: String?,
 )
 
+enum class FilePickerSelectionMode {
+  Single,
+  Multiple,
+}
+
 @Composable
 expect fun rememberFilePicker(
-  onResult: (PlatformFile?) -> Unit,
+  selectionMode: FilePickerSelectionMode = FilePickerSelectionMode.Single,
+  onResult: (List<PlatformFile>) -> Unit,
 ): (mimeType: String) -> Unit
 
 internal fun pickedFilename(

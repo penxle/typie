@@ -17,5 +17,6 @@ plugins {
   alias(libs.plugins.kotlin.multiplatform) apply false
   alias(libs.plugins.kotlin.serialization) apply false
   alias(libs.plugins.apollo) apply false
+  alias(libs.plugins.aboutLibraries) apply false
   alias(libs.plugins.buildkonfig) apply false
 }

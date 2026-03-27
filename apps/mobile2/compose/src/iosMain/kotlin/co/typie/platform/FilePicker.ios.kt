@@ -27,21 +27,23 @@ import platform.UIKit.UIImagePickerControllerSourceType
 import platform.UIKit.UINavigationControllerDelegateProtocol
 import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTType
+import platform.UniformTypeIdentifiers.UTTypeData
 import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.darwin.NSObject
 import platform.posix.memcpy
 
 @Composable
 actual fun rememberFilePicker(
-  onResult: (PlatformFile?) -> Unit,
+  selectionMode: FilePickerSelectionMode,
+  onResult: (List<PlatformFile>) -> Unit,
 ): (mimeType: String) -> Unit {
   val currentOnResult = rememberUpdatedState(onResult)
   var delegateHolder by remember { mutableStateOf<NSObject?>(null) }
 
-  return remember {
+  return remember(selectionMode) {
     { mimeType: String ->
       val presenter = topViewController() ?: run {
-        currentOnResult.value(null)
+        currentOnResult.value(emptyList())
         return@remember
       }
 
@@ -54,7 +56,7 @@ actual fun rememberFilePicker(
           override fun imagePickerControllerDidCancel(picker: UIImagePickerController) {
             picker.dismissViewControllerAnimated(true, completion = null)
             delegateHolder = null
-            currentOnResult.value(null)
+            currentOnResult.value(emptyList())
           }
 
           override fun imagePickerController(
@@ -68,15 +70,17 @@ actual fun rememberFilePicker(
             delegateHolder = null
 
             if (data == null) {
-              currentOnResult.value(null)
+              currentOnResult.value(emptyList())
               return
             }
 
             currentOnResult.value(
-              PlatformFile(
-                bytes = data.toByteArray(),
-                filename = pickedFilename(originalFilename = null, mimeType = "image/jpeg"),
-                mimeType = "image/jpeg",
+              listOf(
+                PlatformFile(
+                  bytes = data.toByteArray(),
+                  filename = pickedFilename(originalFilename = null, mimeType = "image/jpeg"),
+                  mimeType = "image/jpeg",
+                ),
               ),
             )
           }
@@ -86,36 +90,36 @@ actual fun rememberFilePicker(
         picker.delegate = delegate
         presenter.presentViewController(picker, animated = true, completion = null)
       } else {
-        val types = listOf(UTType.typeWithMIMEType(mimeType) ?: UTTypeImage)
-        val picker = UIDocumentPickerViewController(forOpeningContentTypes = types)
+        val types = listOf(
+          when (mimeType) {
+            "*/*" -> UTTypeData
+            else -> UTType.typeWithMIMEType(mimeType) ?: UTTypeData
+          },
+        )
+        val picker = UIDocumentPickerViewController(forOpeningContentTypes = types).apply {
+          allowsMultipleSelection = selectionMode == FilePickerSelectionMode.Multiple
+        }
 
         val delegate = object : NSObject(), UIDocumentPickerDelegateProtocol {
           override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
             delegateHolder = null
-            val url = didPickDocumentsAtURLs.firstOrNull() as? NSURL
-            if (url == null) {
-              currentOnResult.value(null)
-              return
-            }
+            val files = didPickDocumentsAtURLs
+              .mapNotNull { it as? NSURL }
+              .mapNotNull { url ->
+                val data = NSData.create(contentsOfURL = url) ?: return@mapNotNull null
+                PlatformFile(
+                  bytes = data.toByteArray(),
+                  filename = pickedFilename(url.lastPathComponent, mimeType = null),
+                  mimeType = mimeType,
+                )
+              }
 
-            val data = NSData.create(contentsOfURL = url)
-            if (data == null) {
-              currentOnResult.value(null)
-              return
-            }
-
-            currentOnResult.value(
-              PlatformFile(
-                bytes = data.toByteArray(),
-                filename = pickedFilename(url.lastPathComponent, mimeType = null),
-                mimeType = mimeType,
-              ),
-            )
+            currentOnResult.value(files)
           }
 
           override fun documentPickerWasCancelled(controller: UIDocumentPickerViewController) {
             delegateHolder = null
-            currentOnResult.value(null)
+            currentOnResult.value(emptyList())
           }
         }
 

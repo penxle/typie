@@ -22,6 +22,10 @@ val dopplerSecrets: Map<String, String> by lazy {
 fun env(key: String): String =
   System.getenv(key) ?: dopplerSecrets[key] ?: error("$key is not set")
 
+val aboutLibrariesComposeResourceFile = layout.projectDirectory.file(
+  "src/commonMain/composeResources/files/aboutlibraries.json",
+)
+
 plugins {
   alias(libs.plugins.kotlin.multiplatform)
   alias(libs.plugins.android.multiplatformLibrary)
@@ -30,6 +34,7 @@ plugins {
   alias(libs.plugins.koin.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.apollo)
+  alias(libs.plugins.aboutLibraries)
   alias(libs.plugins.buildkonfig)
 }
 
@@ -167,6 +172,16 @@ buildkonfig {
     buildConfigField(STRING, "NAVER_CLIENT_SECRET", env("NAVER_CLIENT_SECRET"))
     buildConfigField(STRING, "USERSITE_HOST", env("USERSITE_HOST"))
   }
+}
+
+aboutLibraries {
+  export {
+    outputFile = aboutLibrariesComposeResourceFile.asFile
+  }
+}
+
+tasks.named("copyNonXmlValueResourcesForCommonMain") {
+  dependsOn("exportLibraryDefinitions")
 }
 
 val versionProps = Properties().apply {

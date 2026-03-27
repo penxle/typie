@@ -4,10 +4,16 @@ import co.typie.route.Route
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class NavigatorTest {
 
   @Test
@@ -22,7 +28,7 @@ class NavigatorTest {
   @Test
   fun navigate() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Detail("1"))
+    navigateAndComplete(nav, Route.Detail("1"))
     assertEquals(Route.Detail("1"), nav.current)
     assertEquals(Route.Home, nav.previous)
     assertTrue(nav.canPop)
@@ -32,8 +38,8 @@ class NavigatorTest {
   @Test
   fun pop() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Detail("1"))
-    nav.pop()
+    navigateAndComplete(nav, Route.Detail("1"))
+    popAndComplete(nav)
     assertEquals(Route.Home, nav.current)
     assertFalse(nav.canPop)
   }
@@ -48,9 +54,9 @@ class NavigatorTest {
   @Test
   fun popTo() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Space)
-    nav.navigate(Route.Detail("1"))
-    nav.navigate(Route.Detail("2"))
+    navigateAndComplete(nav, Route.Space)
+    navigateAndComplete(nav, Route.Detail("1"))
+    navigateAndComplete(nav, Route.Detail("2"))
     nav.popTo(Route.Space)
     assertEquals(Route.Space, nav.current)
     assertEquals(2, nav.stack.size)
@@ -59,7 +65,7 @@ class NavigatorTest {
   @Test
   fun popToNotInStack() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Detail("1"))
+    navigateAndComplete(nav, Route.Detail("1"))
     nav.popTo(Route.Notes)
     assertEquals(Route.Detail("1"), nav.current)
     assertEquals(2, nav.stack.size)
@@ -68,8 +74,8 @@ class NavigatorTest {
   @Test
   fun popToRoot() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Space)
-    nav.navigate(Route.Detail("1"))
+    navigateAndComplete(nav, Route.Space)
+    navigateAndComplete(nav, Route.Detail("1"))
     nav.popToRoot()
     assertEquals(Route.Home, nav.current)
     assertEquals(1, nav.stack.size)
@@ -96,9 +102,9 @@ class NavigatorTest {
   @Test
   fun popDismissesModalFirst() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Detail("1"))
+    navigateAndComplete(nav, Route.Detail("1"))
     nav.showModal {}
-    nav.pop()
+    popAndComplete(nav)
     assertEquals(0, nav.modals.size)
     assertEquals(Route.Detail("1"), nav.current)
     assertEquals(2, nav.stack.size)
@@ -107,15 +113,46 @@ class NavigatorTest {
   @Test
   fun lastOperationOnNavigate() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Detail("1"))
+    navigateAndComplete(nav, Route.Detail("1"))
     assertEquals(NavOperation.Push, nav.lastOperation)
   }
 
   @Test
   fun lastOperationOnPop() = runTest {
     val nav = Navigator(Route.Home)
-    nav.navigate(Route.Detail("1"))
-    nav.pop()
+    navigateAndComplete(nav, Route.Detail("1"))
+    popAndComplete(nav)
     assertEquals(NavOperation.Pop, nav.lastOperation)
+  }
+
+  @Test
+  fun clearDropsViewModelStores() {
+    val nav = Navigator(Route.Home)
+    val originalStore = nav.viewModelStoreFor(Route.Home)
+
+    nav.clear()
+
+    val recreatedStore = nav.viewModelStoreFor(Route.Home)
+    assertNotSame(originalStore, recreatedStore)
+  }
+
+  private suspend fun TestScope.navigateAndComplete(nav: Navigator, route: Route) {
+    val job = launch { nav.navigate(route) }
+    advanceUntilIdle()
+    nav.completeTransition()
+    advanceUntilIdle()
+    job.join()
+  }
+
+  private suspend fun TestScope.popAndComplete(nav: Navigator) {
+    val job = launch { nav.pop() }
+    advanceUntilIdle()
+    if (nav.popRequested) {
+      nav.performPop()
+      nav.consumePopRequest()
+    }
+    nav.completeTransition()
+    advanceUntilIdle()
+    job.join()
   }
 }

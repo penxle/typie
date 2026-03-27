@@ -15,7 +15,7 @@ suspend fun <D : Mutation.Data> ApolloClient.executeMutation(
     val type = gqlError.extensions?.get("type") as? String
     if (type == "TypieError") {
       val code = gqlError.extensions?.get("code") as String
-      val message = gqlError.extensions?.get("message") as String?
+      val message = (gqlError.extensions?.get("message") as? String) ?: gqlError.message
       throw TypieError(code = code, message = message)
     } else {
       throw Exception(gqlError.message)

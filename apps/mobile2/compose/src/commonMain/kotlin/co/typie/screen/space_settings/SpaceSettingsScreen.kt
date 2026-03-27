@@ -34,6 +34,7 @@ import co.typie.ext.clickable
 import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
@@ -64,6 +65,7 @@ import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.icon.Icon
+import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
@@ -91,10 +93,11 @@ fun SpaceSettingsScreen() {
   val model = koinViewModel<SpaceSettingsViewModel>()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
+  val scrollState = rememberScrollState()
   var showLastSiteAlert by remember { mutableStateOf(false) }
 
-  val filePicker = rememberFilePicker { file ->
-    if (file == null) return@rememberFilePicker
+  val filePicker = rememberFilePicker { files ->
+    val file = files.firstOrNull() ?: return@rememberFilePicker
     scope.launch { model.uploadLogo(file) }
   }
 
@@ -114,135 +117,144 @@ fun SpaceSettingsScreen() {
     val data = model.query.data
     val hasSubscription = data.me.subscription != null
 
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(contentPadding)
         .navigationBarsPadding()
         .imePadding(),
-      verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
       Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+          .fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
       ) {
-        SectionTitle("일반")
-
-        CardSurface(
+        Column(
           modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          Column(modifier = Modifier.fillMaxWidth()) {
-            Column(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 24.dp, bottom = 20.dp),
-              horizontalAlignment = Alignment.CenterHorizontally,
-              verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-              SpaceLogo(
-                image = data.site.logo.img_image,
-                previewUrl = model.state.logoPreviewUrl,
-                onClick = { filePicker("image/*") },
-              )
+          SectionTitle("일반")
 
-              Text(
-                "스페이스 로고",
-                style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
-              )
+          CardSurface(
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(top = 24.dp, bottom = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+              ) {
+                SpaceLogo(
+                  image = data.site.logo.img_image,
+                  previewUrl = model.state.logoPreviewUrl,
+                  onClick = { filePicker("image/*") },
+                )
+
+                Text(
+                  "스페이스 로고",
+                  style = AppTheme.typography.caption,
+                  color = AppTheme.colors.textTertiary,
+                )
+              }
+
+              CardDivider()
+
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                TextField(
+                  field = model.state.form.name,
+                  label = "이름",
+                  labelPosition = LabelPosition.Internal,
+                  placeholder = "스페이스 이름",
+                )
+
+                TextField(
+                  field = model.state.form.slug,
+                  label = "주소",
+                  // TODO: 구독 없으면 플랜 페이지로 이동
+                  help = if (!hasSubscription) {
+                    "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                  } else {
+                    null
+                  },
+                  helpTextStyle = AppTheme.typography.caption,
+                  labelPosition = LabelPosition.Internal,
+                  placeholder = "스페이스 주소",
+                  enabled = hasSubscription,
+                  readOnly = !hasSubscription,
+                  suffix = {
+                    Text(
+                      ".${model.usersiteHost}",
+                      style = AppTheme.typography.body,
+                      color = AppTheme.colors.textSecondary,
+                    )
+                  },
+                )
+              }
             }
+          }
+        }
 
-            CardDivider()
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          SectionTitle("디자인")
 
-            Column(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-              verticalArrangement = Arrangement.spacedBy(8.dp),
+          CardSurface(
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            CardRow(
+              onClick = {
+                bottomSheetHost.show {
+                  SpaceDateDisplaySheet(
+                    selected = model.state.form.dateDisplay.value,
+                    onSelected = { selected ->
+                      model.state.form.dateDisplay.setValue(selected)
+                      dismiss()
+                    },
+                  )
+                }
+              },
             ) {
-              TextField(
-                field = model.state.form.name,
-                label = "이름",
-                labelPosition = LabelPosition.Internal,
-                placeholder = "스페이스 이름",
-              )
-
-              TextField(
-                field = model.state.form.slug,
-                label = "주소",
-                // TODO: 구독 없으면 플랜 페이지로 이동
-                help = if (!hasSubscription) {
-                  "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
-                } else {
-                  null
-                },
-                helpTextStyle = AppTheme.typography.caption,
-                labelPosition = LabelPosition.Internal,
-                placeholder = "스페이스 주소",
-                enabled = hasSubscription,
-                readOnly = !hasSubscription,
-                suffix = {
+              SpaceSettingsRowContent(
+                label = "글 목록에 표시할 날짜",
+                trailing = {
                   Text(
-                    ".${model.usersiteHost}",
-                    style = AppTheme.typography.body,
-                    color = AppTheme.colors.textSecondary,
+                    text = spaceDateDisplayLabel(model.state.form.dateDisplay.value),
+                    style = AppTheme.typography.caption,
+                    color = AppTheme.colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                  Spacer(Modifier.width(4.dp))
+                  Icon(
+                    icon = Lucide.ChevronRight,
+                    modifier = Modifier.size(16.dp),
+                    tint = AppTheme.colors.textTertiary,
                   )
                 },
               )
             }
           }
         }
+
+        Spacer(Modifier.height(96.dp))
       }
-
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        SectionTitle("디자인")
-
-        CardSurface(
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          CardRow(
-            onClick = {
-              bottomSheetHost.show {
-                SpaceDateDisplaySheet(
-                  selected = model.state.form.dateDisplay.value,
-                  onSelected = { selected ->
-                    model.state.form.dateDisplay.setValue(selected)
-                    dismiss()
-                  },
-                )
-              }
-            },
-          ) {
-            SpaceSettingsRowContent(
-              label = "글 목록에 표시할 날짜",
-              trailing = {
-                Text(
-                  text = spaceDateDisplayLabel(model.state.form.dateDisplay.value),
-                  style = AppTheme.typography.caption,
-                  color = AppTheme.colors.textTertiary,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                  icon = Lucide.ChevronRight,
-                  modifier = Modifier.size(16.dp),
-                  tint = AppTheme.colors.textTertiary,
-                )
-              },
-            )
-          }
-        }
-      }
-
-      Spacer(Modifier.weight(1f))
 
       Button(
         text = "저장",
-        modifier = Modifier.padding(bottom = 16.dp),
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
         loading = model.state.isSubmitting,
         loadingText = "저장 중...",
         onClick = { model.submit { nav.pop() } },

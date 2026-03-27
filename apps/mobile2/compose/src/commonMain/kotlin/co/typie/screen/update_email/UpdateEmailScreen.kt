@@ -1,18 +1,21 @@
 package co.typie.screen.update_email
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import co.typie.ext.imePadding
 import co.typie.ext.navigationBarsPadding
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.ui.component.AlertModal
@@ -23,6 +26,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -30,6 +34,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun UpdateEmailScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdateEmailViewModel>()
+  val scrollState = rememberScrollState()
   val showSuccessModal: suspend () -> Unit = {
     nav.showModal {
       AlertModal(
@@ -58,42 +63,51 @@ fun UpdateEmailScreen() {
   Screen(
     loading = model.query.state !is QueryState.Success,
   ) { contentPadding ->
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(contentPadding)
         .navigationBarsPadding()
         .imePadding(),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Text(
-        "현재 이메일 주소",
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
-      )
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        Text(
+          "현재 이메일 주소",
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textTertiary,
+        )
 
-      Text(
-        model.query.data.me.email,
-        style = AppTheme.typography.action,
-      )
+        Text(
+          model.query.data.me.email,
+          style = AppTheme.typography.action,
+        )
 
-      Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
 
-      TextField(
-        field = model.state.form.email,
-        label = "변경할 이메일 주소",
-        labelPosition = LabelPosition.Internal,
-        placeholder = "me@example.com",
-        contentType = ContentType.EmailAddress,
-        keyboardType = KeyboardType.Email,
-        onImeAction = { model.submit(showSuccessModal) },
-      )
+        TextField(
+          field = model.state.form.email,
+          label = "변경할 이메일 주소",
+          labelPosition = LabelPosition.Internal,
+          placeholder = "me@example.com",
+          contentType = ContentType.EmailAddress,
+          keyboardType = KeyboardType.Email,
+          onImeAction = { model.submit(showSuccessModal) },
+        )
 
-      Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(96.dp))
+      }
 
       Button(
         text = "변경",
-        modifier = Modifier.padding(bottom = 16.dp),
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
         loading = model.state.isSubmitting,
         loadingText = "변경 중...",
         onClick = { model.submit(showSuccessModal) },

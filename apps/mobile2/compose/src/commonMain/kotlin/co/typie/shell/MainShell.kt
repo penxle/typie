@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
@@ -91,6 +92,12 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   val toast = koinInject<Toast>()
   LaunchedEffect(activeNavigator.current) {
     toast.bottomInset = activeNavigator.current.toastBottomInset
+  }
+
+  DisposableEffect(Unit) {
+    onDispose {
+      navigators.values.forEach { it.clear() }
+    }
   }
 
   NavigationScaffold(

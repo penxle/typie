@@ -1,6 +1,7 @@
 [versions]
 agp = "9.1.0"
 apollo = "4.4.2"
+aboutLibraries = "13.2.1"
 buildkonfig = "0.17.1"
 android-compileSdk = "36"
 android-minSdk = "30"
@@ -45,6 +46,7 @@ androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", vers
 androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-viewmodelCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 androidx-testExt-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
+aboutlibraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "aboutLibraries" }
 coil-resvg = { module = "com.hashsequence:coil-resvg", version.ref = "coil-resvg" }
 coil3-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
 coil3-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
@@ -87,6 +89,7 @@ haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 
 [plugins]
 apollo = { id = "com.apollographql.apollo", version.ref = "apollo" }
+aboutLibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutLibraries" }
 buildkonfig = { id = "com.codingfeline.buildkonfig", version.ref = "buildkonfig" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-multiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }

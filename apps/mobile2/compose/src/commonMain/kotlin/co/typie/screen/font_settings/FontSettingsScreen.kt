@@ -36,7 +36,9 @@ import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.rememberFilePicker
+import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
@@ -74,9 +76,11 @@ fun FontSettingsScreen() {
   var pendingFamilyDeletion by remember { mutableStateOf<FontSettingsFamily?>(null) }
   var pendingFontDeletion by remember { mutableStateOf<PendingFontDeletion?>(null) }
 
-  val filePicker = rememberFilePicker { file ->
-    if (file == null) return@rememberFilePicker
-    scope.launch { model.uploadFont(file) }
+  val filePicker = rememberFilePicker(
+    selectionMode = FilePickerSelectionMode.Multiple,
+  ) { files ->
+    if (files.isEmpty()) return@rememberFilePicker
+    scope.launch { model.uploadFonts(files) }
   }
 
   fun requestUpload() {
@@ -87,6 +91,8 @@ fun FontSettingsScreen() {
         FontUploadSheet(
           hasSubscription = model.hasSubscription,
           isUploading = model.state.isUploading,
+          uploadCurrentIndex = model.state.uploadCurrentIndex,
+          uploadTotalCount = model.state.uploadTotalCount,
           onUploadClick = {
             when (fontUploadAction(model.hasSubscription)) {
               FontUploadAction.PickFont -> {
@@ -188,14 +194,31 @@ fun FontSettingsScreen() {
       onDismiss = { pendingFontDeletion = null },
     )
   }
+
+  model.state.uploadSummary?.let { summary ->
+    AlertModal(
+      title = summary.title,
+      message = summary.message,
+      onConfirm = { model.dismissUploadSummary() },
+      onDismiss = { model.dismissUploadSummary() },
+    )
+  }
 }
 
 @Composable
 private fun BottomSheetScope<Unit>.FontUploadSheet(
   hasSubscription: Boolean,
   isUploading: Boolean,
+  uploadCurrentIndex: Int,
+  uploadTotalCount: Int,
   onUploadClick: suspend () -> Unit,
 ) {
+  val loadingText = if (isUploading && uploadTotalCount > 0) {
+    "업로드 중... (${uploadCurrentIndex.coerceAtLeast(1)}/$uploadTotalCount)"
+  } else {
+    "업로드 중..."
+  }
+
   Column(
     modifier = Modifier
       .fillMaxWidth()
@@ -222,6 +245,7 @@ private fun BottomSheetScope<Unit>.FontUploadSheet(
         )
 
         FontSettingsBullet("TTF 확장자를 가진 폰트 파일만 업로드할 수 있어요.")
+        FontSettingsBullet("여러 개의 TTF 폰트 파일을 한 번에 선택할 수 있어요.")
         FontSettingsBullet("기울어진 폰트는 업로드할 수 없어요.")
         FontSettingsBullet("업로드한 폰트는 내 글이라면 어디서나 사용할 수 있어요.")
         FontSettingsBullet("무료 폰트이거나 웹 사용 라이선스가 있는 폰트만 이용해 주세요.")
@@ -241,7 +265,7 @@ private fun BottomSheetScope<Unit>.FontUploadSheet(
     Button(
       text = "폰트 파일 선택",
       loading = isUploading,
-      loadingText = "업로드 중...",
+      loadingText = loadingText,
       onClick = onUploadClick,
     )
   }
@@ -276,7 +300,7 @@ private fun FontSettingsEmptyState() {
     modifier = Modifier.fillMaxWidth(),
   ) {
     Text(
-      "아직 직접 업로드한 폰트가 없어요.\n우측 상단의 추가 버튼으로 TTF 폰트를 업로드할 수 있어요.",
+      "아직 직접 업로드한 폰트가 없어요.\n우측 상단의 추가 버튼으로 TTF 폰트를 한 번에 여러 개 업로드할 수 있어요.",
       style = AppTheme.typography.caption,
       color = AppTheme.colors.textTertiary,
       modifier = Modifier

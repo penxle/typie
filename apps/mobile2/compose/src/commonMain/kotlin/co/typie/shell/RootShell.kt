@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ import org.koin.compose.koinInject
 fun RootShell() {
   val authService = koinInject<AuthService>()
   val authState by authService.state.collectAsState()
+  val shellTargetState = rootShellTargetState(authState, authService.tokens?.sessionToken)
   val bottomSheetHost = remember { BottomSheetHostState() }
 
   val focusManager = LocalFocusManager.current
@@ -43,15 +45,17 @@ fun RootShell() {
         .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
     ) {
       Crossfade(
-        authState,
+        shellTargetState,
         modifier = Modifier
           .background(AppTheme.colors.surfaceDefault)
           .hazeSource(LocalHazeState.current),
       ) { state ->
-        when (state) {
-          is AuthState.Initializing -> SplashScreen()
-          is AuthState.Authenticated -> MainShell { route -> MainRoutes(route) }
-          else -> AuthShell { route -> AuthRoutes(route) }
+        key(state) {
+          when (state.authState) {
+            is AuthState.Initializing -> SplashScreen()
+            is AuthState.Authenticated -> MainShell { route -> MainRoutes(route) }
+            else -> AuthShell { route -> AuthRoutes(route) }
+          }
         }
       }
 

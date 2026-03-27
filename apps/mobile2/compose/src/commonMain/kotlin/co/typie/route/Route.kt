@@ -15,8 +15,10 @@ sealed interface Route {
   data object SocialAccounts : Route
   data object ProfileSettings : Route
   data object SecuritySettings : Route
+  data object DeleteUser : Route
   data object Referral : Route
   data object Settings : Route
+  data object OssLicenses : Route
   data object FontSettings : Route
   data object EditorSettings : Route
   data object WidgetSettings : Route
@@ -30,7 +32,14 @@ sealed interface Route {
 
 val Route.toastBottomInset: Dp
   get() = when (this) {
-    is Route.Home, is Route.Space, is Route.Notes, is Route.More -> 72.dp
-    is Route.UpdateEmail, is Route.UpdateProfile, is Route.UpdatePassword, is Route.SocialAccounts, is Route.Referral, is Route.Settings, is Route.EditorSettings, is Route.SpaceSettings -> 64.dp
-    else -> 0.dp
+    is Route.Home, is Route.Space, is Route.Notes, is Route.More -> 72.dp // nav bar가 있는 스크린
+    is Route.DeleteUser -> 120.dp // 하단 버튼이 2개인 스크린
+    is Route.UpdateEmail,
+    is Route.UpdateProfile,
+    is Route.UpdatePassword,
+    is Route.SocialAccounts,
+    is Route.Referral,
+    is Route.FontSettings,
+    is Route.SpaceSettings -> 64.dp // 하단 버튼이 있는 스크린
+    else -> 0.dp // 그 외
   }

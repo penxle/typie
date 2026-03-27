@@ -2,13 +2,10 @@ package co.typie.auth
 
 import co.touchlab.kermit.Logger
 import co.typie.Konfig
-import co.typie.graphql.AuthService_Query
 import co.typie.service.SiteService
 import co.typie.storage.Vault
 import com.apollographql.apollo.ApolloClient
-import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.apolloStore
-import com.apollographql.cache.normalized.fetchPolicy
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.forms.submitForm
@@ -22,17 +19,37 @@ import io.ktor.http.contentType
 import io.ktor.http.parameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.koin.core.annotation.Single
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+
+internal data class AuthenticatedUserContext(
+  val userId: String,
+  val siteIds: List<String>,
+)
+
+internal fun parseAuthenticatedUserContextResponse(body: String): AuthenticatedUserContext {
+  val json = Json.parseToJsonElement(body).jsonObject
+  val data = json["data"]?.jsonObject ?: error("Invalid access token")
+  val me = data["me"]?.takeUnless { it.toString() == "null" }?.jsonObject ?: error("Invalid access token")
+
+  val userId = me["id"]?.jsonPrimitive?.content ?: error("Invalid user id")
+  val siteIds = me["sites"]?.jsonArray?.map { site ->
+    site.jsonObject["id"]?.jsonPrimitive?.content ?: error("Invalid site id")
+  }.orEmpty()
+
+  return AuthenticatedUserContext(userId = userId, siteIds = siteIds)
+}
 
 @Single(createdAtStart = true)
 class AuthService(
@@ -44,14 +61,21 @@ class AuthService(
   var tokens: AuthTokens? by vault("tokens", null)
     private set
 
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val mutex = Mutex()
 
   private val _state = MutableStateFlow<AuthState>(AuthState.Initializing)
   val state: StateFlow<AuthState> = _state
 
   init {
-    CoroutineScope(Dispatchers.Default).launch {
+    scope.launch {
       initialize()
+    }
+  }
+
+  fun loginAsync(sessionToken: String) {
+    scope.launch {
+      login(sessionToken)
     }
   }
 
@@ -85,6 +109,7 @@ class AuthService(
       } catch (e: Exception) {
         Logger.e(e) { "Failed to refresh tokens" }
         tokens = null
+        siteService.clearCurrentUser()
         _state.value = AuthState.Unauthenticated
       }
     }
@@ -99,6 +124,7 @@ class AuthService(
     } catch (e: Exception) {
       Logger.e(e) { "Failed to refresh tokens" }
       tokens = null
+      siteService.clearCurrentUser()
       _state.value = AuthState.Unauthenticated
       return@withLock null
     }
@@ -117,7 +143,12 @@ class AuthService(
       }
     }
 
+    clearSession()
+  }
+
+  suspend fun clearSession() {
     tokens = null
+    siteService.clearCurrentUser()
     apolloClient.apolloStore.clearAll()
     _state.value = AuthState.Unauthenticated
   }
@@ -129,23 +160,17 @@ class AuthService(
 
   private suspend fun refreshTokensInternal(sessionToken: String) {
     val accessToken = exchangeToken(sessionToken)
-    validateToken(accessToken)
+    val authenticatedUserContext = fetchAuthenticatedUserContext(accessToken)
     tokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
-    ensureValidSiteId()
+    ensureValidSiteId(authenticatedUserContext)
     _state.value = AuthState.Authenticated
   }
 
-  private suspend fun ensureValidSiteId() {
-    val data = apolloClient.query(AuthService_Query())
-      .fetchPolicy(FetchPolicy.NetworkOnly)
-      .execute().dataOrThrow()
-    val siteIds = data.me.sites.map { it.id }
-    if (siteIds.isNotEmpty()) {
-      val currentSiteId = siteService.siteId
-      if (currentSiteId.isEmpty() || currentSiteId !in siteIds) {
-        siteService.siteId = siteIds.first()
-      }
-    }
+  private fun ensureValidSiteId(authenticatedUserContext: AuthenticatedUserContext) {
+    siteService.bindUser(
+      userId = authenticatedUserContext.userId,
+      availableSiteIds = authenticatedUserContext.siteIds,
+    )
   }
 
   private suspend fun exchangeToken(sessionToken: String): String {
@@ -186,20 +211,14 @@ class AuthService(
       ?: error("No access_token in token response")
   }
 
-  private suspend fun validateToken(accessToken: String) {
+  private suspend fun fetchAuthenticatedUserContext(accessToken: String): AuthenticatedUserContext {
     val response = httpClient.post("${Konfig.API_URL}/graphql") {
       header("Authorization", "Bearer $accessToken")
       contentType(ContentType.Application.Json)
-      setBody("""{"query":"{ me { id } }"}""")
+      setBody("""{"query":"{ me { id sites { id } } }"}""")
     }
 
     val body = response.body<String>()
-    val json = Json.parseToJsonElement(body).jsonObject
-    val data = json["data"]?.jsonObject
-    val me = data?.get("me")
-
-    if (me == null || me.toString() == "null") {
-      error("Invalid access token")
-    }
+    return parseAuthenticatedUserContextResponse(body)
   }
 }

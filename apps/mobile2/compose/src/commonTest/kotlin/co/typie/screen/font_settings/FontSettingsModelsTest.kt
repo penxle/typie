@@ -3,6 +3,7 @@ package co.typie.screen.font_settings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -88,5 +89,104 @@ class FontSettingsModelsTest {
   fun `fontUploadAction returns direct upload only for subscribed users`() {
     assertEquals(FontUploadAction.PickFont, fontUploadAction(hasSubscription = true))
     assertEquals(FontUploadAction.ShowSubscriptionNotice, fontUploadAction(hasSubscription = false))
+  }
+
+  @Test
+  fun `summarizeFontUploadResults groups successful uploads by family and labels weights`() {
+    val summary = summarizeFontUploadResults(
+      successes = listOf(
+        FontUploadSuccess(
+          familyId = "family-1",
+          familyDisplayName = "프리텐다드",
+          weight = 400,
+          subfamilyDisplayName = "Regular",
+        ),
+        FontUploadSuccess(
+          familyId = "family-1",
+          familyDisplayName = "프리텐다드",
+          weight = 700,
+          subfamilyDisplayName = "Bold",
+        ),
+        FontUploadSuccess(
+          familyId = "family-2",
+          familyDisplayName = "코펍월드돋움",
+          weight = 450,
+          subfamilyDisplayName = "Semi Condensed",
+        ),
+      ),
+      failures = emptyList(),
+    )
+
+    assertNotNull(summary)
+    assertEquals(FontUploadSummaryStatus.Success, summary.status)
+    assertEquals(3, summary.successCount)
+    assertEquals(0, summary.failureCount)
+    assertEquals(1, Regex("프리텐다드").findAll(summary.message).count())
+    assertTrue(summary.message.contains("보통"))
+    assertTrue(summary.message.contains("굵게"))
+    assertTrue(summary.message.contains("코펍월드돋움"))
+    assertTrue(summary.message.contains("Semi Condensed (450)"))
+  }
+
+  @Test
+  fun `summarizeFontUploadResults includes both success and failure sections for partial uploads`() {
+    val summary = summarizeFontUploadResults(
+      successes = listOf(
+        FontUploadSuccess(
+          familyId = "family-1",
+          familyDisplayName = "프리텐다드",
+          weight = 400,
+          subfamilyDisplayName = "Regular",
+        ),
+      ),
+      failures = listOf(
+        FontUploadFailure(
+          name = "Italic.ttf",
+          error = "기울어진 폰트는 업로드할 수 없어요.",
+        ),
+      ),
+    )
+
+    assertNotNull(summary)
+    assertEquals(FontUploadSummaryStatus.PartialSuccess, summary.status)
+    assertEquals(1, summary.successCount)
+    assertEquals(1, summary.failureCount)
+    assertTrue(summary.message.contains("프리텐다드"))
+    assertTrue(summary.message.contains("보통"))
+    assertTrue(summary.message.contains("Italic.ttf"))
+  }
+
+  @Test
+  fun `summarizeFontUploadResults returns failure summary when all uploads fail`() {
+    val summary = summarizeFontUploadResults(
+      successes = emptyList(),
+      failures = listOf(
+        FontUploadFailure(
+          name = "Broken.otf",
+          error = "TTF 파일만 업로드할 수 있어요.",
+        ),
+        FontUploadFailure(
+          name = "Italic.ttf",
+          error = "기울어진 폰트는 업로드할 수 없어요.",
+        ),
+      ),
+    )
+
+    assertNotNull(summary)
+    assertEquals(FontUploadSummaryStatus.Failure, summary.status)
+    assertEquals(0, summary.successCount)
+    assertEquals(2, summary.failureCount)
+    assertTrue(summary.message.contains("Broken.otf"))
+    assertTrue(summary.message.contains("Italic.ttf"))
+  }
+
+  @Test
+  fun `summarizeFontUploadResults returns null when there is nothing to report`() {
+    assertNull(
+      summarizeFontUploadResults(
+        successes = emptyList(),
+        failures = emptyList(),
+      ),
+    )
   }
 }

@@ -3,6 +3,7 @@ package co.typie.route
 import androidx.compose.runtime.Composable
 import co.typie.screen.detail.DetailScreen
 import co.typie.screen.ai_settings.AiSettingsScreen
+import co.typie.screen.delete_user.DeleteUserScreen
 import co.typie.screen.editor.EditorScreen
 import co.typie.screen.editor_settings.EditorSettingsScreen
 import co.typie.screen.font_settings.FontSettingsScreen
@@ -11,6 +12,7 @@ import co.typie.screen.home.HomeScreen
 import co.typie.screen.login.LoginScreen
 import co.typie.screen.more.MoreScreen
 import co.typie.screen.notes.NotesScreen
+import co.typie.screen.oss_licenses.OssLicensesScreen
 import co.typie.screen.profile_settings.ProfileSettingsScreen
 import co.typie.screen.security_settings.SecuritySettingsScreen
 import co.typie.screen.settings.SettingsScreen
@@ -34,9 +36,11 @@ fun MainRoutes(route: Route) {
     is Route.Stats -> StatsScreen()
     is Route.Referral -> ReferralScreen()
     is Route.Settings -> SettingsScreen()
+    is Route.OssLicenses -> OssLicensesScreen()
     is Route.FontSettings -> FontSettingsScreen()
     is Route.ProfileSettings -> ProfileSettingsScreen()
     is Route.SecuritySettings -> SecuritySettingsScreen()
+    is Route.DeleteUser -> DeleteUserScreen()
     is Route.EditorSettings -> EditorSettingsScreen()
     is Route.WidgetSettings -> WidgetSettingsScreen()
     is Route.AiSettings -> AiSettingsScreen()

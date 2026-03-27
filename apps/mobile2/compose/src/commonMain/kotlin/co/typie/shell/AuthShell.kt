@@ -1,6 +1,7 @@
 package co.typie.shell
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import co.typie.navigation.NavigationScaffold
@@ -20,6 +21,12 @@ fun AuthShell(content: @Composable (Route) -> Unit) {
   val toast = koinInject<Toast>()
   LaunchedEffect(navigator.current) {
     toast.bottomInset = navigator.current.toastBottomInset
+  }
+
+  DisposableEffect(Unit) {
+    onDispose {
+      navigator.clear()
+    }
   }
 
   NavigationScaffold(
