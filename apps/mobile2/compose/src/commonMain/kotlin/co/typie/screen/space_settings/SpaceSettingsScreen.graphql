@@ -15,6 +15,7 @@ query SpaceSettingsScreen_Query($siteId: ID!) {
     id
     name
     slug
+    dateDisplay
     documentCount
     folderCount
 
@@ -29,6 +30,7 @@ mutation SpaceSettingsScreen_UpdateSite_Mutation($input: UpdateSiteInput!) {
   updateSite(input: $input) {
     id
     name
+    dateDisplay
 
     logo {
       id

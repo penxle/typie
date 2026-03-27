@@ -16,6 +16,9 @@ enum class DateTimeStyle {
   FULL,
 }
 
+fun Instant.formatKoreanDate(): String =
+  format("yyyy년 MM월 dd일")
+
 fun Instant.timeAgo(now: Instant = Clock.System.now()): String {
   val duration = now - this
   val isPast = duration.isPositive()

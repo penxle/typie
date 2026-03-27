@@ -23,6 +23,7 @@ import co.typie.graphql.TypieError
 import co.typie.graphql.text
 import co.typie.graphql.type.DeleteSiteInput
 import co.typie.graphql.type.PersistBlobAsImageInput
+import co.typie.graphql.type.SiteDateDisplay
 import co.typie.graphql.type.UpdateSiteInput
 import co.typie.graphql.type.UpdateSiteSlugInput
 import co.typie.graphql.type.buildSite
@@ -65,6 +66,10 @@ class SpaceSettingsForm(scope: CoroutineScope) : FormState(scope) {
   val logoId = field("") {
     focusable = false
   }
+
+  val dateDisplay = field(SiteDateDisplay.UPDATED_AT) {
+    focusable = false
+  }
 }
 
 class SpaceSettingsScreenState(scope: CoroutineScope) {
@@ -88,6 +93,7 @@ class SpaceSettingsViewModel(
       state.form.name.initialValue = data.site.name
       state.form.slug.initialValue = data.site.slug
       state.form.logoId.initialValue = data.site.logo.id
+      state.form.dateDisplay.initialValue = data.site.dateDisplay
     },
   ) { SpaceSettingsScreen_Query(siteId = siteService.siteId) }
 
@@ -97,6 +103,7 @@ class SpaceSettingsViewModel(
     .removePrefix(".")
 
   suspend fun uploadLogo(file: PlatformFile) {
+    // TODO: 로고 변경 트래킹
     try {
       toast.withLoading(
         message = "로고 업로드 중...",
@@ -124,6 +131,7 @@ class SpaceSettingsViewModel(
   }
 
   fun submit(onSubmit: suspend () -> Unit) {
+    // TODO: 이름/주소/날짜 개별 저장으로 맞추기
     viewModelScope.launch {
       state.isSubmitting = true
       try {
@@ -135,6 +143,7 @@ class SpaceSettingsViewModel(
               siteId = siteService.siteId,
               name = Optional.present(state.form.name.value.trim()),
               logoId = Optional.present(state.form.logoId.value),
+              dateDisplay = Optional.present(state.form.dateDisplay.value),
             ),
           ),
         )
@@ -170,6 +179,7 @@ class SpaceSettingsViewModel(
   }
 
   fun deleteSite(onDeleted: suspend () -> Unit) {
+    // TODO: 스페이스 삭제 트래킹
     viewModelScope.launch {
       state.isDeleting = true
       try {
@@ -206,5 +216,6 @@ private fun placeholderData() = SpaceSettingsScreen_Query.Data(PlaceholderResolv
   site = buildSite {
     name = text(3..8)
     slug = text(4..10)
+    dateDisplay = SiteDateDisplay.UPDATED_AT
   }
 }

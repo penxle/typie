@@ -96,6 +96,7 @@ fun EditorSettingsScreen() {
   val autoSurroundEnabled = editorPreferences.autoSurroundEnabled
   val characterCountFloatingEnabled = editorPreferences.characterCountFloatingEnabled
   val widgetAutoFadeEnabled = editorPreferences.widgetAutoFadeEnabled
+  // TODO: 에디터 설정 트래킹
 
   LaunchedEffect(model.query.state) {
     if (model.query.state is QueryState.Success) {
@@ -104,6 +105,23 @@ fun EditorSettingsScreen() {
   }
 
   val aiOptIn = model.aiOptIn
+  var showAiOptInSheet by remember { mutableStateOf(false) }
+
+  LaunchedEffect(showAiOptInSheet) {
+    if (!showAiOptInSheet) return@LaunchedEffect
+
+    showAiOptInSheet = false
+    bottomSheetHost.show {
+      AiOptInSheet(
+        isSubmitting = model.isUpdatingAiOptIn,
+        onConfirm = {
+          model.updateAiOptIn(true) {
+            dismiss()
+          }
+        },
+      )
+    }
+  }
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -280,16 +298,7 @@ fun EditorSettingsScreen() {
             if (aiOptIn) {
               model.updateAiOptIn(false)
             } else {
-              bottomSheetHost.show {
-                AiOptInSheet(
-                  isSubmitting = model.isUpdatingAiOptIn,
-                  onConfirm = {
-                    model.updateAiOptIn(true) {
-                      dismiss()
-                    }
-                  },
-                )
-              }
+              showAiOptInSheet = true
             }
           },
           trailing = {
@@ -298,16 +307,7 @@ fun EditorSettingsScreen() {
               enabled = !model.isUpdatingAiOptIn,
               onCheckedChange = { next ->
                 if (next) {
-                  bottomSheetHost.show {
-                    AiOptInSheet(
-                      isSubmitting = model.isUpdatingAiOptIn,
-                      onConfirm = {
-                        model.updateAiOptIn(true) {
-                          dismiss()
-                        }
-                      },
-                    )
-                  }
+                  showAiOptInSheet = true
                 } else {
                   model.updateAiOptIn(false)
                 }

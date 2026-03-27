@@ -46,6 +46,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -86,6 +87,7 @@ fun TextField(
   label: String,
   modifier: Modifier = Modifier,
   help: String? = null,
+  helpTextStyle: TextStyle = AppTheme.typography.micro,
   error: String? = null,
   success: Boolean = false,
   placeholder: String? = null,
@@ -375,7 +377,7 @@ fun TextField(
 
     Text(
       text = error ?: help ?: "",
-      style = AppTheme.typography.micro,
+      style = helpTextStyle,
       color = helpColor,
       modifier = Modifier
         .defaultMinSize(minHeight = 16.dp)
@@ -390,6 +392,7 @@ fun TextField(
   label: String,
   modifier: Modifier = Modifier,
   help: String? = null,
+  helpTextStyle: TextStyle = AppTheme.typography.micro,
   success: Boolean = false,
   placeholder: String? = null,
   labelPosition: LabelPosition = LabelPosition.External,
@@ -433,6 +436,7 @@ fun TextField(
       modifier
     },
     help = help,
+    helpTextStyle = helpTextStyle,
     error = field.errors.firstOrNull(),
     success = success,
     placeholder = placeholder,

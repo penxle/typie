@@ -11,11 +11,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.touchlab.kermit.Logger
+import co.typie.datetime.formatKoreanDate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
@@ -33,7 +39,9 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
+import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
+import co.typie.ui.component.AlertModal
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
@@ -46,6 +54,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
+import kotlin.time.Clock
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -62,6 +71,7 @@ data class SettingsSection(
 
 enum class SettingsItemAction {
   Theme,
+  MarketingConsent,
 }
 
 data class SettingsThemeOption(
@@ -97,6 +107,11 @@ internal fun settingsThemeModeLabel(mode: ThemeMode): String {
   return settingsThemeOptions().first { it.mode == mode }.label
 }
 
+internal fun settingsMarketingConsentMessage(marketingConsent: Boolean): String {
+  val action = if (marketingConsent) "동의" else "거부"
+  return "${Clock.System.now().formatKoreanDate()}에 ${action}처리되었어요."
+}
+
 internal fun settingsThemeSelectionItems(selectedMode: ThemeMode): List<SettingsThemeSelectionItem> {
   return settingsThemeOptions().map { option ->
     SettingsThemeSelectionItem(
@@ -129,24 +144,27 @@ internal fun settingsSections(hasPassword: Boolean): List<SettingsSection> {
       title = "편집 경험 설정",
       items = listOf(
         SettingsItem("에디터 설정", route = Route.EditorSettings),
+        // TODO: 텍스트 대치 화면 연결
         SettingsItem("텍스트 대치"),
       ),
     ),
     SettingsSection(
       title = "스페이스",
       items = listOf(
-        SettingsItem("현재 스페이스 설정"),
+        // TODO: 스페이스 설정 진입 트래킹
+        SettingsItem("현재 스페이스 설정", route = Route.SpaceSettings),
       ),
     ),
     SettingsSection(
       title = "이벤트 알림 설정",
       items = listOf(
-        SettingsItem("이벤트 및 타이피 소식 받아보기"),
+        SettingsItem("이벤트 및 타이피 소식 받아보기", action = SettingsItemAction.MarketingConsent),
       ),
     ),
     SettingsSection(
       title = "서비스 정보",
       items = listOf(
+        // TODO: 서비스 정보/버전/개발자 모드 연결
         SettingsItem("이용약관"),
         SettingsItem("개인정보처리방침"),
         SettingsItem("사업자 정보"),
@@ -157,6 +175,7 @@ internal fun settingsSections(hasPassword: Boolean): List<SettingsSection> {
     SettingsSection(
       title = "기타",
       items = listOf(
+        // TODO: 로그아웃 확인/회원 탈퇴 연결
         SettingsItem("로그아웃"),
         SettingsItem("회원 탈퇴"),
       ),
@@ -174,6 +193,30 @@ fun SettingsScreen() {
   val themeModeState = LocalThemeMode.current
   val hasPassword = model.query.data.me.hasPassword
   val sections = remember(hasPassword) { settingsSections(hasPassword) }
+  val initialMarketingConsent = model.query.data.me.marketingConsent
+  var marketingConsent by remember(initialMarketingConsent) { mutableStateOf(initialMarketingConsent) }
+  var committedMarketingConsent by remember(initialMarketingConsent) { mutableStateOf(initialMarketingConsent) }
+  var isUpdatingMarketingConsent by remember { mutableStateOf(false) }
+  var marketingConsentModalMessage by remember { mutableStateOf<String?>(null) }
+  var pendingMarketingConsent by remember { mutableStateOf<Boolean?>(null) }
+
+  LaunchedEffect(pendingMarketingConsent) {
+    val requested = pendingMarketingConsent ?: return@LaunchedEffect
+
+    try {
+      model.updateMarketingConsent(requested)
+      committedMarketingConsent = requested
+      // TODO: 마케팅 수신 동의 트래킹
+      marketingConsentModalMessage = settingsMarketingConsentMessage(requested)
+    } catch (e: Exception) {
+      Logger.e(e) { "Failed to update marketing consent (${e::class.simpleName}): ${e.message}" }
+      marketingConsent = committedMarketingConsent
+      toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+    } finally {
+      isUpdatingMarketingConsent = false
+      pendingMarketingConsent = null
+    }
+  }
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -207,13 +250,23 @@ fun SettingsScreen() {
         SettingsSectionCard(
           section = section,
           themeMode = themeModeState.value,
+          marketingConsent = marketingConsent,
+          isUpdatingMarketingConsent = isUpdatingMarketingConsent,
           onThemeClick = {
             bottomSheetHost.show {
               SettingsThemeSheet(
                 themeMode = themeModeState.value,
-                onThemeModeChange = { themeModeState.value = it },
+                onThemeModeChange = {
+                  // TODO: 테마 변경 트래킹
+                  themeModeState.value = it
+                },
               )
             }
+          },
+          onMarketingConsentChange = { next ->
+            marketingConsent = next
+            isUpdatingMarketingConsent = true
+            pendingMarketingConsent = next
           },
           onItemClick = { item ->
             val route = settingsRouteFor(item)
@@ -230,13 +283,25 @@ fun SettingsScreen() {
       Spacer(Modifier.height(72.dp))
     }
   }
+
+  marketingConsentModalMessage?.let { message ->
+    AlertModal(
+      title = "타이피 마케팅 수신 동의",
+      message = message,
+      onConfirm = { marketingConsentModalMessage = null },
+      onDismiss = { marketingConsentModalMessage = null },
+    )
+  }
 }
 
 @Composable
 private fun SettingsSectionCard(
   section: SettingsSection,
   themeMode: ThemeMode,
+  marketingConsent: Boolean,
+  isUpdatingMarketingConsent: Boolean,
   onThemeClick: suspend () -> Unit,
+  onMarketingConsentChange: (Boolean) -> Unit,
   onItemClick: suspend (SettingsItem) -> Unit,
 ) {
   Column(
@@ -258,6 +323,12 @@ private fun SettingsSectionCard(
               themeMode = themeMode,
               onClick = onThemeClick,
             )
+          } else if (item.action == SettingsItemAction.MarketingConsent) {
+            SettingsMarketingConsentRow(
+              checked = marketingConsent,
+              enabled = !isUpdatingMarketingConsent,
+              onCheckedChange = onMarketingConsentChange,
+            )
           } else {
             SettingsRow(
               item = item,
@@ -271,6 +342,32 @@ private fun SettingsSectionCard(
         }
       }
     }
+  }
+}
+
+@Composable
+private fun SettingsMarketingConsentRow(
+  checked: Boolean,
+  enabled: Boolean,
+  onCheckedChange: (Boolean) -> Unit,
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = 16.dp, vertical = 16.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    SettingsRowContent(
+      label = "이벤트 및 타이피 소식 받아보기",
+      trailing = {
+        SettingSwitch(
+          checked = checked,
+          enabled = enabled,
+          onCheckedChange = onCheckedChange,
+        )
+      },
+    )
   }
 }
 
