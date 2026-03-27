@@ -10,6 +10,7 @@ import co.typie.screen.notes.NotesScreen
 import co.typie.screen.profile.ProfileScreen
 import co.typie.screen.referral.ReferralScreen
 import co.typie.screen.settings.SettingsScreen
+import co.typie.screen.social_accounts.SocialAccountsScreen
 import co.typie.screen.space.SpaceScreen
 import co.typie.screen.stats.StatsScreen
 import co.typie.screen.space_settings.SpaceSettingsScreen
@@ -27,6 +28,7 @@ fun MainRoutes(route: Route) {
     is Route.Stats -> StatsScreen()
     is Route.Referral -> ReferralScreen()
     is Route.Settings -> SettingsScreen()
+    is Route.SocialAccounts -> SocialAccountsScreen()
     is Route.UpdateEmail -> UpdateEmailScreen()
     is Route.UpdateProfile -> UpdateProfileScreen()
     is Route.UpdatePassword -> UpdatePasswordScreen()
