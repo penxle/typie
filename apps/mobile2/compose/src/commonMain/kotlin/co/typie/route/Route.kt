@@ -15,6 +15,7 @@ sealed interface Route {
   data object SocialAccounts : Route
   data object Referral : Route
   data object Settings : Route
+  data object EditorSettings : Route
   data object SpaceSettings : Route
   data class Detail(val id: String) : Route
   data class Folder(val entityId: String) : Route
@@ -25,6 +26,6 @@ sealed interface Route {
 val Route.toastBottomInset: Dp
   get() = when (this) {
     is Route.Home, is Route.Space, is Route.Notes, is Route.Profile -> 72.dp
-    is Route.UpdateEmail, is Route.UpdateProfile, is Route.UpdatePassword, is Route.SocialAccounts, is Route.Referral, is Route.Settings, is Route.SpaceSettings -> 64.dp
+    is Route.UpdateEmail, is Route.UpdateProfile, is Route.UpdatePassword, is Route.SocialAccounts, is Route.Referral, is Route.Settings, is Route.EditorSettings, is Route.SpaceSettings -> 64.dp
     else -> 0.dp
   }

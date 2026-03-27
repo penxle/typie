@@ -1,0 +1,13 @@
+query EditorSettingsScreen_Query {
+  me @catch(to: THROW) {
+    id
+    preferences
+  }
+}
+
+mutation EditorSettingsScreen_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+  updatePreferences(input: $input) {
+    id
+    preferences
+  }
+}

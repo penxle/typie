@@ -3,6 +3,7 @@ package co.typie.route
 import androidx.compose.runtime.Composable
 import co.typie.screen.detail.DetailScreen
 import co.typie.screen.editor.EditorScreen
+import co.typie.screen.editor_settings.EditorSettingsScreen
 import co.typie.screen.folder.FolderScreen
 import co.typie.screen.home.HomeScreen
 import co.typie.screen.login.LoginScreen
@@ -28,6 +29,7 @@ fun MainRoutes(route: Route) {
     is Route.Stats -> StatsScreen()
     is Route.Referral -> ReferralScreen()
     is Route.Settings -> SettingsScreen()
+    is Route.EditorSettings -> EditorSettingsScreen()
     is Route.SocialAccounts -> SocialAccountsScreen()
     is Route.UpdateEmail -> UpdateEmailScreen()
     is Route.UpdateProfile -> UpdateProfileScreen()

@@ -128,7 +128,7 @@ internal fun settingsSections(hasPassword: Boolean): List<SettingsSection> {
     SettingsSection(
       title = "편집 경험 설정",
       items = listOf(
-        SettingsItem("에디터 설정"),
+        SettingsItem("에디터 설정", route = Route.EditorSettings),
         SettingsItem("텍스트 대치"),
       ),
     ),
