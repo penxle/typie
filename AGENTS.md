@@ -5,22 +5,25 @@
 Turborepo monorepo using pnpm as package manager.
 
 - `apps/`: api, website, desktop, mobile, bmo, literoom, caddy
-- `crates/`: editor (Rust, WASM)
+- `crates/`: editor (Rust, WASM) — 11 crates: core, commands, state, model, transaction, view, schema, renderer, common, macros, ffi
 - `packages/`: adapter-node, lib, ui, styled-system, tsconfig, lintconfig
 
 ## Commands
 
 ```bash
-pnpm install             # Install dependencies
-pnpm run dev             # Start all dev servers
-pnpm run build           # Build all packages
-pnpm run test            # Run all tests
-pnpm run lint:eslint     # Lint with ESLint
-pnpm run lint:prettier   # Check formatting
-pnpm run lint:typecheck  # TypeScript type checking
-pnpm run lint:svelte     # Svelte-specific linting
-pnpm run lint:spellcheck # Spell check with cspell
-pnpm run lint:syncpack   # Check dependency version sync
+pnpm install                              # Install dependencies
+pnpm run dev                              # Start all dev servers
+pnpm run build                            # Build all packages
+pnpm run test                             # Run all tests
+pnpm run lint:eslint                      # Lint with ESLint
+pnpm run lint:prettier                    # Check formatting
+pnpm run lint:typecheck                   # TypeScript type checking
+pnpm run lint:svelte                      # Svelte-specific linting
+pnpm run lint:spellcheck                  # Spell check with cspell
+pnpm run lint:syncpack                    # Check dependency version sync
+just -f crates/editor-ffi/justfile wasm   # Build WASM
+just -f crates/editor-ffi/justfile test   # Run Rust tests
+just -f crates/editor-ffi/justfile mobile # Build Android + iOS
 ```
 
 ## Git Hooks (Lefthook)
@@ -34,7 +37,7 @@ Run `pnpm run bootstrap` to install hooks after fresh clone.
 - Formatting: 2 spaces, 140 char width, single quotes
 - Naming: `kebab-case.ts` utilities, `PascalCase.svelte` components, `SCREAMING_SNAKE_CASE` constants
 - Svelte: `$props()`, `$state()`, `$derived()` (Svelte 5 runes)
-- Rust: Edition 2024, `cargo fmt` before commits
+- Rust: nightly toolchain, Edition 2024, `cargo fmt` before commits
 - Dart: `dart format`, `dart fix --apply` before commits (Flutter mobile app)
 
 ## Behavioral Guidelines

@@ -1,0 +1,20 @@
+[package]
+name = "editor-model"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-utils = []
+
+[dependencies]
+editor-common = { path = "../editor-common" }
+editor-macros = { path = "../editor-macros" }
+base62.workspace = true
+enum-map.workspace = true
+getrandom.workspace = true
+imbl = { workspace = true, features = ["serde"] }
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+thiserror.workspace = true

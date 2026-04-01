@@ -1,0 +1,29 @@
+[package]
+name = "editor-view"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-utils = ["dep:fontique", "editor-resource/test-utils", "icu_segmenter/compiled_data", "icu_segmenter/auto"]
+
+[dependencies]
+editor-common = { path = "../editor-common" }
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model" }
+editor-resource = { path = "../editor-resource" }
+editor-state = { path = "../editor-state" }
+editor-transaction = { path = "../editor-transaction" }
+fontique = { workspace = true, optional = true }
+hashbrown.workspace = true
+icu_segmenter = { workspace = true, features = ["serde"] }
+log.workspace = true
+parley.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+editor-common = { path = "../editor-common", features = ["test-utils"] }
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-resource = { path = "../editor-resource", features = ["test-utils"] }
+fontique.workspace = true
+icu_segmenter = { workspace = true, features = ["compiled_data", "auto"] }

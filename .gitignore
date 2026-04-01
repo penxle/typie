@@ -7,7 +7,9 @@ target/
 out/
 .turbo/
 pkg/
-!crates/editor/pkg/
+
+!crates/editor-ffi/pkg/
+!legacy/editor/pkg/
 
 .env.local
 kubeconfig
@@ -28,6 +30,7 @@ vite.config.ts.timestamp-*
 .terraform
 .terraform.lock.hcl
 
+.claude/worktrees/
 .superpowers/
 docs/superpowers/
 

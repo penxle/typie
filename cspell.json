@@ -9,6 +9,8 @@
   "enableGlobDot": true,
   "useGitignore": true,
   "ignorePaths": [
+    "*.rs",
+    "*.toml",
     ".git",
     ".gitignore",
     ".github",
@@ -18,8 +20,6 @@
     "bun.lock",
     "*.yaml",
     "*.svg",
-    "*.rs",
-    "*.toml",
     "*.tf",
     "*.py",
     "*.sh",
@@ -42,10 +42,10 @@
     "apps/infrastructure/scripts",
     "packages/styled-system/styled-system",
     ".claude/**",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "crates/editor/assets/**",
-    "crates/editor/benches/fixtures/**"
+    "*.md",
+    "legacy/editor/assets/**",
+    "legacy/editor/benches/fixtures/**",
+    "assets/**"
   ],
   "dictionaries": ["cspell.txt"],
   "dictionaryDefinitions": [

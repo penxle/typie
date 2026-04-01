@@ -1,0 +1,979 @@
+use crate::layout::cursor::{Cursor, NavigationContext};
+use crate::model::NodeId;
+use crate::runtime::{Effect, Runtime};
+use crate::state::Selection;
+
+impl Runtime {
+    pub fn handle_delete_backward(&mut self, length: Option<usize>) -> Vec<Effect> {
+        let count = length.unwrap_or(1);
+
+        if count > 1 {
+            return self.transact(|tr| {
+                tr.delete_selection()?;
+                for _ in 0..count {
+                    if !tr.delete_text_backward()? {
+                        break;
+                    }
+                }
+                Ok(true)
+            });
+        }
+
+        let undo = self.text_replacement_undo.clone();
+        self.transact(|tr| {
+            if let Some(undo) = undo.as_ref()
+                && tr.try_undo_text_replacement(undo)?
+            {
+                return Ok(true);
+            }
+            if tr.delete_selection()? {
+                return Ok(true);
+            }
+            if tr.delete_text_backward()? {
+                return Ok(true);
+            }
+            if tr.join_backward()? {
+                return Ok(true);
+            }
+            if tr.merge_list_item_backward()? {
+                return Ok(true);
+            }
+            if tr.lift_list_item()? {
+                return Ok(true);
+            }
+            tr.lift()
+        })
+    }
+
+    pub fn handle_delete_forward(&mut self) -> Vec<Effect> {
+        self.transact(|tr| {
+            if tr.delete_selection()? {
+                return Ok(true);
+            }
+            if tr.delete_text_forward()? {
+                return Ok(true);
+            }
+            if tr.merge_list_item_forward()? {
+                return Ok(true);
+            }
+            tr.join_forward()
+        })
+    }
+
+    pub fn handle_delete_word_backward(&mut self) -> Vec<Effect> {
+        if !self.state.selection.is_collapsed() {
+            return self.transact(|tr| tr.delete_selection());
+        }
+
+        let ctx = NavigationContext::new(&self.state.doc);
+        let Some((_, rect)) = Cursor::bounds(&ctx, self.pages(), self.state.selection.head) else {
+            return vec![];
+        };
+        let preferred_y = rect.y;
+
+        let Some(end_selection) =
+            Cursor::move_word_left(&ctx, self.pages(), self.state.selection.head, preferred_y)
+        else {
+            return vec![];
+        };
+
+        if !end_selection.is_collapsed() {
+            return vec![];
+        }
+
+        let end_position = end_selection.head;
+
+        if end_position.node_id != self.state.selection.head.node_id {
+            return self.handle_delete_backward(None);
+        }
+
+        let selection = self.state.selection;
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(end_position, selection.head));
+            tr.delete_selection()
+        })
+    }
+
+    pub fn handle_delete_word_forward(&mut self) -> Vec<Effect> {
+        if !self.state.selection.is_collapsed() {
+            return self.transact(|tr| tr.delete_selection());
+        }
+
+        let ctx = NavigationContext::new(&self.state.doc);
+        let Some((_, rect)) = Cursor::bounds(&ctx, self.pages(), self.state.selection.head) else {
+            return vec![];
+        };
+        let preferred_y = rect.y + rect.height;
+
+        let Some(end_selection) =
+            Cursor::move_word_right(&ctx, self.pages(), self.state.selection.head, preferred_y)
+        else {
+            return vec![];
+        };
+
+        if !end_selection.is_collapsed() {
+            return vec![];
+        }
+
+        let end_position = end_selection.head;
+
+        if end_position.node_id != self.state.selection.head.node_id {
+            return self.handle_delete_forward();
+        }
+
+        let selection = self.state.selection;
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(selection.head, end_position));
+            tr.delete_selection()
+        })
+    }
+
+    pub fn handle_delete_sentence_backward(&mut self) -> Vec<Effect> {
+        if !self.state.selection.is_collapsed() {
+            return self.transact(|tr| tr.delete_selection());
+        }
+
+        let ctx = NavigationContext::new(&self.state.doc);
+        let Some((_, rect)) = Cursor::bounds(&ctx, self.pages(), self.state.selection.head) else {
+            return vec![];
+        };
+        let preferred_y = rect.y;
+
+        let Some(end_selection) =
+            Cursor::move_sentence_up(&ctx, self.pages(), self.state.selection.head, preferred_y)
+        else {
+            return vec![];
+        };
+
+        if !end_selection.is_collapsed() {
+            return vec![];
+        }
+
+        let end_position = end_selection.head;
+
+        if end_position.node_id != self.state.selection.head.node_id {
+            return self.handle_delete_backward(None);
+        }
+
+        let selection = self.state.selection;
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(end_position, selection.head));
+            tr.delete_selection()
+        })
+    }
+
+    pub fn handle_delete_to_line_start(&mut self) -> Vec<Effect> {
+        if !self.state.selection.is_collapsed() {
+            return self.transact(|tr| tr.delete_selection());
+        }
+
+        let ctx = NavigationContext::new(&self.state.doc);
+        let Some(line_start_selection) =
+            Cursor::move_to_line_start(&ctx, self.pages(), self.state.selection.head)
+        else {
+            return vec![];
+        };
+        let line_start = line_start_selection.head;
+
+        let selection = self.state.selection;
+        self.transact(move |tr| {
+            tr.set_selection(Selection::new(line_start, selection.head));
+            tr.delete_selection()
+        })
+    }
+
+    pub fn handle_delete_node(&mut self, node_id: String) -> Vec<Effect> {
+        let Some(node_id) = NodeId::from_string(&node_id) else {
+            return vec![];
+        };
+
+        let is_external = self
+            .doc()
+            .node(node_id)
+            .map(|n| n.node().map_or(false, |node| node.is_external()))
+            .unwrap_or(false);
+
+        self.transact(move |tr| {
+            if is_external {
+                tr.push_effect(Effect::ExternalElementChanged);
+            }
+
+            tr.delete_node_with_selection_adjustment(node_id)?;
+
+            Ok(true)
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::CalloutVariant;
+    use crate::runtime::Message;
+    use crate::types::Affinity;
+
+    #[test]
+    fn test_delete_word_backward_after_horizontal_rule_does_nothing() {
+        let mut p = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                horizontal_rule {}
+                @p paragraph {
+                    text { "hello" }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteWordBackward);
+
+        let selection = &rt.state().selection;
+        assert_eq!(selection.anchor.node_id, p);
+        assert_eq!(selection.anchor.offset, 0);
+        assert_eq!(selection.head.node_id, p);
+        assert_eq!(selection.head.offset, 0);
+    }
+
+    #[test]
+    fn test_delete_word_backward_removes_paragraph_break() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+            }
+            selection { (p2, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteWordBackward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "helloworld" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_word_forward_removes_paragraph_break() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteWordForward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "helloworld" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_sentence_backward_removes_paragraph_break() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "hello" } }
+                @p2 paragraph { text { "world" } }
+            }
+            selection { (p2, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteSentenceBackward);
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @p1 paragraph { text { "helloworld" } }
+            }
+            selection { (p1, 5) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_backward_at_start_of_first_paragraph_in_fold_does_nothing() {
+        let mut n1 = id!();
+        let mut fold_id = id!();
+
+        let initial = state! {
+            doc {
+                paragraph {}
+                @fold_id fold {
+                    fold_title {
+                        text { "title" }
+                    }
+                    fold_content {
+                        @n1 paragraph {}
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph {}
+                @fold_id fold {
+                    fold_title {
+                        text { "title" }
+                    }
+                    fold_content {
+                        @n1 paragraph {}
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        assert_state_eq!(*rt.state(), initial);
+    }
+
+    #[test]
+    fn test_delete_selection_across_isolating_boundaries() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @n1 paragraph { text { "11" } }
+                fold {
+                    fold_title { text { "22" } }
+                    fold_content {
+                        @n2 paragraph { text { "33" } }
+                    }
+                }
+                paragraph { text { "44" } }
+            }
+            selection { (n1, 1) -> (n2, 1) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @n1 paragraph { text { "1" } }
+                paragraph { text { "44" } }
+            }
+            selection { (n1, 1) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_selection_across_isolating_boundaries_2() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                paragraph { text { "11" } }
+                fold {
+                    @n1 fold_title { text { "22" } }
+                    fold_content {
+                        paragraph { text { "33" } }
+                    }
+                }
+                @n2 paragraph { text { "44" } }
+            }
+            selection { (n1, 1) -> (n2, 1) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                paragraph { text { "11" } }
+                @n2 paragraph { text { "4" } }
+            }
+            selection { (n2, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_selection_containing_whole_fold() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @n1 paragraph { text { "11" } }
+                fold {
+                    fold_title { text { "22" } }
+                    fold_content {
+                        paragraph { text { "33" } }
+                    }
+                }
+                @n2 paragraph { text { "44" } }
+            }
+            selection { (n1, 1) -> (n2, 1) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @n1 paragraph { text { "14" } }
+            }
+            selection { (n1, 1) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_selection_fold_with_non_textblock() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                fold {
+                    @n1 fold_title { text { "11" } }
+                    fold_content {
+                        paragraph { text { "22" } }
+                        bullet_list {
+                            list_item {
+                                @n2 paragraph { text { "33" } }
+                            }
+                        }
+                    }
+                }
+            }
+            selection { (n1, 1) -> (n2, 1) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                fold {
+                    @n1 fold_title { text { "1" } }
+                    fold_content {
+                        @n2 paragraph { text { "3" } }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 1) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_selection_from_fold_paragraph_into_table_start() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        @n1 paragraph {}
+                        table {
+                            table_row {
+                                table_cell {
+                                    @n2 paragraph {}
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                fold {
+                    fold_title {}
+                    fold_content {
+                        @n1 paragraph {}
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_backward_reverse_selection_from_list_item_start_to_prev_paragraph() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @n1 paragraph {}
+                bullet_list {
+                    list_item {
+                        @n2 paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 0) -> (n1, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @n1 paragraph {
+                    text { "a" }
+                }
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "b" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn test_delete_backward_reverse_selection_from_nested_list_item_start_to_prev_paragraph() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @n1 paragraph {}
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "1" }
+                        }
+                        bullet_list {
+                            list_item {
+                                @n2 paragraph {
+                                    text { "2" }
+                                }
+                                bullet_list {
+                                    list_item {
+                                        paragraph {
+                                            text { "3" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 0) -> (n1, 0) }
+        };
+
+        rt.layout();
+        rt.update(Message::DeleteBackward { length: None });
+        rt.tick();
+
+        let expected = state! {
+            doc {
+                @n1 paragraph {
+                    text { "2" }
+                }
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "3" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(*rt.state(), expected);
+    }
+
+    #[test]
+    fn delete_selection_nested_list_crossing_outside_deletes_outer_list_item() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let initial = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        @n1 paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+        let expected = state! {
+            doc {
+                @n1 paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_selection_across_two_list_items_mid_offsets_deletes_right_list_item() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+
+        let initial = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        @p1 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                    list_item {
+                        @p2 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (p1, 2) -> (p2, 2) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+
+        let expected = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        @p1 paragraph {
+                            text { "asdf" }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (p1, 2) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_selection_nested_list_cross_to_outside_deletes_only_one_list_item() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let initial = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                            list_item {
+                                @n1 paragraph {
+                                    text { "c" }
+                                }
+                            }
+                        }
+                    }
+                    list_item {
+                        paragraph {
+                            text { "d" }
+                        }
+                    }
+                }
+                @n2 paragraph {}
+            }
+            selection { (n1, 0) -> (n2, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+
+        let expected = state! {
+            doc {
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "a" }
+                        }
+                        bullet_list {
+                            list_item {
+                                paragraph {
+                                    text { "b" }
+                                }
+                            }
+                            list_item {
+                                @n1 paragraph {}
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 0) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn delete_selection_deep_nested_list_reverse_upstream_affinity_deletes_range() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+
+        let initial = state! {
+            doc {
+                paragraph {}
+                bullet_list {
+                    list_item {
+                        paragraph {
+                            text { "3" }
+                        }
+                        bullet_list {
+                            list_item {
+                                @n1 paragraph {
+                                    text { "4" }
+                                }
+                                bullet_list {
+                                    list_item {
+                                        paragraph {
+                                            text { "6" }
+                                        }
+                                        bullet_list {
+                                            list_item {
+                                                @n2 paragraph {
+                                                    text { "7" }
+                                                }
+                                                bullet_list {
+                                                    list_item {
+                                                        paragraph {
+                                                            text { "8" }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n2, 1, Affinity::Upstream) -> (n1, 0) }
+        };
+
+        let actual = transact!(initial, |tr| tr.delete_selection().unwrap());
+        let plain_text = actual.doc.to_plain_text();
+
+        assert!(actual.selection.is_collapsed());
+        assert!(plain_text.contains('3'));
+        assert!(plain_text.contains('8'));
+        assert!(!plain_text.contains('4'));
+        assert!(!plain_text.contains('6'));
+        assert!(!plain_text.contains('7'));
+    }
+
+    #[test]
+    fn test_delete_selection_callout_with_two_lines() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+        let mut callout = id!();
+
+        let initial = state! {
+            doc {
+                @n1 paragraph {
+                    text { "outside" }
+                }
+                @callout callout(variant: CalloutVariant::Success,) {
+                    @n2 paragraph {
+                        text { "line 1" }
+                    }
+                    paragraph {
+                        text { "line 2" }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 3) -> (n2, 5) }
+        };
+
+        let (actual, effects) = transact_with_effect!(initial, |tr| tr.delete_selection().unwrap());
+
+        let has_item_changed = effects
+            .iter()
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == callout));
+
+        assert!(
+            has_item_changed,
+            "Effect::NodeChanged should be emitted for the callout"
+        );
+
+        let has_item_changed_2 = effects
+            .iter()
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == n1));
+
+        assert!(
+            has_item_changed_2,
+            "Effect::NodeChanged should be emitted for the paragraph"
+        );
+
+        let has_item_changed_3 = effects
+            .iter()
+            .any(|e| matches!(e, Effect::NodeMutated { node_id, kind: crate::runtime::MutationKind::Attr } if *node_id == n2));
+
+        assert!(
+            has_item_changed_3,
+            "Effect::NodeChanged should be emitted for the paragraph"
+        );
+
+        let expected = state! {
+            doc {
+                @n1 paragraph {
+                    text { "out1" }
+                }
+                callout(variant: CalloutVariant::Success,) {
+                    paragraph {
+                        text { "line 2" }
+                    }
+                }
+                paragraph {}
+            }
+            selection { (n1, 3) }
+        };
+
+        assert_state_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_delete_selected_image_adjusts_selection() {
+        let mut p1 = id!();
+        let mut img = id!();
+        let mut p2 = id!();
+
+        let mut rt = runtime! {
+            viewport { 800, 600, 1.0 }
+            doc {
+                @p1 paragraph { text { "before" } }
+                @img image(id: Some("test-image-id".to_string()),) {}
+                @p2 paragraph { text { "after" } }
+            }
+            selection { (NodeId::ROOT, 1) -> (NodeId::ROOT, 2) }
+        };
+
+        rt.layout();
+
+        let doc = rt.doc();
+        assert!(doc.node(img).is_some());
+
+        rt.handle_delete_node(img.to_string());
+
+        let doc = rt.doc();
+        assert!(doc.node(img).is_none());
+
+        let selection = rt.selection();
+
+        assert_eq!(selection.anchor.node_id, p2);
+        assert_eq!(selection.anchor.offset, 0);
+        assert!(selection.is_collapsed());
+    }
+}

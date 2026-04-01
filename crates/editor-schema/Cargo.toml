@@ -1,0 +1,11 @@
+[package]
+name = "editor-schema"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model" }
+enum-map.workspace = true
+log.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,96 @@
+workspace_dir := justfile_directory() / "../.."
+target_dir := workspace_dir / "target"
+mobile_dir := workspace_dir / "apps/mobile2"
+generated_dir := mobile_dir / "generated/uniffi"
+
+crate := "editor_ffi"
+mode := "release"
+profile := if mode == "debug" { "dev" } else { "release" }
+
+host_target := `rustc --print host-tuple`
+cdylib_ext := if os() == "macos" { "dylib" } else { "so" }
+
+[private]
+default:
+    @just --list
+
+# Build all platforms
+all: jvm android ios wasm
+
+# Build Android + iOS
+mobile: android ios
+
+# Build JVM
+jvm: bindings-kotlin
+    just icu-datagen {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} {{mobile_dir}}/compose/src/jvmMain/resources/icu.zst
+
+# Build Android
+android: bindings-kotlin (ensure "cargo-ndk")
+    rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+    cargo ndk \
+        -t arm64-v8a -t armeabi-v7a -t x86_64 \
+        -o {{mobile_dir}}/android/src/main/jniLibs \
+        build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}}-uniffi --features uniffi
+    just icu-datagen {{mobile_dir}}/android/src/main/jniLibs/arm64-v8a/lib{{crate}}.so {{mobile_dir}}/android/src/main/assets/icu.zst
+
+# Build iOS
+ios: bindings-swift (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim") (ensure "uniffi-bindgen-swift" "uniffi --features cli")
+    #!/usr/bin/env bash
+    set -e
+    headers=$(mktemp -d)
+    uniffi-bindgen-swift {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} \
+        "$headers" --headers --modulemap --modulemap-filename module.modulemap --module-name EditorFFI
+    mkdir -p {{mobile_dir}}/ios/Frameworks
+    rm -rf {{mobile_dir}}/ios/Frameworks/Editor.xcframework
+    xcodebuild -create-xcframework \
+        -library {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.a -headers "$headers" \
+        -library {{target_dir}}/aarch64-apple-ios-sim/{{profile}}-uniffi/lib{{crate}}.a -headers "$headers" \
+        -output {{mobile_dir}}/ios/Frameworks/Editor.xcframework
+    rm -rf "$headers"
+    just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.dylib {{mobile_dir}}/ios/Resources/icu.zst
+
+# Build WASM
+wasm: (build "wasm" "wasm32-unknown-unknown") (ensure "wasm-bindgen" "wasm-bindgen-cli") (ensure "wasm-opt")
+    #!/usr/bin/env bash
+    set -e
+    wasm-bindgen --target module --out-dir {{justfile_directory()}}/pkg \
+        {{target_dir}}/wasm32-unknown-unknown/{{profile}}-wasm/{{crate}}.wasm
+    cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/{{crate}}
+    if [ "{{mode}}" = "release" ]; then
+        wasm-opt -Os --all-features -o {{justfile_directory()}}/pkg/{{crate}}_bg.wasm \
+            {{justfile_directory()}}/pkg/{{crate}}_bg.wasm
+    fi
+    just icu-datagen {{justfile_directory()}}/pkg/{{crate}}_bg.wasm {{justfile_directory()}}/pkg/icu.zst
+
+[private]
+ensure cmd *install:
+    #!/usr/bin/env bash
+    command -v {{cmd}} &> /dev/null || cargo install {{ if install == "" { cmd } else { install } }}
+
+[private]
+build features target:
+    rustup target add {{target}}
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}}-{{features}} --features {{features}} --target {{target}}
+
+[private]
+icu-datagen binary output: (ensure "icu4x-datagen")
+    mkdir -p "$(dirname "{{output}}")"
+    RUST_LOG=off icu4x-datagen --markers-for-bin "{{binary}}" --format blob | zstd -19 -f -o "{{output}}"
+
+[private]
+bindings-kotlin: host (ensure "uniffi-bindgen" "uniffi --features cli")
+    mkdir -p {{generated_dir}}/kotlin
+    uniffi-bindgen generate \
+        --library {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} \
+        --language kotlin --out-dir {{generated_dir}}/kotlin/ --no-format
+
+[private]
+bindings-swift: host (ensure "uniffi-bindgen" "uniffi --features cli")
+    mkdir -p {{generated_dir}}/swift
+    uniffi-bindgen-swift {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} \
+        {{generated_dir}}/swift --swift-sources
+
+[private]
+host: (build "uniffi" host_target)

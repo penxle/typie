@@ -2,3 +2,5 @@ packages:
   - apps/*
   - crates/*
   - packages/*
+  - legacy/*
+  - assets
