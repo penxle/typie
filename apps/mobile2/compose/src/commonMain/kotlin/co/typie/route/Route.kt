@@ -9,6 +9,9 @@ sealed interface Route {
   data object Notes : Route
   data object More : Route
   data object Stats : Route
+  data object CurrentPlan : Route
+  data object EnrollPlan : Route
+  data object CancelPlan : Route
   data object UpdateEmail : Route
   data object UpdateProfile : Route
   data object UpdatePassword : Route
@@ -21,6 +24,7 @@ sealed interface Route {
   data object OssLicenses : Route
   data object FontSettings : Route
   data object EditorSettings : Route
+  data object TextReplacements : Route
   data object WidgetSettings : Route
   data object AiSettings : Route
   data object SpaceSettings : Route
@@ -39,6 +43,7 @@ val Route.toastBottomInset: Dp
     is Route.UpdatePassword,
     is Route.SocialAccounts,
     is Route.Referral,
+    is Route.EnrollPlan,
     is Route.FontSettings,
     is Route.SpaceSettings -> 64.dp // 하단 버튼이 있는 스크린
     else -> 0.dp // 그 외

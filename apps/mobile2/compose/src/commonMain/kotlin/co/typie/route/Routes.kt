@@ -19,12 +19,16 @@ import co.typie.screen.settings.SettingsScreen
 import co.typie.screen.social_accounts.SocialAccountsScreen
 import co.typie.screen.space.SpaceScreen
 import co.typie.screen.stats.StatsScreen
+import co.typie.screen.subscription.CancelPlanScreen
+import co.typie.screen.subscription.CurrentPlanScreen
+import co.typie.screen.subscription.EnrollPlanScreen
 import co.typie.screen.subscription.ReferralScreen
 import co.typie.screen.space_settings.SpaceSettingsScreen
 import co.typie.screen.update_email.UpdateEmailScreen
 import co.typie.screen.update_password.UpdatePasswordScreen
 import co.typie.screen.update_profile.UpdateProfileScreen
 import co.typie.screen.widget_settings.WidgetSettingsScreen
+import co.typie.screen.text_replacements.TextReplacementsScreen
 
 @Composable
 fun MainRoutes(route: Route) {
@@ -34,6 +38,9 @@ fun MainRoutes(route: Route) {
     is Route.Notes -> NotesScreen()
     is Route.More -> MoreScreen()
     is Route.Stats -> StatsScreen()
+    is Route.CurrentPlan -> CurrentPlanScreen()
+    is Route.EnrollPlan -> EnrollPlanScreen()
+    is Route.CancelPlan -> CancelPlanScreen()
     is Route.Referral -> ReferralScreen()
     is Route.Settings -> SettingsScreen()
     is Route.OssLicenses -> OssLicensesScreen()
@@ -42,6 +49,7 @@ fun MainRoutes(route: Route) {
     is Route.SecuritySettings -> SecuritySettingsScreen()
     is Route.DeleteUser -> DeleteUserScreen()
     is Route.EditorSettings -> EditorSettingsScreen()
+    is Route.TextReplacements -> TextReplacementsScreen()
     is Route.WidgetSettings -> WidgetSettingsScreen()
     is Route.AiSettings -> AiSettingsScreen()
     is Route.SocialAccounts -> SocialAccountsScreen()

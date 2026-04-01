@@ -1,10 +1,9 @@
-package co.typie.screen.more
+package co.typie.screen.settings
 
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.GraphQLViewModel
-import co.typie.graphql.MoreScreen_Query
 import co.typie.graphql.PlaceholderResolver
-import co.typie.graphql.text
+import co.typie.graphql.SettingsScreen_Query
 import co.typie.graphql.type.buildUser
 import co.typie.screen.subscription.SubscriptionSync
 import kotlinx.coroutines.flow.collect
@@ -12,10 +11,10 @@ import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
-class MoreViewModel(
+class SettingsViewModel(
   private val subscriptionSync: SubscriptionSync,
 ) : GraphQLViewModel() {
-  val query = watchQuery(placeholderData()) { MoreScreen_Query() }
+  val query = watchQuery(placeholderData()) { SettingsScreen_Query() }
 
   init {
     viewModelScope.launch {
@@ -26,10 +25,8 @@ class MoreViewModel(
   }
 }
 
-private fun placeholderData() = MoreScreen_Query.Data(PlaceholderResolver) {
+private fun placeholderData() = SettingsScreen_Query.Data(PlaceholderResolver) {
   me = buildUser {
-    name = text(3..6)
-    email = text(10..20)
-    characterCountChanges = emptyList()
+    subscription = null
   }
 }

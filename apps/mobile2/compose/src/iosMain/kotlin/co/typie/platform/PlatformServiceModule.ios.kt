@@ -45,6 +45,9 @@ actual class PlatformServiceModule {
   actual fun fileSystem(ctx: PlatformContext): FileSystem = IOSFileSystem()
 
   @Single
+  actual fun purchaseService(ctx: PlatformContext): PurchaseService = IOSPurchaseService()
+
+  @Single
   actual fun share(ctx: PlatformContext): Share = IOSShare()
 }
 

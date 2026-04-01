@@ -26,6 +26,10 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
+import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.subscriptionEntryDestination
+import co.typie.screen.subscription.subscriptionRoute
+import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.ui.component.ActivityGrid
 import co.typie.ui.component.ActivityGridChange
 import co.typie.ui.component.ActivityGridHeight
@@ -47,6 +51,7 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -54,6 +59,7 @@ fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
+  val subscriptionService = koinInject<SubscriptionService>()
 
   val model = koinViewModel<MoreViewModel>()
 
@@ -66,15 +72,16 @@ fun MoreScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (model.query.state is QueryState.Error) {
+  if (subscriptionService.hasQueryError(model.query.state)) {
     ErrorDialog { model.query.refetch() }
   }
 
   Screen(
-    loading = model.query.state !is QueryState.Success,
+    loading = subscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
   ) { contentPadding ->
     val data = model.query.data
+    val subscriptionSummary = subscriptionService.summary(data.me.subscription?.toSubscriptionSnapshot())
 
     Column(
       modifier = Modifier
@@ -84,9 +91,7 @@ fun MoreScreen() {
         .navigationBarsPadding(),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      val hasSubscription = data.me.subscription != null
-      val subscriptionName = data.me.subscription?.plan?.name ?: "타이피 BASIC ACCESS"
-      val subscriptionActionLabel = if (hasSubscription) "이용권 정보" else "구매하기"
+      val subscriptionActionLabel = if (subscriptionSummary.hasSubscription) "이용권 정보" else "구매하기"
 
       val activityChanges = data.me.characterCountChanges.map { change ->
         ActivityGridChange(
@@ -218,7 +223,13 @@ fun MoreScreen() {
       ) {
         Column {
           CardRow(
-            onClick = {},
+            onClick = {
+              nav.navigate(
+                subscriptionRoute(
+                  subscriptionEntryDestination(hasSubscription = subscriptionSummary.hasSubscription),
+                ),
+              )
+            },
           ) {
             Skeleton.Unite {
               Icon(
@@ -239,7 +250,7 @@ fun MoreScreen() {
                 )
 
                 Text(
-                  subscriptionName,
+                  subscriptionSummary.subscriptionName,
                   style = AppTheme.typography.caption,
                   color = AppTheme.colors.textTertiary,
                   maxLines = 1,
@@ -378,7 +389,7 @@ fun MoreScreen() {
         modifier = Modifier.fillMaxWidth(),
       ) {
         Column {
-          if (hasSubscription) {
+          if (subscriptionSummary.hasSubscription) {
             CardRow(
               onClick = { uriHandler.openUri("https://typie.link/community") },
             ) {

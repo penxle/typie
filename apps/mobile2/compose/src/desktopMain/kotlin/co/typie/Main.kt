@@ -22,6 +22,7 @@ import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
 import co.typie.dev.createDevToolsWindow
 import co.typie.di.initKoin
+import co.typie.screen.subscription.SubscriptionDevSandbox
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
@@ -199,7 +200,11 @@ fun main() {
     LaunchedEffect(Unit) {
       SwingUtilities.invokeLater {
         val mainWindow = java.awt.Window.getWindows().first()
-        createDevToolsWindow(mainWindow, networkSimulator)
+        createDevToolsWindow(
+          mainWindow = mainWindow,
+          networkSimulator = networkSimulator,
+          subscriptionDevSandbox = getKoin().get<SubscriptionDevSandbox>(),
+        )
       }
     }
   }

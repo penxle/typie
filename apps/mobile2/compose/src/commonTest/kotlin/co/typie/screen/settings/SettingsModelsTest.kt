@@ -69,6 +69,26 @@ class SettingsModelsTest {
   }
 
   @Test
+  fun `settingsSections configures text replacements route`() {
+    val item = settingsSections()
+      .first { it.title == "환경" }
+      .items
+      .first { it.label == "텍스트 대치" }
+
+    assertSame(Route.TextReplacements, settingsRouteFor(item))
+  }
+
+  @Test
+  fun `settingsSections configures plan as dedicated action`() {
+    val item = settingsSections()
+      .first { it.title == "구독" }
+      .items
+      .first { it.label == "플랜" }
+
+    assertEquals(SettingsItemAction.Plan, item.action)
+  }
+
+  @Test
   fun `settingsTrailingIcon uses external link icon for external urls`() {
     assertSame(Lucide.ExternalLink, settingsTrailingIcon(SettingsItem("이용약관", externalUrl = "https://typie.co/legal/terms")))
     assertSame(Lucide.ChevronRight, settingsTrailingIcon(SettingsItem("프로필", route = co.typie.route.Route.ProfileSettings)))

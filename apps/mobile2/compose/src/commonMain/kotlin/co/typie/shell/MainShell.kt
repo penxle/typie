@@ -55,6 +55,7 @@ import co.typie.navigation.Navigator
 import co.typie.overlay.Toast
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
+import co.typie.shell.marketing_consent.MarketingConsentGate
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
@@ -137,6 +138,8 @@ fun MainShell(content: @Composable (Route) -> Unit) {
       }
     }
   }
+
+  MarketingConsentGate()
 }
 
 @Composable

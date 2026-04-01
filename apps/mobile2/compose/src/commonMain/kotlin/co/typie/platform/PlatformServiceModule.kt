@@ -9,5 +9,6 @@ expect class PlatformServiceModule() {
   @Single fun clipboard(ctx: PlatformContext): Clipboard
   @Single fun deviceInfo(ctx: PlatformContext): DeviceInfo
   @Single fun fileSystem(ctx: PlatformContext): FileSystem
+  @Single fun purchaseService(ctx: PlatformContext): PurchaseService
   @Single fun share(ctx: PlatformContext): Share
 }

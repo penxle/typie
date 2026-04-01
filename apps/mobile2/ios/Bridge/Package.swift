@@ -42,6 +42,10 @@ let package = Package(
           package: "naveridlogin-sdk-ios-swift"
         ),
       ],
-    )
+    ),
+    .testTarget(
+      name: "BridgeTests",
+      dependencies: ["Bridge"],
+    ),
   ],
 )

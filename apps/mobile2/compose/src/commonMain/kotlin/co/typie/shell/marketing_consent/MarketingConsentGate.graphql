@@ -1,0 +1,17 @@
+query MarketingConsentGate_Query {
+  me @catch(to: THROW) {
+    id
+    marketingConsentAskedAt
+    usage {
+      totalCharacterCount
+    }
+  }
+}
+
+mutation MarketingConsentGate_UpdateMarketingConsent_Mutation($input: UpdateMarketingConsentInput!) {
+  updateMarketingConsent(input: $input) {
+    id
+    marketingConsent
+    marketingConsentAskedAt
+  }
+}

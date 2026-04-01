@@ -37,6 +37,8 @@
     "naver*.html",
     "apps/mobile/android",
     "apps/mobile/ios",
+    "apps/mobile2/android",
+    "apps/mobile2/ios",
     "apps/infrastructure/scripts",
     "packages/styled-system/styled-system",
     ".claude/**",

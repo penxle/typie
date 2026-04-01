@@ -1,0 +1,16 @@
+query CancelPlanScreen_Query {
+  me @catch(to: THROW) {
+    id
+
+    subscription {
+      id
+      state
+      expiresAt
+
+      plan {
+        id
+        name
+      }
+    }
+  }
+}

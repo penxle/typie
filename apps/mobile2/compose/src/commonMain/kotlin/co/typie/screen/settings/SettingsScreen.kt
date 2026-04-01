@@ -26,17 +26,23 @@ import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
+import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.DeviceInfo
 import co.typie.route.Route
+import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.subscriptionEntryDestination
+import co.typie.screen.subscription.subscriptionRoute
+import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.service.DeveloperPreferencesService
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ConfirmModal
+import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingSwitch
@@ -54,6 +60,7 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 
 data class SettingsItem(
   val label: String,
@@ -69,6 +76,7 @@ data class SettingsSection(
 
 enum class SettingsItemAction {
   Theme,
+  Plan,
   DeveloperMode,
   Logout,
   VersionInfo,
@@ -201,8 +209,7 @@ internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSec
           SettingsItem("폰트", route = Route.FontSettings),
           // TODO: 프리셋 화면 연결
           SettingsItem("프리셋"),
-          // TODO: 텍스트 대치 화면 연결
-          SettingsItem("텍스트 대치"),
+          SettingsItem("텍스트 대치", route = Route.TextReplacements),
         ),
       ),
     )
@@ -210,8 +217,7 @@ internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSec
       SettingsSection(
         title = "구독",
         items = listOf(
-          // TODO: 플랜 화면 연결
-          SettingsItem("플랜"),
+          SettingsItem("플랜", action = SettingsItemAction.Plan),
           SettingsItem("초대", route = Route.Referral),
         ),
       ),
@@ -262,6 +268,8 @@ fun SettingsScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
+  val subscriptionService = koinInject<SubscriptionService>()
+  val model = koinViewModel<SettingsViewModel>()
   val authService = koinInject<AuthService>()
   val deviceInfo = koinInject<DeviceInfo>()
   val developerPreferences = koinInject<DeveloperPreferencesService>()
@@ -273,6 +281,10 @@ fun SettingsScreen() {
   var appVersion by remember { mutableStateOf<String?>(null) }
   var devModeTapCount by remember { mutableStateOf(0) }
   var showLogoutConfirm by remember { mutableStateOf(false) }
+
+  if (subscriptionService.hasQueryError(model.query.state)) {
+    ErrorDialog { model.query.refetch() }
+  }
 
   LaunchedEffect(deviceInfo) {
     appVersion = runCatching {
@@ -287,8 +299,11 @@ fun SettingsScreen() {
   )
 
   Screen(
+    loading = subscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
   ) { contentPadding ->
+    val hasSubscription = subscriptionService.hasSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot())
+
     Column(
       modifier = Modifier
         .fillMaxSize()
@@ -346,6 +361,12 @@ fun SettingsScreen() {
               nav.navigate(route)
             } else if (item.externalUrl != null) {
               uriHandler.openUri(item.externalUrl)
+            } else if (item.action == SettingsItemAction.Plan) {
+              nav.navigate(
+                subscriptionRoute(
+                  subscriptionEntryDestination(hasSubscription = hasSubscription),
+                ),
+              )
             } else if (item.action == SettingsItemAction.Logout) {
               showLogoutConfirm = true
             } else {

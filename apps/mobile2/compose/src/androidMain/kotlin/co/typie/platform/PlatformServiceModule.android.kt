@@ -29,6 +29,9 @@ actual class PlatformServiceModule {
   actual fun fileSystem(ctx: PlatformContext): FileSystem = AndroidFileSystem(ctx.context)
 
   @Single
+  actual fun purchaseService(ctx: PlatformContext): PurchaseService = AndroidPurchaseService(ctx.context)
+
+  @Single
   actual fun share(ctx: PlatformContext): Share = AndroidShare(ctx.context)
 }
 

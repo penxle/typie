@@ -9,7 +9,7 @@ object BottomSheetDefaults {
   val TopCornerRadius = 22.dp
   val HandleWidth = 36.dp
   val HandleHeight = 4.dp
-  val HandleTopPadding = 12.dp
+  val HandleTopPadding = 8.dp
   const val MaxHeightFraction = 0.9f
   const val ScrimAlpha = 0.4f
   const val EnterDuration = 320

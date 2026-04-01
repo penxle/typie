@@ -102,6 +102,7 @@ kotlin {
         implementation(libs.androidx.activity.compose)
         implementation(libs.androidx.credentials)
         implementation(libs.androidx.credentials.playServicesAuth)
+        implementation(libs.billing.ktx)
         implementation(libs.googleid)
         implementation(libs.kakao.user)
         implementation(libs.naver.oauth)
@@ -116,6 +117,8 @@ kotlin {
     }
 
     val desktopMain by getting {
+      resources.srcDir("src/jvmMain/resources")
+
       dependencies {
         implementation(compose.desktop.currentOs)
         implementation(libs.jna)

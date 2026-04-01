@@ -1,0 +1,79 @@
+query TextReplacementsScreen_Query {
+  me @catch(to: THROW) {
+    id
+    textReplacements {
+      __typename
+      ... on TextReplacement {
+        id
+        match
+        substitute
+        regex
+        preset
+        note
+        order
+      }
+      ... on TextReplacementPreference {
+        id
+        state
+        order
+        textReplacement {
+          id
+          match
+          substitute
+          regex
+          preset
+          note
+          order
+        }
+      }
+    }
+  }
+}
+
+mutation TextReplacementsScreen_CreateTextReplacement_Mutation($input: CreateTextReplacementInput!) {
+  createTextReplacement(input: $input) {
+    __typename
+    ... on TextReplacement {
+      id
+    }
+    ... on TextReplacementPreference {
+      id
+    }
+  }
+}
+
+mutation TextReplacementsScreen_UpdateTextReplacement_Mutation($input: UpdateTextReplacementInput!) {
+  updateTextReplacement(input: $input) {
+    __typename
+    ... on TextReplacement {
+      id
+    }
+    ... on TextReplacementPreference {
+      id
+    }
+  }
+}
+
+mutation TextReplacementsScreen_MoveTextReplacement_Mutation($input: MoveTextReplacementInput!) {
+  moveTextReplacement(input: $input) {
+    __typename
+    ... on TextReplacement {
+      id
+    }
+    ... on TextReplacementPreference {
+      id
+    }
+  }
+}
+
+mutation TextReplacementsScreen_DeleteTextReplacement_Mutation($input: DeleteTextReplacementInput!) {
+  deleteTextReplacement(input: $input) {
+    __typename
+    ... on TextReplacement {
+      id
+    }
+    ... on TextReplacementPreference {
+      id
+    }
+  }
+}

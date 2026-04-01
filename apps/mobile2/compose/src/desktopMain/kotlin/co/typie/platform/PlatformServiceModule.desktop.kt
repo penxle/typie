@@ -26,6 +26,9 @@ actual class PlatformServiceModule {
   actual fun fileSystem(ctx: PlatformContext): FileSystem = DesktopFileSystem()
 
   @Single
+  actual fun purchaseService(ctx: PlatformContext): PurchaseService = DesktopPurchaseService()
+
+  @Single
   actual fun share(ctx: PlatformContext): Share = DesktopShare()
 }
 

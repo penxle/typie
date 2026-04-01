@@ -9,6 +9,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import co.typie.auth.AuthService
 import co.typie.auth.AuthState
+import co.typie.platform.PurchaseActivityHolder
 import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
@@ -23,6 +24,16 @@ class MainActivity : ComponentActivity() {
     setContent {
       App()
     }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    PurchaseActivityHolder.attach(this)
+  }
+
+  override fun onPause() {
+    PurchaseActivityHolder.detach(this)
+    super.onPause()
   }
 }
 

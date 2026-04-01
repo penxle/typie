@@ -1,0 +1,20 @@
+query CurrentPlanScreen_Query {
+  me @catch(to: THROW) {
+    id
+    credit
+
+    subscription {
+      id
+      state
+      startsAt
+      expiresAt
+
+      plan {
+        id
+        name
+        fee
+        availability
+      }
+    }
+  }
+}
