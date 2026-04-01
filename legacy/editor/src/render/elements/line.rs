@@ -1,0 +1,1318 @@
+use crate::global::{GLOBALS, TextBrush};
+use crate::layout::elements::LineElement;
+use crate::render::glyph::Glyph;
+use crate::render::sink::RenderSink;
+use crate::render::{Render, RenderParams, RenderPhase};
+use crate::types::Point;
+use crate::types::theme::Color;
+use kurbo::{Affine, Cap, Join, Stroke};
+use macros::svg_icon_path;
+use peniko::Brush;
+
+fn create_solid_brush(color: Color) -> Brush {
+    Brush::Solid(color)
+}
+
+fn text_for_run<'a>(source_text: &'a str, run: &parley::layout::Run<'_, TextBrush>) -> &'a str {
+    let text_range = run.text_range();
+    if text_range.start >= text_range.end {
+        return "";
+    }
+    source_text.get(text_range).unwrap_or("")
+}
+
+impl LineElement {
+    fn preedit_underline_rect(&self, point: Point) -> Option<kurbo::Rect> {
+        let preedit = self.preedit.as_ref()?;
+        if preedit.node_id != self.block_id {
+            return None;
+        }
+
+        let preedit_len = bytecount::num_chars(preedit.text.as_bytes());
+        if preedit_len == 0 {
+            return None;
+        }
+
+        let preedit_start = preedit.offset;
+        let preedit_end = preedit_start + preedit_len;
+
+        let mut min_x = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut found_overlap = false;
+
+        for cluster in &self.metric.clusters {
+            if cluster.start_offset < preedit_end && cluster.end_offset > preedit_start {
+                found_overlap = true;
+                let cluster_x = self.metric.left + cluster.x;
+                min_x = min_x.min(cluster_x);
+                max_x = max_x.max(cluster_x + cluster.width);
+            }
+        }
+
+        if !found_overlap {
+            return None;
+        }
+
+        let width = (max_x - min_x).max(1.0);
+        Some(kurbo::Rect::new(
+            (point.x + min_x) as f64,
+            (point.y + self.metric.top + self.metric.height) as f64,
+            (point.x + min_x + width) as f64,
+            (point.y + self.metric.top + self.metric.height + 1.0) as f64,
+        ))
+    }
+
+    fn render_line_selection(
+        &self,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        point: Point,
+        ctx: &RenderParams,
+    ) {
+        let brush = ctx.selection_paint();
+        for rect in self.compute_selection_rects(point, ctx.selections) {
+            let r = kurbo::Rect::new(
+                rect.x as f64,
+                rect.y as f64,
+                (rect.x + rect.width) as f64,
+                (rect.y + rect.height) as f64,
+            );
+            sink.fill_rect(r, &brush, transform);
+        }
+    }
+
+    fn render_page_break(
+        &self,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        point: Point,
+        ctx: &RenderParams,
+    ) {
+        if !self.has_page_break {
+            return;
+        }
+
+        if let Some(layout_rect) = self.page_break_indicator(point, ctx.selections) {
+            let rect = kurbo::Rect::new(
+                layout_rect.x as f64,
+                layout_rect.y as f64,
+                (layout_rect.x + layout_rect.width) as f64,
+                (layout_rect.y + layout_rect.height) as f64,
+            );
+
+            let accent_color = ctx.theme.color("ui.accent.brand.default");
+            let accent_brush = create_solid_brush(accent_color);
+
+            let line_rect = kurbo::Rect::new(
+                rect.x0,
+                rect.y0 + (rect.y1 - rect.y0) / 2.0 - 0.75,
+                rect.x0 + (rect.x1 - rect.x0) - 20.0,
+                rect.y0 + (rect.y1 - rect.y0) / 2.0 - 0.75 + 1.5,
+            );
+            sink.fill_rect(line_rect, &accent_brush, transform);
+
+            let icon_size = 16.0;
+            let stroke = Stroke::new(1.5)
+                .with_caps(Cap::Round)
+                .with_join(Join::Round);
+
+            let icon_x = rect.x1 as f32 - icon_size / 2.0 - 2.0;
+            let icon_y = rect.y0 as f32 + (rect.y1 - rect.y0) as f32 / 2.0;
+
+            if let Some(path) = svg_icon_path!("lucide/file", icon_size, icon_x, icon_y) {
+                sink.stroke_path(&path, &accent_brush, &stroke, transform);
+            }
+        }
+    }
+
+    fn render_preedit(
+        &self,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        point: Point,
+        ctx: &RenderParams,
+    ) {
+        let Some(rect) = self.preedit_underline_rect(point) else {
+            return;
+        };
+
+        let color = ctx.theme.color("ui.text.muted");
+        let brush = create_solid_brush(color);
+        sink.fill_rect(rect, &brush, transform);
+    }
+
+    fn render_background_segments(
+        &self,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        ctx: &RenderParams<'_>,
+    ) {
+        if self.background_segments.is_empty() {
+            return;
+        }
+
+        let line_height = self.metric.height;
+
+        for segment in &self.background_segments {
+            let color = ctx.theme.color(&format!("bg.{}", segment.color_key));
+
+            let mut min_x = f32::MAX;
+            let mut max_x = f32::MIN;
+            let mut found_cluster = false;
+
+            for cluster in &self.metric.clusters {
+                if cluster.start_offset < segment.end_offset
+                    && cluster.end_offset > segment.start_offset
+                {
+                    found_cluster = true;
+                    let cluster_x = self.metric.left + cluster.x;
+                    min_x = min_x.min(cluster_x);
+                    max_x = max_x.max(cluster_x + cluster.width);
+                }
+            }
+
+            if !found_cluster {
+                continue;
+            }
+
+            let rect = kurbo::Rect::new(
+                min_x as f64,
+                self.metric.top as f64,
+                max_x as f64,
+                (self.metric.top + line_height) as f64,
+            );
+            let brush = create_solid_brush(color);
+            sink.fill_rect(rect, &brush, transform);
+        }
+    }
+
+    fn render_ruby_annotations(
+        &self,
+        sink: &mut dyn RenderSink,
+        transform: Affine,
+        ctx: &RenderParams<'_>,
+    ) {
+        if self.ruby_segments.is_empty() {
+            return;
+        }
+
+        let scale = ctx.scale_factor as f32;
+        let run_y = self.metric.top + self.metric.ascent;
+
+        GLOBALS.with(|globals| {
+            use parley::style::*;
+
+            let globals = globals.borrow();
+            let mut lcx = globals.parley_layout_context.borrow_mut();
+            let mut fcx = globals.parley_font_context.borrow_mut();
+
+            for ruby_seg in &self.ruby_segments {
+                let mut min_x = f32::MAX;
+                let mut max_x = f32::MIN;
+                let mut found_cluster = false;
+
+                for cluster in &self.metric.clusters {
+                    if cluster.start_offset < ruby_seg.end_offset
+                        && cluster.end_offset > ruby_seg.start_offset
+                    {
+                        found_cluster = true;
+                        let cluster_x = self.metric.left + cluster.x;
+                        min_x = min_x.min(cluster_x);
+                        max_x = max_x.max(cluster_x + cluster.width);
+                    }
+                }
+
+                if !found_cluster {
+                    continue;
+                }
+
+                let base_width = max_x - min_x;
+                let base_x = min_x;
+
+                const RUBY_FONT_SIZE: f32 = 12.0;
+
+                let mut ruby_builder =
+                    lcx.ranged_builder(&mut fcx, &ruby_seg.ruby_text, 1.0, false);
+
+                ruby_builder.push_default(StyleProperty::FontFamily(FontFamily::Single(
+                    FontFamilyName::Named(ctx.doc.default_attrs().font_family().into()),
+                )));
+                ruby_builder.push_default(StyleProperty::FontSize(RUBY_FONT_SIZE));
+                ruby_builder.push_default(StyleProperty::FontWeight(FontWeight::new(400.0)));
+
+                let mut ruby_layout = ruby_builder.build(&ruby_seg.ruby_text);
+                ruby_layout.break_all_lines(None);
+
+                if let Some(ruby_line) = ruby_layout.lines().next() {
+                    let ruby_metrics = ruby_line.metrics();
+                    let ruby_width = ruby_metrics.advance;
+
+                    let ruby_x_offset = (base_x + (base_width - ruby_width) / 2.0)
+                        .clamp(0.0, (self.size.width - ruby_width).max(0.0));
+
+                    let ruby_height = ruby_metrics.ascent + ruby_metrics.descent;
+                    let ruby_y_offset = run_y - ruby_height;
+
+                    let color = ctx.theme.color("text.black");
+                    let ruby_brush = create_solid_brush(color);
+                    let mut last_text_run_idx = None;
+
+                    for item in ruby_line.items() {
+                        if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                            let run = glyph_run.run();
+                            let run_x = glyph_run.offset();
+                            let run_index = run.index();
+
+                            let run_text = if last_text_run_idx != Some(run_index) {
+                                last_text_run_idx = Some(run_index);
+                                text_for_run(&ruby_seg.ruby_text, run)
+                            } else {
+                                ""
+                            };
+
+                            let mut x_advance = 0.0;
+                            let glyphs: Vec<_> = glyph_run
+                                .glyphs()
+                                .map(|g| {
+                                    let glyph_x = x_advance + g.x;
+                                    x_advance += g.advance;
+                                    Glyph {
+                                        id: g.id,
+                                        x: ruby_x_offset + run_x + glyph_x,
+                                        y: ruby_y_offset + g.y,
+                                    }
+                                })
+                                .collect();
+
+                            sink.draw_text(
+                                run_text,
+                                &run.font(),
+                                RUBY_FONT_SIZE * scale,
+                                &ruby_brush,
+                                transform,
+                                None,
+                                false,
+                                &glyphs,
+                            );
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+impl Render for LineElement {
+    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl LineElement {
+    fn paint_to(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
+        let Some(line) = self.layout.get(self.line_idx) else {
+            return;
+        };
+
+        let point = Point::zero();
+
+        match ctx.phase {
+            RenderPhase::Background => {
+                self.render_background_segments(sink, transform, ctx);
+            }
+            RenderPhase::Selection => {
+                self.render_line_selection(sink, transform, point, ctx);
+                self.render_page_break(sink, transform, point, ctx);
+            }
+            RenderPhase::Content => {
+                let scale = ctx.scale_factor as f32;
+                let run_y = self.metric.top + self.metric.ascent;
+                let mut last_text_run_idx = None;
+
+                for item in line.items() {
+                    match item {
+                        parley::PositionedLayoutItem::InlineBox(_) => {}
+                        parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
+                            let run = glyph_run.run();
+                            let style = glyph_run.style();
+
+                            let default_text_brush =
+                                format!("text.{}", ctx.doc.default_attrs().text_color());
+                            let color = if style.brush.color.is_empty()
+                                || style.brush.color == default_text_brush
+                            {
+                                ctx.default_text_color
+                                    .unwrap_or_else(|| ctx.theme.color(&default_text_brush))
+                            } else {
+                                ctx.theme.color(&style.brush.color)
+                            };
+                            let text_brush = create_solid_brush(color);
+
+                            let run_x = glyph_run.offset();
+                            let run_index = run.index();
+
+                            let run_text = if last_text_run_idx != Some(run_index) {
+                                last_text_run_idx = Some(run_index);
+                                text_for_run(&self.text, run)
+                            } else {
+                                ""
+                            };
+
+                            let synthesis = run.synthesis();
+                            let skew_transform = if synthesis.skew() != Some(0.0) {
+                                synthesis.skew().map(|skew| {
+                                    let kx = (skew as f64).to_radians().tan();
+                                    Affine::new([1.0, 0.0, kx, 1.0, 0.0, 0.0])
+                                })
+                            } else {
+                                None
+                            };
+
+                            let mut x_advance = 0.0;
+                            let glyphs: Vec<_> = glyph_run
+                                .glyphs()
+                                .map(|g| {
+                                    let glyph_x = x_advance + g.x;
+                                    x_advance += g.advance;
+                                    Glyph {
+                                        id: g.id,
+                                        x: run_x + glyph_x,
+                                        y: run_y + g.y,
+                                    }
+                                })
+                                .collect();
+
+                            let embolden = style.brush.embolden;
+
+                            sink.draw_text(
+                                run_text,
+                                &run.font(),
+                                run.font_size() * scale,
+                                &text_brush,
+                                transform,
+                                skew_transform,
+                                embolden,
+                                &glyphs,
+                            );
+
+                            let run_width = glyph_run.advance();
+
+                            if let Some(underline_style) = &style.underline {
+                                let descent = (self.metric.height - self.metric.ascent).max(0.0);
+                                let default_offset = descent * 0.5;
+                                let offset = underline_style.offset.unwrap_or(default_offset);
+                                let size = underline_style.size.unwrap_or(1.0);
+
+                                let rect = kurbo::Rect::new(
+                                    run_x as f64,
+                                    (run_y + offset) as f64,
+                                    (run_x + run_width) as f64,
+                                    (run_y + offset + size) as f64,
+                                );
+                                sink.fill_rect(rect, &text_brush, transform);
+                            }
+
+                            if let Some(strikethrough_style) = &style.strikethrough {
+                                let default_offset = -self.metric.ascent * 0.3;
+                                let offset = strikethrough_style.offset.unwrap_or(default_offset);
+                                let size = strikethrough_style.size.unwrap_or(1.0);
+
+                                let rect = kurbo::Rect::new(
+                                    run_x as f64,
+                                    (run_y + offset) as f64,
+                                    (run_x + run_width) as f64,
+                                    (run_y + offset + size) as f64,
+                                );
+                                sink.fill_rect(rect, &text_brush, transform);
+                            }
+                        }
+                    }
+                }
+
+                self.render_preedit(sink, transform, point, ctx);
+                self.render_ruby_annotations(sink, transform, ctx);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::elements::{ClusterMetric, LineMetric};
+    use crate::layout::{Element, Layout, LayoutCache, LayoutContext, LayoutNode};
+    use crate::model::{Attr, Decorations, FontFamilyStyle, NodeId, SelectionDecor, Style};
+    use crate::runtime::{State, ViewStates};
+    use crate::state::build_selection_decorations;
+    use crate::state::selection_helpers::collect_blocks_in_range;
+    use crate::types::{Affinity, BoxConstraints, Rect, Size};
+    use rustc_hash::FxHasher;
+    use std::cell::RefCell;
+    use std::hash::Hasher;
+
+    fn selections_from_state(state: &State) -> Vec<SelectionDecor> {
+        build_selection_decorations(&state.doc, &state.selection, None)
+    }
+
+    fn decorations_from_state(_state: &State) -> Decorations {
+        Decorations {
+            preedit: None,
+            pending_styles: Default::default(),
+        }
+    }
+
+    fn layout_for_paragraph(state: &State, para_id: NodeId) -> LayoutNode {
+        let decorations = decorations_from_state(state);
+        let paragraph = state.doc.node(para_id).unwrap();
+        let settings = state.doc.settings();
+        let default_attrs = state.doc.default_attrs();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+        let ctx = LayoutContext::new(
+            &paragraph,
+            &settings,
+            &default_attrs,
+            &decorations,
+            &view_states,
+            &cache,
+        );
+        let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
+        paragraph.node().unwrap().layout(&ctx, constraints)
+    }
+
+    fn selection_rects(line: &LineElement, selections: &[SelectionDecor]) -> Vec<Rect> {
+        line.compute_selection_rects(Point::zero(), selections)
+    }
+
+    fn line_signature(line: &LineElement) -> u64 {
+        let mut hasher = FxHasher::default();
+        line.hash_render_cache_signature(&mut hasher);
+        hasher.finish()
+    }
+
+    fn first_line(layout: &LayoutNode) -> &LineElement {
+        layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("line should exist")
+    }
+
+    fn nth_line(layout: &LayoutNode, line_idx: usize) -> &LineElement {
+        layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) if line.line_idx == line_idx => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("line should exist")
+    }
+
+    #[test]
+    fn test_preedit_underline_renders_for_partial_cluster_overlap() {
+        let block_id = NodeId::new();
+        let line = LineElement::build(
+            block_id,
+            Size::new(200.0, 20.0),
+            0,
+            std::rc::Rc::new(parley::Layout::default()),
+            LineMetric {
+                top: 0.0,
+                left: 0.0,
+                height: 16.0,
+                leading: 0.0,
+                baseline: 12.0,
+                ascent: 12.0,
+                content_width: 20.0,
+                start_offset: 0,
+                end_offset: 2,
+                clusters: vec![ClusterMetric {
+                    start_offset: 0,
+                    end_offset: 2,
+                    x: 4.0,
+                    width: 10.0,
+                }],
+                break_reason: parley::layout::BreakReason::None,
+                grapheme_offsets: vec![0, 2],
+                ascent_overflow: 0.0,
+                descent_overflow: 0.0,
+            },
+            Some(crate::model::PreeditDecor {
+                node_id: block_id,
+                offset: 1,
+                text: "ㅎ".to_string(),
+            }),
+            false,
+            std::rc::Rc::from("ab"),
+            vec![],
+            vec![],
+            false,
+        );
+
+        let rect = line
+            .preedit_underline_rect(Point::zero())
+            .expect("partial overlap cluster에서도 preedit 밑줄이 필요함");
+        assert!(
+            rect.width() > 0.0,
+            "preedit 밑줄 width는 양수여야 함: {}",
+            rect.width()
+        );
+    }
+
+    #[test]
+    fn line_render_cache_signature_changes_when_italic_toggles() {
+        let mut p1 = id!();
+        let state_plain = state! {
+            doc {
+                @p1 paragraph {
+                    text { "hello" }
+                }
+            }
+        };
+
+        let mut p2 = id!();
+        let state_italic = state! {
+            doc {
+                @p2 paragraph {
+                    text(styles: [italic()]) { "hello" }
+                }
+            }
+        };
+
+        let plain_layout = layout_for_paragraph(&state_plain, p1);
+        let italic_layout = layout_for_paragraph(&state_italic, p2);
+
+        let plain_line = plain_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("plain layout should contain line");
+        let italic_line = italic_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("italic layout should contain line");
+
+        assert_ne!(
+            line_signature(plain_line),
+            line_signature(italic_line),
+            "italic on/off should change line render cache signature"
+        );
+    }
+
+    #[test]
+    fn test_selection_rect_is_drawn_for_hard_break() {
+        let mut p = id!();
+        let hello_len = "Hello".chars().count();
+        let hard_break_end = hello_len + 1;
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, hello_len) -> (p, hard_break_end) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let line_with_selection = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) => {
+                            let metric = &line.metric;
+                            if metric.start_offset <= hard_break_end
+                                && metric.end_offset >= hello_len
+                            {
+                                Some(line)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    })
+            })
+            .expect("line containing hard break selection");
+
+        let rects = selection_rects(line_with_selection, &selections);
+        assert!(
+            !rects.is_empty(),
+            "hard break selection은 최소한 하나의 사각형을 그려야 함"
+        );
+        assert!(
+            rects.iter().any(|r| r.width > 0.0),
+            "hard break 선택 영역의 너비는 0보다 커야 함"
+        );
+    }
+
+    #[test]
+    fn test_hard_break_selection_does_not_draw_on_next_line() {
+        let mut p = id!();
+        let hello_len = "Hello".chars().count();
+        let hard_break_end = hello_len + 1;
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, hello_len) -> (p, hard_break_end) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let mut line_rects = Vec::new();
+        if let Some(children) = layout.children {
+            for child in children {
+                if let Some(Element::Line(line)) = &child.node.element {
+                    line_rects.push(selection_rects(&line, &selections));
+                }
+            }
+        }
+
+        assert_eq!(line_rects.len(), 2, "두 줄이 생성되어야 함");
+        assert!(
+            !line_rects[0].is_empty(),
+            "hard break 선택은 첫 번째 줄에서만 그려져야 함"
+        );
+        assert!(
+            line_rects[1].is_empty(),
+            "hard break 선택은 다음 줄에서 그려지면 안 됨"
+        );
+    }
+
+    #[test]
+    fn test_select_all_draws_selection_across_lines() {
+        let mut p = id!();
+        let text = "Hello\nWorld";
+        let selection_end = text.chars().count();
+
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, 0) -> (p, selection_end) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let mut drawn = 0;
+        if let Some(children) = layout.children {
+            for child in children {
+                if let Some(Element::Line(line)) = &child.node.element {
+                    if !selection_rects(&line, &selections).is_empty() {
+                        drawn += 1;
+                    }
+                }
+            }
+        }
+
+        assert_eq!(drawn, 2, "전체 선택 시 두 줄 모두에 선택이 그려져야 함");
+    }
+
+    #[test]
+    fn test_empty_paragraph_selection_draws_min_rect_for_first_block_only() {
+        let mut p1 = id!();
+        let mut p2 = id!();
+        let state = state! {
+            doc {
+                @p1 paragraph { }
+                @p2 paragraph { }
+            }
+            selection { (p1, 0) -> (p2, 0) }
+        };
+
+        let layout = layout_for_paragraph(&state, p1);
+        let selections = selections_from_state(&state);
+
+        let line = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("첫 번째 빈 문단은 라인을 하나 생성해야 함");
+
+        let rects = selection_rects(line, &selections);
+        assert!(
+            rects.iter().any(|r| r.width >= 4.0),
+            "빈 문단 선택은 최소 너비 4의 사각형을 첫 문단에서만 그려야 함"
+        );
+    }
+
+    #[test]
+    fn test_blank_line_selection_only_shows_marker_on_second_line() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    hard_break {}
+                    hard_break {}
+                }
+            }
+            selection { (p, 1) -> (p, 2) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let selection_instances = layout
+            .children
+            .as_ref()
+            .expect("라인이 존재해야 함")
+            .iter()
+            .filter_map(|child| match child.node.element.as_ref()? {
+                Element::Line(line) => Some((line.line_idx, selection_rects(line, &selections))),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            selection_instances
+                .iter()
+                .any(|(idx, rects)| *idx == 0 && rects.is_empty()),
+            "첫 번째 빈 줄에는 선택 표시가 없어야 함"
+        );
+
+        let second = selection_instances
+            .iter()
+            .find(|(idx, _)| *idx == 1)
+            .expect("두 번째 줄이 존재해야 함");
+
+        assert!(
+            second.1.len() == 1 && (second.1[0].width - 4.0).abs() < f32::EPSILON,
+            "두 번째 빈 줄에는 최소 너비의 마커만 하나 그려져야 함"
+        );
+    }
+
+    #[test]
+    fn test_select_all_shows_hard_break_marker() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "Hello" }
+                    hard_break {}
+                    text { "World" }
+                }
+            }
+            selection { (p, 0) -> (p, 11) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+
+        let first_line_rects = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) if line.line_idx == 0 => {
+                            Some(selection_rects(line, &selections))
+                        }
+                        _ => None,
+                    })
+            })
+            .expect("첫 번째 줄 선택이 렌더링되어야 함");
+
+        assert!(
+            first_line_rects.iter().any(|r| (r.width - 4.0).abs() < 0.1),
+            "전체 선택 시 hard break 마커(작은 사각형)가 포함되어야 함"
+        );
+    }
+
+    #[test]
+    fn test_consecutive_hard_breaks_render_single_marker_per_empty_line() {
+        let mut p = id!();
+        let state = state! {
+            doc {
+                @p paragraph {
+                    text { "ㅁ" }
+                    hard_break {}
+                    hard_break {}
+                }
+            }
+            selection { (p, 0) -> (p, 3) }
+        };
+
+        let layout = layout_for_paragraph(&state, p);
+        let selections = selections_from_state(&state);
+        let blank_line = layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref()? {
+                        Element::Line(line) if line.line_idx == 1 => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("두 번째 줄이 존재해야 함");
+
+        let rects = selection_rects(blank_line, &selections);
+        assert_eq!(rects.len(), 1, "빈 줄에는 단일 마커만 그려져야 함");
+        assert!(
+            (rects[0].width - 4.0).abs() < 0.001,
+            "빈 줄 마커 너비는 최소값과 동일해야 함"
+        );
+    }
+
+    #[test]
+    fn test_page_break_indicator_in_empty_paragraph() {
+        let metric = LineMetric {
+            top: 0.0,
+            left: 0.0,
+            height: 20.0,
+            leading: 0.0,
+            baseline: 14.0,
+            ascent: 14.0,
+            content_width: 100.0,
+            start_offset: 0,
+            end_offset: 3, // \u{200B} length
+            clusters: vec![],
+            break_reason: parley::layout::BreakReason::None,
+            grapheme_offsets: vec![],
+            ascent_overflow: 0.0,
+            descent_overflow: 0.0,
+        };
+
+        let line = LineElement::build(
+            id!(),
+            Size::new(100.0, 20.0),
+            0,
+            std::rc::Rc::new(parley::Layout::default()),
+            metric,
+            None,
+            true, // is_empty
+            std::rc::Rc::from("\u{200B}"),
+            vec![],
+            vec![],
+            true, // has_page_break
+        );
+
+        let selection = SelectionDecor::TextRange {
+            node_id: line.block_id,
+            start_offset: 0,
+            end_offset: 1,
+        };
+
+        let selections = [selection];
+        let rects = line.compute_selection_rects(Point::zero(), &selections);
+        let page_break_rect = line.page_break_indicator(Point::zero(), &selections);
+
+        assert_eq!(
+            rects.len(),
+            1,
+            "Should render empty paragraph rect when page break is selected"
+        );
+        assert!(
+            page_break_rect.is_some(),
+            "Page break indicator should be present"
+        );
+    }
+
+    #[test]
+    fn line_metrics_do_not_shift_with_box_drawing_char() {
+        let mut plain = id!();
+        let plain_state = state! {
+            doc {
+                @plain paragraph {
+                    text { "AAAA" }
+                }
+            }
+            selection { (plain, 0) }
+        };
+        let plain_layout = layout_for_paragraph(&plain_state, plain);
+        let plain_line = plain_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("plain line should exist");
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text { "AA─AA" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_line = mixed_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("mixed line should exist");
+
+        let eps = 0.01;
+        assert!(
+            (plain_line.metric.top - mixed_line.metric.top).abs() <= eps,
+            "line top should stay stable when box drawing char is present: plain={}, mixed={}",
+            plain_line.metric.top,
+            mixed_line.metric.top
+        );
+        assert!(
+            (plain_line.metric.ascent - mixed_line.metric.ascent).abs() <= eps,
+            "line ascent should stay stable when box drawing char is present: plain={}, mixed={}",
+            plain_line.metric.ascent,
+            mixed_line.metric.ascent
+        );
+        assert!(
+            ((plain_line.metric.height + plain_line.metric.leading)
+                - (mixed_line.metric.height + mixed_line.metric.leading))
+                .abs()
+                <= eps,
+            "line box height should stay stable when box drawing char is present"
+        );
+    }
+
+    #[test]
+    fn line_metrics_do_not_shift_with_cjk_ideograph_in_same_declared_font() {
+        let mut plain = id!();
+        let plain_state = state! {
+            doc {
+                @plain paragraph {
+                    text(styles: [font_family("Pretendard")]) { "가나다라" }
+                }
+            }
+            selection { (plain, 0) }
+        };
+        let plain_layout = layout_for_paragraph(&plain_state, plain);
+        let plain_line = first_line(&plain_layout);
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text(styles: [font_family("Pretendard")]) { "가나漢다라" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_line = first_line(&mixed_layout);
+
+        let eps = 0.01;
+        assert!(
+            (plain_line.metric.top - mixed_line.metric.top).abs() <= eps,
+            "line top should stay stable when a CJK ideograph is added in the same declared font: plain={}, mixed={}",
+            plain_line.metric.top,
+            mixed_line.metric.top
+        );
+        assert!(
+            (plain_line.metric.ascent - mixed_line.metric.ascent).abs() <= eps,
+            "line ascent should stay stable when a CJK ideograph is added in the same declared font: plain={}, mixed={}",
+            plain_line.metric.ascent,
+            mixed_line.metric.ascent
+        );
+        assert!(
+            ((plain_line.metric.height + plain_line.metric.leading)
+                - (mixed_line.metric.height + mixed_line.metric.leading))
+                .abs()
+                <= eps,
+            "line box height should stay stable when a CJK ideograph is added in the same declared font"
+        );
+    }
+
+    #[test]
+    fn hidden_paragraph_cascade_font_does_not_shift_visible_text_line_metrics() {
+        let mut plain = id!();
+        let plain_state = state! {
+            doc {
+                @plain paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (plain, 0) }
+        };
+        let plain_layout = layout_for_paragraph(&plain_state, plain);
+        let plain_line = first_line(&plain_layout);
+
+        let mut hidden = id!();
+        let hidden_state = state! {
+            doc {
+                @hidden paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (hidden, 0) }
+        };
+        let hidden_state = transact!(hidden_state, |tr| {
+            tr.set_cascade_attrs(
+                hidden,
+                &Attr::from_styles(&[Style::FontFamily(FontFamilyStyle {
+                    family: "Paperlogy".to_string(),
+                })]),
+            )
+            .unwrap();
+        });
+        let hidden_layout = layout_for_paragraph(&hidden_state, hidden);
+        let hidden_line = first_line(&hidden_layout);
+
+        let eps = 0.01;
+        assert!(
+            (plain_line.metric.top - hidden_line.metric.top).abs() <= eps,
+            "hidden paragraph cascade font should not shift visible text line top: plain={}, hidden={}",
+            plain_line.metric.top,
+            hidden_line.metric.top
+        );
+        assert!(
+            (plain_line.metric.ascent - hidden_line.metric.ascent).abs() <= eps,
+            "hidden paragraph cascade font should not shift visible text ascent: plain={}, hidden={}",
+            plain_line.metric.ascent,
+            hidden_line.metric.ascent
+        );
+        assert!(
+            ((plain_line.metric.height + plain_line.metric.leading)
+                - (hidden_line.metric.height + hidden_line.metric.leading))
+                .abs()
+                <= eps,
+            "hidden paragraph cascade font should not change visible text line box height"
+        );
+    }
+
+    #[test]
+    fn second_line_uses_its_own_declared_font_metrics_after_hard_break() {
+        let mut pretendard = id!();
+        let pretendard_state = state! {
+            doc {
+                @pretendard paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                }
+            }
+            selection { (pretendard, 0) }
+        };
+        let pretendard_layout = layout_for_paragraph(&pretendard_state, pretendard);
+        let pretendard_line = first_line(&pretendard_layout);
+
+        let mut paperlogy = id!();
+        let paperlogy_state = state! {
+            doc {
+                @paperlogy paragraph {
+                    text(styles: [font_family("Paperlogy")]) { "페이퍼로지" }
+                }
+            }
+            selection { (paperlogy, 0) }
+        };
+        let paperlogy_layout = layout_for_paragraph(&paperlogy_state, paperlogy);
+        let paperlogy_line = first_line(&paperlogy_layout);
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text(styles: [font_family("Pretendard")]) { "프리텐다드" }
+                    hard_break {}
+                    text(styles: [font_family("Paperlogy")]) { "페이퍼로지" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_first_line = nth_line(&mixed_layout, 0);
+        let mixed_second_line = nth_line(&mixed_layout, 1);
+
+        let eps = 0.01;
+        assert!(
+            (pretendard_line.metric.ascent - mixed_first_line.metric.ascent).abs() <= eps,
+            "first line should keep Pretendard metrics in mixed paragraph"
+        );
+        assert!(
+            (paperlogy_line.metric.ascent - mixed_second_line.metric.ascent).abs() <= eps,
+            "second line should use Paperlogy metrics after hard break: standalone={}, mixed={}",
+            paperlogy_line.metric.ascent,
+            mixed_second_line.metric.ascent
+        );
+        assert!(
+            ((paperlogy_line.metric.height + paperlogy_line.metric.leading)
+                - (mixed_second_line.metric.height + mixed_second_line.metric.leading))
+                .abs()
+                <= eps,
+            "second line should use Paperlogy line box height after hard break"
+        );
+    }
+
+    #[test]
+    fn line_box_expands_when_mixed_with_larger_font_size() {
+        let mut small = id!();
+        let small_state = state! {
+            doc {
+                @small paragraph {
+                    text { "ab" }
+                }
+            }
+            selection { (small, 0) }
+        };
+        let small_layout = layout_for_paragraph(&small_state, small);
+        let small_line = small_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("small line should exist");
+
+        let mut mixed = id!();
+        let mixed_state = state! {
+            doc {
+                @mixed paragraph {
+                    text { "a" }
+                    text(styles: [font_size(2400)]) { "b" }
+                }
+            }
+            selection { (mixed, 0) }
+        };
+        let mixed_layout = layout_for_paragraph(&mixed_state, mixed);
+        let mixed_line = mixed_layout
+            .children
+            .as_ref()
+            .and_then(|children| {
+                children
+                    .iter()
+                    .find_map(|child| match child.node.element.as_ref() {
+                        Some(Element::Line(line)) => Some(line),
+                        _ => None,
+                    })
+            })
+            .expect("mixed line should exist");
+
+        let small_box_height = small_line.metric.height + small_line.metric.leading;
+        let mixed_box_height = mixed_line.metric.height + mixed_line.metric.leading;
+        assert!(
+            mixed_box_height > small_box_height,
+            "line box should expand for larger mixed font size: small={}, mixed={}",
+            small_box_height,
+            mixed_box_height
+        );
+    }
+
+    #[test]
+    fn test_list_selection_decoration() {
+        let mut n1 = id!();
+        let mut n2 = id!();
+        let mut list_p1 = id!();
+        let mut list_p2 = id!();
+
+        let state = state! {
+            doc {
+                @n1 paragraph {
+                    text { "1" }
+                }
+                bullet_list {
+                    list_item {
+                        @list_p1 paragraph {
+                            text { "2" }
+                        }
+                    }
+                    list_item {
+                        @list_p2 paragraph {
+                            text { "3" }
+                        }
+                    }
+                }
+                @n2 paragraph {
+                    text { "4" }
+                }
+                paragraph {}
+            }
+            selection { (n2, 1, Affinity::Upstream) -> (n1, 0) }
+        };
+
+        let (from, to) = state.selection.as_sorted(&state.doc).unwrap();
+        let block_ids = collect_blocks_in_range(&state.doc, from, to).unwrap();
+        let selections =
+            build_selection_decorations(&state.doc, &state.selection, Some(&block_ids));
+
+        println!("Selections: {:#?}", selections);
+        println!("list_p1: {:?}", list_p1);
+        println!("list_p2: {:?}", list_p2);
+
+        let list_p1_decor = selections.iter().find(|s| s.node_id() == list_p1).unwrap();
+        let list_p2_decor = selections.iter().find(|s| s.node_id() == list_p2).unwrap();
+
+        assert_eq!(
+            list_p1_decor.start_offset(),
+            0,
+            "list_p1 start offset mismatch"
+        );
+        assert_eq!(list_p1_decor.end_offset(), 1, "list_p1 end offset mismatch");
+
+        assert_eq!(
+            list_p2_decor.start_offset(),
+            0,
+            "list_p2 start offset mismatch"
+        );
+        assert_eq!(list_p2_decor.end_offset(), 1, "list_p2 end offset mismatch");
+    }
+}

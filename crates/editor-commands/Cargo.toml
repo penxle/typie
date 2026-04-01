@@ -1,0 +1,22 @@
+[package]
+name = "editor-commands"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+editor-common = { path = "../editor-common" }
+editor-model = { path = "../editor-model" }
+editor-schema = { path = "../editor-schema" }
+editor-state = { path = "../editor-state" }
+editor-transaction = { path = "../editor-transaction" }
+enum-map.workspace = true
+log.workspace = true
+thiserror.workspace = true
+unicode-segmentation.workspace = true
+
+[dev-dependencies]
+editor-common = { path = "../editor-common", features = ["test-utils"] }
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-state = { path = "../editor-state", features = ["test-utils"] }
+smallvec.workspace = true

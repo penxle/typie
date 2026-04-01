@@ -1,0 +1,21 @@
+[package]
+name = "editor-resource"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-utils = []
+
+[dependencies]
+editor-common = { path = "../editor-common" }
+editor-model = { path = "../editor-model" }
+fontique.workspace = true
+hashbrown.workspace = true
+log.workspace = true
+parley.workspace = true
+ruzstd.workspace = true
+smallvec.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+ruzstd.workspace = true

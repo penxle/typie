@@ -1,0 +1,15 @@
+{
+  "name": "@typie/assets",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./defaults.json": "./defaults.json",
+    "./fallbacks.json": "./fallbacks.json",
+    "./Noto-Phantom.bin": "./Noto-Phantom.bin",
+    "./Noto-Phantom-Emoji.bin": "./Noto-Phantom-Emoji.bin"
+  },
+  "files": [
+    "./"
+  ]
+}

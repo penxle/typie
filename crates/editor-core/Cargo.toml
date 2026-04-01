@@ -1,0 +1,34 @@
+[package]
+name = "editor-core"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-utils = [
+  "editor-common/test-utils",
+  "editor-view/test-utils",
+  "editor-resource/test-utils",
+]
+
+[dependencies]
+editor-commands = { path = "../editor-commands" }
+editor-common = { path = "../editor-common" }
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model" }
+editor-renderer = { path = "../editor-renderer" }
+editor-resource = { path = "../editor-resource" }
+editor-state = { path = "../editor-state" }
+editor-transaction = { path = "../editor-transaction" }
+editor-view = { path = "../editor-view" }
+enum-map.workspace = true
+hashbrown.workspace = true
+log.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+editor-common = { path = "../editor-common", features = ["test-utils"] }
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-state = { path = "../editor-state", features = ["test-utils"] }
+editor-view = { path = "../editor-view", features = ["test-utils"] }

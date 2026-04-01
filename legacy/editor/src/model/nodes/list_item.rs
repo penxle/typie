@@ -1,0 +1,212 @@
+use crate::layout::elements::list_marker::ListMarkerElement;
+use crate::layout::{Element, Layout, LayoutContext, LayoutNode, PositionedNode};
+use crate::model::Node;
+use crate::model::html::{DomSpec, NodeHtmlCodec, NodeParseRule};
+use crate::types::{BoxConstraints, Point, Size};
+use macros::Codec;
+use serde::{Deserialize, Serialize};
+use std::rc::Rc;
+
+pub const LIST_ITEM_MARKER_WIDTH: f32 = 20.0;
+pub const LIST_ITEM_MARKER_GAP: f32 = 8.0;
+
+#[derive(Debug, Clone, Default, PartialEq, Hash, Serialize, Deserialize, Codec)]
+#[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
+pub struct ListItemNode {}
+
+impl NodeHtmlCodec for ListItemNode {
+    fn to_dom(&self) -> Option<DomSpec> {
+        Some(DomSpec::el("li").hole())
+    }
+
+    fn parse_rules() -> Vec<NodeParseRule> {
+        vec![NodeParseRule::simple("li", |_| {
+            Some(Node::ListItem(ListItemNode {}))
+        })]
+    }
+}
+
+impl Layout for ListItemNode {
+    fn layout(&self, ctx: &LayoutContext, constraints: BoxConstraints) -> LayoutNode {
+        const CONTENT_OFFSET: f32 = LIST_ITEM_MARKER_WIDTH + LIST_ITEM_MARKER_GAP;
+
+        let child_constraints = BoxConstraints::new(
+            (constraints.min_width - CONTENT_OFFSET).max(0.0),
+            (constraints.max_width - CONTENT_OFFSET).max(0.0),
+            constraints.min_height,
+            constraints.max_height,
+        );
+
+        let children: Vec<_> = ctx.node.children().collect();
+        let mut child_nodes = Vec::new();
+        let mut y_offset = 0.0;
+        let mut max_width = 0.0f32;
+
+        let marker_type = if let Some(parent) = ctx.node.parent() {
+            match parent.node() {
+                Some(crate::model::Node::OrderedList(_)) => {
+                    let index = ctx.node.index().unwrap_or(0) + 1;
+                    crate::layout::elements::list_marker::ListMarkerType::Ordered(index)
+                }
+                _ => crate::layout::elements::list_marker::ListMarkerType::Bullet,
+            }
+        } else {
+            crate::layout::elements::list_marker::ListMarkerType::Bullet
+        };
+
+        for (idx, child) in children.iter().enumerate() {
+            let child_layout = ctx.layout(child, child_constraints);
+
+            let is_last = idx == children.len() - 1;
+            let child_height = child_layout.size.height;
+            let child_width = child_layout.size.width;
+
+            child_nodes.push(PositionedNode {
+                position: Point::new(CONTENT_OFFSET, y_offset),
+                node: child_layout,
+            });
+
+            y_offset += child_height + (if is_last { 0.0 } else { 0.0 });
+            max_width = max_width.max(child_width);
+        }
+
+        let Some((baseline, line_mid, marker_selection_height)) =
+            child_nodes.get(0).and_then(|positioned| {
+                positioned.node.children.as_ref().and_then(|children| {
+                    children.first().and_then(|first_line| {
+                        if let Some(Element::Line(line_element)) = &first_line.node.element {
+                            let baseline = first_line.position.y + line_element.metric.baseline;
+                            let line_mid = first_line.position.y
+                                + line_element.metric.top
+                                + line_element.metric.height / 2.0;
+                            Some((baseline, line_mid, line_element.size.height))
+                        } else {
+                            None
+                        }
+                    })
+                })
+            })
+        else {
+            return LayoutNode {
+                size: Size::new(max_width + CONTENT_OFFSET, y_offset),
+                element: None,
+                children: Some(child_nodes),
+                page_break_policy: Default::default(),
+                render_hints: Default::default(),
+                scope_id: None,
+            };
+        };
+
+        let marker_node = LayoutNode {
+            size: Size::new(CONTENT_OFFSET, marker_selection_height),
+            element: Some(Element::ListMarker(ListMarkerElement::new(
+                marker_type,
+                baseline,
+                line_mid,
+                LIST_ITEM_MARKER_WIDTH,
+                ctx.node.node_id(),
+                CONTENT_OFFSET,
+                marker_selection_height,
+            ))),
+            children: None,
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        };
+
+        child_nodes.insert(
+            0,
+            PositionedNode {
+                position: Point::new(0.0, 0.0),
+                node: Rc::new(marker_node),
+            },
+        );
+
+        LayoutNode {
+            size: Size::new(max_width + CONTENT_OFFSET, y_offset),
+            element: None,
+            children: Some(child_nodes),
+            page_break_policy: Default::default(),
+            render_hints: Default::default(),
+            scope_id: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::LayoutCache;
+    use crate::model::{Decorations, DefaultAttrs};
+    use crate::runtime::ViewStates;
+    use std::cell::RefCell;
+
+    #[test]
+    fn marker_height_matches_first_line_height() {
+        let mut item = id!();
+        let mut p = id!();
+        let state = state! {
+            doc {
+                bullet_list {
+                    @item list_item {
+                        @p paragraph {
+                            text { "hello" }
+                        }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let doc = &state.doc;
+        let item_node = doc.node(item).expect("list item should exist");
+        let settings = doc.settings();
+        let default_attrs = DefaultAttrs::default();
+        let decorations = Decorations::default();
+        let cache = RefCell::new(LayoutCache::new());
+        let view_states = ViewStates::default();
+
+        let ctx = LayoutContext::new(
+            &item_node,
+            &settings,
+            &default_attrs,
+            &decorations,
+            &view_states,
+            &cache,
+        );
+        let constraints = BoxConstraints::new(0.0, 400.0, 0.0, f32::INFINITY);
+
+        let layout = match item_node.node() {
+            Some(Node::ListItem(node)) => node.layout(&ctx, constraints),
+            _ => panic!("expected list item node"),
+        };
+
+        let children = layout
+            .children
+            .as_ref()
+            .expect("list item should have children");
+        assert!(
+            children.len() >= 2,
+            "list item should contain marker + paragraph children"
+        );
+
+        let marker = &children[0].node;
+        let paragraph = &children[1].node;
+        let first_line = paragraph
+            .children
+            .as_ref()
+            .and_then(|lines| lines.first())
+            .expect("paragraph should contain first line");
+
+        assert_eq!(
+            marker.size.width,
+            LIST_ITEM_MARKER_WIDTH + LIST_ITEM_MARKER_GAP,
+            "marker width must include marker gap area"
+        );
+
+        assert!(
+            (marker.size.height - first_line.node.size.height).abs() < 0.001,
+            "marker height should match first line height to avoid marker/line page-split drift"
+        );
+    }
+}

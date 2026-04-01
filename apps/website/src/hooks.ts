@@ -6,7 +6,8 @@ export const reroute: Reroute = async ({ url }) => {
     url.pathname === '/graphql' ||
     url.pathname === '/robots.txt' ||
     url.pathname === '/api/bootstrap' ||
-    url.pathname === '/_internal/bb'
+    url.pathname === '/_internal/bb' ||
+    url.pathname === '/_internal/ffi'
   ) {
     return url.pathname;
   } else if (url.origin === env.PUBLIC_AUTH_URL) {

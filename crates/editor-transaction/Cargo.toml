@@ -1,0 +1,19 @@
+[package]
+name = "editor-transaction"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+editor-common = { path = "../editor-common" }
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model" }
+editor-schema = { path = "../editor-schema" }
+editor-state = { path = "../editor-state" }
+log.workspace = true
+serde.workspace = true
+smallvec.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model", features = ["test-utils"] }

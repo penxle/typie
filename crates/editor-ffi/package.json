@@ -1,0 +1,19 @@
+{
+  "name": "@typie/editor-ffi",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./pkg/editor_ffi.d.ts",
+      "default": "./pkg/editor_ffi.js"
+    },
+    "./wasm": "./pkg/editor_ffi_bg.wasm",
+    "./icu.zst": "./pkg/icu.zst"
+  },
+  "main": "pkg/editor_ffi.js",
+  "types": "pkg/editor_ffi.d.ts",
+  "files": [
+    "pkg"
+  ]
+}

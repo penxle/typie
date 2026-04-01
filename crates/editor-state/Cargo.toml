@@ -1,0 +1,17 @@
+[package]
+name = "editor-state"
+version.workspace = true
+edition.workspace = true
+
+[features]
+test-utils = ["editor-model/test-utils"]
+
+[dependencies]
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model" }
+log.workspace = true
+serde.workspace = true
+smallvec.workspace = true
+
+[dev-dependencies]
+editor-model = { path = "../editor-model", features = ["test-utils"] }

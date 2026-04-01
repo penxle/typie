@@ -1,0 +1,1310 @@
+[
+  {
+    "id": "!PRETENDARD",
+    "familyName": "Pretendard",
+    "fonts": [
+      {
+        "id": "!PRETENDARD100",
+        "postScriptName": "Pretendard-Thin",
+        "weight": 100,
+        "path": "Pretendard-Thin",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard Thin" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-Thin" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard Thin" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-Thin" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Thin" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD200",
+        "postScriptName": "Pretendard-ExtraLight",
+        "weight": 200,
+        "path": "Pretendard-ExtraLight",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard ExtraLight" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-ExtraLight" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard ExtraLight" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-ExtraLight" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "ExtraLight" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD300",
+        "postScriptName": "Pretendard-Light",
+        "weight": 300,
+        "path": "Pretendard-Light",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard Light" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-Light" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard Light" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-Light" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Light" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD400",
+        "postScriptName": "Pretendard-Regular",
+        "weight": 400,
+        "path": "Pretendard-Regular",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-Regular" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard Regular" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-Regular" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD500",
+        "postScriptName": "Pretendard-Medium",
+        "weight": 500,
+        "path": "Pretendard-Medium",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard Medium" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-Medium" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard Medium" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-Medium" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Medium" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD600",
+        "postScriptName": "Pretendard-SemiBold",
+        "weight": 600,
+        "path": "Pretendard-SemiBold",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard SemiBold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-SemiBold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard SemiBold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-SemiBold" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "SemiBold" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD700",
+        "postScriptName": "Pretendard-Bold",
+        "weight": 700,
+        "path": "Pretendard-Bold",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-Bold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard Bold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-Bold" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD800",
+        "postScriptName": "Pretendard-ExtraBold",
+        "weight": 800,
+        "path": "Pretendard-ExtraBold",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard ExtraBold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-ExtraBold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard ExtraBold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-ExtraBold" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "ExtraBold" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      },
+      {
+        "id": "!PRETENDARD900",
+        "postScriptName": "Pretendard-Black",
+        "weight": 900,
+        "path": "Pretendard-Black",
+        "names": [
+          { "nameId": 0, "platformId": 3, "languageId": 1033, "value": "Copyright © 2023 Kil Hyung-jin" },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "Pretendard Black" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.309;CTUS;Pretendard-Black" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "Pretendard Black" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.309" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "Pretendard-Black" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Pretendard is a trademark of Kil Hyung-jin; Inter UI and Inter is a trademark of rsms; Source is a trademark of Adobe in the United States and/or other countries."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Kil Hyung-jin" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Base glyphs from Inter by Rasmus Andersson; Hangeul glyphs from Noto Sans CJK(Source Han Sans) by Jang Soo-young and Kang Joo-yeon, Sandoll Communications; Kana glyphs from M PLUS 1p by Coji Morishita, UNDERFOREST DESIGN; Combined and redesigned to Pretendard by Kil Hyung-jin."
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "https://orioncactus.com/" },
+          {
+            "nameId": 13,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL"
+          },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://scripts.sil.org/OFL" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "Pretendard" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Black" },
+          { "nameId": 0, "platformId": 3, "languageId": 1042, "value": "Copyright © 2023 길형진" },
+          { "nameId": 8, "platformId": 3, "languageId": 1042, "value": "길형진" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "!KOPUBWORLDDOTUM",
+    "familyName": "KoPubWorldDotum",
+    "fonts": [
+      {
+        "id": "!KOPUBWORLDDOTUM300",
+        "postScriptName": "KoPubWorldDotumLight",
+        "weight": 300,
+        "path": "KoPubWorldDotum-Light",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2018 Korea Publisher Society. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotum" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Light" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "FONTRIX_KoPubWorldDotumLight" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotum Light" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotumLight" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "KoPubWorldDotum Light is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "Korea Publisher Society" },
+          {
+            "nameId": 9,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2018 한국출판인회의. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum Light" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Light" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "FONTRIX_KoPubWorldDotumLight" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum Light" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotumLight" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "KoPubWorldDotum Light is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "한국출판인회의" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Light" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체 Light" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Light" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체 Light" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 이상민; 김정진; 박한웅; 김민주;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Light" }
+        ]
+      },
+      {
+        "id": "!KOPUBWORLDDOTUM500",
+        "postScriptName": "KoPubWorldDotumMedium",
+        "weight": 500,
+        "path": "KoPubWorldDotum-Medium",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2018 Korea Publisher Society. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotum" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Medium" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "FONTRIX_KoPubWorldDotumMedium" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotum Medium" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotumMedium" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "KoPubWorldDotum Medium is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "Korea Publisher Society" },
+          {
+            "nameId": 9,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2018 한국출판인회의. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum Medium" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Medium" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "FONTRIX_KoPubWorldDotumMedium" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum Medium" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotumMedium" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "KoPubWorldDotum Medium is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "한국출판인회의" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Medium" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체 Medium" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Medium" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체 Medium" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 이상민; 김정진; 박한웅; 김민주;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Medium" }
+        ]
+      },
+      {
+        "id": "!KOPUBWORLDDOTUM700",
+        "postScriptName": "KoPubWorldDotumBold",
+        "weight": 700,
+        "path": "KoPubWorldDotum-Bold",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2018 Korea Publisher Society. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotum" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Bold" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "FONTRIX_KoPubWorldDotumBold" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotum Bold" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "KoPubWorldDotumBold" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "KoPubWorldDotum Bold is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "Korea Publisher Society" },
+          {
+            "nameId": 9,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2018 한국출판인회의. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum Bold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "FONTRIX_KoPubWorldDotumBold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum Bold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotumBold" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "KoPubWorldDotum Bold is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "한국출판인회의" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "KoPubWorldDotum" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체 Bold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Bold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체 Bold" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 이상민; 김정진; 박한웅; 김민주;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "KoPubWorld돋움체" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Bold" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "!NANUMBARUNGOTHIC",
+    "familyName": "NanumBarunGothic",
+    "fonts": [
+      {
+        "id": "!NANUMBARUNGOTHIC200",
+        "postScriptName": "NanumBarunGothicUltraLight",
+        "weight": 200,
+        "path": "NanumBarunGothic-UltraLight",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2015 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "UltraLight" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "NanumBarunGothicUltraLight" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic UltraLight" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.0.1.0 Build 20150311" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "NanumBarunGothicUltraLight" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "NanumBarunGothic UltraLight is a registered trademark of NHN Corporation."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 1, "languageId": 0, "value": "Jaehyun Yoon; Yongrak Park; Donggwan Kim;" },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2015 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic UltraLight" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "UltraLight" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothicUltraLight" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic UltraLight" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.0.1.0 Build 20150311" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothicUltraLight" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "NanumBarunGothic UltraLight is a registered trademark of NHN Corporation."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 3, "languageId": 1033, "value": "Jaehyun Yoon; Yongrak Park; Donggwan Kim;" },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "UltraLight" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕 UltraLight" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "UltraLight" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕 UltraLight" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "윤재현; 박용락; 김동관;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "UltraLight" }
+        ]
+      },
+      {
+        "id": "!NANUMBARUNGOTHIC300",
+        "postScriptName": "NanumBarunGothicLight",
+        "weight": 300,
+        "path": "NanumBarunGothic-Light",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2014 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Light" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "NanumBarunGothicLight" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic Light" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.0.0.3 Build 20140910" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "NanumBarunGothicLight" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "NanumBarunGothic Light is a registered trademark of NHN Corporation."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 1, "languageId": 0, "value": "Jaehyun Yoon; Yongrak Park; Donggwan Kim;" },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2014 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic Light" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Light" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothicLight" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic Light" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.0.0.3 Build 20140910" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothicLight" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "NanumBarunGothic Light is a registered trademark of NHN Corporation."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 3, "languageId": 1033, "value": "Jaehyun Yoon; Yongrak Park; Donggwan Kim;" },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Light" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕 Light" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Light" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕 Light" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "윤재현; 박용락; 김동관;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Light" }
+        ]
+      },
+      {
+        "id": "!NANUMBARUNGOTHIC400",
+        "postScriptName": "NanumBarunGothic",
+        "weight": 400,
+        "path": "NanumBarunGothic-Regular",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2013 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Regular" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "NHNCorporation: NewNanumGothic: 2013" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.000 2013 initial release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic" },
+          { "nameId": 7, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic is a registered trademark of NHN Corporation." },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 1, "languageId": 0, "value": "Jaehyun Yoon; yongrak park; donggwan kim;" },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.fontrix.com" },
+          { "nameId": 13, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright ⓒ 2013 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "NHNCorporation: NewNanumGothic: 2013" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.000 2013 initial release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 7, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic is a registered trademark of NHN Corporation." },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 3, "languageId": 1033, "value": "Jaehyun Yoon; yongrak park; donggwan kim;" },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.fontrix.com" },
+          { "nameId": 13, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Regular" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "윤재현; 박용락; 김동관;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Regular" }
+        ]
+      },
+      {
+        "id": "!NANUMBARUNGOTHIC700",
+        "postScriptName": "NanumBarunGothicBold",
+        "weight": 700,
+        "path": "NanumBarunGothic-Bold",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2013 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Bold" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "NHNCorporation: NewNanumGothicBold: 2013" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "NanumBarunGothic Bold" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.000 2013 initial release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "NanumBarunGothicBold" },
+          { "nameId": 7, "platformId": 1, "languageId": 0, "value": "NanumBarunGothicBold is a registered trademark of NHN Corporation." },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 1, "languageId": 0, "value": "Jaehyun Yoon; yongrak park; donggwan kim;" },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.fontrix.com" },
+          { "nameId": 13, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright ⓒ 2013 NHN Corporation. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "NHNCorporation: NewNanumGothicBold: 2013" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic Bold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.000 2013 initial release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothicBold" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "NanumBarunGothicBold is a registered trademark of NHN Corporation."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 3, "languageId": 1033, "value": "Jaehyun Yoon; yongrak park; donggwan kim;" },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.fontrix.com" },
+          { "nameId": 13, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "NanumBarunGothic" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Bold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕 Bold" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "윤재현; 박용락; 김동관;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "나눔바른고딕" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Bold" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "!RIDIBATANG",
+    "familyName": "RIDIBatang",
+    "fonts": [
+      {
+        "id": "!RIDIBATANG400",
+        "postScriptName": "RIDIBatang",
+        "weight": 400,
+        "path": "RIDIBatang-Regular",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright © 2019 RIDI & Sandoll. All rights reserved. Font designed by Sandoll Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "RIDIBatang" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Regular" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "1.000;SAND;RIDIBatang;190925_02;" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "RIDIBatang" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.0.1 Build 20191001;hotconv 1.0.109;makeotfexe 2.5.65596" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "RIDIBatang" },
+          { "nameId": 7, "platformId": 1, "languageId": 0, "value": "RIDIBating is a registered trademark of RIDI CORPORATION." },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "Sandoll Inc." },
+          {
+            "nameId": 9,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "RIDI: Jinwoo Kim; Seungbum Kim; Dohoon Kim; Yoonjin Cho; &Sandoll: Hyojin Ahn; Minjae Kang; Chorong Kim; Dohee Lee; Suhyun Lee;"
+          },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.sandoll.co.kr" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.sandoll.co.kr" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright © 2019 RIDI & Sandoll. All rights reserved. Font designed by Sandoll Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "RIDIBatang" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "1.000;SAND;RIDIBatang;190925_02;" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "RIDIBatang" },
+          {
+            "nameId": 5,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Version 1.0.1 Build 20191001;hotconv 1.0.109;makeotfexe 2.5.65596"
+          },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "RIDIBatang" },
+          { "nameId": 7, "platformId": 3, "languageId": 1033, "value": "RIDIBating is a registered trademark of RIDI CORPORATION." },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "Sandoll Inc." },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "RIDI: Jinwoo Kim; Seungbum Kim; Dohoon Kim; Yoonjin Cho; &Sandoll: Hyojin Ahn; Minjae Kang; Chorong Kim; Dohee Lee; Suhyun Lee;"
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.sandoll.co.kr" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.sandoll.co.kr" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "RIDIBatang" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "리디바탕" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Regular" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "리디바탕" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1042,
+            "value": "RIDI: 김진우; 김승범; 김도훈; 조윤진; & Sandoll: 안효진; 강민재; 김초롱; 이도희; 이수현;"
+          },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "리디바탕" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Regular" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "!KOPUBWORLDBATANG",
+    "familyName": "KoPubWorldBatang",
+    "fonts": [
+      {
+        "id": "!KOPUBWORLDBATANG300",
+        "postScriptName": "KoPubWorldBatangLight",
+        "weight": 300,
+        "path": "KoPubWorldBatang-Light",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2018 Korea Publisher Society. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatang" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Light" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "FONTRIX_KoPubWorldBatangLight" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatang Light" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatangLight" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "KoPubWorldBatang Light is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "Korea Publisher Society" },
+          {
+            "nameId": 9,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2018 한국출판인회의. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang Light" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Light" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "FONTRIX_KoPubWorldBatangLight" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang Light" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatangLight" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "KoPubWorldBatang Light is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "한국출판인회의" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Light" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체 Light" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Light" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체 Light" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 이상민; 김정진; 박한웅; 김민주;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Light" }
+        ]
+      },
+      {
+        "id": "!KOPUBWORLDBATANG500",
+        "postScriptName": "KoPubWorldBatangMedium",
+        "weight": 500,
+        "path": "KoPubWorldBatang-Medium",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2018 Korea Publisher Society. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatang" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Medium" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "FONTRIX_KoPubWorldBatangMedium" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatang Medium" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatangMedium" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "KoPubWorldBatang Medium is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "Korea Publisher Society" },
+          {
+            "nameId": 9,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2018 한국출판인회의. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang Medium" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Medium" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "FONTRIX_KoPubWorldBatangMedium" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang Medium" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatangMedium" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "KoPubWorldBatang Medium is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "한국출판인회의" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Medium" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체 Medium" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Medium" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체 Medium" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 이상민; 김정진; 박한웅; 김민주;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Medium" }
+        ]
+      },
+      {
+        "id": "!KOPUBWORLDBATANG700",
+        "postScriptName": "KoPubWorldBatangBold",
+        "weight": 700,
+        "path": "KoPubWorldBatang-Bold",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright (c) 2018 Korea Publisher Society. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatang" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Bold" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "FONTRIX_KoPubWorldBatangBold" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatang Bold" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "KoPubWorldBatangBold" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "KoPubWorldBatang Bold is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "Korea Publisher Society" },
+          {
+            "nameId": 9,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://fontrix.co.kr" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright (c) 2018 한국출판인회의. All rights reserved. Font designed by FONTRIX Inc."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang Bold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "FONTRIX_KoPubWorldBatangBold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang Bold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 1.1.1; Build Release" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatangBold" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "KoPubWorldBatang Bold is a registered trademark of Korea Publisher Society."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "한국출판인회의" },
+          {
+            "nameId": 9,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Park Yong-rak; Lee Sang-min; Kim Jung-jin; Park Han-ung; Kim Min-ju;"
+          },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://fontrix.co.kr" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "KoPubWorldBatang" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체 Bold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Bold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체 Bold" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 이상민; 김정진; 박한웅; 김민주;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "KoPubWorld바탕체" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Bold" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "!NANUMMYEONGJO",
+    "familyName": "NanumMyeongjo",
+    "fonts": [
+      {
+        "id": "!NANUMMYEONGJO400",
+        "postScriptName": "NanumMyeongjo",
+        "weight": 400,
+        "path": "NanumMyeongjo-Regular",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by FONTRIX."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Regular" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "3.01;RIXF;NanumMyeongjo" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 3.011;PS 1;hotconv 1.0.56;makeotf.lib2.0.21325" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo" },
+          { "nameId": 7, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo is a registered trademark of NHN Corporation." },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 1, "languageId": 0, "value": "Yong-rak, Park; Ji-hee, Yoon" },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by FONTRIX."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "3.01;RIXF;NanumMyeongjo" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 3.011;PS 1;hotconv 1.0.56;makeotf.lib2.0.21325" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo" },
+          { "nameId": 7, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo is a registered trademark of NHN Corporation." },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 3, "languageId": 1033, "value": "Yong-rak, Park; Ji-hee, Yoon" },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "나눔명조" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Regular" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "나눔명조" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 윤지희;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "나눔명조" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Regular" }
+        ]
+      },
+      {
+        "id": "!NANUMMYEONGJO700",
+        "postScriptName": "NanumMyeongjoBold",
+        "weight": 700,
+        "path": "NanumMyeongjo-Bold",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by FONTRIX."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "Bold" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "3.01;RIXF;NanumMyeongjoBold" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo Bold" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 3.011;PS 1;hotconv 1.0.56;makeotf.lib2.0.21325" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "NanumMyeongjoBold" },
+          { "nameId": 7, "platformId": 1, "languageId": 0, "value": "NanumMyeongjoBold is a registered trademark of NHN Corporation." },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 1, "languageId": 0, "value": "Yong-rak, Park; Ji-hee, Yoon" },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by FONTRIX."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "3.01;RIXF;NanumMyeongjoBold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjoBold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 3.011;PS 1;hotconv 1.0.56;makeotf.lib2.0.21325" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjoBold" },
+          { "nameId": 7, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjoBold is a registered trademark of NHN Corporation." },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 3, "languageId": 1033, "value": "Yong-rak, Park; Ji-hee, Yoon" },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "Bold" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "나눔명조" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Bold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "나눔명조 Bold" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 윤지희;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "나눔명조" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "Bold" }
+        ]
+      },
+      {
+        "id": "!NANUMMYEONGJO800",
+        "postScriptName": "NanumMyeongjoExtraBold",
+        "weight": 800,
+        "path": "NanumMyeongjo-ExtraBold",
+        "names": [
+          {
+            "nameId": 0,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by FONTRIX."
+          },
+          { "nameId": 1, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo" },
+          { "nameId": 2, "platformId": 1, "languageId": 0, "value": "ExtraBold" },
+          { "nameId": 3, "platformId": 1, "languageId": 0, "value": "3.01;RIXF;NanumMyeongjoExtraBold" },
+          { "nameId": 4, "platformId": 1, "languageId": 0, "value": "NanumMyeongjo ExtraBold" },
+          { "nameId": 5, "platformId": 1, "languageId": 0, "value": "Version 3.011;PS 1;hotconv 1.0.56;makeotf.lib2.0.21325" },
+          { "nameId": 6, "platformId": 1, "languageId": 0, "value": "NanumMyeongjoExtraBold" },
+          {
+            "nameId": 7,
+            "platformId": 1,
+            "languageId": 0,
+            "value": "NanumMyeongjoExtraBold is a registered trademark of NHN Corporation."
+          },
+          { "nameId": 8, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 1, "languageId": 0, "value": "Yong-rak, Park; Ji-hee, Yoon" },
+          { "nameId": 11, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 1, "languageId": 0, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 1, "languageId": 0, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 1, "languageId": 0, "value": "http://www.nhncorp.com" },
+          {
+            "nameId": 0,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "Copyright © 2010 NHN Corporation. All rights reserved. Font designed by FONTRIX."
+          },
+          { "nameId": 1, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjoExtraBold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1033, "value": "Regular" },
+          { "nameId": 3, "platformId": 3, "languageId": 1033, "value": "3.01;RIXF;NanumMyeongjoExtraBold" },
+          { "nameId": 4, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjoExtraBold" },
+          { "nameId": 5, "platformId": 3, "languageId": 1033, "value": "Version 3.011;PS 1;hotconv 1.0.56;makeotf.lib2.0.21325" },
+          { "nameId": 6, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjoExtraBold" },
+          {
+            "nameId": 7,
+            "platformId": 3,
+            "languageId": 1033,
+            "value": "NanumMyeongjoExtraBold is a registered trademark of NHN Corporation."
+          },
+          { "nameId": 8, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 9, "platformId": 3, "languageId": 1033, "value": "Yong-rak, Park; Ji-hee, Yoon" },
+          { "nameId": 11, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 12, "platformId": 3, "languageId": 1033, "value": "http://www.fontrix.co.kr" },
+          { "nameId": 13, "platformId": 3, "languageId": 1033, "value": "NHN Corporation" },
+          { "nameId": 14, "platformId": 3, "languageId": 1033, "value": "http://www.nhncorp.com" },
+          { "nameId": 16, "platformId": 3, "languageId": 1033, "value": "NanumMyeongjo" },
+          { "nameId": 17, "platformId": 3, "languageId": 1033, "value": "ExtraBold" },
+          { "nameId": 1, "platformId": 3, "languageId": 1042, "value": "나눔명조 ExtraBold" },
+          { "nameId": 2, "platformId": 3, "languageId": 1042, "value": "Regular" },
+          { "nameId": 4, "platformId": 3, "languageId": 1042, "value": "나눔명조 ExtraBold" },
+          { "nameId": 9, "platformId": 3, "languageId": 1042, "value": "박용락; 윤지희;" },
+          { "nameId": 16, "platformId": 3, "languageId": 1042, "value": "나눔명조" },
+          { "nameId": 17, "platformId": 3, "languageId": 1042, "value": "ExtraBold" }
+        ]
+      }
+    ]
+  }
+]

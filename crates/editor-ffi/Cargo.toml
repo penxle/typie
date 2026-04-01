@@ -1,0 +1,54 @@
+[package]
+name = "editor-ffi"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+[features]
+default = []
+uniffi = ["dep:uniffi", "dep:android_logger", "dep:env_logger"]
+wasm = [
+  "dep:console_error_panic_hook",
+  "dep:console_log",
+  "dep:wasm-bindgen",
+  "dep:wasm-bindgen-futures",
+  "dep:web-sys",
+  "dep:serde-wasm-bindgen",
+  "dep:serde",
+  "dep:tsify",
+  "dep:wgpu",
+]
+
+[dependencies]
+editor-common = { path = "../editor-common" }
+editor-core = { path = "../editor-core" }
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model" }
+editor-renderer = { path = "../editor-renderer" }
+editor-resource = { path = "../editor-resource" }
+editor-state = { path = "../editor-state" }
+editor-transaction = { path = "../editor-transaction" }
+editor-view = { path = "../editor-view" }
+android_logger = { workspace = true, optional = true }
+cfg-if.workspace = true
+console_error_panic_hook = { workspace = true, optional = true }
+console_log = { workspace = true, optional = true }
+env_logger = { workspace = true, optional = true }
+hashbrown.workspace = true
+log.workspace = true
+serde = { workspace = true, optional = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
+serde_json.workspace = true
+thiserror.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true, features = [
+  "HtmlCanvasElement",
+  "CanvasRenderingContext2d",
+  "ImageData",
+] }
+wgpu = { workspace = true, optional = true }

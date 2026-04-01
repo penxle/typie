@@ -6,22 +6,80 @@ resolver = "3"
 version = "0.0.1"
 edition = "2024"
 
-[profile.dev]
-debug = 2
+[workspace.dependencies]
+android_logger = "0.15"
+base62 = "2"
+bytecount = { version = "0.6", features = ["generic-simd"] }
+cfg-if = "1"
+console_error_panic_hook = { version = "0.1" }
+console_log = "1"
+enum-map = "2"
+env_logger = "0.11"
+fontique = { version = "0.8", default-features = false }
+getrandom = { version = "0.4", features = ["wasm_js"] }
+hashbrown = "0.16"
+heck = "0.5"
+icu_provider = { version = "2", default-features = false, features = [
+  "serde",
+  "sync",
+] }
+icu_provider_blob = "2"
+icu_segmenter = { version = "2", default-features = false }
+imbl = "7"
+kurbo = "0.13"
+log = "0.4"
+parley = { version = "0.8", default-features = false, features = ["std"] }
+peniko = "0.6"
+phf = "0.13"
+phf_codegen = "0.13"
+proc-macro2 = "1"
+quote = "1"
+resize = { version = "0.8", default-features = false }
+ruzstd = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-wasm-bindgen = "0.6"
+skrifa = "0.40"
+smallvec = "1"
+strum = { version = "0.28", features = ["derive"] }
+syn = { version = "2", features = ["full", "extra-traits"] }
+thiserror = "2"
+tsify = { version = "0.5", features = ["js"] }
+unicode-segmentation = "1"
+uniffi = "0.31"
+vello = "0.8"
+vello_cpu = "0.0.7"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3"
+web-time = "1"
+wgpu = "28"
+zeno = "0.3"
+zune-png = "0.5"
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
+[profile.dev-uniffi]
+inherits = "dev"
+panic = "unwind"
+
+[profile.dev-wasm]
+inherits = "dev"
 panic = "abort"
 
-[profile.release.package."*"]
-opt-level = 3
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
 
-[profile.release-native]
+[profile.release-uniffi]
 inherits = "release"
 panic = "unwind"
 
+[profile.release-wasm]
+inherits = "release"
+panic = "abort"
+
 [patch.crates-io]
+bytecount = { git = "https://github.com/devunt/bytecount.git", branch = "master" }
 parley = { git = "https://github.com/devunt/parley.git", branch = "main" }
 fontique = { git = "https://github.com/devunt/parley.git", branch = "main" }
+tsify = { git = "https://github.com/madonoharu/tsify.git", branch = "main" }
