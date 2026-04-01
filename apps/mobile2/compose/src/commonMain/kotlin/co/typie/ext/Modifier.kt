@@ -73,6 +73,8 @@ fun Modifier.pointerIgnore(): Modifier = pointerInput(Unit) {
   awaitPointerEventScope { while (true) { awaitPointerEvent().changes.forEach { it.consume() } } }
 }
 
+internal fun Modifier.touchShield(): Modifier = pointerInput(Unit) {}
+
 fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier = composed {
   val interactionSource = LocalInteractionSource.current ?: return@composed Modifier
   val scale = remember { Animatable(1f) }

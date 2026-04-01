@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
+import co.typie.ext.touchShield
 import co.typie.ext.toPx
 import co.typie.icons.Lucide
 import co.typie.navigation.NavigationScaffold
@@ -171,7 +172,7 @@ private fun BottomBar(currentTab: Tab, onSelectTab: (Tab) -> Unit, modifier: Mod
     ) {
       // Pill
       Box(
-        Modifier.weight(1f).graphicsLayer {
+        Modifier.weight(1f).touchShield().graphicsLayer {
           scaleX = pillScale.value
           scaleY = pillScale.value
         },
