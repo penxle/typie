@@ -2,10 +2,12 @@ use editor_model::{Doc, Modifier, Node, NodeId};
 use editor_transaction::Effect;
 use editor_view::Viewport;
 use hashbrown::{HashMap, HashSet};
+use strum::IntoEnumIterator;
 
 use crate::editor::Editor;
 use crate::event::EditorEvent;
 use crate::message::*;
+use crate::state_field::StateField;
 
 pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
     match event {
@@ -39,6 +41,9 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
             });
 
             editor.view.layout(&editor.state.doc);
+            editor.push_event(EditorEvent::StateChanged {
+                fields: StateField::iter().collect(),
+            });
         }
 
         SystemEvent::Resize {

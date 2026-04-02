@@ -10,7 +10,7 @@ export function initWasm(): Promise<EditorHost> {
   return (hostPromise ??= (async () => {
     const mod = await WebAssembly.compileStreaming(fetch(wasmUrl));
     const { EditorHost } = await createInstance(mod);
-    host = await EditorHost.create('cpu');
+    host = await EditorHost.create('gpu');
     return host;
   })());
 }

@@ -11,6 +11,7 @@ use crate::resolved_position::ResolvedPosition;
 pub struct Position {
     pub node_id: NodeId,
     pub offset: usize,
+    #[serde(default)]
     pub affinity: Affinity,
 }
 

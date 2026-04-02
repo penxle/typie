@@ -60,6 +60,12 @@ pub struct Size {
     pub height: f32,
 }
 
+impl Size {
+    pub fn new(width: f32, height: f32) -> Self {
+        Self { width, height }
+    }
+}
+
 #[ffi]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -71,6 +77,15 @@ pub struct Rect {
 }
 
 impl Rect {
+    pub fn from_xywh(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
     pub fn bottom(&self) -> f32 {
         self.y + self.height
     }

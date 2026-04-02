@@ -209,7 +209,7 @@ pub(crate) fn last_position_in(fragment: &Fragment) -> Position {
 
 #[cfg(test)]
 mod tests {
-    use editor_common::{EdgeInsets, Rect};
+    use editor_common::{EdgeInsets, Rect, Size};
     use editor_model::NodeId;
 
     use super::*;
@@ -268,6 +268,7 @@ mod tests {
         };
 
         let page = Page::new(
+            Size::new(200.0, 800.0),
             vec![
                 Fragment::Container(ContainerFragment {
                     node_id: NodeId::new(),
@@ -314,7 +315,6 @@ mod tests {
                     border: EdgeInsets::default(),
                 }),
             ],
-            800.0,
         );
 
         Fixture {

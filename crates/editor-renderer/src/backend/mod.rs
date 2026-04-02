@@ -45,4 +45,11 @@ impl RenderBackend {
             Self::Gpu(s) => s,
         }
     }
+
+    pub fn kind(&self) -> kind::BackendKind {
+        match self {
+            Self::Cpu(_) => kind::BackendKind::Cpu,
+            Self::Gpu(_) => kind::BackendKind::Gpu,
+        }
+    }
 }

@@ -46,7 +46,7 @@ impl Renderer {
 
 #[cfg(test)]
 mod tests {
-    use editor_common::{EdgeInsets, Rect};
+    use editor_common::{EdgeInsets, Rect, Size};
     use editor_macros::doc;
     use editor_model::NodeId;
     use editor_view::fragment::*;
@@ -137,7 +137,7 @@ mod tests {
     fn render_empty_page() {
         let mut renderer = make_renderer();
         let doc = Doc::new_test();
-        let page = Page::new(vec![], 0.0);
+        let page = Page::new(Size::new(200.0, 0.0), vec![]);
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 
@@ -154,7 +154,7 @@ mod tests {
         let node_id = NodeId::new();
 
         let line = make_line(node_id, 0.0, 0.0);
-        let page = Page::new(vec![Fragment::Line(line)], 20.0);
+        let page = Page::new(Size::new(200.0, 20.0), vec![Fragment::Line(line)]);
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 
@@ -193,7 +193,7 @@ mod tests {
             }],
         };
 
-        let page = Page::new(vec![Fragment::Line(line)], 20.0);
+        let page = Page::new(Size::new(200.0, 20.0), vec![Fragment::Line(line)]);
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 
@@ -219,7 +219,10 @@ mod tests {
             border: EdgeInsets::default(),
         };
 
-        let page = Page::new(vec![Fragment::Container(container)], 120.0);
+        let page = Page::new(
+            Size::new(200.0, 120.0),
+            vec![Fragment::Container(container)],
+        );
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 
@@ -252,7 +255,10 @@ mod tests {
             },
         };
 
-        let page = Page::new(vec![Fragment::Container(container)], 100.0);
+        let page = Page::new(
+            Size::new(200.0, 100.0),
+            vec![Fragment::Container(container)],
+        );
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 
@@ -290,7 +296,10 @@ mod tests {
             border: EdgeInsets::default(),
         };
 
-        let page = Page::new(vec![Fragment::Container(container)], 200.0);
+        let page = Page::new(
+            Size::new(200.0, 200.0),
+            vec![Fragment::Container(container)],
+        );
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 
@@ -337,7 +346,7 @@ mod tests {
             border: EdgeInsets::default(),
         };
 
-        let page = Page::new(vec![Fragment::Container(container)], 40.0);
+        let page = Page::new(Size::new(200.0, 40.0), vec![Fragment::Container(container)]);
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 
@@ -377,7 +386,7 @@ mod tests {
             border: EdgeInsets::default(),
         };
 
-        let page = Page::new(vec![Fragment::Container(container)], 40.0);
+        let page = Page::new(Size::new(200.0, 40.0), vec![Fragment::Container(container)]);
         let mut sink = MockSink::new();
         renderer.render_page(&mut sink, &page, &doc, 1.0);
 

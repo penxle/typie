@@ -505,6 +505,7 @@ dependencies = [
  "itertools",
  "log",
  "serde",
+ "strum",
  "thiserror",
  "tsify",
  "uniffi",

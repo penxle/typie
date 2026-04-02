@@ -36,8 +36,36 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.tick().into_ffi()?))
     }
 
+    pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::PageRect>>> {
+        self.with_inner(|inner| {
+            let selection = inner.editor.state().selection;
+            if selection.is_collapsed() {
+                Ok(inner
+                    .editor
+                    .view()
+                    .cursor_rect(&selection.head)
+                    .into_ffi()?)
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
     pub fn selection(&self) -> EditorResult<Complex<editor_state::Selection>> {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
+    }
+
+    pub fn page_sizes(&self) -> EditorResult<Vec<Complex<editor_common::Size>>> {
+        self.with_inner(|inner| {
+            Ok(inner
+                .editor
+                .view()
+                .pages()
+                .iter()
+                .map(|p| p.size)
+                .collect::<Vec<_>>()
+                .into_ffi()?)
+        })
     }
 }
 

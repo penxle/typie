@@ -75,18 +75,16 @@ impl EditorHost {
     pub fn create_editor(
         &self,
         doc: Complex<editor_model::Doc>,
+        selection: Complex<editor_state::Selection>,
         viewport: Complex<editor_view::Viewport>,
     ) -> EditorResult<Owned<crate::editor::Editor>> {
         let doc = doc.from_ffi()?;
-        let selection = editor_state::Selection::collapsed(editor_state::Position::new(
-            editor_model::NodeId::ROOT,
-            0,
-        ));
-
+        let selection = selection.from_ffi()?;
         let state = editor_state::State::new(doc, selection);
-        let viewport = viewport.from_ffi()?;
 
+        let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
+
         #[cfg(not(feature = "wasm-server"))]
         {
             Ok(into_owned(crate::editor::Editor::new(
@@ -156,6 +154,11 @@ impl EditorHost {
             resource.set_phantom_font_families(families)?;
             Ok(())
         })
+    }
+
+    #[cfg(not(feature = "wasm-server"))]
+    pub fn backend_kind(&self) -> EditorResult<Complex<editor_renderer::BackendKind>> {
+        Ok(self.backend.kind().into_ffi()?)
     }
 }
 

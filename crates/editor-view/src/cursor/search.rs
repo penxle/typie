@@ -252,7 +252,7 @@ fn find_navigable_above_in_fragment<'a>(fragment: &'a Fragment, y: f32) -> Optio
 
 #[cfg(test)]
 mod tests {
-    use editor_common::{EdgeInsets, Rect};
+    use editor_common::{EdgeInsets, Rect, Size};
     use editor_model::NodeId;
 
     use super::*;
@@ -341,13 +341,13 @@ mod tests {
     fn find_line_at_locates_position() {
         let id = NodeId::new();
         let page = Page::new(
+            Size::new(200.0, 800.0),
             vec![container_frag(
                 NodeId::new(),
                 0.0,
                 40.0,
                 vec![line_frag(id, 0.0), line_frag(NodeId::new(), 20.0)],
             )],
-            800.0,
         );
         let pos = Position::new(id, 2);
         let pages = [page];
@@ -360,7 +360,10 @@ mod tests {
     fn find_navigable_below_finds_in_same_page() {
         let id1 = NodeId::new();
         let id2 = NodeId::new();
-        let page = Page::new(vec![line_frag(id1, 0.0), line_frag(id2, 20.0)], 800.0);
+        let page = Page::new(
+            Size::new(200.0, 800.0),
+            vec![line_frag(id1, 0.0), line_frag(id2, 20.0)],
+        );
         let pages = [page];
         let (_, nav) = find_navigable_below(&pages, 0, 10.0, 0.0).unwrap();
         assert_eq!(nav.node_id().unwrap(), id2);
@@ -369,8 +372,8 @@ mod tests {
     #[test]
     fn find_navigable_below_crosses_page() {
         let id = NodeId::new();
-        let page1 = Page::new(vec![line_frag(NodeId::new(), 0.0)], 40.0);
-        let page2 = Page::new(vec![line_frag(id, 0.0)], 40.0);
+        let page1 = Page::new(Size::new(200.0, 40.0), vec![line_frag(NodeId::new(), 0.0)]);
+        let page2 = Page::new(Size::new(200.0, 40.0), vec![line_frag(id, 0.0)]);
         let pages = [page1, page2];
         let (page_idx, nav) = find_navigable_below(&pages, 0, 30.0, 0.0).unwrap();
         assert_eq!(page_idx, 1);
@@ -381,7 +384,10 @@ mod tests {
     fn find_navigable_above_finds_in_same_page() {
         let id1 = NodeId::new();
         let id2 = NodeId::new();
-        let page = Page::new(vec![line_frag(id1, 0.0), line_frag(id2, 20.0)], 800.0);
+        let page = Page::new(
+            Size::new(200.0, 800.0),
+            vec![line_frag(id1, 0.0), line_frag(id2, 20.0)],
+        );
         let pages = [page];
         let (_, nav) = find_navigable_above(&pages, 0, 20.0, 0.0).unwrap();
         assert_eq!(nav.node_id().unwrap(), id1);
@@ -389,7 +395,7 @@ mod tests {
 
     #[test]
     fn find_navigable_returns_none_at_boundary() {
-        let page = Page::new(vec![line_frag(NodeId::new(), 0.0)], 40.0);
+        let page = Page::new(Size::new(200.0, 40.0), vec![line_frag(NodeId::new(), 0.0)]);
         let pages = [page];
         assert!(find_navigable_above(&pages, 0, 0.0, 0.0).is_none());
     }

@@ -9,21 +9,16 @@ pub use navigation::resolve_movement;
 use editor_common::Rect;
 use editor_state::Position;
 
-use crate::fragment::*;
 use crate::page::Page;
+use crate::{PageRect, fragment::*};
 
-pub fn cursor_rect(pages: &[Page], pos: &Position) -> Option<(usize, Rect)> {
+pub fn cursor_rect(pages: &[Page], pos: &Position) -> Option<PageRect> {
     let (page_idx, line) = search::find_line_at(pages, pos)?;
     let x = x_at_offset(line, pos);
 
-    Some((
+    Some(PageRect::new(
         page_idx,
-        Rect {
-            x: line.rect.x + x,
-            y: line.rect.y,
-            width: 1.0,
-            height: line.rect.height,
-        },
+        Rect::from_xywh(line.rect.x + x, line.rect.y, 1.0, line.rect.height),
     ))
 }
 
@@ -46,7 +41,7 @@ pub(crate) fn x_at_offset(line: &LineFragment, pos: &Position) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use editor_common::{EdgeInsets, Rect};
+    use editor_common::{EdgeInsets, Rect, Size};
     use editor_model::NodeId;
 
     use super::*;
@@ -63,6 +58,7 @@ mod tests {
 
     fn single_line_page(id: NodeId) -> Page {
         Page::new(
+            Size::new(200.0, 800.0),
             vec![Fragment::Container(ContainerFragment {
                 node_id: NodeId::new(),
                 rect: Rect {
@@ -86,7 +82,6 @@ mod tests {
                 breaks: Breaks::default(),
                 border: EdgeInsets::default(),
             })],
-            800.0,
         )
     }
 
@@ -95,7 +90,7 @@ mod tests {
         let id = NodeId::new();
         let page = single_line_page(id);
         let pos = Position::new(id, 0);
-        let (page_idx, rect) = cursor_rect(&[page], &pos).unwrap();
+        let PageRect { page_idx, rect } = cursor_rect(&[page], &pos).unwrap();
 
         assert_eq!(page_idx, 0);
         assert_eq!(rect.x, 0.0);
@@ -108,7 +103,7 @@ mod tests {
         let id = NodeId::new();
         let page = single_line_page(id);
         let pos = Position::new(id, 3);
-        let (_, rect) = cursor_rect(&[page], &pos).unwrap();
+        let PageRect { rect, .. } = cursor_rect(&[page], &pos).unwrap();
 
         assert_eq!(rect.x, 30.0);
     }

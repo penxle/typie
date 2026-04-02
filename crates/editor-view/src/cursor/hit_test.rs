@@ -52,7 +52,7 @@ fn hit_test_fragment(fragment: &Fragment, x: f32, y: f32) -> Option<Selection> {
 
 #[cfg(test)]
 mod tests {
-    use editor_common::{EdgeInsets, Rect};
+    use editor_common::{EdgeInsets, Rect, Size};
     use editor_model::NodeId;
 
     use super::*;
@@ -71,6 +71,7 @@ mod tests {
     fn hit_test_line() {
         let id = NodeId::new();
         let page = Page::new(
+            Size::new(200.0, 800.0),
             vec![Fragment::Container(ContainerFragment {
                 node_id: NodeId::new(),
                 rect: Rect {
@@ -94,7 +95,6 @@ mod tests {
                 breaks: Breaks::default(),
                 border: EdgeInsets::default(),
             })],
-            800.0,
         );
 
         let sel = hit_test(&page, 25.0, 5.0).unwrap();
@@ -108,6 +108,7 @@ mod tests {
         let id1 = NodeId::new();
         let id2 = NodeId::new();
         let page = Page::new(
+            Size::new(200.0, 800.0),
             vec![Fragment::Container(ContainerFragment {
                 node_id: NodeId::new(),
                 rect: Rect {
@@ -144,7 +145,6 @@ mod tests {
                 breaks: Breaks::default(),
                 border: EdgeInsets::default(),
             })],
-            800.0,
         );
 
         let sel = hit_test(&page, 5.0, 25.0).unwrap();
@@ -156,6 +156,7 @@ mod tests {
     fn hit_test_atom_returns_range() {
         let parent_id = NodeId::new();
         let page = Page::new(
+            Size::new(200.0, 800.0),
             vec![Fragment::Atom(AtomFragment {
                 node_id: NodeId::new(),
                 parent_id,
@@ -167,7 +168,6 @@ mod tests {
                     height: 100.0,
                 },
             })],
-            800.0,
         );
 
         let sel = hit_test(&page, 100.0, 50.0).unwrap();
@@ -180,6 +180,7 @@ mod tests {
     fn hit_test_fallback_to_closest() {
         let id = NodeId::new();
         let page = Page::new(
+            Size::new(200.0, 800.0),
             vec![Fragment::Container(ContainerFragment {
                 node_id: NodeId::new(),
                 rect: Rect {
@@ -203,7 +204,6 @@ mod tests {
                 breaks: Breaks::default(),
                 border: EdgeInsets::default(),
             })],
-            800.0,
         );
 
         let sel = hit_test(&page, 25.0, 100.0).unwrap();

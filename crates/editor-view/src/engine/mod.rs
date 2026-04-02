@@ -125,7 +125,7 @@ impl LayoutEngine {
             LayoutMode::Continuous { max_width } => {
                 const CONTINUOUS_MAX_CONTENT_HEIGHT: f32 = 1024.0;
                 const CONTINUOUS_MARGIN: f32 = 20.0;
-                let cw = viewport.width.min(max_width) - CONTINUOUS_MARGIN * 2.0;
+                let cw = viewport.width.min(max_width);
                 let p = paginator::Paginator::new_continuous(
                     cw,
                     CONTINUOUS_MAX_CONTENT_HEIGHT,

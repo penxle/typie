@@ -1,4 +1,4 @@
-use editor_common::{Movement, Rect};
+use editor_common::Movement;
 use editor_model::{Doc, NodeId};
 use editor_resource::Resource;
 use editor_resource::TextSegmenters;
@@ -6,6 +6,7 @@ use editor_state::{Position, Selection};
 use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
+use crate::PageRect;
 use crate::cursor;
 use crate::engine::LayoutEngine;
 use crate::view_state::ViewState;
@@ -77,7 +78,7 @@ impl View {
         )
     }
 
-    pub fn cursor_rect(&self, pos: &Position) -> Option<(usize, Rect)> {
+    pub fn cursor_rect(&self, pos: &Position) -> Option<PageRect> {
         cursor::cursor_rect(self.engine.pages(), pos)
     }
 

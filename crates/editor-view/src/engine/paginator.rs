@@ -1,4 +1,4 @@
-use editor_common::{Alignment, EdgeInsets, Rect};
+use editor_common::{Alignment, EdgeInsets, Rect, Size};
 use editor_model::NodeId;
 
 use crate::fragment::*;
@@ -701,8 +701,10 @@ impl Paginator {
 
         let frags = std::mem::take(&mut self.page_fragments);
         if !frags.is_empty() {
-            self.pages
-                .push(Page::new(frags, self.page_height_on_break()));
+            self.pages.push(Page::new(
+                Size::new(self.width, self.page_height_on_break()),
+                frags,
+            ));
         }
 
         self.current_y = self.content_top();
@@ -738,11 +740,17 @@ impl Paginator {
 
         if !self.page_fragments.is_empty() {
             let frags = std::mem::take(&mut self.page_fragments);
-            self.pages.push(Page::new(frags, self.final_page_height()));
+            self.pages.push(Page::new(
+                Size::new(self.width, self.final_page_height()),
+                frags,
+            ));
         }
 
         if self.pages.is_empty() {
-            self.pages.push(Page::new(vec![], self.empty_page_height()));
+            self.pages.push(Page::new(
+                Size::new(self.width, self.empty_page_height()),
+                vec![],
+            ));
         }
 
         self.pages
@@ -825,7 +833,7 @@ mod tests {
 
         assert_eq!(pages.len(), 1);
         assert_eq!(pages[0].fragments.len(), 2);
-        assert_eq!(pages[0].height, 200.0);
+        assert_eq!(pages[0].size.height, 200.0);
         assert_eq!(pages[0].fragments[0].rect().y, 0.0);
         assert_eq!(pages[0].fragments[1].rect().y, 100.0);
     }
@@ -838,8 +846,8 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 2);
-        assert_eq!(pages[0].height, 50.0);
-        assert_eq!(pages[1].height, 50.0);
+        assert_eq!(pages[0].size.height, 50.0);
+        assert_eq!(pages[1].size.height, 50.0);
 
         let p1 = match &pages[0].fragments[0] {
             Fragment::Container(c) => c,
@@ -884,8 +892,8 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 2);
-        assert_eq!(pages[0].height, 250.0);
-        assert_eq!(pages[1].height, 250.0);
+        assert_eq!(pages[0].size.height, 250.0);
+        assert_eq!(pages[1].size.height, 250.0);
 
         let page1_fold = match &pages[0].fragments[0] {
             Fragment::Container(c) => c,
@@ -933,7 +941,7 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].height, 80.0);
+        assert_eq!(pages[0].size.height, 80.0);
         let a = match &pages[0].fragments[0] {
             Fragment::Atom(a) => a,
             _ => panic!("expected Atom"),
@@ -952,9 +960,9 @@ mod tests {
 
         assert_eq!(pages.len(), 2);
         assert_eq!(pages[0].fragments.len(), 1);
-        assert_eq!(pages[0].height, 200.0);
+        assert_eq!(pages[0].size.height, 200.0);
         assert_eq!(pages[1].fragments.len(), 1);
-        assert_eq!(pages[1].height, 200.0);
+        assert_eq!(pages[1].size.height, 200.0);
         assert_eq!(pages[1].fragments[0].rect().y, 0.0);
     }
 
@@ -966,7 +974,7 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].height, 200.0);
+        assert_eq!(pages[0].size.height, 200.0);
         assert_eq!(pages[0].fragments[0].rect().y, 0.0);
     }
 
@@ -1115,7 +1123,7 @@ mod tests {
             _ => panic!("expected Container"),
         };
         assert_eq!(page2_outer.rect.y, 10.0);
-        assert_eq!(pages[1].height, 100.0);
+        assert_eq!(pages[1].size.height, 100.0);
         let page2_inner = match &page2_outer.children[0] {
             Fragment::Container(c) => c,
             _ => panic!("expected Container"),
@@ -1229,7 +1237,7 @@ mod tests {
 
         assert_eq!(pages.len(), 1);
         assert!(pages[0].fragments.is_empty());
-        assert_eq!(pages[0].height, 500.0);
+        assert_eq!(pages[0].size.height, 500.0);
     }
 
     #[test]
@@ -1261,10 +1269,10 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 2);
-        assert_eq!(pages[0].height, 610.0);
+        assert_eq!(pages[0].size.height, 610.0);
         assert_eq!(pages[0].fragments[0].rect().y, 10.0);
         assert_eq!(pages[1].fragments[0].rect().y, 0.0);
-        assert_eq!(pages[1].height, 600.0 + 10.0);
+        assert_eq!(pages[1].size.height, 600.0 + 10.0);
     }
 
     #[test]
@@ -1274,7 +1282,7 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].height, 300.0);
+        assert_eq!(pages[0].size.height, 300.0);
     }
 
     #[test]
@@ -1482,8 +1490,8 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 2);
-        assert_eq!(pages[0].height, 100.0);
-        assert_eq!(pages[1].height, 100.0);
+        assert_eq!(pages[0].size.height, 100.0);
+        assert_eq!(pages[1].size.height, 100.0);
         let row_frag = match &pages[1].fragments[0] {
             Fragment::Container(c) => c,
             _ => panic!("expected Container"),
@@ -1591,7 +1599,7 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].height, 500.0);
+        assert_eq!(pages[0].size.height, 500.0);
     }
 
     #[test]
@@ -1601,7 +1609,7 @@ mod tests {
         let pages = p.finish();
 
         assert_eq!(pages.len(), 1);
-        assert_eq!(pages[0].height, 120.0);
+        assert_eq!(pages[0].size.height, 120.0);
     }
 
     #[test]

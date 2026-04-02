@@ -102,6 +102,7 @@ impl Editor {
         let (state, steps, effects, meta) = tr.commit();
 
         self.state = state;
+        self.process_effects(effects);
 
         if !steps.is_empty() {
             match meta.history {
@@ -111,26 +112,24 @@ impl Editor {
             }
         }
 
+        let mut fields = Vec::new();
+
         if self.view.reconcile(&self.state.doc, &steps) {
+            fields.push(StateField::PageSizes);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if steps.iter().any(|s| s.is_doc_step()) {
-            self.push_event(EditorEvent::DocumentChanged);
+            fields.push(StateField::Doc);
         }
-
-        self.process_effects(effects);
-
-        let mut changed_fields = Vec::new();
 
         if steps.iter().any(|s| s.is_selection_step()) {
-            changed_fields.push(StateField::Selection);
+            fields.push(StateField::Cursor);
+            fields.push(StateField::Selection);
         }
 
-        if !changed_fields.is_empty() {
-            self.push_event(EditorEvent::StateChanged {
-                fields: changed_fields,
-            });
+        if !fields.is_empty() {
+            self.push_event(EditorEvent::StateChanged { fields });
         }
     }
 
@@ -400,7 +399,7 @@ mod tests {
 
         let has_doc_changed = events
             .iter()
-            .any(|e| matches!(e, EditorEvent::DocumentChanged));
+            .any(|e| matches!(e, EditorEvent::StateChanged { fields } if fields.contains(&StateField::Doc)));
         assert!(has_doc_changed);
     }
 }

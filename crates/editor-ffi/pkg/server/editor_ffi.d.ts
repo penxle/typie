@@ -106,6 +106,11 @@ export interface OrderedListNode {}
 
 export interface PageBreakNode {}
 
+export interface PageRect {
+    page_idx: number;
+    rect: Rect;
+}
+
 export interface ParagraphNode {
     align?: TextAlign;
 }
@@ -113,7 +118,7 @@ export interface ParagraphNode {
 export interface Position {
     node_id: NodeId;
     offset: number;
-    affinity: Affinity;
+    affinity?: Affinity;
 }
 
 export interface Rect {
@@ -177,7 +182,9 @@ export type DeletionIntent = { type: "selection" } | { type: "move"; value: Move
 
 export type Direction = "forward" | "backward";
 
-export type EditorEvent = { type: "state_changed"; value: { fields: StateField[] } } | { type: "document_changed" } | { type: "render_invalidated" } | { type: "font_manifest_missing"; value: { family: string; weight: number } } | { type: "font_data_missing"; value: { family: string; weight: number; required: FontData[]; prefetch: FontData[] } } | { type: "cursor_exited_document_start" };
+export type EditorEvent = { type: "state_changed"; value: { fields: StateField[] } } | { type: "render_invalidated" } | { type: "font_manifest_missing"; value: { family: string; weight: number } } | { type: "font_data_missing"; value: { family: string; weight: number; required: FontData[]; prefetch: FontData[] } } | { type: "cursor_exited_document_start" };
+
+export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
 export type FontData = { type: "base" } | { type: "chunk"; value: number };
 
@@ -213,6 +220,8 @@ export type PointerEvent = { type: "down"; value: { x: number; y: number; count:
 
 export type SelectionIntent = { type: "all" } | { type: "set"; value: Selection };
 
+export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "modifiers";
+
 export type SystemEvent = { type: "initialize" } | { type: "resize"; value: { width: number; height: number; scale_factor: number } } | { type: "set_focused"; value: boolean } | { type: "font_manifest_loaded"; value: { family: string; weight: number } } | { type: "font_base_loaded"; value: { family: string; weight: number } } | { type: "font_chunk_loaded"; value: { family: string; weight: number } } | { type: "set_external_height"; value: { node_id: NodeId; height: number } };
 
 export type TableAlign = "left" | "center" | "right";
@@ -228,7 +237,9 @@ declare class Editor {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
+    cursor(): PageRect | undefined;
     enqueue(message: Message): void;
+    page_sizes(): Size[];
     render_page_to_buffer(page: number, width: number, height: number): Uint8Array;
     selection(): Selection;
     tick(): EditorEvent[];
@@ -241,7 +252,7 @@ declare class EditorHost {
     build_fallback_font_manifests(entries: any): Uint8Array;
     build_font_manifest(chunk_codepoints: any): Uint8Array;
     static create(kind?: BackendKind | null): Promise<EditorHost>;
-    create_editor(doc: Doc, viewport: Viewport): Editor;
+    create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
     encode_font(ttf_data: Uint8Array, chunk_codepoints: any): EncodedFont;
     get_font_codepoints(ttf_data: Uint8Array): any;
     get_font_metadata(data: Uint8Array): FontMetadata;

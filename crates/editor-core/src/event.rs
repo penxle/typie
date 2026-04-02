@@ -1,7 +1,7 @@
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-use crate::StateField;
+use crate::state_field::StateField;
 
 #[ffi]
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -10,7 +10,6 @@ pub enum EditorEvent {
     StateChanged {
         fields: Vec<StateField>,
     },
-    DocumentChanged,
     RenderInvalidated,
     FontManifestMissing {
         family: String,
