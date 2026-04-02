@@ -3,9 +3,16 @@ name = "editor-schema"
 version.workspace = true
 edition.workspace = true
 
+[features]
+uniffi = ["dep:uniffi", "editor-model/uniffi"]
+wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm"]
+
 [dependencies]
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 enum-map.workspace = true
 log.workspace = true
 thiserror.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }

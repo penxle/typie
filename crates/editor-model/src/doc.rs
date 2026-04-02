@@ -1,3 +1,4 @@
+use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 use crate::document_attrs::DocumentAttrs;
@@ -6,6 +7,7 @@ use crate::id::NodeId;
 use crate::node_ref::NodeRef;
 use crate::nodes::{Node, RootNode};
 
+#[ffi]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Doc {
     pub nodes: imbl::HashMap<NodeId, NodeEntry>,

@@ -1,3 +1,5 @@
+editor_macros::preamble!();
+
 pub mod backend;
 pub mod error;
 pub(crate) mod glyph;

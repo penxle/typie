@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { compressZstd } from '#/utils/compression.ts';
 import { processFont } from '#/utils/font.ts';
-import { wasm } from '#/utils/wasm.ts';
+import { wasm } from '#/utils/wasm-ffi.ts';
 
 const S3_BUCKET = 'typie-cdn';
 const S3_PREFIX = 'editor/fonts';
@@ -118,14 +118,14 @@ for (const family of DEFAULT_FONTS) {
     const ttfData = new Uint8Array(await readFile(ttfPath));
 
     console.log(`[${done}/${total}] Processing ${font.path}...`);
-    const { manifest, strategy, base, chunks } = await processFont(font.path, ttfData);
+    const { hash, manifest, strategy, base, chunks } = await processFont(font.path, ttfData);
 
     const baseKB = (base.length / 1024).toFixed(1);
     const chunksKB = (chunks.reduce((s, c) => s + c.length, 0) / 1024).toFixed(1);
     console.log(`  base: ${baseKB}KB, ${chunks.length} chunks: ${chunksKB}KB, strategy: ${strategy ?? 'sequential'}`);
 
     // Extract font metadata
-    const metadata = await wasm.getFontMetadata(ttfData);
+    const metadata = await wasm.get_font_metadata(ttfData);
     const findName = (nameId: number) =>
       metadata.names.find((n) => n.nameId === nameId && n.platformId === 3 && n.languageId === 0x04_09)?.value ??
       metadata.names.find((n) => n.nameId === nameId)?.value;
@@ -140,17 +140,29 @@ for (const family of DEFAULT_FONTS) {
       names: metadata.names.map((n) => ({ nameId: n.nameId, platformId: n.platformId, languageId: n.languageId, value: n.value })),
     });
 
-    // Upload manifest.json (always overwrite - no hash in key)
-    const manifestKey = `${S3_PREFIX}/${font.path}/manifest.json`;
-    console.log(`  PUT ${manifestKey}`);
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: S3_BUCKET,
-        Key: manifestKey,
-        Body: JSON.stringify(manifest),
-        ContentType: 'application/json',
-      }),
-    );
+    // Upload manifest.bin (bitcode, for Rust runtime) and hash.json (for host fetch URLs)
+    const manifestBinKey = `${S3_PREFIX}/${font.path}/manifest.bin`;
+    const hashJsonKey = `${S3_PREFIX}/${font.path}/hash.json`;
+    console.log(`  PUT ${manifestBinKey}`);
+    console.log(`  PUT ${hashJsonKey}`);
+    await Promise.all([
+      s3.send(
+        new PutObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: manifestBinKey,
+          Body: manifest,
+          ContentType: 'application/octet-stream',
+        }),
+      ),
+      s3.send(
+        new PutObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: hashJsonKey,
+          Body: JSON.stringify({ hash }),
+          ContentType: 'application/json',
+        }),
+      ),
+    ]);
 
     const originalKey = `${S3_PREFIX}/${font.path}/original.bin`;
     const compressed = await compressZstd(ttfData);
@@ -164,8 +176,8 @@ for (const family of DEFAULT_FONTS) {
       }),
     );
 
-    const s3Base = `${S3_PREFIX}/${font.path}/${manifest.hash}`;
-    const filesToUpload: { key: string; body: Uint8Array | string; contentType: string }[] = [
+    const s3Base = `${S3_PREFIX}/${font.path}/${hash}`;
+    const filesToUpload: { key: string; body: Uint8Array; contentType: string }[] = [
       { key: `${s3Base}/base.bin`, body: base, contentType: 'application/octet-stream' },
       ...chunks.map((chunk, i) => ({ key: `${s3Base}/chunks/${i}.bin`, body: chunk, contentType: 'application/octet-stream' })),
     ];
@@ -189,6 +201,6 @@ console.log(`\nS3: ${uploaded} uploaded, ${skipped} skipped`);
 
 // Write defaults.json
 const workspaceDir = path.resolve(import.meta.dirname, '../../..');
-const defaultsPath = path.join(workspaceDir, 'crates/editor/assets/defaults.json');
+const defaultsPath = path.join(workspaceDir, 'assets/defaults.json');
 await writeFile(defaultsPath, JSON.stringify(defaultsData));
 console.log(`Written: ${defaultsPath}`);

@@ -42,10 +42,25 @@ impl Transform {
         m: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
     };
 
+    pub fn scale(s: f32) -> Self {
+        Self {
+            m: [s, 0.0, 0.0, s, 0.0, 0.0],
+        }
+    }
+
     pub fn translate(self, tx: f32, ty: f32) -> Self {
         let [a, b, c, d, e, f] = self.m;
         Self {
             m: [a, b, c, d, a * tx + c * ty + e, b * tx + d * ty + f],
+        }
+    }
+
+    /// Post-multiply by a uniform scale. Scales path coordinates without
+    /// affecting the accumulated translation.
+    pub fn post_scale(self, s: f32) -> Self {
+        let [a, b, c, d, e, f] = self.m;
+        Self {
+            m: [a * s, b * s, c * s, d * s, e, f],
         }
     }
 }

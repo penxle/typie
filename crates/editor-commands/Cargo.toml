@@ -3,8 +3,28 @@ name = "editor-commands"
 version.workspace = true
 edition.workspace = true
 
+[features]
+uniffi = [
+  "dep:uniffi",
+  "editor-common/uniffi",
+  "editor-model/uniffi",
+  "editor-schema/uniffi",
+  "editor-state/uniffi",
+  "editor-transaction/uniffi",
+]
+wasm = [
+  "dep:tsify",
+  "dep:wasm-bindgen",
+  "editor-common/wasm",
+  "editor-model/wasm",
+  "editor-schema/wasm",
+  "editor-state/wasm",
+  "editor-transaction/wasm",
+]
+
 [dependencies]
 editor-common = { path = "../editor-common" }
+editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-schema = { path = "../editor-schema" }
 editor-state = { path = "../editor-state" }
@@ -13,10 +33,11 @@ enum-map.workspace = true
 log.workspace = true
 thiserror.workspace = true
 unicode-segmentation.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
-editor-common = { path = "../editor-common", features = ["test-utils"] }
-editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state", features = ["test-utils"] }
 smallvec.workspace = true

@@ -1,4 +1,5 @@
-use editor_common::{Axis, Direction, Movement, TextSegmenters};
+use editor_common::{Axis, Direction, Movement};
+use editor_resource::TextSegmenters;
 use editor_state::{Position, Selection};
 
 use crate::cursor::{search, segmentation};

@@ -1,10 +1,10 @@
-use std::sync::{Arc, Mutex};
-
-use editor_common::{Movement, Rect, TextSegmenters};
+use editor_common::{Movement, Rect};
 use editor_model::{Doc, NodeId};
 use editor_resource::Resource;
+use editor_resource::TextSegmenters;
 use editor_state::{Position, Selection};
 use editor_transaction::Step;
+use std::sync::{Arc, Mutex};
 
 use crate::cursor;
 use crate::engine::LayoutEngine;

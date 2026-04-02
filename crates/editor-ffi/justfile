@@ -50,18 +50,40 @@ ios: bindings-swift (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch6
     rm -rf "$headers"
     just icu-datagen {{target_dir}}/aarch64-apple-ios/{{profile}}-uniffi/lib{{crate}}.dylib {{mobile_dir}}/ios/Resources/icu.zst
 
-# Build WASM
-wasm: (build "wasm" "wasm32-unknown-unknown") (ensure "wasm-bindgen" "wasm-bindgen-cli") (ensure "wasm-opt")
+# Build client + server WASM
+wasm: wasm-browser wasm-server
+
+# Build client WASM (browser)
+wasm-browser: (ensure "wasm-bindgen" "wasm-bindgen-cli") (ensure "wasm-opt")
     #!/usr/bin/env bash
     set -e
-    wasm-bindgen --target module --out-dir {{justfile_directory()}}/pkg \
+    rustup target add wasm32-unknown-unknown
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}}-wasm --features wasm-browser --target wasm32-unknown-unknown
+    wasm-bindgen --target module --out-dir {{justfile_directory()}}/pkg/browser \
         {{target_dir}}/wasm32-unknown-unknown/{{profile}}-wasm/{{crate}}.wasm
-    cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/{{crate}}
+    cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/browser/{{crate}}
     if [ "{{mode}}" = "release" ]; then
-        wasm-opt -Os --all-features -o {{justfile_directory()}}/pkg/{{crate}}_bg.wasm \
-            {{justfile_directory()}}/pkg/{{crate}}_bg.wasm
+        wasm-opt -Os --all-features -o {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm \
+            {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm
     fi
-    just icu-datagen {{justfile_directory()}}/pkg/{{crate}}_bg.wasm {{justfile_directory()}}/pkg/icu.zst
+    just icu-datagen {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm {{justfile_directory()}}/pkg/browser/icu.zst
+
+# Build server WASM (Node.js)
+wasm-server: (ensure "wasm-bindgen" "wasm-bindgen-cli") (ensure "wasm-opt")
+    #!/usr/bin/env bash
+    set -e
+    rustup target add wasm32-unknown-unknown
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --profile {{profile}}-wasm --features wasm-server --target wasm32-unknown-unknown
+    wasm-bindgen --target module --out-dir {{justfile_directory()}}/pkg/server \
+        {{target_dir}}/wasm32-unknown-unknown/{{profile}}-wasm/{{crate}}.wasm
+    cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/server/{{crate}}
+    if [ "{{mode}}" = "release" ]; then
+        wasm-opt -Os --all-features -o {{justfile_directory()}}/pkg/server/{{crate}}_bg.wasm \
+            {{justfile_directory()}}/pkg/server/{{crate}}_bg.wasm
+    fi
+    just icu-datagen {{justfile_directory()}}/pkg/server/{{crate}}_bg.wasm {{justfile_directory()}}/pkg/server/icu.zst
 
 [private]
 ensure cmd *install:

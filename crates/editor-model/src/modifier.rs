@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn eq_and_hash() {
-        use std::collections::HashSet;
+        use hashbrown::HashSet;
         let mut set = HashSet::new();
         set.insert(Modifier::Bold);
         set.insert(Modifier::Bold);

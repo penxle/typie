@@ -1,3 +1,5 @@
+editor_macros::preamble!();
+
 mod editor;
 mod error;
 mod event;

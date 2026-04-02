@@ -1,95 +1,46 @@
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::quote;
 
-use super::parse::{EnumVariant, FfiInput, FfiTypeKind, StructField};
+use super::parse::FfiInput;
 
 pub fn generate(input: &FfiInput) -> TokenStream {
-    let name = &input.item.ident;
-    let describe_name = format_ident!("__ffi_describe_{}", name);
-    let kind = input.kind();
+    let item = &input.item;
 
-    let descriptor = match kind {
-        FfiTypeKind::Custom { target } => {
-            quote! { @custom_type #name = $crate :: #name : #target ; }
-        }
-        FfiTypeKind::Struct { fields } => generate_struct_descriptor(name, &fields),
-        FfiTypeKind::Enum { variants } => generate_enum_descriptor(name, &variants),
-    };
+    if let Some(custom) = &input.custom {
+        let ident = item.ident.clone();
 
-    let original_item = &input.item;
+        quote! {
+            #item
 
-    quote! {
-        #original_item
-
-        #[macro_export]
-        macro_rules! #describe_name {
-            ($callback:path) => {
-                $callback! {
-                    #descriptor
-                }
+            #[cfg(feature = "wasm")]
+            const _: () = {
+                #[derive(::tsify::Tsify)]
+                #[tsify(hashmap_as_object)]
+                struct #ident(#custom);
             };
+
+            #[cfg(feature = "uniffi")]
+            ::uniffi::custom_type!(#ident, #custom, {
+                lower: |obj| ::editor_common::Ffi::to_ffi(&obj),
+                try_lift: |val| ::editor_common::Ffi::from_ffi(val).map_err(Into::into),
+            });
         }
-    }
-}
-
-fn generate_struct_descriptor(name: &syn::Ident, fields: &[StructField]) -> TokenStream {
-    let field_entries: Vec<_> = fields
-        .iter()
-        .map(|f| {
-            let fname = &f.name;
-            let fty = &f.ty;
-            quote! { @field #fname : #fty ; }
-        })
-        .collect();
-
-    quote! {
-        @struct #name = $crate :: #name ;
-        #(#field_entries)*
-        @end;
-    }
-}
-
-fn generate_enum_descriptor(name: &syn::Ident, variants: &[EnumVariant]) -> TokenStream {
-    let variant_entries: Vec<_> = variants
-        .iter()
-        .map(|v| match v {
-            EnumVariant::Unit { name: vname } => {
-                quote! { @unit #vname = $crate :: #name :: #vname ; }
+    } else {
+        let uniffi_derive = match &item.data {
+            syn::Data::Struct(_) => {
+                quote! { #[cfg_attr(feature = "uniffi", derive(::uniffi::Record))] }
             }
-            EnumVariant::Tuple {
-                name: vname,
-                fields,
-            } => {
-                let bindings: Vec<_> = fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, ty)| {
-                        let var = format_ident!("_{}", i);
-                        quote! { #var : #ty }
-                    })
-                    .collect();
-                quote! { @tuple #vname ( #(#bindings),* ) = $crate :: #name :: #vname ; }
+            syn::Data::Enum(_) => {
+                quote! { #[cfg_attr(feature = "uniffi", derive(::uniffi::Enum))] }
             }
-            EnumVariant::Struct {
-                name: vname,
-                fields,
-            } => {
-                let field_defs: Vec<_> = fields
-                    .iter()
-                    .map(|f| {
-                        let fname = &f.name;
-                        let fty = &f.ty;
-                        quote! { #fname : #fty }
-                    })
-                    .collect();
-                quote! { @named #vname { #(#field_defs),* } = $crate :: #name :: #vname ; }
-            }
-        })
-        .collect();
+            syn::Data::Union(_) => panic!("#[ffi] does not support unions"),
+        };
 
-    quote! {
-        @enum #name = $crate :: #name ;
-        #(#variant_entries)*
-        @end;
+        quote! {
+            #uniffi_derive
+            #[cfg_attr(feature = "wasm", derive(::tsify::Tsify))]
+            #[cfg_attr(feature = "wasm", tsify(hashmap_as_object))]
+            #item
+        }
     }
 }

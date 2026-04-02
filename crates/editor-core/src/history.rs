@@ -45,6 +45,11 @@ impl History {
                         tag: None,
                     });
                 }
+            } else {
+                self.undos.push(HistoryEntry {
+                    steps: steps.to_vec(),
+                    tag: None,
+                });
             }
         } else {
             self.undos.push(HistoryEntry {
@@ -271,6 +276,19 @@ mod tests {
         // undo하면 tagged entry가 마지막
         h.undo();
         assert!(matches!(h.last_tag(), Some(HistoryTag::AutoReplacement)));
+    }
+
+    #[test]
+    fn push_after_undo_within_merge_window_records_steps() {
+        let mut h = History::new(Duration::from_millis(300));
+        let t = Instant::now();
+        h.push_at(&[text_step()], t);
+        h.undo();
+        h.push_at(&[text_step()], t + Duration::from_millis(150));
+
+        assert!(h.can_undo(), "steps must not be dropped");
+        let undone = h.undo().unwrap();
+        assert_eq!(undone.len(), 1);
     }
 
     #[test]

@@ -6,6 +6,7 @@
   "exports": {
     "./defaults.json": "./defaults.json",
     "./fallbacks.json": "./fallbacks.json",
+    "./fallbacks.bin": "./fallbacks.bin",
     "./Noto-Phantom.bin": "./Noto-Phantom.bin",
     "./Noto-Phantom-Emoji.bin": "./Noto-Phantom-Emoji.bin"
   },

@@ -4,15 +4,21 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./pkg/editor_ffi.d.ts",
-      "default": "./pkg/editor_ffi.js"
+    "./browser": {
+      "types": "./pkg/browser/editor_ffi.d.ts",
+      "default": "./pkg/browser/editor_ffi.js"
     },
-    "./wasm": "./pkg/editor_ffi_bg.wasm",
-    "./icu.zst": "./pkg/icu.zst"
+    "./browser/wasm": "./pkg/browser/editor_ffi_bg.wasm",
+    "./browser/icu.zst": "./pkg/browser/icu.zst",
+    "./server": {
+      "types": "./pkg/server/editor_ffi.d.ts",
+      "default": "./pkg/server/editor_ffi.js"
+    },
+    "./server/wasm": "./pkg/server/editor_ffi_bg.wasm",
+    "./server/icu.zst": "./pkg/server/icu.zst"
   },
-  "main": "pkg/editor_ffi.js",
-  "types": "pkg/editor_ffi.d.ts",
+  "main": "pkg/browser/editor_ffi.js",
+  "types": "pkg/browser/editor_ffi.d.ts",
   "files": [
     "pkg"
   ]

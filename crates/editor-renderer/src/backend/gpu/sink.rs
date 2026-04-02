@@ -48,7 +48,6 @@ impl GpuSink {
             self.height,
         );
 
-        self.scene = scene;
         texture.present();
 
         result

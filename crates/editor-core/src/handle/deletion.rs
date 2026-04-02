@@ -47,9 +47,9 @@ pub fn handle_deletion_intent(editor: &mut Editor, intent: DeletionIntent) {
 
 #[cfg(test)]
 mod tests {
-    use editor_common::TextSegmenters;
     use editor_macros::state;
     use editor_resource::Resource;
+    use editor_resource::TextSegmenters;
     use editor_state::assert_state_eq;
     use std::sync::{Arc, Mutex};
 

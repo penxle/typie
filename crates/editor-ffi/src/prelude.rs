@@ -1,7 +1,7 @@
 use cfg_if::cfg_if;
 
+pub use crate::convert::*;
 pub use crate::error::*;
-pub use crate::types::*;
 
 cfg_if! {
     if #[cfg(feature = "uniffi")] {

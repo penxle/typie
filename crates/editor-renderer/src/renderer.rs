@@ -30,9 +30,16 @@ impl Renderer {
         self.theme.set_variant(variant);
     }
 
-    pub fn render_page(&mut self, sink: &mut dyn RenderSink, page: &Page, doc: &Doc) {
+    pub fn render_page(
+        &mut self,
+        sink: &mut dyn RenderSink,
+        page: &Page,
+        doc: &Doc,
+        scale_factor: f32,
+    ) {
+        let root = Transform::scale(scale_factor);
         for fragment in &page.fragments {
-            crate::nodes::render_fragment(self, sink, fragment, doc, None, Transform::IDENTITY);
+            crate::nodes::render_fragment(self, sink, fragment, doc, None, root);
         }
     }
 }
@@ -132,7 +139,7 @@ mod tests {
         let doc = Doc::new_test();
         let page = Page::new(vec![], 0.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         assert_eq!(sink.fill_rect_count, 0);
         assert_eq!(sink.fill_path_count, 0);
@@ -149,7 +156,7 @@ mod tests {
         let line = make_line(node_id, 0.0, 0.0);
         let page = Page::new(vec![Fragment::Line(line)], 20.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         assert_eq!(sink.fill_rect_count, 0);
     }
@@ -188,7 +195,7 @@ mod tests {
 
         let page = Page::new(vec![Fragment::Line(line)], 20.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         assert_eq!(sink.fill_rect_count, 1);
     }
@@ -214,7 +221,7 @@ mod tests {
 
         let page = Page::new(vec![Fragment::Container(container)], 120.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         // Background fill_rect for callout
         assert_eq!(sink.fill_rect_count, 1);
@@ -247,7 +254,7 @@ mod tests {
 
         let page = Page::new(vec![Fragment::Container(container)], 100.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         // Left border drawn via fill_path
         assert_eq!(sink.fill_path_count, 1);
@@ -285,7 +292,7 @@ mod tests {
 
         let page = Page::new(vec![Fragment::Container(container)], 200.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         // fill_rect: 1 for callout background
         assert_eq!(sink.fill_rect_count, 1);
@@ -332,7 +339,7 @@ mod tests {
 
         let page = Page::new(vec![Fragment::Container(container)], 40.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         // fill_rect: 1 for callout background
         assert_eq!(sink.fill_rect_count, 1);
@@ -372,7 +379,7 @@ mod tests {
 
         let page = Page::new(vec![Fragment::Container(container)], 40.0);
         let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc);
+        renderer.render_page(&mut sink, &page, &doc, 1.0);
 
         // fill_rect: 1 for fold background
         assert_eq!(sink.fill_rect_count, 1);

@@ -119,6 +119,9 @@ importers:
       '@typie/editor':
         specifier: workspace:*
         version: link:../../legacy/editor
+      '@typie/editor-ffi':
+        specifier: workspace:*
+        version: link:../../crates/editor-ffi
       '@typie/lib':
         specifier: workspace:*
         version: link:../../packages/lib

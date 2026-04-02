@@ -1,3 +1,5 @@
+editor_macros::preamble!();
+
 mod dissolve;
 mod effect;
 mod error;

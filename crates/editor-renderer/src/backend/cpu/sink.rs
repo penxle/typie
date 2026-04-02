@@ -45,6 +45,8 @@ impl CpuSink {
             self.height,
             vello_cpu::RenderMode::OptimizeSpeed,
         );
+
+        self.ctx.reset();
     }
 }
 

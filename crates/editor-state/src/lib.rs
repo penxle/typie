@@ -1,4 +1,4 @@
-extern crate self as editor_state;
+editor_macros::preamble!();
 
 mod affinity;
 mod composition;

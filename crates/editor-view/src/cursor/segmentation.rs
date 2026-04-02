@@ -1,4 +1,5 @@
-use editor_common::{StrExt, TextSegmenters};
+use editor_common::StrExt;
+use editor_resource::TextSegmenters;
 use editor_state::{Position, Selection};
 use icu_segmenter::{SentenceSegmenter, WordSegmenter};
 

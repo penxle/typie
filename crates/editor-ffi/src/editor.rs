@@ -1,14 +1,16 @@
+#[cfg(not(feature = "wasm-server"))]
 use hashbrown::HashMap;
 use std::sync::Mutex;
 
+#[cfg(not(feature = "wasm-server"))]
 use crate::backend::BackendMode;
-use crate::convert::{FromFfi, IntoFfi};
+#[cfg(not(feature = "wasm-server"))]
 use crate::platform::{PlatformHandle, SurfaceHandle};
 use crate::prelude::*;
-use crate::types::*;
 
 struct EditorInner {
     editor: editor_core::Editor,
+    #[cfg(not(feature = "wasm-server"))]
     surfaces: HashMap<u32, SurfaceHandle>,
 }
 
@@ -16,29 +18,33 @@ struct EditorInner {
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct Editor {
     inner: Mutex<EditorInner>,
+    #[cfg(not(feature = "wasm-server"))]
     backend: BackendMode,
 }
 
 #[cfg_attr(feature = "uniffi", uniffi::export)]
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 impl Editor {
-    pub fn enqueue(&self, message: Complex<Message>) -> EditorResult<()> {
-        let message = message.from_ffi()?;
-        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
-        inner.editor.enqueue(message);
-        Ok(())
+    pub fn enqueue(&self, message: Complex<editor_core::Message>) -> EditorResult<()> {
+        self.with_inner(|inner| {
+            inner.editor.enqueue(message.from_ffi()?);
+            Ok(())
+        })
     }
 
-    pub fn tick(&self) -> EditorResult<Vec<Complex<EditorEvent>>> {
-        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
-        Ok(inner.editor.tick().into_ffi()?)
+    pub fn tick(&self) -> EditorResult<Vec<Complex<editor_core::EditorEvent>>> {
+        self.with_inner(|inner| Ok(inner.editor.tick().into_ffi()?))
     }
 
-    pub fn selection(&self) -> EditorResult<Complex<Selection>> {
-        let inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
-        Ok(inner.editor.state().selection.into_ffi()?)
+    pub fn selection(&self) -> EditorResult<Complex<editor_state::Selection>> {
+        self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
+}
 
+#[cfg(not(feature = "wasm-server"))]
+#[cfg_attr(feature = "uniffi", uniffi::export)]
+#[cfg_attr(feature = "wasm-browser", wasm_bindgen::prelude::wasm_bindgen)]
+impl Editor {
     pub fn attach_surface(
         &self,
         page: u32,
@@ -48,15 +54,17 @@ impl Editor {
         scale_factor: f64,
     ) -> EditorResult<()> {
         let surface = SurfaceHandle::new(&self.backend, handle, width, height, scale_factor)?;
-        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
-        inner.surfaces.insert(page, surface);
-        Ok(())
+        self.with_inner(|inner| {
+            inner.surfaces.insert(page, surface);
+            Ok(())
+        })
     }
 
     pub fn detach_surface(&self, page: u32) -> EditorResult<()> {
-        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
-        inner.surfaces.remove(&page);
-        Ok(())
+        self.with_inner(|inner| {
+            inner.surfaces.remove(&page);
+            Ok(())
+        })
     }
 
     pub fn resize_surface(
@@ -66,25 +74,51 @@ impl Editor {
         height: u32,
         scale_factor: f64,
     ) -> EditorResult<()> {
-        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
-        if let Some(surface) = inner.surfaces.get_mut(&page) {
-            surface.resize(width, height, scale_factor);
-        }
-        Ok(())
+        self.with_inner(|inner| {
+            if let Some(surface) = inner.surfaces.get_mut(&page) {
+                surface.resize(width, height, scale_factor);
+            }
+            Ok(())
+        })
     }
 
     pub fn render_surface(&self, page: u32) -> EditorResult<()> {
-        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
-        let EditorInner { editor, surfaces } = &mut *inner;
-        if let Some(surface) = surfaces.get_mut(&page) {
-            editor.render_page(page, surface.sink());
-            surface.present();
-        }
-        Ok(())
+        self.with_inner(|inner| {
+            if let Some(surface) = inner.surfaces.get_mut(&page) {
+                let scale_factor = surface.scale_factor() as f32;
+                inner.editor.render_page(page, surface.sink(), scale_factor);
+                surface.present();
+            }
+            Ok(())
+        })
+    }
+}
+
+#[cfg(feature = "wasm-server")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+impl Editor {
+    pub fn render_page_to_buffer(
+        &self,
+        page: u32,
+        width: u32,
+        height: u32,
+    ) -> EditorResult<Vec<u8>> {
+        self.with_inner(|inner| {
+            let mut backend = editor_renderer::RenderBackend::new_cpu(width as u16, height as u16);
+            inner.editor.render_page(page, backend.sink(), 1.0);
+
+            let mut buf = vec![0u8; (width * height * 4) as usize];
+            if let editor_renderer::RenderBackend::Cpu(sink) = &mut backend {
+                sink.flush_to(&mut buf);
+            }
+
+            Ok(buf)
+        })
     }
 }
 
 impl Editor {
+    #[cfg(not(feature = "wasm-server"))]
     pub(crate) fn new(core: editor_core::Editor, backend: BackendMode) -> Self {
         Self {
             inner: Mutex::new(EditorInner {
@@ -93,5 +127,20 @@ impl Editor {
             }),
             backend,
         }
+    }
+
+    #[cfg(feature = "wasm-server")]
+    pub(crate) fn new(core: editor_core::Editor) -> Self {
+        Self {
+            inner: Mutex::new(EditorInner { editor: core }),
+        }
+    }
+
+    fn with_inner<F, R>(&self, f: F) -> EditorResult<R>
+    where
+        F: FnOnce(&mut EditorInner) -> EditorResult<R>,
+    {
+        let mut inner = self.inner.lock().map_err(|_| FfiError::LockPoisoned)?;
+        f(&mut inner)
     }
 }

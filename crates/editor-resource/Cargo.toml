@@ -4,18 +4,34 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-test-utils = []
+test-utils = ["icu_segmenter/compiled_data", "icu_segmenter/auto"]
+uniffi = ["dep:uniffi", "editor-common/uniffi", "editor-model/uniffi"]
+wasm = [
+  "dep:tsify",
+  "dep:wasm-bindgen",
+  "editor-common/wasm",
+  "editor-model/wasm",
+]
 
 [dependencies]
 editor-common = { path = "../editor-common" }
+editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
+bitcode.workspace = true
 fontique.workspace = true
 hashbrown.workspace = true
+icu_provider.workspace = true
+icu_provider_blob.workspace = true
+icu_segmenter = { workspace = true, features = ["serde"] }
 log.workspace = true
 parley.workspace = true
 ruzstd.workspace = true
+serde.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 ruzstd.workspace = true

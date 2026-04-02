@@ -4,7 +4,29 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-test-utils = ["dep:fontique", "editor-resource/test-utils", "icu_segmenter/compiled_data", "icu_segmenter/auto"]
+test-utils = [
+  "dep:fontique",
+  "editor-resource/test-utils",
+  "icu_segmenter/compiled_data",
+  "icu_segmenter/auto",
+]
+uniffi = [
+  "dep:uniffi",
+  "editor-common/uniffi",
+  "editor-model/uniffi",
+  "editor-resource/uniffi",
+  "editor-state/uniffi",
+  "editor-transaction/uniffi",
+]
+wasm = [
+  "dep:tsify",
+  "dep:wasm-bindgen",
+  "editor-common/wasm",
+  "editor-model/wasm",
+  "editor-resource/wasm",
+  "editor-state/wasm",
+  "editor-transaction/wasm",
+]
 
 [dependencies]
 editor-common = { path = "../editor-common" }
@@ -19,10 +41,11 @@ icu_segmenter = { workspace = true, features = ["serde"] }
 log.workspace = true
 parley.workspace = true
 serde.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
-editor-common = { path = "../editor-common", features = ["test-utils"] }
-editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-resource = { path = "../editor-resource", features = ["test-utils"] }
 fontique.workspace = true

@@ -1,6 +1,6 @@
-import { createInstance } from '@typie/editor-ffi';
-import wasmUrl from '@typie/editor-ffi/wasm?url';
-import type { EditorHost } from '@typie/editor-ffi';
+import { createInstance } from '@typie/editor-ffi/browser';
+import wasmUrl from '@typie/editor-ffi/browser/wasm?url';
+import type { EditorHost } from '@typie/editor-ffi/browser';
 
 let host: EditorHost | undefined;
 let hostPromise: Promise<EditorHost> | undefined;
@@ -10,7 +10,7 @@ export function initWasm(): Promise<EditorHost> {
   return (hostPromise ??= (async () => {
     const mod = await WebAssembly.compileStreaming(fetch(wasmUrl));
     const { EditorHost } = await createInstance(mod);
-    host = await EditorHost.create('Gpu');
+    host = await EditorHost.create('cpu');
     return host;
   })());
 }

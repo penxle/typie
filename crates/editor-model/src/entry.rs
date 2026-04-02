@@ -1,15 +1,18 @@
+use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 use crate::id::NodeId;
 use crate::modifier::Modifier;
 use crate::nodes::*;
 
+#[ffi]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeEntry {
     pub node: Node,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub parent: Option<NodeId>,
     #[serde(skip_serializing_if = "imbl::Vector::is_empty", default)]
+    #[cfg_attr(feature = "wasm", tsify(type = "NodeId[]"))]
     pub children: imbl::Vector<NodeId>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub modifiers: Vec<Modifier>,

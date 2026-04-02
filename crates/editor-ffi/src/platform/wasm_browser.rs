@@ -23,8 +23,11 @@ impl SurfaceHandle {
         height: u32,
         scale_factor: f64,
     ) -> Result<Self, FfiError> {
+        let pw = (width as f64 * scale_factor).round() as u32;
+        let ph = (height as f64 * scale_factor).round() as u32;
+
         let backend = match mode {
-            BackendMode::Cpu => RenderBackend::new_cpu(width as u16, height as u16),
+            BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
             BackendMode::Gpu { device } => {
                 let surface = device
                     .instance
@@ -34,19 +37,26 @@ impl SurfaceHandle {
                 let mut backend = RenderBackend::new_gpu(Arc::clone(device), surface)
                     .map_err(|e| FfiError::Surface(e.to_string()))?;
 
-                backend.resize(width as u16, height as u16);
+                backend.resize(pw as u16, ph as u16);
 
                 backend
             }
         };
 
+        handle.set_width(pw);
+        handle.set_height(ph);
+
         Ok(Self {
             backend,
             handle,
-            width,
-            height,
+            width: pw,
+            height: ph,
             scale_factor,
         })
+    }
+
+    pub fn scale_factor(&self) -> f64 {
+        self.scale_factor
     }
 
     pub fn sink(&mut self) -> &mut dyn RenderSink {
@@ -84,13 +94,16 @@ impl SurfaceHandle {
     }
 
     pub fn resize(&mut self, width: u32, height: u32, scale_factor: f64) {
-        self.width = width;
-        self.height = height;
+        let pw = (width as f64 * scale_factor).round() as u32;
+        let ph = (height as f64 * scale_factor).round() as u32;
+
+        self.width = pw;
+        self.height = ph;
         self.scale_factor = scale_factor;
 
-        self.handle.set_width(width);
-        self.handle.set_height(height);
+        self.handle.set_width(pw);
+        self.handle.set_height(ph);
 
-        self.backend.resize(width as u16, height as u16);
+        self.backend.resize(pw as u16, ph as u16);
     }
 }

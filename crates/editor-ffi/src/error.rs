@@ -24,9 +24,6 @@ pub enum EditorError {
     Core(#[from] editor_core::EditorError),
 
     #[error(transparent)]
-    Common(#[from] editor_common::CommonError),
-
-    #[error(transparent)]
     Resource(#[from] editor_resource::ResourceError),
 
     #[error(transparent)]
@@ -34,4 +31,8 @@ pub enum EditorError {
 
     #[error(transparent)]
     Ffi(#[from] FfiError),
+
+    #[cfg(feature = "wasm-server")]
+    #[error(transparent)]
+    Server(#[from] editor_server::ServerError),
 }

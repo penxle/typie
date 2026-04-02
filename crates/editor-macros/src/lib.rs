@@ -1,12 +1,17 @@
 mod content_macro;
 mod context_macro;
 mod doc_macro;
-mod ffi_gen_macro;
 mod ffi_macro;
 mod from_discriminant_macro;
+mod preamble_macro;
 mod state_macro;
 
 use proc_macro::TokenStream;
+
+#[proc_macro]
+pub fn preamble(_input: TokenStream) -> TokenStream {
+    preamble_macro::codegen::generate().into()
+}
 
 #[proc_macro]
 pub fn content_expr(input: TokenStream) -> TokenStream {
@@ -44,17 +49,4 @@ pub fn ffi(attr: TokenStream, input: TokenStream) -> TokenStream {
     let item = syn::parse_macro_input!(input as syn::DeriveInput);
     let input = ffi_macro::parse::FfiInput::from_attr_and_item(attr.into(), item);
     ffi_macro::codegen::generate(&input).into()
-}
-
-#[doc(hidden)]
-#[proc_macro]
-pub fn __ffi_gen(input: TokenStream) -> TokenStream {
-    let input = syn::parse_macro_input!(input as ffi_gen_macro::parse::FfiGenInput);
-    ffi_gen_macro::codegen::generate(&input).into()
-}
-
-#[proc_macro]
-pub fn derive_ffi(input: TokenStream) -> TokenStream {
-    let path = syn::parse_macro_input!(input as syn::Path);
-    ffi_gen_macro::codegen::generate_derive(&path).into()
 }

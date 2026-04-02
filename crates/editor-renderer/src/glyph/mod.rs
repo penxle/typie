@@ -35,6 +35,7 @@ pub fn rasterize(
     fonts: &FontRegistry,
     scale_ctx: &mut ScaleContext,
     cache: &mut GlyphCache,
+    scale_factor: f32,
 ) -> Vec<PositionedGlyph> {
     let Some(font_data) = fonts.font_data(run.font_id, run.font_weight) else {
         return Vec::new();
@@ -43,6 +44,7 @@ pub fn rasterize(
     let font_version = fonts.font_version(run.font_id, run.font_weight);
     let embolden = run.synthesis.embolden;
     let has_skew = run.synthesis.skew.is_some();
+    let scaled_font_size = run.font_size * scale_factor;
 
     run.glyphs
         .iter()
@@ -54,7 +56,8 @@ pub fn rasterize(
             let snapped_x = glyph.x.floor();
             let snapped_y = glyph.y.floor();
 
-            let key = GlyphCacheKey::new(run.font_id, glyph.id, run.font_size, has_skew, embolden);
+            let key =
+                GlyphCacheKey::new(run.font_id, glyph.id, scaled_font_size, has_skew, embolden);
 
             let result = match cache.get(&key, font_version) {
                 Some(cached) => cached.clone(),
@@ -63,7 +66,7 @@ pub fn rasterize(
                         scale_ctx,
                         font_data,
                         glyph.id,
-                        run.font_size,
+                        scaled_font_size,
                         embolden,
                         run.synthesis.skew,
                     );

@@ -4,10 +4,29 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-test-utils = [
-  "editor-common/test-utils",
-  "editor-view/test-utils",
-  "editor-resource/test-utils",
+test-utils = ["editor-view/test-utils", "editor-resource/test-utils"]
+uniffi = [
+  "dep:uniffi",
+  "editor-commands/uniffi",
+  "editor-common/uniffi",
+  "editor-model/uniffi",
+  "editor-renderer/uniffi",
+  "editor-resource/uniffi",
+  "editor-state/uniffi",
+  "editor-transaction/uniffi",
+  "editor-view/uniffi",
+]
+wasm = [
+  "dep:tsify",
+  "dep:wasm-bindgen",
+  "editor-commands/wasm",
+  "editor-common/wasm",
+  "editor-model/wasm",
+  "editor-renderer/wasm",
+  "editor-resource/wasm",
+  "editor-state/wasm",
+  "editor-transaction/wasm",
+  "editor-view/wasm",
 ]
 
 [dependencies]
@@ -21,14 +40,16 @@ editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 editor-view = { path = "../editor-view" }
 enum-map.workspace = true
+itertools.workspace = true
 hashbrown.workspace = true
 log.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
-editor-common = { path = "../editor-common", features = ["test-utils"] }
-editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
 editor-state = { path = "../editor-state", features = ["test-utils"] }
 editor-view = { path = "../editor-view", features = ["test-utils"] }

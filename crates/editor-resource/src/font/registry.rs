@@ -1,14 +1,26 @@
+use editor_macros::ffi;
 use hashbrown::HashMap;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::sync::Arc;
 
 use super::data::FontData;
+use super::fallback::FallbackFontEntry;
+use super::manifest::FontManifest;
+use super::resolve::resolve_codepoint_mappings;
 use super::tpft::decode_tpft;
 use crate::error::ResourceError;
 
 struct FontEntry {
     data: Arc<FontData>,
     split_offset: usize,
+}
+
+#[ffi]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FontFamily {
+    pub name: String,
+    pub weights: Vec<u16>,
 }
 
 pub struct FontRegistry {
@@ -18,6 +30,8 @@ pub struct FontRegistry {
     codepoint_mappings: HashMap<(u16, u16), HashMap<u32, (u16, u16)>>,
     font_entries: HashMap<(u16, u16), FontEntry>,
     font_versions: HashMap<(u16, u16), u64>,
+    manifests: HashMap<(u16, u16), FontManifest>,
+    fallback_entries: Vec<FallbackFontEntry>,
 }
 
 impl FontRegistry {
@@ -29,6 +43,8 @@ impl FontRegistry {
             codepoint_mappings: HashMap::default(),
             font_entries: HashMap::default(),
             font_versions: HashMap::default(),
+            manifests: HashMap::default(),
+            fallback_entries: Vec::new(),
         }
     }
 
@@ -36,6 +52,16 @@ impl FontRegistry {
         self.families.clear();
         self.codepoint_mappings.clear();
         for (name, mut weights) in families {
+            weights.sort_unstable();
+            weights.dedup();
+            self.families.insert(name, SmallVec::from_vec(weights));
+        }
+    }
+
+    pub fn set_families(&mut self, families: Vec<FontFamily>) {
+        self.families.clear();
+        self.codepoint_mappings.clear();
+        for FontFamily { name, mut weights } in families {
             weights.sort_unstable();
             weights.dedup();
             self.families.insert(name, SmallVec::from_vec(weights));
@@ -58,32 +84,7 @@ impl FontRegistry {
 
     pub fn nearest_weight(&self, family: &str, target: u16) -> Option<u16> {
         let weights = self.families.get(family)?;
-        if weights.is_empty() {
-            return None;
-        }
-
-        let idx = weights.partition_point(|&w| w < target);
-
-        let before = if idx > 0 {
-            Some(weights[idx - 1])
-        } else {
-            None
-        };
-
-        let after = weights.get(idx).copied();
-
-        match (before, after) {
-            (Some(b), Some(a)) => {
-                if (target - b) <= (a - target) {
-                    Some(b)
-                } else {
-                    Some(a)
-                }
-            }
-            (Some(b), None) => Some(b),
-            (None, Some(a)) => Some(a),
-            (None, None) => None,
-        }
+        super::weight::match_weight(weights, target)
     }
 
     pub fn intern(&mut self, family: &str) -> u16 {
@@ -104,6 +105,10 @@ impl FontRegistry {
 
     pub fn resolve(&self, id: u16) -> &str {
         &self.family_names[id as usize]
+    }
+
+    pub fn resolve_opt(&self, id: u16) -> Option<&str> {
+        self.family_names.get(id as usize).map(|s| s.as_str())
     }
 
     pub fn codepoint_map(&self, family_id: u16, weight: u16) -> Option<&HashMap<u32, (u16, u16)>> {
@@ -199,6 +204,42 @@ impl FontRegistry {
         self.font_entries
             .get(&(id, weight))
             .map(|e| e.data.as_ref().as_ref())
+    }
+
+    pub fn add_manifest(&mut self, family_id: u16, weight: u16, manifest: FontManifest) {
+        self.manifests.insert((family_id, weight), manifest);
+    }
+
+    pub fn manifest(&self, family_id: u16, weight: u16) -> Option<&FontManifest> {
+        self.manifests.get(&(family_id, weight))
+    }
+
+    pub fn has_manifest(&self, family_id: u16, weight: u16) -> bool {
+        self.manifests.contains_key(&(family_id, weight))
+    }
+
+    pub fn set_fallback_entries(&mut self, entries: Vec<FallbackFontEntry>) {
+        for entry in &entries {
+            let id = self.intern(&entry.family_name);
+            for font in &entry.fonts {
+                self.manifests
+                    .insert((id, font.weight), font.manifest.clone());
+            }
+        }
+        self.fallback_entries = entries;
+    }
+
+    pub fn fallback_entries(&self) -> &[FallbackFontEntry] {
+        &self.fallback_entries
+    }
+
+    pub fn resolve_codepoint_mappings(
+        &self,
+        family_id: u16,
+        weight: u16,
+        codepoints: &[u32],
+    ) -> Vec<super::resolve::CodepointMapping> {
+        resolve_codepoint_mappings(self, family_id, weight, codepoints)
     }
 }
 
@@ -301,7 +342,7 @@ mod tests {
     #[test]
     fn nearest_weight_between() {
         let reg = make_registry();
-        assert_eq!(reg.nearest_weight("Pretendard", 600), Some(500));
+        assert_eq!(reg.nearest_weight("Pretendard", 600), Some(700));
     }
 
     #[test]

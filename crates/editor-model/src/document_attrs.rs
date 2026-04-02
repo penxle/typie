@@ -1,5 +1,7 @@
+use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
+#[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum LayoutMode {
@@ -22,6 +24,7 @@ impl Default for LayoutMode {
     }
 }
 
+#[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DocumentAttrs {
     pub layout_mode: LayoutMode,

@@ -1,11 +1,34 @@
 use editor_model::{Doc, Modifier, ModifierType, NodeId};
-use editor_resource::{FontRegistry, TextBrush};
+use editor_resource::TextBrush;
 use parley::Layout;
 
-use crate::engine::resolve::{resolve_inherited, resolve_text_style};
+use super::style_run::StyleRun;
+use crate::engine::resolve::resolve_inherited;
 use crate::fragment::{Glyph, GlyphRun, Synthesis};
 use crate::measure::MeasuredLine;
 use crate::strut::StrutMetrics;
+
+const ITALIC_SKEW_DEGREES: f32 = 14.0;
+
+fn resolve_synthesis(doc: &Doc, node_id: NodeId) -> Synthesis {
+    let (bold, italic) = doc
+        .node(node_id)
+        .map(|node_ref| {
+            let bold = resolve_inherited(&node_ref, ModifierType::Bold).is_some();
+            let italic = resolve_inherited(&node_ref, ModifierType::Italic).is_some();
+            (bold, italic)
+        })
+        .unwrap_or_default();
+
+    Synthesis {
+        embolden: bold,
+        skew: if italic {
+            Some(ITALIC_SKEW_DEGREES)
+        } else {
+            None
+        },
+    }
+}
 
 fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
     let color = doc
@@ -32,10 +55,10 @@ pub fn extract_measured_lines(
     doc: &Doc,
     text: &str,
     layout: &Layout<TextBrush>,
+    style_runs: &[StyleRun],
     strut: &StrutMetrics,
     line_height_ratio: f32,
     base_font_size: f32,
-    font_registry: &mut FontRegistry,
 ) -> Vec<MeasuredLine> {
     let mut lines = Vec::new();
 
@@ -58,11 +81,6 @@ pub fn extract_measured_lines(
                 parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
                     let run = glyph_run.run();
                     let font_size = run.font_size();
-                    let parley_synthesis = run.synthesis();
-                    let synthesis = Synthesis {
-                        embolden: parley_synthesis.embolden(),
-                        skew: parley_synthesis.skew(),
-                    };
 
                     // Capture glyph positions (line-relative)
                     let run_x = glyph_run.offset();
@@ -117,14 +135,13 @@ pub fn extract_measured_lines(
                                 char_advances.push(per_char);
                             }
 
+                            let synthesis = resolve_synthesis(doc, node_id);
                             let (color, background_color) = resolve_text_colors(doc, node_id);
 
-                            let (font_id, font_weight) = doc
-                                .node(node_id)
-                                .map(|node_ref| {
-                                    let style = resolve_text_style(&node_ref);
-                                    (font_registry.intern(&style.font_family), style.font_weight)
-                                })
+                            let (font_id, font_weight) = style_runs
+                                .iter()
+                                .find(|sr| sr.byte_range.contains(&byte_start))
+                                .map(|sr| (sr.family, sr.weight))
                                 .unwrap_or((0, 400));
 
                             glyph_runs.push(GlyphRun {

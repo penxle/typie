@@ -9,17 +9,17 @@ pub fn handle_insertion_intent(editor: &mut Editor, intent: InsertionIntent) {
             InsertionIntent::Text(text) => {
                 commands::insert_text(tr, &text)?;
             }
-            InsertionIntent::Break(BreakKind::Block) => {
+            InsertionIntent::Break(Break::Paragraph) => {
                 editor_commands::first!(
                     tr,
                     commands::lift_paragraph_forward(),
                     commands::split_paragraph(),
                 )?;
             }
-            InsertionIntent::Break(BreakKind::Line) => {
+            InsertionIntent::Break(Break::Line) => {
                 commands::insert_hard_break(tr)?;
             }
-            InsertionIntent::Break(BreakKind::Page) | InsertionIntent::Block(_) => {}
+            InsertionIntent::Break(Break::Page) | InsertionIntent::Node(_) => {}
         }
         Ok(())
     });
@@ -57,7 +57,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent(Intent::Insertion(InsertionIntent::Break(
-            BreakKind::Block,
+            Break::Paragraph,
         ))));
         let (expected, ..) = state! {
             doc { root { paragraph { text("hel") } paragraph { t1: text("lo") } } }
@@ -74,7 +74,7 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent(Intent::Insertion(InsertionIntent::Break(
-            BreakKind::Line,
+            Break::Line,
         ))));
         let (expected, ..) = state! {
             doc { root { paragraph { text("hel") hard_break {} t1: text("lo") } } }

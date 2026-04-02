@@ -14,6 +14,8 @@ pub fn draw(
     transform: Transform,
 ) {
     let t = transform.translate(lf.rect.x, lf.rect.y);
+    let scale_factor = transform.m[0];
+    let inv_scale = 1.0 / scale_factor;
 
     for run in &lf.glyph_runs {
         if let Some(ref bg_token) = run.background_color {
@@ -36,11 +38,17 @@ pub fn draw(
             &resource_guard.font_registry,
             &mut renderer.scale_ctx,
             &mut renderer.glyph_cache,
+            scale_factor,
         );
         drop(resource_guard);
 
         for pg in &positioned {
-            let gt = t.translate(pg.x, pg.y);
+            // Glyph path/bitmap is rasterized at device pixel size
+            // (font_size * scale_factor). The root transform already scales
+            // CSS positions to device pixels, so post_scale(1/sf) cancels
+            // the root scale for glyph geometry while preserving the
+            // device-pixel translation.
+            let gt = t.translate(pg.x, pg.y).post_scale(inv_scale);
             match &pg.raster {
                 glyph::RasterizedGlyph::Path(path) => {
                     sink.fill_path(path, color, gt);

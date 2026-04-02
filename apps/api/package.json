@@ -44,6 +44,7 @@
     "@sentry/node": "^10.43.0",
     "@sindresorhus/string-hash": "^2.0.0",
     "@typie/editor": "workspace:*",
+    "@typie/editor-ffi": "workspace:*",
     "@typie/lib": "workspace:*",
     "@typie/tsconfig": "workspace:*",
     "apple-signin-auth": "^2.0.0",

@@ -9,6 +9,7 @@ use editor_view::Viewport;
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+use crate::FontData;
 use crate::error::EditorError;
 use crate::event::EditorEvent;
 use crate::handle;
@@ -66,9 +67,10 @@ impl Editor {
         std::mem::take(&mut self.pending_events)
     }
 
-    pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink) {
+    pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
         if let Some(page) = self.view.pages().get(page_idx as usize) {
-            self.renderer.render_page(sink, page, &self.state.doc);
+            self.renderer
+                .render_page(sink, page, &self.state.doc, scale_factor);
         }
     }
 
@@ -139,10 +141,97 @@ impl Editor {
     fn process_effects(&mut self, effects: Vec<Effect>) {
         for effect in effects {
             match effect {
-                Effect::LoadFont { family, weight, .. } => {
-                    self.push_event(EditorEvent::FontMissing { family, weight });
+                Effect::LoadFont {
+                    family,
+                    weight,
+                    codepoints,
+                } => {
+                    let has_manifest = {
+                        let resource = self.resource.lock().unwrap();
+                        resource
+                            .font_registry
+                            .intern_id(&family)
+                            .map(|id| resource.font_registry.has_manifest(id, weight))
+                            .unwrap_or(false)
+                    };
+
+                    if has_manifest {
+                        self.resolve_fonts(&family, weight, &codepoints);
+                    } else {
+                        self.push_event(EditorEvent::FontManifestMissing { family, weight });
+                    }
                 }
             }
+        }
+    }
+
+    pub(crate) fn resolve_fonts(&mut self, family: &str, weight: u16, codepoints: &[u32]) {
+        let mut resource = self.resource.lock().unwrap();
+
+        let family_id = resource.font_registry.intern(family);
+        let mappings = resource
+            .font_registry
+            .resolve_codepoint_mappings(family_id, weight, codepoints);
+
+        for mapping in &mappings {
+            for &cp in &mapping.codepoints {
+                resource.font_registry.add_codepoint_mapping(
+                    family_id,
+                    weight,
+                    cp,
+                    mapping.family_id,
+                    mapping.weight,
+                );
+            }
+        }
+
+        let mut events = Vec::new();
+        for mapping in &mappings {
+            let resolved_family = resource
+                .font_registry
+                .resolve(mapping.family_id)
+                .to_string();
+
+            let is_primary = mapping.family_id == family_id;
+
+            let Some(manifest) = resource
+                .font_registry
+                .manifest(mapping.family_id, mapping.weight)
+            else {
+                continue;
+            };
+
+            let required_chunks = manifest.chunk_indices(&mapping.codepoints);
+
+            let required: Vec<_> = itertools::chain!(
+                [FontData::Base],
+                required_chunks.iter().map(|&i| FontData::Chunk(i)),
+            )
+            .collect();
+
+            let prefetch = if is_primary {
+                let required_set: HashSet<u16> = required_chunks.iter().copied().collect();
+                manifest
+                    .all_chunk_indices()
+                    .filter(|i| !required_set.contains(i))
+                    .map(FontData::Chunk)
+                    .collect()
+            } else {
+                vec![]
+            };
+
+            events.push(EditorEvent::FontDataMissing {
+                family: resolved_family,
+                weight: mapping.weight,
+                required,
+                prefetch,
+            });
+        }
+
+        drop(resource);
+
+        for event in events {
+            self.push_event(event);
         }
     }
 }
@@ -284,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn process_effects_converts_load_font_to_font_missing() {
+    fn process_effects_converts_load_font_to_font_manifest_missing() {
         let (mut editor, _) = test_editor();
         editor.process_effects(vec![Effect::LoadFont {
             family: "Inter".to_string(),
@@ -293,13 +382,13 @@ mod tests {
         }]);
         let events = std::mem::take(&mut editor.pending_events);
 
-        let has_font_missing = events.iter().any(|e| {
+        let has_manifest_missing = events.iter().any(|e| {
             matches!(
                 e,
-                EditorEvent::FontMissing { family, weight } if family == "Inter" && *weight == 400
+                EditorEvent::FontManifestMissing { family, weight } if family == "Inter" && *weight == 400
             )
         });
-        assert!(has_font_missing);
+        assert!(has_manifest_missing);
     }
 
     #[test]

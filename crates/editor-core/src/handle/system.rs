@@ -55,48 +55,66 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
             // stub
         }
 
-        SystemEvent::FontsLoaded {
-            family,
-            weight,
-            mappings,
-        } => {
-            {
-                let mut resource = editor.resource.lock().unwrap();
-                let requested_id = resource.font_registry.intern(&family);
-                for mapping in &mappings {
-                    let resolved_id = resource.font_registry.intern(&mapping.family);
-                    for &cp in &mapping.codepoints {
-                        resource.font_registry.add_codepoint_mapping(
-                            requested_id,
-                            weight,
-                            cp,
-                            resolved_id,
-                            mapping.weight,
-                        );
-                    }
-                }
+        SystemEvent::FontManifestLoaded { family, weight } => {
+            let has_pending = editor.pending_fonts.contains_key(&(family.clone(), weight));
+            if !has_pending {
+                return;
             }
 
-            let loaded_cps: HashSet<u32> = mappings
-                .iter()
-                .flat_map(|m| m.codepoints.iter().copied())
-                .collect();
+            let codepoints: Vec<u32> = editor
+                .pending_fonts
+                .get(&(family.clone(), weight))
+                .map(|nodes| {
+                    nodes
+                        .values()
+                        .flatten()
+                        .copied()
+                        .collect::<HashSet<u32>>()
+                        .into_iter()
+                        .collect()
+                })
+                .unwrap_or_default();
 
+            editor.resolve_fonts(&family, weight, &codepoints);
+        }
+
+        SystemEvent::FontBaseLoaded { family, weight } => {
+            let resource = editor.resource.lock().unwrap();
+
+            let Some(family_id) = resource.font_registry.intern_id(&family) else {
+                return;
+            };
+
+            let loaded = (family_id, weight);
             let mut affected_nodes = Vec::new();
-            let key = (family, weight);
-            if let Some(nodes) = editor.pending_fonts.get_mut(&key) {
-                nodes.retain(|node_id, pending_cps| {
-                    let before = pending_cps.len();
-                    pending_cps.retain(|cp| !loaded_cps.contains(cp));
-                    if before != pending_cps.len() {
-                        affected_nodes.push(*node_id);
-                    }
-                    !pending_cps.is_empty()
-                });
-                if nodes.is_empty() {
-                    editor.pending_fonts.remove(&key);
+
+            for ((family, weight), nodes) in editor.pending_fonts.iter_mut() {
+                let Some(family_id) = resource.font_registry.intern_id(family) else {
+                    continue;
+                };
+
+                for (node_id, pending_cps) in nodes.iter_mut() {
+                    pending_cps.retain(|cp| {
+                        let resolved = resource
+                            .font_registry
+                            .codepoint_map(family_id, *weight)
+                            .and_then(|m| m.get(cp).copied());
+
+                        if resolved == Some(loaded) {
+                            affected_nodes.push(*node_id);
+                            false
+                        } else {
+                            true
+                        }
+                    });
                 }
+
+                nodes.retain(|_, cps| !cps.is_empty());
             }
+
+            editor.pending_fonts.retain(|_, nodes| !nodes.is_empty());
+
+            drop(resource);
 
             if editor
                 .view
@@ -104,6 +122,10 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
             {
                 editor.push_event(EditorEvent::RenderInvalidated);
             }
+        }
+
+        SystemEvent::FontChunkLoaded { .. } => {
+            editor.push_event(EditorEvent::RenderInvalidated);
         }
 
         SystemEvent::SetExternalHeight { node_id, height } => {
@@ -166,6 +188,7 @@ mod tests {
     use editor_macros::{doc, state};
 
     use super::*;
+    use crate::event::FontData;
 
     #[test]
     fn collect_from_single_text_node() {
@@ -244,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn initialize_emits_font_missing_event() {
+    fn initialize_emits_font_manifest_missing_event() {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
@@ -257,18 +280,18 @@ mod tests {
         let mut editor = Editor::new_test(state);
         let events = editor.apply(Message::System(SystemEvent::Initialize));
 
-        let has_font_missing = events.iter().any(|e| {
+        let has_manifest_missing = events.iter().any(|e| {
             matches!(
                 e,
-                EditorEvent::FontMissing { family, weight }
+                EditorEvent::FontManifestMissing { family, weight }
                     if family == "TestFont" && *weight == 400
             )
         });
-        assert!(has_font_missing);
+        assert!(has_manifest_missing);
     }
 
     #[test]
-    fn fonts_loaded_removes_codepoints_from_pending() {
+    fn font_data_loaded_removes_codepoints_from_pending() {
         let (state, t1) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
@@ -281,14 +304,18 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System(SystemEvent::Initialize));
 
-        editor.apply(Message::System(SystemEvent::FontsLoaded {
+        // Pre-register codepoint mapping for 'A' only
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let id = resource.font_registry.intern("TestFont");
+            resource
+                .font_registry
+                .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
+        }
+
+        editor.apply(Message::System(SystemEvent::FontBaseLoaded {
             family: "TestFont".to_string(),
             weight: 400,
-            mappings: vec![FontMapping {
-                family: "TestFont".to_string(),
-                weight: 400,
-                codepoints: vec!['A' as u32],
-            }],
         }));
 
         let key = ("TestFont".to_string(), 400u16);
@@ -298,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn fonts_loaded_removes_node_when_all_cps_loaded() {
+    fn font_data_loaded_removes_node_when_all_cps_loaded() {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
@@ -311,14 +338,18 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System(SystemEvent::Initialize));
 
-        editor.apply(Message::System(SystemEvent::FontsLoaded {
+        // Pre-register codepoint mapping for 'A'
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let id = resource.font_registry.intern("TestFont");
+            resource
+                .font_registry
+                .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
+        }
+
+        editor.apply(Message::System(SystemEvent::FontBaseLoaded {
             family: "TestFont".to_string(),
             weight: 400,
-            mappings: vec![FontMapping {
-                family: "TestFont".to_string(),
-                weight: 400,
-                codepoints: vec!['A' as u32],
-            }],
         }));
 
         assert!(
@@ -329,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn fonts_loaded_does_not_invalidate_unaffected_node() {
+    fn font_data_loaded_does_not_invalidate_unaffected_node() {
         let (state, t1, t2) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
@@ -343,14 +374,18 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System(SystemEvent::Initialize));
 
-        let events = editor.apply(Message::System(SystemEvent::FontsLoaded {
+        // Pre-register codepoint mapping for 'A' only
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let id = resource.font_registry.intern("TestFont");
+            resource
+                .font_registry
+                .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
+        }
+
+        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
             family: "TestFont".to_string(),
             weight: 400,
-            mappings: vec![FontMapping {
-                family: "TestFont".to_string(),
-                weight: 400,
-                codepoints: vec!['A' as u32],
-            }],
         }));
 
         let key = ("TestFont".to_string(), 400u16);
@@ -375,7 +410,7 @@ mod tests {
     }
 
     #[test]
-    fn fonts_loaded_emits_render_invalidated() {
+    fn font_data_loaded_emits_render_invalidated() {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
@@ -388,14 +423,18 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System(SystemEvent::Initialize));
 
-        let events = editor.apply(Message::System(SystemEvent::FontsLoaded {
+        // Pre-register codepoint mapping for 'A'
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let id = resource.font_registry.intern("TestFont");
+            resource
+                .font_registry
+                .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
+        }
+
+        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
             family: "TestFont".to_string(),
             weight: 400,
-            mappings: vec![FontMapping {
-                family: "TestFont".to_string(),
-                weight: 400,
-                codepoints: vec!['A' as u32],
-            }],
         }));
 
         assert!(
@@ -406,7 +445,149 @@ mod tests {
     }
 
     #[test]
-    fn fonts_loaded_no_event_for_unknown_font() {
+    fn full_font_pipeline_with_manifest_and_fallback() {
+        let (state, t1) = state! {
+            doc {
+                root [font_family("Primary".to_string()), font_weight(400)] {
+                    paragraph { t1: text("AB") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+
+        // Step 1: Initialize — should emit FontManifestMissing (no manifest yet)
+        let events = editor.apply(Message::System(SystemEvent::Initialize));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            EditorEvent::FontManifestMissing { family, weight }
+                if family == "Primary" && *weight == 400
+        )));
+
+        // Step 2: Load manifest into resource
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let id = resource.font_registry.intern("Primary");
+
+            // Build chunk_map: block 0x00 exists, 0x41 ('A') -> chunk 0, 0x42 ('B') -> 0xFF (not covered)
+            let mut chunk_map = vec![0xffu8; 256];
+            chunk_map[0] = 0; // block 0x00 -> L2 index 0
+            let mut l2 = [0xffu8; 256];
+            l2[0x41] = 0; // 'A' -> chunk 0
+            chunk_map.extend_from_slice(&l2);
+
+            let manifest = editor_resource::FontManifest::new(4, chunk_map, vec![]);
+            resource.font_registry.add_manifest(id, 400, manifest);
+
+            // Set up fallback that covers B (0x42)
+            let mut fb_chunk_map = vec![0xffu8; 256];
+            fb_chunk_map[0] = 0;
+            let mut fb_l2 = [0xffu8; 256];
+            fb_l2[0x42] = 0; // 'B' -> chunk 0
+            fb_chunk_map.extend_from_slice(&fb_l2);
+
+            let fb_manifest = editor_resource::FontManifest::new(2, fb_chunk_map, vec![]);
+
+            resource
+                .font_registry
+                .set_fallback_entries(vec![editor_resource::FallbackFontEntry {
+                    family_name: "Fallback".into(),
+                    fonts: vec![editor_resource::FallbackFont {
+                        weight: 400,
+                        manifest: fb_manifest,
+                    }],
+                }]);
+
+            // Register Primary 400 as available weight
+            let mut families = hashbrown::HashMap::default();
+            families.insert("Primary".into(), vec![400u16]);
+            resource.font_registry.update(families);
+        }
+
+        // Step 3: Send FontManifestLoaded
+        let events = editor.apply(Message::System(SystemEvent::FontManifestLoaded {
+            family: "Primary".to_string(),
+            weight: 400,
+        }));
+
+        // Should emit FontDataMissing for Primary and Fallback
+        let primary_event = events.iter().find(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, weight, .. }
+                    if family == "Primary" && *weight == 400
+            )
+        });
+        let fallback_event = events.iter().find(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, weight, .. }
+                    if family == "Fallback" && *weight == 400
+            )
+        });
+        assert!(primary_event.is_some(), "should request primary font data");
+        assert!(
+            fallback_event.is_some(),
+            "should request fallback font data"
+        );
+
+        // Verify Primary FontDataMissing: required=[Base, Chunk(0)], prefetch has remaining chunks
+        if let Some(EditorEvent::FontDataMissing {
+            required, prefetch, ..
+        }) = primary_event
+        {
+            assert_eq!(required.len(), 2, "primary required: Base + Chunk(0)");
+            assert!(matches!(required[0], FontData::Base));
+            assert!(matches!(required[1], FontData::Chunk(0)));
+            // Primary font has chunk_count=4, required uses chunk 0, so prefetch=[1,2,3]
+            assert_eq!(prefetch.len(), 3, "primary prefetch: 3 remaining chunks");
+        }
+
+        // Verify Fallback FontDataMissing: required=[Base, Chunk(0)], prefetch=[]
+        if let Some(EditorEvent::FontDataMissing {
+            required, prefetch, ..
+        }) = fallback_event
+        {
+            assert_eq!(required.len(), 2, "fallback required: Base + Chunk(0)");
+            assert!(matches!(required[0], FontData::Base));
+            assert!(matches!(required[1], FontData::Chunk(0)));
+            assert!(prefetch.is_empty(), "fallback should have no prefetch");
+        }
+
+        // Step 4: FontBaseLoaded for Primary — should invalidate T1
+        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
+            family: "Primary".to_string(),
+            weight: 400,
+        }));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+
+        // A is resolved, B still pending
+        let key = ("Primary".to_string(), 400u16);
+        assert!(editor.pending_fonts.get(&key).is_some_and(|n| {
+            n.get(&t1)
+                .is_some_and(|cps| cps.contains(&('B' as u32)) && !cps.contains(&('A' as u32)))
+        }));
+
+        // Step 5: FontBaseLoaded for Fallback — should resolve B
+        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
+            family: "Fallback".to_string(),
+            weight: 400,
+        }));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+        assert!(!editor.pending_fonts.contains_key(&key));
+    }
+
+    #[test]
+    fn font_data_loaded_no_event_for_unknown_font() {
         let (state, ..) = state! {
             doc {
                 root [font_family("TestFont".to_string()), font_weight(400)] {
@@ -419,14 +600,9 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::System(SystemEvent::Initialize));
 
-        let events = editor.apply(Message::System(SystemEvent::FontsLoaded {
+        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
             family: "UnknownFont".to_string(),
             weight: 400,
-            mappings: vec![FontMapping {
-                family: "UnknownFont".to_string(),
-                weight: 400,
-                codepoints: vec!['A' as u32],
-            }],
         }));
 
         assert!(

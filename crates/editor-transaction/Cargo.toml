@@ -3,6 +3,23 @@ name = "editor-transaction"
 version.workspace = true
 edition.workspace = true
 
+[features]
+uniffi = [
+  "dep:uniffi",
+  "editor-common/uniffi",
+  "editor-model/uniffi",
+  "editor-schema/uniffi",
+  "editor-state/uniffi",
+]
+wasm = [
+  "dep:tsify",
+  "dep:wasm-bindgen",
+  "editor-common/wasm",
+  "editor-model/wasm",
+  "editor-schema/wasm",
+  "editor-state/wasm",
+]
+
 [dependencies]
 editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
@@ -13,7 +30,9 @@ log.workspace = true
 serde.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
-editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }

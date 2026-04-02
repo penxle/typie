@@ -1,4 +1,4 @@
-extern crate self as editor_schema;
+editor_macros::preamble!();
 
 mod content;
 mod context;

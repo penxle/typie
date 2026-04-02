@@ -56,14 +56,14 @@ mod tests {
     fn key(k: Key) -> Message {
         Message::Key(KeyEvent {
             key: k,
-            modifiers: KeyModifiers::default(),
+            modifiers: InputModifiers::default(),
         })
     }
 
     fn key_shift(k: Key) -> Message {
         Message::Key(KeyEvent {
             key: k,
-            modifiers: KeyModifiers {
+            modifiers: InputModifiers {
                 shift: true,
                 ..Default::default()
             },

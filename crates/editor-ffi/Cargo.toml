@@ -8,18 +8,38 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 
 [features]
 default = []
-uniffi = ["dep:uniffi", "dep:android_logger", "dep:env_logger"]
+uniffi = [
+  "dep:uniffi",
+  "dep:android_logger",
+  "dep:env_logger",
+  "editor-common/uniffi",
+  "editor-core/uniffi",
+  "editor-model/uniffi",
+  "editor-renderer/uniffi",
+  "editor-resource/uniffi",
+  "editor-state/uniffi",
+  "editor-transaction/uniffi",
+  "editor-view/uniffi",
+]
 wasm = [
   "dep:console_error_panic_hook",
   "dep:console_log",
   "dep:wasm-bindgen",
   "dep:wasm-bindgen-futures",
-  "dep:web-sys",
   "dep:serde-wasm-bindgen",
   "dep:serde",
   "dep:tsify",
-  "dep:wgpu",
+  "editor-common/wasm",
+  "editor-core/wasm",
+  "editor-model/wasm",
+  "editor-renderer/wasm",
+  "editor-resource/wasm",
+  "editor-state/wasm",
+  "editor-transaction/wasm",
+  "editor-view/wasm",
 ]
+wasm-browser = ["wasm", "dep:web-sys", "dep:wgpu"]
+wasm-server = ["wasm", "dep:editor-server", "editor-server/wasm"]
 
 [dependencies]
 editor-common = { path = "../editor-common" }
@@ -28,6 +48,7 @@ editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-renderer = { path = "../editor-renderer" }
 editor-resource = { path = "../editor-resource" }
+editor-server = { path = "../editor-server", optional = true }
 editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 editor-view = { path = "../editor-view" }

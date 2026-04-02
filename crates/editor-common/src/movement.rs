@@ -13,7 +13,7 @@ pub enum Direction {
 
 #[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum Movement {
     Grapheme(Direction),
     Word(Direction),

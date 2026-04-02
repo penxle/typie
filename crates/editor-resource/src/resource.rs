@@ -1,11 +1,12 @@
-use crate::error::ResourceError;
-use editor_common::TextSegmenters;
 use fontique::ScriptExt;
 use parley::{FontContext, LayoutContext};
 use std::sync::Arc;
 
+use crate::FontFamily;
 use crate::brush::TextBrush;
-use crate::font::FontRegistry;
+use crate::error::ResourceError;
+use crate::font::{FallbackFontEntry, FontManifest, FontRegistry};
+use crate::segmentation::TextSegmenters;
 
 pub struct Resource {
     pub font_registry: FontRegistry,
@@ -58,7 +59,38 @@ impl Resource {
         Ok(())
     }
 
-    pub fn set_fallback_font_families(
+    pub fn add_font_manifest(
+        &mut self,
+        family: &str,
+        weight: u16,
+        data: &[u8],
+    ) -> Result<(), ResourceError> {
+        let decompressed = crate::zstd::decompress_zstd(data)?;
+        let manifest: FontManifest = bitcode::decode(&decompressed)
+            .map_err(|e| ResourceError::InvalidManifest(format!("{e}")))?;
+
+        let id = self.font_registry.intern(family);
+        self.font_registry.add_manifest(id, weight, manifest);
+
+        Ok(())
+    }
+
+    pub fn add_fallback_font_manifests(&mut self, data: &[u8]) -> Result<(), ResourceError> {
+        let decompressed = crate::zstd::decompress_zstd(data)?;
+        let entries: Vec<FallbackFontEntry> = bitcode::decode(&decompressed)
+            .map_err(|e| ResourceError::InvalidManifest(format!("{e}")))?;
+
+        self.font_registry.set_fallback_entries(entries);
+
+        Ok(())
+    }
+
+    pub fn set_font_families(&mut self, families: Vec<FontFamily>) -> Result<(), ResourceError> {
+        self.font_registry.set_families(families);
+        Ok(())
+    }
+
+    pub fn set_phantom_font_families(
         &mut self,
         families: Vec<String>,
     ) -> Result<(), ResourceError> {

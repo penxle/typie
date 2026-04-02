@@ -205,6 +205,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
+name = "bitcode"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a6ed1b54d8dc333e7be604d00fa9262f4635485ffea923647b6521a5fff045d"
+dependencies = [
+ "arrayvec",
+ "bitcode_derive",
+ "bytemuck",
+ "glam",
+ "serde",
+]
+
+[[package]]
+name = "bitcode_derive"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "238b90427dfad9da4a9abd60f3ec1cdee6b80454bde49ed37f1781dd8e9dc7f9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -443,7 +467,10 @@ dependencies = [
  "log",
  "smallvec",
  "thiserror",
+ "tsify",
  "unicode-segmentation",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -452,13 +479,11 @@ version = "0.0.1"
 dependencies = [
  "bytecount",
  "editor-macros",
- "icu_provider",
- "icu_provider_blob",
- "icu_segmenter",
  "log",
- "ruzstd",
  "serde",
- "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
  "web-time",
 ]
 
@@ -477,9 +502,13 @@ dependencies = [
  "editor-view",
  "enum-map",
  "hashbrown 0.16.1",
+ "itertools",
  "log",
  "serde",
  "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -496,6 +525,7 @@ dependencies = [
  "editor-model",
  "editor-renderer",
  "editor-resource",
+ "editor-server",
  "editor-state",
  "editor-transaction",
  "editor-view",
@@ -537,12 +567,16 @@ dependencies = [
  "editor-macros",
  "enum-map",
  "getrandom",
+ "hashbrown 0.16.1",
  "imbl",
  "log",
  "serde",
  "serde_json",
  "strum",
  "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -567,8 +601,11 @@ dependencies = [
  "serde_json",
  "skrifa",
  "thiserror",
+ "tsify",
+ "uniffi",
  "vello",
  "vello_cpu",
+ "wasm-bindgen",
  "wgpu",
  "zeno",
  "zune-png",
@@ -578,15 +615,24 @@ dependencies = [
 name = "editor-resource"
 version = "0.0.1"
 dependencies = [
+ "bitcode",
  "editor-common",
+ "editor-macros",
  "editor-model",
  "fontique",
  "hashbrown 0.16.1",
+ "icu_provider",
+ "icu_provider_blob",
+ "icu_segmenter",
  "log",
  "parley",
  "ruzstd",
+ "serde",
  "smallvec",
  "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -598,6 +644,29 @@ dependencies = [
  "enum-map",
  "log",
  "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "editor-server"
+version = "0.0.1"
+dependencies = [
+ "bitcode",
+ "editor-macros",
+ "editor-model",
+ "editor-resource",
+ "hashbrown 0.16.1",
+ "ruzstd",
+ "serde",
+ "serde_bytes",
+ "skrifa",
+ "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
+ "write-fonts",
 ]
 
 [[package]]
@@ -609,6 +678,9 @@ dependencies = [
  "log",
  "serde",
  "smallvec",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -624,6 +696,9 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -642,7 +717,16 @@ dependencies = [
  "log",
  "parley",
  "serde",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
+
+[[package]]
+name = "either"
+version = "1.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "enum-map"
@@ -883,6 +967,12 @@ dependencies = [
  "log",
  "xml-rs",
 ]
+
+[[package]]
+name = "glam"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
 
 [[package]]
 name = "glob"
@@ -1228,6 +1318,15 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
 
 [[package]]
 name = "itoa"
@@ -1972,6 +2071,16 @@ dependencies = [
  "js-sys",
  "serde",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -3048,6 +3157,19 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
+]
+
+[[package]]
+name = "write-fonts"
+version = "0.45.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f12725b0845073e20b04e79b500dbfb465904d7cbd84883a1f1bbd084debc515"
+dependencies = [
+ "font-types",
+ "indexmap",
+ "kurbo",
+ "log",
+ "read-fonts",
 ]
 
 [[package]]

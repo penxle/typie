@@ -447,7 +447,7 @@ builder.mutationFields((t) => ({
       });
 
       const fontName = postScriptName;
-      const { manifest, base, chunks } = await processFont(fontName, buffer);
+      const { hash, manifest, base, chunks } = await processFont(fontName, buffer);
 
       const s3Base = `fonts/${filePath}`;
       const compressed = await compressZstd(buffer);
@@ -465,8 +465,17 @@ builder.mutationFields((t) => ({
         aws.s3.send(
           new PutObjectCommand({
             Bucket: 'typie-usercontents',
-            Key: `${s3Base}/manifest.json`,
-            Body: JSON.stringify(manifest),
+            Key: `${s3Base}/manifest.bin`,
+            Body: manifest,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/hash.json`,
+            Body: JSON.stringify({ hash }),
             ContentType: 'application/json',
             Tagging: tagging,
           }),
@@ -474,7 +483,7 @@ builder.mutationFields((t) => ({
         aws.s3.send(
           new PutObjectCommand({
             Bucket: 'typie-usercontents',
-            Key: `${s3Base}/${manifest.hash}/base.bin`,
+            Key: `${s3Base}/${hash}/base.bin`,
             Body: base,
             ContentType: 'application/octet-stream',
             Tagging: tagging,
@@ -484,7 +493,7 @@ builder.mutationFields((t) => ({
           aws.s3.send(
             new PutObjectCommand({
               Bucket: 'typie-usercontents',
-              Key: `${s3Base}/${manifest.hash}/chunks/${i}.bin`,
+              Key: `${s3Base}/${hash}/chunks/${i}.bin`,
               Body: chunk,
               ContentType: 'application/octet-stream',
               Tagging: tagging,

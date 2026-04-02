@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { processFont } from '#/utils/font.ts';
+import { wasm } from '#/utils/wasm-ffi.ts';
 
 const S3_BUCKET = 'typie-cdn';
 const S3_PREFIX = 'editor/fonts';
@@ -84,7 +85,7 @@ do {
 console.log(`Found ${existingKeys.size} existing keys\n`);
 
 // Process fonts and upload to S3
-type FallbackFont = { weight: number; path: string; hash: string; chunk_count: number; chunk_map: string | null; chunk_map_sup?: number[] };
+type FallbackFont = { weight: number; path: string; hash: string; manifest: Uint8Array };
 const fallbacksData: { familyName: string; fonts: FallbackFont[] }[] = [];
 let uploaded = 0;
 let skipped = 0;
@@ -99,13 +100,13 @@ for (const family of FALLBACK_FONTS) {
     const ttfData = new Uint8Array(await readFile(ttfPath));
 
     console.log(`[${done}/${total}] Processing ${font.path}...`);
-    const { manifest, strategy, base, chunks } = await processFont(font.path, ttfData);
+    const { hash, manifest, strategy, base, chunks } = await processFont(font.path, ttfData);
 
     const baseKB = (base.length / 1024).toFixed(1);
     const chunksKB = (chunks.reduce((s, c) => s + c.length, 0) / 1024).toFixed(1);
     console.log(`  base: ${baseKB}KB, ${chunks.length} chunks: ${chunksKB}KB, strategy: ${strategy ?? 'sequential'}`);
 
-    const s3Base = `${S3_PREFIX}/${font.path}/${manifest.hash}`;
+    const s3Base = `${S3_PREFIX}/${font.path}/${hash}`;
     const filesToUpload: { key: string; body: Uint8Array }[] = [
       { key: `${s3Base}/base.bin`, body: base },
       ...chunks.map((chunk, i) => ({ key: `${s3Base}/chunks/${i}.bin`, body: chunk })),
@@ -122,7 +123,7 @@ for (const family of FALLBACK_FONTS) {
       }
     }
 
-    fonts.push({ weight: font.weight, path: font.path, ...manifest });
+    fonts.push({ weight: font.weight, path: font.path, hash, manifest });
   }
 
   if (fonts.length > 0) {
@@ -132,8 +133,24 @@ for (const family of FALLBACK_FONTS) {
 
 console.log(`\nS3: ${uploaded} uploaded, ${skipped} skipped`);
 
-// Write fallbacks.json
 const workspaceDir = path.resolve(import.meta.dirname, '../../..');
-const fallbacksPath = path.join(workspaceDir, 'crates/editor/assets/fallbacks.json');
-await writeFile(fallbacksPath, JSON.stringify(fallbacksData));
-console.log(`Written: ${fallbacksPath}`);
+
+// Write fallbacks.json (host uses this for fetch URLs)
+const fallbacksJson = fallbacksData.map((entry) => ({
+  familyName: entry.familyName,
+  fonts: entry.fonts.map((f) => ({ weight: f.weight, path: f.path, hash: f.hash })),
+}));
+const jsonPath = path.join(workspaceDir, 'assets/fallbacks.json');
+await writeFile(jsonPath, JSON.stringify(fallbacksJson));
+console.log(`Written: ${jsonPath}`);
+
+// Write fallbacks.bin (Rust runtime uses this for codepoint lookup)
+const fallbacksBlob = await wasm.build_fallback_font_manifests(
+  fallbacksData.map((entry) => ({
+    family_name: entry.familyName,
+    fonts: entry.fonts.map((f) => ({ weight: f.weight, manifest: f.manifest })),
+  })),
+);
+const binPath = path.join(workspaceDir, 'assets/fallbacks.bin');
+await writeFile(binPath, fallbacksBlob);
+console.log(`Written: ${binPath}`);

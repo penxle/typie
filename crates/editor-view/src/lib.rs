@@ -1,3 +1,5 @@
+editor_macros::preamble!();
+
 pub mod cursor;
 pub mod engine;
 pub mod fragment;

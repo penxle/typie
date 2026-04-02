@@ -45,10 +45,10 @@ pub fn measure_paragraph(
         doc,
         &text,
         &layout,
+        &style_runs,
         &strut,
         base_style.line_height,
         base_style.font_size,
-        &mut resource.font_registry,
     );
 
     drop(resource);

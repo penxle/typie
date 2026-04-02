@@ -3,6 +3,23 @@ name = "editor-renderer"
 version.workspace = true
 edition.workspace = true
 
+[features]
+uniffi = [
+  "dep:uniffi",
+  "editor-common/uniffi",
+  "editor-model/uniffi",
+  "editor-resource/uniffi",
+  "editor-view/uniffi",
+]
+wasm = [
+  "dep:tsify",
+  "dep:wasm-bindgen",
+  "editor-common/wasm",
+  "editor-model/wasm",
+  "editor-resource/wasm",
+  "editor-view/wasm",
+]
+
 [dependencies]
 editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
@@ -23,6 +40,9 @@ vello_cpu.workspace = true
 wgpu.workspace = true
 zeno.workspace = true
 zune-png.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [build-dependencies]
 heck.workspace = true
@@ -31,5 +51,4 @@ quote.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-editor-common = { path = "../editor-common", features = ["test-utils"] }
 editor-model = { path = "../editor-model", features = ["test-utils"] }

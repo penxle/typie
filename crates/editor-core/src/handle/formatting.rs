@@ -18,7 +18,9 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state.clone());
-        editor.apply(Message::Intent(Intent::Formatting(FormattingIntent::Clear)));
+        editor.apply(Message::Intent(Intent::Formatting(
+            FormattingIntent::ClearModifiers,
+        )));
         assert_eq!(editor.state().selection, state.selection);
     }
 }

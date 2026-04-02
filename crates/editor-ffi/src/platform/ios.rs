@@ -21,8 +21,11 @@ impl SurfaceHandle {
         height: u32,
         scale_factor: f64,
     ) -> Result<Self, FfiError> {
+        let pw = (width as f64 * scale_factor).round() as u32;
+        let ph = (height as f64 * scale_factor).round() as u32;
+
         let backend = match mode {
-            BackendMode::Cpu => RenderBackend::new_cpu(width as u16, height as u16),
+            BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
             BackendMode::Gpu { .. } => {
                 return Err(FfiError::Surface(
                     "iOS GPU surface not yet supported".into(),
@@ -33,10 +36,14 @@ impl SurfaceHandle {
         Ok(Self {
             backend,
             handle,
-            width,
-            height,
+            width: pw,
+            height: ph,
             scale_factor,
         })
+    }
+
+    pub fn scale_factor(&self) -> f64 {
+        self.scale_factor
     }
 
     pub fn sink(&mut self) -> &mut dyn RenderSink {
@@ -49,10 +56,13 @@ impl SurfaceHandle {
     }
 
     pub fn resize(&mut self, width: u32, height: u32, scale_factor: f64) {
-        self.width = width;
-        self.height = height;
+        let pw = (width as f64 * scale_factor).round() as u32;
+        let ph = (height as f64 * scale_factor).round() as u32;
+
+        self.width = pw;
+        self.height = ph;
         self.scale_factor = scale_factor;
 
-        self.backend.resize(width as u16, height as u16);
+        self.backend.resize(pw as u16, ph as u16);
     }
 }
