@@ -108,6 +108,33 @@ impl Step {
         matches!(self, Step::SetSelection { .. })
     }
 
+    pub fn affected_node_ids(&self) -> Vec<NodeId> {
+        match self {
+            Step::InsertText { node_id, .. }
+            | Step::RemoveText { node_id, .. }
+            | Step::AddModifier { node_id, .. }
+            | Step::RemoveModifier { node_id, .. }
+            | Step::SetModifiers { node_id, .. }
+            | Step::SetNode { node_id, .. } => vec![*node_id],
+            Step::InsertSubtree { parent_id, .. } | Step::RemoveSubtree { parent_id, .. } => {
+                vec![*parent_id]
+            }
+            Step::SplitNode { node_id, .. } => vec![*node_id],
+            Step::MergeNode {
+                node_id, target_id, ..
+            } => vec![*node_id, *target_id],
+            Step::MoveNode {
+                old_parent,
+                new_parent,
+                ..
+            } => vec![*old_parent, *new_parent],
+            Step::SetSelection { .. }
+            | Step::SetPendingModifiers { .. }
+            | Step::SetComposition { .. }
+            | Step::SetDocumentAttrs { .. } => vec![],
+        }
+    }
+
     pub fn apply(&self, state: &State) -> Result<StepOutput, StepError> {
         match self {
             Step::InsertText {
@@ -176,30 +203,6 @@ impl Step {
             } => steps::set_modifiers::apply(state, *node_id, new_modifiers),
             Step::SetComposition { old: _, new } => steps::set_composition::apply(state, new),
             Step::SetDocumentAttrs { old: _, new } => steps::set_document_attrs::apply(state, new),
-        }
-    }
-
-    pub fn affected_node_ids(&self) -> Vec<NodeId> {
-        match self {
-            Step::InsertText { node_id, .. }
-            | Step::RemoveText { node_id, .. }
-            | Step::AddModifier { node_id, .. }
-            | Step::RemoveModifier { node_id, .. }
-            | Step::SetModifiers { node_id, .. }
-            | Step::SetNode { node_id, .. } => vec![*node_id],
-            Step::InsertSubtree { parent_id, .. } | Step::RemoveSubtree { parent_id, .. } => {
-                vec![*parent_id]
-            }
-            Step::SplitNode { node_id, .. } | Step::MergeNode { node_id, .. } => vec![*node_id],
-            Step::MoveNode {
-                old_parent,
-                new_parent,
-                ..
-            } => vec![*old_parent, *new_parent],
-            Step::SetSelection { .. }
-            | Step::SetPendingModifiers { .. }
-            | Step::SetComposition { .. }
-            | Step::SetDocumentAttrs { .. } => vec![],
         }
     }
 

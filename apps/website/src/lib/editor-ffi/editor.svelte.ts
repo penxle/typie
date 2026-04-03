@@ -1,4 +1,5 @@
 import { createContext } from 'svelte';
+import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler, fontManifestMissingHandler, initFonts } from './fonts';
 import type { Doc, Editor as WasmEditor, EditorEvent, Message, PageRect, Selection, Size, Viewport } from '@typie/editor-ffi/browser';
@@ -188,6 +189,16 @@ export class Editor {
 
   resizeSurface(page: number, width: number, height: number): void {
     this.#wasm.resize_surface(page, width, height, this.#viewport.scale_factor);
+  }
+
+  inspect(mode: 'state' | 'state-with-node-id' | 'state-as-macro') {
+    const output = match(mode)
+      .with('state', () => this.#wasm.inspect_state())
+      .with('state-with-node-id', () => this.#wasm.inspect_state({ show_node_ids: true }))
+      .with('state-as-macro', () => this.#wasm.inspect_state_as_macro())
+      .exhaustive();
+
+    console.log(output);
   }
 
   #tick = (): void => {

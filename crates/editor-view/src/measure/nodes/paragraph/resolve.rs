@@ -79,7 +79,6 @@ pub fn resolve_paragraph_indent(node: &NodeRef<'_>) -> f32 {
 #[cfg(test)]
 mod tests {
     use editor_macros::doc;
-    use editor_model::*;
 
     use super::*;
 

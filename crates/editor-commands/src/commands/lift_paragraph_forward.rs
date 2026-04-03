@@ -1,7 +1,7 @@
 use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
 use editor_schema::NodeSpecExt;
-use editor_transaction::{Transaction, dissolve, prune};
+use editor_transaction::{Transaction, compact, dissolve, prune};
 
 use crate::{CommandError, CommandResult};
 
@@ -73,6 +73,11 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
 
     tr.batch::<_, CommandError>(|tr| {
         tr.merge_node(source_paragraph_id, paragraph_id)?;
+
+        let doc = tr.doc();
+        if let Some(p) = doc.node(paragraph_id) {
+            tr.apply_steps(compact(&p))?;
+        }
 
         let doc = tr.doc();
         if let Some(source_parent) = doc.node(source_parent_id) {
@@ -154,8 +159,7 @@ mod tests {
             doc {
                 root {
                     paragraph {
-                        t1: text("Hello")
-                        t2: text("A")
+                        t1: text("HelloA")
                     }
                     blockquote {
                         paragraph { t3: text("B") }
@@ -185,8 +189,7 @@ mod tests {
             doc {
                 root {
                     paragraph {
-                        t1: text("Hello")
-                        t2: text("A")
+                        t1: text("HelloA")
                     }
                 }
             }

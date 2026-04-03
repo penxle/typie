@@ -460,6 +460,7 @@ dependencies = [
  "editor-common",
  "editor-macros",
  "editor-model",
+ "editor-resource",
  "editor-schema",
  "editor-state",
  "editor-transaction",
@@ -522,6 +523,7 @@ dependencies = [
  "console_log",
  "editor-common",
  "editor-core",
+ "editor-introspection",
  "editor-macros",
  "editor-model",
  "editor-renderer",
@@ -543,6 +545,19 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
+]
+
+[[package]]
+name = "editor-introspection"
+version = "0.0.1"
+dependencies = [
+ "editor-macros",
+ "editor-model",
+ "editor-state",
+ "serde",
+ "tsify",
+ "uniffi",
+ "wasm-bindgen",
 ]
 
 [[package]]

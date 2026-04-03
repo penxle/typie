@@ -55,6 +55,30 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
 
+    pub fn inspect_state(
+        &self,
+        options: Option<Complex<editor_introspection::InspectStateOptions>>,
+    ) -> EditorResult<String> {
+        self.with_inner(|inner| {
+            let options = match options {
+                Some(o) => o.from_ffi()?,
+                None => editor_introspection::InspectStateOptions::default(),
+            };
+            Ok(editor_introspection::inspect_state(
+                inner.editor.state(),
+                &options,
+            ))
+        })
+    }
+
+    pub fn inspect_state_as_macro(&self) -> EditorResult<String> {
+        self.with_inner(|inner| {
+            Ok(editor_introspection::inspect_state_as_macro(
+                inner.editor.state(),
+            ))
+        })
+    }
+
     pub fn page_sizes(&self) -> EditorResult<Vec<Complex<editor_common::Size>>> {
         self.with_inner(|inner| {
             Ok(inner

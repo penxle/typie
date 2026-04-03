@@ -1,39 +1,87 @@
+import type { Message, Movement } from '@typie/editor-ffi/browser';
+import type { Editor } from '../editor.svelte';
 import type { EditorEventHandler } from '../types';
 
+type KeyBindingModifier = 'shift' | 'mod' | 'ctrl' | 'alt';
+
+type KeyBinding = {
+  key: string;
+  modifiers?: KeyBindingModifier[];
+  predicate?: (e: KeyboardEvent) => boolean;
+  action: (editor: Editor, e: KeyboardEvent) => void;
+};
+
+const bindings: KeyBinding[] = [
+  { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'backward' }, false)) },
+  { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'backward' }, true)) },
+  { key: 'ArrowRight', action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'forward' }, false)) },
+  { key: 'ArrowRight', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'forward' }, true)) },
+
+  { key: 'ArrowUp', action: (ed) => ed.enqueue(move({ type: 'line', value: ['backward', 'vertical'] }, false)) },
+  { key: 'ArrowUp', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'line', value: ['backward', 'vertical'] }, true)) },
+  { key: 'ArrowDown', action: (ed) => ed.enqueue(move({ type: 'line', value: ['forward', 'vertical'] }, false)) },
+  { key: 'ArrowDown', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'line', value: ['forward', 'vertical'] }, true)) },
+
+  { key: 'Enter', action: (ed) => ed.enqueue({ type: 'key', value: { key: 'enter' } }) },
+  { key: 'Backspace', action: (ed) => ed.enqueue({ type: 'key', value: { key: 'backspace' } }) },
+
+  {
+    key: 'b',
+    modifiers: ['mod'],
+    action: (ed) => ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'bold' } } }),
+  },
+  {
+    key: 'i',
+    modifiers: ['mod'],
+    action: (ed) => ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'italic' } } }),
+  },
+  {
+    key: 's',
+    modifiers: ['mod', 'shift'],
+    action: (ed) =>
+      ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'strikethrough' } } }),
+  },
+  {
+    key: 'u',
+    modifiers: ['mod', 'shift'],
+    action: (ed) => ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'underline' } } }),
+  },
+
+  { key: 'q', modifiers: ['ctrl'], predicate: () => isMac, action: (ed) => ed.inspect('state') },
+  { key: 'w', modifiers: ['ctrl'], predicate: () => isMac, action: (ed) => ed.inspect('state-as-macro') },
+];
+
+const isMac = navigator.platform.toUpperCase().includes('MAC');
+
+const move = (movement: Movement, extend: boolean): Message => ({
+  type: 'intent',
+  value: { type: 'navigation', value: { type: 'move', value: { movement, extend } } },
+});
+
+const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {
+  if (binding.key !== e.key) return false;
+
+  const mods = binding.modifiers ?? [];
+  const expectShift = mods.includes('shift');
+  const expectAlt = mods.includes('alt');
+  const expectCtrl = mods.includes('ctrl') || (!isMac && mods.includes('mod'));
+  const expectMeta = isMac && mods.includes('mod');
+
+  if (e.shiftKey !== expectShift) return false;
+  if (e.altKey !== expectAlt) return false;
+  if (e.ctrlKey !== expectCtrl) return false;
+  if (e.metaKey !== expectMeta) return false;
+
+  if (binding.predicate && !binding.predicate(e)) return false;
+
+  return true;
+};
+
 export const handleKeyDown: EditorEventHandler<HTMLInputElement, KeyboardEvent> = (editor, e) => {
-  if (e.key === 'ArrowRight') {
-    e.preventDefault();
-    editor.enqueue({
-      type: 'intent',
-      value: { type: 'navigation', value: { type: 'move', value: { movement: { type: 'grapheme', value: 'forward' }, extend: false } } },
-    });
-  } else if (e.key === 'ArrowLeft') {
-    e.preventDefault();
-    editor.enqueue({
-      type: 'intent',
-      value: { type: 'navigation', value: { type: 'move', value: { movement: { type: 'grapheme', value: 'backward' }, extend: false } } },
-    });
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    editor.enqueue({
-      type: 'intent',
-      value: {
-        type: 'navigation',
-        value: { type: 'move', value: { movement: { type: 'line', value: ['backward', 'vertical'] }, extend: false } },
-      },
-    });
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    editor.enqueue({
-      type: 'intent',
-      value: {
-        type: 'navigation',
-        value: { type: 'move', value: { movement: { type: 'line', value: ['forward', 'vertical'] }, extend: false } },
-      },
-    });
-  } else if (e.key === 'Enter') {
+  const binding = bindings.find((b) => matchBinding(b, e));
+  if (binding) {
     e.preventDefault();
     e.stopPropagation();
-    editor.enqueue({ type: 'key', value: { key: 'enter' } });
+    binding.action(editor, e);
   }
 };

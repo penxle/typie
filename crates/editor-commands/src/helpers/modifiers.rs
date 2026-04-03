@@ -56,6 +56,22 @@ fn apply_pending_delta(mut modifiers: Vec<Modifier>, pending: &PendingModifiers)
     modifiers
 }
 
+/// Collects inherited modifiers from the ancestor chain (excluding the node itself).
+/// For each modifier type, returns the nearest ancestor's value.
+/// Root has all modifiers (invariant).
+pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
+    let mut found = Vec::new();
+    for ancestor in node.ancestors().skip(1) {
+        for modifier in ancestor.modifiers() {
+            let t = modifier.as_type();
+            if !found.iter().any(|m: &Modifier| m.as_type() == t) {
+                found.push(modifier.clone());
+            }
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
@@ -162,5 +178,47 @@ mod tests {
         };
         let result = resolve_effective_modifiers(&node_at(&state), 0, &state.pending_modifiers);
         assert_eq!(result, vec![Modifier::Bold]);
+    }
+
+    // --- resolve_inherited_modifiers ---
+
+    #[test]
+    fn inherited_weight_from_root_modifiers() {
+        let (state, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("Hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let inherited = resolve_inherited_modifiers(&node_at(&state));
+        assert!(
+            inherited
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight(400)))
+        );
+    }
+
+    #[test]
+    fn inherited_weight_from_parent_overrides_root() {
+        let (state, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph [font_weight(700)] {
+                        t1: text("Hello")
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let inherited = resolve_inherited_modifiers(&node_at(&state));
+        assert!(
+            inherited
+                .iter()
+                .any(|m| matches!(m, Modifier::FontWeight(700)))
+        );
     }
 }

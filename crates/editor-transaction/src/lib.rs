@@ -1,5 +1,6 @@
 editor_macros::preamble!();
 
+mod compact;
 mod dissolve;
 mod effect;
 mod error;
@@ -14,6 +15,7 @@ mod validate;
 #[doc(hidden)]
 pub mod test_utils;
 
+pub use compact::compact;
 pub use dissolve::dissolve;
 pub use effect::*;
 pub use error::*;

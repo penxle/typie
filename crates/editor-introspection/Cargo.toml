@@ -1,0 +1,20 @@
+[package]
+name = "editor-introspection"
+version.workspace = true
+edition.workspace = true
+
+[features]
+uniffi = ["dep:uniffi", "editor-model/uniffi", "editor-state/uniffi"]
+wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm", "editor-state/wasm"]
+
+[dependencies]
+editor-macros = { path = "../editor-macros" }
+editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-state = { path = "../editor-state" }
+serde.workspace = true
+tsify = { workspace = true, optional = true }
+uniffi = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+editor-macros = { path = "../editor-macros" }

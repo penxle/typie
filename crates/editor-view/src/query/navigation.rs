@@ -263,8 +263,11 @@ fn navigate_to(node: &LayoutNode, preferred_x: f32) -> Selection {
 fn position_in_line(line: &LayoutLine, rect: &editor_common::Rect, x: f32) -> Position {
     let local_x = x - rect.x;
     for run in &line.glyph_runs {
-        if local_x < run.x || local_x > run.x + run.width {
+        if local_x > run.x + run.width {
             continue;
+        }
+        if local_x < run.x {
+            return Position::new(run.node_id, run.offset);
         }
         let mut acc = run.x;
         for (i, &adv) in run.char_advances.iter().enumerate() {
@@ -718,5 +721,42 @@ mod tests {
         .unwrap();
         assert_eq!(sel_start.head.node_id, f.lines[0]);
         assert_eq!(sel_start.head.offset, 0);
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use editor_common::{Axis, Direction, Movement};
+    use editor_macros::state;
+    use editor_state::Position;
+
+    use crate::view::View;
+
+    #[test]
+    fn line_vertical_forward_from_start_two_paragraphs() {
+        let (state, t1, t2) = state! {
+            doc {
+                root [paragraph_indent(1), block_gap(1)] {
+                    paragraph { t1: text("hello") }
+                    paragraph { t2: text("world") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(t1, 0),
+                &Movement::Line(Direction::Forward, Axis::Vertical),
+                &state.doc,
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(sel.head.node_id, t2);
+        assert_eq!(sel.head.offset, 0);
     }
 }

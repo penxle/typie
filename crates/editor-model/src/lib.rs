@@ -3,6 +3,7 @@ editor_macros::preamble!();
 mod doc;
 mod document_attrs;
 mod entry;
+mod ffi;
 mod id;
 mod modifier;
 mod node_ref;

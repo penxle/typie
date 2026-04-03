@@ -9,6 +9,8 @@ pub fn default_modifiers() -> Vec<Modifier> {
         Modifier::BackgroundColor("none".to_string()),
         Modifier::LetterSpacing(0),
         Modifier::LineHeight(160),
+        Modifier::ParagraphIndent(100),
+        Modifier::BlockGap(100),
     ]
 }
 

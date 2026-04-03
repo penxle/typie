@@ -2,7 +2,7 @@ use editor_common::StrExt;
 use editor_model::{Node, NodeId};
 use editor_schema::NodeSpecExt;
 use editor_state::{Affinity, Position, Selection};
-use editor_transaction::{Transaction, fulfill, prune};
+use editor_transaction::{Transaction, compact, fulfill, prune};
 
 use crate::helpers::{find_ancestor_textblock, find_lowest_common_ancestor, path_from_ancestor};
 use crate::{CommandError, CommandResult};
@@ -503,6 +503,11 @@ fn merge_after_delete(
     // Paragraph-level merge
     tr.merge_node(to_tb, from_tb)?;
 
+    let doc = tr.doc();
+    if let Some(p) = doc.node(from_tb) {
+        tr.apply_steps(compact(&p))?;
+    }
+
     // Container-level merge: walk up, merge adjacent same-type siblings
     let mut from_current = {
         let doc = tr.doc();
@@ -642,7 +647,7 @@ mod tests {
         let (result, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("He") t2: text("ld") }
+                paragraph { t1: text("Held") }
             } }
             selection: (t1, 2)
         };
@@ -662,7 +667,7 @@ mod tests {
         let (result, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("He") t3: text("ld") }
+                paragraph { t1: text("Held") }
             } }
             selection: (t1, 2)
         };
@@ -689,7 +694,7 @@ mod tests {
             doc { root {
                 blockquote {
                     paragraph { t1: text("A") }
-                    paragraph { t2: text("He") t3: text("ld") }
+                    paragraph { t2: text("Held") }
                     paragraph { t4: text("B") }
                 }
                 paragraph {}
@@ -1124,7 +1129,7 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 bullet_list {
-                    list_item { paragraph { t1: text("as") t2: text("df") } }
+                    list_item { paragraph { t1: text("asdf") } }
                 }
                 paragraph {}
             } }
@@ -1181,7 +1186,7 @@ mod tests {
         let (result, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("1") t3: text("3") }
+                paragraph { t1: text("13") }
                 paragraph { t4: text("44") }
             } }
             selection: (t1, 1)
@@ -1209,7 +1214,7 @@ mod tests {
             doc { root {
                 paragraph { t1: text("11") }
                 fold {
-                    fold_title { t2: text("2") t4: text("4") }
+                    fold_title { t2: text("24") }
                     fold_content { paragraph {} }
                 }
                 paragraph {}
@@ -1237,7 +1242,7 @@ mod tests {
         let (result, ..) = transact!(initial, |tr| delete_selection(&mut tr));
         let (expected, ..) = state! {
             doc { root {
-                paragraph { t1: text("1") t4: text("4") }
+                paragraph { t1: text("14") }
             } }
             selection: (t1, 1)
         };
@@ -1266,7 +1271,7 @@ mod tests {
         let (expected, ..) = state! {
             doc { root {
                 fold {
-                    fold_title { t1: text("1") t3: text("3") }
+                    fold_title { t1: text("13") }
                     fold_content { paragraph {} }
                 }
             } }

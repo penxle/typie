@@ -12,6 +12,7 @@ mod select_all;
 mod set_selection;
 mod sink_paragraph_backward;
 mod split_paragraph;
+mod toggle_bold;
 
 pub use delete_node_backward::delete_node_backward;
 pub use delete_node_forward::delete_node_forward;
@@ -27,3 +28,4 @@ pub use select_all::select_all;
 pub use set_selection::set_selection;
 pub use sink_paragraph_backward::sink_paragraph_backward;
 pub use split_paragraph::split_paragraph;
+pub use toggle_bold::toggle_bold;

@@ -1,12 +1,26 @@
+use editor_commands::{self as commands};
+use editor_model::ModifierType;
+use std::sync::Arc;
+
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
 pub fn handle_formatting_intent(
-    _editor: &mut Editor,
-    _intent: FormattingIntent,
+    editor: &mut Editor,
+    intent: FormattingIntent,
 ) -> Result<(), EditorError> {
-    Ok(())
+    match intent {
+        FormattingIntent::ToggleModifier(m) if m == ModifierType::Bold => {
+            let resource = Arc::clone(&editor.resource);
+            let resource = resource.lock().unwrap();
+            editor.transact(|tr| {
+                commands::toggle_bold(tr, &resource)?;
+                Ok(())
+            })
+        }
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]

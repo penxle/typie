@@ -10,18 +10,16 @@ fn init_logger() {
         if #[cfg(feature = "wasm")] {
             console_log::init_with_level(log::Level::Debug)
                 .expect("logger already initialized");
+        } else if #[cfg(all(feature = "uniffi", target_os = "android"))] {
+            android_logger::init_once(
+                android_logger::Config::default()
+                    .with_max_level(log::LevelFilter::Debug)
+                    .with_tag("editor"),
+            );
         } else if #[cfg(feature = "uniffi")] {
-            if #[cfg(target_os = "android")] {
-                android_logger::init_once(
-                    android_logger::Config::default()
-                        .with_max_level(log::LevelFilter::Debug)
-                        .with_tag("editor"),
-                );
-            } else {
-                let _ = env_logger::builder()
-                    .filter_level(log::LevelFilter::Debug)
-                    .try_init();
-            }
+            let _ = env_logger::builder()
+                .filter_level(log::LevelFilter::Debug)
+                .try_init();
         }
     }
 }

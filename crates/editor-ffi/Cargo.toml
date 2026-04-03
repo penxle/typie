@@ -14,6 +14,7 @@ uniffi = [
   "dep:env_logger",
   "editor-common/uniffi",
   "editor-core/uniffi",
+  "editor-introspection/uniffi",
   "editor-model/uniffi",
   "editor-renderer/uniffi",
   "editor-resource/uniffi",
@@ -31,6 +32,7 @@ wasm = [
   "dep:tsify",
   "editor-common/wasm",
   "editor-core/wasm",
+  "editor-introspection/wasm",
   "editor-model/wasm",
   "editor-renderer/wasm",
   "editor-resource/wasm",
@@ -44,6 +46,7 @@ wasm-server = ["wasm", "dep:editor-server", "editor-server/wasm"]
 [dependencies]
 editor-common = { path = "../editor-common" }
 editor-core = { path = "../editor-core" }
+editor-introspection = { path = "../editor-introspection" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-renderer = { path = "../editor-renderer" }

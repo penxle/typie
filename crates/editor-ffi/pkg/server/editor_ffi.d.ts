@@ -88,6 +88,10 @@ export interface InputModifiers {
     meta?: boolean;
 }
 
+export interface InspectStateOptions {
+    show_node_ids: boolean;
+}
+
 export interface KeyEvent {
     key: Key;
     modifiers?: InputModifiers;
@@ -184,6 +188,8 @@ export type Direction = "forward" | "backward";
 
 export type EditorEvent = { type: "state_changed"; value: { fields: StateField[] } } | { type: "render_invalidated" } | { type: "font_manifest_missing"; value: { family: string; weight: number } } | { type: "font_data_missing"; value: { family: string; weight: number; required: FontData[]; prefetch: FontData[] } } | { type: "cursor_exited_document_start" };
 
+export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
+
 export type FontData = { type: "base" } | { type: "chunk"; value: number };
 
 export type FormattingIntent = { type: "toggle_modifier"; value: ModifierType } | { type: "set_modifier"; value: Modifier } | { type: "clear_modifiers" };
@@ -237,6 +243,8 @@ declare class Editor {
     [Symbol.dispose](): void;
     cursor(): PageRect | undefined;
     enqueue(message: Message): void;
+    inspect_state(options?: InspectStateOptions | null): string;
+    inspect_state_as_macro(): string;
     page_sizes(): Size[];
     render_page_to_buffer(page: number, width: number, height: number): Uint8Array;
     selection(): Selection;

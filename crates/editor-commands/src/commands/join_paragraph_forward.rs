@@ -1,6 +1,6 @@
 use editor_common::StrExt;
 use editor_model::Node;
-use editor_transaction::Transaction;
+use editor_transaction::{Transaction, compact};
 
 use crate::{CommandError, CommandResult};
 
@@ -60,6 +60,11 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
     // Merge next paragraph into current
     tr.merge_node(next_id, paragraph_id)?;
 
+    let doc = tr.doc();
+    if let Some(p) = doc.node(paragraph_id) {
+        tr.apply_steps(compact(&p))?;
+    }
+
     // Restore cursor position
     tr.set_selection(cursor_selection)?;
 
@@ -103,8 +108,7 @@ mod tests {
             doc {
                 root {
                     paragraph {
-                        t1: text("Hello")
-                        t2: text("World")
+                        t1: text("HelloWorld")
                     }
                 }
             }
@@ -247,8 +251,7 @@ mod tests {
                     paragraph {
                         t1: text("A")
                         t2: text("B") [bold]
-                        t3: text("C")
-                        t4: text("D")
+                        t3: text("CD")
                     }
                 }
             }

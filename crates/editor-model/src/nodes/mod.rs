@@ -45,7 +45,7 @@ pub use text::*;
 use editor_macros::{FromDiscriminant, ffi};
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants, EnumIter};
+use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoStaticStr};
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumDiscriminants, FromDiscriminant)]
@@ -60,8 +60,10 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter};
     EnumIter,
     EnumCount,
     Enum,
+    IntoStaticStr,
 ))]
 #[strum_discriminants(serde(rename_all = "snake_case"))]
+#[strum_discriminants(strum(serialize_all = "snake_case"))]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[from_discriminant(NodeType)]
 pub enum Node {
