@@ -21,6 +21,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
@@ -32,10 +33,7 @@ fun BottomSheetScope<Unit>.SubscriptionCelebrationSheet(
   title: String,
   message: String,
 ) {
-  Column(
-    modifier = Modifier.padding(horizontal = 20.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
+  BottomSheetScaffold(title = title) {
     CelebrationBadgeRow()
 
     Column(
@@ -43,11 +41,6 @@ fun BottomSheetScope<Unit>.SubscriptionCelebrationSheet(
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-      Text(
-        text = title,
-        style = AppTheme.typography.title,
-      )
-
       Text(
         text = message,
         style = AppTheme.typography.caption,

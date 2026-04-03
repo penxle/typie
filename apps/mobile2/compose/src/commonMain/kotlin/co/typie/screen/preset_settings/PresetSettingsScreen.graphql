@@ -1,0 +1,27 @@
+query PresetSettingsScreen_Query {
+  me @catch(to: THROW) {
+    id
+    preferences
+    documentFontFamilies {
+      id
+      familyName
+      displayName
+      source
+      state
+      fonts {
+        id
+        weight
+        state
+        subfamilyDisplayName
+        url
+      }
+    }
+  }
+}
+
+mutation PresetSettingsScreen_UpdatePreferences_Mutation($input: UpdatePreferencesInput!) {
+  updatePreferences(input: $input) {
+    id
+    preferences
+  }
+}

@@ -36,6 +36,7 @@ import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextArea
+import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
@@ -142,14 +143,7 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
     }
   }
 
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Text("의견 보내기", style = AppTheme.typography.title)
-
+  BottomSheetScaffold(title = "의견 보내기") {
     FlowRow(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp),

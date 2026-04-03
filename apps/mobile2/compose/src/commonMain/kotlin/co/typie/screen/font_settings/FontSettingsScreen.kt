@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,14 +22,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.ext.navigationBarsPadding
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
@@ -44,9 +38,11 @@ import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
+import co.typie.ui.component.FontSpecimen
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
@@ -57,8 +53,6 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import coil3.compose.AsyncImagePainter
-import coil3.compose.rememberAsyncImagePainter
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -219,17 +213,7 @@ private fun BottomSheetScope<Unit>.FontUploadSheet(
     "업로드 중..."
   }
 
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Text(
-      "폰트 업로드하기",
-      style = AppTheme.typography.title,
-    )
-
+  BottomSheetScaffold(title = "폰트 업로드하기") {
     CardSurface(
       modifier = Modifier.fillMaxWidth(),
     ) {
@@ -447,70 +431,6 @@ private fun FontDeleteFamilyRow(
         style = AppTheme.typography.action,
         color = if (enabled) AppTheme.colors.danger else AppTheme.colors.textTertiary,
       )
-    }
-  }
-}
-
-@Composable
-private fun FontSpecimen(
-  text: String,
-  fontId: String?,
-  weight: Int?,
-  style: androidx.compose.ui.text.TextStyle,
-  modifier: Modifier = Modifier,
-) {
-  val fallbackStyle = if (weight != null) {
-    style.copy(fontWeight = FontWeight(weight.coerceIn(1, 1000)))
-  } else {
-    style
-  }
-  val fallback: @Composable () -> Unit = {
-    Text(
-      text = text,
-      style = fallbackStyle,
-      modifier = Modifier.wrapContentWidth(),
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
-  }
-
-  if (fontId == null) {
-    Box(
-      modifier = modifier,
-      contentAlignment = Alignment.CenterStart,
-    ) {
-      fallback()
-    }
-    return
-  }
-
-  val specimenHeight = with(LocalDensity.current) { style.fontSize.toDp() } + 4.dp
-  val specimenUrl = remember(fontId, text) { fontSpecimenUrl(fontId = fontId, text = text) }
-  val painter = rememberAsyncImagePainter(model = specimenUrl)
-  val painterState by painter.state.collectAsState()
-
-  Box(
-    modifier = modifier.heightIn(min = specimenHeight),
-    contentAlignment = Alignment.CenterStart,
-  ) {
-    if (painterState is AsyncImagePainter.State.Success) {
-      Image(
-        painter = painter,
-        contentDescription = null,
-        contentScale = ContentScale.Fit,
-        modifier = Modifier
-          .height(specimenHeight)
-          .wrapContentWidth(Alignment.Start),
-      )
-    } else {
-      Box(
-        modifier = Modifier
-          .height(specimenHeight)
-          .wrapContentWidth(Alignment.Start),
-        contentAlignment = Alignment.CenterStart,
-      ) {
-        fallback()
-      }
     }
   }
 }

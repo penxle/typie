@@ -2,10 +2,7 @@ package co.typie.ui.component.bottomsheet
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.ViewModelStore
@@ -45,8 +42,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import co.typie.ext.clickable
-import co.typie.ext.imePadding
-import co.typie.ext.navigationBarsPadding
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
@@ -81,13 +76,12 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
 
   // 드래그 중 추가 offset (px, 아래 방향 양수)
   var dragOffsetPx by remember { mutableFloatStateOf(0f) }
-  val scrollState = rememberScrollState()
 
   // 스크롤 최상단에서 아래로 overscroll → 시트 드래그로 전환
   val nestedScrollConnection = remember {
     object : NestedScrollConnection {
       override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-        if (available.y > 0f && scrollState.value == 0) {
+        if (available.y > 0f) {
           dragOffsetPx = (dragOffsetPx + available.y).coerceAtLeast(0f)
           return Offset(0f, available.y)
         }
@@ -243,15 +237,11 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
         modifier = Modifier
           .fillMaxWidth()
           .weight(1f, fill = false)
-          .nestedScroll(nestedScrollConnection)
-          .verticalScroll(scrollState),
+          .nestedScroll(nestedScrollConnection),
       ) {
         CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
           Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .navigationBarsPadding()
-              .imePadding(),
+            modifier = Modifier.fillMaxWidth(),
           ) {
             entry.content.invoke(sheetScope)
           }

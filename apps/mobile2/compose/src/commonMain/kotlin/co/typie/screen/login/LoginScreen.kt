@@ -41,6 +41,7 @@ import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
@@ -103,26 +104,28 @@ private enum class LoginStep { SingleSignOn, Email }
 fun BottomSheetScope<Unit>.LoginBottomSheet() {
   var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
 
-  AnimatedContent(
-    targetState = step,
-    transitionSpec = {
-      if (targetState == LoginStep.Email) {
-        slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
-      } else {
-        slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
-      }
-    },
-  ) { currentStep ->
-    when (currentStep) {
-      LoginStep.SingleSignOn -> LoginSSOContent(
-        onEmailClick = { step = LoginStep.Email },
-        onSuccess = { dismiss() },
-      )
+  BottomSheetScaffold(title = "로그인") {
+    AnimatedContent(
+      targetState = step,
+      transitionSpec = {
+        if (targetState == LoginStep.Email) {
+          slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
+        } else {
+          slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
+        }
+      },
+    ) { currentStep ->
+      when (currentStep) {
+        LoginStep.SingleSignOn -> LoginSSOContent(
+          onEmailClick = { step = LoginStep.Email },
+          onSuccess = { dismiss() },
+        )
 
-      LoginStep.Email -> LoginEmailContent(
-        onBack = { step = LoginStep.SingleSignOn },
-        onSuccess = { dismiss() },
-      )
+        LoginStep.Email -> LoginEmailContent(
+          onBack = { step = LoginStep.SingleSignOn },
+          onSuccess = { dismiss() },
+        )
+      }
     }
   }
 }
@@ -137,7 +140,7 @@ private fun LoginSSOContent(
   val ctx = activityContext()
 
   Column(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    modifier = Modifier.fillMaxWidth(),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Column(
@@ -203,7 +206,7 @@ private fun LoginEmailContent(
   val form = model.state.form
 
   Column(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+    modifier = Modifier.fillMaxWidth(),
   ) {
     TextField(
       field = form.email,

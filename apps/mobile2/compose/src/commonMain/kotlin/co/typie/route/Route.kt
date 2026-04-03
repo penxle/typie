@@ -24,6 +24,7 @@ sealed interface Route {
   data object OssLicenses : Route
   data object FontSettings : Route
   data object EditorSettings : Route
+  data object PresetSettings : Route
   data object TextReplacements : Route
   data object WidgetSettings : Route
   data object AiSettings : Route

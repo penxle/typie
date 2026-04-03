@@ -30,6 +30,7 @@ import co.typie.ui.component.CardRow
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -273,17 +274,7 @@ private fun RowScope.OssLicenseRowContent(
 private fun BottomSheetScope<Unit>.OssLicenseDetailSheet(
   entry: OssLicenseEntry,
 ) {
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Text(
-      text = entry.packageName,
-      style = AppTheme.typography.title,
-    )
-
+  BottomSheetScaffold(title = entry.packageName) {
     entry.paragraphs.forEach { paragraph ->
       Text(
         text = paragraph,

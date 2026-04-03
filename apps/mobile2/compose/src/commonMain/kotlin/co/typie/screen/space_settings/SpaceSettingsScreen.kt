@@ -54,6 +54,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
@@ -297,14 +298,7 @@ private fun BottomSheetScope<Unit>.SpaceDateDisplaySheet(
   selected: SiteDateDisplay,
   onSelected: (SiteDateDisplay) -> Unit,
 ) {
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(4.dp),
-  ) {
-    Text("글 목록에 표시할 날짜", style = AppTheme.typography.title)
-
+  BottomSheetScaffold(title = "글 목록에 표시할 날짜") {
     spaceDateDisplayOptions().forEach { item ->
       SpaceDateDisplaySheetOption(
         label = item.label,
@@ -478,12 +472,7 @@ fun BottomSheetScope<Unit>.DeleteSiteConfirmSheet(
   val confirmText = "$totalCount"
   val isConfirmed = totalCount == 0 || inputValue == confirmText
 
-  Column(
-    modifier = Modifier.padding(horizontal = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
-    Text("정말로 삭제하시겠어요?", style = AppTheme.typography.title)
-
+  BottomSheetScaffold(title = "스페이스 삭제") {
     Text(
       "스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.",
       style = AppTheme.typography.caption,

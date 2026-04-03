@@ -47,6 +47,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
@@ -207,8 +208,7 @@ internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSec
           SettingsItem("에디터", route = Route.EditorSettings),
           SettingsItem("위젯", route = Route.WidgetSettings),
           SettingsItem("폰트", route = Route.FontSettings),
-          // TODO: 프리셋 화면 연결
-          SettingsItem("프리셋"),
+          SettingsItem("프리셋", route = Route.PresetSettings),
           SettingsItem("텍스트 대치", route = Route.TextReplacements),
         ),
       ),
@@ -549,14 +549,7 @@ private fun BottomSheetScope<Unit>.SettingsThemeSheet(
   themeMode: ThemeMode,
   onThemeModeChange: (ThemeMode) -> Unit,
 ) {
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(4.dp),
-  ) {
-    Text("테마", style = AppTheme.typography.title)
-
+  BottomSheetScaffold(title = "테마") {
     settingsThemeSelectionItems(themeMode).forEach { item ->
       SettingsThemeSheetOption(
         item = item,

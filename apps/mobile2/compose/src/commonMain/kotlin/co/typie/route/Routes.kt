@@ -14,6 +14,7 @@ import co.typie.screen.more.MoreScreen
 import co.typie.screen.notes.NotesScreen
 import co.typie.screen.oss_licenses.OssLicensesScreen
 import co.typie.screen.profile_settings.ProfileSettingsScreen
+import co.typie.screen.preset_settings.PresetSettingsScreen
 import co.typie.screen.security_settings.SecuritySettingsScreen
 import co.typie.screen.settings.SettingsScreen
 import co.typie.screen.social_accounts.SocialAccountsScreen
@@ -49,6 +50,7 @@ fun MainRoutes(route: Route) {
     is Route.SecuritySettings -> SecuritySettingsScreen()
     is Route.DeleteUser -> DeleteUserScreen()
     is Route.EditorSettings -> EditorSettingsScreen()
+    is Route.PresetSettings -> PresetSettingsScreen()
     is Route.TextReplacements -> TextReplacementsScreen()
     is Route.WidgetSettings -> WidgetSettingsScreen()
     is Route.AiSettings -> AiSettingsScreen()

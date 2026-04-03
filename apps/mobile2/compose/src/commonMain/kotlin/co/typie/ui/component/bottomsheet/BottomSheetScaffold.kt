@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -31,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.imePadding
+import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -46,6 +50,10 @@ fun BottomSheetScaffold(
   trailingAction: (@Composable () -> Unit)? = null,
   content: @Composable ColumnScope.() -> Unit,
 ) {
+  val scrollState = rememberScrollState()
+  val leadingInset = if (leadingAction != null) TopBarDefaults.SlotWidth + 12.dp else 0.dp
+  val trailingInset = if (trailingAction != null) TopBarDefaults.SlotWidth + 12.dp else 0.dp
+
   Column(
     modifier = modifier
       .fillMaxWidth()
@@ -62,7 +70,7 @@ fun BottomSheetScaffold(
         modifier = Modifier
           .align(Alignment.Center)
           .fillMaxWidth()
-          .padding(horizontal = TopBarDefaults.SlotWidth + 12.dp),
+          .padding(start = leadingInset, end = trailingInset),
         overflow = TextOverflow.Ellipsis,
         maxLines = 1,
         color = AppTheme.colors.textPrimary,
@@ -89,10 +97,22 @@ fun BottomSheetScaffold(
       }
     }
 
-    Column(
-      modifier = Modifier.padding(top = 8.dp),
-      content = content,
-    )
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .weight(1f, fill = false)
+        .padding(top = 8.dp)
+        .verticalScroll(scrollState),
+    ) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .navigationBarsPadding()
+          .imePadding(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        content = content,
+      )
+    }
   }
 }
 
