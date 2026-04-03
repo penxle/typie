@@ -1,8 +1,12 @@
 use crate::editor::Editor;
+use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_formatting_intent(_editor: &mut Editor, _intent: FormattingIntent) {
-    // stub
+pub fn handle_formatting_intent(
+    _editor: &mut Editor,
+    _intent: FormattingIntent,
+) -> Result<(), EditorError> {
+    Ok(())
 }
 
 #[cfg(test)]

@@ -64,15 +64,15 @@ export interface ImageNode {
 }
 
 export interface InputModifiers {
-    shift: boolean;
-    ctrl: boolean;
-    alt: boolean;
-    meta: boolean;
+    shift?: boolean;
+    ctrl?: boolean;
+    alt?: boolean;
+    meta?: boolean;
 }
 
 export interface KeyEvent {
     key: Key;
-    modifiers: InputModifiers;
+    modifiers?: InputModifiers;
 }
 
 export interface ListItemNode {}
@@ -166,8 +166,6 @@ export type Direction = "forward" | "backward";
 
 export type EditorEvent = { type: "state_changed"; value: { fields: StateField[] } } | { type: "render_invalidated" } | { type: "font_manifest_missing"; value: { family: string; weight: number } } | { type: "font_data_missing"; value: { family: string; weight: number; required: FontData[]; prefetch: FontData[] } } | { type: "cursor_exited_document_start" };
 
-export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
-
 export type FontData = { type: "base" } | { type: "chunk"; value: number };
 
 export type FormattingIntent = { type: "toggle_modifier"; value: ModifierType } | { type: "set_modifier"; value: Modifier } | { type: "clear_modifiers" };
@@ -198,7 +196,7 @@ export type NodeId = string;
 
 export type NodeIntent = { type: "delete"; value: { id: NodeId } } | { type: "set_attrs"; value: { id: NodeId; attrs: Node } } | { type: "toggle_fold"; value: { id: NodeId } } | { type: "table"; value: { id: NodeId; op: TableOp } };
 
-export type PointerEvent = { type: "down"; value: { x: number; y: number; count: number; modifiers: InputModifiers } };
+export type PointerEvent = { type: "down"; value: { page: number; x: number; y: number; count: number; modifiers?: InputModifiers } };
 
 export type SelectionIntent = { type: "all" } | { type: "set"; value: Selection };
 

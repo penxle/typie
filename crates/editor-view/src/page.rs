@@ -2,18 +2,12 @@ use editor_common::{Rect, Size};
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-use crate::fragment::Fragment;
-
+/// 2-pass 레이아웃 결과의 페이지. LayoutTree 위의 y-range 창.
 #[derive(Debug, Clone)]
-pub struct Page {
+pub struct LayoutPage {
+    pub y_start: f32,
+    pub y_end: f32,
     pub size: Size,
-    pub fragments: Vec<Fragment>,
-}
-
-impl Page {
-    pub fn new(size: Size, fragments: Vec<Fragment>) -> Self {
-        Self { size, fragments }
-    }
 }
 
 #[ffi]

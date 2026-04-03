@@ -33,7 +33,7 @@ impl Editor {
     }
 
     pub fn tick(&self) -> EditorResult<Vec<Complex<editor_core::EditorEvent>>> {
-        self.with_inner(|inner| Ok(inner.editor.tick().into_ffi()?))
+        self.with_inner(|inner| Ok(inner.editor.tick()?.into_ffi()?))
     }
 
     pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::PageRect>>> {

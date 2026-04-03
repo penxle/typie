@@ -2,9 +2,13 @@ use editor_commands::{self as commands};
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
+use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_selection_intent(editor: &mut Editor, intent: SelectionIntent) {
+pub fn handle_selection_intent(
+    editor: &mut Editor,
+    intent: SelectionIntent,
+) -> Result<(), EditorError> {
     editor.transact(|tr| {
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
         match intent {
@@ -16,7 +20,7 @@ pub fn handle_selection_intent(editor: &mut Editor, intent: SelectionIntent) {
             }
         }
         Ok(())
-    });
+    })
 }
 
 #[cfg(test)]

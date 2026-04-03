@@ -4,7 +4,6 @@ pub mod backend;
 pub mod error;
 pub(crate) mod glyph;
 pub mod icons;
-pub(crate) mod nodes;
 pub mod renderer;
 pub mod sink;
 pub mod theme;

@@ -1,16 +1,19 @@
 editor_macros::preamble!();
 
-pub mod cursor;
-pub mod engine;
-pub mod fragment;
-pub mod measure;
+pub mod glyph_run;
+pub mod style;
+
+pub(crate) mod measure;
+pub(crate) mod paginate;
+pub(crate) mod query;
+
 mod page;
-pub mod strut;
 mod view;
 mod view_state;
 mod viewport;
 
 pub use page::*;
+pub use query::*;
 pub use view::*;
 pub use view_state::*;
 pub use viewport::*;

@@ -58,46 +58,50 @@ impl Editor {
         self.message_queue.push(msg);
     }
 
-    pub fn tick(&mut self) -> Vec<EditorEvent> {
+    pub fn tick(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
         let messages = std::mem::take(&mut self.message_queue);
         for msg in messages {
-            self.process_message(msg);
+            self.process_message(msg)?;
         }
 
-        std::mem::take(&mut self.pending_events)
+        Ok(std::mem::take(&mut self.pending_events))
     }
 
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
-        if let Some(page) = self.view.pages().get(page_idx as usize) {
-            self.renderer
-                .render_page(sink, page, &self.state.doc, scale_factor);
-        }
+        self.view.visit_page(
+            page_idx as usize,
+            &mut self
+                .renderer
+                .page_visitor(sink, &self.state.doc, scale_factor),
+        );
     }
 
-    fn process_message(&mut self, msg: Message) {
+    fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {
         match msg {
-            Message::Key(event) => handle::handle_key_event(self, event),
-            Message::Pointer(event) => handle::handle_pointer_event(self, event),
+            Message::Key(event) => handle::handle_key_event(self, event)?,
+            Message::Pointer(event) => handle::handle_pointer_event(self, event)?,
             Message::Intent(intent) => match intent {
-                Intent::History(h) => handle::handle_history_intent(self, h),
-                Intent::Navigation(n) => handle::handle_navigation_intent(self, n),
-                Intent::Insertion(i) => handle::handle_insertion_intent(self, i),
-                Intent::Deletion(d) => handle::handle_deletion_intent(self, d),
-                Intent::Selection(s) => handle::handle_selection_intent(self, s),
-                Intent::Formatting(f) => handle::handle_formatting_intent(self, f),
-                Intent::Node(n) => handle::handle_node_intent(self, n),
-                Intent::Clipboard(c) => handle::handle_clipboard_intent(self, c),
-                Intent::Composition(c) => handle::handle_composition_intent(self, c),
+                Intent::History(h) => handle::handle_history_intent(self, h)?,
+                Intent::Navigation(n) => handle::handle_navigation_intent(self, n)?,
+                Intent::Insertion(i) => handle::handle_insertion_intent(self, i)?,
+                Intent::Deletion(d) => handle::handle_deletion_intent(self, d)?,
+                Intent::Selection(s) => handle::handle_selection_intent(self, s)?,
+                Intent::Formatting(f) => handle::handle_formatting_intent(self, f)?,
+                Intent::Node(n) => handle::handle_node_intent(self, n)?,
+                Intent::Clipboard(c) => handle::handle_clipboard_intent(self, c)?,
+                Intent::Composition(c) => handle::handle_composition_intent(self, c)?,
             },
-            Message::System(event) => handle::handle_system_event(self, event),
+            Message::System(event) => handle::handle_system_event(self, event)?,
         }
+        Ok(())
     }
 
-    pub(crate) fn transact(&mut self, f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>) {
+    pub(crate) fn transact(
+        &mut self,
+        f: impl FnOnce(&mut Transaction) -> Result<(), EditorError>,
+    ) -> Result<(), EditorError> {
         let mut tr = Transaction::new(&self.state);
-        if f(&mut tr).is_err() {
-            return;
-        }
+        f(&mut tr)?;
 
         let (state, steps, effects, meta) = tr.commit();
 
@@ -131,6 +135,8 @@ impl Editor {
         if !fields.is_empty() {
             self.push_event(EditorEvent::StateChanged { fields });
         }
+
+        Ok(())
     }
 
     pub(crate) fn push_event(&mut self, event: EditorEvent) {
@@ -266,7 +272,7 @@ impl Editor {
 
     pub fn apply(&mut self, msg: Message) -> Vec<EditorEvent> {
         self.enqueue(msg);
-        self.tick()
+        self.tick().unwrap()
     }
 }
 
@@ -333,7 +339,7 @@ mod tests {
         editor.enqueue(Message::Intent(Intent::Selection(SelectionIntent::Set(
             selection,
         ))));
-        editor.tick();
+        editor.tick().unwrap();
 
         assert_eq!(editor.view().viewport().width, 1024.0);
         assert_eq!(editor.state().selection, selection);
@@ -353,7 +359,7 @@ mod tests {
             target,
         ))));
 
-        let events = editor.tick();
+        let events = editor.tick().unwrap();
 
         let has_selection_changed = events.iter().any(|e| {
             matches!(
@@ -367,7 +373,7 @@ mod tests {
     #[test]
     fn tick_returns_empty_events_when_no_messages() {
         let (mut editor, _) = test_editor();
-        let events = editor.tick();
+        let events = editor.tick().unwrap();
         assert!(events.is_empty());
     }
 

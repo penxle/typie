@@ -4,7 +4,7 @@ import notoPhantomUrl from '@typie/assets/Noto-Phantom.bin?url';
 import notoPhantomEmojiUrl from '@typie/assets/Noto-Phantom-Emoji.bin?url';
 import { wasm } from '$lib/wasm-ffi.svelte';
 import type { FontData } from '@typie/editor-ffi/browser';
-import type { EditorEventHandler } from './types';
+import type { EditorEventListener } from './types';
 
 const PRIMARY_FONT_PATHS: Record<string, string> = {
   Pretendard: 'Pretendard-Regular',
@@ -218,7 +218,7 @@ const loadFontData = async (
   }
 };
 
-export const fontManifestMissingHandler: EditorEventHandler<'font_manifest_missing'> = async (editor, { family, weight }) => {
+export const fontManifestMissingHandler: EditorEventListener<'font_manifest_missing'> = async (editor, { family, weight }) => {
   const path = PRIMARY_FONT_PATHS[family];
   if (path) {
     const manifest = await loadFontManifest(family, weight, path);
@@ -227,7 +227,7 @@ export const fontManifestMissingHandler: EditorEventHandler<'font_manifest_missi
   }
 };
 
-export const fontDataMissingHandler: EditorEventHandler<'font_data_missing'> = async (editor, { family, weight, required, prefetch }) => {
+export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = async (editor, { family, weight, required, prefetch }) => {
   await loadFontData(family, weight, required, prefetch, {
     onBaseLoaded: (data) => {
       wasm.load_font_base(family, weight, data);

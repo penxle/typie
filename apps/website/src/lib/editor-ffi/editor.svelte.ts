@@ -2,7 +2,7 @@ import { createContext } from 'svelte';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler, fontManifestMissingHandler, initFonts } from './fonts';
 import type { Doc, Editor as WasmEditor, EditorEvent, Message, PageRect, Selection, Size, Viewport } from '@typie/editor-ffi/browser';
-import type { EditorEventHandler, EditorEventListener } from './types';
+import type { EditorEventListener } from './types';
 
 let initPromise: Promise<void> | null = null;
 
@@ -35,7 +35,7 @@ export class Editor {
   pageEls = $state<Record<number, HTMLDivElement | undefined>>({});
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent>>>();
+  #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
 
   #cursor = $state<PageRect>();
   #selection = $state<Selection>();
@@ -78,6 +78,10 @@ export class Editor {
     this.inputEl?.focus();
   }
 
+  blur() {
+    this.inputEl?.blur();
+  }
+
   get focusable() {
     return !!this.inputEl;
   }
@@ -109,7 +113,44 @@ export class Editor {
     };
   }
 
-  on<K extends EditorEvent['type']>(event: K, callback: EditorEventListener<Extract<EditorEvent, { type: K }>>): () => void {
+  globalToLocal(x: number, y: number) {
+    const pages = this.#pageSizes;
+    if (pages.length === 0) return null;
+
+    let lo = 0;
+    let hi = pages.length - 1;
+
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      const el = this.pageEls[mid];
+      if (!el) return null;
+      if (el.offsetTop + pages[mid].height <= y) lo = mid + 1;
+      else hi = mid;
+    }
+
+    const el = this.pageEls[lo];
+    if (!el) return null;
+    let localY = y - el.offsetTop;
+
+    if (localY < 0 && lo > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const prevBottom = this.pageEls[lo - 1]!.offsetTop + pages[lo - 1].height;
+      if (y < (prevBottom + el.offsetTop) / 2) {
+        lo--;
+        localY = pages[lo].height;
+      } else {
+        localY = 0;
+      }
+    }
+
+    const size = pages[lo];
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const localX = Math.max(0, Math.min(x - this.pageEls[lo]!.offsetLeft, size.width));
+    localY = Math.max(0, Math.min(localY, size.height));
+    return { page: lo, x: localX, y: localY };
+  }
+
+  on<K extends EditorEvent['type']>(event: K, callback: EditorEventListener<K>): () => void {
     let set = this.#listeners.get(event);
     if (!set) {
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -117,8 +158,8 @@ export class Editor {
       this.#listeners.set(event, set);
     }
 
-    set.add(callback);
-    return () => set.delete(callback);
+    set.add(callback as never);
+    return () => set.delete(callback as never);
   }
 
   enqueue(message: Message) {
@@ -179,7 +220,7 @@ export class Editor {
     }
   }
 
-  #stateChangedHandler: EditorEventHandler<'state_changed'> = (_, { fields }) => {
+  #stateChangedHandler: EditorEventListener<'state_changed'> = (_, { fields }) => {
     if (fields.includes('cursor')) {
       this.#cursor = this.#wasm.cursor();
     }

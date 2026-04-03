@@ -20,11 +20,15 @@
           { type: 'paragraph_indent', value: 1 },
           { type: 'block_gap', value: 1 },
         ],
-        children: ['1'],
+        children: ['1', '3', '5'],
       },
-      '1': { node: { type: 'blockquote', variant: 'left_line' }, parent: '0', children: ['2'] },
-      '2': { node: { type: 'paragraph' }, parent: '1', children: ['3'] },
-      '3': { node: { type: 'text', text: '안녕하세요! Hello!' }, parent: '2' },
+      // '1': { node: { type: 'blockquote', variant: 'left_line' }, parent: '0', children: ['2'] },
+      '1': { node: { type: 'paragraph' }, parent: '0', children: ['2'] },
+      '2': { node: { type: 'text', text: 'A' }, parent: '1' },
+      '3': { node: { type: 'paragraph' }, parent: '0', children: ['4'] },
+      '4': { node: { type: 'text', text: 'Hello, World!' }, parent: '3' },
+      '5': { node: { type: 'paragraph' }, parent: '0', children: ['6'] },
+      '6': { node: { type: 'text', text: '안녕하세요!' }, parent: '5' },
     },
     attrs: {
       layout_mode: {
@@ -35,8 +39,8 @@
   };
 
   const selection: Selection = {
-    anchor: { node_id: '3', offset: 0 },
-    head: { node_id: '3', offset: 0 },
+    anchor: { node_id: '4', offset: 0 },
+    head: { node_id: '4', offset: 0 },
   };
 
   $effect(() => {

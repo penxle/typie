@@ -1,13 +1,16 @@
-use editor_model::Doc;
+use editor_common::Rect;
+use editor_model::{Doc, Node, NodeId};
 use editor_resource::Resource;
-use editor_view::Page;
+use editor_view::style::{BoxStyle, DecorationData};
+use editor_view::{Edges, PageVisitor};
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{GlyphCache, ScaleContext};
+use crate::icons::ICONS;
 use crate::sink::RenderSink;
 use crate::theme::Theme;
 use crate::theme_data::ThemeVariant;
-use crate::types::Transform;
+use crate::types::{Path, Transform};
 
 pub struct Renderer {
     pub(crate) theme: Theme,
@@ -30,369 +33,266 @@ impl Renderer {
         self.theme.set_variant(variant);
     }
 
-    pub fn render_page(
-        &mut self,
-        sink: &mut dyn RenderSink,
-        page: &Page,
-        doc: &Doc,
+    pub fn page_visitor<'a>(
+        &'a mut self,
+        sink: &'a mut dyn RenderSink,
+        doc: &'a Doc,
         scale_factor: f32,
-    ) {
-        let root = Transform::scale(scale_factor);
-        for fragment in &page.fragments {
-            crate::nodes::render_fragment(self, sink, fragment, doc, None, root);
+    ) -> RenderVisitor<'a> {
+        RenderVisitor {
+            renderer: self,
+            sink,
+            doc,
+            scale_factor,
+            root_transform: Transform::scale(scale_factor),
+            box_stack: Vec::new(),
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use editor_common::{EdgeInsets, Rect, Size};
-    use editor_macros::doc;
-    use editor_model::NodeId;
-    use editor_view::fragment::*;
+struct BoxFrame {
+    local_rect: Rect,
+    border: editor_common::EdgeInsets,
+    edges: Edges<bool>,
+    node: Option<Node>,
+}
 
-    use super::*;
-    use crate::types::Color;
-    use crate::types::{Image, Path, Stroke};
+pub struct RenderVisitor<'a> {
+    renderer: &'a mut Renderer,
+    sink: &'a mut dyn RenderSink,
+    doc: &'a Doc,
+    scale_factor: f32,
+    root_transform: Transform,
+    box_stack: Vec<BoxFrame>,
+}
 
-    struct MockSink {
-        fill_rect_count: usize,
-        fill_path_count: usize,
-        stroke_path_count: usize,
-        draw_image_count: usize,
-        fill_rect_transforms: Vec<Transform>,
-    }
+impl<'a> PageVisitor for RenderVisitor<'a> {
+    fn box_enter(
+        &mut self,
+        node_id: NodeId,
+        local_rect: Rect,
+        style: &BoxStyle,
+        edges: Edges<bool>,
+    ) {
+        let t = self.root_transform.translate(local_rect.x, local_rect.y);
+        let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
-    impl MockSink {
-        fn new() -> Self {
-            Self {
-                fill_rect_count: 0,
-                fill_path_count: 0,
-                stroke_path_count: 0,
-                draw_image_count: 0,
-                fill_rect_transforms: Vec::new(),
+        let node = self.doc.node(node_id).map(|n| n.node().clone());
+
+        // Draw background
+        match &node {
+            Some(Node::Callout(callout)) => {
+                let token = match callout.variant {
+                    editor_model::CalloutVariant::Info => "ui.callout.info",
+                    editor_model::CalloutVariant::Success => "ui.callout.success",
+                    editor_model::CalloutVariant::Warning => "ui.callout.warning",
+                    editor_model::CalloutVariant::Danger => "ui.callout.danger",
+                };
+                let color = self.renderer.theme.color_with_alpha(token, 8);
+                self.sink.fill_rect(inner_rect, color, t);
             }
+            Some(Node::Fold(_)) => {
+                let color = self.renderer.theme.color("ui.surface.muted");
+                self.sink.fill_rect(inner_rect, color, t);
+            }
+            _ => {}
         }
+
+        self.box_stack.push(BoxFrame {
+            local_rect,
+            border: style.border,
+            edges,
+            node,
+        });
     }
 
-    impl RenderSink for MockSink {
-        fn fill_rect(&mut self, _rect: Rect, _color: Color, transform: Transform) {
-            self.fill_rect_count += 1;
-            self.fill_rect_transforms.push(transform);
-        }
-        fn fill_path(&mut self, _path: &Path, _color: Color, _transform: Transform) {
-            self.fill_path_count += 1;
-        }
-        fn stroke_path(
-            &mut self,
-            _path: &Path,
-            _color: Color,
-            _stroke: &Stroke,
-            _transform: Transform,
-        ) {
-            self.stroke_path_count += 1;
-        }
-        fn draw_image(&mut self, _image: &Image, _rect: Rect, _transform: Transform) {
-            self.draw_image_count += 1;
-        }
-    }
-
-    fn make_renderer() -> Renderer {
-        use editor_resource::Resource;
-        Renderer::new(
-            ThemeVariant::LightWhite,
-            Arc::new(Mutex::new(Resource::new())),
-        )
-    }
-
-    fn make_line(node_id: NodeId, x: f32, y: f32) -> LineFragment {
-        LineFragment {
-            node_id,
-            rect: Rect {
-                x,
-                y,
-                width: 100.0,
-                height: 20.0,
-            },
-            baseline: 16.0,
-            glyph_runs: vec![GlyphRun {
-                font_id: 0,
-                font_weight: 400,
-                font_size: 14.0,
-                synthesis: Synthesis::default(),
-                color: "ui.text".into(),
-                background_color: None,
-                glyphs: vec![],
-                node_id,
-                offset: 0,
-                text: "hi".into(),
-                x: 0.0,
-                width: 20.0,
-                char_advances: vec![10.0, 10.0],
-            }],
-        }
-    }
-
-    #[test]
-    fn render_empty_page() {
-        let mut renderer = make_renderer();
-        let doc = Doc::new_test();
-        let page = Page::new(Size::new(200.0, 0.0), vec![]);
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
-
-        assert_eq!(sink.fill_rect_count, 0);
-        assert_eq!(sink.fill_path_count, 0);
-        assert_eq!(sink.stroke_path_count, 0);
-        assert_eq!(sink.draw_image_count, 0);
-    }
-
-    #[test]
-    fn render_page_with_line() {
-        let mut renderer = make_renderer();
-        let doc = Doc::new_test();
-        let node_id = NodeId::new();
-
-        let line = make_line(node_id, 0.0, 0.0);
-        let page = Page::new(Size::new(200.0, 20.0), vec![Fragment::Line(line)]);
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
-
-        assert_eq!(sink.fill_rect_count, 0);
-    }
-
-    #[test]
-    fn render_line_with_highlight() {
-        let mut renderer = make_renderer();
-        let doc = Doc::new_test();
-        let node_id = NodeId::new();
-
-        let line = LineFragment {
-            node_id,
-            rect: Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 100.0,
-                height: 20.0,
-            },
-            baseline: 16.0,
-            glyph_runs: vec![GlyphRun {
-                font_id: 0,
-                font_weight: 400,
-                font_size: 14.0,
-                synthesis: Synthesis::default(),
-                color: "ui.text".into(),
-                background_color: Some("ui.highlight".into()),
-                glyphs: vec![],
-                node_id,
-                offset: 0,
-                text: "hi".into(),
-                x: 0.0,
-                width: 20.0,
-                char_advances: vec![10.0, 10.0],
-            }],
+    fn box_exit(&mut self) {
+        let Some(frame) = self.box_stack.pop() else {
+            return;
         };
 
-        let page = Page::new(Size::new(200.0, 20.0), vec![Fragment::Line(line)]);
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
+        let t = self
+            .root_transform
+            .translate(frame.local_rect.x, frame.local_rect.y);
+        let b = &frame.border;
 
-        assert_eq!(sink.fill_rect_count, 1);
-    }
-
-    #[test]
-    fn container_with_callout_background() {
-        let mut renderer = make_renderer();
-        let (doc, co1, ..) = doc! { root { co1: callout(variant: CalloutVariant::Info) } };
-
-        let container = ContainerFragment {
-            node_id: co1,
-            rect: Rect {
-                x: 10.0,
-                y: 20.0,
-                width: 200.0,
-                height: 100.0,
-            },
-            children: vec![],
-            scope: false,
-            breaks: Breaks::default(),
-            border: EdgeInsets::default(),
+        let border_color = match &frame.node {
+            Some(Node::Blockquote(_)) => self.renderer.theme.color("ui.border.default"),
+            Some(Node::Fold(_)) => self.renderer.theme.color("ui.border.default"),
+            Some(Node::Table(_)) => self.renderer.theme.color("ui.border.default"),
+            _ => self.renderer.theme.color("ui.border"),
         };
 
-        let page = Page::new(
-            Size::new(200.0, 120.0),
-            vec![Fragment::Container(container)],
-        );
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
+        if frame.edges.left && b.left > 0.0 {
+            let path = Path::rect(Rect::from_xywh(0.0, 0.0, b.left, frame.local_rect.height));
+            self.sink.fill_path(&path, border_color, t);
+        }
 
-        // Background fill_rect for callout
-        assert_eq!(sink.fill_rect_count, 1);
+        if frame.edges.right && b.right > 0.0 {
+            let path = Path::rect(Rect::from_xywh(
+                frame.local_rect.width - b.right,
+                0.0,
+                b.right,
+                frame.local_rect.height,
+            ));
+            self.sink.fill_path(&path, border_color, t);
+        }
+
+        if frame.edges.top && b.top > 0.0 {
+            let path = Path::rect(Rect::from_xywh(0.0, 0.0, frame.local_rect.width, b.top));
+            self.sink.fill_path(&path, border_color, t);
+        }
+
+        if frame.edges.bottom && b.bottom > 0.0 {
+            let path = Path::rect(Rect::from_xywh(
+                0.0,
+                frame.local_rect.height - b.bottom,
+                frame.local_rect.width,
+                b.bottom,
+            ));
+            self.sink.fill_path(&path, border_color, t);
+        }
     }
 
-    #[test]
-    fn container_with_border() {
-        let mut renderer = make_renderer();
-        let (doc, bq1, ..) =
-            doc! { root { bq1: blockquote(variant: BlockquoteVariant::LeftLine) } };
+    fn line(
+        &mut self,
+        _node_id: NodeId,
+        local_rect: Rect,
+        _baseline: f32,
+        glyph_runs: &[editor_view::glyph_run::GlyphRun],
+    ) {
+        let t = self.root_transform.translate(local_rect.x, local_rect.y);
+        let inv_scale = 1.0 / self.scale_factor;
 
-        let container = ContainerFragment {
-            node_id: bq1,
-            rect: Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 200.0,
-                height: 100.0,
-            },
-            children: vec![],
-            scope: false,
-            breaks: Breaks::default(),
-            border: EdgeInsets {
-                left: 3.0,
-                top: 0.0,
-                right: 0.0,
-                bottom: 0.0,
-            },
-        };
+        for run in glyph_runs {
+            if let Some(ref bg_token) = run.background_color {
+                let bg_color = self.renderer.theme.color(bg_token);
+                let run_rect = Rect::from_xywh(run.x, 0.0, run.width, local_rect.height);
+                self.sink.fill_rect(run_rect, bg_color, t);
+            }
 
-        let page = Page::new(
-            Size::new(200.0, 100.0),
-            vec![Fragment::Container(container)],
-        );
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
+            let color = self.renderer.theme.color(&run.color);
 
-        // Left border drawn via fill_path
-        assert_eq!(sink.fill_path_count, 1);
-        // No background for blockquote
-        assert_eq!(sink.fill_rect_count, 0);
-    }
+            let resource = Arc::clone(&self.renderer.resource);
+            let resource_guard = resource.lock().unwrap();
+            let positioned = crate::glyph::rasterize(
+                run,
+                &resource_guard.font_registry,
+                &mut self.renderer.scale_ctx,
+                &mut self.renderer.glyph_cache,
+                self.scale_factor,
+            );
+            drop(resource_guard);
 
-    #[test]
-    fn nested_container_no_double_translation() {
-        let mut renderer = make_renderer();
-        let (doc, co1, p1, ..) = doc! {
-            root {
-                co1: callout(variant: CalloutVariant::Info) {
-                    p1: paragraph
+            for pg in &positioned {
+                let gt = t.translate(pg.x, pg.y).post_scale(inv_scale);
+                match &pg.raster {
+                    crate::glyph::RasterizedGlyph::Path(path) => {
+                        self.sink.fill_path(path, color, gt);
+                    }
+                    crate::glyph::RasterizedGlyph::Bitmap(image) => {
+                        let rect =
+                            Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
+                        self.sink.draw_image(image, rect, gt);
+                    }
                 }
             }
-        };
-
-        // Container at y=80, child line at absolute y=120
-        let child_line = make_line(p1, 10.0, 120.0);
-
-        let container = ContainerFragment {
-            node_id: co1,
-            rect: Rect {
-                x: 0.0,
-                y: 80.0,
-                width: 200.0,
-                height: 60.0,
-            },
-            children: vec![Fragment::Line(child_line)],
-            scope: false,
-            breaks: Breaks::default(),
-            border: EdgeInsets::default(),
-        };
-
-        let page = Page::new(
-            Size::new(200.0, 200.0),
-            vec![Fragment::Container(container)],
-        );
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
-
-        // fill_rect: 1 for callout background
-        assert_eq!(sink.fill_rect_count, 1);
-
-        // The callout background transform should be at (0, 80)
-        let bg_transform = &sink.fill_rect_transforms[0];
-        assert_eq!(bg_transform.m[4], 0.0); // x = 0
-        assert_eq!(bg_transform.m[5], 80.0); // y = 80
-
-        // Children receive the original page-level transform (IDENTITY),
-        // so the line at absolute y=120 translates from IDENTITY,
-        // not from the container's translated transform.
+        }
     }
 
-    #[test]
-    fn placeholder_callout_icon() {
-        let mut renderer = make_renderer();
-        let (doc, co1, ..) = doc! { root { co1: callout(variant: CalloutVariant::Warning) } };
+    fn atom(&mut self, node_id: NodeId, local_rect: Rect) {
+        let t = self.root_transform.translate(local_rect.x, local_rect.y);
+        let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
-        let placeholder = PlaceholderFragment {
-            id: 0,
-            rect: Rect {
-                x: 5.0,
-                y: 10.0,
-                width: 16.0,
-                height: 16.0,
-            },
-            data: PlaceholderData::None,
-        };
+        let node = self.doc.node(node_id);
 
-        let container = ContainerFragment {
-            node_id: co1,
-            rect: Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 200.0,
-                height: 40.0,
-            },
-            children: vec![Fragment::Placeholder(placeholder)],
-            scope: false,
-            breaks: Breaks::default(),
-            border: EdgeInsets::default(),
-        };
-
-        let page = Page::new(Size::new(200.0, 40.0), vec![Fragment::Container(container)]);
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
-
-        // fill_rect: 1 for callout background
-        assert_eq!(sink.fill_rect_count, 1);
-        // fill_path: 1 for placeholder icon
-        assert_eq!(sink.fill_path_count, 1);
+        match node.map(|n| n.node()) {
+            Some(Node::HorizontalRule(hr)) => {
+                let color = self.renderer.theme.color("ui.border");
+                let icon = match hr.variant {
+                    editor_model::HorizontalRuleVariant::Line => "hr/line",
+                    editor_model::HorizontalRuleVariant::DashedLine => "hr/dashed-line",
+                    editor_model::HorizontalRuleVariant::Circle => "hr/circle",
+                    editor_model::HorizontalRuleVariant::Diamond => "hr/diamond",
+                    editor_model::HorizontalRuleVariant::ThreeCircles => "hr/three-circles",
+                    editor_model::HorizontalRuleVariant::ThreeDiamonds => "hr/three-diamonds",
+                    editor_model::HorizontalRuleVariant::Zigzag => "hr/zigzag",
+                    editor_model::HorizontalRuleVariant::CircleLine => "hr/circle-line",
+                    editor_model::HorizontalRuleVariant::DiamondLine => "hr/diamond-line",
+                };
+                let path = ICONS.resolve(icon, inner_rect);
+                self.sink.fill_path(&path, color, t);
+            }
+            Some(Node::Image(_) | Node::File(_) | Node::Embed(_) | Node::Archived(_)) => {}
+            _ => {}
+        }
     }
 
-    #[test]
-    fn placeholder_fold_chevron() {
-        let mut renderer = make_renderer();
-        let (doc, f1, ..) = doc! { root { f1: fold } };
+    fn decoration(&mut self, local_rect: Rect, data: &DecorationData) {
+        let t = self.root_transform.translate(local_rect.x, local_rect.y);
+        let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
-        let placeholder = PlaceholderFragment {
-            id: 0,
-            rect: Rect {
-                x: 5.0,
-                y: 5.0,
-                width: 16.0,
-                height: 16.0,
+        // Parent node from the current box frame
+        let parent_node = self.box_stack.last().and_then(|f| f.node.as_ref());
+
+        match (parent_node, data) {
+            (Some(Node::Callout(callout)), _) => {
+                let icon_name = match callout.variant {
+                    editor_model::CalloutVariant::Info => "lucide/info",
+                    editor_model::CalloutVariant::Success => "lucide/circle-check",
+                    editor_model::CalloutVariant::Warning => "lucide/circle-alert",
+                    editor_model::CalloutVariant::Danger => "lucide/triangle-alert",
+                };
+                let color = self.renderer.theme.color("ui.text.muted");
+                let path = ICONS.resolve(icon_name, inner_rect);
+                self.sink.fill_path(&path, color, t);
+            }
+
+            (Some(Node::Blockquote(bq)), _)
+                if bq.variant == editor_model::BlockquoteVariant::LeftQuote =>
+            {
+                let color = self.renderer.theme.color("ui.text.muted");
+                let path = ICONS.resolve("typie/blockquote-quote", inner_rect);
+                self.sink.fill_path(&path, color, t);
+            }
+
+            (Some(Node::Blockquote(bq)), _)
+                if bq.variant == editor_model::BlockquoteVariant::LeftLine =>
+            {
+                let color = self.renderer.theme.color("ui.border.default");
+                self.sink.fill_rect(inner_rect, color, t);
+            }
+
+            (Some(Node::Fold(_)), _) => {
+                let expanded = matches!(data, DecorationData::Bool(true));
+                let icon_name = if expanded {
+                    "lucide/chevron-up"
+                } else {
+                    "lucide/chevron-down"
+                };
+                let color = self.renderer.theme.color("ui.text.muted");
+                let path = ICONS.resolve(icon_name, inner_rect);
+                self.sink.fill_path(&path, color, t);
+            }
+
+            (Some(Node::ListItem(_)), _) => match data {
+                DecorationData::Text(_label) => {
+                    let color = self.renderer.theme.color("ui.text.muted");
+                    let path = ICONS.resolve("list/ordered", inner_rect);
+                    self.sink.fill_path(&path, color, t);
+                }
+                _ => {
+                    let color = self.renderer.theme.color("ui.text");
+                    self.sink.fill_rect(inner_rect, color, t);
+                }
             },
-            data: PlaceholderData::Bool(true),
-        };
 
-        let container = ContainerFragment {
-            node_id: f1,
-            rect: Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 200.0,
-                height: 40.0,
-            },
-            children: vec![Fragment::Placeholder(placeholder)],
-            scope: false,
-            breaks: Breaks::default(),
-            border: EdgeInsets::default(),
-        };
+            (Some(Node::BulletList(_)), _) => {
+                let color = self.renderer.theme.color("ui.text");
+                self.sink.fill_rect(inner_rect, color, t);
+            }
 
-        let page = Page::new(Size::new(200.0, 40.0), vec![Fragment::Container(container)]);
-        let mut sink = MockSink::new();
-        renderer.render_page(&mut sink, &page, &doc, 1.0);
-
-        // fill_rect: 1 for fold background
-        assert_eq!(sink.fill_rect_count, 1);
-        // fill_path: 1 for chevron icon
-        assert_eq!(sink.fill_path_count, 1);
+            _ => {}
+        }
     }
 }

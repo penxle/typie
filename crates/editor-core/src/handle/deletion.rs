@@ -2,35 +2,42 @@ use editor_commands::{self as commands};
 use editor_state::Selection;
 
 use crate::editor::Editor;
+use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_deletion_intent(editor: &mut Editor, intent: DeletionIntent) {
+pub fn handle_deletion_intent(
+    editor: &mut Editor,
+    intent: DeletionIntent,
+) -> Result<(), EditorError> {
     match intent {
         DeletionIntent::Selection => {
             editor.transact(|tr| {
                 commands::delete_selection(tr)?;
                 Ok(())
-            });
+            })?;
         }
         DeletionIntent::Move(Movement::Grapheme(Direction::Backward)) => {
             editor.transact(|tr| {
                 commands::delete_text_backward(tr)?;
                 Ok(())
-            });
+            })?;
         }
         DeletionIntent::Move(Movement::Grapheme(Direction::Forward)) => {
             editor.transact(|tr| {
                 commands::delete_text_forward(tr)?;
                 Ok(())
-            });
+            })?;
         }
         DeletionIntent::Move(movement) => {
             let head = editor.state().selection.head;
             let target = {
                 let resource = editor.resource.lock().unwrap();
-                editor
-                    .view
-                    .resolve_movement(&head, &movement, resource.segmenters.as_ref())
+                editor.view.resolve_movement(
+                    &head,
+                    &movement,
+                    &editor.state.doc,
+                    resource.segmenters.as_ref(),
+                )
             };
 
             if let Some(target) = target {
@@ -39,10 +46,11 @@ pub fn handle_deletion_intent(editor: &mut Editor, intent: DeletionIntent) {
                     commands::set_selection(tr, selection)?;
                     commands::delete_selection(tr)?;
                     Ok(())
-                });
+                })?;
             }
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]

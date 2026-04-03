@@ -1,9 +1,13 @@
 use editor_commands::{self as commands};
 
 use crate::editor::Editor;
+use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_insertion_intent(editor: &mut Editor, intent: InsertionIntent) {
+pub fn handle_insertion_intent(
+    editor: &mut Editor,
+    intent: InsertionIntent,
+) -> Result<(), EditorError> {
     editor.transact(|tr| {
         match intent {
             InsertionIntent::Text(text) => {
@@ -22,7 +26,7 @@ pub fn handle_insertion_intent(editor: &mut Editor, intent: InsertionIntent) {
             InsertionIntent::Break(Break::Page) | InsertionIntent::Node(_) => {}
         }
         Ok(())
-    });
+    })
 }
 
 #[cfg(test)]

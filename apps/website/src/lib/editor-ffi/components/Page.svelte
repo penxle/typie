@@ -16,7 +16,7 @@
 <div
   style:width={`${width}px`}
   style:height={`${height}px`}
-  class={css({ position: 'relative', flexShrink: '0' })}
+  class={css({ position: 'relative', flexShrink: '0', backgroundColor: 'brand.50' })}
   {@attach (el) => {
     if (editor) {
       editor.pageEls[page] = el;
@@ -39,6 +39,7 @@
 
         $effect(() => {
           editor.resizeSurface(page, width, height);
+          editor.renderSurface(page);
         });
 
         return () => {

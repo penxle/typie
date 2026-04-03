@@ -2,6 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import { onDestroy, untrack } from 'svelte';
   import { Editor, getEditorContext } from '../editor.svelte';
+  import { handle } from '../handlers';
+  import { handlePointerDown } from '../handlers/pointer';
   import Cursor from './Cursor.svelte';
   import CursorPositioned from './CursorPositioned.svelte';
   import Input from './Input.svelte';
@@ -47,7 +49,16 @@
   });
 </script>
 
-<div class={css(style)} onfocusin={() => ctx.editor?.focus()} role="textbox" tabindex={0} bind:clientWidth bind:clientHeight>
+<div
+  class={css({ position: 'relative' }, style)}
+  onfocusin={() => ctx.editor?.focus()}
+  onfocusout={() => ctx.editor?.blur()}
+  onpointerdown={handle(ctx.editor, handlePointerDown)}
+  role="textbox"
+  tabindex={0}
+  bind:clientWidth
+  bind:clientHeight
+>
   {#if ctx.editor}
     {#each ctx.editor.pageSizes as { width, height }, i (i)}
       <Page {height} page={i} {width} />

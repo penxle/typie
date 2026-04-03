@@ -179,6 +179,30 @@ impl Step {
         }
     }
 
+    pub fn affected_node_ids(&self) -> Vec<NodeId> {
+        match self {
+            Step::InsertText { node_id, .. }
+            | Step::RemoveText { node_id, .. }
+            | Step::AddModifier { node_id, .. }
+            | Step::RemoveModifier { node_id, .. }
+            | Step::SetModifiers { node_id, .. }
+            | Step::SetNode { node_id, .. } => vec![*node_id],
+            Step::InsertSubtree { parent_id, .. } | Step::RemoveSubtree { parent_id, .. } => {
+                vec![*parent_id]
+            }
+            Step::SplitNode { node_id, .. } | Step::MergeNode { node_id, .. } => vec![*node_id],
+            Step::MoveNode {
+                old_parent,
+                new_parent,
+                ..
+            } => vec![*old_parent, *new_parent],
+            Step::SetSelection { .. }
+            | Step::SetPendingModifiers { .. }
+            | Step::SetComposition { .. }
+            | Step::SetDocumentAttrs { .. } => vec![],
+        }
+    }
+
     pub fn inverse(&self) -> Step {
         match self {
             Step::InsertText {

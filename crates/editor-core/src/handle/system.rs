@@ -5,11 +5,12 @@ use hashbrown::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 
 use crate::editor::Editor;
+use crate::error::EditorError;
 use crate::event::EditorEvent;
 use crate::message::*;
 use crate::state_field::StateField;
 
-pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
+pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<(), EditorError> {
     match event {
         SystemEvent::Initialize => {
             editor.pending_fonts = collect_font_requests(&editor.state.doc);
@@ -38,7 +39,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
                     });
                 }
                 Ok(())
-            });
+            })?;
 
             editor.view.layout(&editor.state.doc);
             editor.push_event(EditorEvent::StateChanged {
@@ -63,7 +64,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
         SystemEvent::FontManifestLoaded { family, weight } => {
             let has_pending = editor.pending_fonts.contains_key(&(family.clone(), weight));
             if !has_pending {
-                return;
+                return Ok(());
             }
 
             let codepoints: Vec<u32> = editor
@@ -87,7 +88,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
             let resource = editor.resource.lock().unwrap();
 
             let Some(family_id) = resource.font_registry.intern_id(&family) else {
-                return;
+                return Ok(());
             };
 
             let loaded = (family_id, weight);
@@ -137,6 +138,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) {
             editor.view.set_external_height(node_id, height);
         }
     }
+    Ok(())
 }
 
 pub(crate) fn collect_font_requests(

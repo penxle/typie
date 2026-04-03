@@ -19,9 +19,13 @@ pub enum Key {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct InputModifiers {
+    #[serde(default)]
     pub shift: bool,
+    #[serde(default)]
     pub ctrl: bool,
+    #[serde(default)]
     pub alt: bool,
+    #[serde(default)]
     pub meta: bool,
 }
 
@@ -30,6 +34,7 @@ pub struct InputModifiers {
 #[serde(rename_all = "snake_case")]
 pub struct KeyEvent {
     pub key: Key,
+    #[serde(default)]
     pub modifiers: InputModifiers,
 }
 
@@ -38,9 +43,11 @@ pub struct KeyEvent {
 #[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum PointerEvent {
     Down {
+        page: usize,
         x: f32,
         y: f32,
         count: u32,
+        #[serde(default)]
         modifiers: InputModifiers,
     },
 }

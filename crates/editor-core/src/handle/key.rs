@@ -1,9 +1,10 @@
 use editor_commands::{self as commands};
 
 use crate::editor::Editor;
+use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) {
+pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), EditorError> {
     editor.transact(|tr| {
         match (event.key, event.modifiers) {
             (Key::Enter, m) if m.shift => {
@@ -12,7 +13,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) {
             (Key::Enter, _) => {
                 editor_commands::first!(
                     tr,
-                    commands::lift_paragraph_forward(),
+                    commands::delete_selection(),
                     commands::split_paragraph(),
                 )?;
             }
@@ -21,8 +22,9 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) {
                     tr,
                     commands::delete_selection(),
                     commands::delete_text_backward(),
-                    commands::join_paragraph_backward(),
                     commands::delete_node_backward(),
+                    commands::join_paragraph_backward(),
+                    commands::sink_paragraph_backward(),
                 )?;
             }
             (Key::Delete, _) => {
@@ -30,20 +32,21 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) {
                     tr,
                     commands::delete_selection(),
                     commands::delete_text_forward(),
-                    commands::join_paragraph_forward(),
                     commands::delete_node_forward(),
+                    commands::join_paragraph_forward(),
+                    commands::lift_paragraph_forward()
                 )?;
             }
             (Key::Tab, m) if m.shift => {
-                commands::lift_paragraph_forward(tr)?;
+                // commands::lift_paragraph_forward(tr)?;
             }
             (Key::Tab, _) => {
-                commands::sink_paragraph_backward(tr)?;
+                // commands::sink_paragraph_backward(tr)?;
             }
             (Key::Escape, _) => {}
         }
         Ok(())
-    });
+    })
 }
 
 #[cfg(test)]
