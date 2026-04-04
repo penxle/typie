@@ -174,7 +174,14 @@ pub(crate) fn build_modifier_expr(dec: &DecorationDef) -> TokenStream {
             quote! { Modifier::#variant { #(#field_assigns,)* } }
         }
         DecorationParams::Positional(exprs) => {
-            quote! { Modifier::#variant(#(#exprs),*) }
+            // All single-value tuple variants are now struct variants with `value` field
+            assert_eq!(
+                exprs.len(),
+                1,
+                "positional modifier shorthand expects exactly one argument"
+            );
+            let expr = &exprs[0];
+            quote! { Modifier::#variant { value: #expr } }
         }
     }
 }

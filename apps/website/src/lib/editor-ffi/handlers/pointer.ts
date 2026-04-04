@@ -10,5 +10,5 @@ export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = 
 
   const { page, x, y } = local;
 
-  editor.enqueue({ type: 'pointer', value: { type: 'down', value: { page, x, y, count: e.detail } } });
+  editor.enqueue({ type: 'pointer', event: { type: 'down', page, x, y, count: e.detail } });
 };

@@ -32,8 +32,8 @@ pub struct EditorHost {
     backend: BackendMode,
 }
 
-#[cfg_attr(feature = "uniffi", uniffi::export)]
-#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+#[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
+#[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 impl EditorHost {
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
     pub async fn create(

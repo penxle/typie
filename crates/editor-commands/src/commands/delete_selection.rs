@@ -24,7 +24,6 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
     if from.node_id == to.node_id {
         let cursor = delete_within_node(tr, from.node_id, from.offset, to.offset)?;
 
-        // If cursor is at a block-children container, resolve to valid selection
         let is_block_container = {
             let doc = tr.doc();
             doc.node(cursor.node_id).map_or(false, |n| {
@@ -42,7 +41,6 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
         let lca_id = find_lowest_common_ancestor(&doc, from.node_id, to.node_id)
             .ok_or(CommandError::Corrupted("no common ancestor".into()))?;
 
-        // Pre-compute textblocks before deletion
         let from_tb = find_ancestor_textblock(&doc, from.node_id);
         let to_tb = find_ancestor_textblock(&doc, to.node_id);
 
@@ -382,14 +380,11 @@ fn is_textblock(node: &Node) -> bool {
 }
 
 /// Walk into a node to find the first valid text-level position.
-/// - Text node -> Position at offset 0
-/// - Textblock with text children -> Position at first text child offset 0
-/// - Textblock (empty) -> Position at (textblock, 0)
-/// - Otherwise -> recurse into first child
 fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<Position> {
     let node_ref = doc.node(node_id)?;
     let node = node_ref.node();
 
+    // Text node -> position at offset 0
     if matches!(node, Node::Text(_)) {
         return Some(Position {
             node_id,
@@ -399,7 +394,7 @@ fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<
     }
 
     if is_textblock(node) {
-        // If textblock has children, descend into first child (text node)
+        // Textblock with text children -> recurse into first child
         if let Some(&first_child_id) = node_ref.entry().children.front() {
             if let Some(pos) = find_first_text_position(doc, first_child_id) {
                 return Some(pos);
@@ -413,18 +408,12 @@ fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<
         });
     }
 
-    // Recurse into first child
+    // Otherwise -> recurse into first child
     let first_child_id = *node_ref.entry().children.front()?;
     find_first_text_position(doc, first_child_id)
 }
 
 /// Resolve a container position (container_id, offset) to the nearest valid selection.
-///
-/// After block-level deletions, the cursor may end up at a container position like (root, 0).
-/// A collapsed selection at a container position in a block-children container is invalid.
-/// This function resolves to either:
-/// - A node selection for an adjacent block-level leaf
-/// - A collapsed selection at the nearest textblock position
 fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: usize) -> Selection {
     let container = match doc.node(container_id) {
         Some(n) => n,
@@ -432,6 +421,9 @@ fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: u
     };
     let children = &container.entry().children;
 
+    // After block-level deletions, cursor may be at a container position like (root, 0).
+    // A collapsed selection at a container position in a block-children container is invalid.
+    // Try forward child first: node selection for a block-level leaf, or collapsed at first text position.
     if let Some(&child_id) = children.get(offset) {
         if let Some(child) = doc.node(child_id) {
             if is_block_level_leaf(child.node()) {
@@ -454,6 +446,7 @@ fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: u
         }
     }
 
+    // Fall back to previous child.
     if offset > 0 {
         if let Some(&child_id) = children.get(offset - 1) {
             if let Some(child) = doc.node(child_id) {
@@ -500,7 +493,6 @@ fn merge_after_delete(
 
     let to_tb_parent = doc.node(to_tb).and_then(|n| n.parent()).map(|p| p.id());
 
-    // Paragraph-level merge
     tr.merge_node(to_tb, from_tb)?;
 
     let doc = tr.doc();
@@ -544,7 +536,6 @@ fn merge_after_delete(
         }
     }
 
-    // Cleanup
     let doc = tr.doc();
     if let Some(parent_id) = to_tb_parent {
         if let Some(parent) = doc.node(parent_id) {

@@ -40,7 +40,7 @@ fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
         .node(node_id)
         .and_then(|node_ref| {
             resolve_inherited(&node_ref, ModifierType::TextColor).and_then(|m| match m {
-                Modifier::TextColor(c) => Some(c.clone()),
+                Modifier::TextColor { value } => Some(value.clone()),
                 _ => None,
             })
         })
@@ -48,7 +48,7 @@ fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
 
     let background_color = doc.node(node_id).and_then(|node_ref| {
         resolve_inherited(&node_ref, ModifierType::BackgroundColor).and_then(|m| match m {
-            Modifier::BackgroundColor(c) => Some(c.clone()),
+            Modifier::BackgroundColor { value } => Some(value.clone()),
             _ => None,
         })
     });

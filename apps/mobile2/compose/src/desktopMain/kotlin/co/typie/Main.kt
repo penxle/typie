@@ -105,7 +105,9 @@ fun main() {
     dir = dir.parentFile
   }
 
-  System.setProperty("jna.library.path", java.io.File(dir, "target/release-native").absolutePath)
+  val hostTarget = ProcessBuilder("rustc", "--print", "host-tuple").start()
+    .inputStream.bufferedReader().readText().trim()
+  System.setProperty("jna.library.path", java.io.File(dir, "target/$hostTarget/release-uniffi").absolutePath)
 
   initKoin {
     printLogger()

@@ -8,6 +8,7 @@ pub struct TableNode {
     pub border_style: TableBorderStyle,
     #[serde(default)]
     pub align: TableAlign,
+    #[ffi(default = "1.0f")]
     #[serde(default = "default_proportion")]
     pub proportion: f32,
 }

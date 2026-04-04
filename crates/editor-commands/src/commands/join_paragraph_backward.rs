@@ -17,7 +17,6 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    // Determine if cursor is at the start of a paragraph
     let paragraph_id = match node.node() {
         Node::Text(_) => {
             if pos.offset > 0 || node.prev_sibling().is_some() {
@@ -36,7 +35,6 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         _ => return Ok(false),
     };
 
-    // Find previous sibling and check it's a paragraph
     let doc = tr.doc();
     let paragraph = doc
         .node(paragraph_id)
@@ -65,7 +63,6 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
     };
     let prev_children_count = prev.entry().children.len();
 
-    // Merge current paragraph into previous
     tr.merge_node(paragraph_id, prev_id)?;
 
     let doc = tr.doc();
@@ -73,7 +70,6 @@ pub fn join_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         tr.apply_steps(compact(&p))?;
     }
 
-    // Set cursor at join point
     let new_selection = if let Some((cursor_node, cursor_offset)) = join_cursor {
         Selection::collapsed(Position {
             node_id: cursor_node,

@@ -12,7 +12,7 @@ pub fn handle_selection_intent(
     editor.transact(|tr| {
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
         match intent {
-            SelectionIntent::Set(selection) => {
+            SelectionIntent::Set { selection } => {
                 commands::set_selection(tr, selection)?;
             }
             SelectionIntent::All => {
@@ -38,9 +38,11 @@ mod tests {
         };
         let target = Selection::collapsed(Position::new(t1, 3));
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent(Intent::Selection(SelectionIntent::Set(
-            target,
-        ))));
+        editor.apply(Message::Intent {
+            intent: Intent::Selection {
+                intent: SelectionIntent::Set { selection: target },
+            },
+        });
         assert_eq!(editor.state().selection, target);
         assert!(!editor.history.can_undo());
     }

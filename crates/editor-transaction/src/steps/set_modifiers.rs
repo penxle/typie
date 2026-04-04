@@ -74,7 +74,7 @@ mod tests {
         };
 
         let mut tr = Transaction::new(&state);
-        let result = tr.set_modifiers(t1, vec![Modifier::LineHeight(160)]);
+        let result = tr.set_modifiers(t1, vec![Modifier::LineHeight { value: 160 }]);
 
         assert!(result.is_err());
     }

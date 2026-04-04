@@ -204,7 +204,7 @@ mod tests {
         assert!(
             root.modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontFamily(f) if f == "Pretendard"))
+                .any(|m| matches!(m, Modifier::FontFamily { value } if value == "Pretendard"))
         );
     }
 }

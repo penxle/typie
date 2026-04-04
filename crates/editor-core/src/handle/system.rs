@@ -57,7 +57,7 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
                 .resize(Viewport::new(width, height, scale_factor));
         }
 
-        SystemEvent::SetFocused(_focused) => {
+        SystemEvent::SetFocused { .. } => {
             // stub
         }
 
@@ -157,11 +157,11 @@ pub(crate) fn collect_font_requests(
         for ancestor in descendant.ancestors() {
             for m in ancestor.modifiers() {
                 match m {
-                    Modifier::FontFamily(f) if family.is_none() => {
-                        family = Some(f.clone());
+                    Modifier::FontFamily { value } if family.is_none() => {
+                        family = Some(value.clone());
                     }
-                    Modifier::FontWeight(w) if weight.is_none() => {
-                        weight = Some(*w);
+                    Modifier::FontWeight { value } if weight.is_none() => {
+                        weight = Some(*value);
                     }
                     _ => {}
                 }
@@ -266,7 +266,9 @@ mod tests {
         };
 
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::System(SystemEvent::Initialize));
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
 
         let key = ("TestFont".to_string(), 400u16);
         assert!(editor.pending_fonts.contains_key(&key));
@@ -285,7 +287,9 @@ mod tests {
         };
 
         let mut editor = Editor::new_test(state);
-        let events = editor.apply(Message::System(SystemEvent::Initialize));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
 
         let has_manifest_missing = events.iter().any(|e| {
             matches!(
@@ -309,7 +313,9 @@ mod tests {
         };
 
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::System(SystemEvent::Initialize));
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
 
         // Pre-register codepoint mapping for 'A' only
         {
@@ -320,10 +326,12 @@ mod tests {
                 .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
         }
 
-        editor.apply(Message::System(SystemEvent::FontBaseLoaded {
-            family: "TestFont".to_string(),
-            weight: 400,
-        }));
+        editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
 
         let key = ("TestFont".to_string(), 400u16);
         assert!(editor.pending_fonts.contains_key(&key));
@@ -343,7 +351,9 @@ mod tests {
         };
 
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::System(SystemEvent::Initialize));
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
 
         // Pre-register codepoint mapping for 'A'
         {
@@ -354,10 +364,12 @@ mod tests {
                 .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
         }
 
-        editor.apply(Message::System(SystemEvent::FontBaseLoaded {
-            family: "TestFont".to_string(),
-            weight: 400,
-        }));
+        editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
 
         assert!(
             !editor
@@ -379,7 +391,9 @@ mod tests {
         };
 
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::System(SystemEvent::Initialize));
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
 
         // Pre-register codepoint mapping for 'A' only
         {
@@ -390,10 +404,12 @@ mod tests {
                 .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
         }
 
-        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
-            family: "TestFont".to_string(),
-            weight: 400,
-        }));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
 
         let key = ("TestFont".to_string(), 400u16);
         assert!(
@@ -428,7 +444,9 @@ mod tests {
         };
 
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::System(SystemEvent::Initialize));
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
 
         // Pre-register codepoint mapping for 'A'
         {
@@ -439,10 +457,12 @@ mod tests {
                 .add_codepoint_mapping(id, 400, 'A' as u32, id, 400);
         }
 
-        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
-            family: "TestFont".to_string(),
-            weight: 400,
-        }));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
 
         assert!(
             events
@@ -465,7 +485,9 @@ mod tests {
         let mut editor = Editor::new_test(state);
 
         // Step 1: Initialize — should emit FontManifestMissing (no manifest yet)
-        let events = editor.apply(Message::System(SystemEvent::Initialize));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
         assert!(events.iter().any(|e| matches!(
             e,
             EditorEvent::FontManifestMissing { family, weight }
@@ -513,10 +535,12 @@ mod tests {
         }
 
         // Step 3: Send FontManifestLoaded
-        let events = editor.apply(Message::System(SystemEvent::FontManifestLoaded {
-            family: "Primary".to_string(),
-            weight: 400,
-        }));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontManifestLoaded {
+                family: "Primary".to_string(),
+                weight: 400,
+            },
+        });
 
         // Should emit FontDataMissing for Primary and Fallback
         let primary_event = events.iter().find(|e| {
@@ -546,7 +570,7 @@ mod tests {
         {
             assert_eq!(required.len(), 2, "primary required: Base + Chunk(0)");
             assert!(matches!(required[0], FontData::Base));
-            assert!(matches!(required[1], FontData::Chunk(0)));
+            assert!(matches!(required[1], FontData::Chunk { index: 0 }));
             // Primary font has chunk_count=4, required uses chunk 0, so prefetch=[1,2,3]
             assert_eq!(prefetch.len(), 3, "primary prefetch: 3 remaining chunks");
         }
@@ -558,15 +582,17 @@ mod tests {
         {
             assert_eq!(required.len(), 2, "fallback required: Base + Chunk(0)");
             assert!(matches!(required[0], FontData::Base));
-            assert!(matches!(required[1], FontData::Chunk(0)));
+            assert!(matches!(required[1], FontData::Chunk { index: 0 }));
             assert!(prefetch.is_empty(), "fallback should have no prefetch");
         }
 
         // Step 4: FontBaseLoaded for Primary — should invalidate T1
-        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
-            family: "Primary".to_string(),
-            weight: 400,
-        }));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "Primary".to_string(),
+                weight: 400,
+            },
+        });
         assert!(
             events
                 .iter()
@@ -581,10 +607,12 @@ mod tests {
         }));
 
         // Step 5: FontBaseLoaded for Fallback — should resolve B
-        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
-            family: "Fallback".to_string(),
-            weight: 400,
-        }));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "Fallback".to_string(),
+                weight: 400,
+            },
+        });
         assert!(
             events
                 .iter()
@@ -605,12 +633,16 @@ mod tests {
         };
 
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::System(SystemEvent::Initialize));
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
 
-        let events = editor.apply(Message::System(SystemEvent::FontBaseLoaded {
-            family: "UnknownFont".to_string(),
-            weight: 400,
-        }));
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "UnknownFont".to_string(),
+                weight: 400,
+            },
+        });
 
         assert!(
             !events

@@ -41,7 +41,6 @@ pub fn match_weight(weights: &[u16], target: u16) -> Option<u16> {
 mod tests {
     use super::match_weight;
 
-    // Case 1: target in [400, 500]
     #[test]
     fn mid_range_exact_400() {
         assert_eq!(match_weight(&[400, 700], 400), Some(400));
@@ -82,7 +81,6 @@ mod tests {
         assert_eq!(match_weight(&[300, 700], 500), Some(300));
     }
 
-    // Case 2: target < 400
     #[test]
     fn below_400_prefers_lighter() {
         assert_eq!(match_weight(&[100, 500], 300), Some(100));
@@ -103,7 +101,6 @@ mod tests {
         assert_eq!(match_weight(&[200, 400], 350), Some(200));
     }
 
-    // Case 3: target > 500
     #[test]
     fn above_500_prefers_heavier() {
         assert_eq!(match_weight(&[400, 900], 600), Some(900));
@@ -124,7 +121,6 @@ mod tests {
         assert_eq!(match_weight(&[400, 800], 700), Some(800));
     }
 
-    // Edge cases
     #[test]
     fn empty_weights() {
         assert_eq!(match_weight(&[], 400), None);

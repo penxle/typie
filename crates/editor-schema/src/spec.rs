@@ -18,7 +18,8 @@ pub struct NodeSpec {
     pub inline: bool,
     pub selectable: bool,
     pub isolating: bool,
-    pub structural: bool, // 부모의 구조적 일부인 노드. true면 부모 없이 단독 삭제 불가, 내용만 삭제됨.
+    /// When true, the node is a structural part of its parent and cannot be deleted alone; only its content can be cleared.
+    pub structural: bool,
     pub external: bool,
     pub promote_item_type_on_delete: Option<NodeType>,
     pub block_selection_boundary_mode: Option<BlockSelectionBoundaryMode>,

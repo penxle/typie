@@ -2,106 +2,99 @@ use cfg_if::cfg_if;
 
 use crate::error::FfiError;
 
-pub trait IntoFfi {
-    type Repr;
-    fn into_ffi(self) -> Result<Self::Repr, FfiError>;
+pub trait FromFfi<T> {
+    fn from_ffi(self) -> Result<T, FfiError>;
 }
 
-pub trait FromFfi {
-    type Repr;
-    fn from_ffi(self) -> Result<Self::Repr, FfiError>;
+pub trait IntoFfi<R> {
+    fn into_ffi(self) -> Result<R, FfiError>;
 }
 
 cfg_if! {
     if #[cfg(feature = "uniffi")] {
-        impl<T> IntoFfi for T {
-            type Repr = T;
-            fn into_ffi(self) -> Result<T, FfiError> { Ok(self) }
+        impl<T: serde::de::DeserializeOwned> FromFfi<T> for String {
+            fn from_ffi(self) -> Result<T, FfiError> {
+                serde_json::from_str(&self)
+                    .map_err(|e| FfiError::Deserialization(e.to_string()))
+            }
         }
 
-        impl<T> FromFfi for T {
-            type Repr = T;
-            fn from_ffi(self) -> Result<T, FfiError> { Ok(self) }
+        impl<T: serde::Serialize> IntoFfi<String> for T {
+            fn into_ffi(self) -> Result<String, FfiError> {
+                serde_json::to_string(&self)
+                    .map_err(|e| FfiError::Serialization(e.to_string()))
+            }
         }
     } else if #[cfg(feature = "wasm")] {
-        impl<T> IntoFfi for T
+        impl<T> IntoFfi<tsify::Ts<T>> for T
         where
             T: tsify::Tsify + serde::Serialize,
         {
-            type Repr = tsify::Ts<T>;
             fn into_ffi(self) -> Result<tsify::Ts<T>, FfiError> {
                 tsify::Ts::from_rust(&self).map_err(|e| FfiError::Serialization(format!("{e:?}")))
             }
         }
 
-        impl<T> FromFfi for tsify::Ts<T>
+        impl<T> FromFfi<T> for tsify::Ts<T>
         where
             T: tsify::Tsify + serde::de::DeserializeOwned,
             <T as tsify::Tsify>::JsType: Clone,
         {
-            type Repr = T;
             fn from_ffi(self) -> Result<T, FfiError> {
                 self.to_rust().map_err(|e| FfiError::Deserialization(format!("{e:?}")))
             }
         }
     } else {
-        impl<T> IntoFfi for T {
-            type Repr = T;
-            fn into_ffi(self) -> Result<T, FfiError> { Ok(self) }
-        }
-
-        impl<T> FromFfi for T {
-            type Repr = T;
+        impl<T> FromFfi<T> for T {
             fn from_ffi(self) -> Result<T, FfiError> { Ok(self) }
         }
-    }
-}
 
-#[cfg(feature = "wasm")]
-mod ext {
-    use super::*;
-
-    pub trait IntoFfiExt {
-        type Repr;
-        fn into_ffi(self) -> Result<Self::Repr, FfiError>;
-    }
-
-    pub trait FromFfiExt {
-        type Repr;
-        fn from_ffi(self) -> Result<Self::Repr, FfiError>;
-    }
-
-    impl<T: IntoFfi> IntoFfiExt for Vec<T> {
-        type Repr = Vec<T::Repr>;
-        fn into_ffi(self) -> Result<Vec<T::Repr>, FfiError> {
-            self.into_iter().map(IntoFfi::into_ffi).collect()
-        }
-    }
-
-    impl<T: FromFfi> FromFfiExt for Vec<T> {
-        type Repr = Vec<T::Repr>;
-        fn from_ffi(self) -> Result<Vec<T::Repr>, FfiError> {
-            self.into_iter().map(FromFfi::from_ffi).collect()
-        }
-    }
-
-    impl<T: IntoFfi> IntoFfiExt for Option<T> {
-        type Repr = Option<T::Repr>;
-        fn into_ffi(self) -> Result<Option<T::Repr>, FfiError> {
-            self.map(IntoFfi::into_ffi).transpose()
-        }
-    }
-
-    impl<T: FromFfi> FromFfiExt for Option<T> {
-        type Repr = Option<T::Repr>;
-        fn from_ffi(self) -> Result<Option<T::Repr>, FfiError> {
-            self.map(FromFfi::from_ffi).transpose()
+        impl<T> IntoFfi<T> for T {
+            fn into_ffi(self) -> Result<T, FfiError> { Ok(self) }
         }
     }
 }
 
-#[cfg(feature = "wasm")]
-pub use ext::*;
+// Container delegation — only needed when blanket T→T impls are absent
+cfg_if! {
+    if #[cfg(any(feature = "uniffi", feature = "wasm"))] {
+        impl<T, R> IntoFfi<Vec<R>> for Vec<T>
+        where
+            T: IntoFfi<R>,
+        {
+            fn into_ffi(self) -> Result<Vec<R>, FfiError> {
+                self.into_iter().map(IntoFfi::into_ffi).collect()
+            }
+        }
+
+        impl<T, R> IntoFfi<Option<R>> for Option<T>
+        where
+            T: IntoFfi<R>,
+        {
+            fn into_ffi(self) -> Result<Option<R>, FfiError> {
+                self.map(IntoFfi::into_ffi).transpose()
+            }
+        }
+
+        impl<T, R> FromFfi<Vec<R>> for Vec<T>
+        where
+            T: FromFfi<R>,
+        {
+            fn from_ffi(self) -> Result<Vec<R>, FfiError> {
+                self.into_iter().map(FromFfi::from_ffi).collect()
+            }
+        }
+
+        impl<T, R> FromFfi<Option<R>> for Option<T>
+        where
+            T: FromFfi<R>,
+        {
+            fn from_ffi(self) -> Result<Option<R>, FfiError> {
+                self.map(FromFfi::from_ffi).transpose()
+            }
+        }
+    }
+}
 
 #[cfg(feature = "wasm")]
 impl From<crate::error::EditorError> for wasm_bindgen::JsValue {

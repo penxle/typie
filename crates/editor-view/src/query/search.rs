@@ -11,7 +11,7 @@ fn find_line_in<'a>(node: &'a LayoutNode, pos: &Position) -> Option<&'a LayoutNo
     match &node.content {
         LayoutContent::Box(b) => b.children.iter().find_map(|child| find_line_in(child, pos)),
         LayoutContent::Line(l) => {
-            // 빈 줄: glyph_runs 없으면 paragraph node_id + offset 0으로 매칭
+            // Empty line: match by paragraph node_id at offset 0
             if l.glyph_runs.is_empty() {
                 return if l.node_id == pos.node_id && pos.offset == 0 {
                     Some(node)
@@ -102,12 +102,11 @@ pub fn find_navigable_above<'a>(node: &'a LayoutNode, y: f32) -> Option<&'a Layo
     }
 }
 
-/// Find the scope container (style.scope == true) that contains a given position.
-/// Returns the innermost scope container.
+/// Find the innermost scope container (style.scope == true) that contains a given position.
 pub fn find_scope_container_at<'a>(node: &'a LayoutNode, pos: &Position) -> Option<&'a LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => {
-            // Try children first (innermost scope wins)
+            // Try children first so the innermost scope wins
             for child in &b.children {
                 if let Some(scope) = find_scope_container_at(child, pos) {
                     return Some(scope);

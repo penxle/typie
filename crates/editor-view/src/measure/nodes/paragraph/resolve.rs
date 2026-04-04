@@ -31,25 +31,25 @@ pub fn resolve_text_style(node: &NodeRef<'_>) -> ResolvedTextStyle {
         }
         for m in ancestor.modifiers() {
             match m {
-                Modifier::FontFamily(f) if font_family.is_none() => {
-                    font_family = Some(f.clone());
+                Modifier::FontFamily { value } if font_family.is_none() => {
+                    font_family = Some(value.clone());
                     resolved_count += 1;
                 }
-                Modifier::FontWeight(w) if font_weight.is_none() => {
-                    font_weight = Some(*w);
+                Modifier::FontWeight { value } if font_weight.is_none() => {
+                    font_weight = Some(*value);
                     resolved_count += 1;
                 }
-                Modifier::FontSize(s) if font_size.is_none() => {
-                    let pt = *s as f32 / 100.0;
+                Modifier::FontSize { value } if font_size.is_none() => {
+                    let pt = *value as f32 / 100.0;
                     font_size = Some(pt * PT_TO_PX);
                     resolved_count += 1;
                 }
-                Modifier::LetterSpacing(ls) if letter_spacing.is_none() => {
-                    letter_spacing = Some(*ls as f32 / 100.0);
+                Modifier::LetterSpacing { value } if letter_spacing.is_none() => {
+                    letter_spacing = Some(*value as f32 / 100.0);
                     resolved_count += 1;
                 }
-                Modifier::LineHeight(lh) if line_height.is_none() => {
-                    line_height = Some(*lh as f32 / 100.0);
+                Modifier::LineHeight { value } if line_height.is_none() => {
+                    line_height = Some(*value as f32 / 100.0);
                     resolved_count += 1;
                 }
                 _ => {}
@@ -71,7 +71,7 @@ pub fn resolve_text_style(node: &NodeRef<'_>) -> ResolvedTextStyle {
 
 pub fn resolve_paragraph_indent(node: &NodeRef<'_>) -> f32 {
     match resolve_inherited(node, ModifierType::ParagraphIndent) {
-        Some(Modifier::ParagraphIndent(v)) => *v as f32 / 100.0 * DEFAULT_FONT_SIZE_PX,
+        Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * DEFAULT_FONT_SIZE_PX,
         _ => 0.0,
     }
 }

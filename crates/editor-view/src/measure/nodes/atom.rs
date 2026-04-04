@@ -18,7 +18,7 @@ pub fn measure_atom(node: &NodeRef<'_>, width: f32, view_state: &ViewState) -> M
         }
         Node::HorizontalRule(_) => (width, HORIZONTAL_RULE_HEIGHT),
         _ => {
-            // File, Embed, Archived
+            // File, Embed, Archived: height supplied externally
             let h = view_state.external_height(node_id).unwrap_or(0.0);
             (width, h)
         }

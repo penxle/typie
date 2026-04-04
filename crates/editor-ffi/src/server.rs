@@ -1,9 +1,10 @@
+use editor_macros::ffi_export;
 use wasm_bindgen::prelude::*;
 
 use crate::host::EditorHost;
 use crate::prelude::*;
 
-#[wasm_bindgen]
+#[ffi_export(wasm)]
 impl EditorHost {
     pub fn get_font_metadata(
         &self,

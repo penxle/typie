@@ -45,14 +45,8 @@ impl GlyphCache {
         }
     }
 
-    /// Look up a cached glyph result.
-    ///
-    /// For `Some` results, the cache entry is always valid (chunk writes
-    /// never overwrite previously populated glyph data).
-    ///
-    /// For `None` results, the entry is only valid if the stored version
-    /// matches `current_font_version`. A version mismatch means a new
-    /// chunk may have loaded the glyph data — treat as cache miss.
+    /// Look up a cached glyph result; `None` entries are only valid when `font_version` matches
+    /// because a new font chunk may have populated the glyph data since the miss was recorded.
     pub fn get(
         &self,
         key: &GlyphCacheKey,

@@ -7,6 +7,7 @@ pub fn generate() -> TokenStream {
         .expect("CARGO_PKG_NAME not set")
         .to_snake_case();
     let crate_ident = Ident::new(&crate_name, Span::call_site());
+    let usize_alias = Ident::new(&format!("__{crate_name}_usize"), Span::call_site());
 
     quote! {
         #[cfg(not(doctest))]
@@ -16,7 +17,10 @@ pub fn generate() -> TokenStream {
         ::uniffi::setup_scaffolding!();
 
         #[cfg(feature = "uniffi")]
-        ::uniffi::custom_type!(usize, u64, {
+        type #usize_alias = usize;
+
+        #[cfg(feature = "uniffi")]
+        ::uniffi::custom_type!(#usize_alias, u64, {
             remote,
             lower: |obj| obj as u64,
             try_lift: |val| Ok(val as usize),

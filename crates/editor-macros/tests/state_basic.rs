@@ -15,13 +15,11 @@ fn state_collapsed_selection() {
         selection: (t, 0)
     };
 
-    // Verify selection is collapsed at (t, 0)
     assert!(state.selection.is_collapsed());
     assert_eq!(state.selection.anchor.node_id, t);
     assert_eq!(state.selection.anchor.offset, 0);
     assert_eq!(state.selection.anchor.affinity, Affinity::Downstream);
 
-    // Verify doc content
     let t_entry = state.doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
         assert_eq!(text_node.text, "Hello World");

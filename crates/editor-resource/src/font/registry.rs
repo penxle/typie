@@ -387,7 +387,7 @@ mod tests {
         let mut reg = FontRegistry::new();
         let id = reg.intern("Arial");
         assert_eq!(reg.resolve(id), "Arial");
-        assert_eq!(reg.intern("Arial"), id); // same ID
+        assert_eq!(reg.intern("Arial"), id);
     }
 
     #[test]

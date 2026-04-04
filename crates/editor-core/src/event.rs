@@ -5,7 +5,7 @@ use crate::state_field::StateField;
 
 #[ffi]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum EditorEvent {
     StateChanged {
         fields: Vec<StateField>,
@@ -26,8 +26,8 @@ pub enum EditorEvent {
 
 #[ffi]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum FontData {
     Base,
-    Chunk(u16),
+    Chunk { index: u16 },
 }

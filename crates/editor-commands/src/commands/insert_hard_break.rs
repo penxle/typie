@@ -41,7 +41,6 @@ pub fn insert_hard_break(tr: &mut Transaction) -> CommandResult {
                 // Case C: cursor at end of text → insert hard break after
                 tr.insert_subtree(parent.id(), node_index + 1, break_subtree)?;
 
-                // Check if next sibling (after the new hard break) is a text node
                 let doc = tr.doc();
                 let break_node = doc
                     .node(break_id)

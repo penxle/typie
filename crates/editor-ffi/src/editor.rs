@@ -22,8 +22,8 @@ pub struct Editor {
     backend: BackendMode,
 }
 
-#[cfg_attr(feature = "uniffi", uniffi::export)]
-#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+#[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
+#[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 impl Editor {
     pub fn enqueue(&self, message: Complex<editor_core::Message>) -> EditorResult<()> {
         self.with_inner(|inner| {
@@ -94,8 +94,8 @@ impl Editor {
 }
 
 #[cfg(not(feature = "wasm-server"))]
-#[cfg_attr(feature = "uniffi", uniffi::export)]
-#[cfg_attr(feature = "wasm-browser", wasm_bindgen::prelude::wasm_bindgen)]
+#[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
+#[cfg_attr(feature = "wasm-browser", editor_macros::ffi_export(wasm))]
 impl Editor {
     pub fn attach_surface(
         &self,

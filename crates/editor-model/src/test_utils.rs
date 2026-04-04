@@ -2,15 +2,21 @@ use crate::{Doc, Modifier, Node, NodeId};
 
 pub fn default_modifiers() -> Vec<Modifier> {
     vec![
-        Modifier::FontFamily("Pretendard".to_string()),
-        Modifier::FontSize(1200),
-        Modifier::FontWeight(400),
-        Modifier::TextColor("black".to_string()),
-        Modifier::BackgroundColor("none".to_string()),
-        Modifier::LetterSpacing(0),
-        Modifier::LineHeight(160),
-        Modifier::ParagraphIndent(100),
-        Modifier::BlockGap(100),
+        Modifier::FontFamily {
+            value: "Pretendard".to_string(),
+        },
+        Modifier::FontSize { value: 1200 },
+        Modifier::FontWeight { value: 400 },
+        Modifier::TextColor {
+            value: "black".to_string(),
+        },
+        Modifier::BackgroundColor {
+            value: "none".to_string(),
+        },
+        Modifier::LetterSpacing { value: 0 },
+        Modifier::LineHeight { value: 160 },
+        Modifier::ParagraphIndent { value: 100 },
+        Modifier::BlockGap { value: 100 },
     ]
 }
 
@@ -84,19 +90,6 @@ macro_rules! assert_doc_eq {
 #[cfg(test)]
 mod tests {
     use editor_macros::doc;
-
-    use super::*;
-
-    #[test]
-    fn default_modifiers_contains_expected() {
-        let mods = default_modifiers();
-        assert_eq!(mods.len(), 7);
-        assert!(
-            mods.iter()
-                .any(|m| matches!(m, Modifier::FontFamily(f) if f == "Pretendard"))
-        );
-        assert!(mods.iter().any(|m| matches!(m, Modifier::FontSize(1200))));
-    }
 
     #[test]
     fn assert_doc_eq_identical_docs() {

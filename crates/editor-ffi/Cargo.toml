@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 default = []
 uniffi = [
   "dep:uniffi",
+  "dep:serde",
   "dep:android_logger",
   "dep:env_logger",
   "editor-common/uniffi",

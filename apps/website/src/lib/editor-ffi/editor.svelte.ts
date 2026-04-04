@@ -58,7 +58,7 @@ export class Editor {
     self.on('font_manifest_missing', fontManifestMissingHandler);
     self.on('font_data_missing', fontDataMissingHandler);
 
-    self.enqueue({ type: 'system', value: { type: 'initialize' } });
+    self.enqueue({ type: 'system', event: { type: 'initialize' } });
 
     return self;
   }
@@ -222,11 +222,7 @@ export class Editor {
     const set = this.#listeners.get(event.type);
     if (set) {
       for (const cb of set) {
-        if ('value' in event) {
-          (cb as (editor: Editor, value: unknown) => void)(this, event.value);
-        } else {
-          (cb as (editor: Editor) => void)(this);
-        }
+        (cb as EditorEventListener<typeof event.type>)(this, event as never);
       }
     }
   }

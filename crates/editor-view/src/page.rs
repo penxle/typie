@@ -2,7 +2,7 @@ use editor_common::{Rect, Size};
 use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
-/// 2-pass 레이아웃 결과의 페이지. LayoutTree 위의 y-range 창.
+/// A y-range window into the LayoutTree produced by the two-pass layout.
 #[derive(Debug, Clone)]
 pub struct LayoutPage {
     pub y_start: f32,

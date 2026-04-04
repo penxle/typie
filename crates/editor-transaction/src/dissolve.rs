@@ -3,14 +3,11 @@ use editor_schema::NodeSpecExt;
 
 use crate::Step;
 
-/// Analyzes a node whose content is invalid (children don't satisfy content
-/// expression) and returns steps to promote its children into the parent,
-/// then remove the now-empty node. Recursively dissolves promoted children
-/// that don't fit in the parent's content.
+/// Returns steps to promote `node`'s children into the parent and remove `node`.
+/// Recursively dissolves promoted children that don't fit in the parent's content.
 pub fn dissolve(node: &NodeRef) -> Vec<Step> {
     let child_types: Vec<NodeType> = node.children().map(|c| c.as_type()).collect();
 
-    // Already valid — nothing to do
     if node.spec().content.matches_sequence(&child_types) {
         return vec![];
     }
@@ -25,11 +22,7 @@ pub fn dissolve(node: &NodeRef) -> Vec<Step> {
 }
 
 /// Promotes all children of `node` into `effective_parent` and removes `node`.
-///
-/// `effective_parent_id` / `effective_parent_spec` / `node_index` describe where
-/// `node` currently lives from the perspective of the step sequence being built.
-/// For the initial call this matches the doc snapshot; for recursive calls it
-/// reflects the post-move parent.
+/// `node_index` reflects the post-move position within the step sequence being built.
 fn dissolve_into(
     node: &NodeRef,
     effective_parent_id: NodeId,
@@ -41,7 +34,6 @@ fn dissolve_into(
 
     let mut steps = Vec::new();
 
-    // Move each child from node into parent, right after node
     for (j, (child_id, _)) in children.iter().enumerate() {
         steps.push(Step::MoveNode {
             node_id: *child_id,
@@ -52,7 +44,6 @@ fn dissolve_into(
         });
     }
 
-    // Remove the now-empty node
     steps.push(Step::RemoveSubtree {
         parent_id: effective_parent_id,
         index: node_index,
@@ -64,7 +55,6 @@ fn dissolve_into(
         },
     });
 
-    // Recursively dissolve children that don't fit in the parent's content
     for (j, (child_id, child_type)) in children.iter().enumerate() {
         if !effective_parent_spec.content.matches(*child_type) {
             if let Some(child_ref) = node.children().find(|c| c.id() == *child_id) {

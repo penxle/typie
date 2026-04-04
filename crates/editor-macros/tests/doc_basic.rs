@@ -11,21 +11,18 @@ fn doc_basic_tree() {
         }
     };
 
-    // Verify root
     let root = doc.get_entry(NodeId::ROOT).unwrap();
     assert!(matches!(root.node, Node::Root(RootNode {})));
     assert!(root.parent.is_none());
     assert_eq!(root.children.len(), 1);
     assert_eq!(root.children[0], p);
 
-    // Verify paragraph
     let p_entry = doc.get_entry(p).unwrap();
     assert!(matches!(p_entry.node, Node::Paragraph(_)));
     assert_eq!(p_entry.parent, Some(NodeId::ROOT));
     assert_eq!(p_entry.children.len(), 1);
     assert_eq!(p_entry.children[0], t);
 
-    // Verify text
     let t_entry = doc.get_entry(t).unwrap();
     if let Node::Text(ref text_node) = t_entry.node {
         assert_eq!(text_node.text, "Hello World");

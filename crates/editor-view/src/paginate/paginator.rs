@@ -102,13 +102,10 @@ impl Paginator {
                     content: LayoutContent::Spacing(SpacingKind::Gap),
                 }
             }
-            MeasuredContent::PageBreak => {
-                // Task 11 will handle forced breaks
-                LayoutNode {
-                    rect: Rect::from_xywh(0.0, self.accumulated_y, 0.0, 0.0),
-                    content: LayoutContent::Spacing(SpacingKind::Gap),
-                }
-            }
+            MeasuredContent::PageBreak => LayoutNode {
+                rect: Rect::from_xywh(0.0, self.accumulated_y, 0.0, 0.0),
+                content: LayoutContent::Spacing(SpacingKind::Gap),
+            },
         }
     }
 
@@ -157,7 +154,7 @@ impl Paginator {
                 && child.height <= self.page_content_height()
             {
                 self.break_page(&mut children);
-                // Gap absorption after Fill
+                // Absorb gap immediately after a forced page break
                 if matches!(child.content, MeasuredContent::Spacing(_)) {
                     continue;
                 }
@@ -167,22 +164,18 @@ impl Paginator {
             let layout_child = self.place_node(child);
             children.push(layout_child);
 
-            // Track border for collapse
             prev_border_bottom = child_border_bottom(child);
 
-            // 6. Oversized check: if child extends past page, advance pages
+            // 6. Oversized child: advance pages until the child fits, without resetting accumulated_y
             let child_bottom = self.accumulated_y;
             if self.is_paginated() {
                 while child_bottom > self.page_content_bottom() {
                     self.start_new_page();
                 }
-                // After advancing pages, accumulated_y should be at the new page start
-                // (not reset behind the child)
                 if self.accumulated_y < child_bottom {
                     self.accumulated_y = child_bottom;
                 }
             }
-            // Continuous mode: check if we exceeded max content height
             if !self.is_paginated() && self.accumulated_y > self.page_content_bottom() {
                 self.start_new_page();
             }
@@ -315,7 +308,6 @@ impl Paginator {
         }
     }
 
-    /// Called after all content is placed. Records the final page.
     fn finish(mut self) -> Vec<LayoutPage> {
         if self.accumulated_y > self.page_content_top {
             if self.paginated {

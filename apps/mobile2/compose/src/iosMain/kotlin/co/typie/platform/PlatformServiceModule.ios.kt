@@ -1,9 +1,6 @@
-@file:OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-
 package co.typie.platform
 
 import co.typie.di.PlatformContext
-import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
@@ -70,24 +67,26 @@ private class IOSDeviceInfo : DeviceInfo {
 }
 
 private class IOSClipboard : Clipboard {
-  override suspend fun copy(bytes: ByteArray, mimeType: String): Boolean = withContext(Dispatchers.Default) {
-    runCatching {
-      if (mimeType.startsWith("image/")) {
-        val image = bytes.toUIImage() ?: return@withContext false
-        UIPasteboard.generalPasteboard.image = image
-      } else {
-        UIPasteboard.generalPasteboard.setData(bytes.toNSData(), forPasteboardType = mimeType)
-      }
-      true
-    }.getOrDefault(false)
-  }
+  override suspend fun copy(bytes: ByteArray, mimeType: String): Boolean =
+    withContext(Dispatchers.Default) {
+      runCatching {
+        if (mimeType.startsWith("image/")) {
+          val image = bytes.toUIImage() ?: return@withContext false
+          UIPasteboard.generalPasteboard.image = image
+        } else {
+          UIPasteboard.generalPasteboard.setData(bytes.toNSData(), forPasteboardType = mimeType)
+        }
+        true
+      }.getOrDefault(false)
+    }
 
-  override suspend fun copy(text: String, mimeType: String): Boolean = withContext(Dispatchers.Default) {
-    runCatching {
-      UIPasteboard.generalPasteboard.string = text
-      true
-    }.getOrDefault(false)
-  }
+  override suspend fun copy(text: String, mimeType: String): Boolean =
+    withContext(Dispatchers.Default) {
+      runCatching {
+        UIPasteboard.generalPasteboard.string = text
+        true
+      }.getOrDefault(false)
+    }
 }
 
 private class IOSFileSystem : FileSystem {
@@ -105,8 +104,10 @@ private class IOSFileSystem : FileSystem {
           UIImageWriteToSavedPhotosAlbum(image, null, null, null)
           FileSystemSaveResult.Success
         }
+
         FileSystemSaveLocation.Files -> {
-          val paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
+          val paths =
+            NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
           val documentsDir = paths.firstOrNull() as? String
             ?: return@withContext FileSystemSaveResult.Error
           val filePath = "$documentsDir/$name"
@@ -121,20 +122,22 @@ private class IOSFileSystem : FileSystem {
   }
 }
 
-private suspend fun requestPhotoLibraryAccess(): Boolean = suspendCancellableCoroutine { continuation ->
-  when (PHPhotoLibrary.authorizationStatus()) {
-    PHAuthorizationStatusAuthorized, PHAuthorizationStatusLimited -> continuation.resume(true)
-    PHAuthorizationStatusDenied, PHAuthorizationStatusRestricted -> continuation.resume(false)
-    PHAuthorizationStatusNotDetermined -> {
-      PHPhotoLibrary.requestAuthorization { status ->
-        continuation.resume(status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited)
+private suspend fun requestPhotoLibraryAccess(): Boolean =
+  suspendCancellableCoroutine { continuation ->
+    when (PHPhotoLibrary.authorizationStatus()) {
+      PHAuthorizationStatusAuthorized, PHAuthorizationStatusLimited -> continuation.resume(true)
+      PHAuthorizationStatusDenied, PHAuthorizationStatusRestricted -> continuation.resume(false)
+      PHAuthorizationStatusNotDetermined -> {
+        PHPhotoLibrary.requestAuthorization { status ->
+          continuation.resume(status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited)
+        }
       }
-    }
-    else -> continuation.resume(false)
-  }
-}
 
-private fun ByteArray.toUIImage(): UIImage? {
+      else -> continuation.resume(false)
+    }
+  }
+
+private fun ByteArray.toUIImage(): UIImage {
   return UIImage(data = toNSData())
 }
 
@@ -148,18 +151,19 @@ private fun ByteArray.toNSData(): NSData {
 }
 
 private class IOSShare : Share {
-  override suspend fun share(bytes: ByteArray, mimeType: String): Boolean = withContext(Dispatchers.Main) {
-    runCatching {
-      val item: Any = if (mimeType.startsWith("image/")) {
-        bytes.toUIImage() ?: return@withContext false
-      } else {
-        bytes.toNSData()
-      }
+  override suspend fun share(bytes: ByteArray, mimeType: String): Boolean =
+    withContext(Dispatchers.Main) {
+      runCatching {
+        val item: Any = if (mimeType.startsWith("image/")) {
+          bytes.toUIImage() ?: return@withContext false
+        } else {
+          bytes.toNSData()
+        }
 
-      presentShareSheet(listOf(item))
-      true
-    }.getOrDefault(false)
-  }
+        presentShareSheet(listOf(item))
+        true
+      }.getOrDefault(false)
+    }
 
   override suspend fun share(text: String): Boolean = withContext(Dispatchers.Main) {
     runCatching {

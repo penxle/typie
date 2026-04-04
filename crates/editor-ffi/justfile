@@ -9,20 +9,22 @@ profile := if mode == "debug" { "dev" } else { "release" }
 
 host_target := `rustc --print host-tuple`
 cdylib_ext := if os() == "macos" { "dylib" } else { "so" }
+bindgen := "cargo run --quiet -p editor-bindgen --features bin --bin"
+host_bindgen_lib := target_dir / host_target / "debug" / "lib" + crate + "." + cdylib_ext
 
 [private]
 default:
     @just --list
 
 # Build all platforms
-all: jvm android ios wasm
+all: desktop android ios wasm
 
 # Build Android + iOS
 mobile: android ios
 
-# Build JVM
-jvm: bindings-kotlin
-    just icu-datagen {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} {{mobile_dir}}/compose/src/jvmMain/resources/icu.zst
+# Build Desktop
+desktop: host bindings-kotlin
+    just icu-datagen {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} {{mobile_dir}}/compose/src/desktopMain/resources/icu.zst
 
 # Build Android
 android: bindings-kotlin (ensure "cargo-ndk")
@@ -35,11 +37,11 @@ android: bindings-kotlin (ensure "cargo-ndk")
     just icu-datagen {{mobile_dir}}/android/src/main/jniLibs/arm64-v8a/lib{{crate}}.so {{mobile_dir}}/android/src/main/assets/icu.zst
 
 # Build iOS
-ios: bindings-swift (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim") (ensure "uniffi-bindgen-swift" "uniffi --features cli")
+ios: bindings-swift (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim")
     #!/usr/bin/env bash
     set -e
     headers=$(mktemp -d)
-    uniffi-bindgen-swift {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} \
+    {{bindgen}} uniffi-bindgen-swift -- {{host_bindgen_lib}} \
         "$headers" --headers --modulemap --modulemap-filename module.modulemap --module-name EditorFFI
     mkdir -p {{mobile_dir}}/ios/Frameworks
     rm -rf {{mobile_dir}}/ios/Frameworks/Editor.xcframework
@@ -54,13 +56,13 @@ ios: bindings-swift (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch6
 wasm: wasm-browser wasm-server
 
 # Build client WASM (browser)
-wasm-browser: (ensure "wasm-bindgen" "wasm-bindgen-cli") (ensure "wasm-opt")
+wasm-browser: (ensure "wasm-opt")
     #!/usr/bin/env bash
     set -e
     rustup target add wasm32-unknown-unknown
     cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
         --profile {{profile}}-wasm --features wasm-browser --target wasm32-unknown-unknown
-    wasm-bindgen --target module --out-dir {{justfile_directory()}}/pkg/browser \
+    {{bindgen}} wasm-bindgen-cli -- --target module --out-dir {{justfile_directory()}}/pkg/browser \
         {{target_dir}}/wasm32-unknown-unknown/{{profile}}-wasm/{{crate}}.wasm
     cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/browser/{{crate}}
     if [ "{{mode}}" = "release" ]; then
@@ -70,13 +72,13 @@ wasm-browser: (ensure "wasm-bindgen" "wasm-bindgen-cli") (ensure "wasm-opt")
     just icu-datagen {{justfile_directory()}}/pkg/browser/{{crate}}_bg.wasm {{justfile_directory()}}/pkg/browser/icu.zst
 
 # Build server WASM (Node.js)
-wasm-server: (ensure "wasm-bindgen" "wasm-bindgen-cli") (ensure "wasm-opt")
+wasm-server: (ensure "wasm-opt")
     #!/usr/bin/env bash
     set -e
     rustup target add wasm32-unknown-unknown
     cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
         --profile {{profile}}-wasm --features wasm-server --target wasm32-unknown-unknown
-    wasm-bindgen --target module --out-dir {{justfile_directory()}}/pkg/server \
+    {{bindgen}} wasm-bindgen-cli -- --target module --out-dir {{justfile_directory()}}/pkg/server \
         {{target_dir}}/wasm32-unknown-unknown/{{profile}}-wasm/{{crate}}.wasm
     cargo -Zscript {{justfile_directory()}}/scripts/wbg.rs {{justfile_directory()}}/pkg/server/{{crate}}
     if [ "{{mode}}" = "release" ]; then
@@ -102,17 +104,29 @@ icu-datagen binary output: (ensure "icu4x-datagen")
     RUST_LOG=off icu4x-datagen --markers-for-bin "{{binary}}" --format blob | zstd -19 -f -o "{{output}}"
 
 [private]
-bindings-kotlin: host (ensure "uniffi-bindgen" "uniffi --features cli")
+bindings-kotlin: host-bindgen
     mkdir -p {{generated_dir}}/kotlin
-    uniffi-bindgen generate \
-        --library {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} \
+    {{bindgen}} uniffi-bindgen -- generate \
+        --library {{host_bindgen_lib}} \
         --language kotlin --out-dir {{generated_dir}}/kotlin/ --no-format
+    rm -rf {{mobile_dir}}/compose/build/generated/editor-bindgen
+    {{bindgen}} editor-bindgen-kotlin -- \
+        {{host_bindgen_lib}} \
+        --base-dir {{mobile_dir}}/compose/build/generated/editor-bindgen
 
 [private]
-bindings-swift: host (ensure "uniffi-bindgen" "uniffi --features cli")
+bindings-swift: host-bindgen
     mkdir -p {{generated_dir}}/swift
-    uniffi-bindgen-swift {{target_dir}}/{{host_target}}/{{profile}}-uniffi/lib{{crate}}.{{cdylib_ext}} \
+    {{bindgen}} uniffi-bindgen-swift -- {{host_bindgen_lib}} \
         {{generated_dir}}/swift --swift-sources
+    {{bindgen}} editor-bindgen-swift -- \
+        {{host_bindgen_lib}} \
+        {{mobile_dir}}/generated/editor-bindgen/swift
 
 [private]
 host: (build "uniffi" host_target)
+
+[private]
+host-bindgen:
+    cargo build --manifest-path {{justfile_directory()}}/Cargo.toml \
+        --features uniffi --target {{host_target}}

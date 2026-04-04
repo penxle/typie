@@ -16,36 +16,58 @@ pub fn resolve_movement(
     segmenters: Option<&TextSegmenters>,
 ) -> Option<Selection> {
     match movement {
-        Movement::Grapheme(Direction::Forward) => move_grapheme_forward(tree, pos),
-        Movement::Grapheme(Direction::Backward) => move_grapheme_backward(tree, pos),
-        Movement::Word(Direction::Forward) => {
-            segmenters.and_then(|s| segmentation::move_word_forward(tree, pos, s))
-        }
-        Movement::Word(Direction::Backward) => {
-            segmenters.and_then(|s| segmentation::move_word_backward(tree, pos, s))
-        }
-        Movement::Sentence(Direction::Forward) => {
-            segmenters.and_then(|s| segmentation::move_sentence_forward(tree, pos, s))
-        }
-        Movement::Sentence(Direction::Backward) => {
-            segmenters.and_then(|s| segmentation::move_sentence_backward(tree, pos, s))
-        }
-        Movement::Line(Direction::Forward, Axis::Horizontal) => {
-            move_line_horizontal_forward(tree, pos)
-        }
-        Movement::Line(Direction::Backward, Axis::Horizontal) => {
-            move_line_horizontal_backward(tree, pos)
-        }
-        Movement::Line(Direction::Forward, Axis::Vertical) => move_line_vertical_forward(tree, pos),
-        Movement::Line(Direction::Backward, Axis::Vertical) => {
-            move_line_vertical_backward(tree, pos)
-        }
-        Movement::Block(Direction::Forward) => move_block_forward(tree, pos),
-        Movement::Block(Direction::Backward) => move_block_backward(tree, pos),
-        Movement::Page(Direction::Forward) => move_page_forward(tree, pos, viewport),
-        Movement::Page(Direction::Backward) => move_page_backward(tree, pos, viewport),
-        Movement::Document(Direction::Forward) => move_document_forward(tree),
-        Movement::Document(Direction::Backward) => move_document_backward(tree),
+        Movement::Grapheme {
+            direction: Direction::Forward,
+        } => move_grapheme_forward(tree, pos),
+        Movement::Grapheme {
+            direction: Direction::Backward,
+        } => move_grapheme_backward(tree, pos),
+        Movement::Word {
+            direction: Direction::Forward,
+        } => segmenters.and_then(|s| segmentation::move_word_forward(tree, pos, s)),
+        Movement::Word {
+            direction: Direction::Backward,
+        } => segmenters.and_then(|s| segmentation::move_word_backward(tree, pos, s)),
+        Movement::Sentence {
+            direction: Direction::Forward,
+        } => segmenters.and_then(|s| segmentation::move_sentence_forward(tree, pos, s)),
+        Movement::Sentence {
+            direction: Direction::Backward,
+        } => segmenters.and_then(|s| segmentation::move_sentence_backward(tree, pos, s)),
+        Movement::Line {
+            direction: Direction::Forward,
+            axis: Axis::Horizontal,
+        } => move_line_horizontal_forward(tree, pos),
+        Movement::Line {
+            direction: Direction::Backward,
+            axis: Axis::Horizontal,
+        } => move_line_horizontal_backward(tree, pos),
+        Movement::Line {
+            direction: Direction::Forward,
+            axis: Axis::Vertical,
+        } => move_line_vertical_forward(tree, pos),
+        Movement::Line {
+            direction: Direction::Backward,
+            axis: Axis::Vertical,
+        } => move_line_vertical_backward(tree, pos),
+        Movement::Block {
+            direction: Direction::Forward,
+        } => move_block_forward(tree, pos),
+        Movement::Block {
+            direction: Direction::Backward,
+        } => move_block_backward(tree, pos),
+        Movement::Page {
+            direction: Direction::Forward,
+        } => move_page_forward(tree, pos, viewport),
+        Movement::Page {
+            direction: Direction::Backward,
+        } => move_page_backward(tree, pos, viewport),
+        Movement::Document {
+            direction: Direction::Forward,
+        } => move_document_forward(tree),
+        Movement::Document {
+            direction: Direction::Backward,
+        } => move_document_backward(tree),
     }
 }
 
@@ -66,13 +88,12 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     )));
                 }
             }
-            // At end of line -> go to next navigable
+            // At end of line: advance to the next navigable node
             let y = line_node.rect.bottom();
             let next = search::find_navigable_below(&tree.root, y)?;
             Some(Selection::collapsed(first_position_in(next)))
         }
         LayoutContent::Atom(a) => {
-            // Move past atom
             let y = line_node.rect.bottom();
             if let Some(next) = search::find_navigable_below(&tree.root, y) {
                 Some(Selection::collapsed(first_position_in(next)))
@@ -103,13 +124,12 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                     )));
                 }
             }
-            // At start of line -> go to prev navigable
+            // At start of line: retreat to the previous navigable node
             let y = line_node.rect.y;
             let prev = search::find_navigable_above(&tree.root, y)?;
             Some(Selection::collapsed(last_position_in(prev)))
         }
         LayoutContent::Atom(a) => {
-            // Move before atom
             let y = line_node.rect.y;
             if let Some(prev) = search::find_navigable_above(&tree.root, y) {
                 Some(Selection::collapsed(last_position_in(prev)))
@@ -203,8 +223,6 @@ fn move_document_backward(tree: &LayoutTree) -> Option<Selection> {
     Some(Selection::collapsed(first_position_in(nav)))
 }
 
-// -- Position helpers --
-
 fn first_position_in_line(line: &LayoutLine) -> Position {
     if let Some(run) = line.glyph_runs.first() {
         Position::new(run.node_id, run.offset)
@@ -237,7 +255,6 @@ pub(crate) fn last_position_in(node: &LayoutNode) -> Position {
     }
 }
 
-/// Navigate to a navigable node at a given preferred_x, producing a Selection.
 fn navigate_to(node: &LayoutNode, preferred_x: f32) -> Selection {
     match &node.content {
         LayoutContent::Line(line) => {
@@ -259,7 +276,6 @@ fn navigate_to(node: &LayoutNode, preferred_x: f32) -> Selection {
     }
 }
 
-/// Map an absolute x coordinate into a Position within a line.
 fn position_in_line(line: &LayoutLine, rect: &editor_common::Rect, x: f32) -> Position {
     let local_x = x - rect.x;
     for run in &line.glyph_runs {
@@ -278,7 +294,7 @@ fn position_in_line(line: &LayoutLine, rect: &editor_common::Rect, x: f32) -> Po
         }
         return Position::new(run.node_id, run.offset + run.char_advances.len());
     }
-    // Fallback: last run end
+    // Fallback: position at the end of the last run
     if let Some(last) = line.glyph_runs.last() {
         Position::new(last.node_id, last.offset + last.char_advances.len())
     } else {
@@ -426,7 +442,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[0], 2),
-            Movement::Grapheme(Direction::Forward),
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -439,7 +457,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[0], 3),
-            Movement::Grapheme(Direction::Backward),
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -452,7 +472,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[0], 11),
-            Movement::Grapheme(Direction::Forward),
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -466,7 +488,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[1], 0),
-            Movement::Grapheme(Direction::Backward),
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -481,7 +505,9 @@ mod tests {
             mov(
                 &f.tree,
                 Position::new(f.lines[0], 0),
-                Movement::Word(Direction::Forward),
+                Movement::Word {
+                    direction: Direction::Forward
+                },
             )
             .is_none()
         );
@@ -493,7 +519,10 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[0], 2),
-            Movement::Line(Direction::Forward, Axis::Horizontal),
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Horizontal,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -507,7 +536,10 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[0], 5),
-            Movement::Line(Direction::Backward, Axis::Horizontal),
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Horizontal,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -521,7 +553,10 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[0], 2),
-            Movement::Line(Direction::Forward, Axis::Vertical),
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -534,7 +569,10 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[1], 2),
-            Movement::Line(Direction::Backward, Axis::Vertical),
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Vertical,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -548,7 +586,10 @@ mod tests {
             mov(
                 &f.tree,
                 Position::new(f.lines[4], 0),
-                Movement::Line(Direction::Forward, Axis::Vertical),
+                Movement::Line {
+                    direction: Direction::Forward,
+                    axis: Axis::Vertical
+                },
             )
             .is_none()
         );
@@ -573,7 +614,10 @@ mod tests {
         let sel = mov(
             &tree,
             Position::new(id1, 2),
-            Movement::Line(Direction::Forward, Axis::Vertical),
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
         )
         .unwrap();
         assert_eq!(sel.head.node_id, id2);
@@ -585,7 +629,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[0], 2),
-            Movement::Block(Direction::Forward),
+            Movement::Block {
+                direction: Direction::Forward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -599,7 +645,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[1], 3),
-            Movement::Block(Direction::Backward),
+            Movement::Block {
+                direction: Direction::Backward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -613,7 +661,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.atom_parent, 0),
-            Movement::Block(Direction::Forward),
+            Movement::Block {
+                direction: Direction::Forward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -627,7 +677,9 @@ mod tests {
         let sel = mov(
             &f.tree,
             Position::new(f.lines[2], 1),
-            Movement::Block(Direction::Backward),
+            Movement::Block {
+                direction: Direction::Backward,
+            },
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -646,7 +698,9 @@ mod tests {
         let sel = resolve_movement(
             &f.tree,
             &Position::new(f.lines[0], 0),
-            &Movement::Page(Direction::Forward),
+            &Movement::Page {
+                direction: Direction::Forward,
+            },
             &vp,
             None,
         )
@@ -666,7 +720,9 @@ mod tests {
         let sel = resolve_movement(
             &f.tree,
             &Position::new(f.lines[4], 0),
-            &Movement::Page(Direction::Backward),
+            &Movement::Page {
+                direction: Direction::Backward,
+            },
             &vp,
             None,
         )
@@ -683,7 +739,9 @@ mod tests {
         let sel_start = mov(
             &f.tree,
             Position::new(f.lines[4], 2),
-            Movement::Document(Direction::Backward),
+            Movement::Document {
+                direction: Direction::Backward,
+            },
         )
         .unwrap();
         assert_eq!(sel_start.head, sel_start.anchor);
@@ -693,7 +751,9 @@ mod tests {
         let sel_end = mov(
             &f.tree,
             Position::new(f.lines[0], 0),
-            Movement::Document(Direction::Forward),
+            Movement::Document {
+                direction: Direction::Forward,
+            },
         )
         .unwrap();
         assert_eq!(sel_end.head, sel_end.anchor);
@@ -707,7 +767,10 @@ mod tests {
         let sel_end = mov(
             &f.tree,
             Position::new(f.lines[0], 2),
-            Movement::Line(Direction::Forward, Axis::Horizontal),
+            Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Horizontal,
+            },
         )
         .unwrap();
         assert_eq!(sel_end.head.node_id, f.lines[0]);
@@ -716,7 +779,10 @@ mod tests {
         let sel_start = mov(
             &f.tree,
             Position::new(f.lines[0], 5),
-            Movement::Line(Direction::Backward, Axis::Horizontal),
+            Movement::Line {
+                direction: Direction::Backward,
+                axis: Axis::Horizontal,
+            },
         )
         .unwrap();
         assert_eq!(sel_start.head.node_id, f.lines[0]);
@@ -750,7 +816,10 @@ mod integration_tests {
         let sel = view
             .resolve_movement(
                 &Position::new(t1, 0),
-                &Movement::Line(Direction::Forward, Axis::Vertical),
+                &Movement::Line {
+                    direction: Direction::Forward,
+                    axis: Axis::Vertical,
+                },
                 &state.doc,
                 None,
             )

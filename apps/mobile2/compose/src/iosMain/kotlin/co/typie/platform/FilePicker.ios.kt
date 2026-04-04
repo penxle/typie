@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-
 package co.typie.platform
 
 import androidx.compose.runtime.Composable
@@ -8,13 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
 import platform.Foundation.create
-import platform.Foundation.dataWithContentsOfURL
 import platform.UIKit.UIApplication
 import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
@@ -28,7 +24,6 @@ import platform.UIKit.UINavigationControllerDelegateProtocol
 import platform.UIKit.UIViewController
 import platform.UniformTypeIdentifiers.UTType
 import platform.UniformTypeIdentifiers.UTTypeData
-import platform.UniformTypeIdentifiers.UTTypeImage
 import platform.darwin.NSObject
 import platform.posix.memcpy
 
@@ -49,10 +44,12 @@ actual fun rememberFilePicker(
 
       if (mimeType.startsWith("image/")) {
         val picker = UIImagePickerController().apply {
-          sourceType = UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypePhotoLibrary
+          sourceType =
+            UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypePhotoLibrary
         }
 
-        val delegate = object : NSObject(), UIImagePickerControllerDelegateProtocol, UINavigationControllerDelegateProtocol {
+        val delegate = object : NSObject(), UIImagePickerControllerDelegateProtocol,
+          UINavigationControllerDelegateProtocol {
           override fun imagePickerControllerDidCancel(picker: UIImagePickerController) {
             picker.dismissViewControllerAnimated(true, completion = null)
             delegateHolder = null
@@ -63,7 +60,8 @@ actual fun rememberFilePicker(
             picker: UIImagePickerController,
             didFinishPickingMediaWithInfo: Map<Any?, *>,
           ) {
-            val image = didFinishPickingMediaWithInfo[UIImagePickerControllerOriginalImage] as? UIImage
+            val image =
+              didFinishPickingMediaWithInfo[UIImagePickerControllerOriginalImage] as? UIImage
             val data = image?.let { UIImageJPEGRepresentation(it, 0.9) }
 
             picker.dismissViewControllerAnimated(true, completion = null)
@@ -101,7 +99,10 @@ actual fun rememberFilePicker(
         }
 
         val delegate = object : NSObject(), UIDocumentPickerDelegateProtocol {
-          override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+          override fun documentPicker(
+            controller: UIDocumentPickerViewController,
+            didPickDocumentsAtURLs: List<*>
+          ) {
             delegateHolder = null
             val files = didPickDocumentsAtURLs
               .mapNotNull { it as? NSURL }

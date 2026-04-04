@@ -10,20 +10,22 @@ pub fn handle_insertion_intent(
 ) -> Result<(), EditorError> {
     editor.transact(|tr| {
         match intent {
-            InsertionIntent::Text(text) => {
+            InsertionIntent::Text { text } => {
                 commands::insert_text(tr, &text)?;
             }
-            InsertionIntent::Break(Break::Paragraph) => {
+            InsertionIntent::Break {
+                kind: Break::Paragraph,
+            } => {
                 editor_commands::first!(
                     tr,
                     commands::lift_paragraph_forward(),
                     commands::split_paragraph(),
                 )?;
             }
-            InsertionIntent::Break(Break::Line) => {
+            InsertionIntent::Break { kind: Break::Line } => {
                 commands::insert_hard_break(tr)?;
             }
-            InsertionIntent::Break(Break::Page) | InsertionIntent::Node(_) => {}
+            InsertionIntent::Break { kind: Break::Page } | InsertionIntent::Node { .. } => {}
         }
         Ok(())
     })
@@ -43,9 +45,13 @@ mod tests {
             selection: (t1, 5)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent(Intent::Insertion(InsertionIntent::Text(
-            " world".into(),
-        ))));
+        editor.apply(Message::Intent {
+            intent: Intent::Insertion {
+                intent: InsertionIntent::Text {
+                    text: " world".into(),
+                },
+            },
+        });
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("hello world") } } }
             selection: (t1, 11)
@@ -60,9 +66,13 @@ mod tests {
             selection: (t1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent(Intent::Insertion(InsertionIntent::Break(
-            Break::Paragraph,
-        ))));
+        editor.apply(Message::Intent {
+            intent: Intent::Insertion {
+                intent: InsertionIntent::Break {
+                    kind: Break::Paragraph,
+                },
+            },
+        });
         let (expected, ..) = state! {
             doc { root { paragraph { text("hel") } paragraph { t1: text("lo") } } }
             selection: (t1, 0)
@@ -77,9 +87,11 @@ mod tests {
             selection: (t1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent(Intent::Insertion(InsertionIntent::Break(
-            Break::Line,
-        ))));
+        editor.apply(Message::Intent {
+            intent: Intent::Insertion {
+                intent: InsertionIntent::Break { kind: Break::Line },
+            },
+        });
         let (expected, ..) = state! {
             doc { root { paragraph { text("hel") hard_break {} t1: text("lo") } } }
             selection: (t1, 0)

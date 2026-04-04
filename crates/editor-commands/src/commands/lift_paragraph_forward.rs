@@ -17,7 +17,6 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    // Determine if cursor is at the end of a paragraph
     let paragraph_id = match node.node() {
         Node::Text(text_node) => {
             let text_len = text_node.text.char_count();
@@ -38,7 +37,6 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         _ => return Ok(false),
     };
 
-    // Find next sibling
     let doc = tr.doc();
     let paragraph = doc
         .node(paragraph_id)
@@ -54,7 +52,6 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     }
 
-    // Find the first paragraph inside the container via first_child chain
     let source_paragraph_id = match find_lift_source(&doc, &next) {
         Some(id) => id,
         None => return Ok(false),
@@ -68,7 +65,6 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         .ok_or(CommandError::NoParent(source_paragraph_id))?
         .id();
 
-    // Save current cursor selection
     let cursor_selection = tr.selection();
 
     tr.batch::<_, CommandError>(|tr| {
@@ -97,7 +93,6 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         Ok(())
     })?;
 
-    // Restore cursor selection
     tr.set_selection(cursor_selection)?;
 
     Ok(true)

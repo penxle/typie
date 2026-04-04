@@ -180,8 +180,6 @@ mod tests {
         assert_eq!(result, vec![Modifier::Bold]);
     }
 
-    // --- resolve_inherited_modifiers ---
-
     #[test]
     fn inherited_weight_from_root_modifiers() {
         let (state, ..) = state! {
@@ -198,7 +196,7 @@ mod tests {
         assert!(
             inherited
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight(400)))
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 }))
         );
     }
 
@@ -218,7 +216,7 @@ mod tests {
         assert!(
             inherited
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight(700)))
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
         );
     }
 }

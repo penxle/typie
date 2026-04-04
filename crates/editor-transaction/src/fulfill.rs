@@ -27,7 +27,6 @@ pub fn fulfill(node: &NodeRef) -> Vec<Step> {
         .collect()
 }
 
-/// Compute (index, NodeType) pairs for needed insertions.
 fn compute_insertions(content: &ContentExpr, existing: &[NodeType]) -> Vec<(usize, NodeType)> {
     match content {
         ContentExpr::Empty | ContentExpr::ZeroOrMore(_) | ContentExpr::Optional(_) => vec![],
@@ -99,7 +98,6 @@ fn compute_seq_insertions(exprs: &[ContentExpr], existing: &[NodeType]) -> Vec<(
     insertions
 }
 
-/// Extract first concrete NodeType from a ContentExpr.
 fn first_type(expr: &ContentExpr) -> NodeType {
     match expr {
         ContentExpr::Single(t) => *t,

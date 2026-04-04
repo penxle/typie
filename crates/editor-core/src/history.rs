@@ -203,7 +203,7 @@ mod tests {
             t + Duration::from_millis(100),
         );
 
-        // 시간 내여도 별도 entry
+        // within the merge window, tagged entry is still separate
         h.undo();
         assert!(h.undo().is_some());
     }
@@ -215,7 +215,7 @@ mod tests {
         h.push_tagged_at(&[text_step()], HistoryTag::AutoReplacement, t);
         h.push_at(&[text_step()], t + Duration::from_millis(100));
 
-        // tagged entry 직후 push도 별도 entry
+        // push immediately after a tagged entry also creates a separate entry
         h.undo();
         assert!(h.undo().is_some());
     }
@@ -270,10 +270,10 @@ mod tests {
         h.push_tagged_at(&[text_step()], HistoryTag::AutoReplacement, t);
         h.push_at(&[text_step()], t + Duration::from_secs(1));
 
-        // 마지막은 untagged
+        // last entry is untagged
         assert!(h.last_tag().is_none());
 
-        // undo하면 tagged entry가 마지막
+        // after undo, the tagged entry is last
         h.undo();
         assert!(matches!(h.last_tag(), Some(HistoryTag::AutoReplacement)));
     }

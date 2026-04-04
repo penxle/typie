@@ -213,14 +213,16 @@ fn write_modifier_macro(m: &Modifier, output: &mut String) {
         Modifier::Bold | Modifier::Italic | Modifier::Underline | Modifier::Strikethrough => {
             output.push_str(name);
         }
-        Modifier::FontSize(v)
-        | Modifier::LineHeight(v)
-        | Modifier::BlockGap(v)
-        | Modifier::ParagraphIndent(v) => write!(output, "{name}({v})").unwrap(),
-        Modifier::FontWeight(v) => write!(output, "{name}({v})").unwrap(),
-        Modifier::LetterSpacing(v) => write!(output, "{name}({v})").unwrap(),
-        Modifier::FontFamily(v) | Modifier::TextColor(v) | Modifier::BackgroundColor(v) => {
-            write!(output, "{name}(\"{v}\".to_string())").unwrap();
+        Modifier::FontSize { value }
+        | Modifier::LineHeight { value }
+        | Modifier::BlockGap { value }
+        | Modifier::ParagraphIndent { value } => write!(output, "{name}({value})").unwrap(),
+        Modifier::FontWeight { value } => write!(output, "{name}({value})").unwrap(),
+        Modifier::LetterSpacing { value } => write!(output, "{name}({value})").unwrap(),
+        Modifier::FontFamily { value }
+        | Modifier::TextColor { value }
+        | Modifier::BackgroundColor { value } => {
+            write!(output, "{name}(\"{value}\".to_string())").unwrap();
         }
         Modifier::Link { href } => {
             write!(output, "{name}(href: \"{href}\".to_string())").unwrap();

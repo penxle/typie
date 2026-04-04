@@ -3,7 +3,7 @@ use editor_schema::{ContextExpr, ModifierSpecExt, NodeSpecExt};
 
 use crate::StepError;
 
-/// node_id의 children이 해당 노드의 content expression을 만족하는지 검증.
+/// Validates that `node_id`'s children satisfy its content expression.
 pub(crate) fn validate_content(doc: &Doc, node_id: NodeId) -> Result<(), StepError> {
     let node = doc.node(node_id).ok_or(StepError::NodeNotFound(node_id))?;
     let spec = node.spec();
@@ -16,8 +16,7 @@ pub(crate) fn validate_content(doc: &Doc, node_id: NodeId) -> Result<(), StepErr
         })
 }
 
-/// node_id의 위치가 해당 노드의 context expression을 만족하는지 검증.
-/// path는 [Root, ..., Parent, Self] 순서.
+/// Validates that `node_id` is placed in an allowed context. Path is ordered `[Root, ..., Parent, Self]`.
 pub(crate) fn validate_context(doc: &Doc, node_id: NodeId) -> Result<(), StepError> {
     let node = doc.node(node_id).ok_or(StepError::NodeNotFound(node_id))?;
     let spec = node.spec();
@@ -44,8 +43,7 @@ pub(crate) fn validate_context(doc: &Doc, node_id: NodeId) -> Result<(), StepErr
     Ok(())
 }
 
-/// node_id와 그 하위 모든 노드의 context를 검증.
-/// MoveNode 등 서브트리의 ancestor path가 변경되는 경우 사용.
+/// Validates context for `node_id` and all its descendants. Use when a subtree's ancestor path changes (e.g. MoveNode).
 pub(crate) fn validate_context_deep(doc: &Doc, node_id: NodeId) -> Result<(), StepError> {
     validate_context(doc, node_id)?;
 
@@ -60,8 +58,7 @@ pub(crate) fn validate_context_deep(doc: &Doc, node_id: NodeId) -> Result<(), St
     Ok(())
 }
 
-/// ModifierType으로 modifier context를 검증.
-/// Validation::Modifier에서 사용 — Modifier 인스턴스 없이 타입만으로 검증.
+/// Validates modifier context by type only, without a Modifier instance. Used by `Validation::Modifier`.
 pub(crate) fn validate_modifier_context_by_type(
     doc: &Doc,
     node_id: NodeId,

@@ -13,7 +13,7 @@ const BLOCK_GAP_BASE_PX: f32 = 16.0;
 
 pub fn resolve_gap_after(node: &NodeRef<'_>) -> f32 {
     match resolve_inherited(node, ModifierType::BlockGap) {
-        Some(Modifier::BlockGap(v)) => *v as f32 / 100.0 * BLOCK_GAP_BASE_PX,
+        Some(Modifier::BlockGap { value }) => *value as f32 / 100.0 * BLOCK_GAP_BASE_PX,
         _ => 0.0,
     }
 }

@@ -78,20 +78,20 @@ impl Editor {
 
     fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {
         match msg {
-            Message::Key(event) => handle::handle_key_event(self, event)?,
-            Message::Pointer(event) => handle::handle_pointer_event(self, event)?,
-            Message::Intent(intent) => match intent {
-                Intent::History(h) => handle::handle_history_intent(self, h)?,
-                Intent::Navigation(n) => handle::handle_navigation_intent(self, n)?,
-                Intent::Insertion(i) => handle::handle_insertion_intent(self, i)?,
-                Intent::Deletion(d) => handle::handle_deletion_intent(self, d)?,
-                Intent::Selection(s) => handle::handle_selection_intent(self, s)?,
-                Intent::Formatting(f) => handle::handle_formatting_intent(self, f)?,
-                Intent::Node(n) => handle::handle_node_intent(self, n)?,
-                Intent::Clipboard(c) => handle::handle_clipboard_intent(self, c)?,
-                Intent::Composition(c) => handle::handle_composition_intent(self, c)?,
+            Message::Key { event } => handle::handle_key_event(self, event)?,
+            Message::Pointer { event } => handle::handle_pointer_event(self, event)?,
+            Message::Intent { intent } => match intent {
+                Intent::History { intent } => handle::handle_history_intent(self, intent)?,
+                Intent::Navigation { intent } => handle::handle_navigation_intent(self, intent)?,
+                Intent::Insertion { intent } => handle::handle_insertion_intent(self, intent)?,
+                Intent::Deletion { intent } => handle::handle_deletion_intent(self, intent)?,
+                Intent::Selection { intent } => handle::handle_selection_intent(self, intent)?,
+                Intent::Formatting { intent } => handle::handle_formatting_intent(self, intent)?,
+                Intent::Node { intent } => handle::handle_node_intent(self, intent)?,
+                Intent::Clipboard { intent } => handle::handle_clipboard_intent(self, intent)?,
+                Intent::Composition { intent } => handle::handle_composition_intent(self, intent)?,
             },
-            Message::System(event) => handle::handle_system_event(self, event)?,
+            Message::System { event } => handle::handle_system_event(self, event)?,
         }
         Ok(())
     }
@@ -210,7 +210,9 @@ impl Editor {
 
             let required: Vec<_> = itertools::chain!(
                 [FontData::Base],
-                required_chunks.iter().map(|&i| FontData::Chunk(i)),
+                required_chunks
+                    .iter()
+                    .map(|&i| FontData::Chunk { index: i }),
             )
             .collect();
 
@@ -219,7 +221,7 @@ impl Editor {
                 manifest
                     .all_chunk_indices()
                     .filter(|i| !required_set.contains(i))
-                    .map(FontData::Chunk)
+                    .map(|i| FontData::Chunk { index: i })
                     .collect()
             } else {
                 vec![]
@@ -297,9 +299,11 @@ mod tests {
         let (mut editor, t) = test_editor();
         let target = Selection::collapsed(Position::new(t, 3));
 
-        editor.apply(Message::Intent(Intent::Selection(SelectionIntent::Set(
-            target,
-        ))));
+        editor.apply(Message::Intent {
+            intent: Intent::Selection {
+                intent: SelectionIntent::Set { selection: target },
+            },
+        });
 
         assert_eq!(editor.state().selection, target);
     }
@@ -308,22 +312,26 @@ mod tests {
     fn undo_on_empty_history_is_noop() {
         let (mut editor, _) = test_editor();
         let before = editor.state().selection;
-        editor.apply(Message::Intent(Intent::History(HistoryIntent::Undo)));
+        editor.apply(Message::Intent {
+            intent: Intent::History {
+                intent: HistoryIntent::Undo,
+            },
+        });
         assert_eq!(editor.state().selection, before);
     }
 
     #[test]
     fn system_resize_updates_viewport() {
         let (mut editor, _) = test_editor();
-        editor.apply(Message::System(SystemEvent::Resize {
-            width: 1024.0,
-            height: 768.0,
-            scale_factor: 1.0,
-        }));
+        editor.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 1024.0,
+                height: 768.0,
+                scale_factor: 1.0,
+            },
+        });
         assert_eq!(editor.view().viewport().width, 1024.0);
     }
-
-    // can_undo/can_redo 통합 테스트도 content 변경 command 이식 후 작성
 
     #[test]
     fn tick_processes_all_enqueued_messages() {
@@ -331,14 +339,18 @@ mod tests {
 
         let selection = Selection::collapsed(Position::new(t, 3));
 
-        editor.enqueue(Message::System(SystemEvent::Resize {
-            width: 1024.0,
-            height: 768.0,
-            scale_factor: 2.0,
-        }));
-        editor.enqueue(Message::Intent(Intent::Selection(SelectionIntent::Set(
-            selection,
-        ))));
+        editor.enqueue(Message::System {
+            event: SystemEvent::Resize {
+                width: 1024.0,
+                height: 768.0,
+                scale_factor: 2.0,
+            },
+        });
+        editor.enqueue(Message::Intent {
+            intent: Intent::Selection {
+                intent: SelectionIntent::Set { selection },
+            },
+        });
         editor.tick().unwrap();
 
         assert_eq!(editor.view().viewport().width, 1024.0);
@@ -355,9 +367,11 @@ mod tests {
     fn tick_returns_state_changed_on_selection_set() {
         let (mut editor, t) = test_editor();
         let target = Selection::collapsed(Position::new(t, 3));
-        editor.enqueue(Message::Intent(Intent::Selection(SelectionIntent::Set(
-            target,
-        ))));
+        editor.enqueue(Message::Intent {
+            intent: Intent::Selection {
+                intent: SelectionIntent::Set { selection: target },
+            },
+        });
 
         let events = editor.tick().unwrap();
 
@@ -399,9 +413,13 @@ mod tests {
     #[test]
     fn tick_returns_doc_changed_on_text_insert() {
         let (mut editor, _) = test_editor();
-        let events = editor.apply(Message::Intent(Intent::Insertion(InsertionIntent::Text(
-            "a".to_string(),
-        ))));
+        let events = editor.apply(Message::Intent {
+            intent: Intent::Insertion {
+                intent: InsertionIntent::Text {
+                    text: "a".to_string(),
+                },
+            },
+        });
 
         let has_doc_changed = events
             .iter()

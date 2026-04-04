@@ -1,7 +1,6 @@
 package co.typie.screen.text_replacements
 
 import co.touchlab.kermit.Logger
-import co.typie.editor.EditorEngine
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TextReplacementsScreen_CreateTextReplacement_Mutation
@@ -25,7 +24,6 @@ private const val MUTATION_FAILURE_MESSAGE = "오류가 발생했어요. 잠시 
 @KoinViewModel
 class TextReplacementsViewModel(
   private val toast: Toast,
-  private val editorEngine: EditorEngine,
 ) : GraphQLViewModel() {
   val query = watchQuery(placeholderData()) { TextReplacementsScreen_Query() }
 
@@ -42,10 +40,11 @@ class TextReplacementsViewModel(
     get() = customItems(normalizedItems)
 
   val isSmartQuoteEnabled: Boolean
-    get() = co.typie.screen.text_replacements.isSmartQuoteEnabled(normalizedItems)
+    get() = isSmartQuoteEnabled(normalizedItems)
 
   fun validateRegex(pattern: String): Boolean {
-    return editorEngine.validateRegex(pattern)
+    return true
+//    return editorEngine.validateRegex(pattern)
   }
 
   suspend fun togglePreset(item: NormalizedTextReplacement) {

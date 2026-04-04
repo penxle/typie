@@ -37,13 +37,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::lift_paragraph_forward()
                 )?;
             }
-            (Key::Tab, m) if m.shift => {
-                // commands::lift_paragraph_forward(tr)?;
-            }
-            (Key::Tab, _) => {
-                // commands::sink_paragraph_backward(tr)?;
-            }
-            (Key::Escape, _) => {}
+            (Key::Escape, _) | (Key::Tab, _) => {}
         }
         Ok(())
     })
@@ -57,20 +51,24 @@ mod tests {
     use super::*;
 
     fn key(k: Key) -> Message {
-        Message::Key(KeyEvent {
-            key: k,
-            modifiers: InputModifiers::default(),
-        })
+        Message::Key {
+            event: KeyEvent {
+                key: k,
+                modifiers: InputModifiers::default(),
+            },
+        }
     }
 
     fn key_shift(k: Key) -> Message {
-        Message::Key(KeyEvent {
-            key: k,
-            modifiers: InputModifiers {
-                shift: true,
-                ..Default::default()
+        Message::Key {
+            event: KeyEvent {
+                key: k,
+                modifiers: InputModifiers {
+                    shift: true,
+                    ..Default::default()
+                },
             },
-        })
+        }
     }
 
     #[test]
@@ -132,7 +130,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(key(Key::Backspace));
         let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello") text("world") } } }
+            doc { root { paragraph { t1: text("helloworld") } } }
             selection: (t1, 5)
         };
         assert_state_eq!(editor.state(), &expected);

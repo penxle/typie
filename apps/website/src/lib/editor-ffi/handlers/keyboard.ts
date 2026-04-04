@@ -12,39 +12,50 @@ type KeyBinding = {
 };
 
 const bindings: KeyBinding[] = [
-  { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'backward' }, false)) },
-  { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'backward' }, true)) },
-  { key: 'ArrowRight', action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'forward' }, false)) },
-  { key: 'ArrowRight', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', value: 'forward' }, true)) },
+  { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, false)) },
+  { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, true)) },
+  { key: 'ArrowRight', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, false)) },
+  { key: 'ArrowRight', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, true)) },
 
-  { key: 'ArrowUp', action: (ed) => ed.enqueue(move({ type: 'line', value: ['backward', 'vertical'] }, false)) },
-  { key: 'ArrowUp', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'line', value: ['backward', 'vertical'] }, true)) },
-  { key: 'ArrowDown', action: (ed) => ed.enqueue(move({ type: 'line', value: ['forward', 'vertical'] }, false)) },
-  { key: 'ArrowDown', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'line', value: ['forward', 'vertical'] }, true)) },
+  { key: 'ArrowUp', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, false)) },
+  {
+    key: 'ArrowUp',
+    modifiers: ['shift'],
+    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, true)),
+  },
+  { key: 'ArrowDown', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, false)) },
+  {
+    key: 'ArrowDown',
+    modifiers: ['shift'],
+    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, true)),
+  },
 
-  { key: 'Enter', action: (ed) => ed.enqueue({ type: 'key', value: { key: 'enter' } }) },
-  { key: 'Backspace', action: (ed) => ed.enqueue({ type: 'key', value: { key: 'backspace' } }) },
+  { key: 'Enter', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'enter' } }) },
+  { key: 'Backspace', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'backspace' } }) },
 
   {
     key: 'b',
     modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'bold' } } }),
+    action: (ed) =>
+      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'bold' } } }),
   },
   {
     key: 'i',
     modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'italic' } } }),
+    action: (ed) =>
+      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'italic' } } }),
   },
   {
     key: 's',
     modifiers: ['mod', 'shift'],
     action: (ed) =>
-      ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'strikethrough' } } }),
+      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'strikethrough' } } }),
   },
   {
     key: 'u',
     modifiers: ['mod', 'shift'],
-    action: (ed) => ed.enqueue({ type: 'intent', value: { type: 'formatting', value: { type: 'toggle_modifier', value: 'underline' } } }),
+    action: (ed) =>
+      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'underline' } } }),
   },
 
   { key: 'q', modifiers: ['ctrl'], predicate: () => isMac, action: (ed) => ed.inspect('state') },
@@ -55,7 +66,7 @@ const isMac = navigator.platform.toUpperCase().includes('MAC');
 
 const move = (movement: Movement, extend: boolean): Message => ({
   type: 'intent',
-  value: { type: 'navigation', value: { type: 'move', value: { movement, extend } } },
+  intent: { type: 'navigation', intent: { type: 'move', movement, extend } },
 });
 
 const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {

@@ -93,8 +93,13 @@ kotlin {
   }
 
   sourceSets {
+    commonMain {
+      kotlin.srcDir(layout.buildDirectory.dir("generated/editor-bindgen/commonMain"))
+    }
+
     val jnaMain by getting {
       kotlin.srcDir(rootProject.layout.projectDirectory.dir("generated/uniffi/kotlin"))
+      kotlin.srcDir(layout.buildDirectory.dir("generated/editor-bindgen/jnaMain"))
     }
 
     androidMain {
@@ -111,6 +116,8 @@ kotlin {
     }
 
     iosMain {
+      kotlin.srcDir(layout.buildDirectory.dir("generated/editor-bindgen/iosMain"))
+
       dependencies {
         implementation(libs.ktor.client.darwin)
       }

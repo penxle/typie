@@ -142,6 +142,7 @@ rlib
 roughjs
 rpop
 rpush
+rustc
 sadd
 saeeum
 safi

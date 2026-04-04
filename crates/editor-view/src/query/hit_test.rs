@@ -23,13 +23,12 @@ fn exact_hit_node(node: &LayoutNode, x: f32, y: f32, doc: &Doc) -> Option<Select
             if !node.rect.contains(x, y) {
                 return None;
             }
-            // Depth-first: try children
             for child in &b.children {
                 if let Some(sel) = exact_hit_node(child, x, y, doc) {
                     return Some(sel);
                 }
             }
-            None // No fallback -- exact only
+            None
         }
         LayoutContent::Line(l) => {
             if y >= node.rect.y && y < node.rect.y + node.rect.height {
@@ -62,12 +61,11 @@ pub fn closest_hit_test(
     Some(navigate_to_node(nav, x))
 }
 
-/// Find the closest navigable node by euclidean rect-edge distance.
-/// Descends into the innermost containing Box, then expands outward.
+/// Find the closest navigable node by squared euclidean rect-edge distance.
+/// Descends into the innermost containing box first, then falls back to all children.
 fn closest_navigable<'a>(node: &'a LayoutNode, x: f32, y: f32) -> Option<&'a LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => {
-            // Try to find a containing child Box and recurse
             for child in &b.children {
                 if child.rect.contains(x, y) {
                     if let Some(found) = closest_navigable(child, x, y) {
@@ -75,8 +73,7 @@ fn closest_navigable<'a>(node: &'a LayoutNode, x: f32, y: f32) -> Option<&'a Lay
                     }
                 }
             }
-            // No child Box contains the point (or child had no navigable).
-            // Search ALL children for closest navigable by edge distance.
+            // No containing child found; search all children by edge distance
             closest_navigable_in_children(&b.children, x, y)
         }
         LayoutContent::Line(_) | LayoutContent::Atom(_) => Some(node),
@@ -130,8 +127,6 @@ pub fn rect_distance_sq(rect: &Rect, x: f32, y: f32) -> f32 {
     dx * dx + dy * dy
 }
 
-// -- Navigation helpers --
-
 fn navigate_to_line(line: &LayoutLine, rect: &Rect, x: f32) -> Selection {
     Selection::collapsed(position_in_line(line, rect, x))
 }
@@ -145,17 +140,14 @@ fn position_in_line(line: &LayoutLine, rect: &Rect, x: f32) -> Position {
     let first = &line.glyph_runs[0];
     let last = &line.glyph_runs[line.glyph_runs.len() - 1];
 
-    // Left of all text → line start
     if local_x <= first.x {
         return Position::new(first.node_id, first.offset);
     }
 
-    // Right of all text → line end
     if local_x >= last.x + last.width {
         return Position::new(last.node_id, last.offset + last.char_advances.len());
     }
 
-    // Within text — find the run and character
     for run in &line.glyph_runs {
         if local_x < run.x || local_x > run.x + run.width {
             continue;
@@ -170,7 +162,7 @@ fn position_in_line(line: &LayoutLine, rect: &Rect, x: f32) -> Position {
         return Position::new(run.node_id, run.offset + run.char_advances.len());
     }
 
-    // Between runs (shouldn't happen with contiguous runs)
+    // Fallback: shouldn't happen with contiguous runs
     Position::new(last.node_id, last.offset + last.char_advances.len())
 }
 

@@ -55,8 +55,7 @@ impl Transform {
         }
     }
 
-    /// Post-multiply by a uniform scale. Scales path coordinates without
-    /// affecting the accumulated translation.
+    /// Post-multiply by a uniform scale, scaling path coordinates without affecting the accumulated translation.
     pub fn post_scale(self, s: f32) -> Self {
         let [a, b, c, d, e, f] = self.m;
         Self {

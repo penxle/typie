@@ -1,6 +1,7 @@
 mod content_macro;
 mod context_macro;
 mod doc_macro;
+mod ffi_export_macro;
 mod ffi_macro;
 mod from_discriminant_macro;
 mod preamble_macro;
@@ -46,7 +47,21 @@ pub fn derive_from_discriminant(input: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn ffi(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let item = syn::parse_macro_input!(input as syn::DeriveInput);
-    let input = ffi_macro::parse::FfiInput::from_attr_and_item(attr.into(), item);
-    ffi_macro::codegen::generate(&input).into()
+    // Try as struct/enum first
+    if let Ok(item) = syn::parse::<syn::DeriveInput>(input.clone()) {
+        let input = ffi_macro::parse::FfiInput::from_attr_and_item(attr.into(), item);
+        return ffi_macro::codegen::generate(&input).into();
+    }
+    // Try as type alias
+    if let Ok(item) = syn::parse::<syn::ItemType>(input) {
+        return ffi_macro::codegen::generate_type_alias(&item).into();
+    }
+    panic!("#[ffi] can only be applied to structs, enums, or type aliases");
+}
+
+#[proc_macro_attribute]
+pub fn ffi_export(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let mode = syn::parse_macro_input!(attr as ffi_export_macro::parse::FfiExportMode);
+    let item = syn::parse_macro_input!(input as syn::ItemImpl);
+    ffi_export_macro::codegen::generate(mode, item).into()
 }

@@ -202,11 +202,11 @@ const loadFontData = async (
       handlers.onChunkLoaded(data);
     });
 
-  await Promise.allSettled(chunks.map((item) => loadChunk(item.value)));
+  await Promise.allSettled(chunks.map((item) => loadChunk(item.index)));
 
   for (const item of prefetch) {
     if (item.type === 'chunk') {
-      const idx = item.value;
+      const idx = item.index;
       preloadQueue.enqueue(`chunk:${family}:${weight}:${idx}`, idx, async () => {
         try {
           await loadChunk(idx);
@@ -223,7 +223,7 @@ export const fontManifestMissingHandler: EditorEventListener<'font_manifest_miss
   if (path) {
     const manifest = await loadFontManifest(family, weight, path);
     wasm.load_font_manifest(family, weight, manifest);
-    editor.enqueue({ type: 'system', value: { type: 'font_manifest_loaded', value: { family, weight } } });
+    editor.enqueue({ type: 'system', event: { type: 'font_manifest_loaded', family, weight } });
   }
 };
 
@@ -231,11 +231,11 @@ export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = 
   await loadFontData(family, weight, required, prefetch, {
     onBaseLoaded: (data) => {
       wasm.load_font_base(family, weight, data);
-      editor.enqueue({ type: 'system', value: { type: 'font_base_loaded', value: { family, weight } } });
+      editor.enqueue({ type: 'system', event: { type: 'font_base_loaded', family, weight } });
     },
     onChunkLoaded: (data) => {
       wasm.load_font_chunk(family, weight, data);
-      editor.enqueue({ type: 'system', value: { type: 'font_chunk_loaded', value: { family, weight } } });
+      editor.enqueue({ type: 'system', event: { type: 'font_chunk_loaded', family, weight } });
     },
   });
 };

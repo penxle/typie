@@ -1,9 +1,9 @@
 use editor_model::NodeId;
 
-/// 폰트 식별자. FontRegistry에서 interning된 값.
+/// Interned font identifier from FontRegistry.
 pub type FontId = u16;
 
-/// 개별 glyph의 위치 정보.
+/// Position of an individual glyph within a run.
 #[derive(Debug, Clone, Copy)]
 pub struct Glyph {
     pub id: u32,
@@ -11,17 +11,16 @@ pub struct Glyph {
     pub y: f32,
 }
 
-/// Faux bold/italic 합성 정보.
+/// Faux bold/italic synthesis flags for fonts that lack native variants.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Synthesis {
     pub embolden: bool,
     pub skew: Option<f32>,
 }
 
-/// 하나의 glyph run. 렌더링(glyph 데이터)과 커서 내비게이션(char_advances)을 통합.
+/// A single glyph run combining render data (glyphs) and cursor navigation (char_advances).
 #[derive(Debug, Clone)]
 pub struct GlyphRun {
-    // 렌더용
     pub font_id: FontId,
     pub font_weight: u16,
     pub font_size: f32,
@@ -30,7 +29,6 @@ pub struct GlyphRun {
     pub background_color: Option<String>,
     pub glyphs: Vec<Glyph>,
 
-    // 커서용
     pub node_id: NodeId,
     pub offset: usize,
     pub text: String,

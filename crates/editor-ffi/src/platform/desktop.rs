@@ -1,8 +1,10 @@
+use editor_macros::ffi;
 use editor_renderer::{RenderBackend, RenderSink};
 
 use crate::backend::BackendMode;
 use crate::error::FfiError;
 
+#[ffi]
 pub type PlatformHandle = u64;
 
 pub struct SurfaceHandle {
@@ -51,8 +53,8 @@ impl SurfaceHandle {
     }
 
     pub fn present(&mut self) {
-        // Desktop present: todo -- requires raw_window_handle integration
-        // Will be implemented in a follow-up task
+        let _ = self.handle;
+        // todo -- requires raw_window_handle integration
         todo!("desktop present")
     }
 

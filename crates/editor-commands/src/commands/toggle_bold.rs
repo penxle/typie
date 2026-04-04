@@ -133,14 +133,14 @@ fn is_node_bold(node: &NodeRef) -> bool {
         .modifiers()
         .iter()
         .find_map(|m| match m {
-            Modifier::FontWeight(w) => Some(*w),
+            Modifier::FontWeight { value } => Some(*value),
             _ => None,
         })
         .unwrap_or_else(|| {
             resolve_inherited_modifiers(node)
                 .iter()
                 .find_map(|m| match m {
-                    Modifier::FontWeight(w) => Some(*w),
+                    Modifier::FontWeight { value } => Some(*value),
                     _ => None,
                 })
                 .unwrap()
@@ -245,20 +245,20 @@ fn toggle_bold_on_range(
         let inherited_weight = inherited
             .iter()
             .find_map(|m| match m {
-                Modifier::FontWeight(w) => Some(*w),
+                Modifier::FontWeight { value } => Some(*value),
                 _ => None,
             })
             .unwrap();
         let inherited_family = inherited
             .iter()
             .find_map(|m| match m {
-                Modifier::FontFamily(f) => Some(f.as_str()),
+                Modifier::FontFamily { value } => Some(value.as_str()),
                 _ => None,
             })
             .unwrap();
 
         let has_explicit_weight = node.modifiers().iter().find_map(|m| match m {
-            Modifier::FontWeight(w) => Some(*w),
+            Modifier::FontWeight { value } => Some(*value),
             _ => None,
         });
         let current_weight = has_explicit_weight.unwrap_or(inherited_weight);
@@ -266,7 +266,7 @@ fn toggle_bold_on_range(
             .modifiers()
             .iter()
             .find_map(|m| match m {
-                Modifier::FontFamily(f) => Some(f.as_str()),
+                Modifier::FontFamily { value } => Some(value.as_str()),
                 _ => None,
             })
             .unwrap_or(inherited_family);
@@ -276,10 +276,10 @@ fn toggle_bold_on_range(
         match find_bold_target(current_weight, available) {
             Some(target) => {
                 if let Some(w) = has_explicit_weight {
-                    tr.remove_modifier(node_id, Modifier::FontWeight(w))?;
+                    tr.remove_modifier(node_id, Modifier::FontWeight { value: w })?;
                 }
                 if target != inherited_weight {
-                    tr.add_modifier(node_id, Modifier::FontWeight(target))?;
+                    tr.add_modifier(node_id, Modifier::FontWeight { value: target })?;
                 }
             }
             None => {
@@ -307,20 +307,20 @@ fn toggle_bold_off_range(
         let inherited_weight = inherited
             .iter()
             .find_map(|m| match m {
-                Modifier::FontWeight(w) => Some(*w),
+                Modifier::FontWeight { value } => Some(*value),
                 _ => None,
             })
             .unwrap();
         let inherited_family = inherited
             .iter()
             .find_map(|m| match m {
-                Modifier::FontFamily(f) => Some(f.as_str()),
+                Modifier::FontFamily { value } => Some(value.as_str()),
                 _ => None,
             })
             .unwrap();
 
         let has_explicit_weight = node.modifiers().iter().find_map(|m| match m {
-            Modifier::FontWeight(w) => Some(*w),
+            Modifier::FontWeight { value } => Some(*value),
             _ => None,
         });
         let current_weight = has_explicit_weight.unwrap_or(inherited_weight);
@@ -328,7 +328,7 @@ fn toggle_bold_off_range(
             .modifiers()
             .iter()
             .find_map(|m| match m {
-                Modifier::FontFamily(f) => Some(f.as_str()),
+                Modifier::FontFamily { value } => Some(value.as_str()),
                 _ => None,
             })
             .unwrap_or(inherited_family);
@@ -341,10 +341,10 @@ fn toggle_bold_off_range(
         }
 
         if let Some(w) = has_explicit_weight {
-            tr.remove_modifier(node_id, Modifier::FontWeight(w))?;
+            tr.remove_modifier(node_id, Modifier::FontWeight { value: w })?;
         }
         if unbold != inherited_weight {
-            tr.add_modifier(node_id, Modifier::FontWeight(unbold))?;
+            tr.add_modifier(node_id, Modifier::FontWeight { value: unbold })?;
         }
     }
 
@@ -364,14 +364,14 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
     let current_weight = effective
         .iter()
         .find_map(|m| match m {
-            Modifier::FontWeight(w) => Some(*w),
+            Modifier::FontWeight { value } => Some(*value),
             _ => None,
         })
         .expect("FontWeight must exist in effective modifiers");
     let font_family = effective
         .iter()
         .find_map(|m| match m {
-            Modifier::FontFamily(f) => Some(f.as_str()),
+            Modifier::FontFamily { value } => Some(value.as_str()),
             _ => None,
         })
         .expect("FontFamily must exist in effective modifiers");
@@ -381,7 +381,7 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
     let inherited_weight = inherited
         .iter()
         .find_map(|m| match m {
-            Modifier::FontWeight(w) => Some(*w),
+            Modifier::FontWeight { value } => Some(*value),
             _ => None,
         })
         .unwrap();
@@ -398,20 +398,18 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
         .collect();
 
     if is_bold {
-        // Toggle OFF
         let unbold = find_unbold_target(current_weight, available);
         pending.push(PendingModifier::Unset(ModifierType::Bold));
         if unbold != inherited_weight {
-            pending.push(PendingModifier::Set(Modifier::FontWeight(unbold)));
+            pending.push(PendingModifier::Set(Modifier::FontWeight { value: unbold }));
         } else {
             pending.push(PendingModifier::Unset(ModifierType::FontWeight));
         }
     } else {
-        // Toggle ON
         match find_bold_target(current_weight, available) {
             Some(target) => {
                 if target != inherited_weight {
-                    pending.push(PendingModifier::Set(Modifier::FontWeight(target)));
+                    pending.push(PendingModifier::Set(Modifier::FontWeight { value: target }));
                 } else {
                     pending.push(PendingModifier::Unset(ModifierType::FontWeight));
                 }
@@ -433,8 +431,6 @@ mod tests {
 
     use super::*;
     use crate::test_utils::*;
-
-    // --- find_bold_target ---
 
     #[test]
     fn bold_target_prefers_700_when_available() {
@@ -469,8 +465,6 @@ mod tests {
         assert_eq!(find_bold_target(300, &[100, 300, 400, 700]), Some(700));
     }
 
-    // --- find_unbold_target ---
-
     #[test]
     fn unbold_target_prefers_400() {
         assert_eq!(
@@ -500,8 +494,6 @@ mod tests {
         resource
     }
 
-    // --- collapsed toggle ON ---
-
     #[test]
     fn collapsed_toggle_on_sets_pending_font_weight() {
         let resource = make_resource([("Pretendard", vec![400, 700])]);
@@ -518,7 +510,7 @@ mod tests {
         let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
             result.pending_modifiers.as_slice(),
-            &[PendingModifier::Set(Modifier::FontWeight(700))]
+            &[PendingModifier::Set(Modifier::FontWeight { value: 700 })]
         );
     }
 
@@ -542,8 +534,6 @@ mod tests {
             &[PendingModifier::Set(Modifier::Bold)]
         );
     }
-
-    // --- collapsed toggle OFF ---
 
     #[test]
     fn collapsed_toggle_off_from_bold_modifier() {
@@ -571,7 +561,7 @@ mod tests {
             !result
                 .pending_modifiers
                 .iter()
-                .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight(_))))
+                .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight { .. })))
         );
     }
 
@@ -620,12 +610,10 @@ mod tests {
             selection: (t1, 3)
         };
         let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        assert!(
-            result
-                .pending_modifiers
-                .iter()
-                .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight(400))))
-        );
+        assert!(result.pending_modifiers.iter().any(|pm| matches!(
+            pm,
+            PendingModifier::Set(Modifier::FontWeight { value: 400 })
+        )));
     }
 
     #[test]
@@ -646,11 +634,9 @@ mod tests {
             !result
                 .pending_modifiers
                 .iter()
-                .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight(_))))
+                .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight { .. })))
         );
     }
-
-    // --- check_range_is_bold ---
 
     #[test]
     fn check_bold_all_bold_nodes() {
@@ -690,8 +676,6 @@ mod tests {
         let nodes = vec![doc.node(t1).unwrap(), doc.node(t2).unwrap()];
         assert!(!check_range_is_bold(&nodes));
     }
-
-    // --- range toggle ON ---
 
     #[test]
     fn range_toggle_on_single_node_full() {
@@ -796,11 +780,9 @@ mod tests {
             !entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight(_)))
+                .any(|m| matches!(m, Modifier::FontWeight { .. }))
         );
     }
-
-    // --- range toggle OFF ---
 
     #[test]
     fn range_toggle_off_removes_bold_and_sets_weight() {
@@ -823,7 +805,7 @@ mod tests {
             !entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight(_)))
+                .any(|m| matches!(m, Modifier::FontWeight { .. }))
         );
     }
 
@@ -847,7 +829,7 @@ mod tests {
             !entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight(_)))
+                .any(|m| matches!(m, Modifier::FontWeight { .. }))
         );
     }
 
@@ -871,7 +853,7 @@ mod tests {
             entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight(400)))
+                .any(|m| matches!(m, Modifier::FontWeight { value: 400 }))
         );
     }
 
@@ -902,8 +884,6 @@ mod tests {
         };
         assert_state_eq!(&result, &expected);
     }
-
-    // --- integration ---
 
     #[test]
     fn range_toggle_on_cross_paragraph() {
@@ -958,11 +938,9 @@ mod tests {
             entry
                 .modifiers
                 .iter()
-                .any(|m| matches!(m, Modifier::FontWeight(700)))
+                .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
         );
     }
-
-    // --- compact (adjacent same-modifier merge) ---
 
     #[test]
     fn compact_merges_adjacent_after_toggle_on() {
@@ -1082,8 +1060,6 @@ mod tests {
         };
         assert_state_eq!(&result, &expected);
     }
-
-    // --- range faux bold ---
 
     #[test]
     fn range_toggle_on_faux_bold_when_no_heavier() {

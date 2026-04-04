@@ -27,7 +27,7 @@ mod tests {
         let node = doc.node(p1).unwrap();
         let result = resolve_inherited(&node, ModifierType::BlockGap);
 
-        assert!(matches!(result, Some(Modifier::BlockGap(200))));
+        assert!(matches!(result, Some(Modifier::BlockGap { value: 200 })));
     }
 
     #[test]
@@ -41,7 +41,7 @@ mod tests {
         let node = doc.node(t1).unwrap();
         let result = resolve_inherited(&node, ModifierType::BlockGap);
 
-        assert!(matches!(result, Some(Modifier::BlockGap(150))));
+        assert!(matches!(result, Some(Modifier::BlockGap { value: 150 })));
     }
 
     #[test]

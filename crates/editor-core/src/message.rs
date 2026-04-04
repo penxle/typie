@@ -40,7 +40,7 @@ pub struct KeyEvent {
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PointerEvent {
     Down {
         page: usize,
@@ -63,41 +63,41 @@ pub enum Break {
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum InsertionIntent {
-    Text(String),
-    Break(Break),
-    Node(Node),
+    Text { text: String },
+    Break { kind: Break },
+    Node { node: Node },
 }
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum DeletionIntent {
     Selection,
-    Move(Movement),
+    Move { movement: Movement },
 }
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum FormattingIntent {
-    ToggleModifier(ModifierType),
-    SetModifier(Modifier),
+    ToggleModifier { modifier_type: ModifierType },
+    SetModifier { modifier: Modifier },
     ClearModifiers,
 }
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum SelectionIntent {
     All,
-    Set(Selection),
+    Set { selection: Selection },
 }
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum TableOp {
     InsertAxis {
         axis: Axis,
@@ -113,13 +113,17 @@ pub enum TableOp {
         from: usize,
         to: usize,
     },
-    SelectAxis(Option<Axis>),
-    SetColumnWidths(Vec<f32>),
+    SelectAxis {
+        axis: Option<Axis>,
+    },
+    SetColumnWidths {
+        widths: Vec<f32>,
+    },
 }
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum NodeIntent {
     Delete { id: NodeId },
     SetAttrs { id: NodeId, attrs: Node },
@@ -129,7 +133,7 @@ pub enum NodeIntent {
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClipboardIntent {
     Paste { html: Option<String>, text: String },
     Cut,
@@ -138,7 +142,7 @@ pub enum ClipboardIntent {
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum CompositionIntent {
     Update {
         text: String,
@@ -149,7 +153,7 @@ pub enum CompositionIntent {
 
 #[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum NavigationIntent {
     Move { movement: Movement, extend: bool },
 }
@@ -164,22 +168,22 @@ pub enum HistoryIntent {
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Intent {
-    Insertion(InsertionIntent),
-    Deletion(DeletionIntent),
-    Formatting(FormattingIntent),
-    Selection(SelectionIntent),
-    Node(NodeIntent),
-    Clipboard(ClipboardIntent),
-    Composition(CompositionIntent),
-    Navigation(NavigationIntent),
-    History(HistoryIntent),
+    Insertion { intent: InsertionIntent },
+    Deletion { intent: DeletionIntent },
+    Formatting { intent: FormattingIntent },
+    Selection { intent: SelectionIntent },
+    Node { intent: NodeIntent },
+    Clipboard { intent: ClipboardIntent },
+    Composition { intent: CompositionIntent },
+    Navigation { intent: NavigationIntent },
+    History { intent: HistoryIntent },
 }
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum SystemEvent {
     Initialize,
     Resize {
@@ -187,7 +191,9 @@ pub enum SystemEvent {
         height: f32,
         scale_factor: f64,
     },
-    SetFocused(bool),
+    SetFocused {
+        focused: bool,
+    },
     FontManifestLoaded {
         family: String,
         weight: u16,
@@ -208,10 +214,10 @@ pub enum SystemEvent {
 
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
-    Key(KeyEvent),
-    Pointer(PointerEvent),
-    Intent(Intent),
-    System(SystemEvent),
+    Key { event: KeyEvent },
+    Pointer { event: PointerEvent },
+    Intent { intent: Intent },
+    System { event: SystemEvent },
 }

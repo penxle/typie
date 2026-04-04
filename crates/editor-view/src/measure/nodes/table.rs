@@ -24,14 +24,7 @@ fn min_table_width(col_count: usize) -> f32 {
     col_count as f32 * MIN_CELL_WIDTH + border_width(col_count)
 }
 
-/// Ratio-based column width calculation.
-/// Algorithm (ported from legacy TableWidthModel::calculate_col_widths):
-/// 1. If custom_widths is None, use equal ratios (1/col_count)
-/// 2. If available_width <= col_count * MIN_CELL_WIDTH, return all MIN_CELL_WIDTH
-/// 3. Sort columns by ratio ascending
-/// 4. From smallest: if scale * ratio < MIN_CELL_WIDTH, constrain to MIN
-/// 5. Remaining columns get: scale * ratio where scale = remaining_width / unconstrained_ratio_sum
-/// 6. Float correction: adjust last column for rounding error
+/// Distributes available width across columns using ratio-based constraints.
 fn calculate_col_widths(
     col_count: usize,
     custom_widths: Option<&[f32]>,
@@ -41,6 +34,7 @@ fn calculate_col_widths(
         return vec![];
     }
 
+    // Use equal ratios when no custom widths are provided
     let ratios: Vec<f32> = match custom_widths {
         Some(cw) => cw
             .iter()
@@ -49,6 +43,7 @@ fn calculate_col_widths(
         None => vec![1.0 / col_count as f32; col_count],
     };
 
+    // All columns at minimum when space is too tight
     let min_total = col_count as f32 * MIN_CELL_WIDTH;
     if available_width <= min_total {
         return vec![MIN_CELL_WIDTH; col_count];
@@ -62,6 +57,7 @@ fn calculate_col_widths(
 
     let mut widths = vec![MIN_CELL_WIDTH; col_count];
 
+    // Sort by ratio ascending so smallest columns are constrained first
     let mut indexed_ratios: Vec<(usize, f32)> = ratios
         .iter()
         .enumerate()
@@ -79,6 +75,7 @@ fn calculate_col_widths(
     let mut remaining_width = available_width - constrained_count as f32 * MIN_CELL_WIDTH;
     let mut unconstrained_ratio_sum = ratio_sum;
 
+    // Greedily constrain columns whose proportional share falls below MIN_CELL_WIDTH
     let mut constrained_end = 0;
     for (pos, &(_, ratio)) in indexed_ratios.iter().enumerate() {
         let scale = remaining_width / unconstrained_ratio_sum;
@@ -90,6 +87,7 @@ fn calculate_col_widths(
         constrained_end = pos + 1;
     }
 
+    // Distribute remaining width proportionally among unconstrained columns
     if unconstrained_ratio_sum > 1e-7 {
         let scale = remaining_width / unconstrained_ratio_sum;
         for &(idx, ratio) in &indexed_ratios[constrained_end..] {
@@ -97,6 +95,7 @@ fn calculate_col_widths(
         }
     }
 
+    // Adjust last unconstrained column to absorb floating-point rounding error
     let total: f32 = widths.iter().sum();
     let diff = available_width - total;
     let tolerance = (1e-6 * available_width).max(1e-4);
@@ -199,7 +198,6 @@ pub fn measure_table(
     let actual_table_width =
         (col_count + 1) as f32 * TABLE_BORDER_WIDTH + col_widths.iter().sum::<f32>();
 
-    // Measure rows
     let mut row_measurements: Vec<Arc<MeasuredNode>> = Vec::with_capacity(rows.len());
 
     for row in &rows {
@@ -255,7 +253,6 @@ pub fn measure_table(
         row_measurements.push(Arc::new(row_node));
     }
 
-    // Calculate collapsed height
     let row_count = row_measurements.len();
     let row_inner_heights_sum: f32 = row_measurements
         .iter()

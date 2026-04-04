@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImageNode {
     pub id: Option<String>,
+    #[ffi(default = "1.0f")]
     #[serde(default = "default_proportion")]
     pub proportion: f32,
 }

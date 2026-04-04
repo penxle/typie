@@ -11,7 +11,9 @@ pub fn handle_formatting_intent(
     intent: FormattingIntent,
 ) -> Result<(), EditorError> {
     match intent {
-        FormattingIntent::ToggleModifier(m) if m == ModifierType::Bold => {
+        FormattingIntent::ToggleModifier { modifier_type }
+            if modifier_type == ModifierType::Bold =>
+        {
             let resource = Arc::clone(&editor.resource);
             let resource = resource.lock().unwrap();
             editor.transact(|tr| {
@@ -36,9 +38,11 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state.clone());
-        editor.apply(Message::Intent(Intent::Formatting(
-            FormattingIntent::ClearModifiers,
-        )));
+        editor.apply(Message::Intent {
+            intent: Intent::Formatting {
+                intent: FormattingIntent::ClearModifiers,
+            },
+        });
         assert_eq!(editor.state().selection, state.selection);
     }
 }

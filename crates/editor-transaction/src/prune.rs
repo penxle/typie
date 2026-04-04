@@ -7,12 +7,10 @@ use crate::Step;
 /// parent containers that would become empty as a result. Returns empty vec if
 /// the node is non-empty or if empty is valid for this node.
 pub fn prune(node: &NodeRef) -> Vec<Step> {
-    // Only prune nodes that have no children
     if node.children().len() > 0 {
         return vec![];
     }
 
-    // If empty is valid for this node, nothing to do
     if node.spec().content.min_required() == 0 {
         return vec![];
     }
@@ -20,8 +18,8 @@ pub fn prune(node: &NodeRef) -> Vec<Step> {
     prune_empty(node)
 }
 
-/// Generates RemoveSubtree steps for a node that is known to be empty and
-/// requires children. Recurses into the parent if it would also become empty.
+/// Generates RemoveSubtree steps for a node that is known to be empty and requires children.
+/// Recurses into the parent if it would also become empty.
 fn prune_empty(node: &NodeRef) -> Vec<Step> {
     // Can't remove root — no parent to attach RemoveSubtree to
     let parent = match node.parent() {

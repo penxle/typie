@@ -36,12 +36,10 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
     let node_top = node.rect.y;
     let node_bottom = node.rect.y + node.rect.height;
 
-    // Skip if entirely outside page y-range
     if node_bottom <= page.y_start || node_top >= page.y_end {
         return;
     }
 
-    // Compute page-local rect
     let local_rect = Rect::from_xywh(
         node.rect.x,
         node.rect.y - page.y_start,
@@ -51,7 +49,7 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
 
     match &node.content {
         LayoutContent::Box(b) => {
-            // Border visibility: geometric comparison
+            // A border edge is visible only if it falls within the current page's y-range
             let edges = Edges {
                 top: node_top >= page.y_start,
                 bottom: node_bottom <= page.y_end,
@@ -61,7 +59,6 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
 
             visitor.box_enter(b.node_id, local_rect, &b.style, edges);
 
-            // Visit decorations (if within page range)
             for dec in &b.style.decorations {
                 let dec_abs_y = node_top + dec.rect.y;
                 let dec_abs_bottom = dec_abs_y + dec.rect.height;
@@ -76,7 +73,6 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
                 }
             }
 
-            // Recurse into children
             for child in &b.children {
                 visit_node(child, page, visitor);
             }
@@ -89,9 +85,7 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
         LayoutContent::Atom(a) => {
             visitor.atom(a.node_id, local_rect);
         }
-        LayoutContent::Spacing(_) => {
-            // Invisible — skip
-        }
+        LayoutContent::Spacing(_) => {}
     }
 }
 

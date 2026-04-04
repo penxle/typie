@@ -16,7 +16,6 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         .node(pos.node_id)
         .ok_or(CommandError::NodeNotFound(pos.node_id))?;
 
-    // Determine if cursor is at the end of a paragraph
     let paragraph_id = match node.node() {
         Node::Text(text_node) => {
             let text_len = text_node.text.char_count();
@@ -37,7 +36,6 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         _ => return Ok(false),
     };
 
-    // Find next sibling and check it's a paragraph
     let doc = tr.doc();
     let paragraph = doc
         .node(paragraph_id)
@@ -57,7 +55,6 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
     // Record cursor position before merge (stays at current position)
     let cursor_selection = tr.selection();
 
-    // Merge next paragraph into current
     tr.merge_node(next_id, paragraph_id)?;
 
     let doc = tr.doc();
@@ -65,7 +62,6 @@ pub fn join_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         tr.apply_steps(compact(&p))?;
     }
 
-    // Restore cursor position
     tr.set_selection(cursor_selection)?;
 
     Ok(true)
