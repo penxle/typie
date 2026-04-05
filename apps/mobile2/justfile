@@ -1,3 +1,5 @@
+mode := "prod"
+
 # Show available recipes
 [private]
 default:
@@ -10,11 +12,11 @@ setup:
 
 # Deploy Android beta to Google Play (internal track)
 android:
-    cd android && doppler run -c prod -- bundle exec fastlane beta
+    cd android && doppler run -c {{mode}} -- bundle exec fastlane beta
 
 # Deploy iOS beta to TestFlight
 ios:
-    cd ios && doppler run -c prod -- bundle exec fastlane beta
+    cd ios && doppler run -c {{mode}} -- bundle exec fastlane beta
 
 # Deploy both platforms
 all: android ios

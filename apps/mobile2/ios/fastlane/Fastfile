@@ -17,11 +17,6 @@ platform :ios do
 
     latest_build_number = latest_testflight_build_number
 
-    gradle(
-      project_dir: "..",
-      task: "compose:linkReleaseFrameworkIosArm64"
-    )
-
     build_app(
       project: "App.xcodeproj",
       scheme: "iOS",
@@ -35,5 +30,4 @@ platform :ios do
       notify_external_testers: false,
     )
   end
-
 end

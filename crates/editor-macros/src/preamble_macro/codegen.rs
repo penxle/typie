@@ -20,9 +20,17 @@ pub fn generate() -> TokenStream {
         type #usize_alias = usize;
 
         #[cfg(feature = "uniffi")]
-        ::uniffi::custom_type!(#usize_alias, u64, {
+        ::uniffi::custom_type!(#usize_alias, u32, {
             remote,
-            lower: |obj| obj as u64,
+            // Editor document sizes stay below u32::MAX; release-build truncation is intentional.
+            lower: |obj| {
+                debug_assert!(
+                    obj <= u32::MAX as usize,
+                    "usize value {} exceeds u32::MAX at FFI boundary",
+                    obj
+                );
+                obj as u32
+            },
             try_lift: |val| Ok(val as usize),
         });
     }

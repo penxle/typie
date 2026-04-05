@@ -13,7 +13,7 @@ val doppler: String = listOf("/opt/homebrew/bin/doppler", "/usr/local/bin/dopple
 
 val dopplerSecrets: Map<String, String> by lazy {
   val output = providers.exec {
-    commandLine(doppler, "secrets", "download", "--no-file", "--format", "json")
+    commandLine(doppler, "secrets", "download", "-c", "dev", "--no-file", "--format", "json")
   }.standardOutput.asText.get()
   @Suppress("UNCHECKED_CAST")
   groovy.json.JsonSlurper().parseText(output) as Map<String, String>

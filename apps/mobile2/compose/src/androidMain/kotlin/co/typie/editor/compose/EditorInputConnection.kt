@@ -1,0 +1,193 @@
+package co.typie.editor.compose
+
+import android.os.Bundle
+import android.view.KeyEvent
+import android.view.View
+import android.view.inputmethod.CompletionInfo
+import android.view.inputmethod.CorrectionInfo
+import android.view.inputmethod.ExtractedText
+import android.view.inputmethod.ExtractedTextRequest
+import android.view.inputmethod.HandwritingGesture
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputContentInfo
+import android.view.inputmethod.SurroundingText
+import android.view.inputmethod.TextAttribute
+import co.typie.editor.Editor
+import co.typie.editor.ffi.CompositionIntent
+import co.typie.editor.ffi.DeletionIntent
+import co.typie.editor.ffi.Intent
+import co.typie.editor.ffi.Key
+import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
+import co.typie.editor.ffi.Message
+import co.typie.editor.ffi.SelectionIntent
+
+internal class EditorInputConnection(
+  private val editor: Editor,
+  private val view: View,
+) : InputConnection {
+  private var batchLevel = 0
+
+  override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
+    if (n < 0) return null
+    return editor.inputContext(n, 0).textBeforeCursor
+  }
+
+  override fun getTextAfterCursor(n: Int, flags: Int): CharSequence? {
+    if (n < 0) return null
+    return editor.inputContext(0, n).textAfterCursor
+  }
+
+  override fun getSelectedText(flags: Int): CharSequence? {
+    val text = editor.inputContext(0, 0).selectedText
+    return text.ifEmpty { null }
+  }
+
+  override fun getSurroundingText(
+    beforeLength: Int,
+    afterLength: Int,
+    flags: Int,
+  ): SurroundingText? {
+    if (beforeLength < 0 || afterLength < 0) return null
+    val ctx = editor.inputContext(beforeLength, afterLength)
+    val text = ctx.textBeforeCursor + ctx.selectedText + ctx.textAfterCursor
+    val selStart = ctx.textBeforeCursor.length
+    val selEnd = selStart + ctx.selectedText.length
+    // offset=-1: document offset of returned text[0] is unknown.
+    // Correct value would be (ctx.selectionStart - ctx.textBeforeCursor.length).toInt(),
+    // but inputContext is a stub so we pass -1 until real offsets are available.
+    return SurroundingText(text, selStart, selEnd, -1)
+  }
+
+  override fun getCursorCapsMode(reqModes: Int): Int = 0
+
+  override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText? = null
+
+  override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+    val value = text?.toString() ?: return false
+    editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(value))))
+    return true
+  }
+
+  override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+    val value = text?.toString() ?: return false
+    editor.enqueue(
+      Message.Intent(Intent.Composition(CompositionIntent.Update(value, null)))
+    )
+    return true
+  }
+
+  override fun setComposingRegion(start: Int, end: Int): Boolean {
+    editor.enqueue(
+      Message.Intent(Intent.Composition(CompositionIntent.SetRegion(start.toLong(), end.toLong())))
+    )
+    return true
+  }
+
+  override fun finishComposingText(): Boolean {
+    editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.CommitAsIs)))
+    return true
+  }
+
+  override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+    editor.enqueue(
+      Message.Intent(Intent.Deletion(
+        DeletionIntent.Surrounding(beforeLength.toLong(), afterLength.toLong())
+      ))
+    )
+    return true
+  }
+
+  override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
+    editor.enqueue(
+      Message.Intent(Intent.Deletion(
+        DeletionIntent.SurroundingCodePoints(beforeLength.toLong(), afterLength.toLong())
+      ))
+    )
+    return true
+  }
+
+  override fun setSelection(start: Int, end: Int): Boolean {
+    editor.enqueue(
+      Message.Intent(Intent.Selection(SelectionIntent.SetFlat(start.toLong(), end.toLong())))
+    )
+    return true
+  }
+
+  override fun sendKeyEvent(event: KeyEvent?): Boolean {
+    if (event == null || event.action != KeyEvent.ACTION_DOWN) return false
+    val key = when (event.keyCode) {
+      KeyEvent.KEYCODE_DEL -> Key.Backspace
+      KeyEvent.KEYCODE_FORWARD_DEL -> Key.Delete
+      KeyEvent.KEYCODE_ENTER -> Key.Enter
+      KeyEvent.KEYCODE_TAB -> Key.Tab
+      KeyEvent.KEYCODE_ESCAPE -> Key.Escape
+      else -> return false
+    }
+    editor.enqueue(Message.Key(FfiKeyEvent(key)))
+    return true
+  }
+
+  override fun performEditorAction(editorAction: Int): Boolean = false
+
+  override fun performContextMenuAction(id: Int): Boolean = false
+
+  override fun beginBatchEdit(): Boolean {
+    batchLevel++
+    return true
+  }
+
+  override fun endBatchEdit(): Boolean {
+    if (batchLevel > 0) batchLevel--
+    return batchLevel > 0
+  }
+
+  override fun clearMetaKeyStates(states: Int): Boolean = false
+
+  override fun reportFullscreenMode(enabled: Boolean): Boolean = false
+
+  override fun performPrivateCommand(action: String?, data: Bundle?): Boolean = false
+
+  override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean = false
+
+  override fun getHandler() = null
+
+  override fun closeConnection() {
+    editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.CommitAsIs)))
+    batchLevel = 0
+  }
+
+  override fun commitContent(
+    inputContentInfo: InputContentInfo,
+    flags: Int,
+    opts: Bundle?,
+  ): Boolean = false
+
+  override fun commitCompletion(text: CompletionInfo?): Boolean = false
+
+  override fun commitCorrection(correctionInfo: CorrectionInfo?): Boolean = false
+
+  override fun performSpellCheck(): Boolean = false
+
+  override fun performHandwritingGesture(
+    gesture: HandwritingGesture,
+    executor: java.util.concurrent.Executor?,
+    consumer: java.util.function.IntConsumer?,
+  ) {}
+
+  override fun previewHandwritingGesture(
+    gesture: android.view.inputmethod.PreviewableHandwritingGesture,
+    cancellationSignal: android.os.CancellationSignal?,
+  ): Boolean = false
+
+  override fun replaceText(
+    start: Int,
+    end: Int,
+    text: CharSequence,
+    newCursorPosition: Int,
+    textAttribute: TextAttribute?,
+  ): Boolean = false
+
+  override fun takeSnapshot(): android.view.inputmethod.TextSnapshot? = null
+
+  override fun setImeConsumesInput(imeConsumesInput: Boolean): Boolean = false
+}

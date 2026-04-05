@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.EditorHost
+import co.typie.editor.ffi.InputContext
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PageRect
@@ -94,6 +95,9 @@ class Editor private constructor(
   fun inspectState(options: InspectStateOptions? = null): String = inner.inspectState(options)
 
   fun inspectStateAsMacro(): String = inner.inspectStateAsMacro()
+
+  fun inputContext(beforeLimit: Int, afterLimit: Int): InputContext =
+    inner.inputContext(beforeLimit, afterLimit)
 
   companion object : KoinComponent {
     suspend fun create(

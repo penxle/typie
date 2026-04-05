@@ -2,6 +2,7 @@ package co.typie.editor.compose
 
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -13,17 +14,19 @@ import co.typie.editor.ffi.Size
 
 internal fun Modifier.editorGestures(
   editor: Editor,
+  focusRequester: FocusRequester,
   pageOffsets: Map<Int, Offset>,
   pageSizes: List<Size>,
 ): Modifier = this.pointerInput(editor, pageOffsets, pageSizes) {
   detectTapGestures { offset ->
+    focusRequester.requestFocus()
     val xDp = offset.x / density
     val yDp = offset.y / density
     val point = globalToLocal(xDp, yDp, pageOffsets, pageSizes) ?: return@detectTapGestures
     editor.enqueue(
       Message.Pointer(
         PointerEvent.Down(
-          page = point.page.toLong(),
+          page = point.page,
           x = point.x,
           y = point.y,
           count = 1,

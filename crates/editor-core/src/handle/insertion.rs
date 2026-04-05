@@ -16,7 +16,7 @@ pub fn handle_insertion_intent(
             InsertionIntent::Break {
                 kind: Break::Paragraph,
             } => {
-                editor_commands::first!(
+                commands::first!(
                     tr,
                     commands::lift_paragraph_forward(),
                     commands::split_paragraph(),

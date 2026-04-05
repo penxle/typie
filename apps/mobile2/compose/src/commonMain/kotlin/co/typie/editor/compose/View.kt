@@ -1,5 +1,6 @@
 package co.typie.editor.compose
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
@@ -28,8 +30,12 @@ fun EditorView(editor: Editor) {
 
   Box(Modifier.fillMaxSize()) {
     Box(
-      Modifier.fillMaxWidth().verticalScroll(scrollState)
-        .editorGestures(editor, pageOffsets, pageSizes)
+      Modifier.fillMaxWidth()
+        .focusRequester(focusRequester)
+        .editorTextInput(editor)
+        .focusable()
+        .verticalScroll(scrollState)
+        .editorGestures(editor, focusRequester, pageOffsets, pageSizes)
     ) {
       Column {
         pageSizes.forEachIndexed { index, size ->
@@ -65,7 +71,5 @@ fun EditorView(editor: Editor) {
         }
       }
     }
-
-    Input(editor = editor, focusRequester = focusRequester)
   }
 }

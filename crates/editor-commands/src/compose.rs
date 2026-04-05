@@ -95,6 +95,26 @@ macro_rules! chain {
     };
 }
 
+#[macro_export]
+macro_rules! optional {
+    ($($path:ident)::+ ( $($args:expr),* $(,)? )) => {
+        |tr| $crate::optional(tr, &|tr| $($path)::+(tr $(, $args)*))
+    };
+    ($cmd:expr) => {
+        |tr| $crate::optional(tr, &$cmd)
+    };
+}
+
+#[macro_export]
+macro_rules! when {
+    ($cond:expr, $($path:ident)::+ ( $($args:expr),* $(,)? )) => {
+        |tr| if $cond { $($path)::+(tr $(, $args)*) } else { Ok(true) }
+    };
+    ($cond:expr, $cmd:expr) => {
+        |tr| if $cond { $cmd(tr) } else { Ok(true) }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use crate::CommandResult;
@@ -185,5 +205,112 @@ mod tests {
 
         let result = chain!(&mut tr, noop_command(), failing_command(), noop_command(),);
         assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn optional_macro_bare_path() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let cmd = optional!(failing_command());
+        assert_eq!(cmd(&mut tr).unwrap(), true);
+    }
+
+    #[test]
+    fn optional_macro_path_with_args() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let cmd = optional!(command_with_arg(42));
+        assert_eq!(cmd(&mut tr).unwrap(), true);
+    }
+
+    #[test]
+    fn optional_macro_in_chain() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let result = chain!(
+            &mut tr,
+            noop_command(),
+            optional!(failing_command()),
+            noop_command(),
+        );
+        assert_eq!(result.unwrap(), true);
+    }
+
+    #[test]
+    fn when_macro_true_runs_command() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let cmd = when!(true, failing_command());
+        assert_eq!(cmd(&mut tr).unwrap(), false);
+    }
+
+    #[test]
+    fn when_macro_false_skips_command() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let cmd = when!(false, failing_command());
+        assert_eq!(cmd(&mut tr).unwrap(), true);
+    }
+
+    #[test]
+    fn when_macro_in_chain() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let text = "";
+        let result = chain!(
+            &mut tr,
+            noop_command(),
+            when!(!text.is_empty(), failing_command()),
+            noop_command(),
+        );
+        assert_eq!(result.unwrap(), true);
+    }
+
+    #[test]
+    fn optional_wraps_when() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let cmd = optional!(when!(true, failing_command()));
+        assert_eq!(cmd(&mut tr).unwrap(), true);
+    }
+
+    #[test]
+    fn when_wraps_optional() {
+        let (state, ..) = editor_macros::state! {
+            doc { root { paragraph { _t: text("hello") } } }
+            selection: (_t, 0)
+        };
+        let mut tr = Transaction::new(&state);
+
+        let cmd = when!(true, optional!(failing_command()));
+        assert_eq!(cmd(&mut tr).unwrap(), true);
     }
 }

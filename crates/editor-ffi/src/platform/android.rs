@@ -41,6 +41,10 @@ unsafe extern "C" {
     ) -> i32;
     #[link_name = "ANativeWindow_unlockAndPost"]
     fn native_window_unlock_and_post(window: *mut c_void) -> i32;
+    #[link_name = "ANativeWindow_getWidth"]
+    fn native_window_get_width(window: *mut c_void) -> i32;
+    #[link_name = "ANativeWindow_getHeight"]
+    fn native_window_get_height(window: *mut c_void) -> i32;
 }
 
 #[unsafe(no_mangle)]
@@ -82,9 +86,6 @@ impl SurfaceHandle {
         height: u32,
         scale_factor: f64,
     ) -> Result<Self, FfiError> {
-        let pw = (width as f64 * scale_factor).round() as u32;
-        let ph = (height as f64 * scale_factor).round() as u32;
-
         // format only — 0,0 keeps the surface's natural dimensions
         if handle != 0 {
             unsafe {
@@ -96,6 +97,28 @@ impl SurfaceHandle {
                 );
             }
         }
+
+        // use actual surface dimensions, not derived from scale_factor
+        let (pw, ph) = if handle != 0 {
+            unsafe {
+                let window = handle as *mut c_void;
+                let w = native_window_get_width(window);
+                let h = native_window_get_height(window);
+                if w > 0 && h > 0 {
+                    (w as u32, h as u32)
+                } else {
+                    (
+                        (width as f64 * scale_factor).round() as u32,
+                        (height as f64 * scale_factor).round() as u32,
+                    )
+                }
+            }
+        } else {
+            (
+                (width as f64 * scale_factor).round() as u32,
+                (height as f64 * scale_factor).round() as u32,
+            )
+        };
 
         let backend = match mode {
             BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
@@ -218,8 +241,28 @@ impl SurfaceHandle {
     }
 
     pub fn resize(&mut self, width: u32, height: u32, scale_factor: f64) {
-        let pw = (width as f64 * scale_factor).round() as u32;
-        let ph = (height as f64 * scale_factor).round() as u32;
+        let (pw, ph) = {
+            let window = self.handle as *mut c_void;
+            if !window.is_null() {
+                unsafe {
+                    let w = native_window_get_width(window);
+                    let h = native_window_get_height(window);
+                    if w > 0 && h > 0 {
+                        (w as u32, h as u32)
+                    } else {
+                        (
+                            (width as f64 * scale_factor).round() as u32,
+                            (height as f64 * scale_factor).round() as u32,
+                        )
+                    }
+                }
+            } else {
+                (
+                    (width as f64 * scale_factor).round() as u32,
+                    (height as f64 * scale_factor).round() as u32,
+                )
+            }
+        };
 
         self.width = pw;
         self.height = ph;

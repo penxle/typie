@@ -11,14 +11,14 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 commands::insert_hard_break(tr)?;
             }
             (Key::Enter, _) => {
-                editor_commands::first!(
+                commands::first!(
                     tr,
                     commands::delete_selection(),
                     commands::split_paragraph(),
                 )?;
             }
             (Key::Backspace, _) => {
-                editor_commands::first!(
+                commands::first!(
                     tr,
                     commands::delete_selection(),
                     commands::delete_text_backward(),
@@ -28,7 +28,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 )?;
             }
             (Key::Delete, _) => {
-                editor_commands::first!(
+                commands::first!(
                     tr,
                     commands::delete_selection(),
                     commands::delete_text_forward(),

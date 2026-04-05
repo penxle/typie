@@ -57,6 +57,14 @@ pub fn handle_deletion_intent(
                 })?;
             }
         }
+        DeletionIntent::Surrounding {
+            before: _,
+            after: _,
+        } => {}
+        DeletionIntent::SurroundingCodePoints {
+            before: _,
+            after: _,
+        } => {}
     }
     Ok(())
 }

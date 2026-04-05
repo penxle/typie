@@ -30,7 +30,7 @@ fun EditorScreen(slug: String) {
 
   val editor = model.editor
 
-  Screen { body = contentPadding ->
+  Screen(body = { contentPadding ->
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
       if (editor == null) {
         Text("Editor loading...", style = AppTheme.typography.body)
@@ -38,5 +38,5 @@ fun EditorScreen(slug: String) {
         EditorView(editor)
       }
     }
-  }
+  })
 }

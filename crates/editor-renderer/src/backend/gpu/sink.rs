@@ -24,7 +24,12 @@ impl GpuSink {
         surface: wgpu::Surface<'static>,
     ) -> Result<Self, RendererError> {
         let caps = surface.get_capabilities(&device.adapter);
-        let format = caps.formats[0];
+        let format = caps
+            .formats
+            .iter()
+            .find(|f| !f.is_srgb())
+            .copied()
+            .unwrap_or(caps.formats[0]);
         use wgpu::CompositeAlphaMode::*;
         let alpha_mode = if caps.alpha_modes.contains(&PreMultiplied)
             || device.adapter.get_info().backend == wgpu::Backend::BrowserWebGpu

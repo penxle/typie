@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn resolve_gap_after_returns_zero_when_no_block_gap() {
-        let (doc, p1) = doc! { root { p1: paragraph } };
+        let (doc, p1) = doc! { root [] { p1: paragraph } };
         let node = doc.node(p1).unwrap();
         assert_eq!(resolve_gap_after(&node), 0.0);
     }

@@ -76,6 +76,8 @@ pub enum InsertionIntent {
 pub enum DeletionIntent {
     Selection,
     Move { movement: Movement },
+    Surrounding { before: usize, after: usize },
+    SurroundingCodePoints { before: usize, after: usize },
 }
 
 #[ffi]
@@ -93,6 +95,7 @@ pub enum FormattingIntent {
 pub enum SelectionIntent {
     All,
     Set { selection: Selection },
+    SetFlat { start: usize, end: usize },
 }
 
 #[ffi]
@@ -148,7 +151,15 @@ pub enum CompositionIntent {
         text: String,
         replace_length: Option<usize>,
     },
-    End,
+    SetRegion {
+        start: usize,
+        end: usize,
+    },
+    Commit {
+        text: String,
+    },
+    CommitAsIs,
+    Cancel,
 }
 
 #[ffi]
@@ -220,4 +231,23 @@ pub enum Message {
     Pointer { event: PointerEvent },
     Intent { intent: Intent },
     System { event: SystemEvent },
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputContextRange {
+    pub start: usize,
+    pub end: usize,
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputContext {
+    pub text_before_cursor: String,
+    pub text_after_cursor: String,
+    pub selected_text: String,
+    pub cursor_position: usize,
+    pub selection_start: usize,
+    pub selection_end: usize,
+    pub composing_range: Option<InputContextRange>,
 }

@@ -81,6 +81,21 @@ export interface ImageNode {
     proportion?: number;
 }
 
+export interface InputContext {
+    text_before_cursor: string;
+    text_after_cursor: string;
+    selected_text: string;
+    cursor_position: number;
+    selection_start: number;
+    selection_end: number;
+    composing_range: InputContextRange | undefined;
+}
+
+export interface InputContextRange {
+    start: number;
+    end: number;
+}
+
 export interface InputModifiers {
     shift?: boolean;
     ctrl?: boolean;
@@ -180,9 +195,9 @@ export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
 export type ClipboardIntent = { type: "paste"; html: string | undefined; text: string } | { type: "cut" } | { type: "copy" };
 
-export type CompositionIntent = { type: "update"; text: string; replace_length: number | undefined } | { type: "end" };
+export type CompositionIntent = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" };
 
-export type DeletionIntent = { type: "selection" } | { type: "move"; movement: Movement };
+export type DeletionIntent = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
 
 export type Direction = "forward" | "backward";
 
@@ -222,7 +237,7 @@ export type NodeIntent = { type: "delete"; id: NodeId } | { type: "set_attrs"; i
 
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers };
 
-export type SelectionIntent = { type: "all" } | { type: "set"; selection: Selection };
+export type SelectionIntent = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
 export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "modifiers";
 
@@ -243,6 +258,7 @@ declare class Editor {
     [Symbol.dispose](): void;
     cursor(): PageRect | undefined;
     enqueue(message: Message): void;
+    input_context(before_limit: number, after_limit: number): InputContext;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     page_sizes(): Size[];

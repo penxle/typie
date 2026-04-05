@@ -156,6 +156,7 @@ sfnt
 shiki
 sindresorhus
 skia
+skiko
 smembers
 squircle
 srandmember
@@ -177,6 +178,7 @@ uniffi
 unplugin
 unstub
 unsubscriber
+usize
 vcpu
 vermuda
 vertexai

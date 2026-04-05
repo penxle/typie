@@ -4,7 +4,14 @@ use crate::message::*;
 
 pub fn handle_composition_intent(
     _editor: &mut Editor,
-    _intent: CompositionIntent,
+    intent: CompositionIntent,
 ) -> Result<(), EditorError> {
+    match intent {
+        CompositionIntent::Update { .. } => {}
+        CompositionIntent::SetRegion { .. } => {}
+        CompositionIntent::Commit { .. } => {}
+        CompositionIntent::CommitAsIs => {}
+        CompositionIntent::Cancel => {}
+    }
     Ok(())
 }

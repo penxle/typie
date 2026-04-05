@@ -69,8 +69,8 @@ impl SurfaceHandle {
                 RenderBackend::new_cpu(pw as u16, ph as u16)
             }
             BackendMode::Gpu { device } => {
-                let layer_ptr = handle as *mut c_void;
-                if layer_ptr.is_null() {
+                let layer_ptr_void = handle as *mut c_void;
+                if layer_ptr_void.is_null() {
                     return Err(FfiError::Surface("null CAMetalLayer handle".into()));
                 }
 
@@ -78,7 +78,7 @@ impl SurfaceHandle {
                     device
                         .instance
                         .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(
-                            layer_ptr,
+                            layer_ptr_void,
                         ))
                         .map_err(|e| FfiError::Surface(e.to_string()))?
                 };
@@ -89,7 +89,6 @@ impl SurfaceHandle {
                         backend
                     }
                     Err(_) => {
-                        let layer_ptr = handle as *mut AnyObject;
                         if !layer_ptr.is_null() {
                             unsafe {
                                 let _: () = msg_send![&*layer_ptr, setFramebufferOnly: false];

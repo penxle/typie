@@ -147,8 +147,8 @@ fn resolve_default(field: &FfiField, kt_type: &str, ctx: &CodegenContext) -> Str
 
     match rust_ty.as_str() {
         "bool" => "false".into(),
-        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" => "0".into(),
-        "u64" | "i64" | "usize" => "0L".into(),
+        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "usize" => "0".into(),
+        "u64" | "i64" => "0L".into(),
         "f32" => "0.0f".into(),
         "f64" => "0.0".into(),
         "String" => "\"\"".into(),
@@ -195,8 +195,8 @@ fn map_type_path(
     if segments.len() == 1 && last.arguments.is_none() {
         match ident.as_str() {
             "bool" => return "Boolean".into(),
-            "u8" | "u16" | "u32" | "i8" | "i16" | "i32" => return "Int".into(),
-            "u64" | "i64" | "usize" => return "Long".into(),
+            "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "usize" => return "Int".into(),
+            "u64" | "i64" => return "Long".into(),
             "f32" => return "Float".into(),
             "f64" => return "Double".into(),
             "String" => return "String".into(),
@@ -509,7 +509,7 @@ mod tests {
         assert_eq!(map_type("bool", &ct, &kt), "Boolean");
         assert_eq!(map_type("u32", &ct, &kt), "Int");
         assert_eq!(map_type("i64", &ct, &kt), "Long");
-        assert_eq!(map_type("usize", &ct, &kt), "Long");
+        assert_eq!(map_type("usize", &ct, &kt), "Int");
         assert_eq!(map_type("f32", &ct, &kt), "Float");
         assert_eq!(map_type("String", &ct, &kt), "String");
     }
@@ -678,7 +678,7 @@ mod tests {
             &ctx,
         );
         assert!(output.contains("@SerialName(\"node_id\") val nodeId: String,"));
-        assert!(output.contains("@SerialName(\"offset\") val offset: Long,"));
+        assert!(output.contains("@SerialName(\"offset\") val offset: Int,"));
         assert!(output.contains("@SerialName(\"affinity\") val affinity: Affinity,"));
     }
 
@@ -919,7 +919,7 @@ mod tests {
             &ctx,
         );
         assert!(output.contains("@SerialName(\"node_id\") val nodeId: String,"));
-        assert!(output.contains("@SerialName(\"offset\") val offset: Long = 0L,"));
+        assert!(output.contains("@SerialName(\"offset\") val offset: Int = 0,"));
         assert!(
             output.contains(
                 "@SerialName(\"affinity\") val affinity: co.typie.editor.ffi.Affinity = co.typie.editor.ffi.Affinity.Downstream,"

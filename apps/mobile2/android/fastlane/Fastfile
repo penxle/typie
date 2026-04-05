@@ -20,5 +20,4 @@ platform :android do
       track: "internal",
     )
   end
-
 end

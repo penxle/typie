@@ -116,8 +116,8 @@ pub fn resolve_primitive(name: &str, custom_types: &HashMap<String, String>) -> 
     let resolved = custom_types.get(name).map(|s| s.as_str()).unwrap_or(name);
     match resolved {
         "bool" => "Boolean".into(),
-        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" => "Int".into(),
-        "u64" | "i64" | "usize" => "Long".into(),
+        "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "usize" => "Int".into(),
+        "u64" | "i64" => "Long".into(),
         "f32" => "Float".into(),
         "f64" => "Double".into(),
         "String" => "String".into(),
@@ -214,6 +214,12 @@ mod tests {
             param_to_kotlin(&FfiParamType::Primitive("PlatformHandle".into()), &ct),
             "Long"
         );
+    }
+
+    #[test]
+    fn usize_resolves_to_int() {
+        let ct = empty_ct();
+        assert_eq!(resolve_primitive("usize", &ct), "Int");
     }
 
     #[test]

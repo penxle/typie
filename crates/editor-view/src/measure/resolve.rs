@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn resolve_inherited_returns_none_when_absent() {
-        let (doc, p1) = doc! { root { p1: paragraph } };
+        let (doc, p1) = doc! { root [] { p1: paragraph } };
 
         let node = doc.node(p1).unwrap();
         let result = resolve_inherited(&node, ModifierType::BlockGap);

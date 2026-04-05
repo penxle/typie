@@ -287,8 +287,8 @@ fn resolve_swift_primitive(name: &str, custom_types: &HashMap<String, String>) -
     let resolved = custom_types.get(name).map(|s| s.as_str()).unwrap_or(name);
     match resolved {
         "bool" => "Bool".into(),
-        "u16" | "i16" | "u32" | "i32" => "Int32".into(),
-        "u64" | "i64" | "usize" => "Int64".into(),
+        "u16" | "i16" | "u32" | "i32" | "usize" => "Int32".into(),
+        "u64" | "i64" => "Int64".into(),
         "f32" => "Float".into(),
         "f64" => "Double".into(),
         "String" => "String".into(),
@@ -448,6 +448,12 @@ mod tests {
     fn platform_handle_resolves() {
         let ct = make_custom_types();
         assert_eq!(resolve_swift_primitive("PlatformHandle", &ct), "Int64");
+    }
+
+    #[test]
+    fn usize_resolves_to_int32() {
+        let ct = empty_ct();
+        assert_eq!(resolve_swift_primitive("usize", &ct), "Int32");
     }
 
     #[test]

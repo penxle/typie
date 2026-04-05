@@ -2,13 +2,82 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::meta::{FfiMethod, FfiParam};
 
+/// Prepositions that cause Swift to omit the `with` prefix when generating
+/// Objective-C selectors. Source: swift/lib/Basic/PartsOfSpeech.def
+const PREPOSITIONS: &[&str] = &[
+    "above",
+    "after",
+    "along",
+    "alongside",
+    "as",
+    "at",
+    "before",
+    "below",
+    "by",
+    "following",
+    "for",
+    "from",
+    "given",
+    "in",
+    "including",
+    "inside",
+    "into",
+    "matching",
+    "of",
+    "on",
+    "passing",
+    "preceding",
+    "since",
+    "to",
+    "until",
+    "using",
+    "via",
+    "when",
+    "with",
+    "within",
+];
+
+/// Checks whether a camelCase name's leading lowercase word is a preposition.
+fn first_word_is_preposition(camel: &str) -> bool {
+    let first_word_end = camel
+        .char_indices()
+        .find(|(_, c)| c.is_ascii_uppercase())
+        .map(|(i, _)| i)
+        .unwrap_or(camel.len());
+    let first_word = &camel[..first_word_end];
+    PREPOSITIONS.contains(&first_word)
+}
+
+/// Checks whether a camelCase name's trailing word (last uppercase-started
+/// segment, or the whole string if no uppercase letters) is a preposition.
+fn last_word_is_preposition(camel: &str) -> bool {
+    let last_word_start = camel
+        .char_indices()
+        .rev()
+        .find(|(_, c)| c.is_ascii_uppercase())
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let last_word = &camel[last_word_start..].to_ascii_lowercase();
+    PREPOSITIONS.contains(&last_word.as_str())
+}
+
+/// Swift's ObjC selector rule: the `With` prefix before the first argument
+/// is omitted when EITHER the base method name ends with a preposition OR
+/// the first argument name starts with a preposition.
+/// Source: swift/lib/AST/Decl.cpp (AbstractFunctionDecl::getObjCSelector).
 pub fn objc_selector(method: &FfiMethod) -> String {
     let base = method.name.to_lower_camel_case();
     if method.params.is_empty() {
         format!("{}WithError", base)
     } else {
-        let first = method.params[0].name.to_upper_camel_case();
-        format!("{}With{}", base, first)
+        let first_camel = method.params[0].name.to_lower_camel_case();
+        let first_upper = method.params[0].name.to_upper_camel_case();
+        let drop_with = first_word_is_preposition(&first_camel) || last_word_is_preposition(&base);
+        if drop_with {
+            format!("{}{}", base, first_upper)
+        } else {
+            format!("{}With{}", base, first_upper)
+        }
     }
 }
 
@@ -106,6 +175,76 @@ mod tests {
             )],
         );
         assert_eq!(objc_selector(&m), "loadIcuDataWithData");
+    }
+
+    #[test]
+    fn selector_preposition_drops_with() {
+        let m = method(
+            "input_context",
+            vec![
+                param("before_limit", FfiParamType::Primitive("u32".into())),
+                param("after_limit", FfiParamType::Primitive("u32".into())),
+            ],
+        );
+        assert_eq!(objc_selector(&m), "inputContextBeforeLimit");
+    }
+
+    #[test]
+    fn selector_single_preposition_word_drops_with() {
+        // First param is a single preposition — treated as starting with itself.
+        let m = method(
+            "take_snapshot",
+            vec![param("at", FfiParamType::Primitive("u32".into()))],
+        );
+        assert_eq!(objc_selector(&m), "takeSnapshotAt");
+    }
+
+    #[test]
+    fn selector_base_ending_preposition_drops_with() {
+        // `move_to` → `moveTo`; base ends with preposition "to".
+        let m = method(
+            "move_to",
+            vec![param("point", FfiParamType::Primitive("u32".into()))],
+        );
+        assert_eq!(objc_selector(&m), "moveToPoint");
+    }
+
+    #[test]
+    fn selector_base_ending_at_drops_with() {
+        let m = method(
+            "insert_at",
+            vec![param("index", FfiParamType::Primitive("u32".into()))],
+        );
+        assert_eq!(objc_selector(&m), "insertAtIndex");
+    }
+
+    #[test]
+    fn selector_base_ending_from_drops_with() {
+        let m = method(
+            "fetch_from",
+            vec![param("url", FfiParamType::Primitive("String".into()))],
+        );
+        assert_eq!(objc_selector(&m), "fetchFromUrl");
+    }
+
+    #[test]
+    fn selector_single_word_base_no_preposition() {
+        // `move` alone is not a preposition; param doesn't start with one.
+        let m = method(
+            "move",
+            vec![param("point", FfiParamType::Primitive("u32".into()))],
+        );
+        assert_eq!(objc_selector(&m), "moveWithPoint");
+    }
+
+    #[test]
+    fn selector_non_preposition_keeps_with() {
+        // `message` does not start with a preposition.
+        let m = method(
+            "enqueue",
+            vec![param("message", FfiParamType::Primitive("String".into()))],
+        );
+        assert_eq!(objc_selector(&m), "enqueueWithMessage");
     }
 
     #[test]

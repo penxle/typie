@@ -91,6 +91,26 @@ impl Editor {
                 .into_ffi()?)
         })
     }
+
+    pub fn input_context(
+        &self,
+        before_limit: u32,
+        after_limit: u32,
+    ) -> EditorResult<Complex<editor_core::InputContext>> {
+        self.with_inner(|inner| {
+            let _ = (before_limit, after_limit, &inner.editor);
+            let ctx = editor_core::InputContext {
+                text_before_cursor: String::new(),
+                text_after_cursor: String::new(),
+                selected_text: String::new(),
+                cursor_position: 0,
+                selection_start: 0,
+                selection_end: 0,
+                composing_range: None,
+            };
+            Ok(ctx.into_ffi()?)
+        })
+    }
 }
 
 #[cfg(not(feature = "wasm-server"))]

@@ -18,6 +18,7 @@ pub fn handle_selection_intent(
             SelectionIntent::All => {
                 commands::select_all(tr)?;
             }
+            SelectionIntent::SetFlat { start: _, end: _ } => {}
         }
         Ok(())
     })

@@ -1,5 +1,7 @@
 package co.typie.editor.compose
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -10,6 +12,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import co.typie.editor.Editor
 import co.typie.editor.ffi.EditorEvent
+import co.typie.ui.theme.AppTheme
 
 @Composable
 internal fun Page(
@@ -22,16 +25,18 @@ internal fun Page(
   val density = LocalDensity.current
   val scaleFactor = density.density.toDouble()
 
-  Surface(
-    modifier = modifier.width(Dp(width)).height(Dp(height)),
-    onAttach = { handle ->
-      editor.attachSurface(page, handle, width.toInt(), height.toInt(), scaleFactor)
-      editor.renderSurface(page)
-    },
-    onDetach = {
-      editor.detachSurface(page)
-    },
-  )
+  Box(modifier = Modifier.background(AppTheme.colors.surfaceDefault)) {
+    Surface(
+      modifier = modifier.width(Dp(width)).height(Dp(height)),
+      onAttach = { handle ->
+        editor.attachSurface(page, handle, width.toInt(), height.toInt(), scaleFactor)
+        editor.renderSurface(page)
+      },
+      onDetach = {
+        editor.detachSurface(page)
+      },
+    )
+  }
 
   DisposableEffect(editor, page) {
     val off = editor.on<EditorEvent.RenderInvalidated> { ed, _ ->
