@@ -79,19 +79,12 @@ fun CancelPlanScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = subscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
     val subscription = subscriptionService.currentSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot()) ?: return@Screen
-
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
       Text(
         "이용권 해지",
         style = AppTheme.typography.display,
@@ -168,6 +161,5 @@ fun CancelPlanScreen() {
       )
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 }

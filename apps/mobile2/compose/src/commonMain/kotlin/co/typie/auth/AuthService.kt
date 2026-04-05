@@ -2,12 +2,16 @@ package co.typie.auth
 
 import co.touchlab.kermit.Logger
 import co.typie.Konfig
+import co.typie.dev.SimulatedNetworkFailureException
 import co.typie.service.SiteService
 import co.typie.storage.Vault
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.cache.normalized.apolloStore
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ResponseException
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.network.sockets.SocketTimeoutException
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -17,6 +21,8 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.parameters
+import io.ktor.util.network.UnresolvedAddressException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +35,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.io.IOException
 import org.koin.core.annotation.Single
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -49,6 +56,37 @@ internal fun parseAuthenticatedUserContextResponse(body: String): AuthenticatedU
   }.orEmpty()
 
   return AuthenticatedUserContext(userId = userId, siteIds = siteIds)
+}
+
+internal enum class AuthFailureDisposition {
+  ClearSession,
+  Offline,
+}
+
+internal fun classifyAuthFailure(error: Throwable): AuthFailureDisposition {
+  val causes = generateSequence(error) { it.cause }.toList()
+
+  val responseException = causes.filterIsInstance<ResponseException>().firstOrNull()
+  if (responseException != null) {
+    return if (responseException.response.status.value == 401) {
+      AuthFailureDisposition.ClearSession
+    } else {
+      AuthFailureDisposition.Offline
+    }
+  }
+
+  if (causes.any { cause ->
+      cause is IOException ||
+        cause is ConnectTimeoutException ||
+        cause is SocketTimeoutException ||
+        cause is UnresolvedAddressException ||
+        cause is SimulatedNetworkFailureException ||
+        cause.message == "Simulated network failure"
+    }) {
+    return AuthFailureDisposition.Offline
+  }
+
+  return AuthFailureDisposition.ClearSession
 }
 
 @Single(createdAtStart = true)
@@ -79,6 +117,12 @@ class AuthService(
     }
   }
 
+  fun retryAsync() {
+    scope.launch {
+      retry()
+    }
+  }
+
   private suspend fun initialize() {
     val currentTokens = tokens
     if (currentTokens == null) {
@@ -88,13 +132,10 @@ class AuthService(
 
     try {
       refreshTokensInternal(currentTokens.sessionToken)
+    } catch (e: CancellationException) {
+      throw e
     } catch (e: Exception) {
-      Logger.e(e) { "Failed to refresh tokens" }
-      if (tokens?.sessionToken != null) {
-        _state.value = AuthState.Offline
-      } else {
-        _state.value = AuthState.Unauthenticated
-      }
+      handleRefreshFailure(error = e, sessionToken = currentTokens.sessionToken)
     }
   }
 
@@ -104,13 +145,17 @@ class AuthService(
     }
 
     mutex.withLock {
+      val currentTokens = tokens
+      if (currentTokens?.sessionToken != sessionToken) {
+        tokens = AuthTokens(sessionToken = sessionToken)
+      }
+
       try {
         refreshTokensInternal(sessionToken)
+      } catch (e: CancellationException) {
+        throw e
       } catch (e: Exception) {
-        Logger.e(e) { "Failed to refresh tokens" }
-        tokens = null
-        siteService.clearCurrentUser()
-        _state.value = AuthState.Unauthenticated
+        handleRefreshFailure(error = e, sessionToken = sessionToken)
       }
     }
   }
@@ -121,11 +166,10 @@ class AuthService(
     try {
       refreshTokensInternal(currentSessionToken)
       return@withLock tokens?.accessToken
+    } catch (e: CancellationException) {
+      throw e
     } catch (e: Exception) {
-      Logger.e(e) { "Failed to refresh tokens" }
-      tokens = null
-      siteService.clearCurrentUser()
-      _state.value = AuthState.Unauthenticated
+      handleRefreshFailure(error = e, sessionToken = currentSessionToken)
       return@withLock null
     }
   }
@@ -153,9 +197,26 @@ class AuthService(
     _state.value = AuthState.Unauthenticated
   }
 
-  suspend fun retry() {
+  private suspend fun retry() {
     _state.value = AuthState.Initializing
     initialize()
+  }
+
+  private suspend fun handleRefreshFailure(
+    error: Exception,
+    sessionToken: String?,
+  ) {
+    Logger.e(error) { "Failed to refresh tokens" }
+
+    if (sessionToken == null) {
+      clearSession()
+      return
+    }
+
+    when (classifyAuthFailure(error)) {
+      AuthFailureDisposition.ClearSession -> clearSession()
+      AuthFailureDisposition.Offline -> _state.value = AuthState.Offline
+    }
   }
 
   private suspend fun refreshTokensInternal(sessionToken: String) {

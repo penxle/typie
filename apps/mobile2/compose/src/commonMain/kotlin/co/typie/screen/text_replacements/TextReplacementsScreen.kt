@@ -94,6 +94,7 @@ fun TextReplacementsScreen() {
   val scope = rememberCoroutineScope()
   var topBarScrollOffset by remember { mutableIntStateOf(0) }
   var isPersistingCustomReorder by remember { mutableStateOf(false) }
+  val lazyListState = rememberLazyListState()
 
   val presetItems = model.normalizedPresetItems.sortedBy { it.order.orEmpty() }
   val smartQuoteItems = model.normalizedSmartQuoteItems
@@ -134,9 +135,9 @@ fun TextReplacementsScreen() {
   Screen(
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    primaryScrollableState = lazyListState,
+    body = { contentPadding ->
     val skeleton = LocalSkeleton.current
-    val lazyListState = rememberLazyListState()
     val reorderState = rememberReorderableLazyColumnState(
       keys = serverCustomItemIds,
       lazyListState = lazyListState,
@@ -321,7 +322,7 @@ fun TextReplacementsScreen() {
         }
       }
     }
-  }
+  })
 }
 
 @Composable

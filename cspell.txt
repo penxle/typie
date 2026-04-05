@@ -108,8 +108,8 @@ noreferrer
 nori
 noto
 nsis
-nsutf
 nsurl
+nsutf
 nums
 objc
 observablehq
@@ -168,6 +168,7 @@ tsup
 twips
 typie
 udids
+UNDISPATCHED
 uniffi
 unplugin
 unstub
@@ -182,11 +183,11 @@ wbindgen
 webp
 wonka
 xact
-xcargs
 xcarchive
+xcargs
 xcconfig
-xcodeproj
 xcframework
+xcodeproj
 xcworkspace
 xexpect
 xlarge

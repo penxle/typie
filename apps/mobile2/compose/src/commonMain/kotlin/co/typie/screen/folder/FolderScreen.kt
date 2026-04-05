@@ -17,9 +17,9 @@ fun FolderScreen(entityId: String) {
     center = { TopBarTitle("폴더") },
   )
 
-  Screen { contentPadding ->
+  Screen(body = { contentPadding ->
     Column(Modifier.fillMaxSize().padding(contentPadding)) {
       Text("Folder: $entityId", style = AppTheme.typography.body)
     }
-  }
+  })
 }

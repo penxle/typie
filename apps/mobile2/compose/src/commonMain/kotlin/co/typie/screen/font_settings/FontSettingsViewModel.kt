@@ -52,9 +52,6 @@ class FontSettingsViewModel(
 
   val query = watchQuery(placeholderData()) { FontSettingsScreen_Query() }
 
-  internal val hasSubscription: Boolean
-    get() = query.data.me.subscription != null
-
   internal val userFontFamilies: List<FontSettingsFamily>
     get() = uploadedFontFamilies(query.data.me.documentFontFamilies.map { it.toModel() })
 
@@ -156,14 +153,6 @@ class FontSettingsViewModel(
 
   internal fun dismissUploadSummary() {
     state.uploadSummary = null
-  }
-
-  internal fun showUploadSubscriptionNotice() {
-    // TODO: 구독 화면이 준비되면 업그레이드 화면으로 연결
-    toast.show(
-      type = ToastType.Notification,
-      message = "폰트 업로드는 FULL ACCESS 플랜에서 사용할 수 있어요.",
-    )
   }
 
   internal suspend fun deleteFamily(family: FontSettingsFamily) {

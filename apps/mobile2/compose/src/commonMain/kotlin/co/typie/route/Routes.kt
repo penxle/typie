@@ -25,6 +25,7 @@ import co.typie.screen.subscription.CurrentPlanScreen
 import co.typie.screen.subscription.EnrollPlanScreen
 import co.typie.screen.subscription.ReferralScreen
 import co.typie.screen.space_settings.SpaceSettingsScreen
+import co.typie.screen.trash.TrashScreen
 import co.typie.screen.update_email.UpdateEmailScreen
 import co.typie.screen.update_password.UpdatePasswordScreen
 import co.typie.screen.update_profile.UpdateProfileScreen
@@ -59,6 +60,7 @@ fun MainRoutes(route: Route) {
     is Route.UpdateProfile -> UpdateProfileScreen()
     is Route.UpdatePassword -> UpdatePasswordScreen()
     is Route.SpaceSettings -> SpaceSettingsScreen()
+    is Route.Trash -> TrashScreen(entityId = route.entityId)
     is Route.Detail -> DetailScreen(id = route.id)
     is Route.Folder -> FolderScreen(entityId = route.entityId)
     is Route.Editor -> EditorScreen(slug = route.slug)

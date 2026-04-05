@@ -43,6 +43,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import co.typie.ext.clickable
 import co.typie.navigation.PlatformBackHandler
+import co.typie.ui.component.ResponsiveContainer
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -186,68 +187,69 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
       val maxSheetHeight = maxHeight * BottomSheetDefaults.MaxHeightFraction
 
-      Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-          .fillMaxWidth()
-          .heightIn(max = maxSheetHeight)
-          .onSizeChanged { sheetHeightPx = it.height.toFloat() }
-          .offset { IntOffset(0, totalOffsetY) }
-          .dropShadow(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius)) {
-            color = colors.shadowAmbient
-            radius = 8f
-          }
-          .dropShadow(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius)) {
-            color = colors.shadow
-            offset = Offset(0f, -4f)
-            radius = 12f
-          }
-          .draggable(
-          state = draggableState,
-          orientation = Orientation.Vertical,
-          onDragStopped = { velocity ->
-            dragDebt = 0f
-            if (dragOffsetPx > sheetHeightPx * 0.3f || velocity > 1000f) {
-              // dismiss
-              dismissWithoutResult()
-            } else {
-              // snap back
-              coroutineScope.launch {
-                val snapBack = Animatable(dragOffsetPx)
-                snapBack.animateTo(0f, enterSpec) { dragOffsetPx = value }
+      ResponsiveContainer(
+        modifier = Modifier.fillMaxWidth(),
+        alignment = Alignment.BottomCenter,
+      ) {
+        Column(
+          horizontalAlignment = Alignment.CenterHorizontally,
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = maxSheetHeight)
+            .onSizeChanged { sheetHeightPx = it.height.toFloat() }
+            .offset { IntOffset(0, totalOffsetY) }
+            .dropShadow(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius)) {
+              color = colors.shadowAmbient
+              radius = 8f
+            }
+            .dropShadow(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius)) {
+              color = colors.shadow
+              offset = Offset(0f, -4f)
+              radius = 12f
+            }
+            .draggable(
+              state = draggableState,
+              orientation = Orientation.Vertical,
+              onDragStopped = { velocity ->
+                dragDebt = 0f
+                if (dragOffsetPx > sheetHeightPx * 0.3f || velocity > 1000f) {
+                  dismissWithoutResult()
+                } else {
+                  coroutineScope.launch {
+                    val snapBack = Animatable(dragOffsetPx)
+                    snapBack.animateTo(0f, enterSpec) { dragOffsetPx = value }
+                  }
+                }
+              },
+            )
+            .clip(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius))
+            .background(colors.surfaceRaised),
+        ) {
+          Spacer(modifier = Modifier.height(BottomSheetDefaults.HandleTopPadding))
+          Box(
+            modifier = Modifier
+              .size(width = BottomSheetDefaults.HandleWidth, height = BottomSheetDefaults.HandleHeight)
+              .clip(RoundedCornerShape(BottomSheetDefaults.HandleHeight / 2))
+              .background(colors.borderSubtle),
+          )
+          Spacer(modifier = Modifier.height(BottomSheetDefaults.HandleTopPadding))
+
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .weight(1f, fill = false)
+              .nestedScroll(nestedScrollConnection),
+          ) {
+            CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
+              Column(
+                modifier = Modifier.fillMaxWidth(),
+              ) {
+                entry.content.invoke(sheetScope)
               }
             }
-          },
-        )
-        .clip(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius))
-        .background(colors.surfaceRaised)
-    ) {
-      // Handle
-      Spacer(modifier = Modifier.height(BottomSheetDefaults.HandleTopPadding))
-      Box(
-        modifier = Modifier
-          .size(width = BottomSheetDefaults.HandleWidth, height = BottomSheetDefaults.HandleHeight)
-          .clip(RoundedCornerShape(BottomSheetDefaults.HandleHeight / 2))
-          .background(colors.borderSubtle),
-      )
-      Spacer(modifier = Modifier.height(BottomSheetDefaults.HandleTopPadding))
-
-      // Content
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .weight(1f, fill = false)
-          .nestedScroll(nestedScrollConnection),
-      ) {
-        CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
-          Column(
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            entry.content.invoke(sheetScope)
           }
         }
       }
-    }
     }
   }
 }

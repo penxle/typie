@@ -41,7 +41,7 @@ fun EditorScreen(slug: String) {
     }
   }
 
-  Screen { contentPadding ->
+  Screen(body = { contentPadding ->
     Column(Modifier.fillMaxSize().padding(contentPadding)) {
       when (inspectedState) {
         null -> Text("Editor loading...", style = AppTheme.typography.body)
@@ -51,5 +51,5 @@ fun EditorScreen(slug: String) {
         )
       }
     }
-  }
+  })
 }

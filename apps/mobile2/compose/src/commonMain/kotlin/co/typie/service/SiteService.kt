@@ -1,5 +1,8 @@
 package co.typie.service
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import co.typie.storage.Prefs
 import org.koin.core.annotation.Single
 
@@ -22,14 +25,16 @@ class SiteService(prefs: Prefs) {
   private var currentUserId: String by prefs("current_user_id", "")
   private var siteIdsByUserId: Map<String, String> by prefs("site_ids_by_user_id", emptyMap<String, String>())
   private var legacySiteId: String by prefs("site_id", "")
+  private var currentSiteId by mutableStateOf(loadCurrentSiteId())
 
   var siteId: String
-    get() = currentUserId.takeIf { it.isNotEmpty() }?.let { siteIdsByUserId[it] }.orEmpty()
+    get() = currentSiteId
     set(value) {
       val userId = currentUserId
       if (userId.isEmpty()) return
 
       siteIdsByUserId = siteIdsByUserId + (userId to value)
+      currentSiteId = value
     }
 
   fun bindUser(userId: String, availableSiteIds: List<String>) {
@@ -47,9 +52,15 @@ class SiteService(prefs: Prefs) {
     }
 
     legacySiteId = ""
+    currentSiteId = resolvedSiteId
   }
 
   fun clearCurrentUser() {
     currentUserId = ""
+    currentSiteId = ""
+  }
+
+  private fun loadCurrentSiteId(): String {
+    return currentUserId.takeIf { it.isNotEmpty() }?.let { siteIdsByUserId[it] }.orEmpty()
   }
 }

@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,6 +51,8 @@ import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
+import co.typie.ui.component.bottomsheet.BottomSheetOptionList
+import co.typie.ui.component.bottomsheet.BottomSheetOptionRow
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -170,17 +170,11 @@ fun PresetSettingsScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
       Text(
         text = "프리셋",
         style = AppTheme.typography.display,
@@ -289,7 +283,6 @@ fun PresetSettingsScreen() {
 
       Spacer(Modifier.height(72.dp))
     }
-  }
 
   if (showResetConfirm) {
     ConfirmModal(
@@ -404,31 +397,25 @@ private fun BottomSheetScope<Unit>.FontFamilySheet(
         )
       }
     } else {
-      PresetSheetCard {
-        families.forEachIndexed { index, family ->
-          if (index > 0) {
-            CardDivider()
-          }
+      BottomSheetOptionList(items = families) { family ->
+        val specimen = representativeFontEntry(family, template.fontWeight)
+        BottomSheetOptionRow(
+          selected = selectedFamilyName == family.familyName,
+          enabled = !isSaving,
+          onClick = {
+            if (isSaving) return@BottomSheetOptionRow
 
-          val specimen = representativeFontEntry(family, template.fontWeight)
-          PresetSheetOptionRow(
-            selected = selectedFamilyName == family.familyName,
-            enabled = !isSaving,
-            onClick = {
-              if (isSaving) return@PresetSheetOptionRow
-
-              val nextWeight = closestWeight(template.fontWeight, family.fonts.map { it.weight })
-              selectedFamilyName = family.familyName
-              isSaving = true
-            },
-          ) {
-            FontSpecimen(
-              text = family.displayName,
-              fontId = specimen?.id,
-              weight = specimen?.weight,
-              style = AppTheme.typography.body,
-            )
-          }
+            val nextWeight = closestWeight(template.fontWeight, family.fonts.map { it.weight })
+            selectedFamilyName = family.familyName
+            isSaving = true
+          },
+        ) {
+          FontSpecimen(
+            text = family.displayName,
+            fontId = specimen?.id,
+            weight = specimen?.weight,
+            style = AppTheme.typography.body,
+          )
         }
       }
     }
@@ -485,28 +472,22 @@ private fun BottomSheetScope<Unit>.FontWeightSheet(
         )
       }
     } else {
-      PresetSheetCard {
-        fonts.forEachIndexed { index, font ->
-          if (index > 0) {
-            CardDivider()
-          }
-
-          PresetSheetOptionRow(
-            selected = selectedWeight == font.weight,
-            enabled = !isSaving,
-            onClick = {
-              if (isSaving) return@PresetSheetOptionRow
-              selectedWeight = font.weight
-              isSaving = true
-            },
-          ) {
-            FontSpecimen(
-              text = fontWeightLabel(font.weight, font.subfamilyDisplayName),
-              fontId = font.id,
-              weight = font.weight,
-              style = AppTheme.typography.body,
-            )
-          }
+      BottomSheetOptionList(items = fonts) { font ->
+        BottomSheetOptionRow(
+          selected = selectedWeight == font.weight,
+          enabled = !isSaving,
+          onClick = {
+            if (isSaving) return@BottomSheetOptionRow
+            selectedWeight = font.weight
+            isSaving = true
+          },
+        ) {
+          FontSpecimen(
+            text = fontWeightLabel(font.weight, font.subfamilyDisplayName),
+            fontId = font.id,
+            weight = font.weight,
+            style = AppTheme.typography.body,
+          )
         }
       }
     }
@@ -938,23 +919,17 @@ private fun <T> BottomSheetScope<Unit>.PresetOptionSheet(
   var selectedValue by remember { mutableStateOf(initialValue) }
 
   PresetInstantSheetScaffold(title = title) {
-    PresetSheetCard {
-      options.forEachIndexed { index, option ->
-        if (index > 0) {
-          CardDivider()
-        }
-
-        PresetSheetOptionRow(
-          selected = selectedValue == option.value,
-          enabled = !isSaving,
-          onClick = {
-            if (isSaving) return@PresetSheetOptionRow
-            selectedValue = option.value
-            isSaving = true
-          },
-        ) {
-          Text(option.label, style = AppTheme.typography.body)
-        }
+    BottomSheetOptionList(items = options) { option ->
+      BottomSheetOptionRow(
+        selected = selectedValue == option.value,
+        enabled = !isSaving,
+        onClick = {
+          if (isSaving) return@BottomSheetOptionRow
+          selectedValue = option.value
+          isSaving = true
+        },
+      ) {
+        Text(option.label, style = AppTheme.typography.body)
       }
     }
   }
@@ -986,32 +961,26 @@ private fun BottomSheetScope<Unit>.PresetColorSheet(
   var selectedValue by remember { mutableStateOf(initialValue) }
 
   PresetInstantSheetScaffold(title = title) {
-    PresetSheetCard {
-      options.forEachIndexed { index, option ->
-        if (index > 0) {
-          CardDivider()
-        }
-
-        PresetSheetOptionRow(
-          selected = selectedValue == option.value,
-          enabled = !isSaving,
-          onClick = {
-            if (isSaving) return@PresetSheetOptionRow
-            selectedValue = option.value
-            isSaving = true
-          },
+    BottomSheetOptionList(items = options) { option ->
+      BottomSheetOptionRow(
+        selected = selectedValue == option.value,
+        enabled = !isSaving,
+        onClick = {
+          if (isSaving) return@BottomSheetOptionRow
+          selectedValue = option.value
+          isSaving = true
+        },
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            PresetColorSwatch(
-              color = presetColor(option.value, background),
-              isNone = background && option.value == "none",
-              shape = if (background) PresetColorSwatchShape.Square else PresetColorSwatchShape.Circle,
-            )
-            Text(option.label, style = AppTheme.typography.body)
-          }
+          PresetColorSwatch(
+            color = presetColor(option.value, background),
+            isNone = background && option.value == "none",
+            shape = if (background) PresetColorSwatchShape.Square else PresetColorSwatchShape.Circle,
+          )
+          Text(option.label, style = AppTheme.typography.body)
         }
       }
     }
@@ -1080,60 +1049,6 @@ private fun <T> BottomSheetScope<T>.PresetInstantSheetScaffold(
       verticalArrangement = Arrangement.spacedBy(12.dp),
       content = content,
     )
-  }
-}
-
-@Composable
-private fun PresetSheetCard(
-  content: @Composable ColumnScope.() -> Unit,
-) {
-  CardSurface(
-    modifier = Modifier.fillMaxWidth(),
-  ) {
-    Column(content = content)
-  }
-}
-
-@Composable
-private fun PresetSheetOptionRow(
-  selected: Boolean,
-  enabled: Boolean = true,
-  onClick: suspend () -> Unit,
-  modifier: Modifier = Modifier,
-  contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
-  trailing: @Composable RowScope.() -> Unit = {
-    if (selected) {
-      Icon(
-        icon = Lucide.Check,
-        modifier = Modifier.size(16.dp),
-        tint = AppTheme.colors.brand,
-      )
-    }
-  },
-  label: @Composable ColumnScope.() -> Unit,
-) {
-  CardRow(
-    onClick = { if (enabled) onClick() },
-    modifier = modifier,
-    contentPadding = contentPadding,
-  ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        content = label,
-      )
-
-      Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        content = trailing,
-      )
-    }
   }
 }
 

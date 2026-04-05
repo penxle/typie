@@ -85,17 +85,11 @@ fun AiSettingsScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
       CardSurface(
         modifier = Modifier.fillMaxWidth(),
       ) {
@@ -166,7 +160,6 @@ fun AiSettingsScreen() {
       }
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 
   if (showEnableConfirm) {

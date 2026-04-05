@@ -88,23 +88,17 @@ fun EnrollPlanScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = subscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
     val subscription = subscriptionService.currentSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot())
     val currentPlanId = subscription?.planId
     val hasSubscription = subscription != null
     val isOnTrial = subscription?.availability == SubscriptionAvailability.Trial
     val canStartTrial = subscriptionService.canStartTrial(model.query.data.me.canStartTrial)
 
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
       Text(
         text = "이용권 구매/변경",
         style = AppTheme.typography.display,
@@ -144,7 +138,6 @@ fun EnrollPlanScreen() {
       )
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 
   if (showTrialStartConfirm) {

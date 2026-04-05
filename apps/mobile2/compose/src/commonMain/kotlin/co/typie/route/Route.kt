@@ -29,6 +29,7 @@ sealed interface Route {
   data object WidgetSettings : Route
   data object AiSettings : Route
   data object SpaceSettings : Route
+  data class Trash(val entityId: String? = null) : Route
   data class Detail(val id: String) : Route
   data class Folder(val entityId: String) : Route
   data class Editor(val slug: String) : Route

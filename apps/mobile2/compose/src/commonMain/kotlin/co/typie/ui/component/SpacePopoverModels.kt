@@ -18,3 +18,10 @@ fun resolveSpacePopoverSelection(
     otherSiteIds = availableSiteIds.filter { it != currentSiteId },
   )
 }
+
+fun resolvePendingCreatedSiteSelection(
+  pendingCreatedSiteId: String?,
+  availableSiteIds: List<String>,
+): String? {
+  return pendingCreatedSiteId?.takeIf { it in availableSiteIds }
+}

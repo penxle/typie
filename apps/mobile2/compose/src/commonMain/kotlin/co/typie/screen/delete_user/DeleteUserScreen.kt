@@ -97,20 +97,33 @@ fun DeleteUserScreen() {
   )
 
   Screen(
+    scrollState = scrollState,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .navigationBarsPadding(),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+    bottomBar = {
       Column(
         modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
       ) {
+        Button(
+          text = "탈퇴하기",
+          variant = ButtonVariant.Danger,
+          loading = isSubmitting,
+          loadingText = "탈퇴하는 중...",
+          onClick = { submit() },
+        )
+
+        Button(
+          text = "타이피 계속 이용하기",
+          variant = ButtonVariant.Secondary,
+          enabled = !isSubmitting,
+          onClick = { nav.pop() },
+        )
+      }
+    },
+  ) {
         Column(
           modifier = Modifier
             .fillMaxWidth(),
@@ -158,33 +171,6 @@ fun DeleteUserScreen() {
           checked = isAcknowledged,
           onToggle = { isAcknowledged = !isAcknowledged },
         )
-
-        Spacer(Modifier.height(160.dp))
-      }
-
-      Column(
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Button(
-          text = "탈퇴하기",
-          variant = ButtonVariant.Danger,
-          loading = isSubmitting,
-          loadingText = "탈퇴하는 중...",
-          onClick = { submit() },
-        )
-
-        Button(
-          text = "타이피 계속 이용하기",
-          variant = ButtonVariant.Secondary,
-          enabled = !isSubmitting,
-          onClick = { nav.pop() },
-        )
-      }
-    }
   }
 }
 

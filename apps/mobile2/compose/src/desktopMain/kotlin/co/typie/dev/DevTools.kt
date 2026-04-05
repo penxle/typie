@@ -1,5 +1,7 @@
 package co.typie.dev
 
+import co.typie.bootstrap.BootstrapDevSandbox
+import co.typie.bootstrap.BootstrapDevScenario
 import co.typie.screen.subscription.SubscriptionDevSandbox
 import co.typie.screen.subscription.SubscriptionDevScenario
 import kotlinx.coroutines.CoroutineScope
@@ -32,38 +34,26 @@ private val PanelBackground = Color(0x2C, 0x2C, 0x2E)
 private val ItemHover = Color(0x3A, 0x3A, 0x3C)
 private val TextPrimary = Color(0xFF, 0xFF, 0xFF)
 private val TextSecondary = Color(0x98, 0x98, 0x9D)
-private val AccentNormal = Color(0x30, 0xD1, 0x58)
-private val AccentSlow = Color(0xFF, 0x9F, 0x0A)
-private val AccentOffline = Color(0xFF, 0x45, 0x3A)
-private val AccentSubscriptionNone = Color(0x8E, 0x8E, 0x93)
-private val AccentSubscriptionTrial = Color(0x0A, 0x84, 0xFF)
-private val AccentSubscriptionPaid = Color(0x30, 0xD1, 0x58)
-private val AccentSubscriptionCancel = Color(0xFF, 0x9F, 0x0A)
-private val AccentSubscriptionOther = Color(0xBF, 0x5A, 0xF2)
+private val AccentMuted = Color(0x8E, 0x8E, 0x93)
+private val AccentSuccess = Color(0x30, 0xD1, 0x58)
+private val AccentWarning = Color(0xFF, 0x9F, 0x0A)
+private val AccentDanger = Color(0xFF, 0x45, 0x3A)
+private val AccentInfo = Color(0x0A, 0x84, 0xFF)
+private val AccentHighlight = Color(0xBF, 0x5A, 0xF2)
 
-private fun NetworkPreset.accentColor(): Color = when (this) {
-  NetworkPreset.Normal -> AccentNormal
-  NetworkPreset.Slow -> AccentSlow
-  NetworkPreset.Offline -> AccentOffline
-}
-
-private fun SubscriptionDevScenario.accentColor(): Color = when (this) {
-  SubscriptionDevScenario.RemoteData -> AccentSubscriptionOther
-  SubscriptionDevScenario.NoSubscription -> AccentSubscriptionNone
-  SubscriptionDevScenario.Trial -> AccentSubscriptionTrial
-  SubscriptionDevScenario.Monthly,
-  SubscriptionDevScenario.Yearly,
-  -> AccentSubscriptionPaid
-
-  SubscriptionDevScenario.CancelScheduled -> AccentSubscriptionCancel
-  SubscriptionDevScenario.BillingKey,
-  SubscriptionDevScenario.Manual,
-  -> AccentSubscriptionOther
+private fun DevToolsAccent.accentColor(): Color = when (this) {
+  DevToolsAccent.Muted -> AccentMuted
+  DevToolsAccent.Success -> AccentSuccess
+  DevToolsAccent.Warning -> AccentWarning
+  DevToolsAccent.Danger -> AccentDanger
+  DevToolsAccent.Info -> AccentInfo
+  DevToolsAccent.Highlight -> AccentHighlight
 }
 
 fun createDevToolsWindow(
   mainWindow: Window,
   networkSimulator: NetworkSimulator,
+  bootstrapDevSandbox: BootstrapDevSandbox,
   subscriptionDevSandbox: SubscriptionDevSandbox,
 ): JWindow {
   val devWindow = JWindow()
@@ -86,9 +76,23 @@ fun createDevToolsWindow(
       // Circle background
       g2.color = PanelBackground
       g2.fill(Ellipse2D.Double(0.0, 0.0, 32.0, 32.0))
-      // Colored dot
-      g2.color = networkSimulator.preset.value.accentColor()
-      g2.fill(Ellipse2D.Double(11.0, 11.0, 10.0, 10.0))
+
+      val dotSize = 6.0
+      val dotGap = 2.0
+      val accents = devToolsCollapsedIndicatorAccents(
+        networkPreset = networkSimulator.preset.value,
+        subscriptionScenario = subscriptionDevSandbox.scenario.value,
+        bootstrapScenario = bootstrapDevSandbox.scenario.value,
+      )
+      val totalHeight = accents.size * dotSize + (accents.size - 1) * dotGap
+      val x = (32.0 - dotSize) / 2
+      var y = (32.0 - totalHeight) / 2
+
+      accents.forEach { accent ->
+        g2.color = accent.accentColor()
+        g2.fill(Ellipse2D.Double(x, y, dotSize, dotSize))
+        y += dotSize + dotGap
+      }
     }
   }
 
@@ -203,7 +207,7 @@ fun createDevToolsWindow(
     dropdownPanel.add(
       createOptionItem(
         labelText = option.name,
-        accentColor = option.accentColor(),
+        accentColor = option.devToolsAccent().accentColor(),
         selected = { networkSimulator.preset.value == option },
         onClick = {
           networkSimulator.select(option)
@@ -219,9 +223,22 @@ fun createDevToolsWindow(
     dropdownPanel.add(
       createOptionItem(
         labelText = option.label,
-        accentColor = option.accentColor(),
+        accentColor = option.devToolsAccent().accentColor(),
         selected = { subscriptionDevSandbox.scenario.value == option },
         onClick = { subscriptionDevSandbox.select(option) },
+      ),
+    )
+  }
+
+  dropdownPanel.add(createSectionLabel("Bootstrap"))
+
+  BootstrapDevScenario.entries.forEach { option ->
+    dropdownPanel.add(
+      createOptionItem(
+        labelText = option.label,
+        accentColor = option.devToolsAccent().accentColor(),
+        selected = { bootstrapDevSandbox.scenario.value == option },
+        onClick = { bootstrapDevSandbox.select(option) },
       ),
     )
   }
@@ -265,6 +282,12 @@ fun createDevToolsWindow(
   }.launchIn(scope)
 
   subscriptionDevSandbox.scenario.onEach {
+    SwingUtilities.invokeLater {
+      devWindow.repaint()
+    }
+  }.launchIn(scope)
+
+  bootstrapDevSandbox.scenario.onEach {
     SwingUtilities.invokeLater {
       devWindow.repaint()
     }

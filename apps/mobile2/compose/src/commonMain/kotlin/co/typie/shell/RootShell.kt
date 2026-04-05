@@ -15,12 +15,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import co.typie.auth.AuthService
-import co.typie.auth.AuthState
+import co.typie.bootstrap.BootstrapDevSandbox
+import co.typie.bootstrap.BootstrapService
+import co.typie.bootstrap.effectiveBootstrapState
 import co.typie.overlay.LoaderOverlay
 import co.typie.overlay.ToastOverlay
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
+import co.typie.screen.app_state.MaintenanceScreen
+import co.typie.screen.app_state.OfflineScreen
 import co.typie.screen.splash.SplashScreen
+import co.typie.screen.app_state.UpdateRequiredScreen
 import co.typie.ui.component.bottomsheet.BottomSheetHost
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -32,8 +37,19 @@ import org.koin.compose.koinInject
 @Composable
 fun RootShell() {
   val authService = koinInject<AuthService>()
+  val bootstrapService = koinInject<BootstrapService>()
+  val bootstrapDevSandbox = koinInject<BootstrapDevSandbox>()
   val authState by authService.state.collectAsState()
-  val shellTargetState = rootShellTargetState(authState, authService.tokens?.sessionToken)
+  val bootstrapState by bootstrapService.state.collectAsState()
+  val bootstrapScenario by bootstrapDevSandbox.scenario.collectAsState()
+  val shellTargetState = rootShellTargetState(
+    authState = authState,
+    sessionToken = authService.tokens?.sessionToken,
+    bootstrapState = effectiveBootstrapState(
+      remoteState = bootstrapState,
+      scenario = bootstrapScenario,
+    ),
+  )
   val bottomSheetHost = remember { BottomSheetHostState() }
 
   val focusManager = LocalFocusManager.current
@@ -51,10 +67,23 @@ fun RootShell() {
           .hazeSource(LocalHazeState.current),
       ) { state ->
         key(state) {
-          when (state.authState) {
-            is AuthState.Initializing -> SplashScreen()
-            is AuthState.Authenticated -> MainShell { route -> MainRoutes(route) }
-            else -> AuthShell { route -> AuthRoutes(route) }
+          when (val destination = state.destination) {
+            is RootShellDestination.Splash -> SplashScreen()
+            is RootShellDestination.Main -> MainShell { route -> MainRoutes(route) }
+            is RootShellDestination.Auth -> AuthShell { route -> AuthRoutes(route) }
+            is RootShellDestination.Offline -> OfflineScreen {
+              authService.retryAsync()
+            }
+            is RootShellDestination.Maintenance -> MaintenanceScreen(
+              title = destination.title,
+              message = destination.message,
+              until = destination.until,
+            )
+            is RootShellDestination.UpdateRequired -> UpdateRequiredScreen(
+              storeUrl = destination.storeUrl,
+              currentVersion = destination.currentVersion,
+              requiredVersion = destination.requiredVersion,
+            )
           }
         }
       }

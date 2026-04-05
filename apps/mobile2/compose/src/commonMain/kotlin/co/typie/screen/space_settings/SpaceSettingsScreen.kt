@@ -40,7 +40,12 @@ import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.route.Route
 import co.typie.platform.rememberFilePicker
+import co.typie.screen.subscription.planUpgradeRoute
+import co.typie.screen.subscription.showPlanUpgradeSheet
+import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
@@ -54,6 +59,8 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.bottomsheet.BottomSheetOptionList
+import co.typie.ui.component.bottomsheet.BottomSheetOptionRow
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -69,6 +76,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 private data class SpaceDateDisplayOption(
@@ -92,6 +100,7 @@ private fun spaceDateDisplayLabel(value: SiteDateDisplay): String {
 fun SpaceSettingsScreen() {
   val nav = Nav.current
   val model = koinViewModel<SpaceSettingsViewModel>()
+  val subscriptionService = koinInject<SubscriptionService>()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
   val scrollState = rememberScrollState()
@@ -112,25 +121,27 @@ fun SpaceSettingsScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    val data = model.query.data
-    val hasSubscription = data.me.subscription != null
-
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .navigationBarsPadding()
-        .imePadding(),
-    ) {
-      Column(
+    verticalArrangement = Arrangement.spacedBy(24.dp),
+    imeAware = true,
+    bottomBar = {
+      Button(
+        text = "저장",
         modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-      ) {
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
+        loading = model.state.isSubmitting,
+        loadingText = "저장 중...",
+        onClick = { model.submit { nav.pop() } },
+      )
+    },
+  ) {
+    val data = model.query.data
+    val hasSubscription = subscriptionService.hasSubscription(
+      data.me.subscription?.toSubscriptionSnapshot(),
+    )
         Column(
           modifier = Modifier.fillMaxWidth(),
           verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -176,28 +187,47 @@ fun SpaceSettingsScreen() {
                   placeholder = "스페이스 이름",
                 )
 
-                TextField(
-                  field = model.state.form.slug,
-                  label = "주소",
-                  // TODO: 구독 없으면 플랜 페이지로 이동
-                  help = if (!hasSubscription) {
-                    "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
-                  } else {
-                    null
-                  },
-                  helpTextStyle = AppTheme.typography.caption,
-                  labelPosition = LabelPosition.Internal,
-                  placeholder = "스페이스 주소",
-                  enabled = hasSubscription,
-                  readOnly = !hasSubscription,
-                  suffix = {
-                    Text(
-                      ".${model.usersiteHost}",
-                      style = AppTheme.typography.body,
-                      color = AppTheme.colors.textSecondary,
-                    )
-                  },
-                )
+                Box(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                      if (!hasSubscription) {
+                        Modifier.clickable {
+                          planUpgradeRoute(
+                            bottomSheetHost.showPlanUpgradeSheet(
+                              message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.",
+                            ),
+                          )?.let { route ->
+                            nav.navigate(route)
+                          }
+                        }
+                      } else {
+                        Modifier
+                      }
+                    ),
+                ) {
+                  TextField(
+                    field = model.state.form.slug,
+                    label = "주소",
+                    help = if (!hasSubscription) {
+                      "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                    } else {
+                      null
+                    },
+                    helpTextStyle = AppTheme.typography.caption,
+                    labelPosition = LabelPosition.Internal,
+                    placeholder = "스페이스 주소",
+                    enabled = hasSubscription,
+                    readOnly = !hasSubscription,
+                    suffix = {
+                      Text(
+                        ".${model.usersiteHost}",
+                        style = AppTheme.typography.body,
+                        color = AppTheme.colors.textSecondary,
+                      )
+                    },
+                  )
+                }
               }
             }
           }
@@ -246,21 +276,6 @@ fun SpaceSettingsScreen() {
             }
           }
         }
-
-        Spacer(Modifier.height(96.dp))
-      }
-
-      Button(
-        text = "저장",
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
-        loading = model.state.isSubmitting,
-        loadingText = "저장 중...",
-        onClick = { model.submit { nav.pop() } },
-      )
-    }
   }
 
   if (showLastSiteAlert) {
@@ -299,7 +314,7 @@ private fun BottomSheetScope<Unit>.SpaceDateDisplaySheet(
   onSelected: (SiteDateDisplay) -> Unit,
 ) {
   BottomSheetScaffold(title = "글 목록에 표시할 날짜") {
-    spaceDateDisplayOptions().forEach { item ->
+    BottomSheetOptionList(items = spaceDateDisplayOptions()) { item ->
       SpaceDateDisplaySheetOption(
         label = item.label,
         selected = item.value == selected,
@@ -315,35 +330,18 @@ private fun SpaceDateDisplaySheetOption(
   selected: Boolean,
   onClick: suspend () -> Unit,
 ) {
-  InteractionScope {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clickable(onClick)
-        .padding(vertical = 12.dp)
-        .pressScale(),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Text(
-        text = label,
-        style = AppTheme.typography.action,
-        modifier = Modifier.weight(1f),
-        color = AppTheme.colors.textPrimary,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-
-      if (selected) {
-        Icon(
-          icon = Lucide.Check,
-          modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.brand,
-        )
-      } else {
-        Spacer(Modifier.size(16.dp))
-      }
-    }
+  BottomSheetOptionRow(
+    selected = selected,
+    onClick = onClick,
+  ) {
+    Text(
+      text = label,
+      style = AppTheme.typography.action,
+      modifier = Modifier.fillMaxWidth(),
+      color = AppTheme.colors.textPrimary,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
   }
 }
 

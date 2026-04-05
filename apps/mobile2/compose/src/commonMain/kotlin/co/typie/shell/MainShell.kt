@@ -126,6 +126,8 @@ fun MainShell(content: @Composable (Route) -> Unit) {
     },
   ) {
     CompositionLocalProvider(LocalBottomBarState provides bottomBarState) {
+      SiteUpdateStreamEffect()
+
       Crossfade(
         targetState = currentTab,
         modifier = Modifier.fillMaxSize(),

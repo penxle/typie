@@ -3,8 +3,10 @@ package co.typie.screen.subscription
 import co.typie.graphql.CancelPlanScreen_Query
 import co.typie.graphql.CurrentPlanScreen_Query
 import co.typie.graphql.EnrollPlanScreen_Query
+import co.typie.graphql.FontSettingsScreen_Query
 import co.typie.graphql.MoreScreen_Query
 import co.typie.graphql.SettingsScreen_Query
+import co.typie.graphql.SpaceSettingsScreen_Query
 import co.typie.graphql.type.PlanAvailability
 import co.typie.graphql.type.SubscriptionState as GraphqlSubscriptionState
 
@@ -17,6 +19,14 @@ fun MoreScreen_Query.Subscription.toSubscriptionSnapshot(): SubscriptionSnapshot
 }
 
 fun SettingsScreen_Query.Subscription.toSubscriptionSnapshot(): SubscriptionSnapshot {
+  return SubscriptionSnapshot(id = id)
+}
+
+fun FontSettingsScreen_Query.Subscription.toSubscriptionSnapshot(): SubscriptionSnapshot {
+  return SubscriptionSnapshot(id = id)
+}
+
+fun SpaceSettingsScreen_Query.Subscription.toSubscriptionSnapshot(): SubscriptionSnapshot {
   return SubscriptionSnapshot(id = id)
 }
 

@@ -30,8 +30,13 @@ import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.rememberFilePicker
+import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.planUpgradeRoute
+import co.typie.screen.subscription.showPlanUpgradeSheet
+import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
@@ -54,6 +59,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 private data class PendingFontDeletion(
@@ -64,11 +70,15 @@ private data class PendingFontDeletion(
 @Composable
 fun FontSettingsScreen() {
   val model = koinViewModel<FontSettingsViewModel>()
+  val nav = Nav.current
+  val subscriptionService = koinInject<SubscriptionService>()
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
   var pendingFamilyDeletion by remember { mutableStateOf<FontSettingsFamily?>(null) }
   var pendingFontDeletion by remember { mutableStateOf<PendingFontDeletion?>(null) }
+  val remoteSubscription = model.query.data.me.subscription?.toSubscriptionSnapshot()
+  val hasSubscription = subscriptionService.hasSubscription(remoteSubscription)
 
   val filePicker = rememberFilePicker(
     selectionMode = FilePickerSelectionMode.Multiple,
@@ -80,26 +90,35 @@ fun FontSettingsScreen() {
   fun requestUpload() {
     if (model.query.state !is QueryState.Success) return
     if (model.state.isUploading) return
-    scope.launch {
-      bottomSheetHost.show {
-        FontUploadSheet(
-          hasSubscription = model.hasSubscription,
-          isUploading = model.state.isUploading,
-          uploadCurrentIndex = model.state.uploadCurrentIndex,
-          uploadTotalCount = model.state.uploadTotalCount,
-          onUploadClick = {
-            when (fontUploadAction(model.hasSubscription)) {
-              FontUploadAction.PickFont -> {
+
+    when (fontUploadAction(hasSubscription)) {
+      FontUploadAction.PickFont -> {
+        scope.launch {
+          bottomSheetHost.show {
+            FontUploadSheet(
+              hasSubscription = hasSubscription,
+              isUploading = model.state.isUploading,
+              uploadCurrentIndex = model.state.uploadCurrentIndex,
+              uploadTotalCount = model.state.uploadTotalCount,
+              onUploadClick = {
                 dismiss()
                 filePicker("*/*")
-              }
+              },
+            )
+          }
+        }
+      }
 
-              FontUploadAction.ShowSubscriptionNotice -> {
-                model.showUploadSubscriptionNotice()
-              }
-            }
-          },
-        )
+      FontUploadAction.ShowPlanUpgradeSheet -> {
+        scope.launch {
+          planUpgradeRoute(
+            bottomSheetHost.showPlanUpgradeSheet(
+              message = "폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.",
+            ),
+          )?.let { route ->
+            nav.navigate(route)
+          }
+        }
       }
     }
   }
@@ -116,17 +135,11 @@ fun FontSettingsScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
       Text(
         "폰트",
         style = AppTheme.typography.display,
@@ -155,7 +168,6 @@ fun FontSettingsScreen() {
       }
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 
   pendingFamilyDeletion?.let { family ->

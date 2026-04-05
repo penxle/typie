@@ -11,3 +11,15 @@ query SpacePopover_Query {
     }
   }
 }
+
+mutation SpacePopover_CreateSite_Mutation($input: CreateSiteInput!) {
+  createSite(input: $input) {
+    id
+    name
+
+    logo {
+      id
+      ...Img_image
+    }
+  }
+}

@@ -59,12 +59,15 @@ class WatchQuery<D : Query.Data, out R> private constructor(
 
   init {
     scope.launch {
-      snapshotFlow { skip() to query() }
+      snapshotFlow {
+        val shouldSkip = skip()
+        shouldSkip to if (shouldSkip) null else query()
+      }
         .distinctUntilChanged()
         .collect { (shouldSkip, query) ->
           if (shouldSkip) {
             job?.cancel()
-          } else {
+          } else if (query != null) {
             execute(query, resetState = resetOnChange)
           }
         }

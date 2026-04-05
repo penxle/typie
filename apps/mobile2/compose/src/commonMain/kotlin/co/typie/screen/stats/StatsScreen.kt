@@ -85,9 +85,11 @@ fun StatsScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
     val data = model.query.data
     val changes = remember(data.me.characterCountChanges) {
       data.me.characterCountChanges.map { change ->
@@ -155,15 +157,6 @@ fun StatsScreen() {
       }
     }
 
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .background(AppTheme.colors.surfaceBase)
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
       Text(
         "나의 글쓰기 통계",
         style = AppTheme.typography.display,
@@ -297,7 +290,6 @@ fun StatsScreen() {
       }
 
       Spacer(Modifier.height(140.dp))
-    }
   }
 }
 

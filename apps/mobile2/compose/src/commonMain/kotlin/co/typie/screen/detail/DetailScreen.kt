@@ -40,7 +40,7 @@ fun DetailScreen(id: String) {
     },
   )
 
-  Screen { contentPadding ->
+  Screen(body = { contentPadding ->
     Column(
       Modifier.fillMaxSize().padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -54,6 +54,5 @@ fun DetailScreen(id: String) {
           nav.navigate(Route.Detail(id + 1))
         })
     }
-  }
+  })
 }
-

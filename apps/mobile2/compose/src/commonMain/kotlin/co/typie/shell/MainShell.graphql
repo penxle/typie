@@ -1,0 +1,11 @@
+subscription MainShell_SiteUpdateStream_Subscription($siteId: ID!) {
+  siteUpdateStream(siteId: $siteId) {
+    ... on Site {
+      id
+    }
+
+    ... on Entity {
+      id
+    }
+  }
+}

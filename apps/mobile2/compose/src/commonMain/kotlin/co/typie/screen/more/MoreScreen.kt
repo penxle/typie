@@ -77,20 +77,13 @@ fun MoreScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = subscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
     val data = model.query.data
     val subscriptionSummary = subscriptionService.summary(data.me.subscription?.toSubscriptionSnapshot())
-
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
       val subscriptionActionLabel = if (subscriptionSummary.hasSubscription) "이용권 정보" else "구매하기"
 
       val activityChanges = data.me.characterCountChanges.map { change ->
@@ -479,6 +472,5 @@ fun MoreScreen() {
       }
 
       Spacer(Modifier.height(140.dp))
-    }
   }
 }

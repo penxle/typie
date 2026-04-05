@@ -107,7 +107,7 @@ kotlin {
         implementation(libs.androidx.activity.compose)
         implementation(libs.androidx.credentials)
         implementation(libs.androidx.credentials.playServicesAuth)
-        implementation(libs.billing.ktx)
+        implementation(libs.billing)
         implementation(libs.googleid)
         implementation(libs.kakao.user)
         implementation(libs.naver.oauth)
@@ -172,6 +172,7 @@ buildkonfig {
 
   defaultConfigs {
     buildConfigField(STRING, "API_URL", env("API_URL"))
+    buildConfigField(STRING, "WS_URL", env("WS_URL"))
     buildConfigField(STRING, "AUTH_URL", env("AUTH_URL"))
     buildConfigField(STRING, "OIDC_CLIENT_ID", env("OIDC_CLIENT_ID"))
     buildConfigField(STRING, "OIDC_CLIENT_SECRET", env("OIDC_CLIENT_SECRET"))

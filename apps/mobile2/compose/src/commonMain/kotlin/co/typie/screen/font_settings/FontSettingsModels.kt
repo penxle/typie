@@ -47,7 +47,7 @@ internal data class FontUploadSummary(
 
 internal enum class FontUploadAction {
   PickFont,
-  ShowSubscriptionNotice,
+  ShowPlanUpgradeSheet,
 }
 
 internal val FONT_WEIGHT_LABELS = mapOf(
@@ -120,7 +120,7 @@ internal fun isSupportedTtfFontFile(
 internal fun fontUploadAction(
   hasSubscription: Boolean,
 ): FontUploadAction {
-  return if (hasSubscription) FontUploadAction.PickFont else FontUploadAction.ShowSubscriptionNotice
+  return if (hasSubscription) FontUploadAction.PickFont else FontUploadAction.ShowPlanUpgradeSheet
 }
 
 internal fun summarizeFontUploadResults(

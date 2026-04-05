@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.Composable
@@ -36,6 +38,7 @@ fun InteractionScope(content: @Composable () -> Unit) {
 expect fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier
 expect fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier
 expect fun Modifier.overscroll(): Modifier
+expect fun Modifier.dragScrollable(state: ScrollableState, orientation: Orientation, enabled: Boolean = true): Modifier
 
 fun Modifier.clickable(onClick: suspend () -> Unit): Modifier = clickable(
   enabled = true,

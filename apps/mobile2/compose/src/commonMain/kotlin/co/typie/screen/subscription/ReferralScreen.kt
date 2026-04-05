@@ -130,29 +130,30 @@ fun ReferralScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+    bottomBar = {
+      Button(
+        text = "초대 링크 복사",
+        modifier = Modifier
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
+        loading = isInviteLoading,
+        loadingText = "불러오는 중...",
+        enabled = !isInviteLoading,
+        onClick = ::copyLink,
+      )
+    },
+  ) {
     val data = model.query.data
     val referrals = data.me.referrals
     val referralCount = referrals.size
     val compensatedCount = referrals.count { it.compensated }
-
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .background(AppTheme.colors.surfaceBase),
-    ) {
-      Column(
-        modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        Text(
-          "초대",
-          style = AppTheme.typography.display,
+      Text(
+        "초대",
+        style = AppTheme.typography.display,
           modifier = Modifier.padding(top = 4.dp),
         )
 
@@ -235,23 +236,6 @@ fun ReferralScreen() {
             ReferralBulletPoint("초대 횟수에는 제한이 없어요.")
           }
         }
-
-        Spacer(Modifier.height(120.dp))
-      }
-
-      Button(
-        text = "초대 링크 복사",
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(horizontal = 16.dp)
-          .navigationBarsPadding()
-          .padding(bottom = 16.dp),
-        loading = isInviteLoading,
-        loadingText = "불러오는 중...",
-        enabled = !isInviteLoading,
-        onClick = ::copyLink,
-      )
-    }
   }
 }
 

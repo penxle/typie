@@ -68,20 +68,21 @@ fun UpdateProfileScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
-  ) { contentPadding ->
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .navigationBarsPadding()
-        .imePadding(),
-    ) {
-      Column(
+    imeAware = true,
+    bottomBar = {
+      Button(
+        text = "변경",
         modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding),
-      ) {
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
+        loading = model.state.isSubmitting,
+        loadingText = "변경 중...",
+        onClick = { model.submit { nav.pop() } },
+      )
+    },
+  ) {
         Column(
           modifier = Modifier.fillMaxWidth(),
           horizontalAlignment = Alignment.CenterHorizontally,
@@ -110,21 +111,6 @@ fun UpdateProfileScreen() {
         )
 
         Spacer(Modifier.height(24.dp))
-
-        Spacer(Modifier.height(96.dp))
-      }
-
-      Button(
-        text = "변경",
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
-        loading = model.state.isSubmitting,
-        loadingText = "변경 중...",
-        onClick = { model.submit { nav.pop() } },
-      )
-    }
   }
 }
 

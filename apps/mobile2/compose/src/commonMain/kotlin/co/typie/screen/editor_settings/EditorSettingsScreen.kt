@@ -65,16 +65,10 @@ fun EditorSettingsScreen() {
   )
 
   Screen(
+    scrollState = scrollState,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
       Text(
         "에디터",
         style = AppTheme.typography.display,
@@ -178,7 +172,6 @@ fun EditorSettingsScreen() {
       }
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 }
 

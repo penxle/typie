@@ -10,6 +10,8 @@ enum class NetworkPreset {
   Offline,
 }
 
+class SimulatedNetworkFailureException : Exception("Simulated network failure")
+
 @Single
 class NetworkSimulator {
   private val _preset = MutableStateFlow(NetworkPreset.Normal)

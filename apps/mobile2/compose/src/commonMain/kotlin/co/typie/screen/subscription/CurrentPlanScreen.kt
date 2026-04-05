@@ -55,9 +55,11 @@ fun CurrentPlanScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = subscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
     val subscription = subscriptionService.currentSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot()) ?: return@Screen
     val availability = subscription.availability
     val footer = availability?.let(::currentPlanFooter)
@@ -68,14 +70,6 @@ fun CurrentPlanScreen() {
       expiresAt = subscription.expiresAt ?: return@Screen,
     )
 
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
       Text(
         "이용권 정보",
         style = AppTheme.typography.display,
@@ -139,7 +133,6 @@ fun CurrentPlanScreen() {
       }
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 }
 

@@ -22,6 +22,21 @@ class HomeViewModel(
     watchQuery(placeholderData()) { HomeScreen_Query(siteId = siteService.siteId) }
 
   var searching by mutableStateOf(false)
+  var shouldAnimateSearchHeader by mutableStateOf(false)
+
+  fun enterSearch() {
+    shouldAnimateSearchHeader = true
+    searching = true
+  }
+
+  fun onSearchHeaderAnimationConsumed() {
+    shouldAnimateSearchHeader = false
+  }
+
+  fun exitSearch() {
+    shouldAnimateSearchHeader = false
+    searching = false
+  }
 }
 
 private fun placeholderData() = HomeScreen_Query.Data(PlaceholderResolver) {

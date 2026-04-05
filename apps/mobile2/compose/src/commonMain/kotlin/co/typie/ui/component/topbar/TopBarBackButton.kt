@@ -8,11 +8,12 @@ import co.typie.navigation.Nav
 @Composable
 fun TopBarBackButton(
   modifier: Modifier = Modifier,
+  onClick: (suspend () -> Unit)? = null,
 ) {
   val navigator = Nav.current
   TopBarButton(
     icon = Lucide.ChevronLeft,
-    onClick = { navigator.pop() },
+    onClick = onClick ?: { navigator.pop() },
     modifier = modifier,
   )
 }

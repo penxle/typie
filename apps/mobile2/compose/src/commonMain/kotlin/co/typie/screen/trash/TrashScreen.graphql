@@ -1,0 +1,122 @@
+query TrashScreen_WithSiteId_Query($siteId: ID!) {
+  site(siteId: $siteId) @catch(to: THROW) {
+    id
+    name
+
+    deletedEntities {
+      id
+      ancestors {
+        id
+        node {
+          ... on Folder {
+            id
+            name
+          }
+        }
+      }
+      node {
+        ... on Folder {
+          id
+          name
+        }
+
+        ... on Document {
+          id
+          title
+          excerpt
+          updatedAt
+        }
+      }
+    }
+  }
+}
+
+query TrashScreen_WithEntityId_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+    site {
+      id
+      name
+    }
+    ancestors {
+      id
+      node {
+        ... on Folder {
+          id
+          name
+        }
+      }
+    }
+    node {
+      ... on Folder {
+        id
+        name
+      }
+
+      ... on Document {
+        id
+        title
+        excerpt
+        updatedAt
+      }
+    }
+
+    deletedChildren {
+      id
+      ancestors {
+        id
+        node {
+          ... on Folder {
+            id
+            name
+          }
+        }
+      }
+      node {
+        ... on Folder {
+          id
+          name
+        }
+
+        ... on Document {
+          id
+          title
+          excerpt
+          updatedAt
+        }
+      }
+    }
+  }
+}
+
+mutation TrashScreen_RecoverEntity_Mutation($input: RecoverEntityInput!) {
+  recoverEntity(input: $input) {
+    id
+    ancestors {
+      id
+      node {
+        ... on Folder {
+          id
+          name
+        }
+      }
+    }
+    node {
+      ... on Folder {
+        id
+        name
+      }
+
+      ... on Document {
+        id
+        title
+      }
+    }
+  }
+}
+
+mutation TrashScreen_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
+  purgeEntities(input: $input) {
+    id
+  }
+}

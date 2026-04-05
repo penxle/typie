@@ -45,20 +45,21 @@ fun UpdatePasswordScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
-  ) { contentPadding ->
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .navigationBarsPadding()
-        .imePadding(),
-    ) {
-      Column(
+    imeAware = true,
+    bottomBar = {
+      Button(
+        text = buttonText,
         modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding),
-      ) {
+          .padding(horizontal = 16.dp)
+          .padding(bottom = 16.dp),
+        loading = model.state.isSubmitting,
+        loadingText = loadingText,
+        onClick = { model.submit { nav.pop() } },
+      )
+    },
+  ) {
         if (hasPassword) {
           TextField(
             field = model.state.form.currentPassword,
@@ -90,20 +91,5 @@ fun UpdatePasswordScreen() {
         )
 
         Spacer(Modifier.height(24.dp))
-
-        Spacer(Modifier.height(96.dp))
-      }
-
-      Button(
-        text = buttonText,
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
-        loading = model.state.isSubmitting,
-        loadingText = loadingText,
-        onClick = { model.submit { nav.pop() } },
-      )
-    }
   }
 }

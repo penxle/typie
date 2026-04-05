@@ -100,16 +100,10 @@ fun OssLicensesScreen() {
   )
 
   Screen(
+    scrollState = scrollState,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
       Text(
         "오픈소스 라이센스",
         style = AppTheme.typography.display,
@@ -167,7 +161,6 @@ fun OssLicensesScreen() {
       }
 
       Spacer(Modifier.size(72.dp))
-    }
   }
 }
 

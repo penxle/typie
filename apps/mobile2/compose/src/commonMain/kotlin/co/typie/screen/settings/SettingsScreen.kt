@@ -47,6 +47,8 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottomsheet.BottomSheetOptionList
+import co.typie.ui.component.bottomsheet.BottomSheetOptionRow
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -299,19 +301,12 @@ fun SettingsScreen() {
   )
 
   Screen(
+    scrollState = scrollState,
     loading = subscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
     val hasSubscription = subscriptionService.hasSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot())
-
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
       Text(
         "설정",
         style = AppTheme.typography.display,
@@ -377,7 +372,6 @@ fun SettingsScreen() {
       }
 
       Spacer(Modifier.size(72.dp))
-    }
   }
 
   if (showLogoutConfirm) {
@@ -550,7 +544,7 @@ private fun BottomSheetScope<Unit>.SettingsThemeSheet(
   onThemeModeChange: (ThemeMode) -> Unit,
 ) {
   BottomSheetScaffold(title = "테마") {
-    settingsThemeSelectionItems(themeMode).forEach { item ->
+    BottomSheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
       SettingsThemeSheetOption(
         item = item,
         onClick = {
@@ -567,13 +561,11 @@ private fun SettingsThemeSheetOption(
   item: SettingsThemeSelectionItem,
   onClick: suspend () -> Unit,
 ) {
-  InteractionScope {
+  BottomSheetOptionRow(
+    selected = item.selected,
+    onClick = onClick,
+  ) {
     Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clickable(onClick)
-        .padding(vertical = 12.dp)
-        .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -590,15 +582,6 @@ private fun SettingsThemeSheetOption(
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
-      if (item.selected) {
-        Icon(
-          icon = Lucide.Check,
-          modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.brand,
-        )
-      } else {
-        Spacer(Modifier.size(16.dp))
-      }
     }
   }
 }

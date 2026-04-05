@@ -1,11 +1,14 @@
 package co.typie.screen.home
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,11 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.datetime.timeAgo
 import co.typie.ext.InteractionScope
@@ -40,32 +43,37 @@ import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.graphql.HomeScreen_Query
 import co.typie.graphql.QueryState
+import co.typie.graphql.type.DocumentType
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.navigation.PlatformBackHandler
 import co.typie.route.Route
 import co.typie.shell.LocalBottomBarState
+import co.typie.ui.component.DocumentThumbnailPreview
 import co.typie.ui.component.EntityPreview
 import co.typie.ui.component.ErrorDialog
-import co.typie.ui.component.Img
+import co.typie.ui.component.ResponsiveContainer
+import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
+import co.typie.ui.component.resolveResponsiveContainerMetrics
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
-import kotlin.math.roundToInt
 
 @Composable
 fun HomeScreen() {
   val model = koinViewModel<HomeViewModel>()
   val searchModel = koinViewModel<SearchViewModel>()
   val scrollState = rememberScrollState()
+  val searchScrollState = rememberScrollState("home-search")
   val bottomBarState = LocalBottomBarState.current
 
   LaunchedEffect(model.searching) {
@@ -73,107 +81,152 @@ fun HomeScreen() {
   }
 
   ProvideTopBar(
-    leadingKey = SpacePopoverLeadingKey,
-    leading = { SpacePopover() },
-    center = { Text("홈", style = AppTheme.typography.title) },
-    scrollOffset = scrollState.topBarScrollOffset(),
-    custom = if (model.searching) {
-      {
-        SearchTopBar(
-          query = searchModel.query,
-          onQueryChange = { searchModel.updateQuery(it) },
-          onSubmit = { searchModel.submitQuery() },
-          onCancel = {
-            model.searching = false
-          },
-        )
-      }
-    } else null,
-    customKey = SearchTopBarKey,
+    leadingKey = if (model.searching) SearchTopBarKey else SpacePopoverLeadingKey,
+    leading = if (model.searching) {
+      { TopBarBackButton(onClick = { model.exitSearch() }) }
+    } else {
+      { SpacePopover() }
+    },
+    center = if (model.searching) null else { { Text("홈", style = AppTheme.typography.title) } },
+    scrollOffset = if (model.searching) null else scrollState.topBarScrollOffset(),
   )
 
   PlatformBackHandler(enabled = model.searching) {
-    model.searching = false
+    model.exitSearch()
   }
 
   if (model.query.state is QueryState.Error) {
     ErrorDialog { model.query.refetch() }
   }
 
-  Screen(
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    contentPadding = PaddingValues(0.dp)
-  ) { contentPadding ->
-    Crossfade(targetState = model.searching) { isSearching ->
-      if (isSearching) {
-        SearchContent(
-          searchViewModel = searchModel,
-          contentPadding = contentPadding,
-        )
-      } else {
-        Column(
-          Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(contentPadding)
-            .navigationBarsPadding()
-        ) {
-          Skeleton.Keep {
-            Text(
-              "홈",
-              style = AppTheme.typography.display,
-              modifier = Modifier.padding(horizontal = 16.dp)
+  Crossfade(
+    targetState = model.searching,
+    animationSpec = tween(200),
+    modifier = Modifier.fillMaxSize(),
+  ) { isSearching ->
+    Screen(
+      loading = model.query.state !is QueryState.Success,
+      background = AppTheme.colors.surfaceBase,
+      responsive = isSearching,
+      contentPadding = PaddingValues(0.dp),
+      primaryScrollableState = if (isSearching) searchScrollState else scrollState,
+      body = { contentPadding ->
+        if (isSearching) {
+          Column(
+            Modifier
+              .fillMaxSize()
+              .padding(contentPadding)
+          ) {
+            SearchHeader(
+              animateOnEnter = model.shouldAnimateSearchHeader,
+              query = searchModel.query,
+              onQueryChange = { searchModel.updateQuery(it) },
+              onSubmit = { searchModel.submitQuery() },
+              onEnterAnimationConsumed = { model.onSearchHeaderAnimationConsumed() },
             )
 
-            SearchBar(onClick = {
-              searchModel.reset()
-              model.searching = true
-            })
+            SearchContent(
+              modifier = Modifier.weight(1f),
+              searchViewModel = searchModel,
+              contentPadding = PaddingValues(0.dp),
+              scrollState = searchScrollState,
+            )
           }
+        } else {
+          Column(
+            Modifier
+              .fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(contentPadding)
+              .navigationBarsPadding()
+          ) {
+            HomeFramedSection {
+              Skeleton.Keep {
+                Text(
+                  "홈",
+                  style = AppTheme.typography.display,
+                  modifier = Modifier.padding(horizontal = 16.dp)
+                )
 
-          RecentDocuments(data = model.query.data)
+                SearchBar(onClick = {
+                  searchModel.reset()
+                  model.enterSearch()
+                })
+              }
+            }
 
-          RecentFolders(data = model.query.data)
+            RecentDocuments(data = model.query.data)
 
-          MoreDocuments(data = model.query.data)
+            RecentFolders(data = model.query.data)
 
-          Spacer(Modifier.height(140.dp))
+            HomeFramedSection {
+              MoreDocuments(data = model.query.data)
+            }
+
+            Spacer(Modifier.height(140.dp))
+          }
         }
-      }
+      },
+    )
+  }
+}
+
+@Composable
+private fun HomeFramedSection(content: @Composable ColumnScope.() -> Unit) {
+  ResponsiveContainer(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+      content()
+    }
+  }
+}
+
+@Composable
+private fun HomeFullBleedRail(
+  scrollState: androidx.compose.foundation.ScrollState,
+  itemSpacing: Dp = 16.dp,
+  content: @Composable () -> Unit,
+) {
+  BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val metrics = resolveResponsiveContainerMetrics(
+      screenWidth = maxWidth.value,
+      maxWidth = ResponsiveContainerDefaults.MaxWidth.value,
+      breakpoint = ResponsiveContainerDefaults.Breakpoint.value,
+    )
+    val edgePadding = metrics.gutterWidth.dp + 16.dp
+
+    Row(
+      modifier = Modifier
+        .horizontalScroll(scrollState)
+        .padding(start = edgePadding, end = edgePadding),
+      horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+    ) {
+      content()
     }
   }
 }
 
 @Composable
 private fun SearchBar(onClick: () -> Unit) {
-  Box(
+  HomeSearchFieldFrame(
     modifier = Modifier
       .padding(horizontal = 16.dp)
       .padding(top = 12.dp, bottom = 4.dp)
-      .fillMaxWidth()
-      .height(44.dp)
-      .clip(RoundedCornerShape(10.dp))
-      .background(AppTheme.colors.surfaceDefault)
-      .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp),
-    contentAlignment = Alignment.CenterStart,
+      .fillMaxWidth(),
+    onClick = onClick,
   ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Icon(
-        icon = Lucide.Search,
-        modifier = Modifier.size(16.dp),
-        tint = AppTheme.colors.textMuted,
-      )
+    Icon(
+      icon = Lucide.Search,
+      modifier = Modifier.size(HomeSearchFieldDefaults.IconSize),
+      tint = AppTheme.colors.textMuted,
+    )
 
-      Spacer(Modifier.width(10.dp))
+    Spacer(Modifier.width(HomeSearchFieldDefaults.IconGap))
 
-      Text(
-        "문서 검색...",
-        style = AppTheme.typography.action,
-        color = AppTheme.colors.textMuted,
-      )
-    }
+    Text(
+      "문서 검색...",
+      style = AppTheme.typography.body,
+      color = AppTheme.colors.textMuted,
+    )
   }
 }
 
@@ -183,38 +236,39 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
   val documents = data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument }.take(5)
 
   Column {
-    Skeleton.Keep {
-      Text(
-        "자주 찾은 글",
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
-        modifier = Modifier.padding(horizontal = 16.dp).padding(top = 24.dp, bottom = 12.dp),
-      )
+    HomeFramedSection {
+      Skeleton.Keep {
+        Text(
+          "자주 찾은 글",
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textTertiary,
+          modifier = Modifier.padding(horizontal = 16.dp).padding(top = 24.dp, bottom = 12.dp),
+        )
+      }
     }
 
     if (documents.isEmpty()) {
-      Box(
-        modifier = Modifier
-          .padding(horizontal = 16.dp)
-          .fillMaxWidth()
-          .height(110.dp)
-          .clip(RoundedCornerShape(12.dp))
-          .background(AppTheme.colors.surfaceDefault),
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(
-          "자주 찾은 글이 여기 나타나요",
-          style = AppTheme.typography.action,
-          color = AppTheme.colors.textTertiary,
-        )
+      HomeFramedSection {
+        Box(
+          modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .height(110.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppTheme.colors.surfaceDefault),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(
+            "자주 찾은 글이 여기 나타나요",
+            style = AppTheme.typography.action,
+            color = AppTheme.colors.textTertiary,
+          )
+        }
       }
     } else {
       val scrollState = rememberScrollState("recent-documents")
 
-      Row(
-        modifier = Modifier.horizontalScroll(scrollState).padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
+      HomeFullBleedRail(scrollState = scrollState) {
         for (document in documents) {
           InteractionScope {
             Row(
@@ -254,38 +308,39 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
   val folders = data.me.recentlyViewedEntities.mapNotNull { it.node.onFolder }
 
   Column {
-    Skeleton.Keep {
-      Text(
-        "최근 폴더",
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
-        modifier = Modifier.padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 12.dp),
-      )
+    HomeFramedSection {
+      Skeleton.Keep {
+        Text(
+          "최근 폴더",
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textTertiary,
+          modifier = Modifier.padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 12.dp),
+        )
+      }
     }
 
     if (folders.isEmpty()) {
-      Box(
-        modifier = Modifier
-          .padding(horizontal = 16.dp)
-          .fillMaxWidth()
-          .height(110.dp)
-          .clip(RoundedCornerShape(12.dp))
-          .background(AppTheme.colors.surfaceDefault),
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(
-          "최근 사용한 폴더가 여기 나타나요",
-          style = AppTheme.typography.action,
-          color = AppTheme.colors.textTertiary,
-        )
+      HomeFramedSection {
+        Box(
+          modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .height(110.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppTheme.colors.surfaceDefault),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(
+            "최근 사용한 폴더가 여기 나타나요",
+            style = AppTheme.typography.action,
+            color = AppTheme.colors.textTertiary,
+          )
+        }
       }
     } else {
       val scrollState = rememberScrollState("recent-folders")
 
-      Row(
-        modifier = Modifier.horizontalScroll(scrollState).padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
+      HomeFullBleedRail(scrollState = scrollState) {
         for (folder in folders) {
           InteractionScope {
             Column(
@@ -386,10 +441,9 @@ private fun MoreDocuments(data: HomeScreen_Query.Data) {
               verticalAlignment = Alignment.CenterVertically,
             ) {
               val shadowColor = AppTheme.colors.shadowAmbient
-              val density = LocalDensity.current
 
-              Img(
-                url = "${document.previewUrl}&w=${(35 * density.density).roundToInt()}&theme=${AppTheme.themeMode.name.lowercase()}",
+              DocumentThumbnailPreview(
+                url = document.previewUrl,
                 modifier = Modifier
                   .width(35.dp)
                   .height(49.dp)
@@ -407,6 +461,16 @@ private fun MoreDocuments(data: HomeScreen_Query.Data) {
 
               Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                  if (document.type == DocumentType.TEMPLATE) {
+                    Icon(
+                      icon = Lucide.LayoutTemplate,
+                      modifier = Modifier.size(14.dp),
+                      tint = AppTheme.colors.textPrimary,
+                    )
+
+                    Spacer(Modifier.width(4.dp))
+                  }
+
                   Text(
                     document.title,
                     style = AppTheme.typography.label,

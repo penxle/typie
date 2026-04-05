@@ -17,6 +17,7 @@ enum class SubscriptionDevScenario(
 ) {
   RemoteData("실제 구독 상태 사용"),
   NoSubscription("없음"),
+  TrialExpired("무료 체험 종료"),
   Trial("무료 체험 중"),
   Monthly("월간 이용 중"),
   Yearly("연간 이용 중"),
@@ -83,6 +84,7 @@ fun subscriptionDevSubscription(
   return when (scenario) {
     SubscriptionDevScenario.RemoteData -> null
     SubscriptionDevScenario.NoSubscription -> null
+    SubscriptionDevScenario.TrialExpired -> null
     SubscriptionDevScenario.Trial -> SubscriptionSnapshot(
       id = "subscription-trial",
       state = SubscriptionState.Active,

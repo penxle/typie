@@ -103,17 +103,11 @@ fun ProfileSettingsScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
       Text(
         "프로필",
         style = AppTheme.typography.display,
@@ -210,7 +204,6 @@ fun ProfileSettingsScreen() {
       }
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 
   marketingConsentModalMessage?.let { message ->

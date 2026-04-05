@@ -1,6 +1,7 @@
 package co.typie.ui.component
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -12,7 +13,11 @@ import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
 @Composable
-fun EntityPreview(url: String, modifier: Modifier = Modifier, placeholderColor: Color? = null) {
+fun EntityPreview(
+  url: String,
+  modifier: Modifier = Modifier,
+  placeholderColor: Color? = null,
+) {
   val density = LocalDensity.current
   val theme = AppTheme.themeMode.name.lowercase()
 
@@ -24,6 +29,26 @@ fun EntityPreview(url: String, modifier: Modifier = Modifier, placeholderColor: 
       modifier = Modifier
         .fillMaxWidth()
         .height(constraints.maxWidth.toDp(density) * 4 / 3),
+      placeholderColor = placeholderColor,
+    )
+  }
+}
+
+@Composable
+fun DocumentThumbnailPreview(
+  url: String,
+  modifier: Modifier = Modifier,
+  placeholderColor: Color? = null,
+) {
+  val density = LocalDensity.current
+  val theme = AppTheme.themeMode.name.lowercase()
+
+  BoxWithConstraints(modifier = modifier) {
+    val width = (constraints.maxWidth * density.density).roundToInt()
+
+    Img(
+      url = "${url}&w=$width&theme=$theme",
+      modifier = Modifier.fillMaxSize(),
       placeholderColor = placeholderColor,
     )
   }

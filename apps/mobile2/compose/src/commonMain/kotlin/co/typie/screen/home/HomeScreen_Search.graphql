@@ -8,6 +8,7 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
           id
           title
           type
+          previewUrl
           updatedAt
           entity {
             id

@@ -58,7 +58,7 @@ fun LoginScreen() {
     enabled = false
   )
 
-  Screen { contentPadding ->
+  Screen(body = { contentPadding ->
     Column(
       modifier = Modifier
         .fillMaxSize()
@@ -95,7 +95,7 @@ fun LoginScreen() {
         )
       }
     }
-  }
+  })
 }
 
 private enum class LoginStep { SingleSignOn, Email }

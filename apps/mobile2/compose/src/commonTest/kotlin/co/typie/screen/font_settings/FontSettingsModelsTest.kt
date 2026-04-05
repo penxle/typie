@@ -86,9 +86,9 @@ class FontSettingsModelsTest {
   }
 
   @Test
-  fun `fontUploadAction returns direct upload only for subscribed users`() {
+  fun `fontUploadAction returns plan upgrade sheet for unsubscribed users`() {
     assertEquals(FontUploadAction.PickFont, fontUploadAction(hasSubscription = true))
-    assertEquals(FontUploadAction.ShowSubscriptionNotice, fontUploadAction(hasSubscription = false))
+    assertEquals(FontUploadAction.ShowPlanUpgradeSheet, fontUploadAction(hasSubscription = false))
   }
 
   @Test

@@ -111,7 +111,14 @@ fun PopoverScope.PopoverList(
 
   // Scope pointer tracking (drag from anchor)
   val currentPointerState = pointerState
-  LaunchedEffect(currentPointerState) {
+  val inputEnabled = acceptsInput
+  LaunchedEffect(currentPointerState, inputEnabled) {
+    if (!inputEnabled) {
+      edgeAutoScrollState?.stop()
+      activeIndex = null
+      return@LaunchedEffect
+    }
+
     if (isLocalTracking) {
       return@LaunchedEffect
     }
@@ -174,10 +181,15 @@ fun PopoverScope.PopoverList(
                 pos.x + size.width, pos.y + size.height,
               )
             }
-            .pointerInput(index) {
+            .pointerInput(index, inputEnabled) {
               awaitPointerEventScope {
                 while (true) {
                   val event = awaitPointerEvent()
+                  if (!inputEnabled) {
+                    event.changes.forEach { it.consume() }
+                    continue
+                  }
+
                   when (event.type) {
                     PointerEventType.Press -> {
                       val press = event.changes.firstOrNull() ?: continue

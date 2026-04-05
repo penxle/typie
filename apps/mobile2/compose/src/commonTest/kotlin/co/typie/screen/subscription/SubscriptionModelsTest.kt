@@ -1,11 +1,11 @@
 package co.typie.screen.subscription
 
 import co.typie.di.Platform
+import co.typie.platform.PurchasePlanInterval
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
-import co.typie.platform.PurchasePlanInterval
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

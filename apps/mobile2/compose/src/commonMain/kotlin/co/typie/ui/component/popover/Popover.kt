@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
@@ -88,8 +89,11 @@ class PopoverScope internal constructor(
 ) {
   var pointerState: AnchorPointerState? by mutableStateOf(null)
     internal set
+  var acceptsInput: Boolean by mutableStateOf(true)
+    internal set
 
   fun close() {
+    acceptsInput = false
     onClose()
   }
 }
@@ -147,6 +151,7 @@ fun Popover(
 
   LaunchedEffect(isExpanded) {
     if (isExpanded) {
+      scope.acceptsInput = true
       isOverlayVisible = true
       animationProgress.stop()
       animationProgress.snapTo(0f)
@@ -168,8 +173,8 @@ fun Popover(
     }
   }
 
-  DisposableEffect(outsideTapHostState, isOverlayVisible) {
-    if (outsideTapHostState == null || !isOverlayVisible) {
+  DisposableEffect(outsideTapHostState, isExpanded) {
+    if (outsideTapHostState == null || !isExpanded) {
       outsideTapHostHandle = null
       onDispose {}
     } else {
@@ -185,10 +190,12 @@ fun Popover(
   }
 
   SideEffect {
-    outsideTapHostHandle?.update(
-      paneBounds = paneBoundsInWindow,
-      onDismiss = dismissPopover,
-    )
+    if (isExpanded) {
+      outsideTapHostHandle?.update(
+        paneBounds = paneBoundsInWindow,
+        onDismiss = dismissPopover,
+      )
+    }
   }
 
   PlatformBackHandler(enabled = isOverlayVisible) {
@@ -292,6 +299,7 @@ fun Popover(
             anchorBounds = anchorBounds,
             placement = placement,
             progress = progress,
+            interactive = scope.acceptsInput,
             collapsedCornerRadius = collapsedCornerRadius,
             screenPadding = resolvedScreenPadding,
             maxWidth = maxWidth,
@@ -309,6 +317,7 @@ private fun PopoverPanePopup(
   anchorBounds: IntRect,
   placement: PopoverPlacement,
   progress: Float,
+  interactive: Boolean,
   collapsedCornerRadius: Dp,
   screenPadding: PopoverScreenPadding,
   maxWidth: Dp?,
@@ -378,6 +387,7 @@ private fun PopoverPanePopup(
           anchorSize = anchorSize,
           resolvedPlacement = resolvedPlacement,
           progress = progress,
+          interactive = interactive,
           collapsedCornerRadius = collapsedCornerRadius,
         )
       }
@@ -417,6 +427,7 @@ private fun PopoverPaneSurface(
   anchorSize: IntSize,
   resolvedPlacement: PopoverPlacement,
   progress: Float,
+  interactive: Boolean,
   collapsedCornerRadius: Dp,
 ) {
   val density = LocalDensity.current
@@ -454,7 +465,21 @@ private fun PopoverPaneSurface(
         )
         .shadow(shadowElevation, shape)
         .clip(shape)
-        .background(AppTheme.colors.surfaceRaised, shape),
+        .background(AppTheme.colors.surfaceRaised, shape)
+        .then(
+          if (interactive) {
+            Modifier
+          } else {
+            Modifier.pointerInput(Unit) {
+              awaitPointerEventScope {
+                while (true) {
+                  val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                  event.changes.forEach { it.consume() }
+                }
+              }
+            }
+          }
+        ),
     ) {
       PopoverCropLayout(
         pane = {

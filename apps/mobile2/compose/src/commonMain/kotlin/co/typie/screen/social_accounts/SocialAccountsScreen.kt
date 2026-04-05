@@ -66,17 +66,11 @@ fun SocialAccountsScreen() {
   }
 
   Screen(
+    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-  ) { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    verticalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
       Spacer(Modifier.height(4.dp))
 
       SectionTitle("연결된 계정")
@@ -103,7 +97,6 @@ fun SocialAccountsScreen() {
       }
 
       Spacer(Modifier.height(72.dp))
-    }
   }
 }
 

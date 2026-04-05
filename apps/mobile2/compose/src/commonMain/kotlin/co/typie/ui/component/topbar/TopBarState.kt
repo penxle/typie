@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import co.typie.navigation.LocalRoute
@@ -75,34 +76,75 @@ class TopBarState {
 
 val LocalTopBarState = staticCompositionLocalOf<TopBarState?> { null }
 
+internal fun needsImplicitRouteKey(
+  enabled: Boolean,
+  center: (@Composable () -> Unit)?,
+  centerKey: Any?,
+  trailing: (@Composable () -> Unit)?,
+  trailingKey: Any?,
+  custom: (@Composable () -> Unit)?,
+  customKey: Any?,
+): Boolean {
+  if (!enabled) return false
+
+  return (center != null && centerKey == null) ||
+    (trailing != null && trailingKey == null) ||
+    (custom != null && customKey == null)
+}
+
+internal fun resolveTopBarEntryKey(
+  explicitKey: Any?,
+  routeKey: Any?,
+  fallbackKey: Any,
+): Any {
+  return explicitKey ?: routeKey ?: fallbackKey
+}
+
 @Composable
 fun ProvideTopBar(
   enabled: Boolean = true,
   leading: (@Composable () -> Unit)? = { TopBarBackButton() },
   leadingKey: Any = TopBarState.DefaultLeadingKey,
   center: (@Composable () -> Unit)? = null,
-  centerKey: Any = LocalRoute.current,
+  centerKey: Any? = null,
   trailing: (@Composable () -> Unit)? = null,
-  trailingKey: Any = LocalRoute.current,
+  trailingKey: Any? = null,
   scrollOffset: (() -> Int)? = null,
   visible: Boolean = true,
   custom: (@Composable () -> Unit)? = null,
-  customKey: Any = LocalRoute.current,
+  customKey: Any? = null,
 ) {
   val state = LocalTopBarState.current ?: return
+  val fallbackEntryKey = remember { Any() }
+
   state.enabled = enabled
   if (enabled) {
+    val routeKey = if (needsImplicitRouteKey(enabled, center, centerKey, trailing, trailingKey, custom, customKey)) {
+      LocalRoute.current
+    } else {
+      null
+    }
+
     state.setLeading(if (leading != null) leadingKey else TopBarState.NullKey, leading)
-    state.setCenter(if (center != null) centerKey else TopBarState.NullKey, center)
-    state.setTrailing(if (trailing != null) trailingKey else TopBarState.NullKey, trailing)
+    state.setCenter(
+      if (center != null) resolveTopBarEntryKey(centerKey, routeKey, fallbackEntryKey) else TopBarState.NullKey,
+      center,
+    )
+    state.setTrailing(
+      if (trailing != null) resolveTopBarEntryKey(trailingKey, routeKey, fallbackEntryKey) else TopBarState.NullKey,
+      trailing,
+    )
     state.scrollOffset = scrollOffset
     state.visible = visible
-    state.setCustom(customKey, custom)
+    state.setCustom(
+      resolveTopBarEntryKey(customKey, routeKey, fallbackEntryKey),
+      custom,
+    )
   } else {
     state.setLeading(TopBarState.NullKey, null)
     state.setCenter(TopBarState.NullKey, null)
     state.setTrailing(TopBarState.NullKey, null)
     state.scrollOffset = null
-    state.setCustom(customKey, null)
+    state.setCustom(TopBarState.NullKey, null)
   }
 }

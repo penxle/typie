@@ -7,6 +7,8 @@ import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
@@ -85,6 +87,24 @@ actual fun Modifier.overscroll(): Modifier = composed {
   elasticOverscroll(ElasticAxis.Vertical, overscrollState)
 }
 
+actual fun Modifier.dragScrollable(
+  state: ScrollableState,
+  orientation: Orientation,
+  enabled: Boolean,
+): Modifier = composed {
+  val isLocked = LocalScrollGestureLockState.current.isLocked
+  if (!enabled || isLocked) {
+    return@composed this
+  }
+
+  Modifier.dragScroll(
+    state = state,
+    axis = orientation.toElasticAxis(),
+    overscrollState = null,
+    invertFlingVelocity = true,
+  )
+}
+
 private enum class ElasticAxis {
   Horizontal,
   Vertical,
@@ -128,9 +148,10 @@ private class ElasticOverscrollState {
 private fun rememberElasticOverscrollState(): ElasticOverscrollState = remember { ElasticOverscrollState() }
 
 private fun Modifier.dragScroll(
-  state: ScrollState,
+  state: ScrollableState,
   axis: ElasticAxis,
-  overscrollState: ElasticOverscrollState,
+  overscrollState: ElasticOverscrollState?,
+  invertFlingVelocity: Boolean = false,
 ): Modifier = composed {
   val scope = rememberCoroutineScope()
   val decay = remember { exponentialDecay<Float>() }
@@ -163,10 +184,10 @@ private fun Modifier.dragScroll(
             val velocity = when (axis) {
               ElasticAxis.Horizontal -> velocityTracker.calculateVelocity().x
               ElasticAxis.Vertical -> velocityTracker.calculateVelocity().y
-            } * FLING_VELOCITY_MULTIPLIER
+            } * FLING_VELOCITY_MULTIPLIER * if (invertFlingVelocity) -1f else 1f
 
             scope.launch {
-              if (abs(overscrollState.offset) > 0.5f) {
+              if (overscrollState != null && abs(overscrollState.offset) > 0.5f) {
                 overscrollState.release()
               } else if (abs(velocity) > 0.5f) {
                 var previousValue = 0f
@@ -177,26 +198,26 @@ private fun Modifier.dragScroll(
                   ).animateDecay(decay) {
                     val scrollDelta = value - previousValue
                     previousValue = value
-                    val preConsumed = overscrollState.consumePre(scrollDelta)
+                    val preConsumed = overscrollState?.consumePre(scrollDelta) ?: 0f
                     val remaining = scrollDelta - preConsumed
                     if (remaining != 0f) {
                       val consumed = state.dispatchRawDelta(remaining)
                       val unconsumed = remaining - consumed
-                      overscrollState.applyUnconsumed(unconsumed)
+                      overscrollState?.applyUnconsumed(unconsumed)
                       if (abs(unconsumed) > 0.5f) {
                         cancelAnimation()
                       }
                     }
                   }
                 } finally {
-                  overscrollState.release()
+                  overscrollState?.release()
                 }
               } else {
-                overscrollState.release()
+                overscrollState?.release()
               }
             }
           } else {
-            scope.launch { overscrollState.release() }
+            scope.launch { overscrollState?.release() }
           }
           break
         }
@@ -222,15 +243,20 @@ private fun Modifier.dragScroll(
 
         change.consume()
         val scrollDelta = -delta
-        val preConsumed = overscrollState.consumePre(scrollDelta)
+        val preConsumed = overscrollState?.consumePre(scrollDelta) ?: 0f
         val remaining = scrollDelta - preConsumed
         if (remaining != 0f) {
           val consumed = state.dispatchRawDelta(remaining)
-          overscrollState.applyUnconsumed(remaining - consumed)
+          overscrollState?.applyUnconsumed(remaining - consumed)
         }
       }
     }
   }
+}
+
+private fun Orientation.toElasticAxis(): ElasticAxis = when (this) {
+  Orientation.Horizontal -> ElasticAxis.Horizontal
+  Orientation.Vertical -> ElasticAxis.Vertical
 }
 
 private fun ElasticAxis.extract(offset: Offset): Float = when (this) {

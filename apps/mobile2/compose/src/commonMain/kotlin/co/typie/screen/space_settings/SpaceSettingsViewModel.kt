@@ -31,6 +31,8 @@ import co.typie.graphql.type.buildUser
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.PlatformFile
+import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.service.SiteService
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.api.CacheKey
@@ -84,6 +86,7 @@ class SpaceSettingsViewModel(
   val siteService: SiteService,
   private val blobService: BlobService,
   private val toast: Toast,
+  private val subscriptionService: SubscriptionService,
 ) : GraphQLViewModel() {
   val state = SpaceSettingsScreenState(viewModelScope)
 
@@ -148,14 +151,19 @@ class SpaceSettingsViewModel(
           ),
         )
 
-        executeMutation(
-          SpaceSettingsScreen_UpdateSiteSlug_Mutation(
-            input = UpdateSiteSlugInput(
-              siteId = siteService.siteId,
-              slug = state.form.slug.value.trim().lowercase(),
+        if (
+          subscriptionService.hasSubscription(query.data.me.subscription?.toSubscriptionSnapshot()) &&
+          state.form.slug.isDirty
+        ) {
+          executeMutation(
+            SpaceSettingsScreen_UpdateSiteSlug_Mutation(
+              input = UpdateSiteSlugInput(
+                siteId = siteService.siteId,
+                slug = state.form.slug.value.trim().lowercase(),
+              ),
             ),
-          ),
-        )
+          )
+        }
 
         toast.show(ToastType.Success, "스페이스 설정이 변경되었어요.")
         state.form.commit()
