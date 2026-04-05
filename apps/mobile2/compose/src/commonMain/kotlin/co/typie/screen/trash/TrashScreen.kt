@@ -30,6 +30,7 @@ import co.typie.graphql.TrashScreen_PurgeEntities_Mutation
 import co.typie.graphql.TrashScreen_RecoverEntity_Mutation
 import co.typie.graphql.TrashScreen_WithEntityId_Query
 import co.typie.graphql.TrashScreen_WithSiteId_Query
+import co.typie.graphql.type.EntityState
 import co.typie.graphql.type.PurgeEntitiesInput
 import co.typie.graphql.type.RecoverEntityInput
 import co.typie.icons.Lucide
@@ -199,10 +200,18 @@ fun TrashScreen(entityId: String? = null) {
 
   LaunchedEffect(entityId) {
     model.entityId = entityId
+    model.refetch()
   }
 
   val queryState = if (entityId == null) model.siteQuery.state else model.entityQuery.state
   val content = trashContent(queryState = queryState)
+
+  LaunchedEffect(queryState, entityId) {
+    val data = (queryState as? QueryState.Success<*>)?.data as? TrashScreen_WithEntityId_Query.Data ?: return@LaunchedEffect
+    if (entityId != null && data.entity.state != EntityState.DELETED) {
+      nav.pop()
+    }
+  }
 
   val topBarActions = if (queryState is QueryState.Success) {
     buildList {
@@ -339,7 +348,11 @@ fun TrashScreen(entityId: String? = null) {
                           TrashActionItem(
                             label = "복원",
                             icon = Lucide.Undo2,
-                            onClick = { model.recoverEntity(item) },
+                            onClick = {
+                              if (model.recoverEntity(item)) {
+                                model.refetch()
+                              }
+                            },
                           ),
                           TrashActionItem(
                             label = "영구 삭제",
@@ -382,8 +395,12 @@ fun TrashScreen(entityId: String? = null) {
         if (request != null) {
           purgeRequest = null
           screenScope.launch {
-            if (model.purgeEntities(request.entityIds, request.successMessage) && request.shouldPop) {
-              nav.pop()
+            if (model.purgeEntities(request.entityIds, request.successMessage)) {
+              if (request.shouldPop) {
+                nav.pop()
+              } else {
+                model.refetch()
+              }
             }
           }
         }

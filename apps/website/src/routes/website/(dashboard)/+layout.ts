@@ -32,7 +32,6 @@ export const load: LayoutLoad = async (event) => {
             name
 
             ...DashboardLayout_SiteSettingsModal_site
-            ...DashboardLayout_TrashModal_site
           }
 
           referral {

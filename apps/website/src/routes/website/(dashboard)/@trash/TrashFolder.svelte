@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { createFragment, createMutation } from '@mearie/svelte';
+  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css, cx } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { tooltip } from '@typie/ui/actions';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, RingSpinner } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
@@ -13,14 +13,14 @@
   import Undo2Icon from '~icons/lucide/undo-2';
   import { graphql } from '$mearie';
   import TrashEntity from './TrashEntity.svelte';
-  import type { DashboardLayout_TrashTree_TrashFolder_entity$key, DashboardLayout_TrashTree_TrashFolder_folder$key } from '$mearie';
+  import type { DashboardLayout_TrashTree_TrashFolder_folder$key } from '$mearie';
 
   type Props = {
     folder$key: DashboardLayout_TrashTree_TrashFolder_folder$key;
-    entities$key: DashboardLayout_TrashTree_TrashFolder_entity$key[];
+    onChange?: () => void;
   };
 
-  let { folder$key, entities$key }: Props = $props();
+  let { folder$key, onChange }: Props = $props();
 
   const folder = createFragment(
     graphql(`
@@ -79,11 +79,6 @@
             }
           }
 
-          site {
-            id
-            ...DashboardLayout_TrashModal_site
-          }
-
           container {
             ... on Site {
               id
@@ -123,25 +118,38 @@
       mutation DashboardLayout_TrashTree_TrashFolder_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
         purgeEntities(input: $input) {
           id
-          ...DashboardLayout_TrashModal_site
         }
       }
     `),
   );
 
-  const entities = createFragment(
-    graphql(`
-      fragment DashboardLayout_TrashTree_TrashFolder_entity on Entity {
-        id
-
-        ...DashboardLayout_TrashTree_TrashEntity_entity
-      }
-    `),
-    () => entities$key,
-  );
-
   let detailsEl = $state<HTMLDetailsElement>();
   let open = $state(false);
+
+  const children = createQuery(
+    graphql(`
+      query DashboardLayout_TrashTree_TrashFolderChildren_Query($entityId: ID!) {
+        entity(entityId: $entityId) {
+          id
+
+          deletedChildren {
+            id
+            deletedAt
+            node {
+              __typename
+            }
+
+            ...DashboardLayout_TrashTree_TrashEntity_entity
+          }
+        }
+      }
+    `),
+    () => ({ entityId: folder.data.entity.id }),
+    () => ({ skip: !open }),
+  );
+
+  const childEntities = $derived(children.data?.entity?.deletedChildren ?? []);
+  const showLoading = $derived(children.loading && childEntities.length === 0);
 </script>
 
 <details
@@ -169,7 +177,7 @@
       }),
     )}
     aria-selected="false"
-    data-anchor={entities.data && entities.data.length > 0}
+    data-anchor={(children.data?.entity?.deletedChildren?.length ?? 0) > 0}
     onkeyup={(e) => {
       if (e.code === 'Space') {
         e.preventDefault();
@@ -194,23 +202,6 @@
       >
         {folder.data.name}
       </span>
-
-      {#if folder.data.entity.ancestors.length > 0}
-        <div class={css({ display: 'flex', alignItems: 'center', gap: '2px', minWidth: '0' })}>
-          {#each folder.data.entity.ancestors as ancestor, i (ancestor.id)}
-            {#if ancestor.node.__typename === 'Folder'}
-              {#if i > 0}
-                <Icon style={css.raw({ color: 'text.disabled', flexShrink: '0' })} icon={ChevronRightIcon} size={10} />
-              {/if}
-              <span
-                class={css({ fontSize: '12px', color: 'text.faint', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })}
-              >
-                {ancestor.node.name}
-              </span>
-            {/if}
-          {/each}
-        </div>
-      {/if}
     </div>
 
     <div
@@ -249,6 +240,7 @@
               .filter((segment) => segment.length > 0)
               .join(' › ');
 
+            onChange?.();
             mixpanel.track('recover_entity', { via: 'trash', type: 'folder' });
             Toast.success(`"${path}" 폴더를 복원했어요`);
           } catch {
@@ -277,6 +269,7 @@
             actionHandler: async () => {
               try {
                 await purgeEntities({ input: { entityIds: [folder.data.entity.id] } });
+                onChange?.();
                 mixpanel.track('purge_entity', { via: 'trash', type: 'folder' });
               } catch {
                 Toast.error('폴더 영구 삭제에 실패했어요');
@@ -293,12 +286,40 @@
   </summary>
 
   <div class={flex({ flexDirection: 'column', borderLeftWidth: '1px', marginLeft: '24px' })} aria-hidden={!open} role="tree">
-    {#each entities.data as entity (entity.id)}
-      <TrashEntity entity$key={entity} />
-    {:else}
-      <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
-        폴더가 비어있어요
+    {#if showLoading}
+      <div
+        class={css({
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '6px',
+          paddingX: '12px',
+          paddingY: '6px',
+          borderRadius: '8px',
+        })}
+      >
+        <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
+          <RingSpinner style={css.raw({ size: '14px', color: 'text.disabled' })} />
+          <span
+            class={css({
+              fontSize: '14px',
+              fontWeight: 'medium',
+              color: 'text.disabled',
+              lineClamp: '1',
+            })}
+          >
+            불러오는 중...
+          </span>
+        </div>
       </div>
-    {/each}
+    {:else}
+      {#each childEntities as entity (entity.id)}
+        <TrashEntity entity$key={entity} onChange={() => children.refetch()} />
+      {:else}
+        <div class={css({ paddingX: '8px', paddingY: '6px', fontSize: '14px', fontWeight: 'medium', color: 'text.disabled' })}>
+          폴더가 비어있어요
+        </div>
+      {/each}
+    {/if}
   </div>
 </details>

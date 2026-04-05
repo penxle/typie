@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createFragment, createMutation } from '@mearie/svelte';
+  import { createFragment, createMutation, createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Button, HorizontalDivider, Icon, Modal } from '@typie/ui/components';
@@ -9,45 +9,54 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$mearie';
   import TrashTree from './TrashTree.svelte';
-  import type { DashboardLayout_TrashModal_site$key } from '$mearie';
 
   type Props = {
-    site$key: DashboardLayout_TrashModal_site$key;
+    siteId: string;
   };
 
-  let { site$key }: Props = $props();
+  let { siteId }: Props = $props();
 
-  const site = createFragment(
-    graphql(`
-      fragment DashboardLayout_TrashModal_site on Site {
+  const app = getAppContext();
+
+  const siteFragment = graphql(`
+    fragment DashboardLayout_TrashModal_site on Site {
+      id
+      deletedEntities {
         id
-        deletedEntities {
+      }
+      ...DashboardLayout_TrashTree_site
+    }
+  `);
+
+  const query = createQuery(
+    graphql(`
+      query DashboardLayout_TrashModal_Query($siteId: ID!) {
+        site(siteId: $siteId) {
           id
+          ...DashboardLayout_TrashModal_site
         }
-        ...DashboardLayout_TrashTree_site
       }
     `),
-    () => site$key,
+    () => ({ siteId }),
+    () => ({ skip: !app.state.trashOpen }),
   );
+
+  const site = createFragment(siteFragment, () => query.data?.site);
 
   const [purgeEntities] = createMutation(
     graphql(`
       mutation DashboardLayout_TrashModal_PurgeEntities($input: PurgeEntitiesInput!) {
         purgeEntities(input: $input) {
           id
-
-          ...DashboardLayout_TrashModal_site
         }
       }
     `),
   );
 
-  const app = getAppContext();
-
-  const entityCount = $derived(site.data.deletedEntities.length);
+  const entityCount = $derived(site.data?.deletedEntities.length ?? 0);
 
   const handleEmptyTrash = async () => {
-    const entityIds = site.data.deletedEntities.map((entity) => entity.id);
+    const entityIds = site.data?.deletedEntities.map((entity) => entity.id) ?? [];
     if (entityIds.length === 0) {
       Toast.success('휴지통이 비어있어요');
       return;
@@ -61,6 +70,7 @@
       actionHandler: async () => {
         try {
           await purgeEntities({ input: { entityIds } });
+          await query.refetch();
           mixpanel.track('empty_trash', { via: 'trash', count: entityIds.length });
           Toast.success('휴지통을 비웠어요');
         } catch {
@@ -116,6 +126,12 @@
       maxHeight: '[60vh]',
     })}
   >
-    <TrashTree site$key={site.data} />
+    {#if site.data}
+      <TrashTree loading={query.loading} onChange={() => query.refetch()} site$key={site.data} />
+    {:else}
+      <div class={center({ height: 'full' })}>
+        <span class={css({ fontSize: '13px', color: 'text.disabled' })}>불러오는 중...</span>
+      </div>
+    {/if}
   </div>
 </Modal>

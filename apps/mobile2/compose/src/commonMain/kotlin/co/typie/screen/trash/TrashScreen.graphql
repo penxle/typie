@@ -34,6 +34,7 @@ query TrashScreen_WithSiteId_Query($siteId: ID!) {
 query TrashScreen_WithEntityId_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
     id
+    state
     site {
       id
       name

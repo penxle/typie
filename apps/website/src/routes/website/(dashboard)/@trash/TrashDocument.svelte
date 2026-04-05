@@ -6,7 +6,6 @@
   import { Icon } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import ChevronRightIcon from '~icons/lucide/chevron-right';
   import FileIcon from '~icons/lucide/file';
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
@@ -15,9 +14,10 @@
 
   type Props = {
     document$key: DashboardLayout_TrashTree_TrashDocument_document$key;
+    onChange?: () => void;
   };
 
-  let { document$key }: Props = $props();
+  let { document$key, onChange }: Props = $props();
 
   const document = createFragment(
     graphql(`
@@ -74,11 +74,6 @@
             }
           }
 
-          site {
-            id
-            ...DashboardLayout_TrashModal_site
-          }
-
           container {
             ... on Site {
               id
@@ -118,7 +113,6 @@
       mutation DashboardLayout_TrashTree_TrashDocument_PurgeEntities_Mutation($input: PurgeEntitiesInput!) {
         purgeEntities(input: $input) {
           id
-          ...DashboardLayout_TrashModal_site
         }
       }
     `),
@@ -159,23 +153,6 @@
     >
       {document.data.title}
     </span>
-
-    {#if document.data.entity.ancestors.length > 0}
-      <div class={css({ display: 'flex', alignItems: 'center', gap: '2px', minWidth: '0' })}>
-        {#each document.data.entity.ancestors as ancestor, i (ancestor.id)}
-          {#if ancestor.node.__typename === 'Folder'}
-            {#if i > 0}
-              <Icon style={css.raw({ color: 'text.disabled', flexShrink: '0' })} icon={ChevronRightIcon} size={10} />
-            {/if}
-            <span
-              class={css({ fontSize: '12px', color: 'text.faint', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })}
-            >
-              {ancestor.node.name}
-            </span>
-          {/if}
-        {/each}
-      </div>
-    {/if}
   </div>
 
   <div
@@ -215,6 +192,7 @@
             .filter((segment) => segment.length > 0)
             .join(' › ');
 
+          onChange?.();
           mixpanel.track('recover_entity', { via: 'trash', type: 'document' });
           Toast.success(`"${path}" 문서를 복원했어요`);
         } catch {
@@ -244,6 +222,7 @@
           actionHandler: async () => {
             try {
               await purgeEntities({ input: { entityIds: [document.data.entity.id] } });
+              onChange?.();
               mixpanel.track('purge_entity', { via: 'trash', type: 'document' });
               Toast.success('문서를 영구 삭제했어요');
             } catch {

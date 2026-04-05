@@ -2,7 +2,7 @@
   import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
-  import { Icon } from '@typie/ui/components';
+  import { Icon, RingSpinner } from '@typie/ui/components';
   import dayjs from 'dayjs';
   import Trash2Icon from '~icons/lucide/trash-2';
   import { graphql } from '$mearie';
@@ -11,9 +11,11 @@
 
   type Props = {
     site$key: DashboardLayout_TrashTree_site$key;
+    onChange?: () => void;
+    loading?: boolean;
   };
 
-  let { site$key }: Props = $props();
+  let { site$key, onChange, loading = false }: Props = $props();
 
   const site = createFragment(
     graphql(`
@@ -27,33 +29,6 @@
             __typename
           }
           ...DashboardLayout_TrashTree_TrashEntity_entity
-
-          deletedChildren {
-            id
-            deletedAt
-            node {
-              __typename
-            }
-            ...DashboardLayout_TrashTree_TrashEntity_entity
-
-            deletedChildren {
-              id
-              deletedAt
-              node {
-                __typename
-              }
-              ...DashboardLayout_TrashTree_TrashEntity_entity
-
-              deletedChildren {
-                id
-                deletedAt
-                node {
-                  __typename
-                }
-                ...DashboardLayout_TrashTree_TrashEntity_entity
-              }
-            }
-          }
         }
       }
     `),
@@ -89,6 +64,8 @@
 
     return groups;
   });
+
+  const showLoading = $derived(loading && site.data.deletedEntities.length === 0);
 </script>
 
 <div
@@ -100,7 +77,12 @@
   })}
   role="tree"
 >
-  {#if site.data.deletedEntities.length > 0}
+  {#if showLoading}
+    <div class={center({ flexGrow: '1', flexDirection: 'column', gap: '10px' })}>
+      <RingSpinner style={css.raw({ size: '24px', color: 'text.faint' })} />
+      <p class={css({ fontSize: '13px', color: 'text.disabled' })}>불러오는 중...</p>
+    </div>
+  {:else if site.data.deletedEntities.length > 0}
     <div
       class={flex({
         flexDirection: 'column',
@@ -129,7 +111,7 @@
 
           <div class={flex({ flexDirection: 'column', paddingX: '12px', paddingBottom: '8px' })}>
             {#each group.entities as entity (entity.id)}
-              <TrashEntity entity$key={entity} />
+              <TrashEntity entity$key={entity} {onChange} />
             {/each}
           </div>
         </div>

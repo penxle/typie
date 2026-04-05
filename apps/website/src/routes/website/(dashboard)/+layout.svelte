@@ -65,7 +65,6 @@
             id
 
             ...DashboardLayout_EntityTree_site
-            ...DashboardLayout_TrashModal_site
           }
 
           ... on Entity {
@@ -373,7 +372,7 @@
 <DocumentExportModal user$key={query.data.me} />
 <ShareModal />
 <StatsModal />
-<TrashModal site$key={currentSite} />
+<TrashModal siteId={currentSite.id} />
 <Shortcuts query$key={query.data} />
 <ShortcutsModal />
 
