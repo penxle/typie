@@ -367,14 +367,18 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
             Modifier::FontWeight { value } => Some(*value),
             _ => None,
         })
-        .expect("FontWeight must exist in effective modifiers");
+        .ok_or_else(|| {
+            CommandError::Corrupted("FontWeight missing in effective modifiers".into())
+        })?;
     let font_family = effective
         .iter()
         .find_map(|m| match m {
             Modifier::FontFamily { value } => Some(value.as_str()),
             _ => None,
         })
-        .expect("FontFamily must exist in effective modifiers");
+        .ok_or_else(|| {
+            CommandError::Corrupted("FontFamily missing in effective modifiers".into())
+        })?;
 
     let available = resource.font_registry.weights(font_family).unwrap_or(&[]);
     let inherited = resolve_inherited_modifiers(&node);
@@ -384,7 +388,9 @@ fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandRe
             Modifier::FontWeight { value } => Some(*value),
             _ => None,
         })
-        .unwrap();
+        .ok_or_else(|| {
+            CommandError::Corrupted("FontWeight missing in inherited modifiers".into())
+        })?;
     let is_bold = has_bold || current_weight >= 700;
 
     let mut pending: PendingModifiers = tr

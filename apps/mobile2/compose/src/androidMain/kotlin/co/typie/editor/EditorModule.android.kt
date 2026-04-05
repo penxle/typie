@@ -6,17 +6,16 @@ import co.typie.editor.ffi.JnaEditorHost
 import kotlinx.coroutines.runBlocking
 import org.koin.core.annotation.Module
 import org.koin.core.annotation.Single
-import uniffi.editor_ffi.EditorHost as NativeEditorHost
 
 @Module
 actual class EditorModule {
   @Single
   actual fun editorHost(ctx: PlatformContext): EditorHost {
-    val native = runBlocking { NativeEditorHost.create(null) }
+    val host = runBlocking { JnaEditorHost.create() }
 
     val icu = ctx.context.assets.open("icu.zst").readBytes()
-    native.loadIcuData(icu)
+    host.loadIcuData(icu)
 
-    return JnaEditorHost(native)
+    return host
   }
 }

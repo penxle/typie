@@ -1,4 +1,4 @@
-use editor_renderer::GpuDevice;
+use editor_renderer::{BackendKind, GpuDevice};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -8,10 +8,10 @@ pub enum BackendMode {
 }
 
 impl BackendMode {
-    pub fn kind(&self) -> editor_renderer::BackendKind {
+    pub fn kind(&self) -> BackendKind {
         match self {
-            Self::Cpu => editor_renderer::BackendKind::Cpu,
-            Self::Gpu { .. } => editor_renderer::BackendKind::Gpu,
+            Self::Cpu => BackendKind::Cpu,
+            Self::Gpu { .. } => BackendKind::Gpu,
         }
     }
 }

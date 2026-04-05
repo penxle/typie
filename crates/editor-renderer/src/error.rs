@@ -11,4 +11,7 @@ pub enum RendererError {
 
     #[error("surface error: {0}")]
     Surface(#[from] wgpu::SurfaceError),
+
+    #[error("GPU does not support required capabilities")]
+    UnsupportedGpu,
 }

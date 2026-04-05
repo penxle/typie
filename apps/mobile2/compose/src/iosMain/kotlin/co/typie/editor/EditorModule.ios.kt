@@ -1,46 +1,36 @@
+@file:OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+
 package co.typie.editor
 
 import co.typie.di.PlatformContext
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.IosEditorHost
-import kotlinx.cinterop.ObjCObjectVar
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
-import kotlinx.cinterop.value
+import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.core.annotation.Module
 import org.koin.core.annotation.Single
 import platform.Foundation.NSBundle
 import platform.Foundation.NSData
-import platform.Foundation.NSError
 import platform.Foundation.create
-import swiftPMImport.co.typie.compose.NativeEditorHost
+import platform.posix.memcpy
 
 @Module
 actual class EditorModule {
   @Single
   actual fun editorHost(ctx: PlatformContext): EditorHost {
-    val native = NativeEditorHost()
-
-    runBlocking {
-      suspendCancellableCoroutine { cont ->
-        native.createWithCompletion { error ->
-          if (error != null) cont.resumeWith(Result.failure(EditorException(error.localizedDescription)))
-          else cont.resumeWith(Result.success(Unit))
-        }
-      }
-    }
+    val host = runBlocking { IosEditorHost.create() }
 
     val path = NSBundle.mainBundle.pathForResource("icu", "zst")!!
-    val icu = NSData.create(contentsOfFile = path)!!
-    memScoped {
-      val err = alloc<ObjCObjectVar<NSError?>>()
-      native.loadIcuDataWithData(icu, err.ptr)
-      err.value?.let { throw EditorException(it.localizedDescription) }
+    val nsData = NSData.create(contentsOfFile = path)!!
+    val icu = ByteArray(nsData.length.toInt()).apply {
+      usePinned { memcpy(it.addressOf(0), nsData.bytes, nsData.length) }
     }
 
-    return IosEditorHost(native)
+    host.loadIcuData(icu)
+
+    return host
   }
 }

@@ -49,18 +49,7 @@ pub fn generate(input: &FfiInput) -> TokenStream {
             });
         }
     } else {
-        let uniffi_derive = match &item.data {
-            syn::Data::Struct(_) => {
-                quote! { #[cfg_attr(feature = "uniffi", derive(::uniffi::Record))] }
-            }
-            syn::Data::Enum(_) => {
-                quote! { #[cfg_attr(feature = "uniffi", derive(::uniffi::Enum))] }
-            }
-            syn::Data::Union(_) => panic!("#[ffi] does not support unions"),
-        };
-
         quote! {
-            #uniffi_derive
             #[cfg_attr(feature = "wasm", derive(::tsify::Tsify))]
             #[cfg_attr(feature = "wasm", tsify(hashmap_as_object))]
             #item

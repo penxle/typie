@@ -4,6 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import co.typie.screen.subscription.FULL_ACCESS_GOOGLE_PLAY_PRODUCT_ID
+import co.typie.screen.subscription.FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID
+import co.typie.screen.subscription.FULL_ACCESS_YEARLY_STORE_PRODUCT_ID
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClient.BillingResponseCode
@@ -25,13 +28,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import co.typie.screen.subscription.FULL_ACCESS_GOOGLE_PLAY_PRODUCT_ID
-import co.typie.screen.subscription.FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID
-import co.typie.screen.subscription.FULL_ACCESS_YEARLY_STORE_PRODUCT_ID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-internal object PurchaseActivityHolder {
+object PurchaseActivityHolder {
   private var activity: Activity? = null
 
   fun attach(activity: Activity) {
@@ -104,7 +104,8 @@ internal class AndroidPurchaseService(
         val mapped = buildAndroidPurchaseProducts(queryResult.productDetailsList.orEmpty())
         productCache.clear()
         productCache.putAll(mapped.associateBy { it.product.id })
-        continuation.resume(mapped.associateBy { it.product.interval }.mapValues { (_, value) -> value.product })
+        continuation.resume(mapped.associateBy { it.product.interval }
+          .mapValues { (_, value) -> value.product })
       }
     }
   }
@@ -116,7 +117,8 @@ internal class AndroidPurchaseService(
     ensureConnected()
 
     val activity = PurchaseActivityHolder.current() ?: return false
-    val availableProduct = productCache[product.id] ?: queryProducts()[product.interval]?.let { productCache[product.id] }
+    val availableProduct = productCache[product.id]
+      ?: queryProducts()[product.interval]?.let { productCache[product.id] }
       ?: return false
 
     pendingProductId = availableProduct.product.id
@@ -218,7 +220,8 @@ internal class AndroidPurchaseService(
       return
     }
 
-    val productId = pendingProductId ?: purchase.products.firstOrNull() ?: FULL_ACCESS_GOOGLE_PLAY_PRODUCT_ID
+    val productId =
+      pendingProductId ?: purchase.products.firstOrNull() ?: FULL_ACCESS_GOOGLE_PLAY_PRODUCT_ID
 
     mutableEvents.emit(
       PurchaseEvent.Purchased(

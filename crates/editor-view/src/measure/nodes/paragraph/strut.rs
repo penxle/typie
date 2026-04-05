@@ -10,7 +10,7 @@ pub struct StrutMetrics {
     pub descent: f32,
 }
 
-pub fn compute_strut(resource: &mut Resource, style: &ResolvedTextStyle) -> StrutMetrics {
+pub fn compute_strut(resource: &mut Resource, style: &ResolvedTextStyle) -> Option<StrutMetrics> {
     let text = " ";
     let mut builder =
         resource
@@ -33,20 +33,12 @@ pub fn compute_strut(resource: &mut Resource, style: &ResolvedTextStyle) -> Stru
     let mut layout = builder.build(text);
     layout.break_all_lines(None);
 
-    let line = layout
-        .lines()
-        .next()
-        .expect("strut layout should have one line");
-
-    let run = line
-        .runs()
-        .next()
-        .expect("strut layout should have one run");
-
+    let line = layout.lines().next()?;
+    let run = line.runs().next()?;
     let metrics = run.metrics();
 
-    StrutMetrics {
+    Some(StrutMetrics {
         ascent: metrics.ascent,
         descent: metrics.descent,
-    }
+    })
 }

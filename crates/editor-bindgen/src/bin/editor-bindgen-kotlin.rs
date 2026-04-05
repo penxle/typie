@@ -13,14 +13,11 @@ fn main() {
         .iter()
         .position(|a| a == "--base-dir")
         .and_then(|i| args.get(i + 1))
-        .map(PathBuf::from);
-
-    // Legacy --output-dir for backward compatibility (types only)
-    let output_dir = args
-        .iter()
-        .position(|a| a == "--output-dir")
-        .and_then(|i| args.get(i + 1))
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            eprintln!("Error: --base-dir required");
+            std::process::exit(1);
+        });
 
     let metas = editor_bindgen::reader::read_ffi_meta(&library_path);
     eprintln!("Found {} FFI types", metas.len());
@@ -38,22 +35,14 @@ fn main() {
     let interfaces = editor_bindgen::reader::read_ffi_interfaces(&library_path);
     eprintln!("Found {} FFI interfaces", interfaces.len());
 
-    if let Some(base) = base_dir {
-        let common = base.join("commonMain");
-        let jna = base.join("jnaMain");
-        let ios = base.join("iosMain");
+    let common = base_dir.join("commonMain");
+    let jna = base_dir.join("jnaMain");
+    let ios = base_dir.join("iosMain");
 
-        editor_bindgen::kotlin::generate_all(&metas, &common);
-        editor_bindgen::kotlin_iface::generate_all(&interfaces, &custom_types, &common);
-        editor_bindgen::kotlin_jna::generate_all(&interfaces, &custom_types, &jna);
-        editor_bindgen::kotlin_ios::generate_all(&interfaces, &custom_types, &ios);
+    editor_bindgen::kotlin::generate_all(&metas, &common);
+    editor_bindgen::kotlin_iface::generate_all(&interfaces, &custom_types, &common);
+    editor_bindgen::kotlin_jna::generate_all(&interfaces, &custom_types, &jna);
+    editor_bindgen::kotlin_ios::generate_all(&interfaces, &custom_types, &ios);
 
-        eprintln!("Generated Kotlin files");
-    } else if let Some(dir) = output_dir {
-        editor_bindgen::kotlin::generate_all(&metas, &dir);
-        eprintln!("Generated Kotlin type files in {}", dir.display());
-    } else {
-        eprintln!("Error: --base-dir or --output-dir required");
-        std::process::exit(1);
-    }
+    eprintln!("Generated Kotlin files");
 }

@@ -64,7 +64,7 @@ const config = {
     wasmReloadPlugin(),
   ],
   optimizeDeps: {
-    exclude: ['@typie/editor'],
+    exclude: ['@typie/editor', '@typie/editor-ffi'],
   },
   server: {
     port: 4000,

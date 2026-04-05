@@ -3,7 +3,6 @@ editor_macros::preamble!();
 mod doc;
 mod document_attrs;
 mod entry;
-mod ffi;
 mod id;
 mod modifier;
 mod node_ref;
@@ -19,7 +18,7 @@ pub use entry::*;
 pub use id::*;
 pub use imbl;
 pub use modifier::*;
-pub use node_ref::NodeRef;
+pub use node_ref::*;
 pub use nodes::*;
 pub use subtree::*;
 

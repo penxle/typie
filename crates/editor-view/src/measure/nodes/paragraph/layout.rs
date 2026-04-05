@@ -23,7 +23,13 @@ pub fn build_layout(
 
     let family_names: Vec<String> = style_runs
         .iter()
-        .map(|sr| resource.font_registry.resolve(sr.family).to_owned())
+        .map(|sr| {
+            resource
+                .font_registry
+                .resolve_opt(sr.family)
+                .unwrap_or_default()
+                .to_owned()
+        })
         .collect();
     for (style_run, family_name) in style_runs.iter().zip(&family_names) {
         let style = TextStyle {

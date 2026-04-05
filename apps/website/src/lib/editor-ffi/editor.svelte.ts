@@ -212,10 +212,6 @@ export class Editor {
         this.#emit(event);
       }
     }
-
-    if (this.#queued) {
-      this.#rafId = requestAnimationFrame(this.#tick);
-    }
   };
 
   #emit(event: EditorEvent): void {

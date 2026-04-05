@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use heck::ToLowerCamelCase;
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::kotlin_iface::{param_to_kotlin, return_to_kotlin};
 use crate::meta::{
@@ -45,6 +45,7 @@ fn generate_ios_wrapper(
     w.line("import platform.Foundation.NSData");
     w.line("import platform.Foundation.NSError");
     w.line("import platform.Foundation.create");
+    w.line("import kotlinx.coroutines.suspendCancellableCoroutine");
     w.line("import co.typie.editor.EditorException");
     w.line(&format!(
         "import swiftPMImport.co.typie.compose.Native{} as Swift{}",
@@ -65,6 +66,71 @@ fn generate_ios_wrapper(
         }
         w.line("");
         generate_method(&mut w, method, all_interfaces, custom_types);
+    }
+
+    let constructors: Vec<_> = iface.methods.iter().filter(|m| m.is_constructor).collect();
+    if !constructors.is_empty() {
+        w.line("");
+        w.open_block("companion object");
+        for ctor in &constructors {
+            let kt_name = ctor.name.to_lower_camel_case();
+            let params_sig = ctor
+                .params
+                .iter()
+                .map(|p| {
+                    let kt_param = p.name.to_lower_camel_case();
+                    let kt_type = param_to_kotlin(&p.ty, custom_types);
+                    let default = if matches!(p.ty, FfiParamType::Option(_)) {
+                        " = null"
+                    } else {
+                        ""
+                    };
+                    format!("{}: {}{}", kt_param, kt_type, default)
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            w.line(&format!(
+                "suspend fun {}({}): Ios{} {{",
+                kt_name, params_sig, iface.name
+            ));
+            w.indent += 1;
+            w.line(&format!("val native = Swift{}()", iface.name));
+            w.line("suspendCancellableCoroutine { cont ->");
+            w.indent += 1;
+
+            let selector = if ctor.params.is_empty() {
+                format!("{}WithCompletion", kt_name)
+            } else {
+                let first = ctor.params[0].name.to_upper_camel_case();
+                format!("{}With{}", kt_name, first)
+            };
+
+            if ctor.params.is_empty() {
+                w.line(&format!("native.{}() {{ error ->", selector));
+            } else {
+                let cinterop_args = crate::objc::kotlin_cinterop_args(&ctor.params, |p| {
+                    convert_param_value(p, custom_types)
+                });
+                w.line(&format!(
+                    "native.{}({}) {{ error ->",
+                    selector, cinterop_args
+                ));
+            }
+
+            w.indent += 1;
+            w.line("if (error != null) cont.resumeWith(Result.failure(EditorException(error.localizedDescription)))");
+            w.line("else cont.resumeWith(Result.success(Unit))");
+            w.indent -= 1;
+            w.line("}");
+
+            w.indent -= 1;
+            w.line("}");
+            w.line(&format!("return Ios{}(native)", iface.name));
+            w.indent -= 1;
+            w.line("}");
+        }
+        w.close_block();
     }
 
     w.close_block();
@@ -93,21 +159,25 @@ fn generate_method(
         .join(", ");
 
     let ret = return_to_kotlin(&method.return_type, custom_types);
-    let sig = if ret.is_empty() {
-        format!("override fun {}({}) = memScoped {{", kt_name, params_sig)
+    let is_unit = ret.is_empty();
+    if is_unit {
+        w.line(&format!("override fun {}({}) {{", kt_name, params_sig));
     } else {
-        format!(
-            "override fun {}({}): {} = memScoped {{",
+        w.line(&format!(
+            "override fun {}({}): {} {{",
             kt_name, params_sig, ret
-        )
-    };
-
-    w.line(&sig);
+        ));
+    }
+    w.indent += 1;
+    if is_unit {
+        w.line("memScoped {");
+    } else {
+        w.line("return memScoped {");
+    }
     w.indent += 1;
 
     w.line("val error = alloc<ObjCObjectVar<NSError?>>()");
 
-    // Build the native call
     let selector = objc_selector(method);
     let call_args = build_call_args(method, custom_types);
 
@@ -121,10 +191,8 @@ fn generate_method(
         )
     };
 
-    // Handle return type
     match &method.return_type {
         FfiReturnType::Unit => {
-            // Emit any pre-call conversions
             emit_pre_call_conversions(w, &method.params);
             w.line(&format!("{}", native_call));
             w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
@@ -181,7 +249,6 @@ fn generate_method(
             }
         },
         FfiReturnType::Owned(name) => {
-            // Check if the owned type is one of the interfaces
             let is_iface = all_interfaces.iter().any(|i| &i.name == name);
             emit_pre_call_conversions(w, &method.params);
             w.line(&format!("val result = {}!!", native_call));
@@ -202,10 +269,10 @@ fn generate_method(
 
     w.indent -= 1;
     w.line("}");
+    w.indent -= 1;
+    w.line("}");
 }
 
-/// Emit any local variable declarations needed before the native call.
-/// Currently handles Vec<u8> (ByteArray → NSData).
 fn emit_pre_call_conversions(w: &mut CodeWriter, params: &[FfiParam]) {
     for param in params {
         if is_byte_array(&param.ty) {
@@ -218,7 +285,6 @@ fn emit_pre_call_conversions(w: &mut CodeWriter, params: &[FfiParam]) {
     }
 }
 
-/// Build the argument list for the cinterop call (excluding `error`).
 fn build_call_args(
     method: &FfiMethod,
     custom_types: &HashMap<String, String>,
@@ -235,14 +301,12 @@ fn build_call_args(
         .collect()
 }
 
-/// Format the value expression for a single parameter in the native call.
 fn convert_param_value(param: &FfiParam, _custom_types: &HashMap<String, String>) -> String {
     let kt_name = param.name.to_lower_camel_case();
     match &param.ty {
         FfiParamType::Complex(_) => format!("json.encodeToString({})", kt_name),
         FfiParamType::Vec(inner) => {
             if matches!(inner, FfiScalarParam::Primitive(p) if p == "u8") {
-                // NSData variable was emitted by emit_pre_call_conversions
                 format!("{}NsData", kt_name)
             } else if matches!(inner, FfiScalarParam::Complex(_)) {
                 format!("{}.map {{ json.encodeToString(it) }}", kt_name)
@@ -265,8 +329,6 @@ fn is_byte_array(ty: &FfiParamType) -> bool {
     matches!(ty, FfiParamType::Vec(FfiScalarParam::Primitive(p)) if p == "u8")
 }
 
-/// Format call args as indented lines for the multiline native call.
-/// Returns the positional first arg on its own line, named args on subsequent lines.
 fn format_call_args_multiline(args: &[(usize, String, String)]) -> String {
     let mut lines = String::new();
     for (i, label, value) in args {
@@ -278,10 +340,6 @@ fn format_call_args_multiline(args: &[(usize, String, String)]) -> String {
     }
     lines
 }
-
-// ---------------------------------------------------------------------------
-// CodeWriter
-// ---------------------------------------------------------------------------
 
 struct CodeWriter {
     buf: String,
@@ -323,10 +381,6 @@ impl CodeWriter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,10 +406,6 @@ mod tests {
             ty,
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Test 1: ObjC selector naming
-    // -----------------------------------------------------------------------
 
     #[test]
     fn selector_load_font_base_with_family() {
@@ -384,10 +434,6 @@ mod tests {
         assert_eq!(objc_selector(&method), "tickWithError");
     }
 
-    // -----------------------------------------------------------------------
-    // Test 2: ByteArray params generate NSData conversion
-    // -----------------------------------------------------------------------
-
     #[test]
     fn byte_array_param_generates_nsdata() {
         let iface = FfiInterface {
@@ -410,10 +456,6 @@ mod tests {
         assert!(output.contains("dataNsData"));
     }
 
-    // -----------------------------------------------------------------------
-    // Test 3: memScoped + error handling inline on every method
-    // -----------------------------------------------------------------------
-
     #[test]
     fn every_method_has_mem_scoped_and_error_handling() {
         let iface = FfiInterface {
@@ -435,18 +477,12 @@ mod tests {
             ],
         };
         let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
-        // Each method uses = memScoped {
-        assert!(output.contains("= memScoped {"));
-        // Error handling is present
+        assert!(output.contains("memScoped {"));
         assert!(output.contains("alloc<ObjCObjectVar<NSError?>>()"));
         assert!(
             output.contains("error.value?.let { throw EditorException(it.localizedDescription) }")
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Test 4: Owned return type generates IosEditor(result!!)
-    // -----------------------------------------------------------------------
 
     #[test]
     fn owned_return_type_generates_ios_wrapper() {
@@ -471,10 +507,6 @@ mod tests {
         assert!(output.contains("IosEditor(result)"));
     }
 
-    // -----------------------------------------------------------------------
-    // Additional: imports and class structure
-    // -----------------------------------------------------------------------
-
     #[test]
     fn generated_file_has_correct_imports_and_class() {
         let iface = FfiInterface {
@@ -498,12 +530,8 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // Additional: constructor is skipped
-    // -----------------------------------------------------------------------
-
     #[test]
-    fn constructor_methods_are_skipped() {
+    fn constructor_not_generated_as_override() {
         let iface = FfiInterface {
             name: "EditorHost".into(),
             methods: vec![
@@ -511,20 +539,76 @@ mod tests {
                     name: "create".into(),
                     is_async: true,
                     is_constructor: true,
-                    params: vec![],
+                    params: vec![FfiParam {
+                        name: "kind".into(),
+                        ty: FfiParamType::Option(FfiScalarParam::Complex("BackendKind".into())),
+                    }],
                     return_type: FfiReturnType::Owned("EditorHost".into()),
                 },
                 make_method("tick", vec![], FfiReturnType::Unit),
             ],
         };
         let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
-        assert!(!output.contains("fun create("));
+        assert!(
+            !output.contains("override fun create("),
+            "Constructor should not be an override method:\n{}",
+            output
+        );
         assert!(output.contains("fun tick("));
     }
 
-    // -----------------------------------------------------------------------
-    // Additional: Vec<Complex<T>> return generates UNCHECKED_CAST + map decode
-    // -----------------------------------------------------------------------
+    #[test]
+    fn constructor_generates_companion_factory() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![FfiMethod {
+                name: "create".into(),
+                is_async: true,
+                is_constructor: true,
+                params: vec![FfiParam {
+                    name: "kind".into(),
+                    ty: FfiParamType::Option(FfiScalarParam::Complex("BackendKind".into())),
+                }],
+                return_type: FfiReturnType::Owned("EditorHost".into()),
+            }],
+        };
+        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        assert!(
+            output.contains("companion object"),
+            "Expected companion object:\n{}",
+            output
+        );
+        assert!(
+            output.contains("suspend fun create("),
+            "Expected suspend fun create:\n{}",
+            output
+        );
+        assert!(
+            output.contains("kind: BackendKind? = null"),
+            "Expected typed BackendKind? param with default null:\n{}",
+            output
+        );
+        assert!(
+            output.contains("SwiftEditorHost()"),
+            "Expected Swift native object creation:\n{}",
+            output
+        );
+        assert!(
+            output.contains("createWithKind("),
+            "Expected ObjC cinterop selector:\n{}",
+            output
+        );
+        assert!(
+            output.contains("json.encodeToString(it)"),
+            "Expected JSON serialization:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return IosEditorHost(native)"),
+            "Expected IosEditorHost wrapper return:\n{}",
+            output
+        );
+    }
 
     #[test]
     fn vec_complex_return_generates_unchecked_cast_and_map() {
@@ -541,10 +625,6 @@ mod tests {
         assert!(output.contains("as List<String>"));
         assert!(output.contains("result.map { json.decodeFromString(it) }"));
     }
-
-    // -----------------------------------------------------------------------
-    // Additional: Option<Complex<T>> return
-    // -----------------------------------------------------------------------
 
     #[test]
     fn option_complex_return_generates_if_empty_let_decode() {

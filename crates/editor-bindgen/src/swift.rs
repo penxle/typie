@@ -75,7 +75,7 @@ fn generate_class(iface: &FfiInterface, custom_types: &HashMap<String, String>) 
     for method in &iface.methods {
         out.push('\n');
         if method.is_constructor {
-            out.push_str(&generate_constructor_method(method, iface));
+            out.push_str(&generate_constructor_method(method, iface, custom_types));
         } else {
             out.push_str(&generate_regular_method(method, iface, custom_types));
         }
@@ -85,18 +85,41 @@ fn generate_class(iface: &FfiInterface, custom_types: &HashMap<String, String>) 
     out
 }
 
-fn generate_constructor_method(_method: &FfiMethod, iface: &FfiInterface) -> String {
+fn generate_constructor_method(
+    method: &FfiMethod,
+    iface: &FfiInterface,
+    custom_types: &HashMap<String, String>,
+) -> String {
     let inner_type = &iface.name;
     let mut out = String::new();
 
-    out.push_str(
-        "    @objc public func create(completion: @escaping @Sendable (NSError?) -> Void) {\n",
-    );
+    let user_params = swift_param_decl(&method.params, |p| swift_param_type(&p.ty, custom_types));
+    let all_params = if user_params.is_empty() {
+        "completion: @escaping @Sendable (NSError?) -> Void".to_string()
+    } else {
+        format!(
+            "{}, completion: @escaping @Sendable (NSError?) -> Void",
+            user_params
+        )
+    };
+
+    out.push_str(&format!(
+        "    @objc public func create({}) {{\n",
+        all_params
+    ));
     out.push_str("        Task {\n");
     out.push_str("            do {\n");
+
+    let call_args = swift_call_args(&method.params, |p| param_conversion(p, custom_types));
+    let create_call = if call_args.is_empty() {
+        format!("{}.create()", inner_type)
+    } else {
+        format!("{}.create({})", inner_type, call_args)
+    };
+
     out.push_str(&format!(
-        "                self.inner = try await {}.create(kind: nil)\n",
-        inner_type
+        "                self.inner = try await {}\n",
+        create_call
     ));
     out.push_str("                completion(nil)\n");
     out.push_str("            } catch {\n");
@@ -116,7 +139,6 @@ fn generate_regular_method(
     let is_host = has_constructor(iface);
     let swift_name = method.name.to_lower_camel_case();
 
-    // Build parameter declaration including error as last param
     let user_params = swift_param_decl(&method.params, |p| swift_param_type(&p.ty, custom_types));
     let error_param = "error: AutoreleasingUnsafeMutablePointer<NSError?>";
     let all_params = if user_params.is_empty() {
@@ -125,12 +147,10 @@ fn generate_regular_method(
         format!("{}, {}", user_params, error_param)
     };
 
-    // Return type: non-Unit returns become optional (nil on error)
     let ret_swift = swift_return_type(&method.return_type, custom_types);
     let ret_part = if ret_swift.is_empty() {
         String::new()
     } else {
-        // All return types become optional for the error pattern
         let opt = if ret_swift.ends_with('?') {
             ret_swift.clone()
         } else {
@@ -144,7 +164,6 @@ fn generate_regular_method(
         swift_name, all_params, ret_part
     );
 
-    // Build the inner call expression
     let call_args = swift_call_args(&method.params, |p| param_conversion(p, custom_types));
     let call_expr = if call_args.is_empty() {
         format!("inner.{}()", swift_name)
@@ -158,7 +177,6 @@ fn generate_regular_method(
     let mut out = String::new();
     out.push_str(&format!("{} {{\n", sig));
 
-    // Guard for host classes
     if is_host {
         out.push_str("        guard let inner else {\n");
         out.push_str("            error.pointee = NSError(domain: \"EditorBridge\", code: -1,\n");
@@ -173,7 +191,6 @@ fn generate_regular_method(
         out.push_str("        }\n");
     }
 
-    // do/catch block
     out.push_str("        do {\n");
     out.push_str(&format!("            {}\n", return_expr));
     out.push_str("        } catch let e {\n");
@@ -302,7 +319,10 @@ mod tests {
                     name: "create".into(),
                     is_async: true,
                     is_constructor: true,
-                    params: vec![],
+                    params: vec![FfiParam {
+                        name: "kind".into(),
+                        ty: FfiParamType::Option(FfiScalarParam::Complex("BackendKind".into())),
+                    }],
                     return_type: FfiReturnType::Owned("EditorHost".into()),
                 },
                 FfiMethod {
@@ -368,7 +388,6 @@ mod tests {
     fn no_throws_keyword() {
         let iface = editor_iface();
         let output = generate_class(&iface, &empty_ct());
-        // Regular methods should NOT have throws
         assert!(!output.contains(" throws"));
     }
 
@@ -377,7 +396,6 @@ mod tests {
         let iface = editor_iface();
         let output = generate_class(&iface, &empty_ct());
         assert!(output.contains("error: AutoreleasingUnsafeMutablePointer<NSError?>"));
-        // Every non-constructor method should have error param
         assert!(output.contains(
             "func enqueue(message: String, error: AutoreleasingUnsafeMutablePointer<NSError?>)"
         ));
@@ -400,7 +418,6 @@ mod tests {
         let iface = editor_host_iface();
         let output = generate_class(&iface, &empty_ct());
         assert!(output.contains("error.pointee = NSError(domain: \"EditorBridge\""));
-        // void method guard returns without value
         assert!(output.contains("EditorHost not initialized\"])\n            return\n"));
     }
 
@@ -408,7 +425,6 @@ mod tests {
     fn option_return_is_nullable() {
         let iface = editor_iface();
         let output = generate_class(&iface, &empty_ct());
-        // cursor returns Option<Complex> → String? (already optional, no double-optional)
         assert!(output.contains("-> String?"));
         assert!(!output.contains("-> String??"));
     }
@@ -417,7 +433,6 @@ mod tests {
     fn non_option_return_becomes_nullable() {
         let iface = editor_host_iface();
         let output = generate_class(&iface, &empty_ct());
-        // createEditor returns Owned<Editor> → NativeEditor? (nullable for error pattern)
         assert!(output.contains("-> NativeEditor?"));
     }
 
@@ -433,5 +448,21 @@ mod tests {
     fn platform_handle_resolves() {
         let ct = make_custom_types();
         assert_eq!(resolve_swift_primitive("PlatformHandle", &ct), "Int64");
+    }
+
+    #[test]
+    fn constructor_passes_params_to_create() {
+        let iface = editor_host_iface();
+        let output = generate_class(&iface, &empty_ct());
+        assert!(
+            output.contains("func create(kind: String?, completion:"),
+            "Expected kind param in constructor:\n{}",
+            output
+        );
+        assert!(
+            output.contains("EditorHost.create(kind: kind)"),
+            "Expected kind forwarded to inner create:\n{}",
+            output
+        );
     }
 }

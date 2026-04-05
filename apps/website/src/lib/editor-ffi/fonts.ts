@@ -55,7 +55,7 @@ function getCache(): Promise<Cache> {
   return cachePromise;
 }
 
-async function fetchBinary(url: string): Promise<Uint8Array> {
+async function getOrFetch(url: string): Promise<Uint8Array> {
   const cache = await getCache();
   const cached = await cache.match(url);
   if (cached) return new Uint8Array(await cached.arrayBuffer());
@@ -160,8 +160,12 @@ export async function initFonts(): Promise<void> {
 
 const loadFontManifest = async (family: string, weight: number, fontPath: string) => {
   const [manifest, hash] = await Promise.all([
-    fetchBinary(`${CDN_BASE}/${fontPath}/manifest.bin`),
-    fetch(`${CDN_BASE}/${fontPath}/hash.json`).then((r) => r.json() as Promise<{ hash: string }>),
+    fetch(`${CDN_BASE}/${fontPath}/manifest.bin`)
+      .then((r) => r.arrayBuffer())
+      .then((r) => new Uint8Array(r)),
+    fetch(`${CDN_BASE}/${fontPath}/hash.json`)
+      .then((r) => r.json())
+      .then((r) => r as { hash: string }),
   ]);
 
   fontPaths.set(fontKey(family, weight), { path: fontPath, hash: hash.hash });
@@ -191,14 +195,14 @@ const loadFontData = async (
 
   if (base) {
     await loadOnce(`base:${family}:${weight}`, async () => {
-      const data = await fetchBinary(`${baseUrl}/base.bin`);
+      const data = await getOrFetch(`${baseUrl}/base.bin`);
       handlers.onBaseLoaded(data);
     });
   }
 
   const loadChunk = (idx: number) =>
     loadOnce(`chunk:${family}:${weight}:${idx}`, async () => {
-      const data = await fetchBinary(`${baseUrl}/chunks/${idx}.bin`);
+      const data = await getOrFetch(`${baseUrl}/chunks/${idx}.bin`);
       handlers.onChunkLoaded(data);
     });
 

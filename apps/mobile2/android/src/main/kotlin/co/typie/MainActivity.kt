@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     val splashScreen = installSplashScreen()
     splashScreen.setKeepOnScreenCondition { authService.state.value is AuthState.Initializing }
+
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
 

@@ -13,6 +13,7 @@ const PACKAGE: &str = "co.typie.editor.ffi";
 struct CodegenContext<'a> {
     custom_types: HashMap<String, String>,
     meta_map: HashMap<&'a str, &'a FfiMeta>,
+    known_types: HashSet<&'a str>,
     inlined_types: HashSet<String>,
 }
 
@@ -24,8 +25,6 @@ pub fn generate_all(metas: &[FfiMeta], output_dir: &Path) {
         meta_map.insert(&m.name, m);
     }
 
-    // Find inlined types: types that appear as the sole tuple arg of a tagged enum variant,
-    // where the arg type is a Struct in meta_map.
     let mut inlined_types = HashSet::new();
     for meta in metas {
         if let FfiKind::Enum {
@@ -49,9 +48,12 @@ pub fn generate_all(metas: &[FfiMeta], output_dir: &Path) {
         }
     }
 
+    let known_types: HashSet<&str> = meta_map.keys().copied().collect();
+
     let ctx = CodegenContext {
         custom_types,
         meta_map,
+        known_types,
         inlined_types,
     };
 
@@ -114,40 +116,35 @@ fn apply_rename(name: &str, strategy: Option<&str>) -> String {
 }
 
 fn resolve_default(field: &FfiField, kt_type: &str, ctx: &CodegenContext) -> String {
-    // ffi_default_override takes precedence
     if let Some(override_val) = &field.ffi_default_override {
         return override_val.clone();
     }
 
     let rust_ty = &field.ty;
 
-    // Option<T> → null
     if rust_ty.starts_with("Option<") {
         return "null".into();
     }
 
-    // Vec<T> / imbl::Vector<T> → emptyList()
     if rust_ty.starts_with("Vec<") || rust_ty.starts_with("imbl::Vector<") {
         return "emptyList()".into();
     }
 
-    // Look up rust type in meta_map
     if let Some(meta) = ctx.meta_map.get(rust_ty.as_str()) {
         match &meta.kind {
             FfiKind::Enum {
                 default_variant: Some(variant),
                 ..
             } => {
-                return format!("{}.{}", meta.name, variant);
+                return format!("{PACKAGE}.{}.{}", meta.name, variant);
             }
             FfiKind::Struct { fields } if fields.iter().all(|f| f.has_serde_default) => {
-                return format!("{}()", meta.name);
+                return format!("{PACKAGE}.{}()", meta.name);
             }
             _ => {}
         }
     }
 
-    // Primitives
     match rust_ty.as_str() {
         "bool" => "false".into(),
         "u8" | "u16" | "u32" | "i8" | "i16" | "i32" => "0".into(),
@@ -159,19 +156,31 @@ fn resolve_default(field: &FfiField, kt_type: &str, ctx: &CodegenContext) -> Str
     }
 }
 
-fn map_type(rust_ty: &str, custom_types: &HashMap<String, String>) -> String {
+fn map_type(
+    rust_ty: &str,
+    custom_types: &HashMap<String, String>,
+    known_types: &HashSet<&str>,
+) -> String {
     let parsed: syn::Type = syn::parse_str(rust_ty).expect("failed to parse type");
-    map_syn_type(&parsed, custom_types)
+    map_syn_type(&parsed, custom_types, known_types)
 }
 
-fn map_syn_type(ty: &syn::Type, custom_types: &HashMap<String, String>) -> String {
+fn map_syn_type(
+    ty: &syn::Type,
+    custom_types: &HashMap<String, String>,
+    known_types: &HashSet<&str>,
+) -> String {
     match ty {
-        syn::Type::Path(type_path) => map_type_path(type_path, custom_types),
+        syn::Type::Path(type_path) => map_type_path(type_path, custom_types, known_types),
         _ => panic!("unsupported type in FFI metadata"),
     }
 }
 
-fn map_type_path(type_path: &syn::TypePath, custom_types: &HashMap<String, String>) -> String {
+fn map_type_path(
+    type_path: &syn::TypePath,
+    custom_types: &HashMap<String, String>,
+    known_types: &HashSet<&str>,
+) -> String {
     let path = &type_path.path;
     let segments: Vec<_> = path.segments.iter().collect();
     let last = segments.last().expect("empty path");
@@ -179,7 +188,7 @@ fn map_type_path(type_path: &syn::TypePath, custom_types: &HashMap<String, Strin
 
     if segments.len() == 1 && last.arguments.is_none() {
         if let Some(target) = custom_types.get(&ident) {
-            return map_type(target, custom_types);
+            return map_type(target, custom_types, known_types);
         }
     }
 
@@ -197,7 +206,12 @@ fn map_type_path(type_path: &syn::TypePath, custom_types: &HashMap<String, Strin
 
     let args = match &last.arguments {
         syn::PathArguments::AngleBracketed(args) => args,
-        syn::PathArguments::None => return ident,
+        syn::PathArguments::None => {
+            if known_types.contains(ident.as_str()) {
+                return format!("{PACKAGE}.{ident}");
+            }
+            return ident;
+        }
         _ => panic!("unsupported path arguments"),
     };
 
@@ -210,11 +224,11 @@ fn map_type_path(type_path: &syn::TypePath, custom_types: &HashMap<String, Strin
     match full_path.as_str() {
         "Option" => {
             let inner = extract_single_type_arg(args);
-            format!("{}?", map_syn_type(inner, custom_types))
+            format!("{}?", map_syn_type(inner, custom_types, known_types))
         }
         "Vec" | "imbl::Vector" => {
             let inner = extract_single_type_arg(args);
-            format!("List<{}>", map_syn_type(inner, custom_types))
+            format!("List<{}>", map_syn_type(inner, custom_types, known_types))
         }
         "HashMap" | "imbl::HashMap" | "std::collections::HashMap" | "hashbrown::HashMap" => {
             let mut arg_iter = args.args.iter();
@@ -228,8 +242,8 @@ fn map_type_path(type_path: &syn::TypePath, custom_types: &HashMap<String, Strin
             };
             format!(
                 "Map<{}, {}>",
-                map_syn_type(key_ty, custom_types),
-                map_syn_type(val_ty, custom_types)
+                map_syn_type(key_ty, custom_types, known_types),
+                map_syn_type(val_ty, custom_types, known_types)
             )
         }
         _ => ident,
@@ -242,10 +256,6 @@ fn extract_single_type_arg(args: &syn::AngleBracketedGenericArguments) -> &syn::
         _ => panic!("expected type argument"),
     }
 }
-
-// ---------------------------------------------------------------------------
-// CodeWriter
-// ---------------------------------------------------------------------------
 
 struct CodeWriter {
     buf: String,
@@ -287,10 +297,6 @@ impl CodeWriter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Codegen: data class
-// ---------------------------------------------------------------------------
-
 fn generate_data_class(meta: &FfiMeta, fields: &[FfiField], ctx: &CodegenContext) -> String {
     let mut w = CodeWriter::new();
     w.line(&format!("package {}", PACKAGE));
@@ -306,7 +312,7 @@ fn generate_data_class(meta: &FfiMeta, fields: &[FfiField], ctx: &CodegenContext
         w.indent += 1;
         for field in fields {
             let kt_name = field.name.to_lower_camel_case();
-            let kt_type = map_type(&field.ty, &ctx.custom_types);
+            let kt_type = map_type(&field.ty, &ctx.custom_types, &ctx.known_types);
             let serial_name = apply_rename(&field.name, meta.serde_rename_all.as_deref());
             let default_part = if field.has_serde_default {
                 format!(" = {}", resolve_default(field, &kt_type, ctx))
@@ -323,10 +329,6 @@ fn generate_data_class(meta: &FfiMeta, fields: &[FfiField], ctx: &CodegenContext
     }
     w.finish()
 }
-
-// ---------------------------------------------------------------------------
-// Codegen: enum class (untagged, unit-only)
-// ---------------------------------------------------------------------------
 
 fn generate_enum_class(meta: &FfiMeta, variants: &[FfiVariant], _ctx: &CodegenContext) -> String {
     let mut w = CodeWriter::new();
@@ -346,10 +348,6 @@ fn generate_enum_class(meta: &FfiMeta, variants: &[FfiVariant], _ctx: &CodegenCo
     w.close_block();
     w.finish()
 }
-
-// ---------------------------------------------------------------------------
-// Codegen: sealed class (tagged enum)
-// ---------------------------------------------------------------------------
 
 fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenContext) -> String {
     let mut w = CodeWriter::new();
@@ -373,11 +371,9 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                 w.line("");
                 w.line(&format!("@Serializable @SerialName(\"{}\")", serial_name));
 
-                // Newtype flattening: single-arg tuple where the arg is a Struct in meta_map
                 if tys.len() == 1 {
                     if let Some(inner_meta) = ctx.meta_map.get(tys[0].as_str()) {
                         if let FfiKind::Struct { fields } = &inner_meta.kind {
-                            // Inline the inner struct's fields
                             let rename_all = inner_meta.serde_rename_all.as_deref();
                             if fields.is_empty() {
                                 w.line(&format!("data object {} : {}()", name, meta.name));
@@ -386,7 +382,8 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                                     .iter()
                                     .map(|f| {
                                         let kt_name = f.name.to_lower_camel_case();
-                                        let kt_type = map_type(&f.ty, &ctx.custom_types);
+                                        let kt_type =
+                                            map_type(&f.ty, &ctx.custom_types, &ctx.known_types);
                                         let sn = apply_rename(&f.name, rename_all);
                                         let default_part = if f.has_serde_default {
                                             format!(" = {}", resolve_default(f, &kt_type, ctx))
@@ -410,9 +407,8 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                     }
                 }
 
-                // Non-flattened tuple
                 if tys.len() == 1 {
-                    let kt_type = map_type(&tys[0], &ctx.custom_types);
+                    let kt_type = map_type(&tys[0], &ctx.custom_types, &ctx.known_types);
                     w.line(&format!(
                         "data class {}(val value: {}) : {}()",
                         name, kt_type, meta.name
@@ -422,7 +418,11 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                         .iter()
                         .enumerate()
                         .map(|(i, ty)| {
-                            format!("val value{}: {}", i, map_type(ty, &ctx.custom_types))
+                            format!(
+                                "val value{}: {}",
+                                i,
+                                map_type(ty, &ctx.custom_types, &ctx.known_types)
+                            )
                         })
                         .collect::<Vec<_>>()
                         .join(", ");
@@ -438,8 +438,6 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                 serde_rename_all,
             } => {
                 let serial_name = apply_rename(name, meta.serde_rename_all.as_deref());
-                // For struct variant fields, use variant's own serde_rename_all if present,
-                // else fall back to the enum's serde_rename_all.
                 let field_rename = serde_rename_all
                     .as_deref()
                     .or(meta.serde_rename_all.as_deref());
@@ -447,7 +445,7 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
                     .iter()
                     .map(|f| {
                         let kt_name = f.name.to_lower_camel_case();
-                        let kt_type = map_type(&f.ty, &ctx.custom_types);
+                        let kt_type = map_type(&f.ty, &ctx.custom_types, &ctx.known_types);
                         let sn = apply_rename(&f.name, field_rename);
                         let default_part = if f.has_serde_default {
                             format!(" = {}", resolve_default(f, &kt_type, ctx))
@@ -478,10 +476,6 @@ fn generate_sealed_class(meta: &FfiMeta, variants: &[FfiVariant], ctx: &CodegenC
     w.finish()
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,97 +484,120 @@ mod tests {
         HashMap::new()
     }
 
+    fn empty_known_types() -> HashSet<&'static str> {
+        HashSet::new()
+    }
+
     fn test_context<'a>(extra_metas: &[&'a FfiMeta]) -> CodegenContext<'a> {
         let mut meta_map = HashMap::new();
         for m in extra_metas {
             meta_map.insert(m.name.as_str(), *m);
         }
+        let known_types: HashSet<&str> = meta_map.keys().copied().collect();
         CodegenContext {
             custom_types: HashMap::new(),
             meta_map,
+            known_types,
             inlined_types: HashSet::new(),
         }
     }
 
-    // -----------------------------------------------------------------------
-    // map_type tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn map_primitives() {
         let ct = empty_custom_types();
-        assert_eq!(map_type("bool", &ct), "Boolean");
-        assert_eq!(map_type("u32", &ct), "Int");
-        assert_eq!(map_type("i64", &ct), "Long");
-        assert_eq!(map_type("usize", &ct), "Long");
-        assert_eq!(map_type("f32", &ct), "Float");
-        assert_eq!(map_type("String", &ct), "String");
+        let kt = empty_known_types();
+        assert_eq!(map_type("bool", &ct, &kt), "Boolean");
+        assert_eq!(map_type("u32", &ct, &kt), "Int");
+        assert_eq!(map_type("i64", &ct, &kt), "Long");
+        assert_eq!(map_type("usize", &ct, &kt), "Long");
+        assert_eq!(map_type("f32", &ct, &kt), "Float");
+        assert_eq!(map_type("String", &ct, &kt), "String");
     }
 
     #[test]
     fn map_option() {
         let ct = empty_custom_types();
-        assert_eq!(map_type("Option<String>", &ct), "String?");
-        assert_eq!(map_type("Option<u32>", &ct), "Int?");
+        let kt = empty_known_types();
+        assert_eq!(map_type("Option<String>", &ct, &kt), "String?");
+        assert_eq!(map_type("Option<u32>", &ct, &kt), "Int?");
     }
 
     #[test]
     fn map_vec() {
         let ct = empty_custom_types();
-        assert_eq!(map_type("Vec<u32>", &ct), "List<Int>");
-        assert_eq!(map_type("Vec<String>", &ct), "List<String>");
+        let kt = empty_known_types();
+        assert_eq!(map_type("Vec<u32>", &ct, &kt), "List<Int>");
+        assert_eq!(map_type("Vec<String>", &ct, &kt), "List<String>");
     }
 
     #[test]
     fn map_imbl_vector() {
         let ct = empty_custom_types();
-        assert_eq!(map_type("imbl::Vector<NodeId>", &ct), "List<NodeId>");
+        let kt = empty_known_types();
+        assert_eq!(map_type("imbl::Vector<NodeId>", &ct, &kt), "List<NodeId>");
     }
 
     #[test]
     fn map_custom_type() {
         let mut ct = HashMap::new();
         ct.insert("NodeId".into(), "String".into());
-        assert_eq!(map_type("NodeId", &ct), "String");
-        assert_eq!(map_type("Option<NodeId>", &ct), "String?");
-        assert_eq!(map_type("Vec<NodeId>", &ct), "List<String>");
+        let kt = empty_known_types();
+        assert_eq!(map_type("NodeId", &ct, &kt), "String");
+        assert_eq!(map_type("Option<NodeId>", &ct, &kt), "String?");
+        assert_eq!(map_type("Vec<NodeId>", &ct, &kt), "List<String>");
     }
 
     #[test]
-    fn map_ffi_type_passthrough() {
+    fn map_unknown_type_passthrough() {
         let ct = empty_custom_types();
-        assert_eq!(map_type("Affinity", &ct), "Affinity");
-        assert_eq!(map_type("Position", &ct), "Position");
+        let kt = empty_known_types();
+        assert_eq!(map_type("Affinity", &ct, &kt), "Affinity");
+        assert_eq!(map_type("Position", &ct, &kt), "Position");
+    }
+
+    #[test]
+    fn map_known_type_uses_fqn() {
+        let ct = empty_custom_types();
+        let mut kt = HashSet::new();
+        kt.insert("Intent");
+        kt.insert("Break");
+        assert_eq!(map_type("Intent", &ct, &kt), "co.typie.editor.ffi.Intent");
+        assert_eq!(map_type("Break", &ct, &kt), "co.typie.editor.ffi.Break");
+        assert_eq!(
+            map_type("Option<Intent>", &ct, &kt),
+            "co.typie.editor.ffi.Intent?"
+        );
     }
 
     #[test]
     fn map_nested_generic() {
         let ct = empty_custom_types();
-        assert_eq!(map_type("Option<Vec<u32>>", &ct), "List<Int>?");
-        assert_eq!(map_type("Vec<Option<String>>", &ct), "List<String?>");
+        let kt = empty_known_types();
+        assert_eq!(map_type("Option<Vec<u32>>", &ct, &kt), "List<Int>?");
+        assert_eq!(map_type("Vec<Option<String>>", &ct, &kt), "List<String?>");
     }
 
     #[test]
     fn map_hashmap_types() {
         let ct = empty_custom_types();
-        assert_eq!(map_type("HashMap<String, u32>", &ct), "Map<String, Int>");
+        let kt = empty_known_types();
         assert_eq!(
-            map_type("std::collections::HashMap<String, Vec<u32>>", &ct),
+            map_type("HashMap<String, u32>", &ct, &kt),
+            "Map<String, Int>"
+        );
+        assert_eq!(
+            map_type("std::collections::HashMap<String, Vec<u32>>", &ct, &kt),
             "Map<String, List<Int>>"
         );
         assert_eq!(
-            map_type("hashbrown::HashMap<String, bool>", &ct),
+            map_type("hashbrown::HashMap<String, bool>", &ct, &kt),
             "Map<String, Boolean>"
         );
         assert_eq!(
-            map_type("imbl::HashMap<String, f64>", &ct),
+            map_type("imbl::HashMap<String, f64>", &ct, &kt),
             "Map<String, Double>"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // generate_data_class tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn generate_simple_struct() {
@@ -665,10 +682,6 @@ mod tests {
         assert!(output.contains("@SerialName(\"affinity\") val affinity: Affinity,"));
     }
 
-    // -----------------------------------------------------------------------
-    // generate_enum_class tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn generate_untagged_unit_enum() {
         let meta = FfiMeta {
@@ -702,10 +715,6 @@ mod tests {
         assert!(output.contains("@SerialName(\"downstream\") Downstream,"));
         assert!(output.contains("@SerialName(\"upstream\") Upstream,"));
     }
-
-    // -----------------------------------------------------------------------
-    // generate_sealed_class tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn generate_tagged_enum_sealed_class() {
@@ -856,10 +865,6 @@ mod tests {
         assert!(output.contains("data class Range(val value0: Int, val value1: Int) : TestEnum()"));
     }
 
-    // -----------------------------------------------------------------------
-    // Default value tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn generate_struct_with_defaults() {
         let affinity_meta = FfiMeta {
@@ -917,7 +922,7 @@ mod tests {
         assert!(output.contains("@SerialName(\"offset\") val offset: Long = 0L,"));
         assert!(
             output.contains(
-                "@SerialName(\"affinity\") val affinity: Affinity = Affinity.Downstream,"
+                "@SerialName(\"affinity\") val affinity: co.typie.editor.ffi.Affinity = co.typie.editor.ffi.Affinity.Downstream,"
             )
         );
     }
@@ -947,10 +952,6 @@ mod tests {
         );
         assert!(output.contains("@SerialName(\"proportion\") val proportion: Float = 1.0f,"));
     }
-
-    // -----------------------------------------------------------------------
-    // Newtype flattening test
-    // -----------------------------------------------------------------------
 
     #[test]
     fn generate_tagged_enum_with_newtype_flattening() {
@@ -1001,10 +1002,8 @@ mod tests {
             &ctx,
         );
         assert!(output.contains("sealed class EditorEvent {"));
-        // Flattened: inner struct fields are inlined
         assert!(output.contains("@SerialName(\"doc_version\") val docVersion: Long"));
         assert!(output.contains("@SerialName(\"fields\") val fields: List<String>"));
-        // Should NOT contain "val value: StateChangedPayload"
         assert!(!output.contains("val value:"));
         assert!(output.contains("data object RenderInvalidated : EditorEvent()"));
     }

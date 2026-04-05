@@ -34,10 +34,12 @@ pub fn measure_paragraph(
     };
 
     let mut resource = measurer.resource.lock().unwrap();
-
     let strut = compute_strut(&mut resource, &base_style);
     let style_runs = resolve_style_runs(&text, &runs, &mut resource.font_registry);
     let layout = build_layout(&text, &style_runs, align, indent, width, &mut resource);
+    drop(resource);
+
+    let strut = strut.expect("strut layout should have one line and run");
 
     let old_lines = extract_lines(
         doc,
@@ -48,8 +50,6 @@ pub fn measure_paragraph(
         base_style.line_height,
         base_style.font_size,
     );
-
-    drop(resource);
 
     let node_id = node.id();
     let alignment = text_align_to_alignment(align);
@@ -101,6 +101,8 @@ fn measure_empty_paragraph(
     let mut resource = measurer.resource.lock().unwrap();
     let strut = compute_strut(&mut resource, &base_style);
     drop(resource);
+
+    let strut = strut.expect("strut layout should have one line and run");
 
     let height = (base_style.font_size * base_style.line_height).max(strut.ascent + strut.descent);
     let node_id = node.id();

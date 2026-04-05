@@ -2,10 +2,6 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::meta::{FfiMethod, FfiParam};
 
-/// ObjC selector for a Swift @objc method with explicit error parameter.
-/// - No user params → `{methodName}WithError`
-/// - With user params → `{methodName}With{FirstParamName}`
-/// The `error:` label is always the last parameter in the ObjC selector.
 pub fn objc_selector(method: &FfiMethod) -> String {
     let base = method.name.to_lower_camel_case();
     if method.params.is_empty() {
@@ -16,8 +12,6 @@ pub fn objc_selector(method: &FfiMethod) -> String {
     }
 }
 
-/// Format Kotlin cinterop call arguments for an iOS wrapper method.
-/// First argument is positional, subsequent use named labels.
 pub fn kotlin_cinterop_args(
     params: &[FfiParam],
     format_value: impl Fn(&FfiParam) -> String,
@@ -38,7 +32,6 @@ pub fn kotlin_cinterop_args(
     parts.join(", ")
 }
 
-/// Format Swift @objc method parameter declarations.
 pub fn swift_param_decl(params: &[FfiParam], format_type: impl Fn(&FfiParam) -> String) -> String {
     params
         .iter()
@@ -51,7 +44,6 @@ pub fn swift_param_decl(params: &[FfiParam], format_type: impl Fn(&FfiParam) -> 
         .join(", ")
 }
 
-/// Format Swift call arguments (from @objc bridge to UniFFI).
 pub fn swift_call_args(params: &[FfiParam], format_value: impl Fn(&FfiParam) -> String) -> String {
     params
         .iter()

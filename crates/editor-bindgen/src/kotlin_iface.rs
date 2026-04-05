@@ -63,7 +63,6 @@ fn format_method_sig(method: &FfiMethod, custom_types: &HashMap<String, String>)
     }
 }
 
-/// Map FfiParamType to Kotlin type string. Resolves custom types (e.g. PlatformHandle → u64 → Long).
 pub fn param_to_kotlin(ty: &FfiParamType, custom_types: &HashMap<String, String>) -> String {
     match ty {
         FfiParamType::Primitive(p) => resolve_primitive(p, custom_types),
@@ -79,7 +78,6 @@ pub fn param_to_kotlin(ty: &FfiParamType, custom_types: &HashMap<String, String>
     }
 }
 
-/// Map FfiReturnType to Kotlin type string.
 pub fn return_to_kotlin(ty: &FfiReturnType, custom_types: &HashMap<String, String>) -> String {
     match ty {
         FfiReturnType::Unit => String::new(),
@@ -114,8 +112,6 @@ fn scalar_return_to_kotlin(ty: &FfiScalarReturn, custom_types: &HashMap<String, 
     }
 }
 
-/// Resolve a primitive type name, following custom type aliases.
-/// PlatformHandle → (custom_types lookup) → u64 → Long
 pub fn resolve_primitive(name: &str, custom_types: &HashMap<String, String>) -> String {
     let resolved = custom_types.get(name).map(|s| s.as_str()).unwrap_or(name);
     match resolved {

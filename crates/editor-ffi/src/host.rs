@@ -14,11 +14,18 @@ fn init_logger() {
             android_logger::init_once(
                 android_logger::Config::default()
                     .with_max_level(log::LevelFilter::Debug)
+                    .with_filter(
+                        env_filter::Builder::new()
+                            .filter_level(log::LevelFilter::Warn)
+                            .filter_module("editor", log::LevelFilter::Debug)
+                            .build(),
+                    )
                     .with_tag("editor"),
             );
         } else if #[cfg(feature = "uniffi")] {
             let _ = env_logger::builder()
-                .filter_level(log::LevelFilter::Debug)
+                .filter_level(log::LevelFilter::Warn)
+                .filter_module("editor", log::LevelFilter::Debug)
                 .try_init();
         }
     }
@@ -99,7 +106,7 @@ impl EditorHost {
     pub fn load_icu_data(&self, data: Vec<u8>) -> EditorResult<()> {
         let segmenters = editor_resource::TextSegmenters::from_icu_data(&data)?;
         self.with_resource(|resource| {
-            resource.segmenters = Some(segmenters);
+            resource.segmenters = Some(Arc::new(segmenters));
             Ok(())
         })
     }

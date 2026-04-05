@@ -46,10 +46,6 @@ pub enum FfiVariant {
     },
 }
 
-// ---------------------------------------------------------------------------
-// Interface metadata (Phase 3)
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct FfiInterface {
     pub name: String,

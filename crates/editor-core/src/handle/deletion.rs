@@ -40,15 +40,13 @@ pub fn handle_deletion_intent(
         }
         DeletionIntent::Move { movement } => {
             let head = editor.state().selection.head;
-            let target = {
-                let resource = editor.resource.lock().unwrap();
-                editor.view.resolve_movement(
-                    &head,
-                    &movement,
-                    &editor.state.doc,
-                    resource.segmenters.as_ref(),
-                )
-            };
+            let segmenters = editor.resource.lock().unwrap().segmenters.clone();
+            let target = editor.view.resolve_movement(
+                &head,
+                &movement,
+                &editor.state.doc,
+                segmenters.as_deref(),
+            );
 
             if let Some(target) = target {
                 let selection = Selection::new(head, target.head);
@@ -141,7 +139,7 @@ mod tests {
 
     fn editor_with_layout(state: editor_state::State) -> Editor {
         let resource = Arc::new(Mutex::new(Resource::new()));
-        resource.lock().unwrap().segmenters = Some(TextSegmenters::new_test());
+        resource.lock().unwrap().segmenters = Some(Arc::new(TextSegmenters::new_test()));
         let mut editor = Editor::new_test_with_resource(state.clone(), resource);
         editor.view.layout(&state.doc);
         editor

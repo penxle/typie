@@ -12,7 +12,7 @@ pub struct Resource {
     pub font_registry: FontRegistry,
     pub font_context: FontContext,
     pub layout_context: LayoutContext<TextBrush>,
-    pub segmenters: Option<TextSegmenters>,
+    pub segmenters: Option<Arc<TextSegmenters>>,
 }
 
 impl Resource {

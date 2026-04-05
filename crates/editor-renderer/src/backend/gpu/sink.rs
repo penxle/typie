@@ -13,6 +13,7 @@ pub struct GpuSink {
     scene: vello::Scene,
     surface: wgpu::Surface<'static>,
     format: wgpu::TextureFormat,
+    alpha_mode: wgpu::CompositeAlphaMode,
     width: u32,
     height: u32,
 }
@@ -22,7 +23,20 @@ impl GpuSink {
         device: Arc<GpuDevice>,
         surface: wgpu::Surface<'static>,
     ) -> Result<Self, RendererError> {
-        let format = surface.get_capabilities(&device.adapter).formats[0];
+        let caps = surface.get_capabilities(&device.adapter);
+        let format = caps.formats[0];
+        use wgpu::CompositeAlphaMode::*;
+        let alpha_mode = if caps.alpha_modes.contains(&PreMultiplied)
+            || device.adapter.get_info().backend == wgpu::Backend::BrowserWebGpu
+        {
+            // WebGPU reports [Opaque] but supports PreMultiplied in practice
+            PreMultiplied
+        } else {
+            [PostMultiplied, Opaque]
+                .into_iter()
+                .find(|m| caps.alpha_modes.contains(m))
+                .unwrap_or(caps.alpha_modes[0])
+        };
         let submitter = GpuSubmitter::new(Arc::clone(&device))?;
 
         Ok(Self {
@@ -31,6 +45,7 @@ impl GpuSink {
             scene: vello::Scene::new(),
             surface,
             format,
+            alpha_mode,
             width: 0,
             height: 0,
         })
@@ -65,7 +80,7 @@ impl GpuSink {
                 width,
                 height,
                 present_mode: wgpu::PresentMode::Fifo,
-                alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied,
+                alpha_mode: self.alpha_mode,
                 view_formats: vec![],
                 desired_maximum_frame_latency: 2,
             },

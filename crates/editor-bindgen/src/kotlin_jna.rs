@@ -75,7 +75,6 @@ fn generate_jna_class(
         out.push_str(&format!("{} {{\n", sig));
         out.push_str("        try {\n");
 
-        // Build native call arguments
         let native_args = method
             .params
             .iter()
@@ -95,7 +94,6 @@ fn generate_jna_class(
             )
         };
 
-        // Build return expression
         let return_stmt = build_return_stmt(&method.return_type, &native_call, all_interfaces);
         out.push_str(&format!("            {}\n", return_stmt));
 
@@ -105,11 +103,71 @@ fn generate_jna_class(
         out.push_str("    }\n");
     }
 
+    let constructors: Vec<_> = iface.methods.iter().filter(|m| m.is_constructor).collect();
+    if !constructors.is_empty() {
+        out.push_str("    companion object {\n");
+        for ctor in &constructors {
+            let kt_name = ctor.name.to_lower_camel_case();
+            let params = ctor
+                .params
+                .iter()
+                .map(|p| {
+                    let kt_param = p.name.to_lower_camel_case();
+                    let kt_type = crate::kotlin_iface::param_to_kotlin(&p.ty, custom_types);
+                    let default = if matches!(p.ty, FfiParamType::Option(_)) {
+                        " = null"
+                    } else {
+                        ""
+                    };
+                    format!("{}: {}{}", kt_param, kt_type, default)
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let suspend = if ctor.is_async { "suspend " } else { "" };
+            out.push_str(&format!(
+                "        {}fun {}({}): Jna{} {{\n",
+                suspend, kt_name, params, iface.name
+            ));
+            out.push_str("            try {\n");
+
+            let native_args = ctor
+                .params
+                .iter()
+                .map(|p| {
+                    let kt_param = p.name.to_lower_camel_case();
+                    convert_param(&p.ty, &kt_param, custom_types)
+                })
+                .collect::<Vec<_>>()
+                .join(",\n                    ");
+
+            let native_call = if ctor.params.is_empty() {
+                format!("Native{}.{}()", iface.name, kt_name)
+            } else {
+                format!(
+                    "Native{}.{}(\n                    {}\n                )",
+                    iface.name, kt_name, native_args
+                )
+            };
+
+            out.push_str(&format!(
+                "                return Jna{}({})\n",
+                iface.name, native_call
+            ));
+            out.push_str("            } catch (e: NativeEditorException) {\n");
+            out.push_str(
+                "                throw EditorException(e.message ?: \"Unknown editor error\")\n",
+            );
+            out.push_str("            }\n");
+            out.push_str("        }\n");
+        }
+        out.push_str("    }\n");
+    }
+
     out.push_str("}\n");
     out
 }
 
-/// Convert a parameter value for passing to the native call.
 fn convert_param(
     ty: &FfiParamType,
     kt_name: &str,
@@ -148,7 +206,6 @@ fn convert_param(
     }
 }
 
-/// Resolve a primitive type through custom_types and return the JNA conversion expression.
 fn jna_primitive_conversion(
     name: &str,
     kt_name: &str,
@@ -163,7 +220,6 @@ fn jna_primitive_conversion(
     }
 }
 
-/// Build the return statement for a method.
 fn build_return_stmt(
     return_type: &FfiReturnType,
     native_call: &str,
@@ -176,7 +232,6 @@ fn build_return_stmt(
             format!("return json.decodeFromString({})", native_call)
         }
         FfiReturnType::Owned(name) => {
-            // If owned type is another interface, wrap in JnaXxx
             if all_interfaces.iter().any(|i| &i.name == name) {
                 format!("return Jna{}({})", name, native_call)
             } else {
@@ -234,9 +289,12 @@ mod tests {
             methods: vec![
                 FfiMethod {
                     name: "create".into(),
-                    is_async: false,
+                    is_async: true,
                     is_constructor: true,
-                    params: vec![],
+                    params: vec![FfiParam {
+                        name: "kind".into(),
+                        ty: FfiParamType::Option(FfiScalarParam::Complex("BackendKind".into())),
+                    }],
                     return_type: FfiReturnType::Owned("EditorHost".into()),
                 },
                 FfiMethod {
@@ -306,7 +364,6 @@ mod tests {
         }
     }
 
-    // Test 1: loadFontBase generates weight.toUShort() for u16 param
     #[test]
     fn load_font_base_u16_param_converts_to_ushort() {
         let iface = editor_host_iface();
@@ -319,7 +376,6 @@ mod tests {
         );
     }
 
-    // Test 2: createEditor generates JnaEditor(native.createEditor(...)) for Owned<Editor> return
     #[test]
     fn create_editor_owned_return_wraps_in_jna_editor() {
         let iface = editor_host_iface();
@@ -332,7 +388,6 @@ mod tests {
         );
     }
 
-    // Test 3: tick generates native.tick().map { json.decodeFromString(it) } for Vec<Complex<T>> return
     #[test]
     fn tick_vec_complex_return_maps_with_json_decode() {
         let iface = editor_iface();
@@ -345,7 +400,6 @@ mod tests {
         );
     }
 
-    // Test 4: PlatformHandle resolves via custom_types to generate .toULong()
     #[test]
     fn platform_handle_resolves_to_ulong() {
         let ct = with_platform_handle();
@@ -353,21 +407,55 @@ mod tests {
         assert_eq!(result, "handle.toULong()");
     }
 
-    // Additional: constructor methods are skipped
     #[test]
-    fn constructor_methods_are_skipped() {
+    fn constructor_not_generated_as_override() {
         let iface = editor_host_iface();
         let all_ifaces = vec![iface.clone()];
         let output = generate_jna_class(&iface, &all_ifaces, &empty_ct());
-        // 'create' is constructor — must not appear as override fun
         assert!(
             !output.contains("override fun create("),
-            "Constructor method should be skipped:\n{}",
+            "Constructor should not be an override method:\n{}",
             output
         );
     }
 
-    // Additional: loadIcuData passes ByteArray directly
+    #[test]
+    fn constructor_generates_companion_factory() {
+        let iface = editor_host_iface();
+        let all_ifaces = vec![iface.clone()];
+        let output = generate_jna_class(&iface, &all_ifaces, &empty_ct());
+        assert!(
+            output.contains("companion object"),
+            "Expected companion object:\n{}",
+            output
+        );
+        assert!(
+            output.contains("suspend fun create("),
+            "Expected suspend fun create:\n{}",
+            output
+        );
+        assert!(
+            output.contains("kind: BackendKind? = null"),
+            "Expected typed BackendKind? param with default null:\n{}",
+            output
+        );
+        assert!(
+            output.contains("NativeEditorHost.create("),
+            "Expected delegation to NativeEditorHost.create:\n{}",
+            output
+        );
+        assert!(
+            output.contains("return JnaEditorHost("),
+            "Expected return JnaEditorHost wrapper:\n{}",
+            output
+        );
+        assert!(
+            output.contains("json.encodeToString(it)"),
+            "Expected JSON serialization for Complex param:\n{}",
+            output
+        );
+    }
+
     #[test]
     fn load_icu_data_bytearray_passed_directly() {
         let iface = editor_host_iface();
@@ -378,7 +466,6 @@ mod tests {
             "Expected native.loadIcuData call:\n{}",
             output
         );
-        // data should be passed as-is, no conversion
         assert!(
             !output.contains("data.toU"),
             "ByteArray data should not be converted:\n{}",

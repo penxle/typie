@@ -194,8 +194,8 @@ impl Editor {
         for mapping in &mappings {
             let resolved_family = resource
                 .font_registry
-                .resolve(mapping.family_id)
-                .to_string();
+                .resolve_opt(mapping.family_id)
+                .map(|s| s.to_string());
 
             let is_primary = mapping.family_id == family_id;
 
@@ -203,6 +203,10 @@ impl Editor {
                 .font_registry
                 .manifest(mapping.family_id, mapping.weight)
             else {
+                continue;
+            };
+
+            let Some(resolved_family) = resolved_family else {
                 continue;
             };
 

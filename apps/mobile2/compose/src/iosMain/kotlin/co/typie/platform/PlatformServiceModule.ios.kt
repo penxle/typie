@@ -71,8 +71,7 @@ private class IOSClipboard : Clipboard {
     withContext(Dispatchers.Default) {
       runCatching {
         if (mimeType.startsWith("image/")) {
-          val image = bytes.toUIImage() ?: return@withContext false
-          UIPasteboard.generalPasteboard.image = image
+          UIPasteboard.generalPasteboard.image = bytes.toUIImage()
         } else {
           UIPasteboard.generalPasteboard.setData(bytes.toNSData(), forPasteboardType = mimeType)
         }
@@ -98,7 +97,7 @@ private class IOSFileSystem : FileSystem {
     try {
       when (location) {
         FileSystemSaveLocation.Gallery -> {
-          val image = bytes.toUIImage() ?: return@withContext FileSystemSaveResult.Error
+          val image = bytes.toUIImage()
           val granted = requestPhotoLibraryAccess()
           if (!granted) return@withContext FileSystemSaveResult.PermissionDenied
           UIImageWriteToSavedPhotosAlbum(image, null, null, null)
@@ -155,7 +154,7 @@ private class IOSShare : Share {
     withContext(Dispatchers.Main) {
       runCatching {
         val item: Any = if (mimeType.startsWith("image/")) {
-          bytes.toUIImage() ?: return@withContext false
+          bytes.toUIImage()
         } else {
           bytes.toNSData()
         }

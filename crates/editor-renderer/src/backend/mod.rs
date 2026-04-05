@@ -22,6 +22,13 @@ impl RenderBackend {
         device: Arc<gpu::GpuDevice>,
         surface: wgpu::Surface<'static>,
     ) -> Result<Self, crate::RendererError> {
+        let downlevel = device.adapter.get_downlevel_capabilities();
+        if !downlevel
+            .flags
+            .contains(wgpu::DownlevelFlags::INDIRECT_EXECUTION)
+        {
+            return Err(crate::RendererError::UnsupportedGpu);
+        }
         Ok(Self::Gpu(GpuSink::new(device, surface)?))
     }
 

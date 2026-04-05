@@ -15,6 +15,7 @@ cfg-if = "1"
 console_error_panic_hook = { version = "0.1" }
 console_log = "1"
 enum-map = "2"
+env_filter = "0.1"
 env_logger = "0.11"
 fontique = { version = "0.8", default-features = false }
 getrandom = { version = "0.4", features = ["wasm_js"] }
@@ -30,6 +31,9 @@ icu_segmenter = { version = "2", default-features = false }
 imbl = "7"
 kurbo = "0.13"
 log = "0.4"
+objc2 = "0.6"
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
+objc2-metal = { version = "0.3", features = ["MTLTexture", "MTLDrawable", "MTLTypes"] }
 object = { version = "0.36", default-features = false, features = ["read"] }
 parley = { version = "0.8", default-features = false, features = ["std"] }
 peniko = "0.6"
@@ -37,6 +41,7 @@ phf = "0.13"
 phf_codegen = "0.13"
 proc-macro2 = "1"
 quote = "1"
+raw-window-handle = "0.6"
 resize = { version = "0.8", default-features = false }
 ruzstd = "0.8"
 serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,43 @@
+use editor_macros::ffi;
+use editor_renderer::RenderSink;
+
+use crate::backend::BackendMode;
+use crate::error::FfiError;
+
+#[ffi]
+pub type PlatformHandle = u64;
+
+pub struct SurfaceHandle;
+
+impl SurfaceHandle {
+    pub fn new(
+        mode: &BackendMode,
+        _handle: PlatformHandle,
+        _width: u32,
+        _height: u32,
+        _scale_factor: f64,
+    ) -> Result<Self, FfiError> {
+        let _ = match mode {
+            BackendMode::Gpu { device } => Some(device),
+            BackendMode::Cpu => None,
+        };
+
+        unreachable!();
+    }
+
+    pub fn scale_factor(&self) -> f64 {
+        unreachable!();
+    }
+
+    pub fn sink(&mut self) -> &mut dyn RenderSink {
+        unreachable!();
+    }
+
+    pub fn present(&mut self) {
+        unreachable!();
+    }
+
+    pub fn resize(&mut self, _width: u32, _height: u32, _scale_factor: f64) {
+        unreachable!();
+    }
+}
