@@ -42,10 +42,10 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let doc = tr.doc();
     let mut textblock_ids = Vec::new();
     for &node_id in &node_ids {
-        if let Some(tb_id) = find_ancestor_textblock(&doc, node_id) {
-            if !textblock_ids.contains(&tb_id) {
-                textblock_ids.push(tb_id);
-            }
+        if let Some(tb_id) = find_ancestor_textblock(&doc, node_id)
+            && !textblock_ids.contains(&tb_id)
+        {
+            textblock_ids.push(tb_id);
         }
     }
 

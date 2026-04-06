@@ -33,6 +33,10 @@ impl NodeSpec {
         }
         allowed.iter().all(|t| Schema::node_spec(*t).inline)
     }
+
+    pub fn is_leaf(&self) -> bool {
+        self.content.is_leaf()
+    }
 }
 
 impl Default for NodeSpec {
@@ -76,4 +80,23 @@ pub enum Expand {
     After,
     Both,
     None,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Schema;
+
+    #[test]
+    fn is_leaf_classifies_nodes() {
+        assert!(Schema::node_spec(NodeType::Text).is_leaf());
+        assert!(Schema::node_spec(NodeType::HardBreak).is_leaf());
+        assert!(Schema::node_spec(NodeType::PageBreak).is_leaf());
+        assert!(Schema::node_spec(NodeType::Image).is_leaf());
+        assert!(Schema::node_spec(NodeType::HorizontalRule).is_leaf());
+        assert!(!Schema::node_spec(NodeType::Root).is_leaf());
+        assert!(!Schema::node_spec(NodeType::Paragraph).is_leaf());
+        assert!(!Schema::node_spec(NodeType::Blockquote).is_leaf());
+        assert!(!Schema::node_spec(NodeType::Table).is_leaf());
+    }
 }

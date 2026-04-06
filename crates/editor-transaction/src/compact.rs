@@ -12,19 +12,19 @@ pub fn compact(node: &NodeRef) -> Vec<Step> {
 
     // Phase 1: remove empty text nodes (reverse order for index stability)
     for i in (0..children.len()).rev() {
-        if let Node::Text(t) = children[i].node() {
-            if t.text.is_empty() {
-                steps.push(Step::RemoveSubtree {
-                    parent_id: node.id(),
-                    index: i,
-                    subtree: Subtree {
-                        id: children[i].id(),
-                        node: children[i].node().clone(),
-                        modifiers: children[i].modifiers().to_vec(),
-                        children: vec![],
-                    },
-                });
-            }
+        if let Node::Text(t) = children[i].node()
+            && t.text.is_empty()
+        {
+            steps.push(Step::RemoveSubtree {
+                parent_id: node.id(),
+                index: i,
+                subtree: Subtree {
+                    id: children[i].id(),
+                    node: children[i].node().clone(),
+                    modifiers: children[i].modifiers().to_vec(),
+                    children: vec![],
+                },
+            });
         }
     }
 

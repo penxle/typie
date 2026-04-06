@@ -4,12 +4,15 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-uniffi = ["dep:uniffi", "editor-model/uniffi"]
-wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm"]
+test-utils = ["editor-model/test-utils", "editor-state/test-utils"]
+uniffi = ["dep:uniffi", "editor-common/uniffi", "editor-model/uniffi", "editor-state/uniffi"]
+wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-common/wasm", "editor-model/wasm", "editor-state/wasm"]
 
 [dependencies]
+editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
+editor-state = { path = "../editor-state" }
 enum-map.workspace = true
 log.workspace = true
 thiserror.workspace = true

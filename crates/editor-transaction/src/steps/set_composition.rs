@@ -4,7 +4,7 @@ use crate::{Step, StepError, StepOutput};
 
 pub(crate) fn apply(state: &State, new: &Option<Composition>) -> Result<StepOutput, StepError> {
     let mut new_state = state.clone();
-    new_state.composition = new.clone();
+    new_state.composition = *new;
 
     Ok(StepOutput {
         state: new_state,
@@ -25,20 +25,16 @@ mod tests {
 
     #[test]
     fn set_composition_apply() {
-        let (state, t1) = state! {
+        let (state, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0)
         };
 
-        let comp = Some(Composition {
-            node_id: t1,
-            offset: 0,
-            text: "ㅎ".into(),
-        });
+        let comp = Some(Composition { start: 0, end: 1 });
 
         let step = Step::SetComposition {
             old: None,
-            new: comp.clone(),
+            new: comp,
         };
 
         let output = step.apply(&state).unwrap();
@@ -48,16 +44,12 @@ mod tests {
 
     #[test]
     fn set_composition_inverse_roundtrip() {
-        let (state, t1) = state! {
+        let (state, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0)
         };
 
-        let comp = Some(Composition {
-            node_id: t1,
-            offset: 0,
-            text: "ㅎ".into(),
-        });
+        let comp = Some(Composition { start: 0, end: 1 });
 
         let step = Step::SetComposition {
             old: None,

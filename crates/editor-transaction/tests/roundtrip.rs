@@ -122,7 +122,7 @@ fn set_node_and_selection_combined() {
 
     // Move selection
     let set_sel = Step::SetSelection {
-        old: state2.selection.clone(),
+        old: state2.selection,
         new: Selection::collapsed(Position::new(t1, 5)),
     };
     let state3 = set_sel.apply(&state2).unwrap().state;

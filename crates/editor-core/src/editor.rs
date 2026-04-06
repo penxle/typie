@@ -2,8 +2,9 @@ use editor_common::time::Duration;
 use editor_model::NodeId;
 use editor_renderer::{RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
+use editor_schema::{DocFlatExt, ResolvedPositionFlatExt};
 use editor_state::State;
-use editor_transaction::{Effect, HistoryMeta, Transaction};
+use editor_transaction::{Effect, HistoryMeta, Step, Transaction};
 use editor_view::View;
 use editor_view::Viewport;
 use hashbrown::{HashMap, HashSet};
@@ -25,6 +26,8 @@ pub struct Editor {
     pub(crate) resource: Arc<Mutex<Resource>>,
     message_queue: Vec<Message>,
     pending_events: Vec<EditorEvent>,
+    pending_steps: Vec<Step>,
+    pending_effects: Vec<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>,
 }
 
@@ -38,6 +41,8 @@ impl Editor {
             resource,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
+            pending_steps: Vec::new(),
+            pending_effects: Vec::new(),
             pending_fonts: HashMap::new(),
         }
     }
@@ -54,6 +59,54 @@ impl Editor {
         self.renderer.set_theme_variant(variant);
     }
 
+    pub fn input_context(
+        &self,
+        before_limit: usize,
+        after_limit: usize,
+    ) -> Result<InputContext, EditorError> {
+        let state = self.state();
+        let doc = &state.doc;
+        let doc_size = doc.flat_size();
+
+        let sel = state.selection;
+        let anchor_flat = sel
+            .anchor
+            .resolve(doc)
+            .ok_or_else(|| EditorError::General {
+                msg: "invariant violated: state.selection.anchor must resolve against state.doc"
+                    .into(),
+            })?
+            .to_flat();
+        let head_flat = sel
+            .head
+            .resolve(doc)
+            .ok_or_else(|| EditorError::General {
+                msg: "invariant violated: state.selection.head must resolve against state.doc"
+                    .into(),
+            })?
+            .to_flat();
+        let (sel_start, sel_end) = (anchor_flat.min(head_flat), anchor_flat.max(head_flat));
+
+        let window_start = sel_start.saturating_sub(before_limit);
+        let window_end = sel_end.saturating_add(after_limit).min(doc_size);
+
+        let text = doc.flat_text(window_start..window_end);
+        let composing = state.composition.map(|c| InputContextRange {
+            start: c.start,
+            end: c.end,
+        });
+
+        Ok(InputContext {
+            text,
+            window_start,
+            selection: InputContextRange {
+                start: sel_start,
+                end: sel_end,
+            },
+            composing,
+        })
+    }
+
     pub fn enqueue(&mut self, msg: Message) {
         self.message_queue.push(msg);
     }
@@ -62,6 +115,32 @@ impl Editor {
         let messages = std::mem::take(&mut self.message_queue);
         for msg in messages {
             self.process_message(msg)?;
+        }
+
+        let effects = std::mem::take(&mut self.pending_effects);
+        if !effects.is_empty() {
+            self.process_effects(effects);
+        }
+
+        let steps = std::mem::take(&mut self.pending_steps);
+        let mut fields = Vec::new();
+
+        if !steps.is_empty() && self.view.reconcile(&self.state.doc, &steps) {
+            fields.push(StateField::PageSizes);
+            self.push_event(EditorEvent::RenderInvalidated);
+        }
+
+        if steps.iter().any(|s| s.is_doc_step()) {
+            fields.push(StateField::Doc);
+        }
+
+        if steps.iter().any(|s| s.is_selection_step()) {
+            fields.push(StateField::Cursor);
+            fields.push(StateField::Selection);
+        }
+
+        if !fields.is_empty() {
+            self.push_event(EditorEvent::StateChanged { fields });
         }
 
         Ok(std::mem::take(&mut self.pending_events))
@@ -105,9 +184,6 @@ impl Editor {
 
         let (state, steps, effects, meta) = tr.commit();
 
-        self.state = state;
-        self.process_effects(effects);
-
         if !steps.is_empty() {
             match meta.history {
                 HistoryMeta::Record => self.history.push(&steps),
@@ -116,25 +192,9 @@ impl Editor {
             }
         }
 
-        let mut fields = Vec::new();
-
-        if self.view.reconcile(&self.state.doc, &steps) {
-            fields.push(StateField::PageSizes);
-            self.push_event(EditorEvent::RenderInvalidated);
-        }
-
-        if steps.iter().any(|s| s.is_doc_step()) {
-            fields.push(StateField::Doc);
-        }
-
-        if steps.iter().any(|s| s.is_selection_step()) {
-            fields.push(StateField::Cursor);
-            fields.push(StateField::Selection);
-        }
-
-        if !fields.is_empty() {
-            self.push_event(EditorEvent::StateChanged { fields });
-        }
+        self.state = state;
+        self.pending_steps.extend(steps);
+        self.pending_effects.extend(effects);
 
         Ok(())
     }
@@ -259,6 +319,8 @@ impl Editor {
             resource,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
+            pending_steps: Vec::new(),
+            pending_effects: Vec::new(),
             pending_fonts: HashMap::new(),
         }
     }
@@ -272,6 +334,8 @@ impl Editor {
             resource,
             message_queue: Vec::new(),
             pending_events: Vec::new(),
+            pending_steps: Vec::new(),
+            pending_effects: Vec::new(),
             pending_fonts: HashMap::new(),
         }
     }
@@ -429,5 +493,48 @@ mod tests {
             .iter()
             .any(|e| matches!(e, EditorEvent::StateChanged { fields } if fields.contains(&StateField::Doc)));
         assert!(has_doc_changed);
+    }
+
+    #[test]
+    fn input_context_full_window_returns_whole_doc() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 2)
+        };
+        let editor = Editor::new_test(state);
+        let ctx = editor.input_context(usize::MAX, usize::MAX).unwrap();
+        assert_eq!(ctx.text, "hello");
+        assert_eq!(ctx.window_start, 0);
+        assert_eq!(ctx.selection.start, 2);
+        assert_eq!(ctx.selection.end, 2);
+        assert!(ctx.composing.is_none());
+    }
+
+    #[test]
+    fn input_context_limited_window_clamps() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello world") } } }
+            selection: (t1, 6)
+        };
+        let editor = Editor::new_test(state);
+        let ctx = editor.input_context(3, 3).unwrap();
+        // cursor at 6, before 3 chars → window_start = 3, after 3 → window_end = 9
+        assert_eq!(ctx.window_start, 3);
+        assert_eq!(ctx.text, "lo wor");
+        assert_eq!(ctx.selection.start, 6);
+        assert_eq!(ctx.selection.end, 6);
+    }
+
+    #[test]
+    fn input_context_with_non_collapsed_selection() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello world") } } }
+            selection: (t1, 2) -> (t1, 8)
+        };
+        let editor = Editor::new_test(state);
+        let ctx = editor.input_context(usize::MAX, usize::MAX).unwrap();
+        assert_eq!(ctx.text, "hello world");
+        assert_eq!(ctx.selection.start, 2);
+        assert_eq!(ctx.selection.end, 8);
     }
 }

@@ -4,7 +4,7 @@ use editor_common::{Alignment, EdgeInsets};
 use editor_model::{Doc, Node, NodeRef, TableAlign};
 
 use crate::measure::Measurer;
-use crate::measure::container::layout_padded;
+use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
 use crate::style::{BorderMode, BoxStyle, Direction};
 use crate::view_state::ViewState;
@@ -99,12 +99,11 @@ fn calculate_col_widths(
     let total: f32 = widths.iter().sum();
     let diff = available_width - total;
     let tolerance = (1e-6 * available_width).max(1e-4);
-    if diff.abs() > tolerance {
-        if let Some(&(last_idx, _)) = indexed_ratios.last() {
-            if diff > 0.0 || widths[last_idx] + diff >= MIN_CELL_WIDTH {
-                widths[last_idx] += diff;
-            }
-        }
+    if diff.abs() > tolerance
+        && let Some(&(last_idx, _)) = indexed_ratios.last()
+        && (diff > 0.0 || widths[last_idx] + diff >= MIN_CELL_WIDTH)
+    {
+        widths[last_idx] += diff;
     }
 
     widths
@@ -123,10 +122,12 @@ pub fn measure_table_cell(
         node,
         width,
         view_state,
-        EdgeInsets::all(TABLE_CELL_PADDING),
-        EdgeInsets::all(TABLE_BORDER_WIDTH),
-        true,
-        Alignment::Start,
+        PaddedLayoutConfig {
+            padding: EdgeInsets::all(TABLE_CELL_PADDING),
+            border: EdgeInsets::all(TABLE_BORDER_WIDTH),
+            scope: true,
+            alignment: Alignment::Start,
+        },
     )
 }
 

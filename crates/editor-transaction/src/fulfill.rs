@@ -86,11 +86,12 @@ fn compute_seq_insertions(exprs: &[ContentExpr], existing: &[NodeType]) -> Vec<(
                     insertions.push((existing_idx + insertions.len(), first_type(inner)));
                 }
             }
-            ContentExpr::Optional(inner) => {
-                if existing_idx < existing.len() && inner.matches(existing[existing_idx]) {
-                    existing_idx += 1;
-                }
+            ContentExpr::Optional(inner)
+                if existing_idx < existing.len() && inner.matches(existing[existing_idx]) =>
+            {
+                existing_idx += 1;
             }
+            ContentExpr::Optional(_) => {}
             _ => {}
         }
     }
@@ -131,7 +132,7 @@ fn scaffold_children(content: &ContentExpr) -> Vec<Subtree> {
         ContentExpr::Single(t) => vec![scaffold(*t)],
         ContentExpr::OneOrMore(inner) => vec![scaffold(first_type(inner))],
         ContentExpr::Choice(choices) => vec![scaffold(first_type(&choices[0]))],
-        ContentExpr::Seq(exprs) => exprs.iter().flat_map(|e| scaffold_children(e)).collect(),
+        ContentExpr::Seq(exprs) => exprs.iter().flat_map(scaffold_children).collect(),
     }
 }
 

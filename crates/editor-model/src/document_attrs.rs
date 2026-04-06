@@ -25,17 +25,9 @@ impl Default for LayoutMode {
 }
 
 #[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DocumentAttrs {
     pub layout_mode: LayoutMode,
-}
-
-impl Default for DocumentAttrs {
-    fn default() -> Self {
-        Self {
-            layout_mode: LayoutMode::default(),
-        }
-    }
 }
 
 #[cfg(test)]

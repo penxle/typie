@@ -416,13 +416,13 @@ mod tests {
             !editor
                 .pending_fonts
                 .get(&key)
-                .map_or(false, |n| n.contains_key(&t1))
+                .is_some_and(|n| n.contains_key(&t1))
         );
         assert!(
             editor
                 .pending_fonts
                 .get(&key)
-                .map_or(false, |n| n.contains_key(&t2))
+                .is_some_and(|n| n.contains_key(&t2))
         );
 
         assert!(

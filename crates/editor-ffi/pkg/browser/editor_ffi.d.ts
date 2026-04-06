@@ -1,6 +1,135 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+ * A document position: the triple `(node_id, offset, affinity)`.
+ *
+ * `Position` is a plain value type (POD) with no automatic validation.
+ * Its invariants are documented below; violating positions either
+ * resolve to `None` via [`Position::resolve`] (value-level invariants)
+ * or produce incorrect behavior in downstream code (structural
+ * invariants).
+ *
+ * # Invariants
+ *
+ * - `node_id` must refer to a **text node** or a **container node**
+ *   (a node whose schema allows children). Non-text leaf nodes
+ *   (e.g. `hard_break`, `horizontal_rule`, `image`, `page_break`,
+ *   `embed`, `file`) must **never** appear as `node_id`; such
+ *   locations are represented by the parent container's boundary
+ *   (the offset between the siblings of the leaf).
+ *   *Not currently enforced.*
+ *
+ * - `offset` must lie within the node's valid range:
+ *   - Text node: `0..=char_count` (unicode codepoint units, **not** bytes).
+ *   - Container node: `0..=children.len()`.
+ *   *Not currently enforced.*
+ *
+ * # Semantics of `offset`
+ *
+ * `offset` names the **boundary between** elements, not an element itself.
+ *
+ * - In a **text node**, `offset` is a unicode codepoint index between
+ *   chars. For `"hello"`, offset `0` is before `'h'`, offset `5` is
+ *   after `'o'`.
+ * - In a **container node**, `offset` is an index between children.
+ *   For `blockquote { p1, p2, p3 }`, `offset: 1` names the boundary
+ *   **between `p1` and `p2`** — it does NOT point at `p2` itself.
+ *   - Empty container cursor: `offset = 0`.
+ *   - End of container: `offset = children.len()` (e.g. 3 in the
+ *     example above — the position after `p3`).
+ *
+ * # Semantics of `affinity`
+ *
+ * See [`Affinity`].
+ */
+export interface Position {
+    node_id: NodeId;
+    offset: number;
+    affinity?: Affinity;
+}
+
+/**
+ * A document selection: an ordered pair of positions with directional intent.
+ *
+ * `Selection` is a plain value type (POD) with no automatic validation.
+ * Structural invariants (subtree constraint, affinity mutual
+ * exclusion, affinity agreement) are the responsibility of
+ * command/transaction implementations; constructors do **not**
+ * enforce them.
+ *
+ * # `anchor` vs `head`
+ *
+ * - `anchor`: the fixed endpoint of the selection. It stays in place
+ *   under range-extension operations (shift+arrow, shift+click, etc.).
+ * - `head`: the moving endpoint — the caret.
+ *
+ * Direction is **preserved, never normalized**. A selection where
+ * `anchor` sorts after `head` (a backward selection) is a distinct,
+ * valid state from its forward counterpart. The two differ in which
+ * endpoint future range extensions will move, so normalizing would
+ * lose user intent.
+ *
+ * # Invariants
+ *
+ * - **Subtree constraint**: `anchor` and `head` must not lie in each
+ *   other's subtrees. A selection that starts outside a nested node
+ *   and ends inside it (or vice versa) is not representable.
+ *   *Upheld by command/transaction implementations; constructors do
+ *   not enforce this.*
+ *
+ * - **Affinity mutual exclusion (non-collapsed)**: when
+ *   `anchor != head`, `anchor.affinity` points toward `head` and
+ *   `head.affinity` points toward `anchor`.
+ *   *Upheld by command/transaction implementations.*
+ *
+ * - **Affinity agreement (collapsed)**: when `anchor == head` (all
+ *   three fields of `Position` match), the two affinities are equal.
+ *   A caret has a single direction; the specific value (Up/Down) is
+ *   free.
+ *   *Upheld by command/transaction implementations.*
+ *
+ * # Node selection
+ *
+ * Selecting a non-text node (e.g. clicking an image) is represented
+ * the same way as selecting a range of text: by two positions that
+ * bracket the target. For `root { paragraph, image, paragraph }`,
+ * selecting the image forward produces
+ *
+ * ```text
+ * Selection {
+ *     anchor: Position { node: root, offset: 1, affinity: Downstream },
+ *     head:   Position { node: root, offset: 2, affinity: Upstream },
+ * }
+ * ```
+ *
+ * The backward form — `anchor` at offset 2 `Upstream`, `head` at
+ * offset 1 `Downstream` — is a distinct valid state representing the
+ * same visual selection with the opposite user intent.
+ */
+export interface Selection {
+    anchor: Position;
+    head: Position;
+}
+
+/**
+ * The directional bias of a [`Position`](crate::Position) at a boundary.
+ *
+ * Affinity disambiguates which side of a boundary a position belongs to.
+ * Its meaning depends on the kind of node that contains the position:
+ *
+ * - **Text node**: determines whether a position between two characters
+ *   leans toward the preceding char or the following char. Primarily used
+ *   at soft-wrap boundaries to decide whether a caret is shown at the end
+ *   of the upper line or at the start of the lower line. The role may
+ *   be extended to other situations in the future.
+ * - **Container node**: when a boundary position must be resolved to a
+ *   single child node, affinity picks between the preceding and the
+ *   following child. `Upstream` → `child[offset - 1]` (preceding);
+ *   `Downstream` → `child[offset]` (following).
+ */
+export type Affinity = "downstream" | "upstream";
+
+/**
  *Auto-generated discriminant enum variants
  */
 export type ModifierType = "bold" | "italic" | "underline" | "strikethrough" | "font_size" | "font_family" | "font_weight" | "text_color" | "background_color" | "letter_spacing" | "link" | "ruby" | "line_height" | "block_gap" | "paragraph_indent";
@@ -64,13 +193,10 @@ export interface ImageNode {
 }
 
 export interface InputContext {
-    text_before_cursor: string;
-    text_after_cursor: string;
-    selected_text: string;
-    cursor_position: number;
-    selection_start: number;
-    selection_end: number;
-    composing_range: InputContextRange | undefined;
+    text: string;
+    window_start: number;
+    selection: InputContextRange;
+    composing: InputContextRange | undefined;
 }
 
 export interface InputContextRange {
@@ -116,12 +242,6 @@ export interface ParagraphNode {
     align?: TextAlign;
 }
 
-export interface Position {
-    node_id: NodeId;
-    offset: number;
-    affinity?: Affinity;
-}
-
 export interface Rect {
     x: number;
     y: number;
@@ -130,11 +250,6 @@ export interface Rect {
 }
 
 export interface RootNode {}
-
-export interface Selection {
-    anchor: Position;
-    head: Position;
-}
 
 export interface Size {
     width: number;
@@ -162,8 +277,6 @@ export interface Viewport {
     height: number;
     scale_factor: number;
 }
-
-export type Affinity = "downstream" | "upstream";
 
 export type Axis = "horizontal" | "vertical";
 

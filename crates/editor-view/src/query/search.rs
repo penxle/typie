@@ -22,7 +22,7 @@ fn find_line_in<'a>(node: &'a LayoutNode, pos: &Position) -> Option<&'a LayoutNo
             for run in &l.glyph_runs {
                 if run.node_id == pos.node_id
                     && pos.offset >= run.offset
-                    && pos.offset <= run.offset + run.char_advances.len()
+                    && pos.offset <= run.offset + super::grapheme::run_codepoint_count(run)
                 {
                     return Some(node);
                 }
@@ -59,7 +59,7 @@ pub fn find_last_navigable(node: &LayoutNode) -> Option<&LayoutNode> {
 }
 
 /// Find the first navigable node whose bottom edge is below `y`.
-pub fn find_navigable_below<'a>(node: &'a LayoutNode, y: f32) -> Option<&'a LayoutNode> {
+pub fn find_navigable_below(node: &LayoutNode, y: f32) -> Option<&LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => {
             for child in &b.children {
@@ -81,7 +81,7 @@ pub fn find_navigable_below<'a>(node: &'a LayoutNode, y: f32) -> Option<&'a Layo
 }
 
 /// Find the last navigable node whose top edge is above `y`.
-pub fn find_navigable_above<'a>(node: &'a LayoutNode, y: f32) -> Option<&'a LayoutNode> {
+pub fn find_navigable_above(node: &LayoutNode, y: f32) -> Option<&LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => {
             for child in b.children.iter().rev() {
@@ -132,8 +132,18 @@ mod tests {
     use editor_model::NodeId;
 
     use super::*;
-    use crate::glyph_run::GlyphRun;
+    use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::*;
+
+    fn gs(n: usize) -> Vec<GraphemeSpan> {
+        vec![
+            GraphemeSpan {
+                advance: 10.0,
+                codepoints: 1
+            };
+            n
+        ]
+    }
 
     fn make_line_node(id: NodeId, y: f32) -> LayoutNode {
         LayoutNode {
@@ -141,7 +151,7 @@ mod tests {
             content: LayoutContent::Line(LayoutLine {
                 node_id: id,
                 baseline: 16.0,
-                glyph_runs: vec![GlyphRun::make_test_run(id, 0, "test", 0.0, vec![10.0; 4])],
+                glyph_runs: vec![GlyphRun::make_test_run(id, 0, "test", 0.0, gs(4))],
             }),
         }
     }

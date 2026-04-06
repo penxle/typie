@@ -46,10 +46,10 @@ impl Measurer {
 
     pub fn invalidate_with_ancestors(&mut self, doc: &Doc, node_id: NodeId) -> bool {
         let mut invalidated = self.cache.invalidate(node_id);
-        if let Some(node_ref) = doc.node(node_id) {
-            if let Some(parent) = node_ref.parent() {
-                invalidated = self.invalidate_with_ancestors(doc, parent.id()) || invalidated;
-            }
+        if let Some(node_ref) = doc.node(node_id)
+            && let Some(parent) = node_ref.parent()
+        {
+            invalidated = self.invalidate_with_ancestors(doc, parent.id()) || invalidated;
         }
         invalidated
     }

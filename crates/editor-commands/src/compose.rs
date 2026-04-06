@@ -144,7 +144,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let result = first!(&mut tr, noop_command());
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -156,7 +156,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let result = first!(&mut tr, failing_command(), noop_command(),);
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -168,7 +168,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let result = first!(&mut tr, failing_command(), command_with_arg(42),);
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -180,7 +180,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let result = first!(&mut tr, failing_command(), |_tr| Ok(true),);
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -192,7 +192,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let result = chain!(&mut tr, noop_command(), command_with_arg(1), |_tr| Ok(true),);
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -204,7 +204,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let result = chain!(&mut tr, noop_command(), failing_command(), noop_command(),);
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]
@@ -216,7 +216,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let cmd = optional!(failing_command());
-        assert_eq!(cmd(&mut tr).unwrap(), true);
+        assert!(cmd(&mut tr).unwrap());
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let cmd = optional!(command_with_arg(42));
-        assert_eq!(cmd(&mut tr).unwrap(), true);
+        assert!(cmd(&mut tr).unwrap());
     }
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
             optional!(failing_command()),
             noop_command(),
         );
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -257,7 +257,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let cmd = when!(true, failing_command());
-        assert_eq!(cmd(&mut tr).unwrap(), false);
+        assert!(!cmd(&mut tr).unwrap());
     }
 
     #[test]
@@ -269,7 +269,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let cmd = when!(false, failing_command());
-        assert_eq!(cmd(&mut tr).unwrap(), true);
+        assert!(cmd(&mut tr).unwrap());
     }
 
     #[test]
@@ -287,7 +287,7 @@ mod tests {
             when!(!text.is_empty(), failing_command()),
             noop_command(),
         );
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -299,7 +299,7 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let cmd = optional!(when!(true, failing_command()));
-        assert_eq!(cmd(&mut tr).unwrap(), true);
+        assert!(cmd(&mut tr).unwrap());
     }
 
     #[test]
@@ -311,6 +311,6 @@ mod tests {
         let mut tr = Transaction::new(&state);
 
         let cmd = when!(true, optional!(failing_command()));
-        assert_eq!(cmd(&mut tr).unwrap(), true);
+        assert!(cmd(&mut tr).unwrap());
     }
 }

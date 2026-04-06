@@ -1,6 +1,6 @@
 use editor_common::{EdgeInsets, Movement};
 use editor_model::{Doc, LayoutMode, NodeId};
-use editor_resource::{Resource, TextSegmenters};
+use editor_resource::Resource;
 use editor_state::{Position, Selection};
 use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
@@ -107,18 +107,18 @@ impl View {
     }
 
     pub fn visit_page(&self, page_idx: usize, visitor: &mut impl query::PageVisitor) {
-        if let Some(ref result) = self.layout {
-            if let Some(page) = result.pages.get(page_idx) {
-                query::visit_page(&result.tree, page, visitor);
-            }
+        if let Some(ref result) = self.layout
+            && let Some(page) = result.pages.get(page_idx)
+        {
+            query::visit_page(&result.tree, page, visitor);
         }
     }
 
-    pub fn hit_test(&self, page_idx: usize, x: f32, y: f32, doc: &Doc) -> Option<Selection> {
+    pub fn hit_test(&self, page_idx: usize, x: f32, y: f32) -> Option<Selection> {
         let result = self.layout.as_ref()?;
         let page = result.pages.get(page_idx)?;
-        query::exact_hit_test(&result.tree, page, x, y, doc)
-            .or_else(|| query::closest_hit_test(&result.tree, page, x, y, doc))
+        query::exact_hit_test(&result.tree, page, x, y)
+            .or_else(|| query::closest_hit_test(&result.tree, page, x, y))
     }
 
     pub fn resolve_movement(
@@ -126,10 +126,10 @@ impl View {
         pos: &Position,
         movement: &Movement,
         _doc: &Doc,
-        segmenters: Option<&TextSegmenters>,
+        resource: &Resource,
     ) -> Option<Selection> {
         let result = self.layout.as_ref()?;
-        query::resolve_movement(&result.tree, pos, movement, &self.viewport, segmenters)
+        query::resolve_movement(&result.tree, pos, movement, &self.viewport, resource)
     }
 
     pub fn cursor_rect(&self, pos: &Position) -> Option<PageRect> {

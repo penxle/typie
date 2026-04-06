@@ -116,10 +116,10 @@ impl ContentExpr {
                     }
                 }
 
-                return Err(SchemaError::InvalidContent(format!(
+                Err(SchemaError::InvalidContent(format!(
                     "Node {:?} doesn't match any of the allowed types in choice",
                     node
-                )));
+                )))
             }
             Self::ZeroOrMore(expr) => {
                 for &node in nodes {

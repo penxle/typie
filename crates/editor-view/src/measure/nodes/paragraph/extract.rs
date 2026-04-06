@@ -1,16 +1,23 @@
+use editor_common::StrExt;
 use editor_model::{Doc, Modifier, ModifierType, NodeId};
 use editor_resource::TextBrush;
+use icu_segmenter::GraphemeClusterSegmenter;
 use parley::Layout;
 
 use super::strut::StrutMetrics;
 use super::style_run::StyleRun;
-use crate::glyph_run::{Glyph, GlyphRun, Synthesis};
+use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis};
 use crate::measure::resolve::resolve_inherited;
 
 pub struct ExtractedLine {
     pub height: f32,
     pub baseline: f32,
     pub glyph_runs: Vec<GlyphRun>,
+}
+
+pub struct LineHeightConfig {
+    pub line_height_ratio: f32,
+    pub base_font_size: f32,
 }
 
 const ITALIC_SKEW_DEGREES: f32 = 14.0;
@@ -56,15 +63,57 @@ fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
     (color, background_color)
 }
 
+fn segment_graphemes(
+    cluster_text: &str,
+    cluster_advance: f32,
+    segmenter: Option<&GraphemeClusterSegmenter>,
+) -> Vec<GraphemeSpan> {
+    if let Some(seg) = segmenter {
+        let boundaries: Vec<usize> = seg.as_borrowed().segment_str(cluster_text).collect();
+        let count = boundaries.len();
+        if count == 0 {
+            return vec![];
+        }
+        let per_grapheme = cluster_advance / count as f32;
+        let mut spans = Vec::with_capacity(count);
+        let mut prev = 0;
+        for b in boundaries {
+            let grapheme = &cluster_text[prev..b];
+            spans.push(GraphemeSpan {
+                advance: per_grapheme,
+                codepoints: grapheme.char_count() as u8,
+            });
+            prev = b;
+        }
+        spans
+    } else {
+        let codepoints = cluster_text.char_count();
+        if codepoints == 0 {
+            return vec![];
+        }
+        let per_char = cluster_advance / codepoints as f32;
+        (0..codepoints)
+            .map(|_| GraphemeSpan {
+                advance: per_char,
+                codepoints: 1,
+            })
+            .collect()
+    }
+}
+
 pub fn extract_lines(
     doc: &Doc,
     text: &str,
     layout: &Layout<TextBrush>,
     style_runs: &[StyleRun],
     strut: &StrutMetrics,
-    line_height_ratio: f32,
-    base_font_size: f32,
+    height_config: LineHeightConfig,
+    grapheme_segmenter: Option<&GraphemeClusterSegmenter>,
 ) -> Vec<ExtractedLine> {
+    let LineHeightConfig {
+        line_height_ratio,
+        base_font_size,
+    } = height_config;
     let mut lines = Vec::new();
 
     for line in layout.lines() {
@@ -82,95 +131,80 @@ pub fn extract_lines(
         let mut x = metrics.offset;
 
         for item in line.items() {
-            match item {
-                parley::PositionedLayoutItem::GlyphRun(glyph_run) => {
-                    let run = glyph_run.run();
-                    let font_size = run.font_size();
+            if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                let run = glyph_run.run();
+                let font_size = run.font_size();
 
-                    // Capture glyph positions (line-relative)
-                    let run_x = glyph_run.offset();
-                    let mut glyph_x_advance = 0.0;
-                    let glyphs: Vec<Glyph> = glyph_run
-                        .glyphs()
-                        .map(|g| {
-                            let gx = glyph_x_advance + g.x;
-                            glyph_x_advance += g.advance;
-                            Glyph {
-                                id: g.id,
-                                x: run_x + gx,
-                                y: baseline + g.y,
-                            }
-                        })
-                        .collect();
-
-                    // Compute char_advances from visual clusters
-                    let mut run_first = true;
-
-                    for cluster in run.visual_clusters() {
-                        let node_id = cluster.first_style().brush.node_id;
-                        let cluster_range = cluster.text_range();
-                        let cluster_text = &text[cluster_range.clone()];
-                        let advance = cluster.advance();
-
-                        let char_count = cluster_text.chars().count();
-                        let per_char = if char_count > 0 {
-                            advance / char_count as f32
-                        } else {
-                            0.0
-                        };
-
-                        let extend = !run_first
-                            && glyph_runs
-                                .last()
-                                .map(|gr: &GlyphRun| gr.node_id == node_id)
-                                .unwrap_or(false);
-
-                        if extend {
-                            let gr: &mut GlyphRun = glyph_runs.last_mut().unwrap();
-                            gr.text.push_str(cluster_text);
-                            gr.width += advance;
-                            for _ in 0..char_count {
-                                gr.char_advances.push(per_char);
-                            }
-                        } else {
-                            let byte_start = cluster_range.start;
-                            let char_offset = text[..byte_start].chars().count();
-                            let mut char_advances = Vec::with_capacity(char_count);
-                            for _ in 0..char_count {
-                                char_advances.push(per_char);
-                            }
-
-                            let synthesis = resolve_synthesis(doc, node_id);
-                            let (color, background_color) = resolve_text_colors(doc, node_id);
-
-                            let (font_id, font_weight) = style_runs
-                                .iter()
-                                .find(|sr| sr.byte_range.contains(&byte_start))
-                                .map(|sr| (sr.family, sr.weight))
-                                .unwrap_or((0, 400));
-
-                            glyph_runs.push(GlyphRun {
-                                font_id,
-                                font_weight,
-                                font_size,
-                                synthesis,
-                                color,
-                                background_color,
-                                glyphs: glyphs.clone(),
-                                node_id,
-                                offset: char_offset,
-                                text: cluster_text.to_string(),
-                                x,
-                                width: advance,
-                                char_advances,
-                            });
+                let run_x = glyph_run.offset();
+                let mut glyph_x_advance = 0.0;
+                let glyphs: Vec<Glyph> = glyph_run
+                    .glyphs()
+                    .map(|g| {
+                        let gx = glyph_x_advance + g.x;
+                        glyph_x_advance += g.advance;
+                        Glyph {
+                            id: g.id,
+                            x: run_x + gx,
+                            y: baseline + g.y,
                         }
+                    })
+                    .collect();
 
-                        run_first = false;
-                        x += advance;
+                let target_style_index = glyph_run.glyphs().next().map(|g| g.style_index());
+
+                let mut run_text = String::new();
+                let mut graphemes = Vec::new();
+                let mut first_byte_start = None;
+
+                for cluster in run.visual_clusters() {
+                    let cluster_style_index = cluster.glyphs().next().map(|g| g.style_index());
+                    if cluster_style_index != target_style_index {
+                        continue;
                     }
+
+                    let cluster_range = cluster.text_range();
+                    let cluster_text = &text[cluster_range.clone()];
+                    let advance = cluster.advance();
+
+                    if first_byte_start.is_none() {
+                        first_byte_start = Some(cluster_range.start);
+                    }
+
+                    run_text.push_str(cluster_text);
+                    graphemes.extend(segment_graphemes(cluster_text, advance, grapheme_segmenter));
                 }
-                _ => {}
+
+                let byte_start = first_byte_start.unwrap_or(0);
+                let char_offset = text[..byte_start].char_count();
+                let node_id = glyph_run.style().brush.node_id;
+                let synthesis = resolve_synthesis(doc, node_id);
+                let (color, background_color) = resolve_text_colors(doc, node_id);
+
+                let (font_id, font_weight) = style_runs
+                    .iter()
+                    .find(|sr| sr.byte_range.contains(&byte_start))
+                    .map(|sr| (sr.family, sr.weight))
+                    .unwrap_or((0, 400));
+
+                let run_advance = glyph_run.advance();
+
+                glyph_runs.push(GlyphRun {
+                    font_id,
+                    font_weight,
+                    font_size,
+                    synthesis,
+                    color,
+                    background_color,
+                    glyphs,
+                    node_id,
+                    offset: char_offset,
+                    text: run_text,
+                    x,
+                    width: run_advance,
+                    graphemes,
+                });
+
+                x += run_advance;
             }
         }
 

@@ -13,10 +13,10 @@ fn node_path(doc: &Doc, node_id: NodeId) -> Vec<usize> {
     let mut current = node_id;
     while let Some(entry) = doc.get_entry(current) {
         if let Some(parent_id) = entry.parent {
-            if let Some(parent_entry) = doc.get_entry(parent_id) {
-                if let Some(idx) = parent_entry.children.iter().position(|&id| id == current) {
-                    path.push(idx);
-                }
+            if let Some(parent_entry) = doc.get_entry(parent_id)
+                && let Some(idx) = parent_entry.children.iter().position(|&id| id == current)
+            {
+                path.push(idx);
             }
             current = parent_id;
         } else {

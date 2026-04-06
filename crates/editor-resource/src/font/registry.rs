@@ -79,7 +79,7 @@ impl FontRegistry {
     pub fn has_weight(&self, family: &str, weight: u16) -> bool {
         self.families
             .get(family)
-            .map_or(false, |w| w.contains(&weight))
+            .is_some_and(|w| w.contains(&weight))
     }
 
     pub fn nearest_weight(&self, family: &str, target: u16) -> Option<u16> {
@@ -178,7 +178,7 @@ impl FontRegistry {
         let num_entries = u32::from_be_bytes(chunk_data[0..4].try_into().unwrap()) as usize;
 
         // Safety: &mut self (or exclusive write lock) guarantees no concurrent readers.
-        let sfnt = unsafe { entry.data.as_mut_slice() };
+        let sfnt = unsafe { &mut *entry.data.as_mut_ptr() };
         let mut pos = 4;
         for _ in 0..num_entries {
             let offset = u32::from_be_bytes(chunk_data[pos..pos + 4].try_into().unwrap()) as usize;

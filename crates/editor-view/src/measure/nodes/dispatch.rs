@@ -1,7 +1,7 @@
 use editor_common::{Alignment, EdgeInsets};
 use editor_model::{Doc, Node, NodeRef};
 
-use crate::measure::container::layout_padded;
+use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::*;
 use crate::view_state::ViewState;
 
@@ -48,10 +48,12 @@ pub(crate) fn measure_node(
             node,
             width,
             view_state,
-            EdgeInsets::ZERO,
-            EdgeInsets::ZERO,
-            false,
-            Alignment::Start,
+            PaddedLayoutConfig {
+                padding: EdgeInsets::ZERO,
+                border: EdgeInsets::ZERO,
+                scope: false,
+                alignment: Alignment::Start,
+            },
         ),
     }
 }

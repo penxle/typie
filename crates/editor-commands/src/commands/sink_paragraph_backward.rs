@@ -140,10 +140,7 @@ fn find_sink_target(doc: &Doc, start: &NodeRef, paragraph: &NodeRef) -> Option<N
 fn build_ancestor_path(doc: &Doc, node_id: NodeId) -> Vec<NodeType> {
     let mut path = Vec::new();
     let mut current = node_id;
-    loop {
-        let Some(node) = doc.node(current) else {
-            break;
-        };
+    while let Some(node) = doc.node(current) {
         path.push(node.as_type());
         match node.entry().parent {
             Some(parent_id) => current = parent_id,

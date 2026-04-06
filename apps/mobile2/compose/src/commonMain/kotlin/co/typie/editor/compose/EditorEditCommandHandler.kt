@@ -32,7 +32,11 @@ internal object EditorEditCommandHandler {
   private fun dispatch(editor: Editor, command: EditCommand) {
     when (command) {
       is CommitTextCommand -> {
-        editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(command.text))))
+        if (command.text == "\n") {
+          editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
+        } else {
+          editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(command.text))))
+        }
       }
       is SetComposingTextCommand -> {
         editor.enqueue(

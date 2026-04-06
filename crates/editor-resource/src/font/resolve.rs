@@ -17,8 +17,8 @@ fn weights_by_proximity(weights: &[u16], target: u16) -> Vec<u16> {
 
     let mut result = Vec::with_capacity(sorted.len());
 
-    if target >= 400 && target <= 500 {
-        result.extend(sorted.iter().filter(|&&w| w >= target && w <= 500));
+    if (400..=500).contains(&target) {
+        result.extend(sorted.iter().filter(|&&w| (target..=500).contains(&w)));
         result.extend(sorted.iter().rev().filter(|&&w| w < target));
         result.extend(sorted.iter().filter(|&&w| w > 500));
     } else if target < 400 {
@@ -42,21 +42,21 @@ pub(crate) fn resolve_codepoint_mappings(
     let mut remaining: Vec<u32> = codepoints.to_vec();
 
     // Step 1: Primary font - all weights in proximity order
-    if let Some(family_name) = registry.resolve_opt(family_id) {
-        if let Some(weights) = registry.weights(family_name) {
-            let ordered = weights_by_proximity(weights, weight);
-            remaining.retain(|&cp| {
-                for &w in &ordered {
-                    if let Some(manifest) = registry.manifest(family_id, w) {
-                        if manifest.has_codepoint(cp) {
-                            result_map.entry((family_id, w)).or_default().push(cp);
-                            return false;
-                        }
-                    }
+    if let Some(family_name) = registry.resolve_opt(family_id)
+        && let Some(weights) = registry.weights(family_name)
+    {
+        let ordered = weights_by_proximity(weights, weight);
+        remaining.retain(|&cp| {
+            for &w in &ordered {
+                if let Some(manifest) = registry.manifest(family_id, w)
+                    && manifest.has_codepoint(cp)
+                {
+                    result_map.entry((family_id, w)).or_default().push(cp);
+                    return false;
                 }
-                true
-            });
-        }
+            }
+            true
+        });
     }
 
     // Step 2: Fallback chain - 1 weight per family
@@ -126,7 +126,7 @@ mod tests {
         for (i, (&hi, _)) in l2_blocks.iter().enumerate() {
             chunk_map[hi as usize] = i as u8;
         }
-        for (_, block) in &l2_blocks {
+        for block in l2_blocks.values() {
             chunk_map.extend_from_slice(block);
         }
         FontManifest::new(chunk_count, chunk_map, vec![])

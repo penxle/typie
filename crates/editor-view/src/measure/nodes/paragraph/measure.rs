@@ -7,7 +7,7 @@ use crate::measure::Measurer;
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredLine, MeasuredNode};
 use crate::style::{BorderMode, BoxStyle, Direction};
 
-use super::extract::extract_lines;
+use super::extract::{LineHeightConfig, extract_lines};
 use super::layout::build_layout;
 use super::resolve::{resolve_paragraph_indent, resolve_text_style};
 use super::strut::compute_strut;
@@ -37,9 +37,11 @@ pub fn measure_paragraph(
     let strut = compute_strut(&mut resource, &base_style);
     let style_runs = resolve_style_runs(&text, &runs, &mut resource.font_registry);
     let layout = build_layout(&text, &style_runs, align, indent, width, &mut resource);
+    let segmenters = resource.segmenters.clone();
     drop(resource);
 
     let strut = strut.expect("strut layout should have one line and run");
+    let grapheme_segmenter = segmenters.as_ref().map(|s| &s.grapheme);
 
     let old_lines = extract_lines(
         doc,
@@ -47,8 +49,11 @@ pub fn measure_paragraph(
         &layout,
         &style_runs,
         &strut,
-        base_style.line_height,
-        base_style.font_size,
+        LineHeightConfig {
+            line_height_ratio: base_style.line_height,
+            base_font_size: base_style.font_size,
+        },
+        grapheme_segmenter,
     );
 
     let node_id = node.id();
@@ -193,5 +198,40 @@ mod tests {
         let m = measurer.measure(&doc, p1, 400.0, &vs);
         assert!(matches!(&m.content, MeasuredContent::Box(_)));
         assert!(m.height > 0.0);
+    }
+
+    #[test]
+    fn bold_middle_text_produces_three_glyph_runs() {
+        let (doc, p1) = doc! {
+            root {
+                p1: paragraph {
+                    text("Hello, ")
+                    text("World") [bold]
+                    text("!")
+                }
+            }
+        };
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+        let m = measurer.measure(&doc, p1, 400.0, &vs);
+        let MeasuredContent::Box(b) = &m.content else {
+            panic!("expected Box")
+        };
+
+        let mut all_runs = vec![];
+        for child in &b.children {
+            let MeasuredContent::Line(l) = &child.content else {
+                panic!("expected Line")
+            };
+            all_runs.extend(l.glyph_runs.iter());
+        }
+
+        assert_eq!(all_runs.len(), 3);
+        assert!(!all_runs[0].synthesis.embolden);
+        assert!(all_runs[1].synthesis.embolden);
+        assert!(!all_runs[2].synthesis.embolden);
+        assert_eq!(all_runs[0].text, "Hello, ");
+        assert_eq!(all_runs[1].text, "World");
+        assert_eq!(all_runs[2].text, "!");
     }
 }

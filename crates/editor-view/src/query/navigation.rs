@@ -1,5 +1,5 @@
 use editor_common::{Axis, Direction, Movement};
-use editor_resource::TextSegmenters;
+use editor_resource::Resource;
 use editor_state::{Affinity, Position, Selection};
 
 use crate::paginate::*;
@@ -13,8 +13,9 @@ pub fn resolve_movement(
     pos: &Position,
     movement: &Movement,
     viewport: &Viewport,
-    segmenters: Option<&TextSegmenters>,
+    resource: &Resource,
 ) -> Option<Selection> {
+    let segmenters = resource.segmenters.as_deref();
     match movement {
         Movement::Grapheme {
             direction: Direction::Forward,
@@ -81,14 +82,18 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                     continue;
                 }
                 let local = pos.offset - run.offset;
-                if local < run.char_advances.len() {
-                    return Some(Selection::collapsed(Position::new(
-                        run.node_id,
-                        pos.offset + 1,
-                    )));
+                let mut cp_acc = 0usize;
+                for g in &run.graphemes {
+                    let cp = g.codepoints as usize;
+                    if local < cp_acc + cp {
+                        return Some(Selection::collapsed(Position::new(
+                            run.node_id,
+                            run.offset + cp_acc + cp,
+                        )));
+                    }
+                    cp_acc += cp;
                 }
             }
-            // At end of line: advance to the next navigable node
             let y = line_node.rect.bottom();
             let next = search::find_navigable_below(&tree.root, y)?;
             Some(Selection::collapsed(first_position_in(next)))
@@ -118,13 +123,22 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                     continue;
                 }
                 if pos.offset > run.offset {
-                    return Some(Selection::collapsed(Position::new(
-                        run.node_id,
-                        pos.offset - 1,
-                    )));
+                    let local = pos.offset - run.offset;
+                    let mut cp_acc = 0usize;
+                    let mut prev_boundary = 0usize;
+                    for g in &run.graphemes {
+                        let cp = g.codepoints as usize;
+                        if cp_acc + cp >= local {
+                            return Some(Selection::collapsed(Position::new(
+                                run.node_id,
+                                run.offset + prev_boundary,
+                            )));
+                        }
+                        prev_boundary = cp_acc + cp;
+                        cp_acc += cp;
+                    }
                 }
             }
-            // At start of line: retreat to the previous navigable node
             let y = line_node.rect.y;
             let prev = search::find_navigable_above(&tree.root, y)?;
             Some(Selection::collapsed(last_position_in(prev)))
@@ -232,11 +246,7 @@ fn first_position_in_line(line: &LayoutLine) -> Position {
 }
 
 fn last_position_in_line(line: &LayoutLine) -> Position {
-    if let Some(run) = line.glyph_runs.last() {
-        Position::new(run.node_id, run.offset + run.char_advances.len())
-    } else {
-        Position::new(line.node_id, 0)
-    }
+    super::grapheme::last_position_in_line(line)
 }
 
 pub(crate) fn first_position_in(node: &LayoutNode) -> Position {
@@ -278,28 +288,7 @@ fn navigate_to(node: &LayoutNode, preferred_x: f32) -> Selection {
 
 fn position_in_line(line: &LayoutLine, rect: &editor_common::Rect, x: f32) -> Position {
     let local_x = x - rect.x;
-    for run in &line.glyph_runs {
-        if local_x > run.x + run.width {
-            continue;
-        }
-        if local_x < run.x {
-            return Position::new(run.node_id, run.offset);
-        }
-        let mut acc = run.x;
-        for (i, &adv) in run.char_advances.iter().enumerate() {
-            if local_x < acc + adv / 2.0 {
-                return Position::new(run.node_id, run.offset + i);
-            }
-            acc += adv;
-        }
-        return Position::new(run.node_id, run.offset + run.char_advances.len());
-    }
-    // Fallback: position at the end of the last run
-    if let Some(last) = line.glyph_runs.last() {
-        Position::new(last.node_id, last.offset + last.char_advances.len())
-    } else {
-        Position::new(line.node_id, 0)
-    }
+    super::grapheme::position_at_x(line, local_x)
 }
 
 fn compute_preferred_x(line_node: &LayoutNode, pos: &Position) -> f32 {
@@ -312,10 +301,20 @@ fn compute_preferred_x(line_node: &LayoutNode, pos: &Position) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::glyph_run::GlyphRun;
+    use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::{BorderMode, BoxStyle, Direction as LayoutDirection};
     use editor_common::{Alignment, Direction, EdgeInsets, Rect};
     use editor_model::NodeId;
+
+    fn gs(n: usize) -> Vec<GraphemeSpan> {
+        vec![
+            GraphemeSpan {
+                advance: 10.0,
+                codepoints: 1
+            };
+            n
+        ]
+    }
 
     fn make_line_node(id: NodeId, y: f32, text: &str) -> LayoutNode {
         let n = text.chars().count();
@@ -324,7 +323,7 @@ mod tests {
             content: LayoutContent::Line(LayoutLine {
                 node_id: id,
                 baseline: 16.0,
-                glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, vec![10.0; n])],
+                glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
             }),
         }
     }
@@ -433,7 +432,7 @@ mod tests {
     };
 
     fn mov(tree: &LayoutTree, pos: Position, movement: Movement) -> Option<Selection> {
-        resolve_movement(tree, &pos, &movement, &VP, None)
+        resolve_movement(tree, &pos, &movement, &VP, &Resource::new())
     }
 
     #[test]
@@ -702,7 +701,7 @@ mod tests {
                 direction: Direction::Forward,
             },
             &vp,
-            None,
+            &Resource::new(),
         )
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
@@ -724,7 +723,7 @@ mod tests {
                 direction: Direction::Backward,
             },
             &vp,
-            None,
+            &Resource::new(),
         )
         .unwrap();
         assert_eq!(sel.anchor.node_id, f.atom_parent);
@@ -794,6 +793,7 @@ mod tests {
 mod integration_tests {
     use editor_common::{Axis, Direction, Movement};
     use editor_macros::state;
+    use editor_resource::Resource;
     use editor_state::Position;
 
     use crate::view::View;
@@ -821,7 +821,7 @@ mod integration_tests {
                     axis: Axis::Vertical,
                 },
                 &state.doc,
-                None,
+                &Resource::new(),
             )
             .unwrap();
 

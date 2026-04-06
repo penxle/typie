@@ -1,9 +1,7 @@
 use editor_model::NodeId;
 
-/// Interned font identifier from FontRegistry.
 pub type FontId = u16;
 
-/// Position of an individual glyph within a run.
 #[derive(Debug, Clone, Copy)]
 pub struct Glyph {
     pub id: u32,
@@ -11,14 +9,18 @@ pub struct Glyph {
     pub y: f32,
 }
 
-/// Faux bold/italic synthesis flags for fonts that lack native variants.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Synthesis {
     pub embolden: bool,
     pub skew: Option<f32>,
 }
 
-/// A single glyph run combining render data (glyphs) and cursor navigation (char_advances).
+#[derive(Debug, Clone, Copy)]
+pub struct GraphemeSpan {
+    pub advance: f32,
+    pub codepoints: u8,
+}
+
 #[derive(Debug, Clone)]
 pub struct GlyphRun {
     pub font_id: FontId,
@@ -34,7 +36,7 @@ pub struct GlyphRun {
     pub text: String,
     pub x: f32,
     pub width: f32,
-    pub char_advances: Vec<f32>,
+    pub graphemes: Vec<GraphemeSpan>,
 }
 
 #[cfg(test)]
@@ -44,9 +46,9 @@ impl GlyphRun {
         offset: usize,
         text: &str,
         x: f32,
-        advances: Vec<f32>,
+        graphemes: Vec<GraphemeSpan>,
     ) -> Self {
-        let width = advances.iter().sum();
+        let width = graphemes.iter().map(|g| g.advance).sum();
         Self {
             font_id: 0,
             font_weight: 400,
@@ -60,7 +62,7 @@ impl GlyphRun {
             text: text.to_string(),
             x,
             width,
-            char_advances: advances,
+            graphemes,
         }
     }
 }

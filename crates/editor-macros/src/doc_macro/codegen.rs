@@ -152,12 +152,14 @@ fn build_node_expr(node: &NodeDef) -> TokenStream {
         if node.params.is_empty() {
             quote! { Node::#variant(#node_struct::default()) }
         } else {
-            let field_assigns = build_field_assigns(&node.params);
+            let field_names: Vec<_> = node.params.iter().map(|fv| &fv.name).collect();
+            let field_values: Vec<_> = node.params.iter().map(|fv| &fv.value).collect();
             quote! {
-                Node::#variant(#node_struct {
-                    #(#field_assigns,)*
-                    ..Default::default()
-                })
+                {
+                    let mut __node = #node_struct::default();
+                    #(__node.#field_names = #field_values;)*
+                    Node::#variant(__node)
+                }
             }
         }
     }

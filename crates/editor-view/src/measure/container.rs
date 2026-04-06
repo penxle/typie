@@ -51,17 +51,27 @@ pub fn layout_vertical(
     (result, total_height)
 }
 
+pub struct PaddedLayoutConfig {
+    pub padding: EdgeInsets,
+    pub border: EdgeInsets,
+    pub scope: bool,
+    pub alignment: Alignment,
+}
+
 pub fn layout_padded(
     measurer: &mut Measurer,
     doc: &Doc,
     node: &NodeRef<'_>,
     width: f32,
     view_state: &ViewState,
-    padding: EdgeInsets,
-    border: EdgeInsets,
-    scope: bool,
-    alignment: Alignment,
+    config: PaddedLayoutConfig,
 ) -> MeasuredNode {
+    let PaddedLayoutConfig {
+        padding,
+        border,
+        scope,
+        alignment,
+    } = config;
     let inner_width = width - padding.left - padding.right - border.left - border.right;
     let (children, children_height) = layout_vertical(measurer, doc, node, inner_width, view_state);
     let total_height = children_height + padding.top + padding.bottom + border.top + border.bottom;
@@ -108,10 +118,12 @@ mod tests {
             &node,
             300.0,
             &ViewState::new(),
-            EdgeInsets::ZERO,
-            EdgeInsets::ZERO,
-            false,
-            Alignment::Start,
+            PaddedLayoutConfig {
+                padding: EdgeInsets::ZERO,
+                border: EdgeInsets::ZERO,
+                scope: false,
+                alignment: Alignment::Start,
+            },
         );
 
         assert!(matches!(result.content, MeasuredContent::Box(_)));

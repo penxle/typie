@@ -1,11 +1,12 @@
 use editor_common::StrExt;
 use editor_model::{Node, NodeId};
+use editor_resource::Resource;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::Transaction;
 
 use crate::{CommandError, CommandResult};
 
-pub fn delete_text_forward(tr: &mut Transaction) -> CommandResult {
+pub fn delete_text_forward(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let selection = tr.selection();
     if !selection.is_collapsed() {
         return Ok(false);
@@ -24,7 +25,14 @@ pub fn delete_text_forward(tr: &mut Transaction) -> CommandResult {
     let text_len = text_node.text.char_count();
 
     if pos.offset < text_len {
-        let is_last_char = text_len == 1;
+        let doc = tr.doc();
+        let next_offset = pos
+            .resolve(&doc)
+            .and_then(|r| r.next_grapheme(resource))
+            .map(|r| r.offset())
+            .unwrap_or(pos.offset.saturating_add(1).min(text_len));
+        let delete_count = next_offset - pos.offset;
+        let is_last_char = text_len == delete_count;
 
         if is_last_char {
             let parent_id = node
@@ -43,7 +51,7 @@ pub fn delete_text_forward(tr: &mut Transaction) -> CommandResult {
                 resolve_cursor_after_removal(tr, prev_id, next_id, parent_id, node_index);
             tr.set_selection(new_selection)?;
         } else {
-            tr.remove_text(pos.node_id, pos.offset, 1)?;
+            tr.remove_text(pos.node_id, pos.offset, delete_count)?;
             tr.set_selection(Selection::collapsed(Position {
                 node_id: pos.node_id,
                 offset: pos.offset,
@@ -93,28 +101,26 @@ fn resolve_cursor_after_removal(
 ) -> Selection {
     let doc = tr.doc();
 
-    if let Some(next_id) = next_id {
-        if let Some(next) = doc.node(next_id) {
-            if matches!(next.node(), Node::Text(_)) {
-                return Selection::collapsed(Position {
-                    node_id: next_id,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                });
-            }
-        }
+    if let Some(next_id) = next_id
+        && let Some(next) = doc.node(next_id)
+        && matches!(next.node(), Node::Text(_))
+    {
+        return Selection::collapsed(Position {
+            node_id: next_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        });
     }
 
-    if let Some(prev_id) = prev_id {
-        if let Some(prev) = doc.node(prev_id) {
-            if let Node::Text(t) = prev.node() {
-                return Selection::collapsed(Position {
-                    node_id: prev_id,
-                    offset: t.text.char_count(),
-                    affinity: Affinity::Upstream,
-                });
-            }
-        }
+    if let Some(prev_id) = prev_id
+        && let Some(prev) = doc.node(prev_id)
+        && let Node::Text(t) = prev.node()
+    {
+        return Selection::collapsed(Position {
+            node_id: prev_id,
+            offset: t.text.char_count(),
+            affinity: Affinity::Upstream,
+        });
     }
 
     Selection::collapsed(Position {
@@ -127,6 +133,7 @@ fn resolve_cursor_after_removal(
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_resource::Resource;
 
     use super::*;
     use crate::test_utils::*;
@@ -137,7 +144,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 3)
         };
-        transact_fail!(initial, |tr| delete_text_forward(&mut tr));
+        transact_fail!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
     }
 
     #[test]
@@ -146,7 +153,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr));
+        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("ello") } } }
             selection: (t1, 0)
@@ -160,7 +167,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr));
+        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Helo") } } }
             selection: (t1, 2)
@@ -174,7 +181,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 5)
         };
-        transact_fail!(initial, |tr| delete_text_forward(&mut tr));
+        transact_fail!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
     }
 
     #[test]
@@ -190,7 +197,7 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr));
+        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -219,7 +226,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr));
+        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -247,7 +254,7 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr));
+        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -267,7 +274,7 @@ mod tests {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
-        transact_fail!(initial, |tr| delete_text_forward(&mut tr));
+        transact_fail!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
     }
 
     #[test]
@@ -276,7 +283,7 @@ mod tests {
             doc { root { paragraph { t1: text("한글") } } }
             selection: (t1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr));
+        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("글") } } }
             selection: (t1, 0)

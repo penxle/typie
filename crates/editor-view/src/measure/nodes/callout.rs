@@ -2,7 +2,7 @@ use editor_common::{Alignment, EdgeInsets, Rect};
 use editor_model::{Doc, NodeRef};
 
 use crate::measure::Measurer;
-use crate::measure::container::layout_padded;
+use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::{MeasuredContent, MeasuredNode};
 use crate::style::{Decoration, DecorationData};
 use crate::view_state::ViewState;
@@ -32,10 +32,12 @@ pub fn measure_callout(
         node,
         width,
         view_state,
-        padding,
-        EdgeInsets::ZERO,
-        false,
-        Alignment::Start,
+        PaddedLayoutConfig {
+            padding,
+            border: EdgeInsets::ZERO,
+            scope: false,
+            alignment: Alignment::Start,
+        },
     );
 
     if let MeasuredContent::Box(ref mut b) = measured.content {

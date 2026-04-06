@@ -24,7 +24,7 @@ mod tests {
         };
 
         let target = Selection::collapsed(Position::new(t, 3));
-        let (result, ..) = transact!(state, |tr| set_selection(&mut tr, target.clone()));
+        let (result, ..) = transact!(state, |tr| set_selection(&mut tr, target));
 
         assert_eq!(result.selection, target);
     }
@@ -37,7 +37,7 @@ mod tests {
         };
 
         let target = Selection::new(Position::new(t, 2), Position::new(t, 8));
-        let (result, ..) = transact!(state, |tr| set_selection(&mut tr, target.clone()));
+        let (result, ..) = transact!(state, |tr| set_selection(&mut tr, target));
 
         assert_eq!(result.selection, target);
     }

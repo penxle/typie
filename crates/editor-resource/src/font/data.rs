@@ -17,7 +17,7 @@ impl FontData {
     }
 
     // Safety: Caller must ensure no shared references to the data exist.
-    pub(crate) unsafe fn as_mut_slice(&self) -> &mut [u8] {
+    pub(crate) fn as_mut_ptr(&self) -> *mut [u8] {
         unsafe { (*self.0.get()).as_mut_slice() }
     }
 }
@@ -42,7 +42,7 @@ mod tests {
     fn mutate_data() {
         let fd = FontData::new(vec![0, 0, 0]);
         unsafe {
-            fd.as_mut_slice()[1] = 42;
+            (*fd.as_mut_ptr())[1] = 42;
         }
         assert_eq!(fd.as_ref(), &[0, 42, 0]);
     }

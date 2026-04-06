@@ -131,12 +131,12 @@ impl Paginator {
             }
 
             // 2. Border collapse
-            if measured.style.border_mode == BorderMode::Collapse {
-                if let Some(prev_bb) = prev_border_bottom {
-                    let child_bt = child_border_top(child);
-                    let overlap = prev_bb.min(child_bt);
-                    self.accumulated_y -= overlap;
-                }
+            if measured.style.border_mode == BorderMode::Collapse
+                && let Some(prev_bb) = prev_border_bottom
+            {
+                let child_bt = child_border_top(child);
+                let overlap = prev_bb.min(child_bt);
+                self.accumulated_y -= overlap;
             }
 
             // 3. PageBreak -> forced break
@@ -208,10 +208,10 @@ impl Paginator {
             .map(|child| {
                 let layout_child = place_node_at(child, child_x, child_y);
                 child_x += child.width;
-                if measured.style.border_mode == BorderMode::Collapse {
-                    if let MeasuredContent::Box(child_box) = &child.content {
-                        child_x -= child_box.style.border.right;
-                    }
+                if measured.style.border_mode == BorderMode::Collapse
+                    && let MeasuredContent::Box(child_box) = &child.content
+                {
+                    child_x -= child_box.style.border.right;
                 }
                 layout_child
             })

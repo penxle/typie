@@ -273,7 +273,7 @@ fn param_conversion(param: &FfiParam, custom_types: &HashMap<String, String>) ->
                 .map(|s| s.as_str())
                 .unwrap_or(p.as_str());
             match resolved {
-                "u32" => format!("UInt32({})", name),
+                "u32" | "usize" => format!("UInt32({})", name),
                 "u16" => format!("UInt16({})", name),
                 "u64" => format!("UInt64({})", name),
                 _ => name,

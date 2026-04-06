@@ -56,18 +56,18 @@ fn dissolve_into(
     });
 
     for (j, (child_id, child_type)) in children.iter().enumerate() {
-        if !effective_parent_spec.content.matches(*child_type) {
-            if let Some(child_ref) = node.children().find(|c| c.id() == *child_id) {
-                // After RemoveSubtree of node, children that were at node_index+1+j
-                // shift down by 1, so the child is now at node_index+j
-                let child_effective_index = node_index + j;
-                steps.extend(dissolve_into(
-                    &child_ref,
-                    effective_parent_id,
-                    effective_parent_spec,
-                    child_effective_index,
-                ));
-            }
+        if !effective_parent_spec.content.matches(*child_type)
+            && let Some(child_ref) = node.children().find(|c| c.id() == *child_id)
+        {
+            // After RemoveSubtree of node, children that were at node_index+1+j
+            // shift down by 1, so the child is now at node_index+j
+            let child_effective_index = node_index + j;
+            steps.extend(dissolve_into(
+                &child_ref,
+                effective_parent_id,
+                effective_parent_spec,
+                child_effective_index,
+            ));
         }
     }
 

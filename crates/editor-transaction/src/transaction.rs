@@ -267,7 +267,7 @@ impl Transaction {
 
     pub fn set_selection(&mut self, selection: Selection) -> Result<(), StepError> {
         self.apply_step(Step::SetSelection {
-            old: self.state.selection.clone(),
+            old: self.state.selection,
             new: selection,
         })
     }
@@ -301,7 +301,7 @@ impl Transaction {
     }
 
     pub fn set_composition(&mut self, composition: Option<Composition>) -> Result<(), StepError> {
-        let old = self.state.composition.clone();
+        let old = self.state.composition;
         self.apply_step(Step::SetComposition {
             old,
             new: composition,
@@ -649,7 +649,7 @@ mod tests {
 
         let mut tr = Transaction::new(&state);
         let new_sel = Selection::collapsed(Position::new(t1, 5));
-        tr.set_selection(new_sel.clone()).unwrap();
+        tr.set_selection(new_sel).unwrap();
 
         assert_eq!(tr.selection(), new_sel);
 

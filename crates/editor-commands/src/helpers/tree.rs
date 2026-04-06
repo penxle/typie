@@ -60,9 +60,8 @@ pub(crate) fn find_ancestor_textblock(doc: &Doc, node_id: NodeId) -> Option<Node
 
 /// Find the first cursor position within a node's subtree.
 pub(crate) fn find_first_cursor_position(node: &NodeRef) -> Option<Position> {
-    match node.node() {
-        Node::Text(_) => return Some(Position::new(node.id(), 0)),
-        _ => {}
+    if let Node::Text(_) = node.node() {
+        return Some(Position::new(node.id(), 0));
     }
 
     match node.first_child() {
@@ -81,11 +80,8 @@ pub(crate) fn find_first_cursor_position(node: &NodeRef) -> Option<Position> {
 
 /// Find the last cursor position within a node's subtree.
 pub(crate) fn find_last_cursor_position(node: &NodeRef) -> Option<Position> {
-    match node.node() {
-        Node::Text(text_node) => {
-            return Some(Position::new(node.id(), text_node.text.char_count()));
-        }
-        _ => {}
+    if let Node::Text(text_node) = node.node() {
+        return Some(Position::new(node.id(), text_node.text.char_count()));
     }
 
     match node.last_child() {

@@ -5,7 +5,7 @@ use crate::message::*;
 pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<(), EditorError> {
     match event {
         PointerEvent::Down { page, x, y, .. } => {
-            if let Some(new_selection) = { editor.view.hit_test(page, x, y, &editor.state.doc) } {
+            if let Some(new_selection) = { editor.view.hit_test(page, x, y) } {
                 editor.transact(|tr| {
                     tr.set_selection(new_selection)?;
                     Ok(())

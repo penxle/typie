@@ -2,6 +2,7 @@ mod clipboard;
 mod composition;
 mod deletion;
 mod formatting;
+mod helpers;
 mod history;
 mod insertion;
 mod key;

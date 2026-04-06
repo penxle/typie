@@ -4,13 +4,15 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-test-utils = ["editor-model/test-utils"]
+test-utils = ["editor-model/test-utils", "editor-resource/test-utils"]
 uniffi = ["dep:uniffi", "editor-model/uniffi"]
 wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm"]
 
 [dependencies]
+editor-common = { path = "../editor-common" }
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
+editor-resource = { path = "../editor-resource" }
 log.workspace = true
 serde.workspace = true
 smallvec.workspace = true
@@ -20,3 +22,4 @@ wasm-bindgen = { workspace = true, optional = true }
 
 [dev-dependencies]
 editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-resource = { path = "../editor-resource", features = ["test-utils"] }

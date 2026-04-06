@@ -1,5 +1,5 @@
 use editor_common::Rect;
-use editor_model::Doc;
+
 use editor_state::{Affinity, Position, Selection};
 
 use crate::page::LayoutPage;
@@ -11,20 +11,19 @@ pub fn exact_hit_test(
     page: &LayoutPage,
     x: f32,
     page_y: f32,
-    doc: &Doc,
 ) -> Option<Selection> {
     let abs_y = page_y + page.y_start;
-    exact_hit_node(&tree.root, x, abs_y, doc)
+    exact_hit_node(&tree.root, x, abs_y)
 }
 
-fn exact_hit_node(node: &LayoutNode, x: f32, y: f32, doc: &Doc) -> Option<Selection> {
+fn exact_hit_node(node: &LayoutNode, x: f32, y: f32) -> Option<Selection> {
     match &node.content {
         LayoutContent::Box(b) => {
             if !node.rect.contains(x, y) {
                 return None;
             }
             for child in &b.children {
-                if let Some(sel) = exact_hit_node(child, x, y, doc) {
+                if let Some(sel) = exact_hit_node(child, x, y) {
                     return Some(sel);
                 }
             }
@@ -54,7 +53,6 @@ pub fn closest_hit_test(
     page: &LayoutPage,
     x: f32,
     page_y: f32,
-    _doc: &Doc,
 ) -> Option<Selection> {
     let abs_y = page_y + page.y_start;
     let nav = closest_navigable(&tree.root, x, abs_y)?;
@@ -63,14 +61,14 @@ pub fn closest_hit_test(
 
 /// Find the closest navigable node by squared euclidean rect-edge distance.
 /// Descends into the innermost containing box first, then falls back to all children.
-fn closest_navigable<'a>(node: &'a LayoutNode, x: f32, y: f32) -> Option<&'a LayoutNode> {
+fn closest_navigable(node: &LayoutNode, x: f32, y: f32) -> Option<&LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => {
             for child in &b.children {
-                if child.rect.contains(x, y) {
-                    if let Some(found) = closest_navigable(child, x, y) {
-                        return Some(found);
-                    }
+                if child.rect.contains(x, y)
+                    && let Some(found) = closest_navigable(child, x, y)
+                {
+                    return Some(found);
                 }
             }
             // No containing child found; search all children by edge distance
@@ -81,11 +79,7 @@ fn closest_navigable<'a>(node: &'a LayoutNode, x: f32, y: f32) -> Option<&'a Lay
     }
 }
 
-fn closest_navigable_in_children<'a>(
-    children: &'a [LayoutNode],
-    x: f32,
-    y: f32,
-) -> Option<&'a LayoutNode> {
+fn closest_navigable_in_children(children: &[LayoutNode], x: f32, y: f32) -> Option<&LayoutNode> {
     children
         .iter()
         .filter_map(|child| {
@@ -132,38 +126,8 @@ fn navigate_to_line(line: &LayoutLine, rect: &Rect, x: f32) -> Selection {
 }
 
 fn position_in_line(line: &LayoutLine, rect: &Rect, x: f32) -> Position {
-    if line.glyph_runs.is_empty() {
-        return Position::new(line.node_id, 0);
-    }
-
     let local_x = x - rect.x;
-    let first = &line.glyph_runs[0];
-    let last = &line.glyph_runs[line.glyph_runs.len() - 1];
-
-    if local_x <= first.x {
-        return Position::new(first.node_id, first.offset);
-    }
-
-    if local_x >= last.x + last.width {
-        return Position::new(last.node_id, last.offset + last.char_advances.len());
-    }
-
-    for run in &line.glyph_runs {
-        if local_x < run.x || local_x > run.x + run.width {
-            continue;
-        }
-        let mut acc = run.x;
-        for (i, &adv) in run.char_advances.iter().enumerate() {
-            if local_x < acc + adv / 2.0 {
-                return Position::new(run.node_id, run.offset + i);
-            }
-            acc += adv;
-        }
-        return Position::new(run.node_id, run.offset + run.char_advances.len());
-    }
-
-    // Fallback: shouldn't happen with contiguous runs
-    Position::new(last.node_id, last.offset + last.char_advances.len())
+    super::grapheme::position_at_x(line, local_x)
 }
 
 fn select_atom(atom: &LayoutAtom) -> Selection {
@@ -192,7 +156,7 @@ fn navigate_to_node(node: &LayoutNode, x: f32) -> Selection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::glyph_run::GlyphRun;
+    use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::*;
     use editor_common::{Alignment, EdgeInsets};
     use editor_model::NodeId;
@@ -204,7 +168,19 @@ mod tests {
             content: LayoutContent::Line(LayoutLine {
                 node_id: id,
                 baseline: 16.0,
-                glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, vec![char_w; n])],
+                glyph_runs: vec![GlyphRun::make_test_run(
+                    id,
+                    0,
+                    text,
+                    0.0,
+                    vec![
+                        GraphemeSpan {
+                            advance: char_w,
+                            codepoints: 1
+                        };
+                        n
+                    ],
+                )],
             }),
         }
     }
@@ -257,8 +233,8 @@ mod tests {
             ),
         };
         let page = make_page(0.0, 100.0);
-        let doc = Doc::new_test();
-        let sel = exact_hit_test(&tree, &page, 25.0, 5.0, &doc).unwrap();
+
+        let sel = exact_hit_test(&tree, &page, 25.0, 5.0).unwrap();
         assert!(sel.is_collapsed());
         assert_eq!(sel.head.node_id, id);
     }
@@ -283,9 +259,9 @@ mod tests {
             ),
         };
         let page = make_page(0.0, 100.0);
-        let doc = Doc::new_test();
+
         // Click in the spacing area (y=25)
-        assert!(exact_hit_test(&tree, &page, 5.0, 25.0, &doc).is_none());
+        assert!(exact_hit_test(&tree, &page, 5.0, 25.0).is_none());
     }
 
     #[test]
@@ -310,9 +286,9 @@ mod tests {
             ),
         };
         let page = make_page(0.0, 100.0);
-        let doc = Doc::new_test();
+
         // Click in spacing (y=25) -- should find closest line
-        let sel = closest_hit_test(&tree, &page, 5.0, 25.0, &doc).unwrap();
+        let sel = closest_hit_test(&tree, &page, 5.0, 25.0).unwrap();
         assert!(sel.is_collapsed());
         // Should be id1 (closer: line1 bottom at 20, dist=5; line2 top at 36, dist=11)
         assert_eq!(sel.head.node_id, id1);
@@ -332,9 +308,9 @@ mod tests {
             ),
         };
         let page = make_page(0.0, 200.0);
-        let doc = Doc::new_test();
+
         // Click in margin area (x=5, y=5) -- outside all boxes
-        let sel = closest_hit_test(&tree, &page, 5.0, 5.0, &doc).unwrap();
+        let sel = closest_hit_test(&tree, &page, 5.0, 5.0).unwrap();
         assert_eq!(sel.head.node_id, id);
     }
 
@@ -366,13 +342,13 @@ mod tests {
             ),
         };
         let page = make_page(0.0, 100.0);
-        let doc = Doc::new_test();
+
         // Click at x=5 (left margin, before line x=20)
-        let sel = exact_hit_test(&tree, &page, 5.0, 5.0, &doc);
+        let sel = exact_hit_test(&tree, &page, 5.0, 5.0);
         // exact misses (x=5 is outside line rect at x=20)
         assert!(sel.is_none());
         // closest finds the line, cursor should be at offset 0 (start)
-        let sel = closest_hit_test(&tree, &page, 5.0, 5.0, &doc).unwrap();
+        let sel = closest_hit_test(&tree, &page, 5.0, 5.0).unwrap();
         assert_eq!(sel.head.node_id, id);
         assert_eq!(sel.head.offset, 0);
     }

@@ -3,6 +3,8 @@ use ruzstd::encoding::{CompressionLevel, compress_to_vec};
 
 use crate::ServerError;
 
+type FallbackFontEntries = Vec<(String, Vec<(u16, Vec<u8>)>)>;
+
 fn compress_bitcode(data: &[u8]) -> Vec<u8> {
     compress_to_vec(data, CompressionLevel::Fastest)
 }
@@ -23,9 +25,7 @@ pub fn build_font_manifest(chunk_codepoints: &[Vec<u32>]) -> Result<Vec<u8>, Ser
     Ok(compress_bitcode(&bitcode::encode(&manifest)))
 }
 
-pub fn build_fallback_font_manifests(
-    entries: Vec<(String, Vec<(u16, Vec<u8>)>)>,
-) -> Result<Vec<u8>, ServerError> {
+pub fn build_fallback_font_manifests(entries: FallbackFontEntries) -> Result<Vec<u8>, ServerError> {
     let fallback_entries: Vec<FallbackFontEntry> = entries
         .into_iter()
         .map(|(family_name, fonts)| {

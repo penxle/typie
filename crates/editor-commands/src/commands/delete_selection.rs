@@ -26,9 +26,8 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
 
         let is_block_container = {
             let doc = tr.doc();
-            doc.node(cursor.node_id).map_or(false, |n| {
-                !matches!(n.node(), Node::Text(_)) && !is_textblock(n.node())
-            })
+            doc.node(cursor.node_id)
+                .is_some_and(|n| !matches!(n.node(), Node::Text(_)) && !is_textblock(n.node()))
         };
 
         if is_block_container {
@@ -52,7 +51,7 @@ pub fn delete_selection(tr: &mut Transaction) -> CommandResult {
         let from_index = doc.node(from.node_id).and_then(|n| n.index());
         let from_is_text = doc
             .node(from.node_id)
-            .map_or(false, |n| matches!(n.node(), Node::Text(_)));
+            .is_some_and(|n| matches!(n.node(), Node::Text(_)));
         let from_will_be_deleted = from_is_text && from.offset == 0;
 
         let mut from_path = path_from_ancestor(&doc, from.node_id, lca_id).ok_or(
@@ -176,28 +175,26 @@ fn resolve_cursor_after_removal(
 ) -> Position {
     let doc = tr.doc();
 
-    if let Some(next_id) = next_id {
-        if let Some(next) = doc.node(next_id) {
-            if matches!(next.node(), Node::Text(_)) {
-                return Position {
-                    node_id: next_id,
-                    offset: 0,
-                    affinity: Affinity::Downstream,
-                };
-            }
-        }
+    if let Some(next_id) = next_id
+        && let Some(next) = doc.node(next_id)
+        && matches!(next.node(), Node::Text(_))
+    {
+        return Position {
+            node_id: next_id,
+            offset: 0,
+            affinity: Affinity::Downstream,
+        };
     }
 
-    if let Some(prev_id) = prev_id {
-        if let Some(prev) = doc.node(prev_id) {
-            if let Node::Text(t) = prev.node() {
-                return Position {
-                    node_id: prev_id,
-                    offset: t.text.char_count(),
-                    affinity: Affinity::Upstream,
-                };
-            }
-        }
+    if let Some(prev_id) = prev_id
+        && let Some(prev) = doc.node(prev_id)
+        && let Node::Text(t) = prev.node()
+    {
+        return Position {
+            node_id: prev_id,
+            offset: t.text.char_count(),
+            affinity: Affinity::Upstream,
+        };
     }
 
     Position {
@@ -395,10 +392,10 @@ fn find_first_text_position(doc: &editor_model::Doc, node_id: NodeId) -> Option<
 
     if is_textblock(node) {
         // Textblock with text children -> recurse into first child
-        if let Some(&first_child_id) = node_ref.entry().children.front() {
-            if let Some(pos) = find_first_text_position(doc, first_child_id) {
-                return Some(pos);
-            }
+        if let Some(&first_child_id) = node_ref.entry().children.front()
+            && let Some(pos) = find_first_text_position(doc, first_child_id)
+        {
+            return Some(pos);
         }
         // Empty textblock — cursor at (textblock, 0)
         return Some(Position {
@@ -424,50 +421,49 @@ fn resolve_selection_at(doc: &editor_model::Doc, container_id: NodeId, offset: u
     // After block-level deletions, cursor may be at a container position like (root, 0).
     // A collapsed selection at a container position in a block-children container is invalid.
     // Try forward child first: node selection for a block-level leaf, or collapsed at first text position.
-    if let Some(&child_id) = children.get(offset) {
-        if let Some(child) = doc.node(child_id) {
-            if is_block_level_leaf(child.node()) {
-                return Selection::new(
-                    Position {
-                        node_id: container_id,
-                        offset,
-                        affinity: Affinity::Downstream,
-                    },
-                    Position {
-                        node_id: container_id,
-                        offset: offset + 1,
-                        affinity: Affinity::Upstream,
-                    },
-                );
-            }
-            if let Some(pos) = find_first_text_position(doc, child_id) {
-                return Selection::collapsed(pos);
-            }
+    if let Some(&child_id) = children.get(offset)
+        && let Some(child) = doc.node(child_id)
+    {
+        if is_block_level_leaf(child.node()) {
+            return Selection::new(
+                Position {
+                    node_id: container_id,
+                    offset,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: container_id,
+                    offset: offset + 1,
+                    affinity: Affinity::Upstream,
+                },
+            );
+        }
+        if let Some(pos) = find_first_text_position(doc, child_id) {
+            return Selection::collapsed(pos);
         }
     }
 
     // Fall back to previous child.
-    if offset > 0 {
-        if let Some(&child_id) = children.get(offset - 1) {
-            if let Some(child) = doc.node(child_id) {
-                if is_block_level_leaf(child.node()) {
-                    return Selection::new(
-                        Position {
-                            node_id: container_id,
-                            offset: offset - 1,
-                            affinity: Affinity::Downstream,
-                        },
-                        Position {
-                            node_id: container_id,
-                            offset,
-                            affinity: Affinity::Upstream,
-                        },
-                    );
-                }
-                if let Some(pos) = find_first_text_position(doc, child_id) {
-                    return Selection::collapsed(pos);
-                }
-            }
+    if offset > 0
+        && let Some(&child_id) = children.get(offset - 1)
+        && let Some(child) = doc.node(child_id)
+    {
+        if is_block_level_leaf(child.node()) {
+            return Selection::new(
+                Position {
+                    node_id: container_id,
+                    offset: offset - 1,
+                    affinity: Affinity::Downstream,
+                },
+                Position {
+                    node_id: container_id,
+                    offset,
+                    affinity: Affinity::Upstream,
+                },
+            );
+        }
+        if let Some(pos) = find_first_text_position(doc, child_id) {
+            return Selection::collapsed(pos);
         }
     }
 
@@ -506,8 +502,7 @@ fn merge_after_delete(
         doc.node(from_tb).and_then(|n| n.parent()).map(|p| p.id())
     };
 
-    loop {
-        let Some(from_id) = from_current else { break };
+    while let Some(from_id) = from_current {
         if from_id == lca_id {
             break;
         }
@@ -537,12 +532,11 @@ fn merge_after_delete(
     }
 
     let doc = tr.doc();
-    if let Some(parent_id) = to_tb_parent {
-        if let Some(parent) = doc.node(parent_id) {
-            if parent.entry().children.is_empty() {
-                tr.apply_steps(prune(&parent))?;
-            }
-        }
+    if let Some(parent_id) = to_tb_parent
+        && let Some(parent) = doc.node(parent_id)
+        && parent.entry().children.is_empty()
+    {
+        tr.apply_steps(prune(&parent))?;
     }
 
     let doc = tr.doc();

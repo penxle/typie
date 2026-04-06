@@ -243,11 +243,8 @@ pub struct InputContextRange {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputContext {
-    pub text_before_cursor: String,
-    pub text_after_cursor: String,
-    pub selected_text: String,
-    pub cursor_position: usize,
-    pub selection_start: usize,
-    pub selection_end: usize,
-    pub composing_range: Option<InputContextRange>,
+    pub text: String,
+    pub window_start: usize,
+    pub selection: InputContextRange,
+    pub composing: Option<InputContextRange>,
 }

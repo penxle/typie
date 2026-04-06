@@ -97,10 +97,10 @@ impl FontManifest {
         let mut seen = hashbrown::HashSet::new();
         let mut result = Vec::new();
         for &cp in codepoints {
-            if let Some(idx) = self.chunk_index(cp) {
-                if seen.insert(idx) {
-                    result.push(idx);
-                }
+            if let Some(idx) = self.chunk_index(cp)
+                && seen.insert(idx)
+            {
+                result.push(idx);
             }
         }
         result
@@ -174,7 +174,7 @@ mod tests {
             chunk_map[hi as usize] = i as u8;
         }
 
-        for (_, block) in &l2_blocks {
+        for block in l2_blocks.values() {
             chunk_map.extend_from_slice(block);
         }
 

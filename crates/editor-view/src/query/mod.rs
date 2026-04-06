@@ -1,4 +1,5 @@
 pub(crate) mod cursor;
+pub(crate) mod grapheme;
 pub(crate) mod hit_test;
 pub(crate) mod navigation;
 pub(crate) mod search;

@@ -11,9 +11,9 @@ pub fn handle_formatting_intent(
     intent: FormattingIntent,
 ) -> Result<(), EditorError> {
     match intent {
-        FormattingIntent::ToggleModifier { modifier_type }
-            if modifier_type == ModifierType::Bold =>
-        {
+        FormattingIntent::ToggleModifier {
+            modifier_type: ModifierType::Bold,
+        } => {
             let resource = Arc::clone(&editor.resource);
             let resource = resource.lock().unwrap();
             editor.transact(|tr| {

@@ -29,16 +29,21 @@ internal class EditorInputConnection(
 
   override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
     if (n < 0) return null
-    return editor.inputContext(n, 0).textBeforeCursor
+    val ctx = editor.inputContext(n, 0)
+    return ctx.text.substring(0, ctx.selection.start - ctx.windowStart)
   }
 
   override fun getTextAfterCursor(n: Int, flags: Int): CharSequence? {
     if (n < 0) return null
-    return editor.inputContext(0, n).textAfterCursor
+    val ctx = editor.inputContext(0, n)
+    return ctx.text.substring(ctx.selection.end - ctx.windowStart)
   }
 
   override fun getSelectedText(flags: Int): CharSequence? {
-    val text = editor.inputContext(0, 0).selectedText
+    val ctx = editor.inputContext(0, 0)
+    val start = ctx.selection.start - ctx.windowStart
+    val end = ctx.selection.end - ctx.windowStart
+    val text = ctx.text.substring(start, end)
     return text.ifEmpty { null }
   }
 
@@ -49,13 +54,9 @@ internal class EditorInputConnection(
   ): SurroundingText? {
     if (beforeLength < 0 || afterLength < 0) return null
     val ctx = editor.inputContext(beforeLength, afterLength)
-    val text = ctx.textBeforeCursor + ctx.selectedText + ctx.textAfterCursor
-    val selStart = ctx.textBeforeCursor.length
-    val selEnd = selStart + ctx.selectedText.length
-    // offset=-1: document offset of returned text[0] is unknown.
-    // Correct value would be (ctx.selectionStart - ctx.textBeforeCursor.length).toInt(),
-    // but inputContext is a stub so we pass -1 until real offsets are available.
-    return SurroundingText(text, selStart, selEnd, -1)
+    val selStart = ctx.selection.start - ctx.windowStart
+    val selEnd = ctx.selection.end - ctx.windowStart
+    return SurroundingText(ctx.text, selStart, selEnd, ctx.windowStart)
   }
 
   override fun getCursorCapsMode(reqModes: Int): Int = 0
@@ -64,7 +65,11 @@ internal class EditorInputConnection(
 
   override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
-    editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(value))))
+    if (value == "\n") {
+      editor.enqueue(Message.Key(FfiKeyEvent(Key.Enter)))
+    } else {
+      editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(value))))
+    }
     return true
   }
 

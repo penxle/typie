@@ -26,13 +26,13 @@ pub fn extract(input: &DeriveInput, custom: Option<&syn::Type>) -> FfiMeta {
 
     let kind = match &input.data {
         syn::Data::Struct(data) => {
-            let fields = data.fields.iter().map(|f| extract_field(f)).collect();
+            let fields = data.fields.iter().map(extract_field).collect();
             FfiKind::Struct { fields }
         }
         syn::Data::Enum(data) => {
             let serde_tag = parse_serde_tag(&input.attrs);
             let default_variant = find_default_variant(&data.variants);
-            let variants = data.variants.iter().map(|v| extract_variant(v)).collect();
+            let variants = data.variants.iter().map(extract_variant).collect();
             FfiKind::Enum {
                 variants,
                 serde_tag,
@@ -76,7 +76,7 @@ fn extract_variant(v: &syn::Variant) -> FfiVariant {
             let serde_rename_all = parse_serde_rename_all(&v.attrs);
             FfiVariant::Struct {
                 name: vname,
-                fields: fields.named.iter().map(|f| extract_field(f)).collect(),
+                fields: fields.named.iter().map(extract_field).collect(),
                 serde_rename_all,
             }
         }

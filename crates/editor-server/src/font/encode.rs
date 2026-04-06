@@ -70,13 +70,12 @@ pub fn encode_font(
             let start_gid = size.start_glyph_index().to_u32();
             let end_gid = size.end_glyph_index().to_u32();
             for gid in start_gid..=end_gid {
-                if let Ok(loc) = size.location(cblc.offset_data(), GlyphId::new(gid)) {
-                    if loc.data_size > 0 {
-                        let start = loc.data_offset;
-                        let end = start + loc.data_size;
-                        per_glyph
-                            .insert(gid as u16, (start, cbdt_raw.as_ref()[start..end].to_vec()));
-                    }
+                if let Ok(loc) = size.location(cblc.offset_data(), GlyphId::new(gid))
+                    && loc.data_size > 0
+                {
+                    let start = loc.data_offset;
+                    let end = start + loc.data_size;
+                    per_glyph.insert(gid as u16, (start, cbdt_raw.as_ref()[start..end].to_vec()));
                 }
             }
         }
@@ -181,17 +180,16 @@ pub fn encode_font(
         false
     };
 
-    if needs_head_patch {
-        if let (Some((gx_min, gy_min, gx_max, gy_max)), Some(head_data)) =
+    if needs_head_patch
+        && let (Some((gx_min, gy_min, gx_max, gy_max)), Some(head_data)) =
             (glyph_bounds, font.table_data(head_tag))
-        {
-            let mut patched_head = head_data.as_ref().to_vec();
-            patched_head[36..38].copy_from_slice(&gx_min.to_be_bytes());
-            patched_head[38..40].copy_from_slice(&gy_min.to_be_bytes());
-            patched_head[40..42].copy_from_slice(&gx_max.to_be_bytes());
-            patched_head[42..44].copy_from_slice(&gy_max.to_be_bytes());
-            table_overrides.push((head_tag, patched_head));
-        }
+    {
+        let mut patched_head = head_data.as_ref().to_vec();
+        patched_head[36..38].copy_from_slice(&gx_min.to_be_bytes());
+        patched_head[38..40].copy_from_slice(&gy_min.to_be_bytes());
+        patched_head[40..42].copy_from_slice(&gx_max.to_be_bytes());
+        patched_head[42..44].copy_from_slice(&gy_max.to_be_bytes());
+        table_overrides.push((head_tag, patched_head));
     }
 
     let mut builder = FontBuilder::new();
@@ -338,13 +336,11 @@ fn resolve_gsub_alternates(font: &FontRef) -> HashMap<u16, HashSet<u16>> {
                         for (i, gid) in coverage.iter().enumerate() {
                             let src = gid.to_u32() as u16;
                             if let Ok(lig_set) = lig_sets.get(i) {
-                                for lig in lig_set.ligatures().iter() {
-                                    if let Ok(lig) = lig {
-                                        alternates
-                                            .entry(src)
-                                            .or_default()
-                                            .insert(lig.ligature_glyph().to_u32() as u16);
-                                    }
+                                for lig in lig_set.ligatures().iter().flatten() {
+                                    alternates
+                                        .entry(src)
+                                        .or_default()
+                                        .insert(lig.ligature_glyph().to_u32() as u16);
                                 }
                             }
                         }

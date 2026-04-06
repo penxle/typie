@@ -1,7 +1,8 @@
 use editor_model::NodeType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum ContextExpr {
+    #[default]
     Any,
     SelfRef,
     Node(NodeType),
@@ -34,12 +35,6 @@ impl ContextExpr {
                 parent.matches_exact(&path[..split]) && child.matches_exact(&path[split..])
             }),
         }
-    }
-}
-
-impl Default for ContextExpr {
-    fn default() -> Self {
-        ContextExpr::Any
     }
 }
 

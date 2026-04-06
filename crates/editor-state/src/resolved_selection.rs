@@ -5,6 +5,20 @@ use crate::position::Position;
 use crate::resolved_position::ResolvedPosition;
 use crate::selection::Selection;
 
+/// A [`Selection`](crate::Selection) resolved against a specific
+/// [`Doc`] (via [`Selection::resolve`](crate::Selection::resolve)),
+/// holding two [`ResolvedPosition`]s.
+///
+/// Provides direction-independent views via [`from`](Self::from) and
+/// [`to`](Self::to), which return the earlier/later endpoint by
+/// `ResolvedPosition` ordering (path, then affinity — see
+/// [`ResolvedPosition`]). The underlying `anchor`/`head` pair retains
+/// its directional intent and is **not** normalized.
+///
+/// [`is_collapsed`](Self::is_collapsed) returns true iff `anchor` and
+/// `head` match on every field of [`Position`](crate::Position)
+/// (node_id, offset, affinity) — same semantics as
+/// [`Selection::is_collapsed`](crate::Selection::is_collapsed).
 pub struct ResolvedSelection<'a> {
     _marker: PhantomData<&'a Doc>,
     anchor: ResolvedPosition<'a>,

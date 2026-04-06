@@ -2,6 +2,7 @@ use cfg_if::cfg_if;
 
 use crate::error::FfiError;
 
+#[allow(clippy::wrong_self_convention)]
 pub trait FromFfi<T> {
     fn from_ffi(self) -> Result<T, FfiError>;
 }

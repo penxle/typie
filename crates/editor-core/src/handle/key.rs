@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use editor_commands::{self as commands};
 
 use crate::editor::Editor;
@@ -5,6 +7,8 @@ use crate::error::EditorError;
 use crate::message::*;
 
 pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), EditorError> {
+    let resource = Arc::clone(&editor.resource);
+    let resource = resource.lock().unwrap();
     editor.transact(|tr| {
         match (event.key, event.modifiers) {
             (Key::Enter, m) if m.shift => {
@@ -21,7 +25,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 commands::first!(
                     tr,
                     commands::delete_selection(),
-                    commands::delete_text_backward(),
+                    commands::delete_text_backward(&resource),
                     commands::delete_node_backward(),
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
@@ -31,7 +35,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 commands::first!(
                     tr,
                     commands::delete_selection(),
-                    commands::delete_text_forward(),
+                    commands::delete_text_forward(&resource),
                     commands::delete_node_forward(),
                     commands::join_paragraph_forward(),
                     commands::lift_paragraph_forward()

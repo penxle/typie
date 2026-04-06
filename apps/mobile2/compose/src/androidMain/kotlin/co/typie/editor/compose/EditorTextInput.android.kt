@@ -21,8 +21,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorTextInputR
     outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE or
       EditorInfo.IME_FLAG_NO_EXTRACT_UI
     val ctx = editor.inputContext(0, 0)
-    outAttrs.initialSelStart = ctx.selectionStart.toInt()
-    outAttrs.initialSelEnd = ctx.selectionEnd.toInt()
+    outAttrs.initialSelStart = ctx.selection.start
+    outAttrs.initialSelEnd = ctx.selection.end
     EditorInputConnection(editor, androidView)
   }
 }
@@ -33,12 +33,12 @@ internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(edit
   val imm = androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
     ?: return
   val ctx = editor.inputContext(0, 0)
-  val composingStart = ctx.composingRange?.start?.toInt() ?: -1
-  val composingEnd = ctx.composingRange?.end?.toInt() ?: -1
+  val composingStart = ctx.composing?.start ?: -1
+  val composingEnd = ctx.composing?.end ?: -1
   imm.updateSelection(
     androidView,
-    ctx.selectionStart.toInt(),
-    ctx.selectionEnd.toInt(),
+    ctx.selection.start,
+    ctx.selection.end,
     composingStart,
     composingEnd,
   )

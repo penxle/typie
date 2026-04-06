@@ -49,10 +49,10 @@ pub fn rasterize_glyph(
 
     let try_outline_before_bitmap = has_skew || embolden;
 
-    if font.color_glyphs().get(gid).is_some() {
-        if let Some(image) = rasterize_color_outline(font_data, glyph_id, font_size) {
-            return Some(RasterizedGlyph::Bitmap(image));
-        }
+    if font.color_glyphs().get(gid).is_some()
+        && let Some(image) = rasterize_color_outline(font_data, glyph_id, font_size)
+    {
+        return Some(RasterizedGlyph::Bitmap(image));
     }
 
     if try_outline_before_bitmap {

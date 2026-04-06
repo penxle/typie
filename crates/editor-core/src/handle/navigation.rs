@@ -11,13 +11,15 @@ pub fn handle_navigation_intent(
     match nav {
         NavigationIntent::Move { movement, extend } => {
             let selection = editor.state.selection;
-            let segmenters = editor.resource.lock().unwrap().segmenters.clone();
-            if let Some(new_selection) = editor.view.resolve_movement(
+            let resource_guard = editor.resource.lock().unwrap();
+            let new_selection = editor.view.resolve_movement(
                 &selection.head,
                 &movement,
                 &editor.state.doc,
-                segmenters.as_deref(),
-            ) {
+                &resource_guard,
+            );
+            drop(resource_guard);
+            if let Some(new_selection) = new_selection {
                 editor.transact(|tr| {
                     let selection = if extend {
                         Selection::new(selection.anchor, new_selection.head)

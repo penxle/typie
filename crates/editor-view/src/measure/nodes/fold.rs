@@ -2,7 +2,7 @@ use editor_common::{Alignment, EdgeInsets, Rect};
 use editor_model::{Doc, Node, NodeRef};
 
 use crate::measure::Measurer;
-use crate::measure::container::layout_padded;
+use crate::measure::container::{PaddedLayoutConfig, layout_padded};
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
 use crate::style::{BorderMode, BoxStyle, Decoration, DecorationData, Direction};
 use crate::view_state::ViewState;
@@ -40,10 +40,12 @@ pub fn measure_fold_title(
         node,
         width,
         view_state,
-        padding,
-        EdgeInsets::ZERO,
-        false,
-        Alignment::Start,
+        PaddedLayoutConfig {
+            padding,
+            border: EdgeInsets::ZERO,
+            scope: false,
+            alignment: Alignment::Start,
+        },
     );
 
     if let MeasuredContent::Box(ref mut b) = measured.content {
@@ -77,10 +79,12 @@ pub fn measure_fold_content(
         node,
         width,
         view_state,
-        padding,
-        EdgeInsets::ZERO,
-        false,
-        Alignment::Start,
+        PaddedLayoutConfig {
+            padding,
+            border: EdgeInsets::ZERO,
+            scope: false,
+            alignment: Alignment::Start,
+        },
     )
 }
 

@@ -44,30 +44,26 @@ pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> O
 }
 
 pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
-    for run in &line.glyph_runs {
-        if run.node_id != pos.node_id {
-            continue;
-        }
-
-        let local_offset = pos.offset.saturating_sub(run.offset);
-        if local_offset > run.char_advances.len() {
-            continue;
-        }
-
-        return run.x + run.char_advances[..local_offset].iter().sum::<f32>();
-    }
-
-    // Fallback: end of last run
-    line.glyph_runs.last().map(|r| r.x + r.width).unwrap_or(0.0)
+    super::grapheme::x_at_offset(line, pos)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::glyph_run::GlyphRun;
+    use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::*;
     use editor_common::{Alignment, EdgeInsets, Size};
     use editor_model::NodeId;
+
+    fn gs(n: usize) -> Vec<GraphemeSpan> {
+        vec![
+            GraphemeSpan {
+                advance: 10.0,
+                codepoints: 1
+            };
+            n
+        ]
+    }
 
     fn make_tree(id: NodeId) -> LayoutTree {
         LayoutTree {
@@ -89,13 +85,7 @@ mod tests {
                         content: LayoutContent::Line(LayoutLine {
                             node_id: id,
                             baseline: 16.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(
-                                id,
-                                0,
-                                "hello",
-                                0.0,
-                                vec![10.0; 5],
-                            )],
+                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                         }),
                     }],
                 }),
@@ -158,13 +148,7 @@ mod tests {
                         content: LayoutContent::Line(LayoutLine {
                             node_id: id,
                             baseline: 16.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(
-                                id,
-                                0,
-                                "hello",
-                                0.0,
-                                vec![10.0; 5],
-                            )],
+                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                         }),
                     }],
                 }),
@@ -205,13 +189,7 @@ mod tests {
                         content: LayoutContent::Line(LayoutLine {
                             node_id: id,
                             baseline: 16.0,
-                            glyph_runs: vec![GlyphRun::make_test_run(
-                                id,
-                                0,
-                                "hello",
-                                0.0,
-                                vec![10.0; 5],
-                            )],
+                            glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                         }),
                     }],
                 }),

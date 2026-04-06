@@ -83,10 +83,10 @@ impl Outline {
             }
         }
 
-        if pos > point_start {
-            if let Some(points) = self.points.get_mut(point_start..pos) {
-                embolden(points, winding, x_strength, y_strength);
-            }
+        if pos > point_start
+            && let Some(points) = self.points.get_mut(point_start..pos)
+        {
+            embolden(points, winding, x_strength, y_strength);
         }
     }
 
@@ -186,10 +186,10 @@ fn compute_outline_winding(points: &[Point], verbs: &[Verb]) -> u8 {
     for verb in verbs {
         match verb {
             Verb::MoveTo | Verb::Close => {
-                if let Some(contour) = points.get(point_start..pos) {
-                    if !contour.is_empty() {
-                        total_area += contour_area(contour);
-                    }
+                if let Some(contour) = points.get(point_start..pos)
+                    && !contour.is_empty()
+                {
+                    total_area += contour_area(contour);
                 }
 
                 point_start = pos;
@@ -204,10 +204,10 @@ fn compute_outline_winding(points: &[Point], verbs: &[Verb]) -> u8 {
         }
     }
 
-    if let Some(contour) = points.get(point_start..pos) {
-        if !contour.is_empty() {
-            total_area += contour_area(contour);
-        }
+    if let Some(contour) = points.get(point_start..pos)
+        && !contour.is_empty()
+    {
+        total_area += contour_area(contour);
     }
 
     if total_area > 0. { 1 } else { 0 }

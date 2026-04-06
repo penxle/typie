@@ -4,7 +4,7 @@ use crate::{Step, StepError, StepOutput};
 
 pub(crate) fn apply(state: &State, new: &Selection) -> Result<StepOutput, StepError> {
     let mut new_state = state.clone();
-    new_state.selection = new.clone();
+    new_state.selection = *new;
 
     Ok(StepOutput {
         state: new_state,
@@ -38,8 +38,8 @@ mod tests {
 
         let new_sel = Selection::collapsed(Position::new(t1, 3));
         let step = Step::SetSelection {
-            old: state.selection.clone(),
-            new: new_sel.clone(),
+            old: state.selection,
+            new: new_sel,
         };
 
         let output = step.apply(&state).unwrap();
@@ -62,7 +62,7 @@ mod tests {
 
         let new_sel = Selection::collapsed(Position::new(t1, 3));
         let step = Step::SetSelection {
-            old: state.selection.clone(),
+            old: state.selection,
             new: new_sel,
         };
 

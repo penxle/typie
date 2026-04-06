@@ -12,6 +12,7 @@ uniffi = [
   "editor-model/uniffi",
   "editor-renderer/uniffi",
   "editor-resource/uniffi",
+  "editor-schema/uniffi",
   "editor-state/uniffi",
   "editor-transaction/uniffi",
   "editor-view/uniffi",
@@ -24,6 +25,7 @@ wasm = [
   "editor-model/wasm",
   "editor-renderer/wasm",
   "editor-resource/wasm",
+  "editor-schema/wasm",
   "editor-state/wasm",
   "editor-transaction/wasm",
   "editor-view/wasm",
@@ -36,6 +38,7 @@ editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-renderer = { path = "../editor-renderer" }
 editor-resource = { path = "../editor-resource" }
+editor-schema = { path = "../editor-schema" }
 editor-state = { path = "../editor-state" }
 editor-transaction = { path = "../editor-transaction" }
 editor-view = { path = "../editor-view" }

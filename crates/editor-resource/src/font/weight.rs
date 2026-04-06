@@ -5,9 +5,9 @@ pub fn match_weight(weights: &[u16], target: u16) -> Option<u16> {
         return None;
     }
 
-    if target >= 400 && target <= 500 {
+    if (400..=500).contains(&target) {
         // [target, 500] ascending -> < target descending -> > 500 ascending
-        if let Some(&w) = weights.iter().find(|&&w| w >= target && w <= 500) {
+        if let Some(&w) = weights.iter().find(|&&w| (target..=500).contains(&w)) {
             return Some(w);
         }
         if let Some(&w) = weights.iter().rev().find(|&&w| w < target) {

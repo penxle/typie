@@ -213,7 +213,7 @@ fn jna_primitive_conversion(
 ) -> String {
     let resolved = custom_types.get(name).map(|s| s.as_str()).unwrap_or(name);
     match resolved {
-        "u32" => format!("{}.toUInt()", kt_name),
+        "u32" | "usize" => format!("{}.toUInt()", kt_name),
         "u16" => format!("{}.toUShort()", kt_name),
         "u64" => format!("{}.toULong()", kt_name),
         _ => kt_name.into(),

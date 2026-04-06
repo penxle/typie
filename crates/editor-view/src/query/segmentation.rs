@@ -190,14 +190,24 @@ mod tests {
     use editor_model::NodeId;
 
     use super::*;
-    use crate::glyph_run::GlyphRun;
+    use crate::glyph_run::{GlyphRun, GraphemeSpan};
+
+    fn gs(n: usize) -> Vec<GraphemeSpan> {
+        vec![
+            GraphemeSpan {
+                advance: 10.0,
+                codepoints: 1
+            };
+            n
+        ]
+    }
 
     fn make_line(id: NodeId, text: &str) -> LayoutLine {
         let n = text.chars().count();
         LayoutLine {
             node_id: id,
             baseline: 16.0,
-            glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, vec![10.0; n])],
+            glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
         }
     }
 
@@ -208,8 +218,8 @@ mod tests {
             node_id: id1,
             baseline: 16.0,
             glyph_runs: vec![
-                GlyphRun::make_test_run(id1, 0, "hello ", 0.0, vec![10.0; 6]),
-                GlyphRun::make_test_run(id2, 0, "world", 60.0, vec![10.0; 5]),
+                GlyphRun::make_test_run(id1, 0, "hello ", 0.0, gs(6)),
+                GlyphRun::make_test_run(id2, 0, "world", 60.0, gs(5)),
             ],
         };
         (line, id1, id2)
@@ -260,7 +270,7 @@ mod tests {
         let line = make_line(id, "hello world");
         let segmenters = TextSegmenters::new_test();
         let boundary = prev_word_boundary(&line, 11, &segmenters.word).unwrap();
-        assert!(boundary >= 5 && boundary <= 6);
+        assert!((5..=6).contains(&boundary));
     }
 
     #[test]
@@ -278,6 +288,6 @@ mod tests {
         let line = make_line(id, "Hello world. Goodbye world.");
         let segmenters = TextSegmenters::new_test();
         let boundary = prev_sentence_boundary(&line, 27, &segmenters.sentence).unwrap();
-        assert!(boundary >= 12 && boundary <= 13);
+        assert!((12..=13).contains(&boundary));
     }
 }

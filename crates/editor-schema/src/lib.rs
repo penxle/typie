@@ -4,12 +4,14 @@ mod content;
 mod context;
 mod error;
 mod ext;
+mod flat;
 mod spec;
 
 pub use content::*;
 pub use context::*;
 pub use error::*;
 pub use ext::*;
+pub use flat::*;
 pub use spec::*;
 
 use editor_macros::{content_expr, context_expr};

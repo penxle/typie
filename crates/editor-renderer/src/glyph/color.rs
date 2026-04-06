@@ -198,7 +198,7 @@ impl<'a> ColorGlyphRasterizer<'a> {
 impl ColorPainter for ColorGlyphRasterizer<'_> {
     fn push_transform(&mut self, transform: Transform) {
         self.transform_stack.push(self.current_transform);
-        self.current_transform = self.current_transform * transform;
+        self.current_transform *= transform;
     }
 
     fn pop_transform(&mut self) {
@@ -274,21 +274,18 @@ impl ColorPainter for ColorGlyphRasterizer<'_> {
     fn pop_layer(&mut self) {
         if let Some(layer) = self.layer_stack.pop() {
             let src = std::mem::replace(&mut self.pixels, layer.pixels);
-            match layer.composite_mode {
-                CompositeMode::SrcOver => {
-                    for i in (0..self.pixels.len()).step_by(4) {
-                        if i + 3 < src.len() {
-                            blend_src_over(
-                                &mut self.pixels[i..i + 4],
-                                src[i],
-                                src[i + 1],
-                                src[i + 2],
-                                src[i + 3],
-                            );
-                        }
+            if layer.composite_mode == CompositeMode::SrcOver {
+                for i in (0..self.pixels.len()).step_by(4) {
+                    if i + 3 < src.len() {
+                        blend_src_over(
+                            &mut self.pixels[i..i + 4],
+                            src[i],
+                            src[i + 1],
+                            src[i + 2],
+                            src[i + 3],
+                        );
                     }
                 }
-                _ => {}
             }
         }
     }

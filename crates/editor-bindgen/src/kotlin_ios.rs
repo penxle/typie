@@ -199,32 +199,29 @@ fn generate_method(
         }
         FfiReturnType::Complex(_) => {
             emit_pre_call_conversions(w, &method.params);
-            w.line(&format!("val result = {}!!", native_call));
+            w.line(&format!("val result = {}", native_call));
             w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-            w.line("json.decodeFromString(result)");
+            w.line("json.decodeFromString(result!!)");
         }
         FfiReturnType::Vec(inner) => match inner {
             FfiScalarReturn::Primitive(_) => {
                 emit_pre_call_conversions(w, &method.params);
-                w.line(&format!("val result = {}!!", native_call));
+                w.line(&format!("val result = {}", native_call));
                 w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-                w.line("result");
+                w.line("result!!");
             }
             FfiScalarReturn::Complex(_) => {
                 emit_pre_call_conversions(w, &method.params);
-                w.line(&format!(
-                    "@Suppress(\"UNCHECKED_CAST\") val result = {}!! as List<String>",
-                    native_call
-                ));
+                w.line(&format!("val result = {}", native_call));
                 w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-                w.line("result.map { json.decodeFromString(it) }");
+                w.line("@Suppress(\"UNCHECKED_CAST\") (result!! as List<String>).map { json.decodeFromString(it) }");
             }
             FfiScalarReturn::Owned(name) => {
                 emit_pre_call_conversions(w, &method.params);
                 let ios_class = format!("Ios{}", name);
-                w.line(&format!("val result = {}!!", native_call));
+                w.line(&format!("val result = {}", native_call));
                 w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-                w.line(&format!("result.map {{ {}(it) }}", ios_class));
+                w.line(&format!("result!!.map {{ {}(it) }}", ios_class));
             }
         },
         FfiReturnType::Option(inner) => match inner {
@@ -251,19 +248,19 @@ fn generate_method(
         FfiReturnType::Owned(name) => {
             let is_iface = all_interfaces.iter().any(|i| &i.name == name);
             emit_pre_call_conversions(w, &method.params);
-            w.line(&format!("val result = {}!!", native_call));
+            w.line(&format!("val result = {}", native_call));
             w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
             if is_iface {
-                w.line(&format!("Ios{}(result)", name));
+                w.line(&format!("Ios{}(result!!)", name));
             } else {
-                w.line("result");
+                w.line("result!!");
             }
         }
         FfiReturnType::Primitive(_) => {
             emit_pre_call_conversions(w, &method.params);
-            w.line(&format!("val result = {}!!", native_call));
+            w.line(&format!("val result = {}", native_call));
             w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
-            w.line("result");
+            w.line("result!!");
         }
     }
 

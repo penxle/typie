@@ -262,9 +262,7 @@ impl Step {
             Step::RemoveModifier { node_id, modifier } => {
                 steps::remove_modifier::inverse(*node_id, modifier.clone())
             }
-            Step::SetSelection { old, new } => {
-                steps::set_selection::inverse(old.clone(), new.clone())
-            }
+            Step::SetSelection { old, new } => steps::set_selection::inverse(*old, *new),
             Step::SetPendingModifiers { old, new } => {
                 steps::set_pending_modifiers::inverse(old.clone(), new.clone())
             }
@@ -277,9 +275,7 @@ impl Step {
                 old_modifiers.clone(),
                 new_modifiers.clone(),
             ),
-            Step::SetComposition { old, new } => {
-                steps::set_composition::inverse(old.clone(), new.clone())
-            }
+            Step::SetComposition { old, new } => steps::set_composition::inverse(*old, *new),
             Step::SetDocumentAttrs { old, new } => {
                 steps::set_document_attrs::inverse(old.clone(), new.clone())
             }
