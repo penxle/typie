@@ -2,6 +2,7 @@ package co.typie.shell
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -10,10 +11,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.preferredFrameRate
 import co.typie.auth.AuthService
 import co.typie.bootstrap.BootstrapDevSandbox
 import co.typie.bootstrap.BootstrapService
@@ -24,8 +26,8 @@ import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.app_state.MaintenanceScreen
 import co.typie.screen.app_state.OfflineScreen
-import co.typie.screen.splash.SplashScreen
 import co.typie.screen.app_state.UpdateRequiredScreen
+import co.typie.screen.splash.SplashScreen
 import co.typie.ui.component.bottomsheet.BottomSheetHost
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -58,6 +60,7 @@ fun RootShell() {
     Box(
       Modifier
         .fillMaxSize()
+        .preferredFrameRate(FrameRateCategory.High)
         .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } },
     ) {
       Crossfade(
@@ -74,11 +77,13 @@ fun RootShell() {
             is RootShellDestination.Offline -> OfflineScreen {
               authService.retryAsync()
             }
+
             is RootShellDestination.Maintenance -> MaintenanceScreen(
               title = destination.title,
               message = destination.message,
               until = destination.until,
             )
+
             is RootShellDestination.UpdateRequired -> UpdateRequiredScreen(
               storeUrl = destination.storeUrl,
               currentVersion = destination.currentVersion,

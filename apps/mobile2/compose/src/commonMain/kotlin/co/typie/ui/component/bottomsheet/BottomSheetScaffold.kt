@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.imePadding
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -79,7 +78,7 @@ fun BottomSheetScaffold(
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically,
       ) {
         Box(
           modifier = Modifier.size(TopBarDefaults.SlotWidth),
@@ -102,13 +101,12 @@ fun BottomSheetScaffold(
         .fillMaxWidth()
         .weight(1f, fill = false)
         .padding(top = 8.dp)
+        .imePadding()
         .verticalScroll(scrollState),
     ) {
       Column(
         modifier = Modifier
-          .fillMaxWidth()
-          .navigationBarsPadding()
-          .imePadding(),
+          .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
       )
@@ -194,7 +192,7 @@ fun BottomSheetHeaderTextAction(
 
 @Composable
 private fun BottomSheetHeaderActionSpinner(
-  color: androidx.compose.ui.graphics.Color,
+  color: Color,
   modifier: Modifier = Modifier,
 ) {
   val transition = rememberInfiniteTransition()

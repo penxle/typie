@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import co.typie.ext.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -142,7 +142,7 @@ fun Screen(
           extraPadding = extraPadding + bottomBarPadding,
           verticalArrangement = verticalArrangement,
           horizontalAlignment = horizontalAlignment,
-          useNavigationBarsPadding = bottomBar == null,
+          useNavigationBarsPadding = !imeAware && bottomBar == null,
         ) {
           content()
         }
@@ -153,7 +153,7 @@ fun Screen(
           modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
-            .navigationBarsPadding()
+            .then(if (!imeAware) Modifier.navigationBarsPadding() else Modifier)
             .onSizeChanged { bottomBarHeight = it.height },
         ) {
           bottomBar()

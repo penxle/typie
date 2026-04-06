@@ -103,7 +103,9 @@ fun Button(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {
-            ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
+            if (debouncedLoading) {
+              ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
+            }
           }
 
           if (debouncedLoading) {

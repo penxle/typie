@@ -57,7 +57,7 @@ fun EditorView(editor: Editor) {
       val cursor = editor.cursor
       if (cursor != null) {
         val cursorGlobal = localToGlobal(
-          page = cursor.pageIdx.toInt(),
+          page = cursor.pageIdx,
           x = cursor.rect.x,
           y = cursor.rect.y,
           pageOffsets = pageOffsets,

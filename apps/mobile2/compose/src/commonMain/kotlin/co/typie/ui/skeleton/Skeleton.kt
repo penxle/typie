@@ -102,23 +102,6 @@ object Skeleton {
     val effectiveAlpha = if (enabled) 1f else fadeAlpha
     val active = enabled || fadeAlpha > 0f
 
-    val infiniteTransition = rememberInfiniteTransition()
-    val pulseAlpha by infiniteTransition.animateFloat(
-      initialValue = 0f,
-      targetValue = 1f,
-      animationSpec = infiniteRepeatable<Float>(
-        animation = tween<Float>(800, easing = EaseInOut),
-        repeatMode = RepeatMode.Reverse,
-      ),
-    )
-
-    val animatedColor = remember { mutableStateOf(colors.bone) }
-    animatedColor.value = lerp(colors.bone, colors.highlight, pulseAlpha)
-
-    val state = remember(colors) {
-      SkeletonState(enabled = true, color = animatedColor, colors = colors)
-    }
-
     Box(modifier) {
       // 실제 콘텐츠 (항상 렌더링)
       CompositionLocalProvider(LocalSkeleton provides SkeletonState.Disabled) {
@@ -127,6 +110,23 @@ object Skeleton {
 
       // Bone 오버레이 (fade out)
       if (active) {
+        val infiniteTransition = rememberInfiniteTransition()
+        val pulseAlpha by infiniteTransition.animateFloat(
+          initialValue = 0f,
+          targetValue = 1f,
+          animationSpec = infiniteRepeatable<Float>(
+            animation = tween<Float>(800, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse,
+          ),
+        )
+
+        val animatedColor = remember { mutableStateOf(colors.bone) }
+        animatedColor.value = lerp(colors.bone, colors.highlight, pulseAlpha)
+
+        val state = remember(colors) {
+          SkeletonState(enabled = true, color = animatedColor, colors = colors)
+        }
+
         CompositionLocalProvider(LocalSkeleton provides state) {
           Box(Modifier.alpha(effectiveAlpha)) {
             content()
