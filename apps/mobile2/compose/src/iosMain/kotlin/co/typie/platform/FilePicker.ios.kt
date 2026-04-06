@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+
 package co.typie.platform
 
 import androidx.compose.runtime.Composable
@@ -6,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import platform.Foundation.NSData

@@ -10,7 +10,7 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import co.typie.editor.Editor
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal actual suspend fun PlatformTextInputSessionScope.createEditorTextInputRequest(
+internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor,
 ): PlatformTextInputMethodRequest {
   val androidView = view
@@ -30,8 +30,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorTextInputR
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
   val androidView = view
-  val imm = androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-    ?: return
+  val imm =
+    androidView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+      ?: return
   val ctx = editor.inputContext(0, 0)
   val composingStart = ctx.composing?.start ?: -1
   val composingEnd = ctx.composing?.end ?: -1

@@ -6,39 +6,72 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import co.typie.di.Platform
 import co.typie.editor.Editor
+import co.typie.editor.LocalEditorState
+import co.typie.editor.ffi.Doc
+import co.typie.editor.ffi.Selection
+import co.typie.editor.ffi.Viewport
 import co.typie.ext.verticalScroll
 import co.typie.ui.state.rememberScrollState
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import androidx.compose.ui.geometry.Size as ComposeSize
 
 @Composable
-fun EditorView(editor: Editor) {
+fun EditorView(doc: Doc, selection: Selection) {
+  val platform = koinInject<Platform>()
   val density = LocalDensity.current
+  val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
-  val focusRequester = remember { FocusRequester() }
-  val pageSizes = editor.pageSizes
-  val pageOffsets = remember { mutableStateMapOf<Int, Offset>() }
 
-  Box(Modifier.fillMaxSize()) {
+  val ctx = LocalEditorState.current
+  var initializing by remember { mutableStateOf(false) }
+
+  Box(
+    Modifier.fillMaxSize().onSizeChanged { size ->
+      if (!initializing) {
+        initializing = true
+        scope.launch {
+          ctx.editor = Editor.create(
+            doc, selection,
+            Viewport(
+              width = size.width / density.density,
+              height = size.height / density.density,
+              scaleFactor = density.density.toDouble(),
+            ),
+            scope,
+          )
+        }
+      }
+    },
+  ) {
+    val editor = ctx.editor ?: return@Box
+    editor.focusManager = LocalFocusManager.current
+
     Box(
       Modifier.fillMaxWidth()
-        .focusRequester(focusRequester)
-        .editorTextInput(editor)
+        .focusRequester(editor.focusRequester)
+        .editorInput(editor, platform)
         .focusable()
         .verticalScroll(scrollState)
-        .editorGestures(editor, focusRequester, pageOffsets, pageSizes)
+        .editorGestures(editor)
     ) {
       Column {
-        pageSizes.forEachIndexed { index, size ->
+        editor.pageSizes.forEachIndexed { index, size ->
           Page(
             editor = editor,
             page = index,
@@ -46,7 +79,7 @@ fun EditorView(editor: Editor) {
             height = size.height,
             modifier = Modifier.onGloballyPositioned { coordinates ->
               val pos = coordinates.positionInParent()
-              pageOffsets[index] = with(density) {
+              editor.pageOffsets[index] = with(density) {
                 Offset(pos.x.toDp().value, pos.y.toDp().value)
               }
             },
@@ -56,11 +89,10 @@ fun EditorView(editor: Editor) {
 
       val cursor = editor.cursor
       if (cursor != null) {
-        val cursorGlobal = localToGlobal(
+        val cursorGlobal = editor.localToGlobal(
           page = cursor.pageIdx,
           x = cursor.rect.x,
           y = cursor.rect.y,
-          pageOffsets = pageOffsets,
         )
 
         if (cursorGlobal != null) {

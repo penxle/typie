@@ -8,6 +8,7 @@ import SwiftUI
 @main
 struct iOSApp: App {
   init() {
+    InitLoggerKt.doInitLogger()
     KoinInitKt.doInitKoin()
 
     let info = Bundle.main.infoDictionary!

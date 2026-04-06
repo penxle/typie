@@ -33,6 +33,8 @@ fn generate_ios_wrapper(
 ) -> String {
     let mut w = CodeWriter::new();
 
+    w.line("@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)");
+    w.line("");
     w.line(&format!("package {}", PACKAGE));
     w.line("");
     w.line("import kotlinx.cinterop.ObjCObjectVar");

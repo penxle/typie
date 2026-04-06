@@ -85,8 +85,24 @@ fn resolve_target(
         tr.set_composition(None)?;
     }
 
-    let cursor = tr.selection().head;
-    let cursor_flat = cursor
+    let sel = tr.selection();
+
+    if !sel.is_collapsed() {
+        let anchor_flat = sel
+            .anchor
+            .resolve(&doc)
+            .ok_or(CommandError::Corrupted("anchor unresolvable".into()))?
+            .to_flat();
+        let head_flat = sel
+            .head
+            .resolve(&doc)
+            .ok_or(CommandError::Corrupted("head unresolvable".into()))?
+            .to_flat();
+        return Ok((anchor_flat.min(head_flat), anchor_flat.max(head_flat)));
+    }
+
+    let cursor_flat = sel
+        .head
         .resolve(&doc)
         .ok_or(CommandError::Corrupted("cursor unresolvable".into()))?
         .to_flat();
@@ -655,5 +671,68 @@ mod tests {
         );
 
         assert_eq!(editor.state().doc.flat_text(0..3), "안녕하");
+    }
+
+    /// iOS Korean IME uses select-delete-reinsert instead of SetComposingText.
+    /// Typing "안녕" after "!" produces:
+    ///   Commit("ㅇ")
+    ///   SetSelection(0,2) → Commit("") → Commit("!") → Commit("아")
+    ///   SetSelection(0,2) → Commit("") → Commit("!") → Commit("안")
+    ///   Commit("ㄴ")
+    ///   SetSelection(1,3) → Commit("") → Commit("안") → Commit("녀")
+    ///   SetSelection(1,3) → Commit("") → Commit("안") → Commit("녕")
+    #[test]
+    fn ios_korean_ime_select_delete_reinsert() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("!") } } }
+            selection: (t1, 1)
+        };
+        let mut editor = Editor::new_test(state);
+
+        let apply_commit = |e: &mut Editor, text: &str| {
+            e.apply(Message::Intent {
+                intent: Intent::Composition {
+                    intent: CompositionIntent::Commit { text: text.into() },
+                },
+            });
+        };
+        let apply_set_selection = |e: &mut Editor, start: usize, end: usize| {
+            e.apply(Message::Intent {
+                intent: Intent::Selection {
+                    intent: SelectionIntent::SetFlat { start, end },
+                },
+            });
+        };
+
+        // ㅇ
+        apply_commit(&mut editor, "ㅇ");
+        // SetSelection(0,2) → Commit("") → Commit("!") → Commit("아")
+        apply_set_selection(&mut editor, 0, 2);
+        apply_commit(&mut editor, "");
+        apply_commit(&mut editor, "!");
+        apply_commit(&mut editor, "아");
+        // SetSelection(0,2) → Commit("") → Commit("!") → Commit("안")
+        apply_set_selection(&mut editor, 0, 2);
+        apply_commit(&mut editor, "");
+        apply_commit(&mut editor, "!");
+        apply_commit(&mut editor, "안");
+        // ㄴ
+        apply_commit(&mut editor, "ㄴ");
+        // SetSelection(1,3) → Commit("") → Commit("안") → Commit("녀")
+        apply_set_selection(&mut editor, 1, 3);
+        apply_commit(&mut editor, "");
+        apply_commit(&mut editor, "안");
+        apply_commit(&mut editor, "녀");
+        // SetSelection(1,3) → Commit("") → Commit("안") → Commit("녕")
+        apply_set_selection(&mut editor, 1, 3);
+        apply_commit(&mut editor, "");
+        apply_commit(&mut editor, "안");
+        apply_commit(&mut editor, "녕");
+
+        let (expected, ..) = state! {
+            doc { root { paragraph { t1: text("!안녕") } } }
+            selection: (t1, 3)
+        };
+        assert_state_eq!(editor.state(), &expected);
     }
 }

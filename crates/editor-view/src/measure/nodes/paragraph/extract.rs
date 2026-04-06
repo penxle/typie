@@ -69,7 +69,11 @@ fn segment_graphemes(
     segmenter: Option<&GraphemeClusterSegmenter>,
 ) -> Vec<GraphemeSpan> {
     if let Some(seg) = segmenter {
-        let boundaries: Vec<usize> = seg.as_borrowed().segment_str(cluster_text).collect();
+        let boundaries: Vec<usize> = seg
+            .as_borrowed()
+            .segment_str(cluster_text)
+            .filter(|&b| b > 0)
+            .collect();
         let count = boundaries.len();
         if count == 0 {
             return vec![];
@@ -98,6 +102,50 @@ fn segment_graphemes(
                 codepoints: 1,
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn segmenter() -> GraphemeClusterSegmenter {
+        GraphemeClusterSegmenter::new().static_to_owned()
+    }
+
+    #[test]
+    fn segment_single_ascii_char() {
+        let spans = segment_graphemes("h", 10.0, Some(&segmenter()));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].codepoints, 1);
+        assert_eq!(spans[0].advance, 10.0);
+    }
+
+    #[test]
+    fn segment_multiple_ascii_chars() {
+        let spans = segment_graphemes("ab", 20.0, Some(&segmenter()));
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].codepoints, 1);
+        assert_eq!(spans[0].advance, 10.0);
+        assert_eq!(spans[1].codepoints, 1);
+        assert_eq!(spans[1].advance, 10.0);
+    }
+
+    #[test]
+    fn segment_multi_codepoint_grapheme() {
+        // 👨‍👩 = U+1F468 U+200D U+1F469 (3 codepoints, 1 grapheme cluster)
+        let text = "\u{1F468}\u{200D}\u{1F469}";
+        let spans = segment_graphemes(text, 20.0, Some(&segmenter()));
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].codepoints, 3);
+        assert_eq!(spans[0].advance, 20.0);
+    }
+
+    #[test]
+    fn segment_no_phantom_zero_codepoint_span() {
+        let spans = segment_graphemes("hello", 50.0, Some(&segmenter()));
+        assert!(spans.iter().all(|s| s.codepoints > 0));
+        assert_eq!(spans.len(), 5);
     }
 }
 
