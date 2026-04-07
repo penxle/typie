@@ -29,6 +29,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_node_backward(),
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
+                    commands::lift_paragraph(),
                 )?;
             }
             (Key::Delete, _) => {

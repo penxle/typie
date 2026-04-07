@@ -12,6 +12,8 @@ use crate::measure::resolve::resolve_inherited;
 pub struct ExtractedLine {
     pub height: f32,
     pub baseline: f32,
+    pub ascent: f32,
+    pub descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
 }
 
@@ -259,6 +261,8 @@ pub fn extract_lines(
         lines.push(ExtractedLine {
             height: line_box_height,
             baseline,
+            ascent,
+            descent,
             glyph_runs,
         });
     }

@@ -69,7 +69,10 @@ pub fn measure_paragraph(
                 content: MeasuredContent::Line(MeasuredLine {
                     node_id,
                     baseline: line.baseline,
+                    ascent: line.ascent,
+                    descent: line.descent,
                     glyph_runs: line.glyph_runs,
+                    text_indent: indent,
                 }),
             })
         })
@@ -102,6 +105,7 @@ fn measure_empty_paragraph(
     width: f32,
 ) -> MeasuredNode {
     let base_style = resolve_text_style(node);
+    let indent = resolve_paragraph_indent(node);
 
     let mut resource = measurer.resource.lock().unwrap();
     let strut = compute_strut(&mut resource, &base_style);
@@ -118,7 +122,10 @@ fn measure_empty_paragraph(
         content: MeasuredContent::Line(MeasuredLine {
             node_id,
             baseline: strut.ascent,
+            ascent: strut.ascent,
+            descent: strut.descent,
             glyph_runs: vec![],
+            text_indent: indent,
         }),
     });
 

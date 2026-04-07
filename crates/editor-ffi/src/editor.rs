@@ -36,7 +36,7 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.tick()?.into_ffi()?))
     }
 
-    pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::PageRect>>> {
+    pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorRect>>> {
         self.with_inner(|inner| {
             let selection = inner.editor.state().selection;
             if selection.is_collapsed() {

@@ -77,7 +77,7 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
 
     match &line_node.content {
         LayoutContent::Line(line) => {
-            for run in &line.glyph_runs {
+            for (i, run) in line.glyph_runs.iter().enumerate() {
                 if run.node_id != pos.node_id {
                     continue;
                 }
@@ -92,6 +92,16 @@ fn move_grapheme_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection>
                         )));
                     }
                     cp_acc += cp;
+                }
+                if local == cp_acc {
+                    if let Some(next) = line.glyph_runs.get(i + 1) {
+                        if let Some(g) = next.graphemes.first() {
+                            return Some(Selection::collapsed(Position::new(
+                                next.node_id,
+                                next.offset + g.codepoints as usize,
+                            )));
+                        }
+                    }
                 }
             }
             let y = line_node.rect.bottom();
@@ -118,7 +128,7 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
 
     match &line_node.content {
         LayoutContent::Line(line) => {
-            for run in &line.glyph_runs {
+            for (i, run) in line.glyph_runs.iter().enumerate() {
                 if run.node_id != pos.node_id {
                     continue;
                 }
@@ -136,6 +146,16 @@ fn move_grapheme_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection
                         }
                         prev_boundary = cp_acc + cp;
                         cp_acc += cp;
+                    }
+                }
+                if pos.offset == run.offset && i > 0 {
+                    let prev = &line.glyph_runs[i - 1];
+                    let total = super::grapheme::run_codepoint_count(prev);
+                    if let Some(g) = prev.graphemes.last() {
+                        return Some(Selection::collapsed(Position::new(
+                            prev.node_id,
+                            prev.offset + total - g.codepoints as usize,
+                        )));
                     }
                 }
             }
@@ -323,7 +343,10 @@ mod tests {
             content: LayoutContent::Line(LayoutLine {
                 node_id: id,
                 baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
+                text_indent: 0.0,
             }),
         }
     }
@@ -758,6 +781,88 @@ mod tests {
         assert_eq!(sel_end.head, sel_end.anchor);
         assert_eq!(sel_end.head.node_id, f.lines[4]);
         assert_eq!(sel_end.head.offset, 3);
+    }
+
+    #[test]
+    fn grapheme_forward_at_text_node_boundary() {
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t1,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                glyph_runs: vec![
+                    GlyphRun::make_test_run(t1, 0, "Hello", 0.0, gs(5)),
+                    GlyphRun::make_test_run(t2, 0, "World", 50.0, gs(5)),
+                ],
+                text_indent: 0.0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: make_box_node(
+                0.0,
+                20.0,
+                false,
+                vec![make_box_node(0.0, 20.0, true, vec![line_node])],
+            ),
+        };
+
+        let sel = mov(
+            &tree,
+            Position::new(t1, 5),
+            Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(sel.head, sel.anchor);
+        assert_eq!(sel.head.node_id, t2);
+        assert_eq!(sel.head.offset, 1);
+    }
+
+    #[test]
+    fn grapheme_backward_at_text_node_boundary() {
+        let t1 = NodeId::new();
+        let t2 = NodeId::new();
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: t1,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                glyph_runs: vec![
+                    GlyphRun::make_test_run(t1, 0, "Hello", 0.0, gs(5)),
+                    GlyphRun::make_test_run(t2, 0, "World", 50.0, gs(5)),
+                ],
+                text_indent: 0.0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: make_box_node(
+                0.0,
+                20.0,
+                false,
+                vec![make_box_node(0.0, 20.0, true, vec![line_node])],
+            ),
+        };
+
+        let sel = mov(
+            &tree,
+            Position::new(t2, 0),
+            Movement::Grapheme {
+                direction: Direction::Backward,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(sel.head, sel.anchor);
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(sel.head.offset, 4);
     }
 
     #[test]

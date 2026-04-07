@@ -40,7 +40,10 @@ pub fn x_at_offset(line: &LayoutLine, pos: &Position) -> f32 {
         return x;
     }
 
-    line.glyph_runs.last().map(|r| r.x + r.width).unwrap_or(0.0)
+    line.glyph_runs
+        .last()
+        .map(|r| r.x + r.width)
+        .unwrap_or(line.text_indent)
 }
 
 pub fn position_at_x(line: &LayoutLine, local_x: f32) -> Position {
@@ -121,6 +124,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -128,6 +133,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            text_indent: 0.0,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 0.0);
     }
@@ -138,6 +144,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -145,6 +153,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            text_indent: 0.0,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 3)), 30.0);
     }
@@ -155,6 +164,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -162,6 +173,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            text_indent: 0.0,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 5)), 50.0);
     }
@@ -172,6 +184,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -179,6 +193,7 @@ mod tests {
                 0.0,
                 vec![gs(20.0, 3), gs(10.0, 1), gs(10.0, 1)],
             )],
+            text_indent: 0.0,
         };
         // offset 1 is inside the first grapheme (3 codepoints) => snaps to start
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 0.0);
@@ -194,6 +209,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -201,6 +218,7 @@ mod tests {
                 50.0,
                 ascii_spans(2, 10.0),
             )],
+            text_indent: 0.0,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id, 1)), 60.0);
     }
@@ -211,6 +229,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -218,6 +238,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            text_indent: 0.0,
         };
         let pos = position_at_x(&line, -5.0);
         assert_eq!(pos.node_id, id);
@@ -230,6 +251,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -237,6 +260,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            text_indent: 0.0,
         };
         let pos = position_at_x(&line, 100.0);
         assert_eq!(pos.node_id, id);
@@ -249,6 +273,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -256,6 +282,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            text_indent: 0.0,
         };
         // x=4 is < 5.0 (half of first advance), so snaps to offset 0
         let pos = position_at_x(&line, 4.0);
@@ -271,6 +298,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -278,6 +307,7 @@ mod tests {
                 0.0,
                 vec![gs(20.0, 3), gs(10.0, 1), gs(10.0, 1)],
             )],
+            text_indent: 0.0,
         };
         // x=9 is < 10.0 (half of 20.0 advance) => offset 0
         let pos = position_at_x(&line, 9.0);
@@ -296,7 +326,10 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![],
+            text_indent: 0.0,
         };
         let pos = position_at_x(&line, 50.0);
         assert_eq!(pos.node_id, id);
@@ -309,6 +342,8 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -316,6 +351,7 @@ mod tests {
                 0.0,
                 ascii_spans(5, 10.0),
             )],
+            text_indent: 0.0,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -328,7 +364,10 @@ mod tests {
         let line = LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![],
+            text_indent: 0.0,
         };
         let pos = last_position_in_line(&line);
         assert_eq!(pos.node_id, id);
@@ -342,10 +381,13 @@ mod tests {
         let line = LayoutLine {
             node_id: id1,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![
                 GlyphRun::make_test_run(id1, 0, "ab", 0.0, ascii_spans(2, 10.0)),
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
             ],
+            text_indent: 0.0,
         };
         assert_eq!(x_at_offset(&line, &Position::new(id2, 1)), 30.0);
     }
@@ -357,13 +399,30 @@ mod tests {
         let line = LayoutLine {
             node_id: id1,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![
                 GlyphRun::make_test_run(id1, 0, "ab", 0.0, ascii_spans(2, 10.0)),
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
             ],
+            text_indent: 0.0,
         };
         let pos = position_at_x(&line, 25.0);
         assert_eq!(pos.node_id, id2);
         assert_eq!(pos.offset, 1);
+    }
+
+    #[test]
+    fn x_at_offset_empty_line_with_text_indent() {
+        let id = NodeId::new();
+        let line = LayoutLine {
+            node_id: id,
+            baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
+            glyph_runs: vec![],
+            text_indent: 32.0,
+        };
+        assert_eq!(x_at_offset(&line, &Position::new(id, 0)), 32.0);
     }
 }

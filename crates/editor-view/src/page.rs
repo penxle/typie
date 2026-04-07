@@ -13,12 +13,12 @@ pub struct LayoutPage {
 #[ffi]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct PageRect {
+pub struct CursorRect {
     pub page_idx: usize,
     pub rect: Rect,
 }
 
-impl PageRect {
+impl CursorRect {
     pub fn new(page_idx: usize, rect: Rect) -> Self {
         Self { page_idx, rect }
     }

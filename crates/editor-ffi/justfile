@@ -37,7 +37,7 @@ android: bindings-kotlin (ensure "cargo-ndk")
     just icu-datagen {{mobile_dir}}/android/src/main/jniLibs/arm64-v8a/lib{{crate}}.so {{mobile_dir}}/android/src/main/assets/icu.zst
 
 # Build iOS
-ios: bindings-swift (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim")
+ios: bindings-swift bindings-kotlin (build "uniffi" "aarch64-apple-ios") (build "uniffi" "aarch64-apple-ios-sim")
     #!/usr/bin/env bash
     set -e
     headers=$(mktemp -d)

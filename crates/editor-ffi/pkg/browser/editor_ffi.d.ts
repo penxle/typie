@@ -153,6 +153,11 @@ export interface CalloutNode {
     variant?: CalloutVariant;
 }
 
+export interface CursorRect {
+    page_idx: number;
+    rect: Rect;
+}
+
 export interface Doc {
     nodes: Record<NodeId, NodeEntry>;
     attrs: DocumentAttrs;
@@ -232,11 +237,6 @@ export interface NodeEntry {
 export interface OrderedListNode {}
 
 export interface PageBreakNode {}
-
-export interface PageRect {
-    page_idx: number;
-    rect: Rect;
-}
 
 export interface ParagraphNode {
     align?: TextAlign;
@@ -334,7 +334,7 @@ export type PointerEvent = { type: "down"; page: number; x: number; y: number; c
 
 export type SelectionIntent = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
-export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "modifiers";
+export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "input_context" | "modifiers";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_manifest_loaded"; family: string; weight: number } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number } | { type: "set_external_height"; node_id: NodeId; height: number };
 
@@ -352,7 +352,7 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
-    cursor(): PageRect | undefined;
+    cursor(): CursorRect | undefined;
     detach_surface(page: number): void;
     enqueue(message: Message): void;
     input_context(before_limit: number, after_limit: number): InputContext;

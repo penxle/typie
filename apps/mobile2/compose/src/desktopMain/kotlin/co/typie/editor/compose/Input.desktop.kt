@@ -59,7 +59,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
     override val onImeAction: ((ImeAction) -> Unit)? = null
 
     // Returning Rect.Zero until page→root coordinate translation is wired here.
-    // editor.cursor is a PageRect whose `rect` is page-local; CMP requires
+    // editor.cursor is a CursorRect whose `rect` is page-local; CMP requires
     // editor-root coordinates so the desktop IME (macOS NSTextInputClient /
     // Windows IMM / X11 XIM) can position candidate windows under the cursor.
     // pageOffsets lives in View.kt and is not reachable from this session scope

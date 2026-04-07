@@ -17,12 +17,12 @@ import androidx.compose.ui.platform.establishTextInputSession
 import co.typie.di.Platform
 import co.typie.editor.Editor
 import co.typie.editor.createBindings
-import co.typie.editor.handleKeyDown
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.InsertionIntent
 import co.typie.editor.ffi.Intent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StateField
+import co.typie.editor.handleKeyDown
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch

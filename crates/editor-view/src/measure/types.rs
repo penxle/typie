@@ -36,7 +36,10 @@ pub struct MeasuredBox {
 pub struct MeasuredLine {
     pub node_id: NodeId,
     pub baseline: f32,
+    pub ascent: f32,
+    pub descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
+    pub text_indent: f32,
 }
 
 #[derive(Debug, Clone)]

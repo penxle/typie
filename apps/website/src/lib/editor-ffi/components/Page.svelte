@@ -16,7 +16,7 @@
 <div
   style:width={`${width}px`}
   style:height={`${height}px`}
-  class={css({ position: 'relative', flexShrink: '0', backgroundColor: 'brand.50' })}
+  class={css({ position: 'relative', flexShrink: '0' })}
   {@attach (el) => {
     if (editor) {
       editor.pageEls[page] = el;

@@ -151,7 +151,10 @@ mod tests {
             content: LayoutContent::Line(LayoutLine {
                 node_id: id,
                 baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(id, 0, "test", 0.0, gs(4))],
+                text_indent: 0.0,
             }),
         }
     }
@@ -302,7 +305,10 @@ mod tests {
                     content: LayoutContent::Line(LayoutLine {
                         node_id: para_id,
                         baseline: 16.0,
+                        ascent: 14.0,
+                        descent: 4.0,
                         glyph_runs: vec![], // empty line
+                        text_indent: 0.0,
                     }),
                 }],
             ),

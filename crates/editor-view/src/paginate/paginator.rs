@@ -77,7 +77,10 @@ impl Paginator {
                     content: LayoutContent::Line(LayoutLine {
                         node_id: l.node_id,
                         baseline: l.baseline,
+                        ascent: l.ascent,
+                        descent: l.descent,
                         glyph_runs: l.glyph_runs.clone(),
+                        text_indent: l.text_indent,
                     }),
                 }
             }
@@ -404,7 +407,10 @@ fn place_node_at(node: &MeasuredNode, x: f32, y: f32) -> LayoutNode {
             content: LayoutContent::Line(LayoutLine {
                 node_id: l.node_id,
                 baseline: l.baseline,
+                ascent: l.ascent,
+                descent: l.descent,
                 glyph_runs: l.glyph_runs.clone(),
+                text_indent: l.text_indent,
             }),
         },
         MeasuredContent::Atom(a) => LayoutNode {
@@ -440,7 +446,10 @@ mod tests {
             content: MeasuredContent::Line(MeasuredLine {
                 node_id: NodeId::new(),
                 baseline: height * 0.8,
+                ascent: height * 0.7,
+                descent: height * 0.1,
                 glyph_runs: vec![],
+                text_indent: 0.0,
             }),
         })
     }

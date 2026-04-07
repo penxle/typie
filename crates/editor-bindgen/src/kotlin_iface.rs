@@ -196,14 +196,16 @@ mod tests {
                     is_async: false,
                     is_constructor: false,
                     params: vec![],
-                    return_type: FfiReturnType::Option(FfiScalarReturn::Complex("PageRect".into())),
+                    return_type: FfiReturnType::Option(FfiScalarReturn::Complex(
+                        "CursorRect".into(),
+                    )),
                 },
             ],
         };
         let output = generate_interface(&iface, &empty_ct());
         assert!(output.contains("fun enqueue(message: Message)"));
         assert!(output.contains("fun tick(): List<EditorEvent>"));
-        assert!(output.contains("fun cursor(): PageRect?"));
+        assert!(output.contains("fun cursor(): CursorRect?"));
     }
 
     #[test]

@@ -20,15 +20,16 @@
           { type: 'paragraph_indent', value: 100 },
           { type: 'block_gap', value: 100 },
         ],
-        children: ['10'],
+        children: ['10', '7'],
       },
-      '10': { node: { type: 'blockquote', variant: 'left_line' }, parent: '0', children: ['1', '3', '5'] },
+      '10': { node: { type: 'callout', variant: 'danger' }, parent: '0', children: ['1', '3', '5'] },
       '1': { node: { type: 'paragraph' }, parent: '10', children: ['2'] },
       '2': { node: { type: 'text', text: 'A' }, parent: '1' },
       '3': { node: { type: 'paragraph' }, parent: '10', children: ['4'] },
       '4': { node: { type: 'text', text: 'Hello, World!' }, parent: '3' },
       '5': { node: { type: 'paragraph' }, parent: '10', children: ['6'] },
       '6': { node: { type: 'text', text: '안녕하세요!' }, parent: '5' },
+      '7': { node: { type: 'paragraph' } },
     },
     attrs: {
       layout_mode: {

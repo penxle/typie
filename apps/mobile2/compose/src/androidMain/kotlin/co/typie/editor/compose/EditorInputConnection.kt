@@ -12,14 +12,15 @@ import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputContentInfo
 import android.view.inputmethod.SurroundingText
 import android.view.inputmethod.TextAttribute
+import androidx.annotation.RequiresApi
 import co.typie.editor.Editor
 import co.typie.editor.ffi.CompositionIntent
 import co.typie.editor.ffi.DeletionIntent
 import co.typie.editor.ffi.Intent
 import co.typie.editor.ffi.Key
-import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionIntent
+import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 
 internal class EditorInputConnection(
   private val editor: Editor,
@@ -47,6 +48,7 @@ internal class EditorInputConnection(
     return text.ifEmpty { null }
   }
 
+  @RequiresApi(31)
   override fun getSurroundingText(
     beforeLength: Int,
     afterLength: Int,
@@ -83,7 +85,7 @@ internal class EditorInputConnection(
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
     editor.enqueue(
-      Message.Intent(Intent.Composition(CompositionIntent.SetRegion(start.toLong(), end.toLong())))
+      Message.Intent(Intent.Composition(CompositionIntent.SetRegion(start, end)))
     )
     return true
   }
@@ -95,25 +97,29 @@ internal class EditorInputConnection(
 
   override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
     editor.enqueue(
-      Message.Intent(Intent.Deletion(
-        DeletionIntent.Surrounding(beforeLength.toLong(), afterLength.toLong())
-      ))
+      Message.Intent(
+        Intent.Deletion(
+          DeletionIntent.Surrounding(beforeLength, afterLength)
+        )
+      )
     )
     return true
   }
 
   override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
     editor.enqueue(
-      Message.Intent(Intent.Deletion(
-        DeletionIntent.SurroundingCodePoints(beforeLength.toLong(), afterLength.toLong())
-      ))
+      Message.Intent(
+        Intent.Deletion(
+          DeletionIntent.SurroundingCodePoints(beforeLength, afterLength)
+        )
+      )
     )
     return true
   }
 
   override fun setSelection(start: Int, end: Int): Boolean {
     editor.enqueue(
-      Message.Intent(Intent.Selection(SelectionIntent.SetFlat(start.toLong(), end.toLong())))
+      Message.Intent(Intent.Selection(SelectionIntent.SetFlat(start, end)))
     )
     return true
   }
@@ -177,7 +183,8 @@ internal class EditorInputConnection(
     gesture: HandwritingGesture,
     executor: java.util.concurrent.Executor?,
     consumer: java.util.function.IntConsumer?,
-  ) {}
+  ) {
+  }
 
   override fun previewHandwritingGesture(
     gesture: android.view.inputmethod.PreviewableHandwritingGesture,

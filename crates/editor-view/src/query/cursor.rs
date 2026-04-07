@@ -1,12 +1,12 @@
 use editor_common::Rect;
 use editor_state::Position;
 
-use crate::page::{LayoutPage, PageRect};
+use crate::page::{CursorRect, LayoutPage};
 use crate::paginate::*;
 
 use super::search;
 
-pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> Option<PageRect> {
+pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> Option<CursorRect> {
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
@@ -14,7 +14,7 @@ pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> O
             let page_idx = pages
                 .iter()
                 .position(|p| line_node.rect.y >= p.y_start && line_node.rect.y < p.y_end)?;
-            return Some(PageRect::new(
+            return Some(CursorRect::new(
                 page_idx,
                 Rect::from_xywh(
                     line_node.rect.x,
@@ -32,13 +32,13 @@ pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> O
         .iter()
         .position(|p| line_node.rect.y >= p.y_start && line_node.rect.y < p.y_end)?;
 
-    Some(PageRect::new(
+    Some(CursorRect::new(
         page_idx,
         Rect::from_xywh(
             line_node.rect.x + x,
-            line_node.rect.y - pages[page_idx].y_start,
+            line_node.rect.y + (line.baseline - line.ascent) - pages[page_idx].y_start,
             1.0,
-            line_node.rect.height,
+            line.ascent + line.descent,
         ),
     ))
 }
@@ -85,7 +85,10 @@ mod tests {
                         content: LayoutContent::Line(LayoutLine {
                             node_id: id,
                             baseline: 16.0,
+                            ascent: 14.0,
+                            descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
+                            text_indent: 0.0,
                         }),
                     }],
                 }),
@@ -103,12 +106,12 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 0);
-        let PageRect { page_idx, rect } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { page_idx, rect } = cursor_rect(&tree, &pages, &pos).unwrap();
 
         assert_eq!(page_idx, 0);
         assert_eq!(rect.x, 0.0);
-        assert_eq!(rect.y, 0.0);
-        assert_eq!(rect.height, 20.0);
+        assert_eq!(rect.y, 2.0);
+        assert_eq!(rect.height, 18.0);
     }
 
     #[test]
@@ -121,7 +124,7 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 3);
-        let PageRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
 
         assert_eq!(rect.x, 30.0);
     }
@@ -148,7 +151,10 @@ mod tests {
                         content: LayoutContent::Line(LayoutLine {
                             node_id: id,
                             baseline: 16.0,
+                            ascent: 14.0,
+                            descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
+                            text_indent: 0.0,
                         }),
                     }],
                 }),
@@ -160,7 +166,7 @@ mod tests {
             size: Size::new(240.0, 800.0),
         }];
         let pos = Position::new(id, 2);
-        let PageRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
 
         // x = line.rect.x(20) + run.x(0) + advances[0..2](20) = 40
         assert_eq!(rect.x, 40.0);
@@ -189,7 +195,10 @@ mod tests {
                         content: LayoutContent::Line(LayoutLine {
                             node_id: id,
                             baseline: 16.0,
+                            ascent: 14.0,
+                            descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
+                            text_indent: 0.0,
                         }),
                     }],
                 }),
@@ -208,10 +217,52 @@ mod tests {
             },
         ];
         let pos = Position::new(id, 0);
-        let PageRect { page_idx, rect } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { page_idx, rect } = cursor_rect(&tree, &pages, &pos).unwrap();
 
         assert_eq!(page_idx, 1);
-        // y should be relative to page start: 500 - 400 = 100
-        assert_eq!(rect.y, 100.0);
+        // y should be relative to page start: 500 + (16 - 14) - 400 = 102
+        assert_eq!(rect.y, 102.0);
+    }
+
+    #[test]
+    fn cursor_rect_empty_line_with_text_indent() {
+        let id = NodeId::new();
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: BoxStyle {
+                        direction: Direction::Vertical,
+                        padding: EdgeInsets::ZERO,
+                        border: EdgeInsets::ZERO,
+                        border_mode: BorderMode::Separate,
+                        alignment: Alignment::Start,
+                        scope: false,
+                        decorations: vec![],
+                    },
+                    children: vec![LayoutNode {
+                        rect: Rect::from_xywh(0.0, 0.0, 200.0, 20.0),
+                        content: LayoutContent::Line(LayoutLine {
+                            node_id: id,
+                            baseline: 16.0,
+                            ascent: 14.0,
+                            descent: 4.0,
+                            glyph_runs: vec![],
+                            text_indent: 32.0,
+                        }),
+                    }],
+                }),
+            },
+        };
+        let pages = [LayoutPage {
+            y_start: 0.0,
+            y_end: 800.0,
+            size: Size::new(200.0, 800.0),
+        }];
+        let pos = Position::new(id, 0);
+        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+
+        assert_eq!(rect.x, 32.0);
     }
 }

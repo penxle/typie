@@ -1,14 +1,15 @@
 use editor_common::{EdgeInsets, Movement};
 use editor_model::{Doc, LayoutMode, NodeId};
 use editor_resource::Resource;
-use editor_state::{Position, Selection};
+use editor_state::{Position, ResolvedSelection, Selection};
 use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
 use crate::measure::{MeasuredTree, Measurer};
-use crate::page::{LayoutPage, PageRect};
+use crate::page::{CursorRect, LayoutPage};
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
+use crate::query::selection::SelectionRect;
 use crate::view_state::ViewState;
 use crate::viewport::Viewport;
 
@@ -132,9 +133,16 @@ impl View {
         query::resolve_movement(&result.tree, pos, movement, &self.viewport, resource)
     }
 
-    pub fn cursor_rect(&self, pos: &Position) -> Option<PageRect> {
+    pub fn cursor_rect(&self, pos: &Position) -> Option<CursorRect> {
         let result = self.layout.as_ref()?;
         query::cursor_rect(&result.tree, &result.pages, pos)
+    }
+
+    pub fn selection_rects(&self, selection: &ResolvedSelection) -> Vec<SelectionRect> {
+        let Some(ref result) = self.layout else {
+            return vec![];
+        };
+        query::selection::selection_rects(&result.tree, &result.pages, selection)
     }
 
     pub fn pages(&self) -> &[LayoutPage] {

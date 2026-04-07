@@ -89,6 +89,8 @@ const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {
 };
 
 export const handleKeyDown: EditorEventHandler<HTMLInputElement, KeyboardEvent> = (editor, e) => {
+  if (e.isComposing) return;
+
   const binding = bindings.find((b) => matchBinding(b, e));
   if (binding) {
     e.preventDefault();

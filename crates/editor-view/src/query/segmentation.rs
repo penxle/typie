@@ -207,7 +207,10 @@ mod tests {
         LayoutLine {
             node_id: id,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
+            text_indent: 0.0,
         }
     }
 
@@ -217,10 +220,13 @@ mod tests {
         let line = LayoutLine {
             node_id: id1,
             baseline: 16.0,
+            ascent: 14.0,
+            descent: 4.0,
             glyph_runs: vec![
                 GlyphRun::make_test_run(id1, 0, "hello ", 0.0, gs(6)),
                 GlyphRun::make_test_run(id2, 0, "world", 60.0, gs(5)),
             ],
+            text_indent: 0.0,
         };
         (line, id1, id2)
     }

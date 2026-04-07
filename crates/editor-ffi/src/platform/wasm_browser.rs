@@ -66,8 +66,19 @@ impl SurfaceHandle {
     pub fn present(&mut self) {
         match &mut self.backend {
             RenderBackend::Cpu(sink) => {
-                let mut buf = vec![0u8; (self.width * self.height * 4) as usize];
+                let buf_size = (self.width * self.height * 4) as usize;
+                let mut buf = vec![0u8; buf_size];
                 sink.flush_to(&mut buf);
+
+                // putImageData expects straight alpha
+                for chunk in buf.chunks_exact_mut(4) {
+                    let a = chunk[3] as u32;
+                    if a > 0 && a < 255 {
+                        chunk[0] = ((chunk[0] as u32 * 255 + a / 2) / a).min(255) as u8;
+                        chunk[1] = ((chunk[1] as u32 * 255 + a / 2) / a).min(255) as u8;
+                        chunk[2] = ((chunk[2] as u32 * 255 + a / 2) / a).min(255) as u8;
+                    }
+                }
 
                 let ctx = self
                     .handle

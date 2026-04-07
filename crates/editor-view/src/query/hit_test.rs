@@ -168,6 +168,8 @@ mod tests {
             content: LayoutContent::Line(LayoutLine {
                 node_id: id,
                 baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(
                     id,
                     0,
@@ -181,6 +183,7 @@ mod tests {
                         n
                     ],
                 )],
+                text_indent: 0.0,
             }),
         }
     }

@@ -132,11 +132,14 @@ impl Editor {
 
         if steps.iter().any(|s| s.is_doc_step()) {
             fields.push(StateField::Doc);
+            fields.push(StateField::InputContext);
         }
 
         if steps.iter().any(|s| s.is_selection_step()) {
             fields.push(StateField::Cursor);
             fields.push(StateField::Selection);
+            fields.push(StateField::InputContext);
+            self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if !fields.is_empty() {
@@ -147,6 +150,14 @@ impl Editor {
     }
 
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
+        if let Some(resolved) = self.state.selection.resolve(&self.state.doc) {
+            if !resolved.is_collapsed() {
+                let rects = self.view.selection_rects(&resolved);
+                self.renderer
+                    .draw_selection(sink, &rects, page_idx as usize, scale_factor);
+            }
+        }
+
         self.view.visit_page(
             page_idx as usize,
             &mut self

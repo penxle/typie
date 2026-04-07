@@ -378,7 +378,9 @@ mod tests {
                     is_async: false,
                     is_constructor: false,
                     params: vec![],
-                    return_type: FfiReturnType::Option(FfiScalarReturn::Complex("PageRect".into())),
+                    return_type: FfiReturnType::Option(FfiScalarReturn::Complex(
+                        "CursorRect".into(),
+                    )),
                 },
             ],
         }

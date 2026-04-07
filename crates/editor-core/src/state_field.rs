@@ -10,5 +10,6 @@ pub enum StateField {
     Selection,
     Cursor,
     PageSizes,
+    InputContext,
     Modifiers,
 }
