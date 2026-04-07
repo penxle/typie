@@ -933,4 +933,122 @@ mod integration_tests {
         assert_eq!(sel.head.node_id, t2);
         assert_eq!(sel.head.offset, 0);
     }
+
+    #[test]
+    fn line_end_offset_is_node_relative_in_multi_text_paragraph() {
+        let (state, t1) = state! {
+            doc {
+                root {
+                    paragraph {
+                        text("Hello, ")
+                        t1: text("World!") [bold]
+                    }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(t1, 0),
+                &Movement::Line {
+                    direction: Direction::Forward,
+                    axis: Axis::Horizontal,
+                },
+                &state.doc,
+                &Resource::new(),
+            )
+            .unwrap();
+
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(sel.head.offset, 6);
+    }
+
+    #[test]
+    fn grapheme_forward_across_text_nodes_offset_is_node_relative() {
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("Hello, ")
+                        t2: text("World!") [bold]
+                    }
+                }
+            }
+            selection: (t1, 7)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(t1, 7),
+                &Movement::Grapheme {
+                    direction: Direction::Forward,
+                },
+                &state.doc,
+                &Resource::new(),
+            )
+            .unwrap();
+
+        assert_eq!(sel.head.node_id, t2);
+        assert_eq!(sel.head.offset, 1);
+    }
+
+    #[test]
+    fn grapheme_backward_across_text_nodes_offset_is_node_relative() {
+        let (state, t1, t2) = state! {
+            doc {
+                root {
+                    paragraph {
+                        t1: text("Hello, ")
+                        t2: text("World!") [bold]
+                    }
+                }
+            }
+            selection: (t2, 0)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view
+            .resolve_movement(
+                &Position::new(t2, 0),
+                &Movement::Grapheme {
+                    direction: Direction::Backward,
+                },
+                &state.doc,
+                &Resource::new(),
+            )
+            .unwrap();
+
+        assert_eq!(sel.head.node_id, t1);
+        assert_eq!(sel.head.offset, 6);
+    }
+
+    #[test]
+    fn hit_test_offset_is_node_relative_in_multi_text_paragraph() {
+        let (state, ..) = state! {
+            doc {
+                root {
+                    paragraph {
+                        text("Hello, ")
+                        t1: text("World!") [bold]
+                    }
+                }
+            }
+            selection: (t1, 6)
+        };
+
+        let mut view = View::new_test();
+        view.layout(&state.doc);
+
+        let sel = view.hit_test(0, 9999.0, 5.0).unwrap();
+        assert_eq!(sel.head.offset, 6);
+    }
 }

@@ -348,7 +348,7 @@ export type NodeId = string;
 
 export type NodeIntent = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: Node } | { type: "toggle_fold"; id: NodeId } | { type: "table"; id: NodeId; op: TableOp };
 
-export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers };
+export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" };
 
 export type SelectionIntent = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 

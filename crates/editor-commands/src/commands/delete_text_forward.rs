@@ -153,12 +153,12 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("ello") } } }
             selection: (t1, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -167,12 +167,12 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Helo") } } }
             selection: (t1, 2)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -209,7 +209,7 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -226,7 +226,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -238,7 +238,7 @@ mod tests {
             }
             selection: (t3, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -265,7 +265,7 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -283,11 +283,11 @@ mod tests {
             doc { root { paragraph { t1: text("한글") } } }
             selection: (t1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("글") } } }
             selection: (t1, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 }

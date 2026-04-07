@@ -145,12 +145,12 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "XY"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "XY"));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("HeXYllo") } } }
             selection: (t1, 4)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -159,12 +159,12 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "AB"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "AB"));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("ABHello") } } }
             selection: (t1, 2)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -173,12 +173,12 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "!"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "!"));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Hello!") } } }
             selection: (t1, 6)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -187,12 +187,12 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "한글"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "한글"));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Hello한글") } } }
             selection: (t1, 7)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -202,7 +202,7 @@ mod tests {
             selection: (t1, 5)
             pending_modifiers: [bold]
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -214,7 +214,7 @@ mod tests {
             }
             selection: (t2, 1)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") [bold] } } }
             selection: (t1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -237,7 +237,7 @@ mod tests {
             }
             selection: (t1, 1)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod tests {
             selection: (t1, 2)
             pending_modifiers: [bold]
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
         // "He" [] → "X" [Bold] → "llo" []
         let (expected, ..) = state! {
             doc {
@@ -261,7 +261,7 @@ mod tests {
             }
             selection: (t2, 1)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
             doc { root { paragraph { t1: text("Click") [link(href: "https://a.com".to_string())] } } }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, " here"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, " here"));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -283,7 +283,7 @@ mod tests {
             }
             selection: (t2, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -293,12 +293,12 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") [bold] } } }
             selection: (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "!"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "!"));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Hello!") [bold] } } }
             selection: (t1, 6)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -307,12 +307,12 @@ mod tests {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "Hello"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "Hello"));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -322,8 +322,8 @@ mod tests {
             selection: (t1, 5)
             pending_modifiers: [bold]
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
-        assert!(result.pending_modifiers.is_empty());
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        assert!(actual.pending_modifiers.is_empty());
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod tests {
             selection: (t1, 5)
             pending_modifiers: [!bold]
         };
-        let (result, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
+        let (actual, ..) = transact!(initial, |tr| insert_text(&mut tr, "X"));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -355,6 +355,6 @@ mod tests {
             }
             selection: (t2, 1)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 }

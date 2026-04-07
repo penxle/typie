@@ -48,6 +48,7 @@ pub fn measure_paragraph(
         &text,
         &layout,
         &style_runs,
+        &runs,
         &strut,
         LineHeightConfig {
             line_height_ratio: base_style.line_height,

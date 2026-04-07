@@ -1,3 +1,4 @@
+use editor_model::NodeId;
 use editor_state::Position;
 
 use crate::paginate::*;
@@ -55,6 +56,20 @@ pub fn find_last_navigable(node: &LayoutNode) -> Option<&LayoutNode> {
         LayoutContent::Box(b) => b.children.iter().rev().find_map(find_last_navigable),
         LayoutContent::Line(_) | LayoutContent::Atom(_) => Some(node),
         LayoutContent::Spacing(_) => None,
+    }
+}
+
+pub fn find_box_by_node_id<'a>(node: &'a LayoutNode, target: NodeId) -> Option<&'a LayoutNode> {
+    match &node.content {
+        LayoutContent::Box(b) => {
+            if b.node_id == target {
+                return Some(node);
+            }
+            b.children
+                .iter()
+                .find_map(|child| find_box_by_node_id(child, target))
+        }
+        _ => None,
     }
 }
 

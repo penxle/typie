@@ -104,7 +104,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let (result, ..) = transact!(initial, |tr| delete_node_backward(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| delete_node_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -116,7 +116,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
             }
             selection: (p1, 2)
         };
-        let (result, ..) = transact!(initial, |tr| delete_node_backward(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| delete_node_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -143,7 +143,7 @@ mod tests {
             }
             selection: (p1, 1)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]

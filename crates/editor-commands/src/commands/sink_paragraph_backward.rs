@@ -210,7 +210,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let (result, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -223,7 +223,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -237,7 +237,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let (result, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -250,7 +250,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -266,7 +266,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let (result, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -281,7 +281,7 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -356,7 +356,7 @@ mod tests {
             }
             selection: (p2, 0)
         };
-        let (result, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| sink_paragraph_backward(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -369,6 +369,6 @@ mod tests {
             }
             selection: (p2, 0)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 }

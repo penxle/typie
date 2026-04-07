@@ -122,6 +122,22 @@ impl View {
             .or_else(|| query::closest_hit_test(&result.tree, page, x, y))
     }
 
+    pub fn select_word_at(
+        &self,
+        pos: &Position,
+        doc: &Doc,
+        resource: &Resource,
+    ) -> Option<Selection> {
+        let result = self.layout.as_ref()?;
+        let segmenters = resource.segmenters.as_deref()?;
+        query::segmentation::select_word_at(&result.tree, doc, pos, segmenters)
+    }
+
+    pub fn select_paragraph_at(&self, pos: &Position) -> Option<Selection> {
+        let result = self.layout.as_ref()?;
+        query::segmentation::select_paragraph_at(&result.tree, pos)
+    }
+
     pub fn resolve_movement(
         &self,
         pos: &Position,

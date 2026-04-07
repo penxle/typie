@@ -11,19 +11,31 @@ pub fn handle_insertion_intent(
     editor.transact(|tr| {
         match intent {
             InsertionIntent::Text { text } => {
-                commands::insert_text(tr, &text)?;
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::delete_selection()),
+                    commands::insert_text(&text),
+                )?;
             }
             InsertionIntent::Break {
                 kind: Break::Paragraph,
             } => {
-                commands::first!(
+                commands::chain!(
                     tr,
-                    commands::lift_paragraph_forward(),
-                    commands::split_paragraph(),
+                    commands::optional!(commands::delete_selection()),
+                    |tr| commands::first!(
+                        tr,
+                        commands::lift_paragraph_forward(),
+                        commands::split_paragraph(),
+                    ),
                 )?;
             }
             InsertionIntent::Break { kind: Break::Line } => {
-                commands::insert_hard_break(tr)?;
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::delete_selection()),
+                    commands::insert_hard_break(),
+                )?;
             }
             InsertionIntent::Break { kind: Break::Page } | InsertionIntent::Node { .. } => {}
         }

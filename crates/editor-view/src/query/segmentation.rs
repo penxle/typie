@@ -1,6 +1,7 @@
 use editor_common::StrExt;
+use editor_model::Doc;
 use editor_resource::TextSegmenters;
-use editor_state::{Position, Selection};
+use editor_state::{Affinity, Position, Selection};
 use icu_segmenter::{SentenceSegmenter, WordSegmenter};
 
 use crate::paginate::*;
@@ -96,6 +97,79 @@ pub fn move_sentence_backward(
     Some(Selection::collapsed(last_position_in(prev)))
 }
 
+pub fn select_word_at(
+    tree: &LayoutTree,
+    doc: &Doc,
+    pos: &Position,
+    segmenters: &TextSegmenters,
+) -> Option<Selection> {
+    let line_node = search::find_line_at(tree, pos)?;
+    let line = match &line_node.content {
+        LayoutContent::Line(l) => l,
+        _ => return None,
+    };
+
+    if line.glyph_runs.is_empty() {
+        let para = doc.node(line.node_id)?;
+        let parent_id = para.parent()?.id();
+        let index = para.index()?;
+        return Some(Selection::new(
+            Position {
+                node_id: parent_id,
+                offset: index,
+                affinity: Affinity::Downstream,
+            },
+            Position {
+                node_id: parent_id,
+                offset: index + 1,
+                affinity: Affinity::Upstream,
+            },
+        ));
+    }
+
+    let char_idx = line_char_index(line, pos)?;
+    let text = line_text(line);
+    let byte_idx = text.nth_char_byte_offset(char_idx);
+
+    let mut prev_start = 0;
+    let mut seg_start = 0;
+    let mut seg_end = text.len();
+    for b in segmenters.word.as_borrowed().segment_str(&text) {
+        if b > byte_idx {
+            seg_end = b;
+            break;
+        }
+        prev_start = seg_start;
+        seg_start = b;
+    }
+
+    if seg_start == seg_end {
+        seg_start = prev_start;
+    }
+
+    let start = text.nth_byte_char_offset(seg_start);
+    let end = text.nth_byte_char_offset(seg_end);
+    let anchor = position_at_char_index(line, start)?;
+    let head = position_at_char_index(line, end)?;
+    Some(Selection::new(anchor, head))
+}
+
+pub fn select_paragraph_at(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
+    let line_node = search::find_line_at(tree, pos)?;
+    let para_id = match &line_node.content {
+        LayoutContent::Line(l) => l.node_id,
+        LayoutContent::Atom(a) => a.parent_id,
+        _ => return None,
+    };
+    let container = search::find_box_by_node_id(&tree.root, para_id)?;
+    let first = search::find_first_navigable(container)?;
+    let last = search::find_last_navigable(container)?;
+    Some(Selection::new(
+        first_position_in(first),
+        last_position_in(last),
+    ))
+}
+
 pub fn line_char_index(line: &LayoutLine, pos: &Position) -> Option<usize> {
     let mut char_count = 0;
     for run in &line.glyph_runs {
@@ -187,10 +261,13 @@ fn prev_sentence_boundary(
 
 #[cfg(test)]
 mod tests {
-    use editor_model::NodeId;
+    use editor_common::{Alignment, EdgeInsets, Rect};
+    use editor_macros::doc;
+    use editor_model::{Doc, NodeId};
 
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
+    use crate::style::{BorderMode, BoxStyle, Direction as LayoutDirection};
 
     fn gs(n: usize) -> Vec<GraphemeSpan> {
         vec![
@@ -295,5 +372,176 @@ mod tests {
         let segmenters = TextSegmenters::new_test();
         let boundary = prev_sentence_boundary(&line, 27, &segmenters.sentence).unwrap();
         assert!((12..=13).contains(&boundary));
+    }
+
+    fn make_box_style() -> BoxStyle {
+        BoxStyle {
+            direction: LayoutDirection::Vertical,
+            padding: EdgeInsets::ZERO,
+            border: EdgeInsets::ZERO,
+            border_mode: BorderMode::Separate,
+            alignment: Alignment::Start,
+            scope: false,
+            decorations: vec![],
+        }
+    }
+
+    #[test]
+    fn select_paragraph_at_selects_full_paragraph() {
+        let para_id = NodeId::new();
+        let text_id = NodeId::new();
+        let n = "hello world".chars().count();
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: para_id,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                glyph_runs: vec![GlyphRun::make_test_run(
+                    text_id,
+                    0,
+                    "hello world",
+                    0.0,
+                    gs(n),
+                )],
+                text_indent: 0.0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: para_id,
+                    style: make_box_style(),
+                    children: vec![line_node],
+                }),
+            },
+        };
+        let pos = Position::new(text_id, 3);
+
+        let sel = select_paragraph_at(&tree, &pos).unwrap();
+        assert_eq!(sel.anchor, Position::new(text_id, 0));
+        assert_eq!(sel.head.node_id, text_id);
+        assert_eq!(sel.head.offset, 11);
+    }
+
+    #[test]
+    fn select_word_at_middle_of_word() {
+        let id = NodeId::new();
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(make_line(id, "hello world")),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    children: vec![line_node],
+                }),
+            },
+        };
+        let doc = Doc::new_test();
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(id, 2); // "he|llo world"
+
+        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        assert_eq!(sel.anchor, Position::new(id, 0));
+        assert_eq!(sel.head.node_id, id);
+        assert!(sel.head.offset > 0 && sel.head.offset <= 5);
+    }
+
+    #[test]
+    fn select_word_at_word_boundary() {
+        let id = NodeId::new();
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(make_line(id, "hello world")),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    children: vec![line_node],
+                }),
+            },
+        };
+        let doc = Doc::new_test();
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(id, 5); // "hello| world"
+
+        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        assert_ne!(sel.anchor, sel.head);
+    }
+
+    #[test]
+    fn select_word_at_end_of_word() {
+        let id = NodeId::new();
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+            content: LayoutContent::Line(make_line(id, "hello world")),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::new(),
+                    style: make_box_style(),
+                    children: vec![line_node],
+                }),
+            },
+        };
+        let doc = Doc::new_test();
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(id, 11); // "hello world|"
+
+        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        assert_eq!(sel.anchor.node_id, id);
+        assert!(sel.anchor.offset >= 6);
+        assert_eq!(sel.head.node_id, id);
+        assert_eq!(sel.head.offset, 11);
+        assert_ne!(sel.anchor, sel.head);
+    }
+
+    #[test]
+    fn select_word_at_empty_line() {
+        let (doc, p1, ..) = doc! {
+            root {
+                p1: paragraph {}
+            }
+        };
+        let line_node = LayoutNode {
+            rect: Rect::from_xywh(0.0, 0.0, 100.0, 20.0),
+            content: LayoutContent::Line(LayoutLine {
+                node_id: p1,
+                baseline: 16.0,
+                ascent: 14.0,
+                descent: 4.0,
+                glyph_runs: vec![],
+                text_indent: 0.0,
+            }),
+        };
+        let tree = LayoutTree {
+            root: LayoutNode {
+                rect: Rect::from_xywh(0.0, 0.0, 100.0, 20.0),
+                content: LayoutContent::Box(LayoutBox {
+                    node_id: NodeId::ROOT,
+                    style: make_box_style(),
+                    children: vec![line_node],
+                }),
+            },
+        };
+        let segmenters = TextSegmenters::new_test();
+        let pos = Position::new(p1, 0);
+
+        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        assert_eq!(sel.anchor.node_id, NodeId::ROOT);
+        assert_eq!(sel.anchor.offset, 0);
+        assert_eq!(sel.head.node_id, NodeId::ROOT);
+        assert_eq!(sel.head.offset, 1);
     }
 }

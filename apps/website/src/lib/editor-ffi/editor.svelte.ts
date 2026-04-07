@@ -1,3 +1,4 @@
+import icuUrl from '@typie/editor-ffi/browser/icu.zst?url';
 import { createContext } from 'svelte';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
@@ -7,9 +8,16 @@ import type { EditorEventListener } from './types';
 
 let initPromise: Promise<void> | null = null;
 
+const initIcu = async () => {
+  const resp = await fetch(icuUrl);
+  const data = await resp.arrayBuffer();
+  wasm.load_icu_data(new Uint8Array(data));
+};
+
 function ensureInitialized(): Promise<void> {
   return (initPromise ??= (async () => {
     await initWasm();
+    await initIcu();
     await initFonts();
     wasm.set_font_families([{ name: 'Pretendard', weights: [400] }]);
   })());

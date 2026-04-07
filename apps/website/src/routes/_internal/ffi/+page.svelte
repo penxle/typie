@@ -29,7 +29,7 @@
       '4': { node: { type: 'text', text: 'Hello, World!' }, parent: '3' },
       '5': { node: { type: 'paragraph' }, parent: '10', children: ['6'] },
       '6': { node: { type: 'text', text: '안녕하세요!' }, parent: '5' },
-      '7': { node: { type: 'paragraph' } },
+      '7': { node: { type: 'paragraph' }, parent: '0' },
     },
     attrs: {
       layout_mode: {

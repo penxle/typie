@@ -6,6 +6,7 @@ use parley::Layout;
 
 use super::strut::StrutMetrics;
 use super::style_run::StyleRun;
+use super::text_run::TextRun;
 use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis};
 use crate::measure::resolve::resolve_inherited;
 
@@ -156,6 +157,7 @@ pub fn extract_lines(
     text: &str,
     layout: &Layout<TextBrush>,
     style_runs: &[StyleRun],
+    text_runs: &[TextRun],
     strut: &StrutMetrics,
     height_config: LineHeightConfig,
     grapheme_segmenter: Option<&GraphemeClusterSegmenter>,
@@ -225,8 +227,13 @@ pub fn extract_lines(
                 }
 
                 let byte_start = first_byte_start.unwrap_or(0);
-                let char_offset = text[..byte_start].char_count();
                 let node_id = glyph_run.style().brush.node_id;
+                let node_byte_start = text_runs
+                    .iter()
+                    .find(|tr| tr.node_id == node_id)
+                    .map(|tr| tr.byte_range.start)
+                    .unwrap_or(0);
+                let char_offset = text[node_byte_start..byte_start].char_count();
                 let synthesis = resolve_synthesis(doc, node_id);
                 let (color, background_color) = resolve_text_colors(doc, node_id);
 

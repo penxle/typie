@@ -12,12 +12,16 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
     editor.transact(|tr| {
         match (event.key, event.modifiers) {
             (Key::Enter, m) if m.shift => {
-                commands::insert_hard_break(tr)?;
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::delete_selection()),
+                    commands::insert_hard_break(),
+                )?;
             }
             (Key::Enter, _) => {
-                commands::first!(
+                commands::chain!(
                     tr,
-                    commands::delete_selection(),
+                    commands::optional!(commands::delete_selection()),
                     commands::split_paragraph(),
                 )?;
             }

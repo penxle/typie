@@ -50,6 +50,12 @@ pub enum PointerEvent {
         #[serde(default)]
         modifiers: InputModifiers,
     },
+    Move {
+        page: usize,
+        x: f32,
+        y: f32,
+    },
+    Up,
 }
 
 #[ffi]

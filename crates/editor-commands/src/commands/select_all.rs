@@ -35,10 +35,10 @@ mod tests {
             selection: (t, 2)
         };
 
-        let (result, ..) = transact!(state, |tr| select_all(&mut tr));
+        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
         assert_eq!(
-            result.selection,
+            actual.selection,
             Selection::new(Position::new(t, 0), Position::new(t, 5))
         );
     }
@@ -56,10 +56,10 @@ mod tests {
             selection: (t1, 0)
         };
 
-        let (result, ..) = transact!(state, |tr| select_all(&mut tr));
+        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
-        assert_eq!(result.selection.anchor, Position::new(t1, 0));
-        assert_eq!(result.selection.head, Position::new(t3, 1));
+        assert_eq!(actual.selection.anchor, Position::new(t1, 0));
+        assert_eq!(actual.selection.head, Position::new(t3, 1));
     }
 
     #[test]
@@ -69,10 +69,10 @@ mod tests {
             selection: (r, 0)
         };
 
-        let (result, ..) = transact!(state, |tr| select_all(&mut tr));
+        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
-        assert_eq!(result.selection.anchor, Position::new(r, 0));
-        assert_eq!(result.selection.head, Position::new(r, 3));
+        assert_eq!(actual.selection.anchor, Position::new(r, 0));
+        assert_eq!(actual.selection.head, Position::new(r, 3));
     }
 
     #[test]
@@ -82,10 +82,10 @@ mod tests {
             selection: (p, 0)
         };
 
-        let (result, ..) = transact!(state, |tr| select_all(&mut tr));
+        let (actual, ..) = transact!(state, |tr| select_all(&mut tr));
 
         assert_eq!(
-            result.selection,
+            actual.selection,
             Selection::new(Position::new(p, 0), Position::new(p, 0))
         );
     }

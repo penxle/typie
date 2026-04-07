@@ -3,7 +3,7 @@
   import { onDestroy, untrack } from 'svelte';
   import { Editor, getEditorContext } from '../editor.svelte';
   import { handle } from '../handlers';
-  import { handlePointerDown } from '../handlers/pointer';
+  import { handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import Cursor from './Cursor.svelte';
   import CursorPositioned from './CursorPositioned.svelte';
   import Input from './Input.svelte';
@@ -50,10 +50,12 @@
 </script>
 
 <div
-  class={css({ position: 'relative' }, style)}
+  class={css({ position: 'relative', userSelect: 'none' }, style)}
   onfocusin={() => ctx.editor?.focus()}
   onfocusout={() => ctx.editor?.blur()}
   onpointerdown={handle(ctx.editor, handlePointerDown)}
+  onpointermove={handle(ctx.editor, handlePointerMove)}
+  onpointerup={handle(ctx.editor, handlePointerUp)}
   role="textbox"
   tabindex={0}
   bind:clientWidth

@@ -1,5 +1,5 @@
 use editor_common::StrExt;
-use editor_model::{Modifier, ModifierType, Node, NodeId, NodeRef};
+use editor_model::{Doc, Modifier, ModifierType, Node, NodeId, NodeRef};
 use editor_resource::{Resource, match_weight};
 use editor_state::{PendingModifier, PendingModifiers, Position, Selection};
 use editor_transaction::{Transaction, compact};
@@ -49,6 +49,9 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
         }
     }
 
+    // Save selection range as absolute text offsets before compact
+    let sel_offsets = selection_offsets_in_textblocks(&doc, &node_ids);
+
     for tb_id in &textblock_ids {
         let doc = tr.doc();
         if let Some(tb) = doc.node(*tb_id) {
@@ -56,22 +59,15 @@ pub fn toggle_bold(tr: &mut Transaction, resource: &Resource) -> CommandResult {
         }
     }
 
-    // Restore selection — after compact, some node_ids may have been merged
-    let doc = tr.doc();
-    let first_surviving = node_ids.iter().find(|id| doc.get_entry(**id).is_some());
-    let last_surviving = node_ids
-        .iter()
-        .rev()
-        .find(|id| doc.get_entry(**id).is_some());
-
-    if let (Some(&first), Some(&last)) = (first_surviving, last_surviving) {
-        let from_pos = Position::new(first, 0);
-        let to_offset = match doc.node(last).map(|n| n.node()) {
-            Some(Node::Text(t)) => t.text.char_count(),
-            _ => 0,
-        };
-        let to_pos = Position::new(last, to_offset);
-        tr.set_selection(Selection::new(from_pos, to_pos))?;
+    // Restore selection from absolute text offsets
+    if let Some((from_tb, from_abs, to_tb, to_abs)) = sel_offsets {
+        let doc = tr.doc();
+        if let (Some(from_pos), Some(to_pos)) = (
+            position_from_text_offset(&doc, from_tb, from_abs, false),
+            position_from_text_offset(&doc, to_tb, to_abs, true),
+        ) {
+            tr.set_selection(Selection::new(from_pos, to_pos))?;
+        }
     }
 
     Ok(true)
@@ -351,6 +347,73 @@ fn toggle_bold_off_range(
     Ok(true)
 }
 
+fn selection_offsets_in_textblocks(
+    doc: &Doc,
+    node_ids: &[NodeId],
+) -> Option<(NodeId, usize, NodeId, usize)> {
+    let first_id = *node_ids.first()?;
+    let last_id = *node_ids.last()?;
+    let from_tb = find_ancestor_textblock(doc, first_id)?;
+    let to_tb = find_ancestor_textblock(doc, last_id)?;
+    let from_abs = text_offset_in_textblock(doc, from_tb, first_id, 0)?;
+    let node_len = match doc.node(last_id)?.node() {
+        Node::Text(t) => t.text.char_count(),
+        _ => 0,
+    };
+    let to_abs = text_offset_in_textblock(doc, to_tb, last_id, node_len)?;
+    Some((from_tb, from_abs, to_tb, to_abs))
+}
+
+fn text_offset_in_textblock(
+    doc: &Doc,
+    tb_id: NodeId,
+    node_id: NodeId,
+    local_offset: usize,
+) -> Option<usize> {
+    let tb = doc.node(tb_id)?;
+    let mut abs = 0;
+    for child in tb.children() {
+        if child.id() == node_id {
+            return Some(abs + local_offset);
+        }
+        if let Node::Text(t) = child.node() {
+            abs += t.text.char_count();
+        }
+    }
+    None
+}
+
+fn position_from_text_offset(
+    doc: &Doc,
+    tb_id: NodeId,
+    abs_offset: usize,
+    end_bias: bool,
+) -> Option<Position> {
+    let tb = doc.node(tb_id)?;
+    let mut remaining = abs_offset;
+    for child in tb.children() {
+        if let Node::Text(t) = child.node() {
+            let len = t.text.char_count();
+            let fits = if end_bias {
+                remaining <= len
+            } else {
+                remaining < len
+            };
+            if fits {
+                return Some(Position::new(child.id(), remaining));
+            }
+            remaining -= len;
+        }
+    }
+    tb.children().last().map(|child| {
+        let len = match child.node() {
+            Node::Text(t) => t.text.char_count(),
+            _ => 0,
+        };
+        Position::new(child.id(), len)
+    })
+}
+
 fn toggle_bold_collapsed(tr: &mut Transaction, resource: &Resource) -> CommandResult {
     let pos = tr.selection().head;
     let doc = tr.doc();
@@ -513,9 +576,9 @@ mod tests {
             }
             selection: (t1, 3)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
-            result.pending_modifiers.as_slice(),
+            actual.pending_modifiers.as_slice(),
             &[PendingModifier::Set(Modifier::FontWeight { value: 700 })]
         );
     }
@@ -534,9 +597,9 @@ mod tests {
             }
             selection: (t1, 3)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert_eq!(
-            result.pending_modifiers.as_slice(),
+            actual.pending_modifiers.as_slice(),
             &[PendingModifier::Set(Modifier::Bold)]
         );
     }
@@ -555,16 +618,16 @@ mod tests {
             }
             selection: (t1, 3)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(
-            result
+            actual
                 .pending_modifiers
                 .iter()
                 .any(|pm| matches!(pm, PendingModifier::Unset(ModifierType::Bold)))
         );
         // unbold target 400 == inherited 400 → no FontWeight set
         assert!(
-            !result
+            !actual
                 .pending_modifiers
                 .iter()
                 .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight { .. })))
@@ -585,16 +648,16 @@ mod tests {
             }
             selection: (t1, 3)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(
-            result
+            actual
                 .pending_modifiers
                 .iter()
                 .any(|pm| matches!(pm, PendingModifier::Unset(ModifierType::Bold)))
         );
         // unbold target 400 == inherited 400 → FontWeight unset (not set)
         assert!(
-            result
+            actual
                 .pending_modifiers
                 .iter()
                 .any(|pm| matches!(pm, PendingModifier::Unset(ModifierType::FontWeight)))
@@ -615,8 +678,8 @@ mod tests {
             }
             selection: (t1, 3)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        assert!(result.pending_modifiers.iter().any(|pm| matches!(
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        assert!(actual.pending_modifiers.iter().any(|pm| matches!(
             pm,
             PendingModifier::Set(Modifier::FontWeight { value: 400 })
         )));
@@ -635,9 +698,9 @@ mod tests {
             }
             selection: (t1, 3)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         assert!(
-            !result
+            !actual
                 .pending_modifiers
                 .iter()
                 .any(|pm| matches!(pm, PendingModifier::Set(Modifier::FontWeight { .. })))
@@ -696,7 +759,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -707,7 +770,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -723,7 +786,7 @@ mod tests {
             }
             selection: (t1, 6) -> (t1, 11)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -735,7 +798,7 @@ mod tests {
             }
             selection: (t2, 0) -> (t2, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -752,7 +815,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t2, 4)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -763,7 +826,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 9)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -779,9 +842,9 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = result.selection.head.node_id;
-        let entry = result.doc.get_entry(t1_id).unwrap();
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let t1_id = actual.selection.head.node_id;
+        let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             !entry
                 .modifiers
@@ -803,9 +866,9 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = result.selection.head.node_id;
-        let entry = result.doc.get_entry(t1_id).unwrap();
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let t1_id = actual.selection.head.node_id;
+        let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(!entry.modifiers.iter().any(|m| matches!(m, Modifier::Bold)));
         assert!(
             !entry
@@ -828,9 +891,9 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = result.selection.head.node_id;
-        let entry = result.doc.get_entry(t1_id).unwrap();
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let t1_id = actual.selection.head.node_id;
+        let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             !entry
                 .modifiers
@@ -852,9 +915,9 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = result.selection.head.node_id;
-        let entry = result.doc.get_entry(t1_id).unwrap();
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let t1_id = actual.selection.head.node_id;
+        let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             entry
                 .modifiers
@@ -877,7 +940,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t2, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -888,7 +951,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 10)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -907,7 +970,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t2, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -921,7 +984,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t2, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -937,9 +1000,9 @@ mod tests {
             }
             selection: (t1, 5) -> (t1, 0)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
-        let t1_id = result.selection.anchor.node_id;
-        let entry = result.doc.get_entry(t1_id).unwrap();
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let t1_id = actual.selection.anchor.node_id;
+        let entry = actual.doc.get_entry(t1_id).unwrap();
         assert!(
             entry
                 .modifiers
@@ -963,7 +1026,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t2, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -974,7 +1037,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 10)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -992,7 +1055,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t2, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -1003,7 +1066,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 10)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -1021,7 +1084,7 @@ mod tests {
             }
             selection: (t1, 1) -> (t2, 2)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         // "A" stays 400, "B" becomes 700, "CD" stays 700 → "B"+"CD" merge
         let (expected, ..) = state! {
             doc {
@@ -1034,7 +1097,7 @@ mod tests {
             }
             selection: (t2, 0) -> (t2, 3)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -1051,7 +1114,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         // "Hello" becomes 700, " World" stays 400 → no merge (different modifiers)
         let (expected, ..) = state! {
             doc {
@@ -1064,7 +1127,110 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_double_toggle_preserves_valid_selection() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("Hello World") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (t1, 6) -> (t1, 11)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| {
+            toggle_bold(&mut tr, &resource).unwrap();
+            toggle_bold(&mut tr, &resource)
+        });
+
+        let sel = &actual.selection;
+        let doc = &actual.doc;
+        assert!(
+            doc.get_entry(sel.anchor.node_id).is_some(),
+            "anchor node must exist"
+        );
+        assert!(
+            doc.get_entry(sel.head.node_id).is_some(),
+            "head node must exist"
+        );
+    }
+
+    #[test]
+    fn range_double_toggle_with_adjacent_hard_break() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("Hello") [font_family("Pretendard".to_string())]
+                        hard_break
+                        t2: text("World") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t1, 5)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| {
+            toggle_bold(&mut tr, &resource).unwrap();
+            toggle_bold(&mut tr, &resource)
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("Hello") [font_family("Pretendard".to_string())]
+                        hard_break
+                        t2: text("World") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t1, 5)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn range_double_toggle_across_hard_break() {
+        let resource = make_resource([("Pretendard", vec![400, 700])]);
+        let (initial, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("Hello") [font_family("Pretendard".to_string())]
+                        hard_break
+                        t2: text("World") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 5)
+        };
+
+        let (actual, ..) = transact!(initial, |tr| {
+            toggle_bold(&mut tr, &resource).unwrap();
+            toggle_bold(&mut tr, &resource)
+        });
+
+        let (expected, ..) = state! {
+            doc {
+                root [font_weight(400), font_family("Pretendard".to_string())] {
+                    paragraph {
+                        t1: text("Hello") [font_family("Pretendard".to_string())]
+                        hard_break
+                        t2: text("World") [font_family("Pretendard".to_string())]
+                    }
+                }
+            }
+            selection: (t1, 0) -> (t2, 5)
+        };
+        assert_state_eq!(&actual, &expected);
     }
 
     #[test]
@@ -1081,7 +1247,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        let (result, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
+        let (actual, ..) = transact!(initial, |tr| toggle_bold(&mut tr, &resource));
         let (expected, ..) = state! {
             doc {
                 root [font_weight(400), font_family("Pretendard".to_string())] {
@@ -1092,6 +1258,6 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 5)
         };
-        assert_state_eq!(&result, &expected);
+        assert_state_eq!(&actual, &expected);
     }
 }

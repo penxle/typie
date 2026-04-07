@@ -14,8 +14,33 @@ type KeyBinding = {
 const bindings: KeyBinding[] = [
   { key: 'ArrowLeft', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, false)) },
   { key: 'ArrowLeft', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'backward' }, true)) },
+  { key: 'ArrowLeft', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'word', direction: 'backward' }, false)) },
+  { key: 'ArrowLeft', modifiers: ['shift', 'alt'], action: (ed) => ed.enqueue(move({ type: 'word', direction: 'backward' }, true)) },
+  {
+    key: 'ArrowLeft',
+    modifiers: ['mod'],
+    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, false)),
+  },
+  {
+    key: 'ArrowLeft',
+    modifiers: ['shift', 'mod'],
+    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'horizontal' }, true)),
+  },
+
   { key: 'ArrowRight', action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, false)) },
   { key: 'ArrowRight', modifiers: ['shift'], action: (ed) => ed.enqueue(move({ type: 'grapheme', direction: 'forward' }, true)) },
+  { key: 'ArrowRight', modifiers: ['alt'], action: (ed) => ed.enqueue(move({ type: 'word', direction: 'forward' }, false)) },
+  { key: 'ArrowRight', modifiers: ['shift', 'alt'], action: (ed) => ed.enqueue(move({ type: 'word', direction: 'forward' }, true)) },
+  {
+    key: 'ArrowRight',
+    modifiers: ['mod'],
+    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, false)),
+  },
+  {
+    key: 'ArrowRight',
+    modifiers: ['shift', 'mod'],
+    action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'horizontal' }, true)),
+  },
 
   { key: 'ArrowUp', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, false)) },
   {
@@ -23,15 +48,26 @@ const bindings: KeyBinding[] = [
     modifiers: ['shift'],
     action: (ed) => ed.enqueue(move({ type: 'line', direction: 'backward', axis: 'vertical' }, true)),
   },
+  { key: 'ArrowUp', modifiers: ['mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, false)) },
+  { key: 'ArrowUp', modifiers: ['shift', 'mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'backward' }, true)) },
+
   { key: 'ArrowDown', action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, false)) },
   {
     key: 'ArrowDown',
     modifiers: ['shift'],
     action: (ed) => ed.enqueue(move({ type: 'line', direction: 'forward', axis: 'vertical' }, true)),
   },
+  { key: 'ArrowDown', modifiers: ['mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, false)) },
+  { key: 'ArrowDown', modifiers: ['shift', 'mod'], action: (ed) => ed.enqueue(move({ type: 'document', direction: 'forward' }, true)) },
 
   { key: 'Enter', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'enter' } }) },
   { key: 'Backspace', action: (ed) => ed.enqueue({ type: 'key', event: { key: 'backspace' } }) },
+
+  {
+    key: 'a',
+    modifiers: ['mod'],
+    action: (ed) => ed.enqueue({ type: 'intent', intent: { type: 'selection', intent: { type: 'all' } } }),
+  },
 
   {
     key: 'b',
