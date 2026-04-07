@@ -172,6 +172,17 @@ impl View {
         query::selection::selection_rects(&result.tree, &result.pages, selection)
     }
 
+    pub fn composition_rects(
+        &self,
+        from: &Position,
+        to: &Position,
+    ) -> Vec<query::composition::CompositionRect> {
+        let Some(ref result) = self.layout else {
+            return vec![];
+        };
+        query::composition::composition_rects(&result.tree, &result.pages, from, to)
+    }
+
     pub fn pages(&self) -> &[LayoutPage] {
         self.layout.as_ref().map_or(&[], |r| &r.pages)
     }

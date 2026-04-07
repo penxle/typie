@@ -2,7 +2,7 @@ use editor_common::Rect;
 use editor_model::{Doc, Node, NodeId};
 use editor_resource::Resource;
 use editor_view::style::{BoxStyle, DecorationData};
-use editor_view::{Edges, PageVisitor, SelectionRect};
+use editor_view::{CompositionRect, Edges, PageVisitor, SelectionRect};
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{GlyphCache, ScaleContext};
@@ -57,6 +57,23 @@ impl Renderer {
         scale_factor: f32,
     ) {
         let color = self.theme.color_with_alpha("selection", 64);
+        let transform = Transform::scale(scale_factor);
+        for rect in rects {
+            if rect.page_idx != page_idx {
+                continue;
+            }
+            sink.fill_rect(rect.rect, color, transform);
+        }
+    }
+
+    pub fn draw_composition(
+        &self,
+        sink: &mut dyn RenderSink,
+        rects: &[CompositionRect],
+        page_idx: usize,
+        scale_factor: f32,
+    ) {
+        let color = self.theme.color("ui.text.default");
         let transform = Transform::scale(scale_factor);
         for rect in rects {
             if rect.page_idx != page_idx {

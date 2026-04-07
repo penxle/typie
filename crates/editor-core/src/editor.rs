@@ -3,7 +3,7 @@ use editor_model::NodeId;
 use editor_renderer::{RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
 use editor_schema::{DocFlatExt, ResolvedPositionFlatExt};
-use editor_state::State;
+use editor_state::{Position, ResolvedPosition, State};
 use editor_transaction::{Effect, HistoryMeta, Step, Transaction};
 use editor_view::View;
 use editor_view::Viewport;
@@ -166,6 +166,19 @@ impl Editor {
                 .renderer
                 .page_visitor(sink, &self.state.doc, scale_factor),
         );
+
+        if let Some(composition) = self.state.composition {
+            if let (Some(from), Some(to)) = (
+                ResolvedPosition::from_flat(&self.state.doc, composition.start),
+                ResolvedPosition::from_flat(&self.state.doc, composition.end),
+            ) {
+                let rects = self
+                    .view
+                    .composition_rects(&Position::from(&from), &Position::from(&to));
+                self.renderer
+                    .draw_composition(sink, &rects, page_idx as usize, scale_factor);
+            }
+        }
     }
 
     fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {
