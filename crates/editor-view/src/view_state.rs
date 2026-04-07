@@ -5,6 +5,7 @@ use hashbrown::HashMap;
 pub struct ViewState {
     pub fold_states: HashMap<NodeId, bool>,
     pub external_heights: HashMap<NodeId, f32>,
+    pub preferred_x: Option<f32>,
 }
 
 impl ViewState {

@@ -14,61 +14,74 @@ pub fn resolve_movement(
     movement: &Movement,
     viewport: &Viewport,
     resource: &Resource,
-) -> Option<Selection> {
+    preferred_x: Option<f32>,
+) -> (Option<Selection>, Option<f32>) {
     let segmenters = resource.segmenters.as_deref();
     match movement {
         Movement::Grapheme {
             direction: Direction::Forward,
-        } => move_grapheme_forward(tree, pos),
+        } => (move_grapheme_forward(tree, pos), None),
         Movement::Grapheme {
             direction: Direction::Backward,
-        } => move_grapheme_backward(tree, pos),
+        } => (move_grapheme_backward(tree, pos), None),
         Movement::Word {
             direction: Direction::Forward,
-        } => segmenters.and_then(|s| segmentation::move_word_forward(tree, pos, s)),
+        } => (
+            segmenters.and_then(|s| segmentation::move_word_forward(tree, pos, s)),
+            None,
+        ),
         Movement::Word {
             direction: Direction::Backward,
-        } => segmenters.and_then(|s| segmentation::move_word_backward(tree, pos, s)),
+        } => (
+            segmenters.and_then(|s| segmentation::move_word_backward(tree, pos, s)),
+            None,
+        ),
         Movement::Sentence {
             direction: Direction::Forward,
-        } => segmenters.and_then(|s| segmentation::move_sentence_forward(tree, pos, s)),
+        } => (
+            segmenters.and_then(|s| segmentation::move_sentence_forward(tree, pos, s)),
+            None,
+        ),
         Movement::Sentence {
             direction: Direction::Backward,
-        } => segmenters.and_then(|s| segmentation::move_sentence_backward(tree, pos, s)),
+        } => (
+            segmenters.and_then(|s| segmentation::move_sentence_backward(tree, pos, s)),
+            None,
+        ),
         Movement::Line {
             direction: Direction::Forward,
             axis: Axis::Horizontal,
-        } => move_line_horizontal_forward(tree, pos),
+        } => (move_line_horizontal_forward(tree, pos), None),
         Movement::Line {
             direction: Direction::Backward,
             axis: Axis::Horizontal,
-        } => move_line_horizontal_backward(tree, pos),
+        } => (move_line_horizontal_backward(tree, pos), None),
         Movement::Line {
             direction: Direction::Forward,
             axis: Axis::Vertical,
-        } => move_line_vertical_forward(tree, pos),
+        } => move_line_vertical_forward(tree, pos, preferred_x),
         Movement::Line {
             direction: Direction::Backward,
             axis: Axis::Vertical,
-        } => move_line_vertical_backward(tree, pos),
+        } => move_line_vertical_backward(tree, pos, preferred_x),
         Movement::Block {
             direction: Direction::Forward,
-        } => move_block_forward(tree, pos),
+        } => (move_block_forward(tree, pos), None),
         Movement::Block {
             direction: Direction::Backward,
-        } => move_block_backward(tree, pos),
+        } => (move_block_backward(tree, pos), None),
         Movement::Page {
             direction: Direction::Forward,
-        } => move_page_forward(tree, pos, viewport),
+        } => move_page_forward(tree, pos, viewport, preferred_x),
         Movement::Page {
             direction: Direction::Backward,
-        } => move_page_backward(tree, pos, viewport),
+        } => move_page_backward(tree, pos, viewport, preferred_x),
         Movement::Document {
             direction: Direction::Forward,
-        } => move_document_forward(tree),
+        } => (move_document_forward(tree), None),
         Movement::Document {
             direction: Direction::Backward,
-        } => move_document_backward(tree),
+        } => (move_document_backward(tree), None),
     }
 }
 
@@ -191,20 +204,32 @@ fn move_line_horizontal_backward(tree: &LayoutTree, pos: &Position) -> Option<Se
     }
 }
 
-fn move_line_vertical_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
-    let preferred_x = compute_preferred_x(line_node, pos);
+fn move_line_vertical_forward(
+    tree: &LayoutTree,
+    pos: &Position,
+    preferred_x: Option<f32>,
+) -> (Option<Selection>, Option<f32>) {
+    let Some(line_node) = search::find_line_at(tree, pos) else {
+        return (None, preferred_x);
+    };
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.bottom();
-    let target = search::find_navigable_below(&tree.root, y)?;
-    Some(navigate_to(target, preferred_x))
+    let target = search::find_navigable_below(&tree.root, y);
+    (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
-fn move_line_vertical_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
-    let preferred_x = compute_preferred_x(line_node, pos);
+fn move_line_vertical_backward(
+    tree: &LayoutTree,
+    pos: &Position,
+    preferred_x: Option<f32>,
+) -> (Option<Selection>, Option<f32>) {
+    let Some(line_node) = search::find_line_at(tree, pos) else {
+        return (None, preferred_x);
+    };
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.y;
-    let target = search::find_navigable_above(&tree.root, y)?;
-    Some(navigate_to(target, preferred_x))
+    let target = search::find_navigable_above(&tree.root, y);
+    (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
 fn move_block_forward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
@@ -231,20 +256,34 @@ fn move_block_backward(tree: &LayoutTree, pos: &Position) -> Option<Selection> {
     Some(Selection::collapsed(first_position_in(nav)))
 }
 
-fn move_page_forward(tree: &LayoutTree, pos: &Position, viewport: &Viewport) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
-    let preferred_x = compute_preferred_x(line_node, pos);
+fn move_page_forward(
+    tree: &LayoutTree,
+    pos: &Position,
+    viewport: &Viewport,
+    preferred_x: Option<f32>,
+) -> (Option<Selection>, Option<f32>) {
+    let Some(line_node) = search::find_line_at(tree, pos) else {
+        return (None, preferred_x);
+    };
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.y + viewport.height;
-    let target = search::find_navigable_below(&tree.root, y)?;
-    Some(navigate_to(target, preferred_x))
+    let target = search::find_navigable_below(&tree.root, y);
+    (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
-fn move_page_backward(tree: &LayoutTree, pos: &Position, viewport: &Viewport) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
-    let preferred_x = compute_preferred_x(line_node, pos);
+fn move_page_backward(
+    tree: &LayoutTree,
+    pos: &Position,
+    viewport: &Viewport,
+    preferred_x: Option<f32>,
+) -> (Option<Selection>, Option<f32>) {
+    let Some(line_node) = search::find_line_at(tree, pos) else {
+        return (None, preferred_x);
+    };
+    let x = preferred_x.unwrap_or_else(|| compute_preferred_x(line_node, pos));
     let y = line_node.rect.bottom() - viewport.height;
-    let target = search::find_navigable_above(&tree.root, y)?;
-    Some(navigate_to(target, preferred_x))
+    let target = search::find_navigable_above(&tree.root, y);
+    (target.map(|t| navigate_to(t, x)), Some(x))
 }
 
 fn move_document_forward(tree: &LayoutTree) -> Option<Selection> {
@@ -455,7 +494,7 @@ mod tests {
     };
 
     fn mov(tree: &LayoutTree, pos: Position, movement: Movement) -> Option<Selection> {
-        resolve_movement(tree, &pos, &movement, &VP, &Resource::new())
+        resolve_movement(tree, &pos, &movement, &VP, &Resource::new(), None).0
     }
 
     #[test]
@@ -725,7 +764,9 @@ mod tests {
             },
             &vp,
             &Resource::new(),
+            None,
         )
+        .0
         .unwrap();
         assert_eq!(sel.head, sel.anchor);
         assert_eq!(sel.head.node_id, f.lines[2]);
@@ -739,7 +780,7 @@ mod tests {
             height: 50.0,
             scale_factor: 1.0,
         };
-        let sel = resolve_movement(
+        let (sel, _) = resolve_movement(
             &f.tree,
             &Position::new(f.lines[4], 0),
             &Movement::Page {
@@ -747,8 +788,9 @@ mod tests {
             },
             &vp,
             &Resource::new(),
-        )
-        .unwrap();
+            None,
+        );
+        let sel = sel.unwrap();
         assert_eq!(sel.anchor.node_id, f.atom_parent);
         assert_eq!(sel.anchor.offset, 0);
         assert_eq!(sel.head.node_id, f.atom_parent);
@@ -891,6 +933,143 @@ mod tests {
         .unwrap();
         assert_eq!(sel_start.head.node_id, f.lines[0]);
         assert_eq!(sel_start.head.offset, 0);
+    }
+
+    #[test]
+    fn preferred_x_maintained_across_short_line() {
+        let ids: [NodeId; 3] = std::array::from_fn(|_| NodeId::new());
+        let tree = LayoutTree {
+            root: make_box_node(
+                0.0,
+                60.0,
+                false,
+                vec![make_box_node(
+                    0.0,
+                    60.0,
+                    true,
+                    vec![
+                        make_line_node(ids[0], 0.0, "hello world"),
+                        make_line_node(ids[1], 20.0, "foo"),
+                        make_line_node(ids[2], 40.0, "qux quux end"),
+                    ],
+                )],
+            ),
+        };
+
+        let (sel1, px1) = resolve_movement(
+            &tree,
+            &Position::new(ids[0], 8),
+            &Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+            &VP,
+            &Resource::new(),
+            None,
+        );
+        let sel1 = sel1.unwrap();
+        assert_eq!(sel1.head.node_id, ids[1]);
+        assert_eq!(sel1.head.offset, 3);
+        assert_eq!(px1, Some(80.0));
+
+        let (sel2, px2) = resolve_movement(
+            &tree,
+            &sel1.head,
+            &Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+            &VP,
+            &Resource::new(),
+            px1,
+        );
+        let sel2 = sel2.unwrap();
+        assert_eq!(sel2.head.node_id, ids[2]);
+        assert_eq!(sel2.head.offset, 8);
+        assert_eq!(px2, Some(80.0));
+    }
+
+    #[test]
+    fn horizontal_movement_resets_preferred_x() {
+        let f = fixture();
+        let (_, px) = resolve_movement(
+            &f.tree,
+            &Position::new(f.lines[0], 5),
+            &Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+            &VP,
+            &Resource::new(),
+            None,
+        );
+        assert!(px.is_some());
+
+        let (_, px2) = resolve_movement(
+            &f.tree,
+            &Position::new(f.lines[1], 3),
+            &Movement::Grapheme {
+                direction: Direction::Forward,
+            },
+            &VP,
+            &Resource::new(),
+            px,
+        );
+        assert_eq!(px2, None);
+    }
+
+    #[test]
+    fn vertical_movement_without_preferred_x_computes_fresh() {
+        let f = fixture();
+        let (sel, px) = resolve_movement(
+            &f.tree,
+            &Position::new(f.lines[0], 3),
+            &Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+            &VP,
+            &Resource::new(),
+            None,
+        );
+        assert_eq!(px, Some(30.0));
+        assert_eq!(sel.as_ref().unwrap().head.node_id, f.lines[1]);
+        assert_eq!(sel.as_ref().unwrap().head.offset, 3);
+    }
+
+    #[test]
+    fn page_movement_preserves_preferred_x() {
+        let f = fixture();
+        let vp = Viewport {
+            width: 200.0,
+            height: 50.0,
+            scale_factor: 1.0,
+        };
+
+        let (_, px) = resolve_movement(
+            &f.tree,
+            &Position::new(f.lines[0], 5),
+            &Movement::Line {
+                direction: Direction::Forward,
+                axis: Axis::Vertical,
+            },
+            &vp,
+            &Resource::new(),
+            None,
+        );
+        assert_eq!(px, Some(50.0));
+
+        let (_, px2) = resolve_movement(
+            &f.tree,
+            &Position::new(f.lines[1], 5),
+            &Movement::Page {
+                direction: Direction::Forward,
+            },
+            &vp,
+            &Resource::new(),
+            px,
+        );
+        assert_eq!(px2, Some(50.0));
     }
 }
 

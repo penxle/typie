@@ -40,6 +40,7 @@ impl View {
     pub fn reconcile(&mut self, doc: &Doc, steps: &[Step]) -> bool {
         if self.measurer.invalidate_with_steps(doc, steps) {
             self.compute(doc);
+            self.view_state.preferred_x = None;
             true
         } else {
             false
@@ -65,6 +66,7 @@ impl View {
     pub fn layout(&mut self, doc: &Doc) {
         self.measurer.clear_cache();
         self.compute(doc);
+        self.view_state.preferred_x = None;
     }
 
     fn compute(&mut self, doc: &Doc) {
@@ -139,14 +141,23 @@ impl View {
     }
 
     pub fn resolve_movement(
-        &self,
+        &mut self,
         pos: &Position,
         movement: &Movement,
         _doc: &Doc,
         resource: &Resource,
     ) -> Option<Selection> {
         let result = self.layout.as_ref()?;
-        query::resolve_movement(&result.tree, pos, movement, &self.viewport, resource)
+        let (selection, new_preferred_x) = query::resolve_movement(
+            &result.tree,
+            pos,
+            movement,
+            &self.viewport,
+            resource,
+            self.view_state.preferred_x,
+        );
+        self.view_state.preferred_x = new_preferred_x;
+        selection
     }
 
     pub fn cursor_rect(&self, pos: &Position) -> Option<CursorRect> {
@@ -179,6 +190,10 @@ impl View {
 
     pub fn set_external_height(&mut self, node_id: NodeId, height: f32) {
         self.view_state.external_heights.insert(node_id, height);
+    }
+
+    pub fn clear_preferred_x(&mut self) {
+        self.view_state.preferred_x = None;
     }
 }
 

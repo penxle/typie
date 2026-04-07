@@ -41,6 +41,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
             };
 
             if let Some(new_selection) = selection {
+                editor.view.clear_preferred_x();
                 editor.transact(|tr| {
                     tr.set_selection(new_selection)?;
                     Ok(())
@@ -55,6 +56,7 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
 
             if let Some(hit) = editor.view.hit_test(page, x, y) {
                 let new_selection = Selection::new(editor.state.selection.anchor, hit.head);
+                editor.view.clear_preferred_x();
                 editor.transact(|tr| {
                     tr.set_selection(new_selection)?;
                     Ok(())

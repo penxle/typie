@@ -11,6 +11,7 @@ pub fn handle_selection_intent(
     editor: &mut Editor,
     intent: SelectionIntent,
 ) -> Result<(), EditorError> {
+    editor.view.clear_preferred_x();
     editor.transact(|tr| {
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
         match intent {
