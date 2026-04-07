@@ -42,7 +42,7 @@ post_install do |installer|
 
     target.build_configurations.each do |config|
       config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
-      config.build_settings['HEADER_SEARCH_PATHS'] << '"${PODS_ROOT}/../../../crates/editor/include"'
+      config.build_settings['HEADER_SEARCH_PATHS'] << '"${PODS_ROOT}/../../../legacy/editor/include"'
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
         '$(inherited)',
 

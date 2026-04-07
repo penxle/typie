@@ -3,7 +3,7 @@ description: FFI bindings for the native editor library
 output: 'lib/native/editor_bindings.dart'
 headers:
   entry-points:
-    - '../../crates/editor/include/editor.h'
+    - '../../legacy/editor/include/editor.h'
 preamble: |
   // ignore_for_file: type=lint
 comments:
@@ -14,10 +14,9 @@ functions:
     - 'editor_.*'
 structs:
   include:
-    - 'ByteBuffer'
-    - 'RenderResult'
     - 'RenderInfo'
     - 'CharacterCounts'
+    - 'DragImageResult'
     - 'EditorApplication'
     - 'EditorHandle'
 typedefs:
