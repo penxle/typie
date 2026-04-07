@@ -105,6 +105,7 @@ icu-datagen binary output: (ensure "icu4x-datagen")
 
 [private]
 bindings-kotlin: host-bindgen
+    rm -rf {{generated_dir}}/kotlin
     mkdir -p {{generated_dir}}/kotlin
     {{bindgen}} uniffi-bindgen -- generate \
         --library {{host_bindgen_lib}} \
@@ -116,6 +117,7 @@ bindings-kotlin: host-bindgen
 
 [private]
 bindings-swift: host-bindgen
+    rm -rf {{generated_dir}}/swift
     mkdir -p {{generated_dir}}/swift
     {{bindgen}} uniffi-bindgen-swift -- {{host_bindgen_lib}} \
         {{generated_dir}}/swift --swift-sources

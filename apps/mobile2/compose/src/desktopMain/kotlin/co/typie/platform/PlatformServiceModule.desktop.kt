@@ -1,6 +1,8 @@
 package co.typie.platform
 
 import co.typie.di.PlatformContext
+import co.typie.migration.DesktopLegacyMigrationPlatformSource
+import co.typie.migration.LegacyMigrationPlatformSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Module
@@ -24,6 +26,10 @@ actual class PlatformServiceModule {
 
   @Single
   actual fun fileSystem(ctx: PlatformContext): FileSystem = DesktopFileSystem()
+
+  @Single
+  actual fun legacyMigrationPlatformSource(ctx: PlatformContext): LegacyMigrationPlatformSource =
+    DesktopLegacyMigrationPlatformSource()
 
   @Single
   actual fun purchaseService(ctx: PlatformContext): PurchaseService = DesktopPurchaseService()

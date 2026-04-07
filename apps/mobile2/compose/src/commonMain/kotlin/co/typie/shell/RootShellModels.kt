@@ -2,6 +2,7 @@ package co.typie.shell
 
 import co.typie.auth.AuthState
 import co.typie.bootstrap.BootstrapState
+import co.typie.startup.AppStartupState
 import kotlin.time.Instant
 
 internal sealed interface RootShellDestination {
@@ -23,13 +24,17 @@ internal sealed interface RootShellDestination {
 }
 internal data class RootShellTargetState(
   val destination: RootShellDestination,
-  val sessionToken: String?,
 )
 
 internal fun resolveRootShellDestination(
+  startupState: AppStartupState,
   authState: AuthState,
   bootstrapState: BootstrapState,
 ): RootShellDestination {
+  if (startupState !is AppStartupState.Ready) {
+    return RootShellDestination.Splash
+  }
+
   if (authState is AuthState.Initializing || bootstrapState is BootstrapState.Loading) {
     return RootShellDestination.Splash
   }
@@ -56,14 +61,13 @@ internal fun resolveRootShellDestination(
 }
 
 internal fun rootShellTargetState(
+  startupState: AppStartupState,
   authState: AuthState,
-  sessionToken: String?,
   bootstrapState: BootstrapState,
 ): RootShellTargetState {
-  val destination = resolveRootShellDestination(authState, bootstrapState)
+  val destination = resolveRootShellDestination(startupState, authState, bootstrapState)
 
   return RootShellTargetState(
     destination = destination,
-    sessionToken = sessionToken.takeIf { destination is RootShellDestination.Main },
   )
 }

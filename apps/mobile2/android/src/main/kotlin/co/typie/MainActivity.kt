@@ -7,17 +7,18 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import co.typie.auth.AuthService
-import co.typie.auth.AuthState
 import co.typie.platform.PurchaseActivityHolder
+import co.typie.startup.AppStartupService
+import co.typie.startup.AppStartupState
 import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
-  private val authService: AuthService by inject()
+  private val appStartupService: AppStartupService by inject()
 
   override fun onCreate(savedInstanceState: Bundle?) {
     val splashScreen = installSplashScreen()
-    splashScreen.setKeepOnScreenCondition { authService.state.value is AuthState.Initializing }
+    appStartupService.startAsync()
+    splashScreen.setKeepOnScreenCondition { appStartupService.state.value !is AppStartupState.Ready }
 
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)

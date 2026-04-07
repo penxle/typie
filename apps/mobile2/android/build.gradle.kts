@@ -5,6 +5,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 val versionProps = Properties().apply {
   load(rootProject.file("version.properties").reader())
 }
+val debugKeystore = file("keystore-debug.jks")
 
 plugins {
   alias(libs.plugins.android.application)
@@ -54,6 +55,14 @@ android {
   }
 
   signingConfigs {
+    getByName("debug") {
+      // Keep a stable debug signature for local update-path testing.
+      storeFile = debugKeystore
+      storePassword = "password"
+      keyAlias = "co.typie"
+      keyPassword = "password"
+    }
+
     create("release") {
       storeFile = file("keystore-release.jks")
       storePassword = System.getenv("KEYSTORE_PASSWORD")
@@ -63,6 +72,10 @@ android {
   }
 
   buildTypes {
+    getByName("debug") {
+      signingConfig = signingConfigs.getByName("debug")
+    }
+
     getByName("release") {
       isMinifyEnabled = false
       signingConfig = signingConfigs.getByName("release")
@@ -74,4 +87,3 @@ android {
     targetCompatibility = JavaVersion.VERSION_11
   }
 }
-

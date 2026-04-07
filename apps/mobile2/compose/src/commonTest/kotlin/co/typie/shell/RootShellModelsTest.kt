@@ -2,24 +2,27 @@ package co.typie.shell
 
 import co.typie.auth.AuthState
 import co.typie.bootstrap.BootstrapState
+import co.typie.migration.LegacyMigrationRunResult
+import co.typie.migration.LegacyMigrationSourceState
+import co.typie.migration.LegacyMigrationStepResult
+import co.typie.startup.AppStartupState
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 
 class RootShellModelsTest {
   @Test
-  fun `rootShellTargetState differentiates authenticated sessions by session token`() {
-    assertNotEquals(
-      rootShellTargetState(AuthState.Authenticated, "session-a", BootstrapState.Ready),
-      rootShellTargetState(AuthState.Authenticated, "session-b", BootstrapState.Ready),
+  fun `rootShellTargetState resolves authenticated destinations without session token state`() {
+    assertEquals(
+      RootShellTargetState(RootShellDestination.Main),
+      rootShellTargetState(AppStartupState.Ready(readyMigrationResult()), AuthState.Authenticated, BootstrapState.Ready),
     )
   }
 
   @Test
-  fun `rootShellTargetState ignores session token outside authenticated state`() {
+  fun `rootShellTargetState ignores stale session context outside authenticated state`() {
     assertEquals(
-      rootShellTargetState(AuthState.Unauthenticated, null, BootstrapState.Ready),
-      rootShellTargetState(AuthState.Unauthenticated, "stale-session", BootstrapState.Ready),
+      RootShellTargetState(RootShellDestination.Auth),
+      rootShellTargetState(AppStartupState.Ready(readyMigrationResult()), AuthState.Unauthenticated, BootstrapState.Ready),
     )
   }
 
@@ -32,6 +35,7 @@ class RootShellModelsTest {
         until = null,
       ),
       resolveRootShellDestination(
+        startupState = AppStartupState.Ready(readyMigrationResult()),
         authState = AuthState.Authenticated,
         bootstrapState = BootstrapState.Maintenance(
           title = "점검 중",
@@ -43,9 +47,38 @@ class RootShellModelsTest {
     assertEquals(
       RootShellDestination.Offline,
       resolveRootShellDestination(
+        startupState = AppStartupState.Ready(readyMigrationResult()),
         authState = AuthState.Offline,
         bootstrapState = BootstrapState.Ready,
       ),
+    )
+  }
+
+  @Test
+  fun `startup state keeps root shell on splash before auth bootstrap resolution begins`() {
+    assertEquals(
+      RootShellDestination.Splash,
+      resolveRootShellDestination(
+        startupState = AppStartupState.NotStarted,
+        authState = AuthState.Authenticated,
+        bootstrapState = BootstrapState.Ready,
+      ),
+    )
+    assertEquals(
+      RootShellDestination.Splash,
+      resolveRootShellDestination(
+        startupState = AppStartupState.Migrating,
+        authState = AuthState.Authenticated,
+        bootstrapState = BootstrapState.Ready,
+      ),
+    )
+  }
+
+  private fun readyMigrationResult(): LegacyMigrationRunResult {
+    return LegacyMigrationRunResult(
+      sourceState = LegacyMigrationSourceState.Missing,
+      authResult = LegacyMigrationStepResult.NotAttempted,
+      prefsResult = LegacyMigrationStepResult.NotAttempted,
     )
   }
 }

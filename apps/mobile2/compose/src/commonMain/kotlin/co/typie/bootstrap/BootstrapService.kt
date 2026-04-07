@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.di.Platform
 import co.typie.platform.DeviceInfo
+import co.typie.startup.BootstrapStartupHandle
 import co.typie.storage.Prefs
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -15,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.isActive
@@ -24,30 +26,48 @@ import org.koin.core.annotation.Single
 
 private const val BOOTSTRAP_REFRESH_INTERVAL_MS = 60_000L
 
-@Single(createdAtStart = true)
+@Single(binds = [BootstrapStartupHandle::class])
 class BootstrapService(
   private val httpClient: HttpClient,
   private val deviceInfo: DeviceInfo,
   private val platform: Platform,
   prefs: Prefs,
-) {
+) : BootstrapStartupHandle {
   private val json = Json { ignoreUnknownKeys = true }
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val mutex = Mutex()
+  private var started = false
+  private var refreshLoopJob: Job? = null
 
   private var cachedPayload by prefs("bootstrap_cache", "")
 
   private val _state = MutableStateFlow<BootstrapState>(BootstrapState.Loading)
   val state: StateFlow<BootstrapState> = _state
 
-  init {
-    scope.launch {
-      refresh()
+  override suspend fun start() {
+    val shouldStart = mutex.withLock {
+      if (started) {
+        false
+      } else {
+        started = true
+        true
+      }
+    }
+    if (!shouldStart) return
 
+    Logger.i { "Bootstrap startup: begin initial refresh." }
+    refresh()
+    refreshLoopJob = scope.launch {
       while (isActive) {
         delay(BOOTSTRAP_REFRESH_INTERVAL_MS)
         refresh(showLoading = false)
       }
+    }
+  }
+
+  fun startAsync() {
+    scope.launch {
+      start()
     }
   }
 
@@ -65,6 +85,7 @@ class BootstrapService(
           platform = platform,
           currentVersion = deviceInfo.snapshot().appVersion,
         )
+        Logger.i { "Bootstrap startup: loaded remote bootstrap." }
         return@withLock
       }
     } catch (e: CancellationException) {
@@ -80,6 +101,7 @@ class BootstrapService(
           platform = platform,
           currentVersion = deviceInfo.snapshot().appVersion,
         )
+        Logger.i { "Bootstrap startup: loaded cached bootstrap." }
         return@withLock
       } catch (e: CancellationException) {
         throw e
@@ -89,6 +111,7 @@ class BootstrapService(
     }
 
     _state.value = BootstrapState.Ready
+    Logger.i { "Bootstrap startup: continuing without bootstrap payload." }
   }
 
   private suspend fun fetchPayload(): String? {

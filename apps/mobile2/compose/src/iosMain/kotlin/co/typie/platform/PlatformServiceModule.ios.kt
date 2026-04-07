@@ -1,10 +1,10 @@
-@file:OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 
 package co.typie.platform
 
 import co.typie.di.PlatformContext
-import kotlinx.cinterop.BetaInteropApi
-import kotlinx.cinterop.ExperimentalForeignApi
+import co.typie.migration.IOSLegacyMigrationPlatformSource
+import co.typie.migration.LegacyMigrationPlatformSource
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +44,10 @@ actual class PlatformServiceModule {
 
   @Single
   actual fun fileSystem(ctx: PlatformContext): FileSystem = IOSFileSystem()
+
+  @Single
+  actual fun legacyMigrationPlatformSource(ctx: PlatformContext): LegacyMigrationPlatformSource =
+    IOSLegacyMigrationPlatformSource()
 
   @Single
   actual fun purchaseService(ctx: PlatformContext): PurchaseService = IOSPurchaseService()

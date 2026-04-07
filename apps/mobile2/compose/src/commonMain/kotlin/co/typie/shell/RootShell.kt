@@ -2,16 +2,17 @@ package co.typie.shell
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.FrameRateCategory
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
@@ -26,8 +27,9 @@ import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.app_state.MaintenanceScreen
 import co.typie.screen.app_state.OfflineScreen
-import co.typie.screen.app_state.UpdateRequiredScreen
 import co.typie.screen.splash.SplashScreen
+import co.typie.screen.app_state.UpdateRequiredScreen
+import co.typie.startup.AppStartupService
 import co.typie.ui.component.bottomsheet.BottomSheetHost
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -38,15 +40,22 @@ import org.koin.compose.koinInject
 
 @Composable
 fun RootShell() {
+  val appStartupService = koinInject<AppStartupService>()
   val authService = koinInject<AuthService>()
   val bootstrapService = koinInject<BootstrapService>()
   val bootstrapDevSandbox = koinInject<BootstrapDevSandbox>()
+  val startupState by appStartupService.state.collectAsState()
   val authState by authService.state.collectAsState()
   val bootstrapState by bootstrapService.state.collectAsState()
   val bootstrapScenario by bootstrapDevSandbox.scenario.collectAsState()
+
+  LaunchedEffect(Unit) {
+    appStartupService.start()
+  }
+
   val shellTargetState = rootShellTargetState(
+    startupState = startupState,
     authState = authState,
-    sessionToken = authService.tokens?.sessionToken,
     bootstrapState = effectiveBootstrapState(
       remoteState = bootstrapState,
       scenario = bootstrapScenario,

@@ -11,6 +11,8 @@ import android.os.Build
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import co.typie.di.PlatformContext
+import co.typie.migration.AndroidLegacyMigrationPlatformSource
+import co.typie.migration.LegacyMigrationPlatformSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.core.annotation.Module
@@ -27,6 +29,10 @@ actual class PlatformServiceModule {
 
   @Single
   actual fun fileSystem(ctx: PlatformContext): FileSystem = AndroidFileSystem(ctx.context)
+
+  @Single
+  actual fun legacyMigrationPlatformSource(ctx: PlatformContext): LegacyMigrationPlatformSource =
+    AndroidLegacyMigrationPlatformSource(ctx.context)
 
   @Single
   actual fun purchaseService(ctx: PlatformContext): PurchaseService = AndroidPurchaseService(ctx.context)

@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.dev.SimulatedNetworkFailureException
 import co.typie.service.SiteService
+import co.typie.startup.AuthStartupHandle
 import co.typie.storage.Vault
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.cache.normalized.apolloStore
@@ -89,31 +90,32 @@ internal fun classifyAuthFailure(error: Throwable): AuthFailureDisposition {
   return AuthFailureDisposition.ClearSession
 }
 
-@Single(createdAtStart = true)
+@Single(binds = [AuthStartupHandle::class])
 class AuthService(
   private val vault: Vault,
   private val httpClient: HttpClient,
   private val siteService: SiteService,
-) : KoinComponent {
+) : KoinComponent, AuthStartupHandle {
   private val apolloClient: ApolloClient by inject()
   var tokens: AuthTokens? by vault("tokens", null)
     private set
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val mutex = Mutex()
+  private var started = false
 
   private val _state = MutableStateFlow<AuthState>(AuthState.Initializing)
   val state: StateFlow<AuthState> = _state
 
-  init {
-    scope.launch {
-      initialize()
-    }
-  }
-
   fun loginAsync(sessionToken: String) {
     scope.launch {
       login(sessionToken)
+    }
+  }
+
+  fun startAsync() {
+    scope.launch {
+      start()
     }
   }
 
@@ -123,9 +125,19 @@ class AuthService(
     }
   }
 
-  private suspend fun initialize() {
+  override suspend fun start() {
+    mutex.withLock {
+      if (started) return@withLock
+      started = true
+      Logger.i { "Auth startup: begin." }
+      initializeLocked()
+    }
+  }
+
+  private suspend fun initializeLocked() {
     val currentTokens = tokens
     if (currentTokens == null) {
+      Logger.i { "Auth startup: no stored session token." }
       _state.value = AuthState.Unauthenticated
       return
     }
@@ -140,11 +152,12 @@ class AuthService(
   }
 
   suspend fun login(sessionToken: String) {
-    if (tokens?.sessionToken == sessionToken && _state.value is AuthState.Authenticated) {
-      return
-    }
-
     mutex.withLock {
+      started = true
+      if (tokens?.sessionToken == sessionToken && _state.value is AuthState.Authenticated) {
+        return@withLock
+      }
+
       val currentTokens = tokens
       if (currentTokens?.sessionToken != sessionToken) {
         tokens = AuthTokens(sessionToken = sessionToken)
@@ -161,6 +174,7 @@ class AuthService(
   }
 
   suspend fun refreshTokens(): String? = mutex.withLock {
+    started = true
     val currentSessionToken = tokens?.sessionToken ?: return@withLock null
 
     try {
@@ -198,8 +212,11 @@ class AuthService(
   }
 
   private suspend fun retry() {
-    _state.value = AuthState.Initializing
-    initialize()
+    mutex.withLock {
+      started = true
+      _state.value = AuthState.Initializing
+      initializeLocked()
+    }
   }
 
   private suspend fun handleRefreshFailure(
@@ -225,6 +242,7 @@ class AuthService(
     tokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
     ensureValidSiteId(authenticatedUserContext)
     _state.value = AuthState.Authenticated
+    Logger.i { "Auth startup: authenticated user=${authenticatedUserContext.userId} sites=${authenticatedUserContext.siteIds.size}." }
   }
 
   private fun ensureValidSiteId(authenticatedUserContext: AuthenticatedUserContext) {

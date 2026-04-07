@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -17,8 +18,11 @@ import co.typie.serialization.EnumSerializer
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.LocalHazeStyle
+import kotlinx.coroutines.flow.drop
 import kotlinx.serialization.Serializable
 import org.koin.compose.koinInject
+import co.typie.startup.AppStartupState
+import co.typie.startup.AppStartupService
 
 @Serializable(with = ThemeMode.Serializer::class)
 enum class ThemeMode {
@@ -163,12 +167,38 @@ val LocalThemeMode = compositionLocalOf<MutableState<ThemeMode>> {
   error("No ThemeMode provided. Wrap your content with AppTheme.")
 }
 
+internal fun resolveThemeModeForStartup(
+  startupState: AppStartupState,
+  persistedThemeMode: ThemeMode,
+): ThemeMode {
+  return if (startupState is AppStartupState.Ready) {
+    persistedThemeMode
+  } else {
+    ThemeMode.System
+  }
+}
+
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
+  val appStartupService = koinInject<AppStartupService>()
   val themeService = koinInject<ThemeService>()
-  val themeMode = remember { mutableStateOf(themeService.themeMode) }
-  LaunchedEffect(Unit) {
+  val startupState = appStartupService.state.collectAsState().value
+  val isStartupReady = startupState is AppStartupState.Ready
+  val themeMode = remember(isStartupReady) {
+    mutableStateOf(
+      if (isStartupReady) {
+        resolveThemeModeForStartup(startupState, themeService.themeMode)
+      } else {
+        ThemeMode.System
+      },
+    )
+  }
+
+  LaunchedEffect(isStartupReady, themeMode) {
+    if (!isStartupReady) return@LaunchedEffect
+
     snapshotFlow { themeMode.value }
+      .drop(1)
       .collect { themeService.themeMode = it }
   }
 

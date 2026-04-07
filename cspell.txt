@@ -34,6 +34,7 @@ creds
 cxzv
 dearmor
 dedup
+decryptor
 disablepictureinpicture
 dmarc
 dotenv
@@ -44,6 +45,7 @@ epub
 eulyoo
 ffigen
 ffprobe
+ffffl
 fira
 fntf
 fnts
@@ -113,6 +115,7 @@ nsutf
 nums
 objc
 observablehq
+oaep
 okhttp
 okio
 oklch
@@ -126,6 +129,7 @@ onstatuschange
 oplog
 oslllo
 penxle
+pwith
 pgbouncer
 plpgsql
 pooler

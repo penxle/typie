@@ -25,3 +25,4 @@ ios/Frameworks/
 **/fastlane/README.md
 **/fastlane/report.xml
 *.jks
+!android/keystore-debug.jks

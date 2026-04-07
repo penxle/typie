@@ -1,0 +1,21 @@
+{
+  "hive_encryption_key_base64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  "expected": {
+    "auth_box": {
+      "session_token": "fixture-session-token"
+    },
+    "preference_box": {
+      "site_id": "site_fixture",
+      "dev_mode": true,
+      "typewriter_enabled": true,
+      "typewriter_position": 0.25,
+      "line_highlight_enabled": false,
+      "auto_surround_enabled": false,
+      "character_count_floating_enabled": true,
+      "widget_auto_fade_enabled": false
+    },
+    "theme_box": {
+      "mode": "dark"
+    }
+  }
+}
