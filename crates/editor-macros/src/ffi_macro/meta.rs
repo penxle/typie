@@ -26,7 +26,12 @@ pub fn extract(input: &DeriveInput, custom: Option<&syn::Type>) -> FfiMeta {
 
     let kind = match &input.data {
         syn::Data::Struct(data) => {
-            let fields = data.fields.iter().map(extract_field).collect();
+            let fields = data
+                .fields
+                .iter()
+                .filter(|f| !has_serde_skip_attr(&f.attrs))
+                .map(extract_field)
+                .collect();
             FfiKind::Struct { fields }
         }
         syn::Data::Enum(data) => {
@@ -132,6 +137,29 @@ fn parse_serde_tag(attrs: &[syn::Attribute]) -> Option<String> {
         }
     }
     None
+}
+
+/// Check for `#[serde(skip)]` on a field.
+fn has_serde_skip_attr(attrs: &[syn::Attribute]) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("serde") {
+            continue;
+        }
+        let mut found = false;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("skip") {
+                found = true;
+            } else if meta.input.peek(syn::Token![=]) {
+                let _value = meta.value()?;
+                let _lit: syn::LitStr = _value.parse()?;
+            }
+            Ok(())
+        });
+        if found {
+            return true;
+        }
+    }
+    false
 }
 
 /// Check for `#[serde(default)]` or `#[serde(default = "...")]` on a field.
