@@ -30,7 +30,7 @@ export const DocumentSyncCollectJob = defineJob('document:sync:collect', async (
     return;
   }
 
-  let updates: string[] = [];
+  let updates: string[];
   let parsedUpdates: { userId: string; data: string; retryCount?: number }[] = [];
   let updated = false;
 

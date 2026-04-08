@@ -110,7 +110,6 @@ function buildPictureData(origWidth: number, origHeight: number, binDataId: numb
 
   // 그림 정보: 밝기(1) + 명암(1) + 효과(1) + binItemId(2, HWP 1-indexed)
   view.setUint16(offset + 3, binDataId + 1, true);
-  offset += 5;
 
   // 투명도(1) + instanceId(4) + 추가 필드(8) = 13
   // 기본값 0

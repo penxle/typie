@@ -509,7 +509,7 @@ builder.mutationFields((t) => ({
           .where(and(eq(FontFamilies.userId, ctx.session.userId), eq(FontFamilies.familyName, familyName)))
           .then(first);
 
-        let familyId: string | null = null;
+        let familyId: string;
 
         if (fontFamily) {
           familyId = fontFamily.id;

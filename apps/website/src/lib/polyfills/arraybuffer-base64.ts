@@ -21,7 +21,7 @@ if (!hasNativeSupport) {
       const { alphabet = 'base64', omitPadding = false } = options;
 
       const CHUNK_SIZE = 0x7f_ff;
-      let result = '';
+      let result: string;
 
       if (this.length <= CHUNK_SIZE) {
         // @ts-expect-error - Using apply with typed array for performance
@@ -104,7 +104,7 @@ if (!hasNativeSupport) {
 
         return bytes;
       } catch (err) {
-        throw new SyntaxError(`Invalid base64 string: ${err instanceof Error ? err.message : 'decode failed'}`);
+        throw new SyntaxError(`Invalid base64 string: ${err instanceof Error ? err.message : 'decode failed'}`, { cause: err });
       }
     };
   }

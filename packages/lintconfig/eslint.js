@@ -1,6 +1,6 @@
 import js from '@eslint/js';
 import { defineConfig } from 'eslint/config';
-import import_ from 'eslint-plugin-import';
+import importX from 'eslint-plugin-import-x';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import svelte from 'eslint-plugin-svelte';
 import unicorn from 'eslint-plugin-unicorn';
@@ -24,7 +24,7 @@ export default defineConfig([
     linterOptions: {
       reportUnusedDisableDirectives: true,
     },
-    plugins: { import: import_, 'simple-import-sort': simpleImportSort },
+    plugins: { import: importX, 'simple-import-sort': simpleImportSort },
     rules: {
       'no-undef': 'off',
       'object-shorthand': ['error', 'always'],

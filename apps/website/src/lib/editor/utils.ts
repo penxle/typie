@@ -101,7 +101,6 @@ export const findNearestPageCoordinate = (
     if (eventY >= pageTop && eventY <= pageBottom) {
       nearestPageIdx = i;
       nearestPageEl = pageEl;
-      minDistance = 0;
       break;
     }
 

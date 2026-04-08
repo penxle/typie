@@ -32,6 +32,7 @@
     clientY: number;
   };
 
+  /* eslint-disable no-useless-assignment -- $bindable() defaults are used by Svelte */
   let {
     editor,
     active = true,
@@ -45,6 +46,7 @@
     scrollContainer = $bindable(null),
     children,
   }: Props = $props();
+  /* eslint-enable no-useless-assignment */
 
   let zoomViewportWidth = $state(0);
   let pinchSession = $state<PinchSession | null>(null);

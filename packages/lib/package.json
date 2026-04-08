@@ -22,25 +22,25 @@
     "lint:typecheck": "tsc"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.11",
-    "@logtape/logtape": "^2.0.4",
-    "@logtape/sentry": "^2.0.4",
+    "@hono/node-server": "^1.19.13",
+    "@logtape/logtape": "^2.0.5",
+    "@logtape/sentry": "^2.0.5",
     "dayjs": "^1.11.20",
-    "graphql": "^16.13.1",
-    "hono": "^4.12.8",
+    "graphql": "^16.13.2",
+    "hono": "^4.12.12",
     "ipaddr.js": "^2.3.0",
-    "remeda": "^2.33.6",
+    "remeda": "^2.33.7",
     "ts-pattern": "^5.9.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@sveltejs/kit": "^2.55.0",
+    "@sveltejs/kit": "^2.57.0",
     "@typie/tsconfig": "workspace:*",
-    "postcss": "^8.5.8",
-    "svelte": "^5.53.12",
+    "postcss": "^8.5.9",
+    "svelte": "^5.55.2",
     "svgo": "^4.0.1",
-    "typescript": "^6.0.1-rc",
-    "vite": "^8.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.7",
     "xmlbuilder2": "^4.0.3"
   }
 }

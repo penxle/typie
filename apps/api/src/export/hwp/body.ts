@@ -41,8 +41,8 @@ const hwpVisitor: NodeVisitor<HwpConvertContext, Uint8Array[]> = {
       const listType = listCtx.type;
       const level = listCtx.depth;
 
-      let numberingId = 0;
-      let headType = 0;
+      let numberingId: number;
+      let headType: number;
       if (listType === 'ordered') {
         numberingId = ctx.tables.numberings.intern({ format: 'decimal' }, 'decimal');
         headType = 2;

@@ -25,8 +25,8 @@ export function convertListItem(entry: NodeEntry, ctx: HwpConvertContext, isFirs
     if (childEntry.type === 'paragraph') {
       const segments = collectInlineSegments(childEntry, ctx);
 
-      let numberingId = 0;
-      let headType = 0;
+      let numberingId: number;
+      let headType: number;
       if (listType === 'ordered') {
         numberingId = ctx.tables.numberings.intern({ format: 'decimal' }, 'decimal');
         headType = 2;
@@ -438,11 +438,9 @@ function buildLineShapeComponent(width: number, height: number): Uint8Array {
   // 8(ctrl_ids) + 42(개체요소속성) + 146(rendering) + 11(border) + 8(fill) + 24(textbox+shadow)
   const totalSize = 8 + 42 + renderingInfo.byteLength + 11 + 8 + 24;
   const { buf, view } = allocate(totalSize);
-  let offset = 0;
-
   view.setUint32(0, ctrlId('$lin'), true);
   view.setUint32(4, ctrlId('$lin'), true);
-  offset = 8;
+  let offset = 8;
 
   view.setUint16(offset + 10, 1, true); // local_version = 1
   offset += 12;
@@ -470,12 +468,9 @@ function buildLineShapeComponent(width: number, height: number): Uint8Array {
   view.setInt16(offset, 100, true);
   offset += 2;
   view.setUint32(offset, 0x00_41_00_00, true); // 속성 (레퍼런스 값)
-  offset += 4;
-  offset += 1; // outline_style = 0
+  // +4 outline_style = 0 (1바이트)
 
   // 채우기 (8바이트, type=0)
-  offset += 8;
-
   // textbox + shadow (24바이트, 모두 0)
 
   return buf;

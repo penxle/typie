@@ -12,8 +12,8 @@
     "codegen:watch": "doppler run -- dart run build_runner watch --delete-conflicting-outputs"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.98",
-    "@iconify/tools": "^5.0.5",
+    "@iconify-json/lucide": "^1.2.101",
+    "@iconify/tools": "^5.0.11",
     "change-case-all": "^2.1.0",
     "fantasticon": "^4.1.0",
     "oslllo-svg-fixer": "^6.0.1"

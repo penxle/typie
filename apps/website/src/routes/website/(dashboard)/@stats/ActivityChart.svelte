@@ -137,7 +137,7 @@
     const getCompressedHeight = (value: number): number => {
       if (!hasCompression || value === 0) return value;
 
-      let height = 0;
+      let height: number;
 
       if (value <= compressionRange.start) {
         height = value;
@@ -173,7 +173,7 @@
       }
 
       const value = data.additions;
-      let height = 0;
+      let height: number;
 
       if (value <= compressionRange.start) {
         height = value;

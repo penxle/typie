@@ -57,7 +57,7 @@ export const useRateLimit = (options: UseRateLimitOptions): Plugin<Context> => (
       setResultAndStopExecution({
         errors: [
           new GraphQLError(`Rate limit exceeded for operation "${operationName}"`, {
-            extensions: { code: 'RATE_LIMITED', http: { statusCode: 429 } },
+            extensions: { code: 'RATE_LIMITED', http: { status: 429 } },
           }),
         ],
       });

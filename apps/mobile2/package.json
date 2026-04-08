@@ -6,8 +6,8 @@
     "generate-icons": "node scripts/generate-icons.js"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.98",
-    "@iconify/tools": "^5.0.5",
+    "@iconify-json/lucide": "^1.2.101",
+    "@iconify/tools": "^5.0.11",
     "change-case-all": "^2.1.0"
   }
 }
