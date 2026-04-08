@@ -1,5 +1,8 @@
+@file:OptIn(BetaInteropApi::class)
+
 package co.typie.migration
 
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.Foundation.NSData
@@ -12,8 +15,9 @@ internal class IOSLegacyMigrationPlatformSource(
   private val bridge: LegacyMigrationBridge = LegacyMigrationBridge(),
 ) : LegacyMigrationPlatformSource {
   override suspend fun load(): LegacyMigrationSource? = withContext(Dispatchers.Default) {
-    val documentsDirectory = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
-      .firstOrNull() as? String ?: return@withContext null
+    val documentsDirectory =
+      NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
+        .firstOrNull() as? String ?: return@withContext null
 
     val authBoxBytes = loadBox(documentsDirectory, "auth_box")
     val preferenceBoxBytes = loadBox(documentsDirectory, "preference_box")

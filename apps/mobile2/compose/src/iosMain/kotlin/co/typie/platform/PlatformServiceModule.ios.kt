@@ -1,10 +1,12 @@
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 
 package co.typie.platform
 
 import co.typie.di.PlatformContext
 import co.typie.migration.IOSLegacyMigrationPlatformSource
 import co.typie.migration.LegacyMigrationPlatformSource
+import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
