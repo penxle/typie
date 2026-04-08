@@ -27,7 +27,6 @@ import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.graphql.HomeScreen_Search_Query
 import co.typie.graphql.QueryState
-import co.typie.graphql.type.DocumentType
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
@@ -194,12 +193,15 @@ private fun SearchResultsList(
           when {
             onDocument != null -> {
               SearchDocumentResultRow(
-                documentType = onDocument.document.type,
+                entityIconName = onDocument.document.entity.icon,
+                entityIconColor = onDocument.document.entity.iconColor,
                 highlightedTitle = onDocument.title,
                 highlightedSubtitle = onDocument.subtitle,
                 fallbackTitle = onDocument.document.title,
                 fallbackSubtitle = onDocument.document.subtitle,
                 folderName = onDocument.document.entity.parent?.node?.onFolder?.name,
+                folderIconName = onDocument.document.entity.parent?.node?.onFolder?.entity?.icon,
+                folderIconColor = onDocument.document.entity.parent?.node?.onFolder?.entity?.iconColor,
                 excerpt = onDocument.document.excerpt,
                 updatedAt = onDocument.document.updatedAt,
                 highlightedText = onDocument.text,
@@ -210,6 +212,8 @@ private fun SearchResultsList(
 
             onFolder != null -> {
               SearchFolderResultRow(
+                iconName = onFolder.folder.entity.icon,
+                iconColor = onFolder.folder.entity.iconColor,
                 highlightedName = onFolder.name,
                 fallbackName = onFolder.folder.name,
                 documentCount = onFolder.folder.documentCount,
@@ -230,12 +234,15 @@ private fun SearchResultsList(
 
 @Composable
 private fun SearchDocumentResultRow(
-  documentType: DocumentType,
+  entityIconName: String,
+  entityIconColor: String,
   highlightedTitle: String?,
   highlightedSubtitle: String?,
   fallbackTitle: String,
   fallbackSubtitle: String?,
   folderName: String?,
+  folderIconName: String?,
+  folderIconColor: String?,
   excerpt: String,
   updatedAt: kotlin.time.Instant,
   highlightedText: String?,
@@ -244,6 +251,20 @@ private fun SearchDocumentResultRow(
 ) {
   InteractionScope {
     val metaColor = AppTheme.colors.textMuted
+    val entityIcon = resolveEntityIconAppearance(
+      iconName = entityIconName,
+      iconColor = entityIconColor,
+      fallbackIcon = Lucide.File,
+      fallbackTint = metaColor,
+      colors = AppTheme.colors,
+    )
+    val folderIcon = resolveEntityIconAppearance(
+      iconName = folderIconName,
+      iconColor = folderIconColor,
+      fallbackIcon = Lucide.Folder,
+      fallbackTint = metaColor,
+      colors = AppTheme.colors,
+    )
     val titleText = buildSearchDocumentTitleText(
       highlightedTitle = highlightedTitle,
       highlightedSubtitle = highlightedSubtitle,
@@ -264,9 +285,9 @@ private fun SearchDocumentResultRow(
       if (folderName != null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Icon(
-            icon = Lucide.Folder,
+            icon = folderIcon.icon,
             modifier = Modifier.size(12.dp),
-            tint = metaColor,
+            tint = folderIcon.tint,
           )
 
           Spacer(Modifier.width(4.dp))
@@ -285,9 +306,9 @@ private fun SearchDocumentResultRow(
 
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
-          icon = if (documentType == DocumentType.TEMPLATE) Lucide.LayoutTemplate else Lucide.File,
+          icon = entityIcon.icon,
           modifier = Modifier.size(18.dp),
-          tint = metaColor,
+          tint = entityIcon.tint,
         )
 
         Spacer(Modifier.width(12.dp))
@@ -340,21 +361,31 @@ private fun SearchDocumentResultRow(
 
 @Composable
 private fun SearchFolderResultRow(
+  iconName: String,
+  iconColor: String,
   highlightedName: String?,
   fallbackName: String,
   documentCount: Int,
   highlightColor: Color,
   onClick: suspend () -> Unit,
 ) {
+  val entityIcon = resolveEntityIconAppearance(
+    iconName = iconName,
+    iconColor = iconColor,
+    fallbackIcon = Lucide.Folder,
+    fallbackTint = AppTheme.colors.brand,
+    colors = AppTheme.colors,
+  )
+
   CardRow(
     onClick = onClick,
     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     spacing = 12.dp,
   ) {
     Icon(
-      icon = Lucide.Folder,
+      icon = entityIcon.icon,
       modifier = Modifier.size(18.dp),
-      tint = AppTheme.colors.brand,
+      tint = entityIcon.tint,
     )
 
     Column(Modifier.weight(1f)) {

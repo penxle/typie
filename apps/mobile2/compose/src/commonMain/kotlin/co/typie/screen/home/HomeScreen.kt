@@ -36,7 +36,6 @@ import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.graphql.HomeScreen_Query
 import co.typie.graphql.QueryState
-import co.typie.graphql.type.DocumentType
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
@@ -224,6 +223,14 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
       HomeFullBleedRail(scrollState = scrollState) {
         for (folder in folders) {
           InteractionScope {
+            val entityIcon = resolveEntityIconAppearance(
+              iconName = folder.entity.icon,
+              iconColor = folder.entity.iconColor,
+              fallbackIcon = Lucide.Folder,
+              fallbackTint = AppTheme.colors.brand,
+              colors = AppTheme.colors,
+            )
+
             Column(
               modifier = Modifier
                 .width(140.dp)
@@ -234,9 +241,9 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
                 .padding(16.dp),
             ) {
               Icon(
-                icon = Lucide.Folder,
+                icon = entityIcon.icon,
                 modifier = Modifier.size(18.dp),
-                tint = AppTheme.colors.brand,
+                tint = entityIcon.tint,
               )
 
               Spacer(Modifier.height(6.dp))
@@ -313,8 +320,23 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
           },
         ) { document ->
           InteractionScope {
-            val folderName = document.entity.parent?.node?.onFolder?.name
+            val parentFolder = document.entity.parent?.node?.onFolder
+            val folderName = parentFolder?.name
             val metaColor = AppTheme.colors.textMuted
+            val entityIcon = resolveEntityIconAppearance(
+              iconName = document.entity.icon,
+              iconColor = document.entity.iconColor,
+              fallbackIcon = Lucide.File,
+              fallbackTint = metaColor,
+              colors = AppTheme.colors,
+            )
+            val folderIcon = resolveEntityIconAppearance(
+              iconName = parentFolder?.entity?.icon,
+              iconColor = parentFolder?.entity?.iconColor,
+              fallbackIcon = Lucide.Folder,
+              fallbackTint = metaColor,
+              colors = AppTheme.colors,
+            )
 
             Column(
               modifier = Modifier
@@ -326,9 +348,9 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
               if (folderName != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                   Icon(
-                    icon = Lucide.Folder,
+                    icon = folderIcon.icon,
                     modifier = Modifier.size(12.dp),
-                    tint = metaColor,
+                    tint = folderIcon.tint,
                   )
 
                   Spacer(Modifier.width(4.dp))
@@ -347,9 +369,9 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
 
               Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                  icon = if (document.type == DocumentType.TEMPLATE) Lucide.LayoutTemplate else Lucide.File,
+                  icon = entityIcon.icon,
                   modifier = Modifier.size(18.dp),
-                  tint = metaColor,
+                  tint = entityIcon.tint,
                 )
 
                 Spacer(Modifier.width(12.dp))

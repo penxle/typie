@@ -26,6 +26,8 @@ query HomeScreen_Query($siteId: ID!) {
           entity {
             id
             slug
+            icon
+            iconColor
             parent {
               id
 
@@ -35,6 +37,11 @@ query HomeScreen_Query($siteId: ID!) {
                 ... on Folder {
                   id
                   name
+                  entity {
+                    id
+                    icon
+                    iconColor
+                  }
                 }
               }
             }
@@ -49,6 +56,8 @@ query HomeScreen_Query($siteId: ID!) {
           entity {
             id
             slug
+            icon
+            iconColor
           }
         }
       }

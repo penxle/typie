@@ -22,6 +22,8 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
           entity {
             id
             slug
+            icon
+            iconColor
             parent {
               id
 
@@ -31,6 +33,11 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
                 ... on Folder {
                   id
                   name
+                  entity {
+                    id
+                    icon
+                    iconColor
+                  }
                 }
               }
             }
@@ -44,6 +51,8 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
           documentCount
           entity {
             id
+            icon
+            iconColor
           }
         }
       }
