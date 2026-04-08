@@ -6,6 +6,7 @@
   import { Dialog } from '@typie/ui/notification';
   import PlusIcon from '~icons/lucide/plus';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
+  import { familySpecimenFallbacks, weightSpecimenFallbacks } from '$lib/components/font-specimen';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { values } from '$lib/editor/values';
   import { cache } from '$lib/graphql';
@@ -135,6 +136,7 @@
         <div class={flex({ alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' })}>
           <h2 class={css({ fontSize: '16px', fontWeight: 'semibold', color: 'text.default' })}>
             <FontSpecimen
+              fallbacks={familySpecimenFallbacks(family.displayName, family.familyName)}
               fontId={getRepresentativeFont(family.fonts)?.id}
               text={family.displayName}
               weight={getRepresentativeFont(family.fonts)?.weight}
@@ -178,7 +180,12 @@
             {/if}
             <SettingsRow>
               {#snippet label()}
-                <FontSpecimen fontId={font.id} text={getWeightLabel(font)} weight={font.weight} />
+                <FontSpecimen
+                  fallbacks={weightSpecimenFallbacks(getWeightLabel(font), font.subfamilyDisplayName, font.weight)}
+                  fontId={font.id}
+                  text={getWeightLabel(font)}
+                  weight={font.weight}
+                />
               {/snippet}
               {#snippet value()}
                 <Button

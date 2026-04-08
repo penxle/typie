@@ -4,6 +4,7 @@
   import { Icon, SearchableDropdown } from '@typie/ui/components';
   import PlusIcon from '~icons/lucide/plus';
   import { FontSpecimen } from '$lib/components';
+  import { familySpecimenFallbacks } from '$lib/components/font-specimen';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { getRepresentativeFont } from '$lib/editor/fonts';
 
@@ -70,6 +71,6 @@
 >
   {#snippet renderItem(item)}
     {@const font = representativeFontMap.get(item.value)}
-    <FontSpecimen fontId={font?.id} text={item.label} weight={font?.weight} />
+    <FontSpecimen fallbacks={familySpecimenFallbacks(item.label, item.value)} fontId={font?.id} text={item.label} weight={font?.weight} />
   {/snippet}
 </SearchableDropdown>

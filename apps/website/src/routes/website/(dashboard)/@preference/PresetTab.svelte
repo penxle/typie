@@ -28,6 +28,7 @@
   import LineHeightIcon from '~icons/typie/line-height';
   import { FontSpecimen, SettingsCard, SettingsDivider, SettingsRow } from '$lib/components';
   import { ToolbarColorGrid } from '$lib/components/editor/toolbar';
+  import { familySpecimenFallbacks, weightSpecimenFallbacks } from '$lib/components/font-specimen';
   import { getRepresentativeFont } from '$lib/editor/fonts';
   import { THEME_COLORS } from '$lib/editor/theme';
   import { createPaginatedLayout, getMaxMargin, mmToPx, pxToMm } from '$lib/editor/utils';
@@ -407,7 +408,12 @@
           >
             {#snippet renderItem(item)}
               {@const font = representativeFontMap.get(item.value)}
-              <FontSpecimen fontId={font?.id} text={item.label} weight={font?.weight} />
+              <FontSpecimen
+                fallbacks={familySpecimenFallbacks(item.label, item.value)}
+                fontId={font?.id}
+                text={item.label}
+                weight={font?.weight}
+              />
             {/snippet}
           </SearchableDropdown>
         {/snippet}
@@ -438,7 +444,13 @@
             value={fontWeight}
           >
             {#snippet renderItem(item)}
-              <FontSpecimen fontId={weightFontIdMap.get(item.value)} text={item.label} weight={item.value} />
+              {@const font = currentFontFamilyFonts.find((candidate) => candidate.weight === item.value)}
+              <FontSpecimen
+                fallbacks={weightSpecimenFallbacks(item.label, font?.subfamilyDisplayName, item.value)}
+                fontId={weightFontIdMap.get(item.value)}
+                text={item.label}
+                weight={item.value}
+              />
             {/snippet}
           </SearchableDropdown>
         {/snippet}

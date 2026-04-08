@@ -47,6 +47,7 @@ import co.typie.ui.component.FontSpecimen
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
+import co.typie.ui.component.familySpecimenFallbacks
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -58,6 +59,7 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.component.weightSpecimenFallbacks
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -316,6 +318,10 @@ private fun FontSettingsFamilySection(
 ) {
   val representativeFont = representativeFont(family.fonts)
   val isDeleteActionEnabled = deletingFamilyId == null && deletingFontId == null
+  val familySpecimenFallback = familySpecimenFallbacks(
+    displayName = family.displayName,
+    familyName = family.familyName,
+  )
 
   Column(
     modifier = Modifier.fillMaxWidth(),
@@ -327,6 +333,7 @@ private fun FontSettingsFamilySection(
       weight = representativeFont?.weight,
       style = AppTheme.typography.title,
       modifier = Modifier.fillMaxWidth(),
+      fallbackTexts = familySpecimenFallback,
     )
 
     CardSurface(
@@ -334,6 +341,8 @@ private fun FontSettingsFamilySection(
     ) {
       Column {
         family.fonts.forEachIndexed { index, font ->
+          val fontLabel = fontWeightLabel(font.weight, font.subfamilyDisplayName)
+
           Row(
             modifier = Modifier
               .fillMaxWidth()
@@ -342,11 +351,16 @@ private fun FontSettingsFamilySection(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             FontSpecimen(
-              text = fontWeightLabel(font.weight, font.subfamilyDisplayName),
+              text = fontLabel,
               fontId = font.id,
               weight = font.weight,
               style = AppTheme.typography.label,
               modifier = Modifier.weight(1f),
+              fallbackTexts = weightSpecimenFallbacks(
+                label = fontLabel,
+                subfamilyDisplayName = font.subfamilyDisplayName,
+                weight = font.weight,
+              ),
             )
 
             FontDeleteButton(

@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -20,7 +21,10 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import co.typie.Konfig
-import io.ktor.http.encodeURLQueryComponent
+import co.typie.ui.theme.AppTheme
+import co.typie.ui.utils.toHexRgbString
+import io.ktor.http.URLBuilder
+import io.ktor.http.appendPathSegments
 
 @Composable
 fun FontSpecimen(
@@ -29,6 +33,7 @@ fun FontSpecimen(
   weight: Int?,
   style: TextStyle,
   modifier: Modifier = Modifier,
+  fallbackTexts: List<String> = emptyList(),
   contentAlignment: Alignment = Alignment.CenterStart,
 ) {
   val fallbackStyle = if (weight != null) {
@@ -58,7 +63,15 @@ fun FontSpecimen(
   }
 
   val specimenHeight = with(LocalDensity.current) { style.fontSize.toDp() } + 4.dp
-  val specimenUrl = remember(fontId, text) { fontSpecimenUrl(fontId = fontId, text = text) }
+  val resolvedColor = if (style.color == Color.Unspecified) AppTheme.colors.textPrimary else style.color
+  val specimenUrl = remember(fontId, text, fallbackTexts, resolvedColor) {
+    fontSpecimenUrl(
+      fontId = fontId,
+      text = text,
+      fallbackTexts = fallbackTexts,
+      colorHex = resolvedColor.toHexRgbString(),
+    )
+  }
   val painter = rememberAsyncImagePainter(model = specimenUrl)
   val painterState by painter.state.collectAsState()
 
@@ -88,9 +101,64 @@ fun FontSpecimen(
   }
 }
 
-private fun fontSpecimenUrl(
+internal fun familySpecimenFallbacks(
+  displayName: String,
+  familyName: String,
+): List<String> {
+  return chooseDistinctFallbackTexts(
+    primaryText = displayName,
+    candidates = listOf(familyName),
+  )
+}
+
+internal fun weightSpecimenFallbacks(
+  label: String,
+  subfamilyDisplayName: String?,
+  weight: Int,
+): List<String> {
+  return chooseDistinctFallbackTexts(
+    primaryText = label,
+    candidates = listOf(subfamilyDisplayName, weight.toString()),
+  )
+}
+
+private fun chooseDistinctFallbackTexts(
+  primaryText: String,
+  candidates: List<String?>,
+): List<String> {
+  val normalizedPrimary = primaryText.trim()
+  val seen = mutableSetOf(normalizedPrimary.lowercase())
+
+  return candidates
+    .mapNotNull { candidate -> candidate?.trim()?.takeIf { it.isNotEmpty() } }
+    .filter { candidate ->
+      val normalizedCandidate = candidate.lowercase()
+      if (seen.contains(normalizedCandidate)) {
+        return@filter false
+      }
+
+      seen += normalizedCandidate
+      true
+    }
+}
+
+internal fun fontSpecimenUrl(
   fontId: String,
   text: String,
+  fallbackTexts: List<String> = emptyList(),
+  colorHex: String? = null,
 ): String {
-  return "${Konfig.API_URL}/font/$fontId/specimen?text=${text.encodeURLQueryComponent()}"
+  return URLBuilder(Konfig.API_URL).apply {
+    appendPathSegments("font", fontId, "specimen")
+    parameters.append("text", text)
+    chooseDistinctFallbackTexts(
+      primaryText = text,
+      candidates = fallbackTexts,
+    ).forEach { fallbackText ->
+      parameters.append("fallbacks", fallbackText)
+    }
+    colorHex?.takeIf { it.isNotBlank() }?.let {
+      parameters.append("color", it)
+    }
+  }.buildString()
 }

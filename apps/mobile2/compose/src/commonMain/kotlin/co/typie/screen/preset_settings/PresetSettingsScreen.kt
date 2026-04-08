@@ -50,6 +50,8 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.familySpecimenFallbacks
+import co.typie.ui.component.weightSpecimenFallbacks
 import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
 import co.typie.ui.component.bottomsheet.BottomSheetOptionList
 import co.typie.ui.component.bottomsheet.BottomSheetOptionRow
@@ -415,6 +417,10 @@ private fun BottomSheetScope<Unit>.FontFamilySheet(
             fontId = specimen?.id,
             weight = specimen?.weight,
             style = AppTheme.typography.body,
+            fallbackTexts = familySpecimenFallbacks(
+              displayName = family.displayName,
+              familyName = family.familyName,
+            ),
           )
         }
       }
@@ -473,6 +479,8 @@ private fun BottomSheetScope<Unit>.FontWeightSheet(
       }
     } else {
       BottomSheetOptionList(items = fonts) { font ->
+        val fontLabel = fontWeightLabel(font.weight, font.subfamilyDisplayName)
+
         BottomSheetOptionRow(
           selected = selectedWeight == font.weight,
           enabled = !isSaving,
@@ -483,10 +491,15 @@ private fun BottomSheetScope<Unit>.FontWeightSheet(
           },
         ) {
           FontSpecimen(
-            text = fontWeightLabel(font.weight, font.subfamilyDisplayName),
+            text = fontLabel,
             fontId = font.id,
             weight = font.weight,
             style = AppTheme.typography.body,
+            fallbackTexts = weightSpecimenFallbacks(
+              label = fontLabel,
+              subfamilyDisplayName = font.subfamilyDisplayName,
+              weight = font.weight,
+            ),
           )
         }
       }

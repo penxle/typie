@@ -1,8 +1,5 @@
 package co.typie.screen.font_settings
 
-import co.typie.Konfig
-import io.ktor.http.encodeURLQueryComponent
-
 internal data class FontSettingsFont(
   val id: String,
   val weight: Int,
@@ -187,11 +184,4 @@ internal fun summarizeFontUploadResults(
     successCount = successes.size,
     failureCount = failures.size,
   )
-}
-
-internal fun fontSpecimenUrl(
-  fontId: String,
-  text: String,
-): String {
-  return "${Konfig.API_URL}/font/$fontId/specimen?text=${text.encodeURLQueryComponent()}"
 }

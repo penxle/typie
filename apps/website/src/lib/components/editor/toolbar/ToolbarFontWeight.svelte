@@ -3,6 +3,7 @@
   import { SearchableDropdown } from '@typie/ui/components';
   import { SvelteMap } from 'svelte/reactivity';
   import { FontSpecimen } from '$lib/components';
+  import { weightSpecimenFallbacks } from '$lib/components/font-specimen';
   import { getEditorContext } from '$lib/editor/context.svelte';
   import { values } from '$lib/editor/values';
 
@@ -95,6 +96,12 @@
   value={currentWeight}
 >
   {#snippet renderItem(item)}
-    <FontSpecimen fontId={weightFontIdMap.get(item.value)} text={item.label} weight={item.value} />
+    {@const font = currentFontFamilyAndFonts.fonts.find((candidate) => candidate.weight === item.value)}
+    <FontSpecimen
+      fallbacks={weightSpecimenFallbacks(item.label, font?.subfamilyDisplayName, item.value)}
+      fontId={weightFontIdMap.get(item.value)}
+      text={item.label}
+      weight={item.value}
+    />
   {/snippet}
 </SearchableDropdown>

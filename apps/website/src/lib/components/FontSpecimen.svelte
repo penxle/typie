@@ -2,6 +2,7 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   const cache = new SvelteMap<string, string | null>();
+  const unavailable = new SvelteSet<string>();
   const loading = new SvelteSet<string>();
 </script>
 
@@ -10,30 +11,35 @@
   import ky, { HTTPError } from 'ky';
   import { untrack } from 'svelte';
   import { env } from '$env/dynamic/public';
+  import { buildFontSpecimenCacheKey, buildFontSpecimenUrl } from './font-specimen';
 
   type Props = {
     fontId?: string | null;
+    fallbacks?: string[];
     text: string;
     weight?: number;
   };
 
-  let { fontId = null, text, weight }: Props = $props();
+  let { fontId = null, fallbacks = [], text, weight }: Props = $props();
 
-  const key = $derived(fontId ? `${fontId}:${text}` : null);
-  const html = $derived(key ? cache.get(key) : null);
+  const key = $derived(fontId ? buildFontSpecimenCacheKey(fontId, text, fallbacks) : null);
+  const specimenUrl = $derived(fontId ? buildFontSpecimenUrl(env.PUBLIC_API_URL, fontId, text, fallbacks) : null);
+  const html = $derived(key && cache.has(key) ? cache.get(key) : undefined);
 
   $effect(() => {
-    if (!key || cache.has(key) || loading.has(key)) return;
+    if (!key || !specimenUrl || cache.has(key) || unavailable.has(key) || loading.has(key)) return;
 
     loading.add(key);
 
     const loadSpecimen = async () => {
       try {
-        const svg = await ky(`${env.PUBLIC_API_URL}/font/${fontId}/specimen`, { searchParams: { text } }).text();
+        const svg = await ky(specimenUrl).text();
         cache.set(key, svg);
       } catch (err) {
         if (err instanceof HTTPError && err.response.status === 422) {
           cache.set(key, null);
+        } else {
+          unavailable.add(key);
         }
       } finally {
         loading.delete(key);
