@@ -1,5 +1,6 @@
 package co.typie.screen.text_replacements
 
+import androidx.compose.animation.animateBounds
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -7,28 +8,22 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,6 +34,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.SubcomposeLayout
@@ -49,9 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import co.typie.ext.clickable
 import co.typie.ext.InteractionScope
-import co.typie.ext.navigationBars
 import co.typie.ext.plus
 import co.typie.ext.pressScale
+import co.typie.ext.safeBottomPadding
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.type.TextReplacementState
 import co.typie.icons.Lucide
@@ -70,15 +67,16 @@ import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
-import co.typie.ui.component.reorder.rememberReorderableLazyColumnState
+import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
-import co.typie.ui.component.reorder.reorderableLazyColumnContainer
+import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
+import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
-import co.typie.ui.skeleton.LocalSkeleton
+import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -92,9 +90,8 @@ fun TextReplacementsScreen() {
   val haptic = LocalHapticFeedback.current
   val model = koinViewModel<TextReplacementsViewModel>()
   val scope = rememberCoroutineScope()
-  var topBarScrollOffset by remember { mutableIntStateOf(0) }
   var isPersistingCustomReorder by remember { mutableStateOf(false) }
-  val lazyListState = rememberLazyListState()
+  val scrollState = rememberScrollState("text-replacements")
 
   val presetItems = model.normalizedPresetItems.sortedBy { it.order.orEmpty() }
   val smartQuoteItems = model.normalizedSmartQuoteItems
@@ -114,8 +111,6 @@ fun TextReplacementsScreen() {
     }
   }
 
-  val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
-
   ProvideTopBar(
     leading = { TopBarBackButton() },
     center = { Text("텍스트 대치", style = AppTheme.typography.title) },
@@ -125,7 +120,7 @@ fun TextReplacementsScreen() {
         onClick = { openForm() },
       )
     },
-    scrollOffset = { topBarScrollOffset },
+    scrollOffset = scrollState.topBarScrollOffset(),
   )
 
   if (model.query.state is QueryState.Error) {
@@ -135,101 +130,82 @@ fun TextReplacementsScreen() {
   Screen(
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-    primaryScrollableState = lazyListState,
+    primaryScrollableState = scrollState,
     body = { contentPadding ->
-    val skeleton = LocalSkeleton.current
-    val reorderState = rememberReorderableLazyColumnState(
-      keys = serverCustomItemIds,
-      lazyListState = lazyListState,
-    )
-    val displayCustomItems = remember(serverCustomItems, reorderState.displayedKeys) {
-      displayCustomItems(serverCustomItems, reorderState.displayedKeys)
-    }
-    val currentScrollOffset = if (lazyListState.firstVisibleItemIndex > 0) {
-      Int.MAX_VALUE
-    } else {
-      lazyListState.firstVisibleItemScrollOffset
-    }
-
-    SideEffect {
-      if (!skeleton.enabled) {
-        topBarScrollOffset = currentScrollOffset
+      val reorderState = rememberReorderableListState(
+        keys = serverCustomItemIds,
+        verticalScrollableState = scrollState,
+      )
+      val displayCustomItems = remember(serverCustomItems, reorderState.displayedKeys) {
+        displayCustomItems(serverCustomItems, reorderState.displayedKeys)
       }
-    }
 
-    LazyColumn(
-      modifier = Modifier
-        .fillMaxSize()
-        .reorderableLazyColumnContainer(reorderState),
-      state = lazyListState,
-      contentPadding = contentPadding + navigationBarsPadding + PaddingValues(bottom = 72.dp),
-    ) {
-      item(key = "preamble") {
-        Column(
-          modifier = Modifier.padding(bottom = 16.dp),
-          verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-          Text(
-            text = "텍스트 대치",
-            style = AppTheme.typography.display,
-            modifier = Modifier.padding(top = 4.dp),
-          )
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding)
+          .safeBottomPadding()
+          .reorderableListContainer(reorderState),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        Text(
+          text = "텍스트 대치",
+          style = AppTheme.typography.display,
+          modifier = Modifier.padding(top = 4.dp),
+        )
 
-          Text(
-            text = "입력 중 특정 텍스트를 자동으로 변환해요.",
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
-          )
+        Text(
+          text = "입력 중 특정 텍스트를 자동으로 변환해요.",
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textTertiary,
+        )
 
-          TextReplacementSection(title = "기본 대치") {
-            if (smartQuoteItems.isNotEmpty()) {
-              TextReplacementToggleRow(
-                title = "곧은따옴표를 둥근따옴표로",
-                checked = model.isSmartQuoteEnabled,
-                onClick = {
+        TextReplacementSection(title = "기본 대치") {
+          if (smartQuoteItems.isNotEmpty()) {
+            TextReplacementToggleRow(
+              title = "곧은따옴표를 둥근따옴표로",
+              checked = model.isSmartQuoteEnabled,
+              onClick = {
+                model.toggleSmartQuotes(
+                  items = model.normalizedItems,
+                  enabled = !model.isSmartQuoteEnabled,
+                )
+              },
+              onCheckedChange = { next ->
+                scope.launch {
                   model.toggleSmartQuotes(
                     items = model.normalizedItems,
-                    enabled = !model.isSmartQuoteEnabled,
+                    enabled = next,
                   )
-                },
-                onCheckedChange = { next ->
-                  scope.launch {
-                    model.toggleSmartQuotes(
-                      items = model.normalizedItems,
-                      enabled = next,
-                    )
-                  }
-                },
-              )
+                }
+              },
+            )
 
-              if (presetItems.isNotEmpty()) {
-                CardDivider()
-              }
-            }
-
-            presetItems.forEachIndexed { index, item ->
-              if (index > 0) {
-                CardDivider()
-              }
-
-              TextReplacementPresetRow(
-                item = item,
-                checked = item.state == TextReplacementState.ACTIVE,
-                onClick = { model.togglePreset(item) },
-                onCheckedChange = {
-                  scope.launch {
-                    model.togglePreset(item)
-                  }
-                },
-              )
+            if (presetItems.isNotEmpty()) {
+              CardDivider()
             }
           }
-        }
-      }
 
-      item(key = "custom-header") {
+          presetItems.forEachIndexed { index, item ->
+            if (index > 0) {
+              CardDivider()
+            }
+
+            TextReplacementPresetRow(
+              item = item,
+              checked = item.state == TextReplacementState.ACTIVE,
+              onClick = { model.togglePreset(item) },
+              onCheckedChange = {
+                scope.launch {
+                  model.togglePreset(item)
+                }
+              },
+            )
+          }
+        }
+
         Column(
-          modifier = Modifier.padding(bottom = 16.dp),
           verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
           SectionTitle(
@@ -241,88 +217,108 @@ fun TextReplacementsScreen() {
             style = AppTheme.typography.caption,
             color = AppTheme.colors.textTertiary,
           )
-        }
-      }
 
-      if (displayCustomItems.isEmpty()) {
-        item(key = "custom-empty") {
-          CardSurface(modifier = Modifier.fillMaxWidth()) {
-            TextReplacementEmptyState()
-          }
-        }
-      } else {
-        itemsIndexed(
-          items = displayCustomItems,
-          key = { _, item -> item.textReplacementId },
-        ) { index, item ->
-          TextReplacementCustomRow(
-            modifier = Modifier
-              .animateItem(
-                fadeInSpec = null,
-                fadeOutSpec = null,
-              )
-              .reorderableItem(
-                state = reorderState,
-                key = item.textReplacementId,
-              ),
-            dragHandleModifier = Modifier.reorderableDragHandle(
-              state = reorderState,
-              key = item.textReplacementId,
-              enabled = !isPersistingCustomReorder,
-              onDragStarted = {
-                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-              },
-              onDragMoved = {
-                haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-              },
-              onDragStopped = { commit ->
-                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                if (commit == null || commit.orderedKeys == serverCustomItemIds) {
-                  return@reorderableDragHandle
-                }
-
-                val reorderOrders = calculateCustomReorderOrdersFromOrderedKeys(
-                  items = serverCustomItems,
-                  orderedKeys = commit.orderedKeys,
-                  movedKey = commit.movedKey,
-                ) ?: run {
-                  reorderState.resetToServerKeys(serverCustomItemIds)
-                  return@reorderableDragHandle
-                }
-
-                isPersistingCustomReorder = true
-                scope.launch {
-                  val success = model.moveCustom(
-                    textReplacementId = commit.movedKey,
-                    lowerOrder = reorderOrders.lowerOrder,
-                    upperOrder = reorderOrders.upperOrder,
+          if (serverCustomItems.isEmpty()) {
+            CardSurface(modifier = Modifier.fillMaxWidth()) {
+              TextReplacementEmptyState()
+            }
+          } else {
+            LookaheadScope {
+              val boundsTransform = remember {
+                androidx.compose.animation.BoundsTransform { _, _ ->
+                  spring(
+                    dampingRatio = 0.9f,
+                    stiffness = Spring.StiffnessMedium,
                   )
-                  isPersistingCustomReorder = false
+                }
+              }
 
-                  if (!success) {
-                    reorderState.resetToServerKeys(serverCustomItemIds)
+              Column(modifier = Modifier.fillMaxWidth()) {
+                displayCustomItems.forEachIndexed { index, item ->
+                  key(item.textReplacementId) {
+                    val isDragging = reorderState.isDragging(item.textReplacementId)
+
+                    TextReplacementCustomRow(
+                      modifier = Modifier
+                        .then(
+                          if (isDragging) {
+                            Modifier
+                          } else {
+                            Modifier.animateBounds(
+                              lookaheadScope = this@LookaheadScope,
+                              boundsTransform = boundsTransform,
+                            )
+                          },
+                        )
+                        .reorderableItem(
+                          state = reorderState,
+                          key = item.textReplacementId,
+                        ),
+                      dragHandleModifier = Modifier.reorderableDragHandle(
+                        state = reorderState,
+                        key = item.textReplacementId,
+                        enabled = !isPersistingCustomReorder,
+                        onDragStarted = {
+                          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                        },
+                        onDragMoved = {
+                          haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                        },
+                        onDragStopped = { commit ->
+                          haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                          if (commit == null || commit.orderedKeys == serverCustomItemIds) {
+                            return@reorderableDragHandle
+                          }
+
+                          val reorderOrders = calculateCustomReorderOrdersFromOrderedKeys(
+                            items = serverCustomItems,
+                            orderedKeys = commit.orderedKeys,
+                            movedKey = commit.movedKey,
+                          ) ?: run {
+                            reorderState.resetToServerKeys(serverCustomItemIds)
+                            return@reorderableDragHandle
+                          }
+
+                          isPersistingCustomReorder = true
+                          scope.launch {
+                            val success = model.moveCustom(
+                              textReplacementId = commit.movedKey,
+                              lowerOrder = reorderOrders.lowerOrder,
+                              upperOrder = reorderOrders.upperOrder,
+                            )
+                            isPersistingCustomReorder = false
+
+                            if (!success) {
+                              reorderState.resetToServerKeys(serverCustomItemIds)
+                            }
+                          }
+                        },
+                      ),
+                      index = index,
+                      item = item,
+                      isDragging = isDragging,
+                      isFirst = index == 0,
+                      isLast = index == displayCustomItems.lastIndex,
+                      onToggleChange = {
+                        scope.launch {
+                          model.toggleCustom(item)
+                        }
+                      },
+                      onEditClick = {
+                        openForm(item)
+                      },
+                    )
                   }
                 }
-              },
-            ),
-            index = index,
-            item = item,
-            isDragging = reorderState.isDragging(item.textReplacementId),
-            isFirst = index == 0,
-            isLast = index == displayCustomItems.lastIndex,
-            onToggleChange = {
-              scope.launch {
-                model.toggleCustom(item)
               }
-            },
-            onEditClick = {
-              openForm(item)
-            },
-          )
+            }
+          }
         }
+
+        Box(modifier = Modifier.height(72.dp))
       }
-    }
-  })
+    },
+  )
 }
 
 @Composable

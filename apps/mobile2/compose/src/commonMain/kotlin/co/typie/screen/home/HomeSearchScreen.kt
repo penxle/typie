@@ -13,19 +13,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ime
-import co.typie.ext.navigationBars
 import co.typie.ext.plus
+import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
 import co.typie.route.Route
@@ -38,6 +32,7 @@ import co.typie.ui.theme.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
 
 private val SearchScreenTopFadeHeight = 24.dp
+private val SearchScreenHeaderHeight = HomeSearchFieldDefaults.Height + 4.dp
 
 @Composable
 fun HomeSearchScreen() {
@@ -45,9 +40,6 @@ fun HomeSearchScreen() {
   val model = koinViewModel<SearchViewModel>()
   val scrollState = rememberScrollState("home-search")
   val bottomBarState = LocalBottomBarState.current
-  var headerHeightPx by remember { mutableIntStateOf(0) }
-  val density = LocalDensity.current
-  val headerHeight = with(density) { headerHeightPx.toDp() }
 
   LaunchedEffect(Unit) {
     bottomBarState.visible = false
@@ -66,7 +58,7 @@ fun HomeSearchScreen() {
     body = { contentPadding ->
       val bottomInset = maxOf(
         WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
-        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
       )
 
       Box(Modifier.fillMaxSize()) {
@@ -78,7 +70,7 @@ fun HomeSearchScreen() {
         ) {
           SearchContent(
             searchViewModel = model,
-            headerHeight = headerHeight,
+            headerHeight = SearchScreenHeaderHeight,
             onDocumentClick = { slug, query ->
               model.saveRecentSearch(query)
               nav.navigate(Route.Editor(slug))
@@ -95,7 +87,6 @@ fun HomeSearchScreen() {
             .align(Alignment.TopCenter)
             .fillMaxWidth()
             .padding(top = contentPadding.calculateTopPadding()),
-          onHeightChanged = { headerHeightPx = it },
         ) {
           SearchHeader(
             animateOnEnter = model.shouldAnimateHeaderOnEnter,
@@ -114,7 +105,6 @@ fun HomeSearchScreen() {
 @Composable
 private fun SearchHeaderOverlay(
   modifier: Modifier = Modifier,
-  onHeightChanged: (Int) -> Unit,
   header: @Composable () -> Unit,
 ) {
   Box(
@@ -123,8 +113,7 @@ private fun SearchHeaderOverlay(
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .background(AppTheme.colors.surfaceBase)
-        .onSizeChanged { onHeightChanged(it.height) },
+        .background(AppTheme.colors.surfaceBase),
     ) {
       header()
     }

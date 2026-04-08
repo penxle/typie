@@ -30,8 +30,8 @@ import co.typie.datetime.timeAgo
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.horizontalScroll
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
+import co.typie.ext.safeBottomPadding
 import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.graphql.HomeScreen_Query
@@ -90,7 +90,7 @@ fun HomeScreen() {
           .fillMaxSize()
           .verticalScroll(scrollState)
           .padding(contentPadding)
-          .navigationBarsPadding()
+          .safeBottomPadding()
       ) {
         HomeFramedSection {
           Skeleton.Keep {

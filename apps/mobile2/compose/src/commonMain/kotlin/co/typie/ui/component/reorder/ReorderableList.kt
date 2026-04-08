@@ -2,7 +2,7 @@ package co.typie.ui.component.reorder
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -40,7 +40,7 @@ private data class ActiveReorderDrag<K : Any>(
 )
 
 @Stable
-class ReorderableLazyColumnState<K : Any> internal constructor(
+class ReorderableListState<K : Any> internal constructor(
   internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScrollState,
 ) {
   private val itemBounds = mutableStateMapOf<K, Rect>()
@@ -179,13 +179,17 @@ class ReorderableLazyColumnState<K : Any> internal constructor(
 }
 
 @Composable
-fun <K : Any> rememberReorderableLazyColumnState(
+fun <K : Any> rememberReorderableListState(
   keys: List<K>,
-  lazyListState: LazyListState,
-): ReorderableLazyColumnState<K> {
-  val edgeAutoScrollState = rememberEdgeAutoScrollState(verticalScrollableState = lazyListState)
+  verticalScrollableState: ScrollableState? = null,
+  horizontalScrollableState: ScrollableState? = null,
+): ReorderableListState<K> {
+  val edgeAutoScrollState = rememberEdgeAutoScrollState(
+    verticalScrollableState = verticalScrollableState,
+    horizontalScrollableState = horizontalScrollableState,
+  )
   val state = remember(edgeAutoScrollState) {
-    ReorderableLazyColumnState<K>(edgeAutoScrollState = edgeAutoScrollState)
+    ReorderableListState<K>(edgeAutoScrollState = edgeAutoScrollState)
   }
 
   SideEffect {
@@ -195,8 +199,8 @@ fun <K : Any> rememberReorderableLazyColumnState(
   return state
 }
 
-fun Modifier.reorderableLazyColumnContainer(
-  state: ReorderableLazyColumnState<*>,
+fun Modifier.reorderableListContainer(
+  state: ReorderableListState<*>,
 ): Modifier {
   return edgeAutoScroll(
     state = state.edgeAutoScrollState,
@@ -205,7 +209,7 @@ fun Modifier.reorderableLazyColumnContainer(
 }
 
 fun <K : Any> Modifier.reorderableItem(
-  state: ReorderableLazyColumnState<K>,
+  state: ReorderableListState<K>,
   key: K,
 ): Modifier = composed {
   DisposableEffect(state, key) {
@@ -224,7 +228,7 @@ fun <K : Any> Modifier.reorderableItem(
 }
 
 fun <K : Any> Modifier.reorderableDragHandle(
-  state: ReorderableLazyColumnState<K>,
+  state: ReorderableListState<K>,
   key: K,
   enabled: Boolean = true,
   onDragStarted: () -> Unit = {},

@@ -32,8 +32,8 @@ import co.typie.auth.sso.activityContext
 import co.typie.di.Platform
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
+import co.typie.ext.safeBottomPadding
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.ui.component.Button
@@ -63,7 +63,7 @@ fun LoginScreen() {
       modifier = Modifier
         .fillMaxSize()
         .padding(contentPadding)
-        .navigationBarsPadding(),
+        .safeBottomPadding(),
     ) {
       Column(
         modifier = Modifier.weight(1f).fillMaxWidth(),

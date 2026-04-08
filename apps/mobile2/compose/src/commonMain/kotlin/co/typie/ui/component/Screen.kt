@@ -28,9 +28,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ime
-import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
+import co.typie.ext.safeDrawing
 import co.typie.ext.statusBars
 import co.typie.ext.verticalScroll
 import co.typie.ui.component.topbar.LocalTopBarState
@@ -133,9 +133,9 @@ fun Screen(
     val bottomInset = when {
       imeAware -> maxOf(
         WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
-        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
       )
-      bottomBar == null -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+      bottomBar == null -> WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
       else -> 0.dp
     }
 

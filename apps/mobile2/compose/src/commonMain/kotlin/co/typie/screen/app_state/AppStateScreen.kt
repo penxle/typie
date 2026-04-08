@@ -20,7 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import co.typie.datetime.format
-import co.typie.ext.navigationBarsPadding
+import co.typie.ext.safeBottomPadding
 import co.typie.generated.resources.Res
 import co.typie.icons.Lucide
 import co.typie.ui.component.Button
@@ -147,7 +147,7 @@ private fun AppStateScaffold(
       modifier = Modifier
         .fillMaxSize()
         .padding(contentPadding)
-        .navigationBarsPadding(),
+        .safeBottomPadding(),
     ) {
       Column(
         modifier = Modifier

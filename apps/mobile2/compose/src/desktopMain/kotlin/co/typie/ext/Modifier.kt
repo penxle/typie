@@ -95,7 +95,7 @@ actual fun Modifier.desktopScrollBehavior(
 
   val overscrollState = rememberElasticOverscrollState()
 
-  Modifier
+  this
     .dragScroll(
       state = state,
       axis = orientation.toElasticAxis(),
@@ -115,7 +115,7 @@ internal actual fun Modifier.desktopDragScroll(
     return@composed this
   }
 
-  Modifier.dragScroll(
+  this.dragScroll(
     state = state,
     axis = orientation.toElasticAxis(),
     overscrollState = null,
