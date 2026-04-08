@@ -31,6 +31,9 @@ jobs:
           node-version: 25
           cache: 'pnpm'
 
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Setup Rust
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
