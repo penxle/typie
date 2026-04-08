@@ -27,6 +27,7 @@ import { pubsub } from '#/pubsub.ts';
 import { copyEntityRecursive, generateFractionalOrder } from '#/utils/index.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
 import { assertPlanRule } from '#/utils/plan.ts';
+import { enqueueSearchSyncForEntityIds } from '#/utils/search-index.ts';
 import { builder } from '../builder.ts';
 import {
   Entity,
@@ -965,7 +966,7 @@ builder.mutationFields((t) => ({
         throw new TypieError({ code: 'site_mismatch' });
       }
 
-      return await db.transaction(async (tx) => {
+      const deletedEntities = await db.transaction(async (tx) => {
         const deletedEntities = await tx
           .update(Entities)
           .set({
@@ -1017,6 +1018,10 @@ builder.mutationFields((t) => ({
 
         return deletedEntities;
       });
+
+      await enqueueSearchSyncForEntityIds(deletedEntities.map(({ id }) => id));
+
+      return deletedEntities;
     },
   }),
 
@@ -1185,7 +1190,7 @@ builder.mutationFields((t) => ({
           ? -entity.depth
           : 0;
 
-      return await db.transaction(async (tx) => {
+      const { recoveredEntity, recoveredEntityIds } = await db.transaction(async (tx) => {
         if (shouldReattachToRoot) {
           await tx
             .update(Entities)
@@ -1241,8 +1246,12 @@ builder.mutationFields((t) => ({
         }
         pubsub.publish('user:usage:update', ctx.session.userId, null);
 
-        return recoveredEntity;
+        return { recoveredEntity, recoveredEntityIds };
       });
+
+      await enqueueSearchSyncForEntityIds(recoveredEntityIds);
+
+      return recoveredEntity;
     },
   }),
 
@@ -1276,6 +1285,8 @@ builder.mutationFields((t) => ({
           })
           .where(inArray(Entities.id, input.entityIds));
       });
+
+      await enqueueSearchSyncForEntityIds(input.entityIds);
 
       pubsub.publish('site:update', siteId, { scope: 'site' });
 

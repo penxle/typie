@@ -4,6 +4,7 @@ import { match } from 'ts-pattern';
 import { TableCode, validateDbId } from '#/db/index.ts';
 import { elasticsearch, esIndex } from '#/search.ts';
 import { assertSitePermission } from '#/utils/permission.ts';
+import { filterVisibleSearchHits } from '#/utils/search-index.ts';
 import { decompose } from '#/utils/text.ts';
 import { builder } from '../builder.ts';
 import { Document, Folder } from '../objects.ts';
@@ -124,7 +125,16 @@ builder.queryFields((t) => ({
       const documentCount = buckets.find((b) => b.key === esIndex.documents)?.doc_count ?? 0;
       const folderCount = buckets.find((b) => b.key === esIndex.folders)?.doc_count ?? 0;
 
-      const hits = result.hits.hits.map((hit) => {
+      const visibleHits = await filterVisibleSearchHits(
+        result.hits.hits.map((hit) => ({
+          kind: hit._index === esIndex.documents ? 'document' : 'folder',
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          id: hit._id!,
+          payload: hit,
+        })),
+      );
+
+      const hits = visibleHits.map(({ payload: hit }) => {
         if (hit._index === esIndex.documents) {
           return {
             type: SearchHitType.DOCUMENT,
