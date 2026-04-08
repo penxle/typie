@@ -112,7 +112,10 @@ impl<'a> Context<'a> {
         };
 
         if let Some(block) = self.state.doc.node(start_id) {
-            if block.spec().map_or(false, |s| s.is_textblock()) {
+            if block
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.state.doc.schema()))
+            {
                 return true;
             }
         }
@@ -132,7 +135,10 @@ impl<'a> Context<'a> {
                 break;
             }
             if let Some(block) = self.state.doc.node(node_id) {
-                if block.spec().map_or(false, |s| s.is_textblock()) {
+                if block
+                    .spec()
+                    .map_or(false, |s| s.is_textblock(self.state.doc.schema()))
+                {
                     return true;
                 }
             }
@@ -148,7 +154,9 @@ impl<'a> Context<'a> {
         }
 
         if let Some(container) = self.state.doc.node(selection.head.node_id) {
-            return container.spec().map_or(false, |s| s.is_textblock());
+            return container
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.state.doc.schema()));
         }
 
         false
@@ -172,10 +180,10 @@ mod tests {
 
     #[test]
     fn test_when_logic() {
-        let doc = Rc::new(Doc::default());
+        let doc = Rc::new(Doc::new());
         let pos = Position::new(NodeId::ROOT, 0, Affinity::Downstream);
         let state = State::new(doc.clone(), Selection::collapsed(pos));
-        let undo_manager = UndoManager::new(&doc.loro());
+        let undo_manager = UndoManager::new(&doc.loro_doc());
         let ctx = create_dummy_context(&state, &undo_manager);
 
         assert_eq!(When::True.evaluate(&ctx), true);

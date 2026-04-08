@@ -171,6 +171,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );

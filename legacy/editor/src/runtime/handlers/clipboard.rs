@@ -2,7 +2,7 @@ use crate::model::Fragment;
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_paste_html(&mut self, html: String, text: String) -> Vec<Effect> {
+    pub(crate) fn handle_paste_html(&mut self, html: String, text: String) -> Vec<Effect> {
         if let Ok(frag) = Fragment::from_html(&html) {
             if !frag.is_empty() {
                 return self.transact(|tr| {
@@ -20,7 +20,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_paste_html_as_text(&mut self, html: String, text: String) -> Vec<Effect> {
+    pub(crate) fn handle_paste_html_as_text(&mut self, html: String, text: String) -> Vec<Effect> {
         let plain = Fragment::from_html(&html)
             .ok()
             .filter(|f| !f.is_empty())
@@ -47,7 +47,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_paste_text(&mut self, text: String) -> Vec<Effect> {
+    pub(crate) fn handle_paste_text(&mut self, text: String) -> Vec<Effect> {
         self.transact(|tr| {
             tr.delete_selection()?;
             tr.normalize()?;
@@ -55,7 +55,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_repaste_as_text(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_repaste_as_text(&mut self) -> Vec<Effect> {
         let Some((selection, text, styles, paragraph_attrs)) = self.repaste_text.take() else {
             return vec![];
         };

@@ -1,4 +1,5 @@
 use crate::model::NodeId;
+use crate::schema::Schema;
 use loro::{LoroDoc, LoroList, LoroMap};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -7,14 +8,16 @@ use std::rc::Rc;
 #[derive(Debug)]
 pub struct DocInner {
     pub loro: LoroDoc,
+    pub schema: Rc<Schema>,
     children_cache: RefCell<FxHashMap<NodeId, Rc<Vec<NodeId>>>>,
     reachable: RefCell<Option<FxHashSet<NodeId>>>,
 }
 
 impl DocInner {
-    pub fn new(loro: LoroDoc) -> Self {
+    pub fn new(loro: LoroDoc, schema: Rc<Schema>) -> Self {
         Self {
             loro,
+            schema,
             children_cache: RefCell::new(FxHashMap::default()),
             reachable: RefCell::new(None),
         }

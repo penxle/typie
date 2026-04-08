@@ -14,7 +14,7 @@ impl PressContext {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum PointerMode {
+pub(crate) enum PointerMode {
     Idle,
     Pressed {
         page_idx: usize,
@@ -52,8 +52,8 @@ impl Default for PointerMode {
 
 #[derive(Default)]
 pub struct PointerState {
-    pub mode: PointerMode,
-    pub drop_target: Option<Position>,
+    pub(crate) mode: PointerMode,
+    pub(crate) drop_target: Option<Position>,
 }
 
 impl PointerState {

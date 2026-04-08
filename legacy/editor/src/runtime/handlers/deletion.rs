@@ -4,7 +4,7 @@ use crate::runtime::{Effect, Runtime};
 use crate::state::Selection;
 
 impl Runtime {
-    pub fn handle_delete_backward(&mut self, length: Option<usize>) -> Vec<Effect> {
+    pub(crate) fn handle_delete_backward(&mut self, length: Option<usize>) -> Vec<Effect> {
         let count = length.unwrap_or(1);
 
         if count > 1 {
@@ -45,7 +45,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_delete_forward(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_delete_forward(&mut self) -> Vec<Effect> {
         self.transact(|tr| {
             if tr.delete_selection()? {
                 return Ok(true);
@@ -60,7 +60,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_delete_word_backward(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_delete_word_backward(&mut self) -> Vec<Effect> {
         if !self.state.selection.is_collapsed() {
             return self.transact(|tr| tr.delete_selection());
         }
@@ -94,7 +94,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_delete_word_forward(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_delete_word_forward(&mut self) -> Vec<Effect> {
         if !self.state.selection.is_collapsed() {
             return self.transact(|tr| tr.delete_selection());
         }
@@ -128,7 +128,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_delete_sentence_backward(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_delete_sentence_backward(&mut self) -> Vec<Effect> {
         if !self.state.selection.is_collapsed() {
             return self.transact(|tr| tr.delete_selection());
         }
@@ -162,7 +162,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_delete_to_line_start(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_delete_to_line_start(&mut self) -> Vec<Effect> {
         if !self.state.selection.is_collapsed() {
             return self.transact(|tr| tr.delete_selection());
         }
@@ -182,7 +182,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_delete_node(&mut self, node_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_delete_node(&mut self, node_id: String) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };
@@ -190,7 +190,10 @@ impl Runtime {
         let is_external = self
             .doc()
             .node(node_id)
-            .map(|n| n.node().map_or(false, |node| node.is_external()))
+            .map(|n| {
+                n.node()
+                    .map_or(false, |node| node.is_external(self.doc().schema()))
+            })
             .unwrap_or(false);
 
         self.transact(move |tr| {

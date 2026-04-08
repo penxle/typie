@@ -9,37 +9,16 @@ pub use spec::*;
 
 use crate::model::{AnnotationType, NodeType, StyleType};
 use rustc_hash::FxHashMap;
-use std::sync::LazyLock;
 
-static INNER: LazyLock<SchemaInner> = LazyLock::new(SchemaInner::default);
-
-pub struct Schema;
-
-impl Schema {
-    pub fn node_spec(node_type: NodeType) -> &'static NodeSpec {
-        INNER
-            .nodes
-            .get(&node_type)
-            .unwrap_or_else(|| panic!("Unknown node type: {:?}", node_type))
-    }
-
-    pub fn annotation_spec(annotation_type: AnnotationType) -> &'static AnnotationSpec {
-        INNER
-            .annotations
-            .get(&annotation_type)
-            .unwrap_or_else(|| panic!("Unknown annotation type: {:?}", annotation_type))
-    }
-}
-
-#[derive(Debug)]
-struct SchemaInner {
+#[derive(Debug, Clone)]
+pub struct Schema {
     nodes: FxHashMap<NodeType, NodeSpec>,
     styles: FxHashMap<StyleType, StyleSpec>,
     annotations: FxHashMap<AnnotationType, AnnotationSpec>,
 }
 
-impl SchemaInner {
-    fn new() -> Self {
+impl Schema {
+    pub fn new() -> Self {
         Self {
             nodes: FxHashMap::default(),
             styles: FxHashMap::default(),
@@ -47,7 +26,13 @@ impl SchemaInner {
         }
     }
 
-    fn add_node(&mut self, node_type: NodeType, spec: NodeSpec) {
+    pub fn add_node(&mut self, node_type: NodeType, spec: NodeSpec) {
+        assert!(
+            !spec.name.is_empty(),
+            "Node {:?} must define NodeSpec.name",
+            node_type
+        );
+
         if let Some(item_type) = spec.promote_item_type_on_delete {
             assert!(
                 spec.content.repeated_single_type() == Some(item_type),
@@ -66,18 +51,30 @@ impl SchemaInner {
         self.nodes.insert(node_type, spec);
     }
 
-    fn add_style(&mut self, style_type: StyleType, spec: StyleSpec) {
+    pub fn add_style(&mut self, style_type: StyleType, spec: StyleSpec) {
         self.styles.insert(style_type, spec);
     }
 
-    fn add_annotation(&mut self, annotation_type: AnnotationType, spec: AnnotationSpec) {
+    pub fn add_annotation(&mut self, annotation_type: AnnotationType, spec: AnnotationSpec) {
         self.annotations.insert(annotation_type, spec);
+    }
+
+    pub fn node_spec(&self, node_type: NodeType) -> &NodeSpec {
+        self.nodes
+            .get(&node_type)
+            .unwrap_or_else(|| panic!("Unknown node type: {:?}", node_type))
+    }
+
+    pub fn annotation_spec(&self, annotation_type: AnnotationType) -> &AnnotationSpec {
+        self.annotations
+            .get(&annotation_type)
+            .unwrap_or_else(|| panic!("Unknown annotation type: {:?}", annotation_type))
     }
 }
 
-impl Default for SchemaInner {
+impl Default for Schema {
     fn default() -> Self {
-        let mut schema = SchemaInner::new();
+        let mut schema = Schema::new();
 
         schema.add_node(
             NodeType::Root,
@@ -311,63 +308,54 @@ impl Default for SchemaInner {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::FontFamily,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::FontSize,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::FontWeight,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::Bold,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::Italic,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::LetterSpacing,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::Strikethrough,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::TextColor,
             StyleSpec {
                 expand: Expand::After,
             },
         );
-
         schema.add_style(
             StyleType::Underline,
             StyleSpec {
@@ -376,7 +364,6 @@ impl Default for SchemaInner {
         );
 
         schema.add_annotation(AnnotationType::Link, AnnotationSpec { overlap: false });
-
         schema.add_annotation(AnnotationType::Ruby, AnnotationSpec { overlap: false });
 
         schema

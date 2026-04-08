@@ -11,6 +11,7 @@ pub struct LayoutContext<'a> {
     pub settings: &'a DocumentSettings,
     pub default_attrs: &'a DefaultAttrs,
     pub decorations: &'a Decorations,
+    pub scale_factor: f64,
     pub view_states: &'a ViewStates,
     cache: &'a RefCell<LayoutCache>,
     trace: Option<&'a RefCell<LayoutPassRecorder>>,
@@ -22,6 +23,7 @@ impl<'a> LayoutContext<'a> {
         settings: &'a DocumentSettings,
         default_attrs: &'a DefaultAttrs,
         decorations: &'a Decorations,
+        scale_factor: f64,
         view_states: &'a ViewStates,
         cache: &'a RefCell<LayoutCache>,
     ) -> Self {
@@ -30,6 +32,7 @@ impl<'a> LayoutContext<'a> {
             settings,
             default_attrs,
             decorations,
+            scale_factor,
             view_states,
             cache,
             None,
@@ -41,6 +44,7 @@ impl<'a> LayoutContext<'a> {
         settings: &'a DocumentSettings,
         default_attrs: &'a DefaultAttrs,
         decorations: &'a Decorations,
+        scale_factor: f64,
         view_states: &'a ViewStates,
         cache: &'a RefCell<LayoutCache>,
         trace: Option<&'a RefCell<LayoutPassRecorder>>,
@@ -50,6 +54,7 @@ impl<'a> LayoutContext<'a> {
             settings,
             default_attrs,
             decorations,
+            scale_factor,
             view_states,
             cache,
             trace,
@@ -113,6 +118,7 @@ impl<'a> LayoutContext<'a> {
             settings: self.settings,
             default_attrs: self.default_attrs,
             decorations: self.decorations,
+            scale_factor: self.scale_factor,
             view_states: self.view_states,
             cache: self.cache,
             trace: self.trace,
@@ -232,6 +238,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -263,6 +270,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations_with_preedit,
+            1.0,
             &view_states,
             &cache,
         );
@@ -361,6 +369,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -401,6 +410,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -437,6 +447,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );

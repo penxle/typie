@@ -1,10 +1,13 @@
 use crate::model::attr::Attr;
-use crate::model::tree::{CASCADE_ATTRS_KEY, DocInner, NodeMut, REMARKS_KEY};
+use crate::model::tree::{DocInner, NodeMut};
 use crate::model::*;
 use crate::schema::{NodeSpec, Schema};
 use rustc_hash::FxHashSet;
 use std::cell::OnceCell;
 use std::rc::Rc;
+
+pub const CASCADE_ATTRS_KEY: &str = "cascade_attrs";
+pub const REMARKS_KEY: &str = "remarks";
 
 #[derive(Debug)]
 pub struct NodeRef<'a> {
@@ -225,8 +228,8 @@ impl<'a> NodeRef<'a> {
         path
     }
 
-    pub fn spec(&self) -> Option<&'static NodeSpec> {
-        Some(Schema::node_spec(self.node_type()?))
+    pub fn spec(&self) -> Option<&NodeSpec> {
+        Some(self.inner.schema.node_spec(self.node_type()?))
     }
 
     pub fn is_inline(&self) -> bool {
@@ -297,6 +300,10 @@ impl<'a> NodeRef<'a> {
         }
         remarks.sort_by_key(|r| r.created_at);
         remarks
+    }
+
+    pub fn schema(&self) -> &Schema {
+        &self.inner.schema
     }
 
     pub fn as_mut(&self) -> NodeMut<'_> {

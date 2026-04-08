@@ -392,6 +392,7 @@ impl BlockquoteNode {
                 ctx.settings,
                 ctx.default_attrs,
                 ctx.decorations,
+                ctx.scale_factor,
                 ctx.view_states,
                 &measure_cache,
             );
@@ -421,6 +422,7 @@ impl BlockquoteNode {
                 ctx.settings,
                 ctx.default_attrs,
                 ctx.decorations,
+                ctx.scale_factor,
                 ctx.view_states,
                 &final_cache,
             );
@@ -555,6 +557,30 @@ mod tests {
         BlockquoteNode::layout_visual_x_bounds(content.node.as_ref(), content.position.x)
     }
 
+    fn first_message_content_line_ranges(layout: &LayoutNode) -> Vec<(usize, usize)> {
+        let bubble = get_message_sent_bubble(layout);
+        let Some(content_nodes) = bubble.children.as_ref() else {
+            return Vec::new();
+        };
+        let Some(first_content) = content_nodes.first() else {
+            return Vec::new();
+        };
+        let Some(lines) = first_content.node.children.as_ref() else {
+            return Vec::new();
+        };
+
+        lines
+            .iter()
+            .filter_map(|line| match line.node.element.as_ref() {
+                Some(Element::Line(line_element)) => Some((
+                    line_element.metric.start_offset,
+                    line_element.metric.end_offset,
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn message_sent_right_align_keeps_compact_width_without_overflow() {
         let mut bq = id!();
@@ -583,6 +609,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -631,6 +658,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -679,6 +707,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -733,6 +762,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -819,6 +849,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -874,6 +905,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -925,6 +957,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -978,5 +1011,59 @@ mod tests {
         }
 
         assert!(found_rect, "selection rect should be generated");
+    }
+
+    #[test]
+    fn message_sent_line_breaks_are_stable_across_scale_factor() {
+        let mut bq = id!();
+        let mut p = id!();
+
+        let state = state! {
+            doc {
+                @bq blockquote(variant: BlockquoteVariant::MessageSent,) {
+                    @p paragraph(align: TextAlign::Left,) {
+                        text { "The quick brown fox jumps over the lazy dog. The quick brown fox." }
+                    }
+                }
+            }
+            selection { (p, 0) }
+        };
+
+        let doc = &state.doc;
+        let settings = doc.settings();
+        let default_attrs = DefaultAttrs::default();
+        let decorations = Decorations::default();
+        let constraints = BoxConstraints::new(0.0, 188.0, 0.0, f32::INFINITY);
+
+        let layout_for_scale = |scale: f64| {
+            let blockquote_ref = doc.node(bq).expect("blockquote ref");
+            let cache = RefCell::new(LayoutCache::new());
+            let view_states = ViewStates::default();
+            let ctx = LayoutContext::new(
+                &blockquote_ref,
+                &settings,
+                &default_attrs,
+                &decorations,
+                scale,
+                &view_states,
+                &cache,
+            );
+            let Some(Node::Blockquote(blockquote)) = blockquote_ref.node() else {
+                panic!("blockquote node expected");
+            };
+            blockquote.layout(&ctx, constraints)
+        };
+
+        let ranges_scale_1 = first_message_content_line_ranges(&layout_for_scale(1.0));
+        let ranges_scale_1_1 = first_message_content_line_ranges(&layout_for_scale(1.1));
+
+        assert!(
+            !ranges_scale_1.is_empty() && !ranges_scale_1_1.is_empty(),
+            "expected non-empty line ranges"
+        );
+        assert_eq!(
+            ranges_scale_1, ranges_scale_1_1,
+            "message variant line breaks should not change with scale factor"
+        );
     }
 }

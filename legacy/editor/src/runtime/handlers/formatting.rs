@@ -17,11 +17,11 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_toggle_bold(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_bold(&mut self) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.toggle_bold_style())
     }
 
-    pub fn handle_toggle_style(&mut self, style: Style) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_style(&mut self, style: Style) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| match &style {
             Style::Bold(_) | Style::Italic(_) | Style::Strikethrough(_) | Style::Underline(_) => {
                 tr.toggle_style(style)
@@ -30,55 +30,61 @@ impl Runtime {
         })
     }
 
-    pub fn handle_toggle_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.toggle_blockquote(variant))
     }
 
-    pub fn handle_set_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
+    pub(crate) fn handle_set_blockquote(&mut self, variant: BlockquoteVariant) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.set_blockquote(variant))
     }
 
-    pub fn handle_toggle_callout(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_callout(&mut self) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.toggle_callout())
     }
 
-    pub fn handle_toggle_bullet_list(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_bullet_list(&mut self) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.toggle_bullet_list())
     }
 
-    pub fn handle_toggle_ordered_list(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_ordered_list(&mut self) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.toggle_ordered_list())
     }
 
-    pub fn handle_set_line_height(&mut self, height: u32) -> Vec<Effect> {
+    pub(crate) fn handle_set_line_height(&mut self, height: u32) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.set_line_height(height))
     }
 
-    pub fn handle_set_text_align(&mut self, align: TextAlign) -> Vec<Effect> {
+    pub(crate) fn handle_set_text_align(&mut self, align: TextAlign) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.set_text_align(align))
     }
 
-    pub fn handle_set_block_gap(&mut self, gap: u32) -> Vec<Effect> {
+    pub(crate) fn handle_set_block_gap(&mut self, gap: u32) -> Vec<Effect> {
         self.transact(|tr| tr.set_block_gap(gap))
     }
 
-    pub fn handle_set_paragraph_indent(&mut self, indent: u32) -> Vec<Effect> {
+    pub(crate) fn handle_set_paragraph_indent(&mut self, indent: u32) -> Vec<Effect> {
         self.transact(|tr| tr.set_paragraph_indent(indent))
     }
 
-    pub fn handle_set_default_attrs(&mut self, attrs: DefaultAttrs) -> Vec<Effect> {
+    pub(crate) fn handle_set_default_attrs(&mut self, attrs: DefaultAttrs) -> Vec<Effect> {
         self.transact(|tr| tr.set_default_attrs(attrs))
     }
 
-    pub fn handle_insert_horizontal_rule(&mut self, variant: HorizontalRuleVariant) -> Vec<Effect> {
+    pub(crate) fn handle_insert_horizontal_rule(
+        &mut self,
+        variant: HorizontalRuleVariant,
+    ) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.insert_horizontal_rule(variant))
     }
 
-    pub fn handle_set_horizontal_rule(&mut self, variant: HorizontalRuleVariant) -> Vec<Effect> {
+    pub(crate) fn handle_set_horizontal_rule(
+        &mut self,
+        variant: HorizontalRuleVariant,
+    ) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.set_horizontal_rule(variant))
     }
 
-    pub fn handle_clear_formatting(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_clear_formatting(&mut self) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| {
             let selection = tr.selection().clone();
             if selection.is_collapsed() {
@@ -108,7 +114,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_add_annotation(&mut self, annotation: Annotation) -> Vec<Effect> {
+    pub(crate) fn handle_add_annotation(&mut self, annotation: Annotation) -> Vec<Effect> {
         self.transact(|tr| {
             let selection = tr.selection().clone();
             if selection.is_collapsed() {
@@ -119,20 +125,23 @@ impl Runtime {
         })
     }
 
-    pub fn handle_update_annotation(&mut self, annotation: Annotation) -> Vec<Effect> {
+    pub(crate) fn handle_update_annotation(&mut self, annotation: Annotation) -> Vec<Effect> {
         let ann_type = annotation.as_type();
         self.transact(|tr| tr.update_annotation(ann_type, annotation))
     }
 
-    pub fn handle_remove_annotation(&mut self, annotation_type: AnnotationType) -> Vec<Effect> {
+    pub(crate) fn handle_remove_annotation(
+        &mut self,
+        annotation_type: AnnotationType,
+    ) -> Vec<Effect> {
         self.transact(|tr| tr.remove_annotation(annotation_type))
     }
 
-    pub fn handle_indent(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_indent(&mut self) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.sink_list_item())
     }
 
-    pub fn handle_outdent(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_outdent(&mut self) -> Vec<Effect> {
         self.transact_after_commit_preedit_if_present(|tr| tr.lift_list_item())
     }
 }

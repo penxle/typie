@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_empty_doc() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
 
         let json = snapshot_to_json(&snapshot).unwrap();
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_doc_with_content() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         let para_id = root
             .as_mut()
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_doc_with_styles() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         let para_id = root
             .as_mut()
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_json_serialization() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let snapshot = doc.export(DocExportMode::Snapshot).unwrap();
 
         let json = snapshot_to_json(&snapshot).unwrap();
@@ -443,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_doc_with_remarks() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         let para_id = root
             .as_mut()
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn test_validate_doc_with_trailing_paragraph() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         root.as_mut()
             .insert_child(0, Node::Paragraph(ParagraphNode::default()))
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn test_validate_doc_with_content() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         let para_id = root
             .as_mut()
@@ -525,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_validate_roundtripped_doc() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
         let para_id = root
             .as_mut()

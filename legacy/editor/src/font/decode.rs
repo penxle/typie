@@ -2,7 +2,7 @@ use super::{TPFT_HEADER_SIZE, TPFT_MAGIC, TPFT_VERSION};
 use anyhow::Context;
 use std::io::Read;
 
-pub fn decode_tpft(data: &[u8]) -> anyhow::Result<Vec<u8>> {
+pub(crate) fn decode_tpft(data: &[u8]) -> anyhow::Result<Vec<u8>> {
     anyhow::ensure!(data.len() >= TPFT_HEADER_SIZE, "TPFT data too short");
     anyhow::ensure!(&data[0..4] == TPFT_MAGIC, "invalid TPFT magic");
     let version = u16::from_be_bytes(data[4..6].try_into().unwrap());

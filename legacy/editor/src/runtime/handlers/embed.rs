@@ -2,11 +2,11 @@ use crate::model::{EmbedNode, Node, NodeId};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_insert_embed(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_insert_embed(&mut self) -> Vec<Effect> {
         self.transact(|tr| tr.insert_node(Node::Embed(EmbedNode { id: None })))
     }
 
-    pub fn handle_set_embed_id(&mut self, node_id: String, embed_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_set_embed_id(&mut self, node_id: String, embed_id: String) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };

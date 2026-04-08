@@ -7,19 +7,19 @@ use crate::state::{Position, Selection};
 use crate::transaction::Transaction;
 
 impl Runtime {
-    pub fn handle_drag_start(&mut self, _page_idx: usize, _x: f32, _y: f32) -> Vec<Effect> {
+    pub(crate) fn handle_drag_start(&mut self, _page_idx: usize, _x: f32, _y: f32) -> Vec<Effect> {
         self.set_pointer_mode(PointerMode::DraggingContent);
         vec![]
     }
 
-    pub fn handle_drag_enter(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_drag_enter(&mut self) -> Vec<Effect> {
         if self.pointer.mode == PointerMode::Idle {
             self.set_pointer_mode(PointerMode::DraggingExternal);
         }
         vec![]
     }
 
-    pub fn handle_drag_leave(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_drag_leave(&mut self) -> Vec<Effect> {
         if self.pointer.is_dragging_external() {
             self.set_pointer_mode(PointerMode::Idle);
         }
@@ -27,7 +27,7 @@ impl Runtime {
         vec![Effect::DropTargetChanged { target: None }]
     }
 
-    pub fn handle_drag_over(&mut self, page_idx: usize, x: f32, y: f32) -> Vec<Effect> {
+    pub(crate) fn handle_drag_over(&mut self, page_idx: usize, x: f32, y: f32) -> Vec<Effect> {
         let is_dragging = self.pointer.is_dragging_content() || self.pointer.is_dragging_external();
 
         if !is_dragging {
@@ -78,7 +78,7 @@ impl Runtime {
         Some(hit_selection.head)
     }
 
-    pub fn handle_drop(
+    pub(crate) fn handle_drop(
         &mut self,
         page_idx: usize,
         x: f32,
@@ -120,7 +120,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_drop_images(
+    pub(crate) fn handle_drop_images(
         &mut self,
         page_idx: usize,
         x: f32,
@@ -149,7 +149,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_drop_files(
+    pub(crate) fn handle_drop_files(
         &mut self,
         page_idx: usize,
         x: f32,
@@ -177,7 +177,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_drag_end(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_drag_end(&mut self) -> Vec<Effect> {
         self.handle_drag_end_internal()
     }
 

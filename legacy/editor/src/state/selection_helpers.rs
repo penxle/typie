@@ -2,7 +2,7 @@ use crate::model::{
     Annotation, AnnotationType, Attr, Doc, Node, NodeId, NodeRef, SelectionDecor, Style, StyleType,
     TextAlign,
 };
-use crate::schema::{BlockSelectionBoundaryMode, Schema};
+use crate::schema::BlockSelectionBoundaryMode;
 use crate::state::position::Position;
 use crate::state::position_helpers::{
     compare_positions, find_child_at_offset, position_in_selection,
@@ -60,7 +60,11 @@ fn extract_block_attrs(node: &NodeRef) -> Vec<BlockAttr> {
     result
 }
 
-pub fn collect_blocks_in_range(doc: &Doc, from: Position, to: Position) -> Result<Vec<NodeId>> {
+pub(crate) fn collect_blocks_in_range(
+    doc: &Doc,
+    from: Position,
+    to: Position,
+) -> Result<Vec<NodeId>> {
     let start_id = start_block_id(doc, from)?;
 
     if from == to {
@@ -124,7 +128,7 @@ pub fn collect_top_level_blocks_in_range(
     Ok(top_level_blocks)
 }
 
-pub fn start_block_id(doc: &Doc, pos: Position) -> Result<NodeId> {
+pub(crate) fn start_block_id(doc: &Doc, pos: Position) -> Result<NodeId> {
     let block_node = doc
         .node(pos.node_id)
         .context("start_block_id: Block node not found")?;
@@ -143,7 +147,7 @@ pub fn start_block_id(doc: &Doc, pos: Position) -> Result<NodeId> {
     Ok(block_node.node_id())
 }
 
-pub fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeId>> {
+pub(crate) fn end_boundary_node(doc: &Doc, pos: Position) -> Result<Option<NodeId>> {
     let block_node = doc
         .node(pos.node_id)
         .context("end_boundary_node: Block node not found")?;
@@ -393,7 +397,7 @@ fn build_block_selection_decoration(
         return Some(SelectionDecor::Block { node_id: block_id });
     }
 
-    if !spec.is_textblock() {
+    if !spec.is_textblock(doc.schema()) {
         return None;
     }
 
@@ -532,7 +536,9 @@ fn add_ancestor_decorations(
         }
 
         if end_offset > start_offset {
-            let is_textblock = ancestor.spec().map_or(false, |s| s.is_textblock());
+            let is_textblock = ancestor
+                .spec()
+                .map_or(false, |s| s.is_textblock(doc.schema()));
 
             if !is_textblock
                 && ancestor
@@ -607,7 +613,9 @@ pub fn compute_selection_attrs(
     let mut effective_block_ids: Vec<NodeId> = block_ids.to_vec();
     if to.offset == 0 && from.node_id != to.node_id && !effective_block_ids.contains(&to.node_id) {
         if let Some(node) = doc.node(to.node_id) {
-            if node.spec().map_or(false, |s| s.is_textblock()) && block_content_len(&node) == 0 {
+            if node.spec().map_or(false, |s| s.is_textblock(doc.schema()))
+                && block_content_len(&node) == 0
+            {
                 effective_block_ids.push(to.node_id);
             }
         }
@@ -920,7 +928,7 @@ pub fn collect_text_ranges_in_selection(
             .node(block_id)
             .with_context(|| format!("Block {block_id} not found"))?;
 
-        if !block.spec().map_or(false, |s| s.is_textblock()) {
+        if !block.spec().map_or(false, |s| s.is_textblock(doc.schema())) {
             continue;
         }
 
@@ -1022,7 +1030,9 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
     let mut block_ids = FxHashSet::default();
 
     if let Ok(traversed) = collect_nodes_in_selection(doc, selection, |node| {
-        Schema::node_spec(node.as_type()).is_structural_root()
+        doc.schema()
+            .node_spec(node.as_type())
+            .is_structural_root(doc.schema())
     }) {
         block_ids.extend(traversed);
     }
@@ -1031,7 +1041,10 @@ fn collect_relevant_blocks(doc: &Doc, selection: &Selection) -> Result<Vec<NodeI
         let mut current_id = Some(node_id);
         while let Some(id) = current_id {
             if let Some(node) = doc.node(id) {
-                if node.spec().is_some_and(|spec| spec.is_structural_root()) {
+                if node
+                    .spec()
+                    .is_some_and(|spec| spec.is_structural_root(doc.schema()))
+                {
                     block_ids.insert(id);
                 }
                 current_id = node.parent().map(|parent| parent.node_id());

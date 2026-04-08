@@ -7,7 +7,7 @@ fn partial_render_does_not_overdraw_outside_dirty_rect() {
     let page1 = callout_page_with_icon(callout_id);
     let page2 = callout_page_with_icon(callout_id);
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(220.0, 160.0, 1.0);
 
@@ -15,14 +15,14 @@ fn partial_render_does_not_overdraw_outside_dirty_rect() {
     let height = renderer.height() as usize;
     let mut buffer = vec![0u8; width * height * 4];
 
-    assert!(renderer.render_into(&page1, 0, None, &[], None, &doc, &mut buffer));
+    assert!(renderer.render_to(&page1, 0, None, &[], None, &doc, &mut buffer));
     let first = rgba_at(&buffer, width, 120, 70);
     assert!(
         first[3] > 0,
         "샘플 픽셀이 투명하면 callout 배경이 실제로 그려졌는지 검증할 수 없음"
     );
 
-    assert!(renderer.render_into(&page2, 0, None, &[], None, &doc, &mut buffer));
+    assert!(renderer.render_to(&page2, 0, None, &[], None, &doc, &mut buffer));
     let second = rgba_at(&buffer, width, 120, 70);
 
     assert_eq!(
@@ -53,7 +53,7 @@ fn blockquote_block_selection_highlights_decoration() {
         Size::new(160.0, 100.0),
     );
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(160.0, 100.0, 1.0);
 
@@ -67,8 +67,8 @@ fn blockquote_block_selection_highlights_decoration() {
     let mut plain = vec![0u8; width * height * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &doc, &mut plain));
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut plain));
+    assert!(renderer.render_to(
         &page,
         0,
         None,
@@ -155,8 +155,8 @@ fn blockquote_delete_like_selection_highlights_only_left_line_area() {
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &state.doc, &mut plain));
-    assert!(renderer.render_into(&page, 0, None, &selections, None, &state.doc, &mut selected));
+    assert!(renderer.render_to(&page, 0, None, &[], None, &state.doc, &mut plain));
+    assert!(renderer.render_to(&page, 0, None, &selections, None, &state.doc, &mut selected));
 
     let plain_decoration = rgba_at(&plain, width, 50, 30);
     let selected_decoration = rgba_at(&selected, width, 50, 30);
@@ -239,8 +239,8 @@ fn blockquote_quote_delete_like_selection_highlights_only_quote_area() {
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &state.doc, &mut plain));
-    assert!(renderer.render_into(&page, 0, None, &selections, None, &state.doc, &mut selected));
+    assert!(renderer.render_to(&page, 0, None, &[], None, &state.doc, &mut plain));
+    assert!(renderer.render_to(&page, 0, None, &selections, None, &state.doc, &mut selected));
 
     let plain_quote = rgba_at(&plain, width, 62, 30);
     let selected_quote = rgba_at(&selected, width, 62, 30);
@@ -262,7 +262,7 @@ fn callout_block_selection_highlights_background() {
     let callout_id = NodeId::new();
     let page = callout_page_with_icon(callout_id);
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(220.0, 160.0, 1.0);
 
@@ -276,8 +276,8 @@ fn callout_block_selection_highlights_background() {
     let mut plain = vec![0u8; width * height * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &doc, &mut plain));
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut plain));
+    assert!(renderer.render_to(
         &page,
         0,
         None,
@@ -325,7 +325,7 @@ fn list_item_block_selection_highlights_marker_without_text_selection() {
         Size::new(120.0, 80.0),
     );
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(120.0, 80.0, 1.0);
 
@@ -339,8 +339,8 @@ fn list_item_block_selection_highlights_marker_without_text_selection() {
     let mut plain = vec![0u8; width * height * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &doc, &mut plain));
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut plain));
+    assert!(renderer.render_to(
         &page,
         0,
         None,
@@ -434,8 +434,8 @@ fn list_item_text_selection_without_front_boundary_does_not_highlight_marker() {
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &state.doc, &mut plain));
-    assert!(renderer.render_into(&page, 0, None, &selections, None, &state.doc, &mut selected));
+    assert!(renderer.render_to(&page, 0, None, &[], None, &state.doc, &mut plain));
+    assert!(renderer.render_to(&page, 0, None, &selections, None, &state.doc, &mut selected));
 
     let plain_marker_pixel = rgba_at(&plain, width, 24, 30);
     let selected_marker_pixel = rgba_at(&selected, width, 24, 30);
@@ -519,8 +519,8 @@ fn list_item_partial_block_selection_highlights_marker_not_container() {
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &state.doc, &mut plain));
-    assert!(renderer.render_into(&page, 0, None, &selections, None, &state.doc, &mut selected));
+    assert!(renderer.render_to(&page, 0, None, &[], None, &state.doc, &mut plain));
+    assert!(renderer.render_to(&page, 0, None, &selections, None, &state.doc, &mut selected));
 
     let plain_bg_pixel = rgba_at(&plain, width, 60, 30);
     let selected_bg_pixel = rgba_at(&selected, width, 60, 30);
@@ -628,8 +628,8 @@ fn list_item_reverse_start_boundary_delete_like_highlights_marker_not_container(
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &state.doc, &mut plain));
-    assert!(renderer.render_into(&page, 0, None, &selections, None, &state.doc, &mut selected));
+    assert!(renderer.render_to(&page, 0, None, &[], None, &state.doc, &mut plain));
+    assert!(renderer.render_to(&page, 0, None, &selections, None, &state.doc, &mut selected));
 
     let plain_bg_pixel = rgba_at(&plain, width, 60, 30);
     let selected_bg_pixel = rgba_at(&selected, width, 60, 30);
@@ -730,8 +730,8 @@ fn list_item_reverse_upstream_end_delete_like_highlights_marker_not_container() 
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &state.doc, &mut plain));
-    assert!(renderer.render_into(&page, 0, None, &selections, None, &state.doc, &mut selected));
+    assert!(renderer.render_to(&page, 0, None, &[], None, &state.doc, &mut plain));
+    assert!(renderer.render_to(&page, 0, None, &selections, None, &state.doc, &mut selected));
 
     let plain_bg_pixel = rgba_at(&plain, width, 60, 30);
     let selected_bg_pixel = rgba_at(&selected, width, 60, 30);
@@ -786,7 +786,7 @@ fn selection_overlay_keeps_content_on_top_in_selected_region() {
         ]),
         Size::new(200.0, 120.0),
     );
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(200.0, 120.0, 1.0);
 
@@ -800,8 +800,8 @@ fn selection_overlay_keeps_content_on_top_in_selected_region() {
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &doc, &mut plain));
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut plain));
+    assert!(renderer.render_to(
         &page,
         0,
         None,
@@ -868,7 +868,7 @@ fn selection_overlay_does_not_double_blend_selected_content() {
         ]),
         Size::new(200.0, 120.0),
     );
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(200.0, 120.0, 1.0);
 
@@ -884,23 +884,27 @@ fn selection_overlay_does_not_double_blend_selected_content() {
     let mut actual = vec![0u8; width * height * 4];
     let selections = [SelectionDecor::Block { node_id: cell_id }];
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &doc, &mut warmup));
-    assert!(renderer.render_into(&page, 0, None, &selections, None, &doc, &mut actual));
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut warmup));
+    assert!(renderer.render_to(&page, 0, None, &selections, None, &doc, &mut actual));
 
     let (background_layer, content_layer) = {
         let cache = renderer
             .page_cache
             .get(&0)
             .expect("render cache should exist after render");
-        (cache.background.clone(), cache.content.clone())
+        (
+            cache.background_pixmap.clone(),
+            cache.content_pixmap.clone(),
+        )
     };
 
     let mut expected = background_layer.data().to_vec();
-    let mut expected_buf = PixelBufMut::from_slice(
+    let mut expected_pixmap = PixmapMut::from_bytes(
         &mut expected,
         renderer.width() as u32,
         renderer.height() as u32,
-    );
+    )
+    .expect("expected frame pixmap");
     let selection_data = Renderer::collect_selection_overlay_data(
         &page,
         &selections,
@@ -908,22 +912,20 @@ fn selection_overlay_does_not_double_blend_selected_content() {
         renderer.height() as f32,
     );
 
-    {
-        let mut scratch = PixelBuf::new(renderer.width() as u32, renderer.height() as u32).unwrap();
-        backend::cpu::render_selection_overlay(
-            &mut expected_buf,
-            &mut scratch,
-            renderer.scale_factor,
-            &renderer.theme,
-            renderer.is_focused,
-            &page,
-            &selections,
-            &doc,
-            &selection_data,
-        );
-    }
-    backend::cpu::composite_cached_content_layer_clipped(
-        &mut expected_buf,
+    Renderer::render_selection_overlay(
+        &mut expected_pixmap,
+        &mut renderer.glyph_renderer,
+        &mut renderer.scratch_pixmap,
+        renderer.scale_factor,
+        &renderer.theme,
+        renderer.is_focused,
+        &page,
+        &selections,
+        &doc,
+        &selection_data,
+    );
+    Renderer::composite_cached_content_layer_clipped(
+        &mut expected_pixmap,
         &content_layer,
         &selection_data.clip_rects,
         renderer.scale_factor,
@@ -967,7 +969,7 @@ fn full_table_selection_highlights_table_border_rect() {
         Size::new(56.0, 36.0),
     );
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(56.0, 36.0, 1.0);
 
@@ -980,8 +982,8 @@ fn full_table_selection_highlights_table_border_rect() {
     let mut plain = vec![0u8; width * renderer.height() as usize * 4];
     let mut selected = plain.clone();
 
-    assert!(renderer.render_into(&page, 0, None, &[], None, &doc, &mut plain));
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut plain));
+    assert!(renderer.render_to(
         &page,
         0,
         None,
@@ -1005,24 +1007,24 @@ fn full_table_selection_highlights_table_border_rect() {
 
 #[test]
 fn selection_fast_path_avoids_double_fill_for_pixel_snapped_overlap() {
-    let mut data = vec![0u8; 32 * 32 * 4];
-    let mut frame = PixelBufMut::from_slice(&mut data, 32, 32);
-    let color = Color::from_rgba8(64, 128, 255, 77);
+    let mut pixmap = Pixmap::new(32, 32).expect("pixmap");
+    let mut frame = pixmap.as_mut();
+    let color = tiny_skia::Color::from_rgba8(64, 128, 255, 77);
 
     // 두 rect는 layout 좌표에서는 분리돼 있지만, floor/ceil 후에는 (10, 10) 픽셀에서 겹친다.
     let rects = vec![
-        LayoutRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
-        LayoutRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
+        CacheRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
+        CacheRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
     ];
 
-    backend::cpu::fill_layout_rects_src_over(&mut frame, &rects, 1.0, color);
+    Renderer::fill_layout_rects_src_over(&mut frame, &rects, 1.0, color);
 
-    let premul = color.premultiply().to_rgba8();
-    let overlap = rgba_at(&data, 32, 10, 10);
+    let premul = color.premultiply().to_color_u8();
+    let overlap = rgba_at(pixmap.data(), 32, 10, 10);
 
     assert_eq!(
         overlap,
-        [premul.r, premul.g, premul.b, premul.a],
+        [premul.red(), premul.green(), premul.blue(), premul.alpha()],
         "pixel snapping으로 rect가 겹쳐도 선택 강조는 한 번만 적용돼야 함"
     );
 }
@@ -1048,7 +1050,7 @@ fn selection_non_text_clipped_phase_avoids_double_fill_for_pixel_snapped_overlap
         Size::new(32.0, 32.0),
     );
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(32.0, 32.0, 1.0);
 
@@ -1057,40 +1059,43 @@ fn selection_non_text_clipped_phase_avoids_double_fill_for_pixel_snapped_overlap
     renderer.set_theme(Theme { colors });
 
     let mut output = vec![0u8; 32 * 32 * 4];
-    let mut buf = PixelBufMut::from_slice(&mut output, 32, 32);
+    let mut pixmap = PixmapMut::from_bytes(&mut output, 32, 32).expect("pixmap");
     let selection_data = SelectionOverlayData {
         clip_rects: vec![
-            LayoutRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
-            LayoutRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
+            CacheRect::from_xywh(10.51, 0.0, 10.0, 10.49).expect("first rect"),
+            CacheRect::from_xywh(0.0, 10.51, 10.49, 10.0).expect("second rect"),
         ],
         text_paint_rects: vec![],
         has_non_text_selection: true,
     };
 
-    {
-        let mut scratch = PixelBuf::new(32, 32).unwrap();
-        backend::cpu::render_selection_overlay(
-            &mut buf,
-            &mut scratch,
-            renderer.scale_factor,
-            &renderer.theme,
-            renderer.is_focused,
-            &page,
-            &[SelectionDecor::Block { node_id: cell_id }],
-            &doc,
-            &selection_data,
-        );
-    }
+    Renderer::render_selection_overlay(
+        &mut pixmap,
+        &mut renderer.glyph_renderer,
+        &mut renderer.scratch_pixmap,
+        renderer.scale_factor,
+        &renderer.theme,
+        renderer.is_focused,
+        &page,
+        &[SelectionDecor::Block { node_id: cell_id }],
+        &doc,
+        &selection_data,
+    );
 
     let expected = renderer
         .theme
         .color_with_alpha("selection", 77)
         .premultiply()
-        .to_rgba8();
+        .to_color_u8();
     let overlap = rgba_at(&output, 32, 10, 10);
     assert_eq!(
         overlap,
-        [expected.r, expected.g, expected.b, expected.a],
+        [
+            expected.red(),
+            expected.green(),
+            expected.blue(),
+            expected.alpha()
+        ],
         "non-text clipped selection phase에서도 pixel 중복 페인트가 없어야 함"
     );
 }
@@ -1116,7 +1121,7 @@ fn selection_non_text_clipped_phase_respects_disjoint_clip_regions() {
         Size::new(32.0, 32.0),
     );
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(32.0, 32.0, 1.0);
 
@@ -1125,42 +1130,45 @@ fn selection_non_text_clipped_phase_respects_disjoint_clip_regions() {
     renderer.set_theme(Theme { colors });
 
     let mut output = vec![0u8; 32 * 32 * 4];
-    let mut buf = PixelBufMut::from_slice(&mut output, 32, 32);
+    let mut pixmap = PixmapMut::from_bytes(&mut output, 32, 32).expect("pixmap");
     let selection_data = SelectionOverlayData {
         clip_rects: vec![
-            LayoutRect::from_xywh(0.0, 0.0, 8.0, 24.0).expect("left clip"),
-            LayoutRect::from_xywh(16.0, 0.0, 8.0, 24.0).expect("right clip"),
+            CacheRect::from_xywh(0.0, 0.0, 8.0, 24.0).expect("left clip"),
+            CacheRect::from_xywh(16.0, 0.0, 8.0, 24.0).expect("right clip"),
         ],
         text_paint_rects: vec![],
         has_non_text_selection: true,
     };
 
-    {
-        let mut scratch = PixelBuf::new(32, 32).unwrap();
-        backend::cpu::render_selection_overlay(
-            &mut buf,
-            &mut scratch,
-            renderer.scale_factor,
-            &renderer.theme,
-            renderer.is_focused,
-            &page,
-            &[SelectionDecor::Block { node_id: cell_id }],
-            &doc,
-            &selection_data,
-        );
-    }
+    Renderer::render_selection_overlay(
+        &mut pixmap,
+        &mut renderer.glyph_renderer,
+        &mut renderer.scratch_pixmap,
+        renderer.scale_factor,
+        &renderer.theme,
+        renderer.is_focused,
+        &page,
+        &[SelectionDecor::Block { node_id: cell_id }],
+        &doc,
+        &selection_data,
+    );
 
     let expected = renderer
         .theme
         .color_with_alpha("selection", 77)
         .premultiply()
-        .to_rgba8();
+        .to_color_u8();
     let inside = rgba_at(&output, 32, 4, 12);
     let outside = rgba_at(&output, 32, 12, 12);
 
     assert_eq!(
         inside,
-        [expected.r, expected.g, expected.b, expected.a],
+        [
+            expected.red(),
+            expected.green(),
+            expected.blue(),
+            expected.alpha()
+        ],
         "clip 내부 픽셀은 selection 색으로 칠해져야 함"
     );
     assert_eq!(
@@ -1208,7 +1216,7 @@ fn render_debug_marker_tracks_selection_overlay_repaint() {
         ]),
         Size::new(200.0, 120.0),
     );
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_render_debug(true);
     renderer.set_size(200.0, 120.0, 1.0);
@@ -1221,8 +1229,8 @@ fn render_debug_marker_tracks_selection_overlay_repaint() {
 
     let width = renderer.width() as usize;
     let mut buffer = vec![0u8; width * renderer.height() as usize * 4];
-    assert!(renderer.render_into(&page, 0, None, &[], None, &doc, &mut buffer));
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(&page, 0, None, &[], None, &doc, &mut buffer));
+    assert!(renderer.render_to(
         &page,
         0,
         None,

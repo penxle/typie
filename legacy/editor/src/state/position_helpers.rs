@@ -199,7 +199,7 @@ fn position_path(doc: &Doc, pos: Position) -> Result<Vec<usize>> {
 }
 
 pub fn leaf_block_start(node: &NodeRef<'_>) -> Option<Position> {
-    if node.spec().map_or(false, |s| s.is_textblock()) {
+    if node.spec().map_or(false, |s| s.is_textblock(node.schema())) {
         return Some(Position::new(node.node_id(), 0, Affinity::Downstream));
     }
 
@@ -214,7 +214,7 @@ pub fn leaf_block_start(node: &NodeRef<'_>) -> Option<Position> {
 }
 
 pub fn leaf_block_end(node: &NodeRef<'_>) -> Option<Position> {
-    if node.spec().map_or(false, |s| s.is_textblock()) {
+    if node.spec().map_or(false, |s| s.is_textblock(node.schema())) {
         return Some(Position::new(
             node.node_id(),
             block_content_len(node),
@@ -237,7 +237,7 @@ pub fn move_from_block_position(doc: &Doc, position: Position, go_forward: bool)
         return position;
     };
 
-    if node.spec().map_or(false, |s| s.is_textblock()) {
+    if node.spec().map_or(false, |s| s.is_textblock(node.schema())) {
         return position;
     }
 

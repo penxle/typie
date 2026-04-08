@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import fallbackFontFamilies from '@typie/editor/font/fallbacks.json' with { type: 'json' };
-import type { EditorEngine } from '@typie/editor';
+import type { Application } from '@typie/editor';
 
 export type Font = {
   weight: number;
@@ -60,8 +60,8 @@ function createAsyncCache<T>() {
 
 const fontData = createAsyncCache<Uint8Array>();
 const fontManifests = createAsyncCache<FontManifest>();
-const instanceLoaded = new WeakMap<EditorEngine, Set<string>>();
-const instanceLoading = new WeakMap<EditorEngine, Map<string, Promise<void>>>();
+const instanceLoaded = new WeakMap<Application, Set<string>>();
+const instanceLoading = new WeakMap<Application, Map<string, Promise<void>>>();
 const decodedChunkMaps = new Map<FontManifest, Uint8Array>();
 
 function fetchFont(url: string): Promise<Uint8Array> {
@@ -80,7 +80,7 @@ function fetchManifest(url: string): Promise<FontManifest> {
   });
 }
 
-function loadOnce(app: EditorEngine, key: string, fn: () => Promise<void>): Promise<void> {
+function loadOnce(app: Application, key: string, fn: () => Promise<void>): Promise<void> {
   let loaded = instanceLoaded.get(app);
   if (!loaded) {
     loaded = new Set();
@@ -159,7 +159,7 @@ function findChunkIndices(manifest: FontManifest, codepoints: number[]): number[
   return [...indices];
 }
 
-async function loadBase(app: EditorEngine, family: string, font: Font): Promise<void> {
+async function loadBase(app: Application, family: string, font: Font): Promise<void> {
   await loadOnce(app, `base:${family}:${font.weight}`, async () => {
     const manifest = await fetchManifest(font.url);
     const buffer = await fetchFont(`${font.url}/${manifest.hash}/base.bin`);
@@ -167,7 +167,7 @@ async function loadBase(app: EditorEngine, family: string, font: Font): Promise<
   });
 }
 
-async function loadChunks(app: EditorEngine, family: string, font: Font, codepoints: number[]): Promise<void> {
+async function loadChunks(app: Application, family: string, font: Font, codepoints: number[]): Promise<void> {
   const manifest = await fetchManifest(font.url);
 
   await Promise.allSettled(
@@ -180,7 +180,7 @@ async function loadChunks(app: EditorEngine, family: string, font: Font, codepoi
   );
 }
 
-export async function initFonts(app: EditorEngine): Promise<void> {
+export async function initFonts(app: Application): Promise<void> {
   await Promise.all(
     phantomFontFamilies.map(async ({ familyName, path }) => {
       const data = await readFile(new URL(path));
@@ -200,13 +200,13 @@ export async function filterUncoveredCodepoints(font: Font, codepoints: number[]
   return codepoints.filter((cp) => !hasCodepoint(manifest, cp));
 }
 
-export async function ensureRequiredFont(app: EditorEngine, family: string, font: Font, codepoints: number[]): Promise<void> {
+export async function ensureRequiredFont(app: Application, family: string, font: Font, codepoints: number[]): Promise<void> {
   await loadBase(app, family, font);
   await loadChunks(app, family, font, codepoints);
 }
 
 export async function resolveFallbackMappings(
-  app: EditorEngine,
+  app: Application,
   weight: number,
   uncovered: number[],
 ): Promise<{ family: string; weight: number; codepoints: number[] }[]> {

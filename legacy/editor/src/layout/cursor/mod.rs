@@ -159,25 +159,25 @@ pub trait CursorNavigable {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum HorizontalDirection {
+pub(crate) enum HorizontalDirection {
     Left,
     Right,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum VerticalDirection {
+pub(crate) enum VerticalDirection {
     Up,
     Down,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum WordDirection {
+pub(crate) enum WordDirection {
     Left,
     Right,
 }
 
 #[derive(Clone, Copy)]
-pub enum GapBehavior {
+pub(crate) enum GapBehavior {
     SnapToClosestX,
     BlockPosition,
     ClosestNode,

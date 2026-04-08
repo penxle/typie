@@ -2,7 +2,7 @@ use crate::model::{FileNode, Node, NodeId};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_insert_file(&mut self, upload_id: Option<String>) -> Vec<Effect> {
+    pub(crate) fn handle_insert_file(&mut self, upload_id: Option<String>) -> Vec<Effect> {
         self.transact(|tr| {
             tr.insert_node(Node::File(FileNode {
                 id: None,
@@ -11,7 +11,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_set_file_id(&mut self, node_id: String, file_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_set_file_id(&mut self, node_id: String, file_id: String) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };

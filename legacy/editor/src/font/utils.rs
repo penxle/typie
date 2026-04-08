@@ -23,7 +23,7 @@ pub struct FontMetadata {
     pub names: Vec<FontName>,
 }
 
-pub fn get_font_metadata(data: &[u8]) -> Result<FontMetadata, String> {
+pub(crate) fn get_font_metadata(data: &[u8]) -> Result<FontMetadata, String> {
     let font = FontRef::new(data).map_err(|e| e.to_string())?;
 
     let os2 = font.os2().map_err(|e| e.to_string())?;

@@ -271,43 +271,43 @@ impl Runtime {
     }
 
     #[cfg(test)]
-    pub fn history_undo_marker_len(&self) -> usize {
+    pub(crate) fn history_undo_marker_len(&self) -> usize {
         self.history.undo_marker_order.len()
     }
 
     #[cfg(test)]
-    pub fn history_redo_marker_len(&self) -> usize {
+    pub(crate) fn history_redo_marker_len(&self) -> usize {
         self.history.redo_marker_order.len()
     }
 
     #[cfg(test)]
-    pub fn history_has_pending_selection(&self) -> bool {
+    pub(crate) fn history_has_pending_selection(&self) -> bool {
         self.history.pending_history_selection.is_some()
     }
 
     #[cfg(test)]
-    pub fn history_has_pending_group_start_selection(&self) -> bool {
+    pub(crate) fn history_has_pending_group_start_selection(&self) -> bool {
         self.history.pending_history_group_start_selection.is_some()
     }
 
     #[cfg(test)]
-    pub fn history_drop_pending_selection_for_test(&mut self) {
+    pub(crate) fn history_drop_pending_selection_for_test(&mut self) {
         self.history.pending_history_selection = None;
     }
 
     #[cfg(test)]
-    pub fn history_clear_undo_snapshots_for_test(&mut self) {
+    pub(crate) fn history_clear_undo_snapshots_for_test(&mut self) {
         self.history.undo_selection_by_marker.clear();
         self.history.undo_marker_order.clear();
     }
 
     #[cfg(test)]
-    pub fn history_first_undo_marker(&self) -> Option<i64> {
+    pub(crate) fn history_first_undo_marker(&self) -> Option<i64> {
         self.history.undo_marker_order.front().copied()
     }
 
     #[cfg(test)]
-    pub fn history_undo_selection_for_marker(&self, marker: i64) -> Option<Selection> {
+    pub(crate) fn history_undo_selection_for_marker(&self, marker: i64) -> Option<Selection> {
         self.history
             .undo_selection_by_marker
             .get(&marker)

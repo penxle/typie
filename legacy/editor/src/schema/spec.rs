@@ -27,15 +27,15 @@ pub struct NodeSpec {
 }
 
 impl NodeSpec {
-    pub fn is_textblock(&self) -> bool {
+    pub fn is_textblock(&self, schema: &Schema) -> bool {
         let allowed = self.content.allowed_types();
         if allowed.is_empty() {
             return false;
         }
-        allowed.iter().all(|t| Schema::node_spec(*t).inline)
+        allowed.iter().all(|t| schema.node_spec(*t).inline)
     }
 
-    pub fn is_structural_root(&self) -> bool {
+    pub fn is_structural_root(&self, schema: &Schema) -> bool {
         if !self.isolating {
             return false;
         }
@@ -46,7 +46,7 @@ impl NodeSpec {
         if allowed.is_empty() {
             return false;
         }
-        allowed.iter().any(|t| Schema::node_spec(*t).structural)
+        allowed.iter().any(|t| schema.node_spec(*t).structural)
     }
 }
 

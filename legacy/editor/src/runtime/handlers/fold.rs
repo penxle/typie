@@ -62,7 +62,7 @@ impl Runtime {
         Some(Selection::new(anchor, head))
     }
 
-    pub fn toggle_view_state(&mut self, node_id: NodeId) -> Vec<Effect> {
+    pub(crate) fn toggle_view_state(&mut self, node_id: NodeId) -> Vec<Effect> {
         let current_expanded = self.layout_engine.fold_expanded(node_id);
         let fold_title_id = self.fold_title_id(node_id);
 
@@ -95,14 +95,14 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_toggle_fold(&mut self, node_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_toggle_fold(&mut self, node_id: String) -> Vec<Effect> {
         let Ok(node_id) = node_id.parse::<NodeId>() else {
             return vec![];
         };
         self.toggle_view_state(node_id)
     }
 
-    pub fn handle_insert_fold(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_insert_fold(&mut self) -> Vec<Effect> {
         let mut created_fold_id = None;
         let mut effects = self.transact(|tr| {
             let fold_id = tr.insert_fold()?;
@@ -117,7 +117,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_unwrap_fold(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_unwrap_fold(&mut self) -> Vec<Effect> {
         self.transact(|tr| tr.unwrap_fold())
     }
 }

@@ -1,7 +1,7 @@
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_input(&mut self, text: &str) -> Vec<Effect> {
+    pub(crate) fn handle_input(&mut self, text: &str) -> Vec<Effect> {
         let mut effects = Vec::new();
 
         if self.state.preedit.is_some() {
@@ -24,7 +24,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_replace_backward(&mut self, length: usize, text: &str) -> Vec<Effect> {
+    pub(crate) fn handle_replace_backward(&mut self, length: usize, text: &str) -> Vec<Effect> {
         let pending_styles = self.state.pending_styles.clone();
 
         let mut effects = self.transact(|tr| {

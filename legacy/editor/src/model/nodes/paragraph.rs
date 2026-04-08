@@ -1045,6 +1045,7 @@ impl Layout for ParagraphNode {
             build_metrics(
                 &layout,
                 &text,
+                ctx.scale_factor,
                 default_strut,
                 per_line_struts.as_deref(),
                 line_height,
@@ -1189,6 +1190,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1236,6 +1238,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1275,6 +1278,7 @@ mod tests {
                 &settings,
                 &default_attrs,
                 &decorations,
+                1.0,
                 &view_states,
                 &cache,
             );
@@ -1354,6 +1358,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1405,6 +1410,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1474,6 +1480,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1593,6 +1600,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1640,6 +1648,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1691,6 +1700,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );
@@ -1766,6 +1776,7 @@ mod tests {
             &settings,
             &default_attrs,
             &decorations,
+            1.0,
             &view_states,
             &cache,
         );

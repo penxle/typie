@@ -19,7 +19,7 @@ mod text;
 mod text_replacement;
 
 pub use selection::{paragraph_range_at, sentence_range_at, word_range_at};
-pub use style::{compute_styles_at_char_position, compute_styles_at_cursor};
+pub(crate) use style::{compute_styles_at_char_position, compute_styles_at_cursor};
 pub use text::DeleteResult;
 
 use crate::model::*;
@@ -43,7 +43,7 @@ impl Transaction {
             initial: state.clone(),
             state: state.clone(),
             effects: Vec::new(),
-            pending_txn_len_before: state.doc.loro().get_pending_txn_len(),
+            pending_txn_len_before: state.doc.loro_doc().get_pending_txn_len(),
         }
     }
 
@@ -114,7 +114,7 @@ impl Transaction {
         });
     }
 
-    pub fn resolve_attr_cascade(&self, node_id: NodeId) -> Vec<Attr> {
+    pub(crate) fn resolve_attr_cascade(&self, node_id: NodeId) -> Vec<Attr> {
         let mut result = Vec::new();
         let Some(node) = self.node(node_id) else {
             return result;
@@ -131,11 +131,11 @@ impl Transaction {
         result
     }
 
-    pub fn resolve_style_cascade(&self, node_id: NodeId) -> Vec<Style> {
+    pub(crate) fn resolve_style_cascade(&self, node_id: NodeId) -> Vec<Style> {
         Attr::extract_styles(&self.resolve_attr_cascade(node_id))
     }
 
-    pub fn set_cascade_attrs(&mut self, node_id: NodeId, attrs: &[Attr]) -> Result<()> {
+    pub(crate) fn set_cascade_attrs(&mut self, node_id: NodeId, attrs: &[Attr]) -> Result<()> {
         let node = self.node_mut(node_id).context("Node not found")?;
         node.as_mut().set_cascade_attrs(attrs)?;
 
@@ -160,7 +160,7 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn selection_codepoints(&self) -> Vec<u32> {
+    pub(crate) fn selection_codepoints(&self) -> Vec<u32> {
         self.selection()
             .to_plain_text(self.doc())
             .chars()
@@ -192,7 +192,7 @@ impl Transaction {
 
         self.validate()?;
 
-        let pending_txn_len = self.state.doc.loro().get_pending_txn_len();
+        let pending_txn_len = self.state.doc.loro_doc().get_pending_txn_len();
         let doc_changed = pending_txn_len > self.pending_txn_len_before
             || self.state.doc.frontiers() != self.initial.frontiers;
 
@@ -217,7 +217,7 @@ impl Transaction {
         if defer_loro_commit {
             self.state.pending_loro_commit = self.initial.pending_loro_commit || doc_changed;
         } else if self.initial.pending_loro_commit || doc_changed {
-            self.state.doc.loro().commit();
+            self.state.doc.loro_doc().commit();
             self.state.pending_loro_commit = false;
         }
 
@@ -239,7 +239,10 @@ impl Transaction {
             return;
         };
 
-        if node.spec().map_or(false, |s| s.is_textblock()) {
+        if node
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             return;
         }
 
@@ -266,7 +269,10 @@ impl Transaction {
             return;
         };
 
-        if child.spec().map_or(false, |s| s.is_textblock()) {
+        if child
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             let new_pos = Position::new(child_id, 0, Affinity::Downstream);
             self.state.selection = Selection::collapsed(new_pos);
             return;
@@ -277,7 +283,10 @@ impl Transaction {
                 continue;
             };
 
-            if block.spec().map_or(false, |s| s.is_textblock()) {
+            if block
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.doc().schema()))
+            {
                 let new_pos = Position::new(block_id, 0, Affinity::Downstream);
                 self.state.selection = Selection::collapsed(new_pos);
                 return;
@@ -367,12 +376,14 @@ impl Transaction {
         let mut queue: Vec<(NodeId, Vec<NodeType>)> = vec![(NodeId::ROOT, Vec::new())];
         let mut modified = false;
 
+        let schema = self.doc().schema().clone();
+
         while let Some((node_id, inherited_forbidden)) = queue.pop() {
-            modified |= self.repair_node_children(node_id)?;
+            modified |= self.repair_node_children(node_id, &schema)?;
 
             let node_type = self.doc().get_node_type(node_id);
             let own_forbidden: Vec<NodeType> = node_type
-                .and_then(|nt| Schema::node_spec(nt).forbidden_descendants)
+                .and_then(|nt| schema.node_spec(nt).forbidden_descendants)
                 .map(|f| f.to_vec())
                 .unwrap_or_default();
 
@@ -392,7 +403,7 @@ impl Transaction {
                         continue;
                     }
 
-                    let spec = Schema::node_spec(child_type);
+                    let spec = schema.node_spec(child_type);
 
                     if let Some(required_grandparent) = spec.grandparent_must_be {
                         let parent_id = self.doc().get_parent_id(child_id);
@@ -423,12 +434,12 @@ impl Transaction {
         Ok(())
     }
 
-    fn repair_node_children(&mut self, node_id: NodeId) -> Result<bool> {
+    fn repair_node_children(&mut self, node_id: NodeId, schema: &Schema) -> Result<bool> {
         let node_type = self
             .doc()
             .get_node_type(node_id)
             .context("Node type not found")?;
-        let spec = Schema::node_spec(node_type);
+        let spec = schema.node_spec(node_type);
 
         let child_ids = self.doc().get_children_ids(node_id);
         let child_types: Vec<_> = child_ids

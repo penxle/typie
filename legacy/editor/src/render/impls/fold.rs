@@ -1,0 +1,327 @@
+use crate::layout::elements::{FoldContentElement, FoldTitleElement, FoldTitleIconElement};
+use crate::model::{FOLD_BORDER_RADIUS, FOLD_BORDER_WIDTH};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
+use macros::svg_icon_path;
+use tiny_skia::{Paint, Path, PathBuilder, PixmapMut, Stroke, Transform};
+
+const CHEVRON_SIZE: f32 = 20.0;
+const CHEVRON_STROKE_WIDTH: f32 = 1.5;
+
+impl Render for FoldTitleIconElement {
+    fn render(
+        &self,
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        ctx: &RenderContext,
+    ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for FoldTitleIconElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl FoldTitleIconElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        if let RenderPhase::Content = ctx.phase {
+            let color = ctx.theme.color("ui.text.faint");
+            let mut paint = Paint::default();
+            paint.set_color(color);
+            paint.anti_alias = true;
+
+            let stroke = Stroke {
+                width: CHEVRON_STROKE_WIDTH,
+                line_cap: tiny_skia::LineCap::Round,
+                line_join: tiny_skia::LineJoin::Round,
+                ..Stroke::default()
+            };
+
+            let cx = self.size.width / 2.0;
+            let cy = self.size.height / 2.0;
+
+            let path = if self.expanded {
+                svg_icon_path!("lucide/chevron-up", CHEVRON_SIZE, cx, cy)
+            } else {
+                svg_icon_path!("lucide/chevron-down", CHEVRON_SIZE, cx, cy)
+            };
+
+            if let Some(path) = path {
+                sink.stroke_path(&path, &paint, &stroke, transform);
+            }
+        }
+    }
+}
+
+impl Render for FoldTitleElement {
+    fn render(
+        &self,
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        ctx: &RenderContext,
+    ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for FoldTitleElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl FoldTitleElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        let inner_radius = (FOLD_BORDER_RADIUS - FOLD_BORDER_WIDTH).max(0.0);
+        let (top_left_radius, top_right_radius, bottom_right_radius, bottom_left_radius) =
+            if self.expanded {
+                (inner_radius, inner_radius, 0.0, 0.0)
+            } else {
+                (inner_radius, inner_radius, inner_radius, inner_radius)
+            };
+
+        let path = build_rounded_rect(
+            0.0,
+            0.0,
+            self.size.width,
+            self.size.height,
+            top_left_radius,
+            top_right_radius,
+            bottom_right_radius,
+            bottom_left_radius,
+        );
+
+        match ctx.phase {
+            RenderPhase::Background => {
+                if let Some(ref path) = path {
+                    let mut paint = Paint::default();
+                    paint.set_color(ctx.theme.color("ui.surface.muted"));
+                    paint.anti_alias = true;
+                    sink.fill_path(path, &paint, tiny_skia::FillRule::Winding, transform);
+                }
+
+                let mut border_paint = Paint::default();
+                border_paint.set_color(ctx.theme.color("ui.border.default"));
+                border_paint.anti_alias = true;
+                let stroke = Stroke {
+                    width: FOLD_BORDER_WIDTH,
+                    ..Stroke::default()
+                };
+
+                if !self.expanded {
+                    if let Some(ref path) = build_rounded_rect(
+                        FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_WIDTH / 2.0,
+                        self.size.width - FOLD_BORDER_WIDTH,
+                        self.size.height - FOLD_BORDER_WIDTH,
+                        top_left_radius,
+                        top_right_radius,
+                        bottom_right_radius,
+                        bottom_left_radius,
+                    ) {
+                        sink.stroke_path(path, &border_paint, &stroke, transform);
+                    }
+                } else {
+                    let mut pb = PathBuilder::new();
+                    pb.move_to(FOLD_BORDER_WIDTH / 2.0, self.size.height);
+                    pb.line_to(FOLD_BORDER_WIDTH / 2.0, FOLD_BORDER_RADIUS);
+                    pb.quad_to(
+                        FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_RADIUS,
+                        FOLD_BORDER_WIDTH / 2.0,
+                    );
+                    pb.line_to(
+                        self.size.width - FOLD_BORDER_RADIUS,
+                        FOLD_BORDER_WIDTH / 2.0,
+                    );
+                    pb.quad_to(
+                        self.size.width - FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_WIDTH / 2.0,
+                        self.size.width - FOLD_BORDER_WIDTH / 2.0,
+                        FOLD_BORDER_RADIUS,
+                    );
+                    pb.line_to(self.size.width - FOLD_BORDER_WIDTH / 2.0, self.size.height);
+                    if let Some(path) = pb.finish() {
+                        sink.stroke_path(&path, &border_paint, &stroke, transform);
+                    }
+                }
+            }
+            RenderPhase::Selection => {
+                if ctx.is_block_selected(self.fold_id) {
+                    if let Some(ref path) = path {
+                        let color = if ctx.is_focused {
+                            ctx.theme.color_with_alpha("selection", 77)
+                        } else {
+                            ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                        };
+                        let mut sel_paint = Paint::default();
+                        sel_paint.set_color(color);
+                        sink.fill_path(path, &sel_paint, tiny_skia::FillRule::Winding, transform);
+                    }
+                }
+            }
+            RenderPhase::Content => {}
+        }
+    }
+}
+
+impl Render for FoldContentElement {
+    fn render(
+        &self,
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        ctx: &RenderContext,
+    ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for FoldContentElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        self.paint_to(sink, transform, ctx);
+    }
+}
+
+impl FoldContentElement {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
+        let mb = FOLD_BORDER_WIDTH / 2.0;
+
+        match ctx.phase {
+            RenderPhase::Background => {
+                let mut paint = Paint::default();
+                paint.set_color(ctx.theme.color("ui.border.default"));
+                paint.anti_alias = true;
+                let stroke = Stroke {
+                    width: FOLD_BORDER_WIDTH,
+                    ..Stroke::default()
+                };
+
+                let mut pb = PathBuilder::new();
+                if self.split_edges.top && self.split_edges.bottom {
+                    pb.move_to(mb, 0.0);
+                    pb.line_to(mb, self.size.height);
+                    pb.move_to(self.size.width - mb, 0.0);
+                    pb.line_to(self.size.width - mb, self.size.height);
+                } else if self.split_edges.bottom {
+                    pb.move_to(mb, 0.0);
+                    pb.line_to(mb, self.size.height);
+                    pb.move_to(self.size.width - mb, 0.0);
+                    pb.line_to(self.size.width - mb, self.size.height);
+                } else {
+                    pb.move_to(mb, 0.0);
+                    pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
+                    pb.quad_to(
+                        mb,
+                        self.size.height - mb,
+                        FOLD_BORDER_RADIUS,
+                        self.size.height - mb,
+                    );
+                    pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
+                    pb.quad_to(
+                        self.size.width - mb,
+                        self.size.height - mb,
+                        self.size.width - mb,
+                        self.size.height - FOLD_BORDER_RADIUS,
+                    );
+                    pb.line_to(self.size.width - mb, 0.0);
+                }
+
+                if let Some(path) = pb.finish() {
+                    sink.stroke_path(&path, &paint, &stroke, transform);
+                }
+            }
+            RenderPhase::Selection => {
+                if ctx.is_block_selected(self.fold_id) {
+                    let color = if ctx.is_focused {
+                        ctx.theme.color_with_alpha("selection", 77)
+                    } else {
+                        ctx.theme.color_with_alpha("ui.surface.dark", 32)
+                    };
+                    let mut sel_paint = Paint::default();
+                    sel_paint.set_color(color);
+
+                    let mut pb = PathBuilder::new();
+                    if self.split_edges.top && self.split_edges.bottom {
+                        pb.move_to(mb, 0.0);
+                        pb.line_to(mb, self.size.height);
+                        pb.line_to(self.size.width - mb, self.size.height);
+                        pb.line_to(self.size.width - mb, 0.0);
+                        pb.close();
+                    } else if self.split_edges.bottom {
+                        pb.move_to(mb, 0.0);
+                        pb.line_to(mb, self.size.height);
+                        pb.line_to(self.size.width - mb, self.size.height);
+                        pb.close();
+                    } else {
+                        pb.move_to(mb, 0.0);
+                        pb.line_to(mb, self.size.height - FOLD_BORDER_RADIUS);
+                        pb.quad_to(
+                            mb,
+                            self.size.height - mb,
+                            FOLD_BORDER_RADIUS,
+                            self.size.height - mb,
+                        );
+                        pb.line_to(self.size.width - FOLD_BORDER_RADIUS, self.size.height - mb);
+                        pb.quad_to(
+                            self.size.width - mb,
+                            self.size.height - mb,
+                            self.size.width - mb,
+                            self.size.height - FOLD_BORDER_RADIUS,
+                        );
+                        pb.line_to(self.size.width - mb, 0.0);
+                        pb.close();
+                    }
+
+                    if let Some(path) = pb.finish() {
+                        sink.fill_path(&path, &sel_paint, tiny_skia::FillRule::Winding, transform);
+                    }
+                }
+            }
+            RenderPhase::Content => {}
+        }
+    }
+}
+
+fn build_rounded_rect(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    top_left: f32,
+    top_right: f32,
+    bottom_right: f32,
+    bottom_left: f32,
+) -> Option<Path> {
+    let mut pb = PathBuilder::new();
+
+    pb.move_to(x + top_left, y);
+    pb.line_to(x + width - top_right, y);
+    if top_right > 0.0 {
+        pb.quad_to(x + width, y, x + width, y + top_right);
+    }
+    pb.line_to(x + width, y + height - bottom_right);
+    if bottom_right > 0.0 {
+        pb.quad_to(x + width, y + height, x + width - bottom_right, y + height);
+    }
+    pb.line_to(x + bottom_left, y + height);
+    if bottom_left > 0.0 {
+        pb.quad_to(x, y + height, x, y + height - bottom_left);
+    }
+    pb.line_to(x, y + top_left);
+    if top_left > 0.0 {
+        pb.quad_to(x, y, x + top_left, y);
+    }
+    pb.close();
+
+    pb.finish()
+}

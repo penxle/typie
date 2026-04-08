@@ -7,7 +7,7 @@ use crate::transaction::Transaction;
 use crate::types::Affinity;
 use anyhow::{Context, Result};
 
-pub fn clone_block_type(node: &Node) -> Option<Node> {
+pub(crate) fn clone_block_type(node: &Node) -> Option<Node> {
     match node {
         Node::Paragraph(p) => Some(Node::Paragraph(ParagraphNode {
             align: p.align,
@@ -295,7 +295,10 @@ impl Transaction {
         }
 
         let block = self.node(block_id).context("Block not found")?;
-        if block.spec().map_or(false, |s| s.is_textblock()) {
+        if block
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             return Ok(false);
         }
 

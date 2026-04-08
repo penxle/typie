@@ -1,6 +1,5 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::schema::Schema;
 use crate::state::{Position, collect_text_ranges_in_selection};
 use crate::transaction::Transaction;
 use crate::utils::collect_codepoints;
@@ -19,7 +18,7 @@ impl Transaction {
         };
 
         let ann_type = annotation.as_type();
-        let spec = Schema::annotation_spec(ann_type);
+        let spec = self.doc().schema().annotation_spec(ann_type);
         if !spec.overlap {
             let (from, to) = selection.as_sorted(self.doc())?;
             if self.selection_has_annotation_type(from.clone(), to.clone(), ann_type)? {

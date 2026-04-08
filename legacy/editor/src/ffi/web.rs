@@ -1,19 +1,24 @@
-use super::common::{CharacterCounts, ClipboardData, EditorCore, count_all};
 use crate::font::FontMetadata;
 use crate::font::encode::EncodedFont;
 use crate::global::{add_font_base, add_font_chunk, set_available_fonts};
-use crate::global::{set_auto_surround_enabled, set_text_replacement_rules};
-use crate::icu_data::load_icu_data;
+use crate::global::{
+    clear_text_replacement_rules, set_auto_surround_enabled, set_text_replacement_rules,
+};
+use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::{is_cursor_hit, is_selection_hit};
-use crate::model::{Doc, DocExportMode, DocumentJson, NodeId, json_to_snapshot, snapshot_to_json};
+use crate::model::{
+    CONTINUOUS_PAGE_MARGIN, Doc, DocExportMode, DocumentJson, LayoutMode, Node, NodeId,
+    ParagraphNode, TextMapping, json_to_snapshot, snapshot_to_json,
+};
 use crate::render::DragImageResult;
-use crate::render::backend::{GpuDevice, RenderBackend};
+use crate::runtime::search::{SearchQuery, perform_search};
 use crate::runtime::text_replacement::RawTextReplacementRule;
-use crate::runtime::{Message, RawTrackedItem, slate};
-use rustc_hash::FxHashMap;
+use crate::runtime::{Message, RawTrackedItem, Runtime, State, slate};
+use crate::state::{Position, Selection, leaf_block_end};
+use crate::types::Affinity;
+use icu_properties::props::GeneralCategory;
 use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
@@ -29,107 +34,94 @@ fn to_js_value<T: Serialize>(value: &T) -> JsValue {
 }
 
 #[wasm_bindgen]
-pub struct EditorEngine {
-    gpu: Option<Arc<Mutex<GpuDevice>>>,
-}
-
-type JsResult<T> = Result<T, JsValue>;
+pub struct Application;
 
 #[wasm_bindgen]
-impl EditorEngine {
+impl Application {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         console_error_panic_hook::set_once();
-        Self { gpu: None }
-    }
-
-    #[wasm_bindgen(js_name = tryInitGpu)]
-    pub async fn try_init_gpu(&mut self) -> JsResult<bool> {
-        match GpuDevice::new().await {
-            Some(ctx) => {
-                self.gpu = Some(Arc::new(Mutex::new(ctx)));
-                Ok(true)
-            }
-            None => Ok(false),
-        }
+        Self
     }
 
     #[wasm_bindgen(js_name = getMemory)]
-    pub fn get_memory(&self) -> JsResult<JsValue> {
-        Ok(wasm_bindgen::memory())
+    pub fn get_memory(&self) -> JsValue {
+        wasm_bindgen::memory()
     }
 
     #[wasm_bindgen(js_name = loadIcuData)]
-    pub fn load_icu_data(&self, icu_data: Vec<u8>) -> JsResult<()> {
+    pub fn load_icu_data(&self, icu_data: Vec<u8>) -> Result<(), JsValue> {
         load_icu_data(&icu_data)
     }
 
     #[wasm_bindgen(js_name = addFontBase)]
-    pub fn add_font_base(&self, family: &str, weight: u16, data: Vec<u8>) -> JsResult<()> {
+    pub fn add_font_base(&self, family: &str, weight: u16, data: Vec<u8>) {
         add_font_base(family, weight, &data);
-        Ok(())
     }
 
     #[wasm_bindgen(js_name = addFontChunk)]
-    pub fn add_font_chunk(&self, family: &str, weight: u16, data: Vec<u8>) -> JsResult<()> {
+    pub fn add_font_chunk(&self, family: &str, weight: u16, data: Vec<u8>) {
         add_font_chunk(family, weight, &data);
-        Ok(())
     }
 
     #[wasm_bindgen(js_name = setAvailableFonts)]
-    pub fn set_available_fonts(&self, fonts: JsValue) -> JsResult<()> {
-        let fonts = serde_wasm_bindgen::from_value::<HashMap<String, Vec<u16>>>(fonts)
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        set_available_fonts(fonts);
-        Ok(())
+    pub fn set_available_fonts(&self, fonts: JsValue) {
+        if let Ok(fonts) =
+            serde_wasm_bindgen::from_value::<std::collections::HashMap<String, Vec<u16>>>(fonts)
+        {
+            set_available_fonts(fonts);
+        }
     }
 
     #[wasm_bindgen(js_name = setTextReplacementRules)]
-    pub fn set_text_replacement_rules(&self, rules: JsValue) -> JsResult<()> {
-        let raw_rules = serde_wasm_bindgen::from_value::<Vec<RawTextReplacementRule>>(rules)
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        set_text_replacement_rules(raw_rules);
-        Ok(())
+    pub fn set_text_replacement_rules(&self, rules: JsValue) {
+        if let Ok(raw_rules) = serde_wasm_bindgen::from_value::<Vec<RawTextReplacementRule>>(rules)
+        {
+            set_text_replacement_rules(raw_rules);
+        }
+    }
+
+    #[wasm_bindgen(js_name = clearTextReplacementRules)]
+    pub fn clear_text_replacement_rules(&self) {
+        clear_text_replacement_rules();
     }
 
     #[wasm_bindgen(js_name = setAutoSurroundEnabled)]
-    pub fn set_auto_surround_enabled(&self, enabled: bool) -> JsResult<()> {
+    pub fn set_auto_surround_enabled(&self, enabled: bool) {
         set_auto_surround_enabled(enabled);
-        Ok(())
     }
 
     #[wasm_bindgen(js_name = createEditor)]
-    pub fn create_editor(&self, scale_factor: f64, snapshot: Option<Vec<u8>>) -> JsResult<Editor> {
-        let gpu = self.gpu.clone();
-        let backend = match &self.gpu {
-            Some(gpu) => RenderBackend::new_gpu(Arc::clone(gpu)),
-            None => RenderBackend::new_cpu(),
-        };
+    pub fn create_editor(
+        &self,
+        scale_factor: f64,
+        snapshot: Option<Vec<u8>>,
+    ) -> Result<Editor, JsValue> {
         if let Some(snapshot) = snapshot {
-            Editor::new_with_snapshot(scale_factor, snapshot, backend, gpu)
+            Editor::new_with_snapshot(scale_factor, snapshot)
         } else {
-            panic!();
+            Ok(Editor::new(scale_factor))
         }
     }
 
     #[wasm_bindgen(js_name = validateRegex)]
-    pub fn validate_regex(&self, pattern: &str) -> JsResult<bool> {
+    pub fn validate_regex(&self, pattern: &str) -> bool {
         let anchored = format!("(?:{pattern})$");
-        Ok(fancy_regex::Regex::new(&anchored).is_ok())
+        fancy_regex::Regex::new(&anchored).is_ok()
     }
 
     #[wasm_bindgen(js_name = getFontMetadata)]
-    pub fn get_font_metadata(&self, data: Vec<u8>) -> JsResult<FontMetadata> {
+    pub fn get_font_metadata(&self, data: Vec<u8>) -> Result<FontMetadata, JsValue> {
         crate::font::get_font_metadata(&data).map_err(|e| JsValue::from_str(&e))
     }
 
     #[wasm_bindgen(js_name = outlineTextToSvg)]
-    pub fn outline_text_to_svg(&self, font_data: Vec<u8>, text: &str) -> JsResult<String> {
+    pub fn outline_text_to_svg(&self, font_data: Vec<u8>, text: &str) -> Result<String, JsValue> {
         crate::font::outline_text_to_svg(&font_data, text).map_err(|e| JsValue::from_str(&e))
     }
 
     #[wasm_bindgen(js_name = getFontCodepoints)]
-    pub fn get_font_codepoints(&self, ttf_data: Vec<u8>) -> JsResult<Codepoints> {
+    pub fn get_font_codepoints(&self, ttf_data: Vec<u8>) -> Result<Codepoints, JsValue> {
         let codepoints = crate::font::encode::get_font_codepoints(&ttf_data)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(Codepoints(codepoints))
@@ -140,7 +132,7 @@ impl EditorEngine {
         &self,
         ttf_data: Vec<u8>,
         chunk_codepoints_json: &str,
-    ) -> JsResult<EncodedFont> {
+    ) -> Result<EncodedFont, JsValue> {
         let chunk_codepoints: Vec<Vec<u32>> = serde_json::from_str(chunk_codepoints_json)
             .map_err(|e| JsValue::from_str(&format!("chunk_codepoints parse: {e}")))?;
         crate::font::encode::encode_font(&ttf_data, &chunk_codepoints)
@@ -148,18 +140,54 @@ impl EditorEngine {
     }
 
     #[wasm_bindgen(js_name = snapshotToJson)]
-    pub fn snapshot_to_json(&self, snapshot: Vec<u8>) -> JsResult<JsValue> {
+    pub fn snapshot_to_json(&self, snapshot: Vec<u8>) -> Result<JsValue, JsValue> {
         let doc_json =
             snapshot_to_json(&snapshot).map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
         Ok(to_js_value(&doc_json))
     }
 
     #[wasm_bindgen(js_name = jsonToSnapshot)]
-    pub fn json_to_snapshot(&self, json: JsValue) -> JsResult<Vec<u8>> {
+    pub fn json_to_snapshot(&self, json: JsValue) -> Result<Vec<u8>, JsValue> {
         let doc_json: DocumentJson = serde_wasm_bindgen::from_value(json)
             .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
         json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&format!("{:?}", e)))
     }
+
+    #[wasm_bindgen(js_name = validateDocumentJson)]
+    pub fn validate_document_json(&self, json: JsValue) -> Result<(), JsValue> {
+        let doc_json: DocumentJson = serde_wasm_bindgen::from_value(json)
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        let snapshot =
+            json_to_snapshot(&doc_json).map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        let doc =
+            Doc::from_snapshot(snapshot).map_err(|e| JsValue::from_str(&format!("{:?}", e)))?;
+        doc.validate_exhaustive()
+            .map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+    }
+}
+
+#[wasm_bindgen]
+pub struct RenderInfo {
+    pub ptr: u32,
+    pub len: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[wasm_bindgen(getter_with_clone)]
+pub struct ClipboardData {
+    pub html: String,
+    pub text: String,
+}
+
+#[wasm_bindgen]
+pub struct CharacterCounts {
+    pub doc_with_whitespace: u32,
+    pub doc_without_whitespace: u32,
+    pub doc_without_whitespace_and_punctuation: u32,
+    pub selection_with_whitespace: u32,
+    pub selection_without_whitespace: u32,
+    pub selection_without_whitespace_and_punctuation: u32,
 }
 
 #[wasm_bindgen]
@@ -205,223 +233,158 @@ impl DragImageInfo {
     }
 }
 
-struct WasmSurface {
-    offscreen: web_sys::OffscreenCanvas,
-    target: WasmRenderTarget,
-    width: u32,
-    height: u32,
-}
-
-#[allow(dead_code)]
-enum WasmRenderTarget {
-    Gpu {
-        surface: wgpu::Surface<'static>,
-        format: wgpu::TextureFormat,
-    },
-    Cpu {
-        ctx: web_sys::OffscreenCanvasRenderingContext2d,
-    },
-}
-
 #[wasm_bindgen]
 pub struct Editor {
-    core: EditorCore,
-    gpu: Option<Arc<Mutex<GpuDevice>>>,
-    surfaces: FxHashMap<u32, WasmSurface>,
+    runtime: Runtime,
 }
 
 impl Editor {
-    fn new_with_snapshot(
-        scale_factor: f64,
-        snapshot: Vec<u8>,
-        backend: RenderBackend,
-        gpu: Option<Arc<Mutex<GpuDevice>>>,
-    ) -> JsResult<Self> {
-        let core = EditorCore::with_snapshot(scale_factor, snapshot, backend, None)
-            .map_err(|e| JsValue::from_str(&e))?;
+    fn new(scale_factor: f64) -> Self {
+        let doc = Rc::new(Doc::new());
+        let layout_mode = doc.settings().layout_mode;
 
-        Ok(Self {
-            core,
-            gpu,
-            surfaces: FxHashMap::default(),
-        })
+        let width = match layout_mode {
+            LayoutMode::Paginated { page_width, .. } => page_width,
+            LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
+        };
+
+        let root = doc
+            .node(NodeId::ROOT)
+            .expect("Doc::new: ROOT node must exist after construction");
+        let paragraph_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .expect("Doc::new: failed to insert initial paragraph");
+
+        let state = State::new(
+            doc,
+            Selection::collapsed(Position::new(paragraph_id, 0, Affinity::default())),
+        );
+
+        let mut runtime = Runtime::new(width, scale_factor, state);
+
+        runtime.layout();
+
+        Self { runtime }
+    }
+
+    fn new_with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> Result<Self, JsValue> {
+        let doc =
+            Rc::new(Doc::from_snapshot(snapshot).map_err(|e| JsValue::from_str(&e.to_string()))?);
+        let layout_mode = doc.settings().layout_mode;
+        let selection_pos = doc
+            .node(NodeId::ROOT)
+            .and_then(|root| leaf_block_end(&root))
+            .unwrap_or(Position::new(NodeId::ROOT, 0, Affinity::Downstream));
+
+        let width = match layout_mode {
+            LayoutMode::Paginated { page_width, .. } => page_width,
+            LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
+        };
+
+        let state = State::new(doc, Selection::collapsed(selection_pos));
+
+        let mut runtime = Runtime::new(width, scale_factor, state);
+
+        runtime.layout();
+
+        Ok(Self { runtime })
     }
 }
 
 #[wasm_bindgen]
 impl Editor {
-    // ── Mount / Render API ──────────────────────────────────────────
-
-    #[wasm_bindgen(js_name = attachSurface)]
-    pub fn attach_surface(&mut self, page_index: u32) -> JsResult<web_sys::OffscreenCanvas> {
-        let info = self
-            .core
-            .runtime_mut()
-            .attach_surface(page_index)
-            .ok_or_else(|| JsValue::from_str("invalid page index"))?;
-
-        let offscreen = web_sys::OffscreenCanvas::new(info.width, info.height)?;
-
-        #[allow(unused)]
-        let target = if let Some(gpu_arc) = &self.gpu {
-            #[cfg(target_arch = "wasm32")]
-            {
-                let gpu = gpu_arc.lock().unwrap_or_else(|e| e.into_inner());
-                let surface = gpu
-                    .instance
-                    .create_surface(wgpu::SurfaceTarget::OffscreenCanvas(offscreen.clone()))
-                    .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                let caps = surface.get_capabilities(&gpu.adapter);
-                let format = caps
-                    .formats
-                    .first()
-                    .copied()
-                    .unwrap_or(wgpu::TextureFormat::Bgra8Unorm);
-                surface.configure(
-                    &gpu.device,
-                    &wgpu::SurfaceConfiguration {
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                        format,
-                        width: info.width,
-                        height: info.height,
-                        present_mode: wgpu::PresentMode::AutoVsync,
-                        alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied,
-                        view_formats: vec![],
-                        desired_maximum_frame_latency: 2,
-                    },
-                );
-                WasmRenderTarget::Gpu { surface, format }
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                return Err(JsValue::from_str("GPU surface requires wasm32 target"));
-            }
-        } else {
-            let ctx = offscreen
-                .get_context("2d")
-                .map_err(|e| e)?
-                .ok_or_else(|| JsValue::from_str("failed to get 2d context"))?
-                .dyn_into::<web_sys::OffscreenCanvasRenderingContext2d>()?;
-            WasmRenderTarget::Cpu { ctx }
-        };
-
-        self.surfaces.insert(
-            page_index,
-            WasmSurface {
-                offscreen: offscreen.clone(),
-                target,
-                width: info.width,
-                height: info.height,
-            },
-        );
-
-        Ok(offscreen)
+    #[wasm_bindgen(js_name = renderPage)]
+    pub fn render_page(&mut self, page_index: usize) -> Option<RenderInfo> {
+        let result = self.runtime.render_page(page_index)?;
+        Some(RenderInfo {
+            ptr: result.ptr as u32,
+            len: result.len as u32,
+            width: result.width as u32,
+            height: result.height as u32,
+        })
     }
 
-    #[wasm_bindgen(js_name = detachSurface)]
-    pub fn detach_surface(&mut self, page_index: u32) -> JsResult<()> {
-        self.surfaces.remove(&page_index);
-        self.core.runtime_mut().detach_surface(page_index);
-        Ok(())
-    }
-
-    #[wasm_bindgen(js_name = renderSurface)]
-    pub fn render_surface(&mut self, page_index: u32) -> JsResult<()> {
-        self.render_single_surface(page_index);
-        Ok(())
-    }
-
-    #[wasm_bindgen(js_name = exportPage)]
-    pub fn export_page(&mut self, page_index: usize) -> JsResult<Option<Vec<u8>>> {
-        Ok(self.core.runtime_mut().export_page(page_index))
+    #[wasm_bindgen(js_name = exportPageVector)]
+    pub fn export_page_vector(&mut self, page_index: usize) -> Option<Vec<u8>> {
+        self.runtime.export_page_vector(page_index)
     }
 
     #[wasm_bindgen(js_name = export)]
-    pub fn export(&mut self, mode: DocExportMode) -> JsResult<Vec<u8>> {
-        self.core
-            .runtime_mut()
+    pub fn export(&mut self, mode: DocExportMode) -> Result<Vec<u8>, JsValue> {
+        self.runtime
             .export(mode)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = importUpdates)]
-    pub fn import_updates(&mut self, updates: Vec<u8>) -> JsResult<()> {
-        self.core
-            .runtime_mut()
+    pub fn import_updates(&mut self, updates: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime
             .import_updates(&updates)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = insertTemplateFragment)]
-    pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) -> JsResult<()> {
-        self.core
-            .runtime_mut()
+    pub fn insert_template_fragment(&mut self, snapshot: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime
             .insert_template_fragment(snapshot)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = importUpdatesBatch)]
-    pub fn import_updates_batch(&mut self, updates_batch: js_sys::Array) -> JsResult<()> {
+    pub fn import_updates_batch(&mut self, updates_batch: js_sys::Array) -> Result<(), JsValue> {
         let batch: Vec<Vec<u8>> = updates_batch
             .iter()
             .filter_map(|v| v.dyn_into::<js_sys::Uint8Array>().ok())
             .map(|arr| arr.to_vec())
             .collect();
-        self.core
-            .runtime_mut()
+        self.runtime
             .import_updates_batch(&batch)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     #[wasm_bindgen(js_name = checkout)]
-    pub fn checkout(&mut self, version: Vec<u8>) -> JsResult<()> {
-        self.core
-            .runtime_mut()
-            .checkout(&version)
-            .map_err(|e| e.to_string())?;
+    pub fn checkout(&mut self, version: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime.checkout(&version).map_err(|e| e.to_string())?;
         Ok(())
     }
 
     #[wasm_bindgen(js_name = checkoutToLatest)]
-    pub fn checkout_to_latest(&mut self) -> JsResult<()> {
-        self.core
-            .runtime_mut()
+    pub fn checkout_to_latest(&mut self) -> Result<(), JsValue> {
+        self.runtime
             .checkout_to_latest()
             .map_err(|e| e.to_string())?;
         Ok(())
     }
 
     #[wasm_bindgen(js_name = isDetached)]
-    pub fn is_detached(&self) -> JsResult<bool> {
-        Ok(self.core.runtime().is_detached())
+    pub fn is_detached(&self) -> bool {
+        self.runtime.is_detached()
     }
 
     #[wasm_bindgen(js_name = revertTo)]
-    pub fn revert_to(&mut self, version: Vec<u8>) -> JsResult<()> {
-        self.core
-            .runtime_mut()
+    pub fn revert_to(&mut self, version: Vec<u8>) -> Result<(), JsValue> {
+        self.runtime
             .revert_to(&version)
             .map_err(|e| e.to_string())?;
         Ok(())
     }
 
     #[wasm_bindgen(js_name = isSelectionHit)]
-    pub fn is_selection_hit(&self, page_idx: usize, x: f32, y: f32) -> JsResult<bool> {
-        let rt = self.core.runtime();
-        if let Some(page) = rt.pages().get(page_idx) {
-            Ok(is_selection_hit(rt.doc(), page, rt.selection(), x, y))
+    pub fn is_selection_hit(&self, page_idx: usize, x: f32, y: f32) -> bool {
+        if let Some(page) = self.runtime.pages().get(page_idx) {
+            is_selection_hit(self.runtime.doc(), page, self.runtime.selection(), x, y)
         } else {
-            Ok(false)
+            false
         }
     }
 
     #[wasm_bindgen(js_name = isCursorHit)]
-    pub fn is_cursor_hit(&self, page_idx: usize, x: f32, y: f32) -> JsResult<bool> {
-        let rt = self.core.runtime();
-        if let Some(page) = rt.pages().get(page_idx) {
-            Ok(is_cursor_hit(rt.doc(), page, rt.selection(), x, y))
+    pub fn is_cursor_hit(&self, page_idx: usize, x: f32, y: f32) -> bool {
+        if let Some(page) = self.runtime.pages().get(page_idx) {
+            is_cursor_hit(self.runtime.doc(), page, self.runtime.selection(), x, y)
         } else {
-            Ok(false)
+            false
         }
     }
 
@@ -430,223 +393,247 @@ impl Editor {
         &mut self,
         visible_pages: Vec<usize>,
         page_idx: usize,
-    ) -> JsResult<Option<DragImageInfo>> {
-        let drag_image = self
-            .core
-            .runtime_mut()
-            .render_drag_image(&visible_pages, page_idx);
-        Ok(drag_image.map(|d| DragImageInfo { drag_image: d }))
+    ) -> Option<DragImageInfo> {
+        let drag_image = self.runtime.render_drag_image(&visible_pages, page_idx)?;
+        Some(DragImageInfo { drag_image })
+    }
+
+    #[wasm_bindgen(js_name = dispatch)]
+    pub fn dispatch(&mut self, val: JsValue) {
+        if let Ok(msg) = serde_wasm_bindgen::from_value::<Message>(val) {
+            self.runtime.update(msg);
+        }
     }
 
     #[wasm_bindgen(js_name = inspectState)]
-    pub fn inspect_state(&self) -> JsResult<String> {
-        Ok(self.core.runtime().inspect_state())
+    pub fn inspect_state(&self) -> String {
+        self.runtime.inspect_state()
     }
 
     #[wasm_bindgen(js_name = inspectStateAsMacro)]
-    pub fn inspect_state_as_macro(&self) -> JsResult<String> {
-        Ok(self.core.runtime().inspect_state_as_macro())
+    pub fn inspect_state_as_macro(&self) -> String {
+        self.runtime.inspect_state_as_macro()
     }
 
     #[wasm_bindgen(js_name = inspectSelectionAsFragmentMacro)]
-    pub fn inspect_selection_as_fragment_macro(&self) -> JsResult<Option<String>> {
-        Ok(self.core.runtime().inspect_selection_as_fragment_macro())
+    pub fn inspect_selection_as_fragment_macro(&self) -> Option<String> {
+        self.runtime.inspect_selection_as_fragment_macro()
     }
 
     #[wasm_bindgen(js_name = inspectPageElement)]
-    pub fn inspect_page_element(
-        &self,
-        page_idx: usize,
-        x: f32,
-        y: f32,
-    ) -> JsResult<Option<String>> {
-        Ok(self.core.runtime().inspect_page_element(page_idx, x, y))
+    pub fn inspect_page_element(&self, page_idx: usize, x: f32, y: f32) -> Option<String> {
+        self.runtime.inspect_page_element(page_idx, x, y)
     }
 
-    pub fn tick(&mut self) -> JsResult<()> {
-        self.core.runtime_mut().tick();
-        Ok(())
+    pub fn tick(&mut self) {
+        self.runtime.tick();
     }
 
     #[wasm_bindgen(js_name = setTracing)]
-    pub fn set_tracing(&mut self, trace_id: &str, parent_span_id: &str) -> JsResult<()> {
-        let trace_id = opentelemetry::trace::TraceId::from_hex(trace_id)
-            .map_err(|e| JsValue::from_str(&format!("Invalid trace_id: {e}")))?;
-        let parent_span_id = opentelemetry::trace::SpanId::from_hex(parent_span_id)
-            .map_err(|e| JsValue::from_str(&format!("Invalid parent_span_id: {e}")))?;
-        self.core
-            .runtime_mut()
-            .tracing
-            .set_tracing(trace_id, parent_span_id);
-        Ok(())
+    pub fn set_tracing(&mut self, trace_id: &str, parent_span_id: &str) {
+        let Ok(trace_id) = opentelemetry::trace::TraceId::from_hex(trace_id) else {
+            return;
+        };
+        let Ok(parent_span_id) = opentelemetry::trace::SpanId::from_hex(parent_span_id) else {
+            return;
+        };
+        self.runtime.tracing.set_tracing(trace_id, parent_span_id);
     }
 
     #[wasm_bindgen(js_name = clearTracing)]
-    pub fn clear_tracing(&mut self) -> JsResult<()> {
-        self.core.runtime_mut().tracing.clear_tracing();
-        Ok(())
+    pub fn clear_tracing(&mut self) {
+        self.runtime.tracing.clear_tracing();
     }
 
     #[wasm_bindgen(js_name = drainTraces)]
-    pub fn drain_traces(&mut self) -> JsResult<JsValue> {
-        let traces = self.core.runtime_mut().tracing.drain();
-        Ok(serde_wasm_bindgen::to_value(&traces).unwrap_or(JsValue::NULL))
+    pub fn drain_traces(&mut self) -> JsValue {
+        let traces = self.runtime.tracing.drain();
+        serde_wasm_bindgen::to_value(&traces).unwrap_or(JsValue::NULL)
     }
 
     #[wasm_bindgen(js_name = getSlatePtr)]
-    pub fn get_slate_ptr(&self) -> JsResult<u32> {
-        Ok(&self.core.runtime().slate as *const _ as u32)
+    pub fn get_slate_ptr(&self) -> u32 {
+        &self.runtime.slate as *const _ as u32
     }
 
     #[wasm_bindgen(js_name = getSlateLen)]
-    pub fn get_slate_len(&self) -> JsResult<u32> {
-        Ok(std::mem::size_of::<slate::Slate>() as u32)
+    pub fn get_slate_len(&self) -> u32 {
+        std::mem::size_of::<slate::Slate>() as u32
     }
 
     #[wasm_bindgen(js_name = getSlabPtr)]
-    pub fn get_slab_ptr(&self) -> JsResult<u32> {
-        Ok(self.core.runtime().slab.data.as_ptr() as u32)
+    pub fn get_slab_ptr(&self) -> u32 {
+        self.runtime.slab.data.as_ptr() as u32
     }
 
     #[wasm_bindgen(js_name = getSlabLen)]
-    pub fn get_slab_len(&self) -> JsResult<u32> {
-        Ok(self.core.runtime().slab.len() as u32)
+    pub fn get_slab_len(&self) -> u32 {
+        self.runtime.slab.len() as u32
     }
 
     #[wasm_bindgen(js_name = getSlateOffsets)]
-    pub fn get_slate_offsets(&self) -> JsResult<JsValue> {
+    pub fn get_slate_offsets(&self) -> JsValue {
         let offsets = slate::get_slate_offsets();
-        Ok(to_js_value(&offsets))
+        to_js_value(&offsets)
     }
 
     #[wasm_bindgen(js_name = enqueueMessage)]
-    pub fn enqueue_message(&mut self, val: JsValue) -> JsResult<()> {
-        let msg = serde_wasm_bindgen::from_value::<Message>(val)
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        self.core.runtime_mut().enqueue_message(msg);
-        Ok(())
+    pub fn enqueue_message(&mut self, val: JsValue) {
+        if let Ok(msg) = serde_wasm_bindgen::from_value::<Message>(val) {
+            self.runtime.enqueue_message(msg);
+        }
     }
 
     #[wasm_bindgen(js_name = flush)]
-    pub fn flush(&mut self) -> JsResult<()> {
-        self.core.runtime_mut().flush();
-        Ok(())
+    pub fn flush(&mut self) {
+        self.runtime.flush();
     }
 
     #[wasm_bindgen(js_name = getClipboardData)]
-    pub fn get_clipboard_data(&self) -> JsResult<Option<ClipboardData>> {
-        Ok(self.core.get_clipboard_data())
+    pub fn get_clipboard_data(&self) -> Option<ClipboardData> {
+        let state = self.runtime.state();
+        if state.selection.is_collapsed() {
+            return None;
+        }
+
+        let fragment = state.selection.extract_fragment(&state.doc).ok()?;
+
+        if fragment.is_empty() {
+            return None;
+        }
+
+        let text = fragment.to_plain_text();
+        let html = fragment.to_html();
+
+        Some(ClipboardData { html, text })
     }
 
     #[wasm_bindgen(js_name = getCharacterCounts)]
-    pub fn get_character_counts(&mut self) -> JsResult<CharacterCounts> {
-        Ok(self.core.get_character_counts())
+    pub fn get_character_counts(&mut self) -> CharacterCounts {
+        let doc_text = self.runtime.get_cached_plain_text();
+        let selection_text = {
+            let state = self.runtime.state();
+            state.selection.to_plain_text(&state.doc)
+        };
+
+        let doc_counts = count_all(&doc_text);
+        let sel_counts = count_all(&selection_text);
+
+        CharacterCounts {
+            doc_with_whitespace: doc_counts.0,
+            doc_without_whitespace: doc_counts.1,
+            doc_without_whitespace_and_punctuation: doc_counts.2,
+            selection_with_whitespace: sel_counts.0,
+            selection_without_whitespace: sel_counts.1,
+            selection_without_whitespace_and_punctuation: sel_counts.2,
+        }
     }
 
     #[wasm_bindgen(js_name = getCharacterCountAtVersion)]
-    pub fn get_character_count_at_version(&mut self, version: Vec<u8>) -> JsResult<Option<u32>> {
-        self.core.runtime_mut().flush();
-        let vv = match loro::VersionVector::decode(&version) {
-            Ok(vv) => vv,
-            Err(_) => return Ok(None),
-        };
-        let loro_doc = self.core.runtime().doc().loro();
+    pub fn get_character_count_at_version(&mut self, version: Vec<u8>) -> Option<u32> {
+        self.runtime.flush();
+        let vv = loro::VersionVector::decode(&version).ok()?;
+        let loro_doc = self.runtime.doc().loro_doc();
 
         if !loro_doc.oplog_vv().includes_vv(&vv) {
-            return Ok(None);
+            return None;
         }
 
         let target_frontiers = loro_doc.vv_to_frontiers(&vv);
 
         if target_frontiers == loro_doc.oplog_frontiers() {
-            return Ok(Some(
-                count_all(&self.core.runtime().doc().to_plain_text()).0,
-            ));
+            return Some(count_all(&self.runtime.doc().to_plain_text()).0);
         }
 
-        let snapshot = match loro_doc.export(loro::ExportMode::Snapshot) {
-            Ok(s) => s,
-            Err(_) => return Ok(None),
-        };
-        let history_doc = match Doc::from_snapshot(snapshot) {
-            Ok(d) => d,
-            Err(_) => return Ok(None),
-        };
-        if history_doc.loro().checkout(&target_frontiers).is_err() {
-            return Ok(None);
-        }
+        let snapshot = loro_doc.export(loro::ExportMode::Snapshot).ok()?;
+        let history_doc = Doc::from_snapshot(snapshot).ok()?;
+        history_doc.loro_doc().checkout(&target_frontiers).ok()?;
 
-        Ok(Some(count_all(&history_doc.to_plain_text()).0))
+        Some(count_all(&history_doc.to_plain_text()).0)
     }
 
     #[wasm_bindgen(js_name = setReadOnly)]
-    pub fn set_read_only(&mut self, read_only: bool) -> JsResult<()> {
-        self.core.runtime_mut().set_read_only(read_only);
-        Ok(())
+    pub fn set_read_only(&mut self, read_only: bool) {
+        self.runtime.set_read_only(read_only);
     }
 
     #[wasm_bindgen(js_name = setRenderDebug)]
-    pub fn set_render_debug(&mut self, enabled: bool) -> JsResult<()> {
-        self.core.runtime_mut().set_render_debug(enabled);
-        Ok(())
+    pub fn set_render_debug(&mut self, enabled: bool) {
+        self.runtime.set_render_debug(enabled);
     }
 
     #[wasm_bindgen(js_name = setLayoutDebug)]
-    pub fn set_layout_debug(&mut self, enabled: bool) -> JsResult<()> {
-        self.core.runtime_mut().set_layout_debug(enabled);
-        Ok(())
+    pub fn set_layout_debug(&mut self, enabled: bool) {
+        self.runtime.set_layout_debug(enabled);
     }
 
     #[wasm_bindgen(js_name = setAllFoldsExpanded)]
-    pub fn set_all_folds_expanded(&mut self, expanded: bool) -> JsResult<()> {
-        self.core.runtime_mut().set_all_folds_expanded(expanded);
-        Ok(())
+    pub fn set_all_folds_expanded(&mut self, expanded: bool) {
+        self.runtime.set_all_folds_expanded(expanded);
     }
 
     #[wasm_bindgen(js_name = setMaxPages)]
-    pub fn set_max_pages(&mut self, max_pages: Option<u32>) -> JsResult<()> {
-        self.core
-            .runtime_mut()
-            .set_max_pages(max_pages.map(|v| v as usize));
-        Ok(())
+    pub fn set_max_pages(&mut self, max_pages: Option<u32>) {
+        self.runtime.set_max_pages(max_pages.map(|v| v as usize));
     }
 
     #[wasm_bindgen(js_name = isReadOnly)]
-    pub fn is_read_only(&self) -> JsResult<bool> {
-        Ok(self.core.runtime().is_read_only())
+    pub fn is_read_only(&self) -> bool {
+        self.runtime.is_read_only()
     }
 
     #[wasm_bindgen(js_name = setTrackedItems)]
-    pub fn set_tracked_items(
-        &mut self,
-        group: u32,
-        raw_items: Vec<RawTrackedItem>,
-    ) -> JsResult<()> {
-        self.core.runtime_mut().set_tracked_items(group, raw_items);
-        Ok(())
+    pub fn set_tracked_items(&mut self, group: u32, raw_items: Vec<RawTrackedItem>) {
+        self.runtime.set_tracked_items(group, raw_items);
     }
 
     #[wasm_bindgen(js_name = removeTrackedItems)]
-    pub fn remove_tracked_items(&mut self, group: u32, ids: Vec<String>) -> JsResult<()> {
-        self.core.runtime_mut().remove_tracked_items(group, &ids);
-        Ok(())
+    pub fn remove_tracked_items(&mut self, group: u32, ids: Vec<String>) {
+        self.runtime.remove_tracked_items(group, &ids);
     }
 
     #[wasm_bindgen(js_name = getTextWithMappings)]
-    pub fn get_text_with_mappings(&self) -> JsResult<JsValue> {
-        let result = self.core.get_text_with_mappings();
+    pub fn get_text_with_mappings(&self) -> Result<JsValue, JsValue> {
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct TextWithMappingsResult {
+            text: String,
+            mappings: Vec<TextMapping>,
+        }
+
+        let (text, mappings) = self.runtime.doc().to_text_with_mappings();
+        let result = TextWithMappingsResult { text, mappings };
         Ok(serde_wasm_bindgen::to_value(&result).map_err(|e| e.to_string())?)
     }
 
     #[wasm_bindgen(js_name = performSearch)]
-    pub fn perform_search(&self, query: &str, match_whole_word: bool) -> JsResult<JsValue> {
-        let results = self.core.perform_search(query, match_whole_word);
-        Ok(to_js_value(&results))
+    pub fn perform_search(&self, query: &str, match_whole_word: bool) -> JsValue {
+        let search_query = SearchQuery::new(query.to_string(), match_whole_word);
+        let matches = perform_search(&self.runtime.doc(), &search_query);
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct MatchResult {
+            node_id: String,
+            start_offset: usize,
+            end_offset: usize,
+        }
+
+        let results: Vec<MatchResult> = matches
+            .into_iter()
+            .map(|m| MatchResult {
+                node_id: m.node_id.to_string(),
+                start_offset: m.start_offset,
+                end_offset: m.end_offset,
+            })
+            .collect();
+
+        to_js_value(&results)
     }
 
     #[wasm_bindgen(js_name = revealTrackedItem)]
-    pub fn reveal_tracked_item(&mut self, group: u32, id: &str) -> JsResult<bool> {
-        Ok(self.core.runtime_mut().reveal_tracked_item(group, id))
+    pub fn reveal_tracked_item(&mut self, group: u32, id: &str) -> bool {
+        self.runtime.reveal_tracked_item(group, id)
     }
 
     #[wasm_bindgen(js_name = replaceTextInBlock)]
@@ -656,23 +643,21 @@ impl Editor {
         start_offset: usize,
         end_offset: usize,
         replacement: &str,
-    ) -> JsResult<bool> {
+    ) -> bool {
         let Some(block_id) = NodeId::from_string(block_id) else {
-            return Ok(false);
+            return false;
         };
-        Ok(self
-            .core
-            .runtime_mut()
+        self.runtime
             .replace_text_in_block(block_id, start_offset, end_offset, replacement)
-            .is_ok())
+            .is_ok()
     }
 
     #[wasm_bindgen(js_name = replaceTextInBlocks)]
-    pub fn replace_text_in_blocks(&mut self, items: JsValue) -> JsResult<bool> {
+    pub fn replace_text_in_blocks(&mut self, items: JsValue) -> bool {
         let entries: Vec<(String, usize, usize, String)> =
             match serde_wasm_bindgen::from_value(items) {
                 Ok(v) => v,
-                Err(_) => return Ok(false),
+                Err(_) => return false,
             };
 
         let replacements: Vec<_> = entries
@@ -682,143 +667,76 @@ impl Editor {
             })
             .collect();
 
-        Ok(self
-            .core
-            .runtime_mut()
-            .replace_text_in_blocks(&replacements)
-            .is_ok())
+        self.runtime.replace_text_in_blocks(&replacements).is_ok()
     }
 }
 
-impl Editor {
-    fn render_single_surface(&mut self, page_index: u32) {
-        if !self.surfaces.contains_key(&page_index) {
-            return;
+fn count_all(text: &str) -> (u32, u32, u32) {
+    let Some(gc_data) = get_general_category_map() else {
+        return (0, 0, 0);
+    };
+    let gc_map = gc_data.as_borrowed();
+
+    let mut with_ws: u32 = 0;
+    let mut without_ws: u32 = 0;
+    let mut without_ws_punct: u32 = 0;
+    let mut prev_whitespace = false;
+
+    for c in text.chars() {
+        if c == '\u{200B}' {
+            continue;
         }
-        self.resize_surface_if_stale(page_index);
-        if self.gpu.is_some() {
-            self.render_gpu_surface(page_index);
+
+        if c.is_whitespace() {
+            if !prev_whitespace {
+                with_ws += 1;
+            }
+            prev_whitespace = true;
         } else {
-            self.render_cpu_surface(page_index);
-        }
-    }
+            with_ws += 1;
+            without_ws += 1;
+            prev_whitespace = false;
 
-    /// 할당된 surface 크기가 현재 레이아웃과 다르면 OffscreenCanvas + GPU surface를 resize한다.
-    fn resize_surface_if_stale(&mut self, page_index: u32) {
-        let Some(new_info) = self.core.runtime_mut().resize_surface(page_index) else {
-            return; // 크기 변경 없음
-        };
-
-        let Some(state) = self.surfaces.get_mut(&page_index) else {
-            return;
-        };
-
-        // OffscreenCanvas resize
-        state.offscreen.set_width(new_info.width);
-        state.offscreen.set_height(new_info.height);
-        state.width = new_info.width;
-        state.height = new_info.height;
-
-        // GPU surface 재구성
-        if let WasmRenderTarget::Gpu {
-            ref surface,
-            format,
-        } = state.target
-        {
-            surface.configure(
-                &self
-                    .gpu
-                    .as_ref()
-                    .unwrap()
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .device,
-                &wgpu::SurfaceConfiguration {
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    format,
-                    width: new_info.width,
-                    height: new_info.height,
-                    present_mode: wgpu::PresentMode::AutoVsync,
-                    alpha_mode: wgpu::CompositeAlphaMode::PreMultiplied,
-                    view_formats: vec![],
-                    desired_maximum_frame_latency: 2,
-                },
-            );
-        }
-    }
-
-    fn render_gpu_surface(&mut self, page_index: u32) {
-        let Some(scene) = self.core.runtime_mut().build_surface_scene(page_index) else {
-            return;
-        };
-
-        let Some(state) = self.surfaces.get(&page_index) else {
-            return;
-        };
-        let WasmRenderTarget::Gpu {
-            ref surface,
-            ref format,
-        } = state.target
-        else {
-            return;
-        };
-        let format = *format;
-
-        let Ok(surface_texture) = surface.get_current_texture() else {
-            return;
-        };
-
-        let gpu_arc = self.gpu.as_ref().unwrap().clone();
-        let mut gpu = gpu_arc.lock().unwrap_or_else(|e| e.into_inner());
-        let _ = gpu.render_to_surface(&scene, &surface_texture, format, state.width, state.height);
-        surface_texture.present();
-    }
-
-    fn render_cpu_surface(&mut self, page_index: u32) {
-        let Some(state) = self.surfaces.get(&page_index) else {
-            return;
-        };
-        let width = state.width;
-        let height = state.height;
-        let buf_size = (width as usize) * (height as usize) * 4;
-
-        let mut buf = vec![0u8; buf_size];
-        if !self
-            .core
-            .runtime_mut()
-            .render_surface_into(page_index as usize, &mut buf)
-        {
-            return;
-        }
-
-        let Some(state) = self.surfaces.get(&page_index) else {
-            return;
-        };
-        let WasmRenderTarget::Cpu { ref ctx } = state.target else {
-            return;
-        };
-
-        // premultiplied alpha -> straight alpha 변환
-        let mut straight = vec![0u8; buf_size];
-        for (src, dst) in buf.chunks_exact(4).zip(straight.chunks_exact_mut(4)) {
-            let a = src[3] as u32;
-            if a == 0 {
-                dst.copy_from_slice(&[0, 0, 0, 0]);
-            } else if a == 255 {
-                dst.copy_from_slice(src);
-            } else {
-                dst[0] = ((src[0] as u32 * 255 + a / 2) / a).min(255) as u8;
-                dst[1] = ((src[1] as u32 * 255 + a / 2) / a).min(255) as u8;
-                dst[2] = ((src[2] as u32 * 255 + a / 2) / a).min(255) as u8;
-                dst[3] = src[3];
+            let gc = gc_map.get(c);
+            if !matches!(
+                gc,
+                GeneralCategory::ConnectorPunctuation
+                    | GeneralCategory::DashPunctuation
+                    | GeneralCategory::ClosePunctuation
+                    | GeneralCategory::FinalPunctuation
+                    | GeneralCategory::InitialPunctuation
+                    | GeneralCategory::OtherPunctuation
+                    | GeneralCategory::OpenPunctuation
+            ) {
+                without_ws_punct += 1;
             }
         }
-        let clamped = wasm_bindgen::Clamped(&straight[..]);
-        let Ok(image_data) =
-            web_sys::ImageData::new_with_u8_clamped_array_and_sh(clamped, width, height)
-        else {
-            return;
-        };
-        let _ = ctx.put_image_data(&image_data, 0.0, 0.0);
     }
+
+    let first_non_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}' && !c.is_whitespace());
+
+    if first_non_ws.is_none() {
+        return (0, without_ws, without_ws_punct);
+    }
+
+    let starts_with_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+    let ends_with_ws = text
+        .chars()
+        .rev()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+
+    if starts_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+    if ends_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+
+    (with_ws, without_ws, without_ws_punct)
 }

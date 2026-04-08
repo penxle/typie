@@ -1,14 +1,14 @@
-use std::rc::Rc;
-
-use crate::prelude::*;
-
-use super::{BlockTextIterator, DocInner, NodeRef, SETTINGS_KEY, TextSegmentIterator};
+use crate::model::tree::node_ref::CASCADE_ATTRS_KEY;
+use crate::model::tree::{BlockTextIterator, DocInner, NodeRef, TextSegmentIterator};
 use crate::model::*;
 use crate::schema::Schema;
-
-use loro::{ExpandType, ExportMode, Frontiers, LoroDoc, StyleConfig};
+use anyhow::{Context, Result};
+use loro::{ExpandType, ExportMode, Frontiers, LoroDoc, LoroMap, StyleConfig};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
+use std::rc::Rc;
+
+const SETTINGS_KEY: &str = "settings";
 
 #[derive(Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify::Tsify))]
@@ -33,28 +33,75 @@ pub struct Doc {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextMapping {
+    #[serde(serialize_with = "serialize_node_id")]
     pub node_id: NodeId,
     pub text_start: usize,
     pub text_end: usize,
     pub block_offset: usize,
 }
 
-impl Doc {
-    pub fn from_snapshot(snapshot: Vec<u8>) -> Result<Self> {
-        let loro = LoroDoc::from_snapshot(&snapshot).context("Failed to decode snapshot")?;
-        Ok(Self::from_loro(loro))
-    }
+fn serialize_node_id<S>(node_id: &NodeId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&node_id.to_string())
+}
 
-    fn from_loro(loro: LoroDoc) -> Self {
+impl Doc {
+    pub fn new() -> Self {
+        let schema = Rc::new(Schema::default());
+
+        let loro = LoroDoc::new();
         loro.config_default_text_style(Some(StyleConfig {
             expand: ExpandType::None,
         }));
 
-        let inner = DocInner::new(loro);
+        let map = loro.get_map(SETTINGS_KEY);
+        let mut settings = DocumentSettings::new();
+        settings
+            .encode(&map)
+            .expect("Doc::new: failed to encode default settings");
+
+        let nodes = loro.get_map("nodes");
+
+        let map = nodes
+            .insert_container(&NodeId::ROOT.to_string(), LoroMap::new())
+            .expect("Doc::new: failed to insert root node container");
+        let mut root = Node::Root(RootNode::default());
+        root.encode(&map)
+            .expect("Doc::new: failed to encode root node");
+
+        {
+            let defaults = DefaultAttrs::default();
+            let cascade_map = map
+                .insert_container(CASCADE_ATTRS_KEY, LoroMap::new())
+                .expect("Doc::new: failed to insert cascade attrs container");
+            for attr in defaults.to_attrs() {
+                cascade_map
+                    .insert(attr.key(), attr.to_loro_value())
+                    .expect("Doc::new: failed to insert default cascade attr");
+            }
+        }
+
+        let inner = DocInner::new(loro, schema);
+
         Self { inner }
     }
 
-    pub fn loro(&self) -> &LoroDoc {
+    pub fn from_snapshot(snapshot: Vec<u8>) -> anyhow::Result<Self> {
+        let schema = Rc::new(Schema::default());
+
+        let loro = LoroDoc::from_snapshot(&snapshot).context("Failed to decode snapshot")?;
+        loro.config_default_text_style(Some(StyleConfig {
+            expand: ExpandType::None,
+        }));
+
+        let inner = DocInner::new(loro, schema);
+
+        Ok(Self { inner })
+    }
+
+    pub fn loro_doc(&self) -> &LoroDoc {
         &self.inner.loro
     }
 
@@ -93,6 +140,13 @@ impl Doc {
         Ok(())
     }
 
+    pub fn import_updates_batch(&self, updates_batch: &[Vec<u8>], origin: &str) -> Result<()> {
+        for updates in updates_batch {
+            self.import_updates(updates, origin)?;
+        }
+        Ok(())
+    }
+
     pub fn revert_to(&self, frontiers: &Frontiers) -> Result<()> {
         self.inner.loro.revert_to(frontiers)?;
         Ok(())
@@ -110,6 +164,10 @@ impl Doc {
 
     pub fn is_detached(&self) -> bool {
         self.inner.loro.is_detached()
+    }
+
+    pub fn schema(&self) -> &Schema {
+        &self.inner.schema
     }
 
     pub fn node(&self, id: NodeId) -> Option<NodeRef<'_>> {
@@ -238,10 +296,134 @@ impl Doc {
             .unwrap_or_default()
     }
 
+    /// Exhaustive document validation. Traverses every reachable node and checks
+    /// content schema, styles, annotations, parent-child consistency, and
+    /// grandparent constraints. Intended for scripts/WASM tooling only — too
+    /// expensive for hot paths.
+    pub fn validate_exhaustive(&self) -> Result<()> {
+        // 1. Root node must exist
+        let root = self
+            .node(NodeId::ROOT)
+            .context("Root node does not exist")?;
+        anyhow::ensure!(
+            root.node_type() == Some(NodeType::Root),
+            "Root node has wrong type: {:?}",
+            root.node_type()
+        );
+
+        // 2. Collect all reachable nodes via DFS from root
+        let mut visited = FxHashSet::default();
+        let mut stack: Vec<(NodeId, Vec<NodeType>)> = vec![(NodeId::ROOT, Vec::new())];
+        let mut parent_map: Vec<(NodeId, Option<NodeId>)> = Vec::new();
+
+        while let Some((id, inherited_forbidden)) = stack.pop() {
+            if !visited.insert(id) {
+                anyhow::bail!("Cycle detected: node {} visited twice", id);
+            }
+
+            let node_ref = self
+                .node(id)
+                .with_context(|| format!("Node {} is referenced but does not exist", id))?;
+
+            let node_type = node_ref
+                .node_type()
+                .with_context(|| format!("Node {} could not be decoded", id))?;
+
+            // Check forbidden_descendants violation
+            anyhow::ensure!(
+                !inherited_forbidden.contains(&node_type),
+                "Node {} ({:?}) is a forbidden descendant of an ancestor",
+                id,
+                node_type
+            );
+
+            let expected_parent = if id == NodeId::ROOT {
+                None
+            } else {
+                Some(node_ref.parent_id())
+            };
+            parent_map.push((id, expected_parent.flatten()));
+
+            // Build forbidden list for children
+            let spec = self.inner.schema.node_spec(node_type);
+            let mut child_forbidden = inherited_forbidden;
+            if let Some(forbidden) = spec.forbidden_descendants {
+                for &ft in forbidden {
+                    if !child_forbidden.contains(&ft) {
+                        child_forbidden.push(ft);
+                    }
+                }
+            }
+
+            let children_ids = self.get_children_ids(id);
+            // Push in reverse so we visit in order
+            for &child_id in children_ids.iter().rev() {
+                stack.push((child_id, child_forbidden.clone()));
+            }
+        }
+
+        // 3. Validate parent-child consistency
+        for &(id, expected_parent) in &parent_map {
+            if id == NodeId::ROOT {
+                continue;
+            }
+
+            let parent_id =
+                expected_parent.with_context(|| format!("Non-root node {} has no parent", id))?;
+
+            anyhow::ensure!(
+                visited.contains(&parent_id),
+                "Node {} has parent {} which is not reachable",
+                id,
+                parent_id
+            );
+
+            let parent_children = self.get_children_ids(parent_id);
+            anyhow::ensure!(
+                parent_children.contains(&id),
+                "Node {} claims parent {} but is not in parent's children list",
+                id,
+                parent_id
+            );
+        }
+
+        // 4. Validate each node: content schema, styles, annotations, grandparent constraint
+        for &id in &visited {
+            self.validate_node(id)
+                .with_context(|| format!("Validation failed at node {}", id))?;
+
+            // grandparent_must_be check
+            let node_ref = self.node(id).unwrap();
+            let Some(nt) = node_ref.node_type() else {
+                continue;
+            };
+            let spec = self.inner.schema.node_spec(nt);
+            if let Some(required_grandparent) = spec.grandparent_must_be {
+                let parent_id = node_ref.parent_id();
+                let grandparent_type = parent_id
+                    .and_then(|pid| self.node(pid))
+                    .and_then(|p| p.parent_id())
+                    .and_then(|gid| self.node(gid))
+                    .and_then(|g| g.node_type());
+
+                anyhow::ensure!(
+                    grandparent_type == Some(required_grandparent),
+                    "Node {} ({:?}) requires grandparent {:?}, but got {:?}",
+                    id,
+                    node_ref.node_type(),
+                    required_grandparent,
+                    grandparent_type
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn validate_node(&self, node_id: NodeId) -> Result<()> {
         let node_ref = self.node(node_id).context("Node not found")?;
         let node_type = node_ref.node_type().context("Node decode failed")?;
-        let spec = Schema::node_spec(node_type);
+        let spec = self.inner.schema.node_spec(node_type);
 
         let child_types: Vec<NodeType> = node_ref
             .children()
@@ -310,7 +492,7 @@ impl Doc {
             let Some(node_type) = ancestor.node_type() else {
                 continue;
             };
-            let spec = Schema::node_spec(node_type);
+            let spec = self.inner.schema.node_spec(node_type);
             match get_field(spec) {
                 Some(items) if !items.is_empty() => {
                     for &item in items {
@@ -330,7 +512,7 @@ impl Doc {
         let mut current = Some(node_id);
         while let Some(id) = current {
             if let Some(node_type) = self.get_node_type(id) {
-                let spec = Schema::node_spec(node_type);
+                let spec = self.inner.schema.node_spec(node_type);
                 if let Some(forbidden) = spec.forbidden_descendants {
                     if forbidden.contains(&target_type) {
                         return true;
@@ -428,7 +610,7 @@ impl Doc {
         result
     }
 
-    pub fn get_text_segments(&self, node_id: NodeId) -> Option<Vec<TextSegment>> {
+    pub(crate) fn get_text_segments(&self, node_id: NodeId) -> Option<Vec<TextSegment>> {
         let node_map = self.inner.get_node_map(node_id)?;
         let text = Text::decode_field(&node_map, "text").ok()?;
         Some(text.get_segments())
@@ -474,168 +656,6 @@ impl Doc {
     }
 }
 
-#[cfg(test)]
-impl Doc {
-    pub fn validate_exhaustive(&self) -> Result<()> {
-        // 1. Root node must exist
-        let root = self
-            .node(NodeId::ROOT)
-            .context("Root node does not exist")?;
-        anyhow::ensure!(
-            root.node_type() == Some(NodeType::Root),
-            "Root node has wrong type: {:?}",
-            root.node_type()
-        );
-
-        // 2. Collect all reachable nodes via DFS from root
-        let mut visited = FxHashSet::default();
-        let mut stack: Vec<(NodeId, Vec<NodeType>)> = vec![(NodeId::ROOT, Vec::new())];
-        let mut parent_map: Vec<(NodeId, Option<NodeId>)> = Vec::new();
-
-        while let Some((id, inherited_forbidden)) = stack.pop() {
-            if !visited.insert(id) {
-                anyhow::bail!("Cycle detected: node {} visited twice", id);
-            }
-
-            let node_ref = self
-                .node(id)
-                .with_context(|| format!("Node {} is referenced but does not exist", id))?;
-
-            let node_type = node_ref
-                .node_type()
-                .with_context(|| format!("Node {} could not be decoded", id))?;
-
-            // Check forbidden_descendants violation
-            anyhow::ensure!(
-                !inherited_forbidden.contains(&node_type),
-                "Node {} ({:?}) is a forbidden descendant of an ancestor",
-                id,
-                node_type
-            );
-
-            let expected_parent = if id == NodeId::ROOT {
-                None
-            } else {
-                Some(node_ref.parent_id())
-            };
-            parent_map.push((id, expected_parent.flatten()));
-
-            // Build forbidden list for children
-            let spec = Schema::node_spec(node_type);
-            let mut child_forbidden = inherited_forbidden;
-            if let Some(forbidden) = spec.forbidden_descendants {
-                for &ft in forbidden {
-                    if !child_forbidden.contains(&ft) {
-                        child_forbidden.push(ft);
-                    }
-                }
-            }
-
-            let children_ids = self.get_children_ids(id);
-            // Push in reverse so we visit in order
-            for &child_id in children_ids.iter().rev() {
-                stack.push((child_id, child_forbidden.clone()));
-            }
-        }
-
-        // 3. Validate parent-child consistency
-        for &(id, expected_parent) in &parent_map {
-            if id == NodeId::ROOT {
-                continue;
-            }
-
-            let parent_id =
-                expected_parent.with_context(|| format!("Non-root node {} has no parent", id))?;
-
-            anyhow::ensure!(
-                visited.contains(&parent_id),
-                "Node {} has parent {} which is not reachable",
-                id,
-                parent_id
-            );
-
-            let parent_children = self.get_children_ids(parent_id);
-            anyhow::ensure!(
-                parent_children.contains(&id),
-                "Node {} claims parent {} but is not in parent's children list",
-                id,
-                parent_id
-            );
-        }
-
-        // 4. Validate each node: content schema, styles, annotations, grandparent constraint
-        for &id in &visited {
-            self.validate_node(id)
-                .with_context(|| format!("Validation failed at node {}", id))?;
-
-            // grandparent_must_be check
-            let node_ref = self.node(id).unwrap();
-            let Some(nt) = node_ref.node_type() else {
-                continue;
-            };
-            let spec = Schema::node_spec(nt);
-            if let Some(required_grandparent) = spec.grandparent_must_be {
-                let parent_id = node_ref.parent_id();
-                let grandparent_type = parent_id
-                    .and_then(|pid| self.node(pid))
-                    .and_then(|p| p.parent_id())
-                    .and_then(|gid| self.node(gid))
-                    .and_then(|g| g.node_type());
-
-                anyhow::ensure!(
-                    grandparent_type == Some(required_grandparent),
-                    "Node {} ({:?}) requires grandparent {:?}, but got {:?}",
-                    id,
-                    node_ref.node_type(),
-                    required_grandparent,
-                    grandparent_type
-                );
-            }
-        }
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-impl Default for Doc {
-    fn default() -> Self {
-        use super::CASCADE_ATTRS_KEY;
-        use loro::LoroMap;
-
-        let loro = LoroDoc::new();
-
-        let map = loro.get_map(SETTINGS_KEY);
-        let mut settings = DocumentSettings::default();
-        settings
-            .encode(&map)
-            .expect("Doc::new: failed to encode default settings");
-
-        let nodes = loro.get_map("nodes");
-
-        let map = nodes
-            .insert_container(&NodeId::ROOT.to_string(), LoroMap::new())
-            .expect("Doc::new: failed to insert root node container");
-        let mut root = Node::Root(RootNode::default());
-        root.encode(&map)
-            .expect("Doc::new: failed to encode root node");
-
-        {
-            let defaults = DefaultAttrs::default();
-            let cascade_map = map
-                .insert_container(CASCADE_ATTRS_KEY, LoroMap::new())
-                .expect("Doc::new: failed to insert cascade attrs container");
-            for attr in defaults.to_attrs() {
-                cascade_map
-                    .insert(attr.key(), attr.to_loro_value())
-                    .expect("Doc::new: failed to insert default cascade attr");
-            }
-        }
-
-        Self::from_loro(loro)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct LinkRange {
     pub block_id: NodeId,
@@ -656,7 +676,7 @@ mod tests {
     /// so all offsets after any such emoji drift by 1 per surrogate pair.
     #[test]
     fn test_emoji_causes_text_offset_drift() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
 
         // Paragraph 1: "ab😀cd"
@@ -715,7 +735,7 @@ mod tests {
     /// wrong for UTF-16 consumers.
     #[test]
     fn test_emoji_causes_block_offset_drift() {
-        let doc = Doc::default();
+        let doc = Doc::new();
         let root = doc.node(NodeId::ROOT).unwrap();
 
         // Single paragraph: "ab😀" (plain) + "cd" (bold) — two styled segments

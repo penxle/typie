@@ -9,8 +9,6 @@ mod utils;
 #[macro_use]
 mod test_utils;
 
-mod prelude;
-
 mod diagnostics;
 mod ffi;
 mod font;

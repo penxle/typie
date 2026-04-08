@@ -1,6 +1,4 @@
 use crate::font::decode_tpft;
-use crate::render::glyph::rasterize::GlyphCache;
-use crate::render::glyph::scale::ScaleContext;
 use crate::runtime::FontMapping;
 use crate::runtime::text_replacement::{
     CompiledPattern, RawTextReplacementRule, TextReplacementRule,
@@ -20,7 +18,7 @@ thread_local! {
     pub static GLOBALS: RefCell<Globals> = RefCell::new(Globals::new());
 }
 
-pub struct SharedFontData(UnsafeCell<Vec<u8>>);
+pub(crate) struct SharedFontData(UnsafeCell<Vec<u8>>);
 
 unsafe impl Send for SharedFontData {}
 unsafe impl Sync for SharedFontData {}
@@ -32,7 +30,7 @@ impl AsRef<[u8]> for SharedFontData {
 }
 
 impl SharedFontData {
-    pub fn new(data: Vec<u8>) -> Self {
+    pub(crate) fn new(data: Vec<u8>) -> Self {
         Self(UnsafeCell::new(data))
     }
 
@@ -49,8 +47,6 @@ pub struct Font {
 pub struct Globals {
     pub parley_layout_context: RefCell<parley::LayoutContext<TextBrush>>,
     pub parley_font_context: RefCell<parley::FontContext>,
-    pub scale_context: RefCell<ScaleContext>,
-    pub glyph_cache: RefCell<GlyphCache>,
     pub text_replacement_rules: RefCell<Vec<TextReplacementRule>>,
     pub fonts: RefCell<HashMap<(String, u16), Font>>,
     pub auto_surround_enabled: RefCell<bool>,
@@ -65,8 +61,6 @@ impl Globals {
         Self {
             parley_layout_context: RefCell::new(parley::LayoutContext::new()),
             parley_font_context: RefCell::new(parley::FontContext::new()),
-            scale_context: RefCell::new(ScaleContext::new()),
-            glyph_cache: RefCell::new(GlyphCache::new()),
             fonts: RefCell::new(HashMap::new()),
             text_replacement_rules: RefCell::new(Vec::new()),
             auto_surround_enabled: RefCell::new(true),
@@ -111,7 +105,7 @@ pub fn update_font_mappings(
     })
 }
 
-pub fn font_version(ptr: *const u8) -> u64 {
+pub(crate) fn font_version(ptr: *const u8) -> u64 {
     GLOBALS.with(|globals| {
         let globals = globals.borrow();
         globals
@@ -123,7 +117,7 @@ pub fn font_version(ptr: *const u8) -> u64 {
     })
 }
 
-pub fn register_font(
+pub(crate) fn register_font(
     fcx: &mut parley::FontContext,
     family: &str,
     weight: u16,
@@ -302,7 +296,6 @@ where
     })
 }
 
-#[cfg(any(feature = "native", test))]
 pub fn clear_text_replacement_rules() {
     GLOBALS.with(|globals| {
         let globals = globals.borrow();

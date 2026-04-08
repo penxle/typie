@@ -1,7 +1,7 @@
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_insert_newline(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_insert_newline(&mut self) -> Vec<Effect> {
         self.transact(|tr| {
             if tr.insert_paragraph_on_nontextblock_selection()? {
                 return Ok(true);
@@ -20,7 +20,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_insert_hard_break(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_insert_hard_break(&mut self) -> Vec<Effect> {
         self.transact(|tr| {
             tr.delete_selection()?;
             tr.normalize()?;
@@ -28,7 +28,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_insert_page_break(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_insert_page_break(&mut self) -> Vec<Effect> {
         self.transact(|tr| {
             tr.insert_paragraph_on_nontextblock_selection()?;
             tr.delete_selection()?;

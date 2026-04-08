@@ -82,7 +82,7 @@ impl OutlinePen for SvgPathPen {
     }
 }
 
-pub fn outline_text_to_svg(font_data: &[u8], text: &str) -> Result<String, String> {
+pub(crate) fn outline_text_to_svg(font_data: &[u8], text: &str) -> Result<String, String> {
     let font = FontRef::new(font_data).map_err(|e| e.to_string())?;
     let size = Size::new(SVG_PPEM);
     let loc = LocationRef::default();

@@ -2,7 +2,7 @@ use crate::model::*;
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_add_remark(
+    pub(crate) fn handle_add_remark(
         &mut self,
         node_id: String,
         user_id: String,
@@ -24,7 +24,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_update_remark(
+    pub(crate) fn handle_update_remark(
         &mut self,
         node_id: String,
         remark_id: String,
@@ -42,7 +42,11 @@ impl Runtime {
         })
     }
 
-    pub fn handle_remove_remark(&mut self, node_id: String, remark_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_remove_remark(
+        &mut self,
+        node_id: String,
+        remark_id: String,
+    ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };

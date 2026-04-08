@@ -1,18 +1,24 @@
-use super::common::{CharacterCounts, EditorCore};
 use crate::global::{add_font_base, add_font_chunk, set_available_fonts};
 use crate::global::{clear_text_replacement_rules, set_text_replacement_rules};
-use crate::icu_data::load_icu_data;
+use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::{is_cursor_hit, is_selection_hit};
-use crate::model::{DocExportMode, NodeId};
-use crate::render::backend::RenderBackend;
-use crate::runtime::Message;
+use crate::model::{
+    CONTINUOUS_PAGE_MARGIN, Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode,
+    TextMapping,
+};
+use crate::runtime::search::{SearchQuery, perform_search};
 use crate::runtime::slate::{Slate, get_slate_offsets};
 use crate::runtime::text_replacement::RawTextReplacementRule;
 use crate::runtime::tracked_items::RawTrackedItem;
+use crate::runtime::{Message, Runtime, State};
+use crate::state::{Position, Selection};
+use crate::types::Affinity;
+use icu_properties::props::GeneralCategory;
 use std::backtrace::Backtrace;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, c_char};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 #[cfg(target_os = "android")]
@@ -379,18 +385,9 @@ pub extern "C" fn editor_application_create_editor(
         {
             let editor = if !snapshot.is_null() && snapshot_len > 0 {
                 let data = unsafe { std::slice::from_raw_parts(snapshot, snapshot_len) };
-                EditorInner {
-                    core: EditorCore::with_snapshot(
-                        scale_factor,
-                        data.to_vec(),
-                        RenderBackend::new_cpu(),
-                        None,
-                    )?,
-                }
+                EditorInner::with_snapshot(scale_factor, data.to_vec())?
             } else {
-                EditorInner {
-                    core: EditorCore::new(scale_factor, RenderBackend::new_cpu()),
-                }
+                EditorInner::new(scale_factor)
             };
             Ok(Box::into_raw(Box::new(editor)) as *mut EditorHandle)
         },
@@ -399,7 +396,47 @@ pub extern "C" fn editor_application_create_editor(
 }
 
 struct EditorInner {
-    core: EditorCore,
+    runtime: Runtime,
+}
+
+impl EditorInner {
+    fn new(scale_factor: f64) -> Self {
+        let doc = Rc::new(Doc::new());
+        let width = Self::get_width(&doc);
+
+        let root = doc
+            .node(NodeId::ROOT)
+            .expect("Doc::new: ROOT node must exist after construction");
+        let paragraph_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .expect("Doc::new: failed to insert initial paragraph");
+
+        Self::create(scale_factor, doc, paragraph_id, width)
+    }
+
+    fn with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> FfiResult<Self> {
+        let doc = Rc::new(Doc::from_snapshot(snapshot).map_err(|e| e.to_string())?);
+        let width = Self::get_width(&doc);
+        Ok(Self::create(scale_factor, doc, NodeId::ROOT, width))
+    }
+
+    fn create(scale_factor: f64, doc: Rc<Doc>, cursor_node: NodeId, width: f32) -> Self {
+        let state = State::new(
+            doc,
+            Selection::collapsed(Position::new(cursor_node, 0, Affinity::default())),
+        );
+        let mut runtime = Runtime::new(width, scale_factor, state);
+        runtime.layout();
+        Self { runtime }
+    }
+
+    fn get_width(doc: &Doc) -> f32 {
+        match doc.settings().layout_mode {
+            LayoutMode::Paginated { page_width, .. } => page_width,
+            LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
+        }
+    }
 }
 
 #[repr(C)]
@@ -427,7 +464,7 @@ pub extern "C" fn editor_dispatch(editor: *mut EditorHandle, message_json: *cons
                 serde_json::from_str(json).map_err(|e| format!("Failed to parse message: {e}"))?;
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.core.runtime_mut().enqueue_message(message);
+            editor.runtime.enqueue_message(message);
             Ok(())
         },
         -1
@@ -442,7 +479,7 @@ pub extern "C" fn editor_tick(editor: *mut EditorHandle) -> i32 {
                 return Err("Editor is null".into());
             }
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.core.runtime_mut().tick();
+            editor.runtime.tick();
             Ok(())
         },
         -1
@@ -471,11 +508,7 @@ pub extern "C" fn editor_set_tracing(
                 opentelemetry::trace::TraceId::from_hex(trace_id_str).map_err(|e| e.to_string())?;
             let parent_span_id = opentelemetry::trace::SpanId::from_hex(parent_span_id_str)
                 .map_err(|e| e.to_string())?;
-            editor
-                .core
-                .runtime_mut()
-                .tracing
-                .set_tracing(trace_id, parent_span_id);
+            editor.runtime.tracing.set_tracing(trace_id, parent_span_id);
             Ok(())
         },
         -1
@@ -490,7 +523,7 @@ pub extern "C" fn editor_clear_tracing(editor: *mut EditorHandle) -> i32 {
                 return Err("Editor is null".into());
             }
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.core.runtime_mut().tracing.clear_tracing();
+            editor.runtime.tracing.clear_tracing();
             Ok(())
         },
         -1
@@ -504,7 +537,7 @@ pub extern "C" fn editor_drain_traces(editor: *mut EditorHandle) -> *mut c_char 
         return std::ptr::null_mut();
     }
     let editor = unsafe { &mut *(editor as *mut EditorInner) };
-    let traces = editor.core.runtime_mut().tracing.drain();
+    let traces = editor.runtime.tracing.drain();
     match serde_json::to_string(&traces) {
         Ok(json) => match std::ffi::CString::new(json) {
             Ok(c_str) => c_str.into_raw(),
@@ -521,7 +554,7 @@ pub extern "C" fn editor_get_slate_ptr(editor: *mut EditorHandle) -> *const u8 {
         return std::ptr::null();
     }
     let editor = unsafe { &*(editor as *const EditorInner) };
-    &editor.core.runtime().slate as *const _ as *const u8
+    &editor.runtime.slate as *const _ as *const u8
 }
 
 #[unsafe(no_mangle)]
@@ -536,7 +569,7 @@ pub extern "C" fn editor_get_slab_ptr(editor: *mut EditorHandle) -> *const u8 {
         return std::ptr::null();
     }
     let editor = unsafe { &*(editor as *const EditorInner) };
-    editor.core.runtime().slab.data.as_ptr()
+    editor.runtime.slab.data.as_ptr()
 }
 
 #[unsafe(no_mangle)]
@@ -546,7 +579,7 @@ pub extern "C" fn editor_get_slab_len(editor: *mut EditorHandle) -> u32 {
         return 0;
     }
     let editor = unsafe { &*(editor as *const EditorInner) };
-    editor.core.runtime().slab.len() as u32
+    editor.runtime.slab.len() as u32
 }
 
 #[unsafe(no_mangle)]
@@ -577,7 +610,7 @@ pub extern "C" fn editor_flush(editor: *mut EditorHandle) -> i32 {
             }
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.core.runtime_mut().flush();
+            editor.runtime.flush();
             Ok(())
         },
         -1
@@ -592,7 +625,7 @@ pub extern "C" fn editor_get_page_count(editor: *mut EditorHandle) -> usize {
                 return Err("Editor is null".into());
             }
             let editor = unsafe { &*(editor as *const EditorInner) };
-            Ok(editor.core.runtime().pages().len())
+            Ok(editor.runtime.pages().len())
         },
         0
     )
@@ -606,7 +639,7 @@ pub struct RenderInfo {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_get_surface_info(
+pub extern "C" fn editor_get_render_info(
     editor: *mut EditorHandle,
     page_index: usize,
     out_info: *mut RenderInfo,
@@ -619,9 +652,8 @@ pub extern "C" fn editor_get_surface_info(
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
             let info = editor
-                .core
-                .runtime_mut()
-                .get_surface_info(page_index)
+                .runtime
+                .get_render_info(page_index)
                 .ok_or("Page not found")?;
 
             unsafe {
@@ -643,7 +675,7 @@ thread_local! {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn editor_render_surface_into(
+pub extern "C" fn editor_render_page_to(
     editor: *mut EditorHandle,
     page_index: usize,
     dst: *mut u8,
@@ -660,9 +692,8 @@ pub extern "C" fn editor_render_surface_into(
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
             let info = editor
-                .core
-                .runtime_mut()
-                .get_surface_info(page_index)
+                .runtime
+                .get_render_info(page_index)
                 .ok_or("Page not found")?;
 
             let width = info.width as usize;
@@ -678,11 +709,7 @@ pub extern "C" fn editor_render_surface_into(
             if dst_stride == tight_stride {
                 let dst_slice =
                     unsafe { std::slice::from_raw_parts_mut(dst, tight_stride * height) };
-                if !editor
-                    .core
-                    .runtime_mut()
-                    .render_surface_into(page_index, dst_slice)
-                {
+                if !editor.runtime.render_page_to(page_index, dst_slice) {
                     return Err("Render failed".into());
                 }
                 if convert_to_bgra {
@@ -697,9 +724,8 @@ pub extern "C" fn editor_render_surface_into(
                     }
 
                     if !editor
-                        .core
-                        .runtime_mut()
-                        .render_surface_into(page_index, &mut temp_buf[..required_size])
+                        .runtime
+                        .render_page_to(page_index, &mut temp_buf[..required_size])
                     {
                         return false;
                     }
@@ -792,9 +818,8 @@ pub extern "C" fn editor_is_selection_hit(
             }
 
             let editor = unsafe { &*(editor as *const EditorInner) };
-            let runtime = editor.core.runtime();
-            Ok(if let Some(page) = runtime.pages().get(page_idx) {
-                if is_selection_hit(runtime.doc(), page, runtime.selection(), x, y) {
+            Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
+                if is_selection_hit(editor.runtime.doc(), page, editor.runtime.selection(), x, y) {
                     1
                 } else {
                     0
@@ -821,9 +846,8 @@ pub extern "C" fn editor_is_cursor_hit(
             }
 
             let editor = unsafe { &*(editor as *const EditorInner) };
-            let runtime = editor.core.runtime();
-            Ok(if let Some(page) = runtime.pages().get(page_idx) {
-                if is_cursor_hit(runtime.doc(), page, runtime.selection(), x, y) {
+            Ok(if let Some(page) = editor.runtime.pages().get(page_idx) {
+                if is_cursor_hit(editor.runtime.doc(), page, editor.runtime.selection(), x, y) {
                     1
                 } else {
                     0
@@ -865,8 +889,7 @@ pub extern "C" fn editor_render_drag_image(
             let visible_pages =
                 unsafe { std::slice::from_raw_parts(visible_pages, visible_pages_len) };
             let result = editor
-                .core
-                .runtime_mut()
+                .runtime
                 .render_drag_image(visible_pages, page_idx)
                 .ok_or("Failed to render drag image")?;
 
@@ -892,6 +915,16 @@ pub extern "C" fn editor_render_drag_image(
     )
 }
 
+#[repr(C)]
+pub struct CharacterCounts {
+    pub doc_with_whitespace: u32,
+    pub doc_without_whitespace: u32,
+    pub doc_without_whitespace_and_punctuation: u32,
+    pub selection_with_whitespace: u32,
+    pub selection_without_whitespace: u32,
+    pub selection_without_whitespace_and_punctuation: u32,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn editor_get_character_counts(
     editor: *mut EditorHandle,
@@ -904,14 +937,97 @@ pub extern "C" fn editor_get_character_counts(
             }
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            let counts = editor.core.get_character_counts();
+            let doc_text = editor.runtime.get_cached_plain_text();
+            let selection_text = {
+                let state = editor.runtime.state();
+                state.selection.to_plain_text(&state.doc)
+            };
+
+            let doc_counts = count_all(&doc_text);
+            let sel_counts = count_all(&selection_text);
+
             unsafe {
-                *out_counts = counts;
+                (*out_counts).doc_with_whitespace = doc_counts.0;
+                (*out_counts).doc_without_whitespace = doc_counts.1;
+                (*out_counts).doc_without_whitespace_and_punctuation = doc_counts.2;
+                (*out_counts).selection_with_whitespace = sel_counts.0;
+                (*out_counts).selection_without_whitespace = sel_counts.1;
+                (*out_counts).selection_without_whitespace_and_punctuation = sel_counts.2;
             }
             Ok(())
         },
         -1
     )
+}
+
+fn count_all(text: &str) -> (u32, u32, u32) {
+    let Some(gc_data) = get_general_category_map() else {
+        return (0, 0, 0);
+    };
+    let gc_map = gc_data.as_borrowed();
+
+    let mut with_ws: u32 = 0;
+    let mut without_ws: u32 = 0;
+    let mut without_ws_punct: u32 = 0;
+    let mut prev_whitespace = false;
+
+    for c in text.chars() {
+        if c == '\u{200B}' {
+            continue;
+        }
+
+        if c.is_whitespace() {
+            if !prev_whitespace {
+                with_ws += 1;
+            }
+            prev_whitespace = true;
+        } else {
+            with_ws += 1;
+            without_ws += 1;
+            prev_whitespace = false;
+
+            let gc = gc_map.get(c);
+            if !matches!(
+                gc,
+                GeneralCategory::ConnectorPunctuation
+                    | GeneralCategory::DashPunctuation
+                    | GeneralCategory::ClosePunctuation
+                    | GeneralCategory::FinalPunctuation
+                    | GeneralCategory::InitialPunctuation
+                    | GeneralCategory::OtherPunctuation
+                    | GeneralCategory::OpenPunctuation
+            ) {
+                without_ws_punct += 1;
+            }
+        }
+    }
+
+    let first_non_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}' && !c.is_whitespace());
+
+    if first_non_ws.is_none() {
+        return (0, without_ws, without_ws_punct);
+    }
+
+    let starts_with_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+    let ends_with_ws = text
+        .chars()
+        .rev()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+
+    if starts_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+    if ends_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+
+    (with_ws, without_ws, without_ws_punct)
 }
 
 #[unsafe(no_mangle)]
@@ -923,14 +1039,26 @@ pub extern "C" fn editor_get_clipboard_data(editor: *mut EditorHandle) -> *mut c
             }
 
             let editor = unsafe { &*(editor as *const EditorInner) };
-            let data = match editor.core.get_clipboard_data() {
-                Some(d) => d,
-                None => return Ok(std::ptr::null_mut()),
+            let state = editor.runtime.state();
+            if state.selection.is_collapsed() {
+                return Ok(std::ptr::null_mut());
+            }
+
+            let fragment = match state.selection.extract_fragment(&state.doc) {
+                Ok(f) => f,
+                Err(_) => return Ok(std::ptr::null_mut()),
             };
 
+            if fragment.is_empty() {
+                return Ok(std::ptr::null_mut());
+            }
+
+            let html = fragment.to_html();
+            let text = fragment.to_plain_text();
+
             let json = serde_json::json!({
-                "html": data.html,
-                "text": data.text,
+                "html": html,
+                "text": text,
             });
             let json_str =
                 serde_json::to_string(&json).map_err(|e| format!("Failed to serialize: {e}"))?;
@@ -989,8 +1117,7 @@ pub extern "C" fn editor_export(
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
             let data = editor
-                .core
-                .runtime_mut()
+                .runtime
                 .export(export_mode)
                 .map_err(|e| format!("Failed to export: {e}"))?;
 
@@ -1019,8 +1146,7 @@ pub extern "C" fn editor_import_updates(
             let data = unsafe { std::slice::from_raw_parts(updates, len) };
 
             editor
-                .core
-                .runtime_mut()
+                .runtime
                 .import_updates(data)
                 .map_err(|e| format!("Failed to import updates: {e}"))?;
 
@@ -1054,8 +1180,7 @@ pub extern "C" fn editor_import_updates_batch(
                 .collect();
 
             editor
-                .core
-                .runtime_mut()
+                .runtime
                 .import_updates_batch(&batch)
                 .map_err(|e| format!("Failed to import updates batch: {e}"))?;
 
@@ -1074,7 +1199,16 @@ pub extern "C" fn editor_get_text_with_mappings(editor: *mut EditorHandle) -> *m
             }
 
             let editor = unsafe { &*(editor as *const EditorInner) };
-            let result = editor.core.get_text_with_mappings();
+
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct TextWithMappingsResult {
+                text: String,
+                mappings: Vec<TextMapping>,
+            }
+
+            let (text, mappings) = editor.runtime.doc().to_text_with_mappings();
+            let result = TextWithMappingsResult { text, mappings };
             let json_str =
                 serde_json::to_string(&result).map_err(|e| format!("Failed to serialize: {e}"))?;
             let c_str = CString::new(json_str).map_err(|_| "Invalid string")?;
@@ -1101,7 +1235,7 @@ pub extern "C" fn editor_set_tracked_items(
                 .map_err(|e| format!("Failed to parse items: {e}"))?;
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.core.runtime_mut().set_tracked_items(group, items);
+            editor.runtime.set_tracked_items(group, items);
 
             Ok(())
         },
@@ -1126,7 +1260,7 @@ pub extern "C" fn editor_remove_tracked_items(
                 serde_json::from_str(json_str).map_err(|e| format!("Failed to parse ids: {e}"))?;
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
-            editor.core.runtime_mut().remove_tracked_items(group, &ids);
+            editor.runtime.remove_tracked_items(group, &ids);
 
             Ok(())
         },
@@ -1149,7 +1283,25 @@ pub extern "C" fn editor_perform_search(
             let query_str = parse_cstr(query, "query")?;
 
             let editor = unsafe { &*(editor as *const EditorInner) };
-            let results = editor.core.perform_search(query_str, match_whole_word != 0);
+            let search_query = SearchQuery::new(query_str.to_string(), match_whole_word != 0);
+            let matches = perform_search(editor.runtime.doc(), &search_query);
+
+            #[derive(serde::Serialize)]
+            #[serde(rename_all = "camelCase")]
+            struct MatchResult {
+                node_id: String,
+                start_offset: usize,
+                end_offset: usize,
+            }
+
+            let results: Vec<MatchResult> = matches
+                .into_iter()
+                .map(|m| MatchResult {
+                    node_id: m.node_id.to_string(),
+                    start_offset: m.start_offset,
+                    end_offset: m.end_offset,
+                })
+                .collect();
 
             let json_str =
                 serde_json::to_string(&results).map_err(|e| format!("Failed to serialize: {e}"))?;
@@ -1175,13 +1327,11 @@ pub extern "C" fn editor_reveal_tracked_item(
             let id = parse_cstr(id, "id")?;
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
 
-            Ok(
-                if editor.core.runtime_mut().reveal_tracked_item(group, id) {
-                    1
-                } else {
-                    0
-                },
-            )
+            Ok(if editor.runtime.reveal_tracked_item(group, id) {
+                1
+            } else {
+                0
+            })
         },
         -1
     )
@@ -1209,8 +1359,7 @@ pub extern "C" fn editor_replace_text_in_block(
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
             let success = editor
-                .core
-                .runtime_mut()
+                .runtime
                 .replace_text_in_block(node_id, start_offset, end_offset, replacement_str)
                 .is_ok();
 
@@ -1245,8 +1394,7 @@ pub extern "C" fn editor_replace_text_in_blocks(
 
             let editor = unsafe { &mut *(editor as *mut EditorInner) };
             editor
-                .core
-                .runtime_mut()
+                .runtime
                 .replace_text_in_blocks(&replacements)
                 .map_err(|e| format!("Failed to replace: {e}"))?;
 
@@ -1272,8 +1420,7 @@ pub extern "C" fn editor_insert_template_fragment(
             let data = unsafe { std::slice::from_raw_parts(snapshot, snapshot_len) };
 
             editor
-                .core
-                .runtime_mut()
+                .runtime
                 .insert_template_fragment(data.to_vec())
                 .map_err(|e| format!("Failed to insert template: {e}"))?;
 
@@ -1285,7 +1432,7 @@ pub extern "C" fn editor_insert_template_fragment(
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderSurfaceInto(
+pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderPageTo(
     _env: EnvUnowned,
     _class: JClass,
     editor_ptr: jlong,
@@ -1304,7 +1451,7 @@ pub extern "system" fn Java_co_typie_editortexture_EditorTexture_nativeRenderSur
     let dst_height = dst_height as usize;
     let format = format as i32;
 
-    editor_render_surface_into(
+    editor_render_page_to(
         editor, page_index, dst, dst_stride, dst_width, dst_height, format,
     ) as jlong
 }

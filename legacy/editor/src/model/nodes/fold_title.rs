@@ -196,7 +196,14 @@ impl Layout for FoldTitleNode {
 
         let (layout, strut_metrics) = layout;
         let layout = Rc::new(layout);
-        let metrics = build_metrics(&layout, &text, strut_metrics, None, line_height);
+        let metrics = build_metrics(
+            &layout,
+            &text,
+            ctx.scale_factor,
+            strut_metrics,
+            None,
+            line_height,
+        );
 
         let expanded = ctx
             .view_states

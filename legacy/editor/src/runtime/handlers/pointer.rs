@@ -7,21 +7,21 @@ use crate::state::{Position, Selection};
 use std::cmp::Ordering;
 
 impl Runtime {
-    pub fn set_pointer_mode(&mut self, mode: PointerMode) {
+    pub(crate) fn set_pointer_mode(&mut self, mode: PointerMode) {
         if self.pointer.mode != mode {
             self.pointer.mode = mode;
             self.pending.pointer_mode_changed = true;
         }
     }
 
-    pub fn reset_pointer(&mut self) {
+    pub(crate) fn reset_pointer(&mut self) {
         if !self.pointer.mode.is_idle() {
             self.pending.pointer_mode_changed = true;
         }
         self.pointer.reset();
     }
 
-    pub fn handle_pointer_down(
+    pub(crate) fn handle_pointer_down(
         &mut self,
         page_idx: usize,
         x: f32,
@@ -212,7 +212,7 @@ impl Runtime {
         )
     }
 
-    pub fn handle_pointer_move(
+    pub(crate) fn handle_pointer_move(
         &mut self,
         page_idx: usize,
         x: f32,
@@ -298,7 +298,7 @@ impl Runtime {
         }
     }
 
-    pub fn handle_pointer_up(
+    pub(crate) fn handle_pointer_up(
         &mut self,
         _page_idx: usize,
         _x: f32,
@@ -348,7 +348,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_extend_selection_to(
+    pub(crate) fn handle_extend_selection_to(
         &mut self,
         anchor_page_idx: usize,
         anchor_x: f32,

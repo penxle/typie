@@ -2,25 +2,25 @@ use crate::model::NodeId;
 use rustc_hash::FxHashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum LayoutInvalidationOp {
+pub(crate) enum LayoutInvalidationOp {
     Full,
     NodeAndAncestors { node_id: NodeId },
     SubtreeAndAncestors { node_id: NodeId },
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct LayoutInvalidationBatch {
+pub(crate) struct LayoutInvalidationBatch {
     full: bool,
     node_and_ancestors: FxHashSet<NodeId>,
     subtree_and_ancestors: FxHashSet<NodeId>,
 }
 
 impl LayoutInvalidationBatch {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
-    pub fn push(&mut self, op: LayoutInvalidationOp) {
+    pub(crate) fn push(&mut self, op: LayoutInvalidationOp) {
         if self.full {
             return;
         }
@@ -45,19 +45,19 @@ impl LayoutInvalidationBatch {
         }
     }
 
-    pub fn is_full(&self) -> bool {
+    pub(crate) fn is_full(&self) -> bool {
         self.full
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         !self.full && self.node_and_ancestors.is_empty() && self.subtree_and_ancestors.is_empty()
     }
 
-    pub fn node_and_ancestors_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
+    pub(crate) fn node_and_ancestors_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
         self.node_and_ancestors.iter().copied()
     }
 
-    pub fn subtree_and_ancestors_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
+    pub(crate) fn subtree_and_ancestors_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
         self.subtree_and_ancestors.iter().copied()
     }
 

@@ -156,7 +156,7 @@ macro_rules! doc {
     ($($items:tt)*) => {
         {
             $crate::test_utils::init_test_env();
-            let doc = std::rc::Rc::new($crate::model::Doc::default());
+            let doc = std::rc::Rc::new($crate::model::Doc::new());
             let state = $crate::runtime::State::new(
                 doc,
                 $crate::state::Selection::collapsed(
@@ -184,7 +184,7 @@ macro_rules! state {
     ) => {
         {
             $crate::test_utils::init_test_env();
-            let doc = std::rc::Rc::new($crate::model::Doc::default());
+            let doc = std::rc::Rc::new($crate::model::Doc::new());
             let state = $crate::runtime::State::new(
                 doc,
                 $crate::state::Selection::collapsed(
@@ -210,7 +210,7 @@ macro_rules! state {
     ) => {
         {
             $crate::test_utils::init_test_env();
-            let doc = std::rc::Rc::new($crate::model::Doc::default());
+            let doc = std::rc::Rc::new($crate::model::Doc::new());
             let state = $crate::runtime::State::new(
                 doc,
                 $crate::state::Selection::collapsed(

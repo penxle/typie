@@ -6,18 +6,22 @@
 
 use std::sync::{Arc, Mutex};
 
-use super::common::{CharacterCounts, EditorCore};
 use crate::global::set_text_replacement_rules;
 use crate::global::{add_font_base, add_font_chunk, set_available_fonts};
-use crate::icu_data::load_icu_data;
+use crate::icu_data::{get_general_category_map, load_icu_data};
 use crate::layout::query::{is_cursor_hit, is_selection_hit};
-use crate::model::{DocExportMode, NodeId};
-use crate::render::PlatformBuffer;
-use crate::render::backend::{GpuDevice, RenderBackend};
-use crate::runtime::Message;
+use crate::model::{
+    CONTINUOUS_PAGE_MARGIN, Doc, DocExportMode, LayoutMode, Node, NodeId, ParagraphNode,
+    TextMapping,
+};
+use crate::runtime::search::{SearchQuery, perform_search};
 use crate::runtime::slate::get_slate_offsets;
 use crate::runtime::text_replacement::RawTextReplacementRule;
 use crate::runtime::tracked_items::RawTrackedItem;
+use crate::runtime::{Message, Runtime, State};
+use crate::state::{Position, Selection};
+use crate::types::Affinity;
+use icu_properties::props::GeneralCategory;
 
 // ── Error ───────────────────────────────────────────────────────────────────
 
@@ -49,10 +53,20 @@ impl From<anyhow::Error> for EditorError {
 // ── Records ─────────────────────────────────────────────────────────────────
 
 #[derive(uniffi::Record)]
-pub struct SurfaceInfo {
+pub struct PageRenderInfo {
     pub width: u32,
     pub height: u32,
     pub buffer_size: u64,
+}
+
+#[derive(uniffi::Record)]
+pub struct CharacterCounts {
+    pub doc_with_whitespace: u32,
+    pub doc_without_whitespace: u32,
+    pub doc_without_whitespace_and_punctuation: u32,
+    pub selection_with_whitespace: u32,
+    pub selection_without_whitespace: u32,
+    pub selection_without_whitespace_and_punctuation: u32,
 }
 
 #[derive(uniffi::Record)]
@@ -65,74 +79,16 @@ pub struct DragImageData {
     pub pixels: Vec<u8>,
 }
 
-// ── SurfaceHandle ──────────────────────────────────────────────────────────────
-
-#[derive(uniffi::Object)]
-pub struct SurfaceHandle {
-    native_handle: u64,
-    width: u32,
-    height: u32,
-    resources: std::sync::Mutex<Option<PlatformBuffer>>,
-}
-
-#[uniffi::export]
-impl SurfaceHandle {
-    pub fn native_handle(&self) -> u64 {
-        self.native_handle
-    }
-
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-
-    pub fn height(&self) -> u32 {
-        self.height
-    }
-
-    /// Desktop JVM 전용: pixel buffer 데이터를 Vec<u8>로 반환.
-    /// Android/iOS에서는 None 반환 (native_handle로 직접 접근).
-    pub fn pixel_data(&self) -> Option<Vec<u8>> {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            let guard = self.resources.lock().unwrap_or_else(|e| e.into_inner());
-            match guard.as_ref()? {
-                PlatformBuffer::Desktop { pixel_data } => Some(pixel_data.clone()),
-            }
-        }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            None
-        }
-    }
-
-    // close()는 UniFFI가 자동 생성 (Disposable). Drop에서 리소스 해제.
-}
-
 // ── EditorEngine (Application-level) ────────────────────────────────────────
 
 #[derive(uniffi::Object)]
-pub struct EditorEngine {
-    gpu: std::sync::Mutex<Option<Arc<std::sync::Mutex<GpuDevice>>>>,
-}
+pub struct EditorEngine;
 
 #[uniffi::export]
 impl EditorEngine {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
-        Arc::new(Self {
-            gpu: std::sync::Mutex::new(None),
-        })
-    }
-
-    pub async fn init_gpu(&self) -> bool {
-        match GpuDevice::new().await {
-            Some(c) => {
-                *self.gpu.lock().unwrap_or_else(|e| e.into_inner()) =
-                    Some(Arc::new(std::sync::Mutex::new(c)));
-                true
-            }
-            None => false,
-        }
+        Arc::new(Self)
     }
 
     pub fn load_icu_data(&self, data: Vec<u8>) -> Result<(), EditorError> {
@@ -144,24 +100,12 @@ impl EditorEngine {
         scale_factor: f64,
         snapshot: Option<Vec<u8>>,
     ) -> Result<Arc<Editor>, EditorError> {
-        let backend = {
-            let gpu = self.gpu.lock().unwrap_or_else(|e| e.into_inner());
-            match &*gpu {
-                Some(ctx) => RenderBackend::new_gpu(Arc::clone(ctx)),
-                None => RenderBackend::new_cpu(),
-            }
-        };
-        let core = match snapshot {
-            Some(data) if !data.is_empty() => {
-                EditorCore::with_snapshot(scale_factor, data, backend, None)?
-            }
-            _ => EditorCore::new(scale_factor, backend),
+        let inner = match snapshot {
+            Some(data) if !data.is_empty() => EditorInner::with_snapshot(scale_factor, data)?,
+            _ => EditorInner::new(scale_factor),
         };
         Ok(Arc::new(Editor {
-            inner: Mutex::new(EditorInner {
-                core,
-                surfaces: std::collections::HashMap::new(),
-            }),
+            inner: Mutex::new(inner),
         }))
     }
 
@@ -213,8 +157,47 @@ impl EditorEngine {
 // ── EditorInner ─────────────────────────────────────────────────────────────
 
 struct EditorInner {
-    core: EditorCore,
-    surfaces: std::collections::HashMap<u32, Arc<SurfaceHandle>>,
+    runtime: Runtime,
+}
+
+impl EditorInner {
+    fn new(scale_factor: f64) -> Self {
+        let doc = std::rc::Rc::new(Doc::new());
+        let width = Self::get_width(&doc);
+
+        let root = doc
+            .node(NodeId::ROOT)
+            .expect("Doc::new: ROOT node must exist after construction");
+        let paragraph_id = root
+            .as_mut()
+            .insert_child(0, Node::Paragraph(ParagraphNode::default()))
+            .expect("Doc::new: failed to insert initial paragraph");
+
+        Self::create(scale_factor, doc, paragraph_id, width)
+    }
+
+    fn with_snapshot(scale_factor: f64, snapshot: Vec<u8>) -> Result<Self, EditorError> {
+        let doc = std::rc::Rc::new(Doc::from_snapshot(snapshot).map_err(|e| e.to_string())?);
+        let width = Self::get_width(&doc);
+        Ok(Self::create(scale_factor, doc, NodeId::ROOT, width))
+    }
+
+    fn create(scale_factor: f64, doc: std::rc::Rc<Doc>, cursor_node: NodeId, width: f32) -> Self {
+        let state = State::new(
+            doc,
+            Selection::collapsed(Position::new(cursor_node, 0, Affinity::default())),
+        );
+        let mut runtime = Runtime::new(width, scale_factor, state);
+        runtime.layout();
+        Self { runtime }
+    }
+
+    fn get_width(doc: &Doc) -> f32 {
+        match doc.settings().layout_mode {
+            LayoutMode::Paginated { page_width, .. } => page_width,
+            LayoutMode::Continuous { max_width, .. } => max_width + 2.0 * CONTINUOUS_PAGE_MARGIN,
+        }
+    }
 }
 
 // ── Editor ──────────────────────────────────────────────────────────────────
@@ -239,141 +222,39 @@ impl Editor {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let message: Message = serde_json::from_str(&message_json)
             .map_err(|e| format!("Failed to parse message: {e}"))?;
-        inner.core.runtime_mut().enqueue_message(message);
+        inner.runtime.enqueue_message(message);
         Ok(())
     }
 
     pub fn tick(&self) -> Result<(), EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.core.runtime_mut().tick();
+        inner.runtime.tick();
         Ok(())
     }
 
     pub fn flush(&self) -> Result<(), EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.core.runtime_mut().flush();
+        inner.runtime.flush();
         Ok(())
     }
 
-    // ── Mount / Render API ────────────────────────────────────────────
-
-    pub fn attach_surface(&self, page_index: u32) -> Result<Arc<SurfaceHandle>, EditorError> {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let surface_size = inner
-            .core
-            .runtime_mut()
-            .attach_surface(page_index)
-            .ok_or_else(|| EditorError::General {
-                msg: format!("invalid page index: {page_index}"),
-            })?;
-
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (native_handle, resources) = {
-            let pixel_data = vec![0u8; (surface_size.width * surface_size.height * 4) as usize];
-            (0u64, PlatformBuffer::Desktop { pixel_data })
-        };
-
-        #[cfg(target_os = "android")]
-        let (native_handle, resources) = {
-            use crate::render::backend::gpu::platform::android::AHardwareBufferWrapper;
-            let buffer = AHardwareBufferWrapper::new(surface_size.width, surface_size.height)
-                .ok_or_else(|| EditorError::General {
-                    msg: "failed to allocate AHardwareBuffer".into(),
-                })?;
-            let handle = buffer.native_handle();
-            (handle, PlatformBuffer::Android { buffer })
-        };
-
-        #[cfg(target_os = "ios")]
-        let (native_handle, resources) = {
-            use crate::render::backend::gpu::platform::ios::IOSurfaceWrapper;
-            let surface = IOSurfaceWrapper::new(surface_size.width, surface_size.height)
-                .ok_or_else(|| EditorError::General {
-                    msg: "failed to create IOSurface".into(),
-                })?;
-            let handle = surface.native_handle();
-            (handle, PlatformBuffer::Ios { surface })
-        };
-
-        let texture = Arc::new(SurfaceHandle {
-            native_handle,
-            width: surface_size.width,
-            height: surface_size.height,
-            resources: std::sync::Mutex::new(Some(resources)),
-        });
-        inner.surfaces.insert(page_index, Arc::clone(&texture));
-        Ok(texture)
-    }
-
-    pub fn detach_surface(&self, page_index: u32) -> Result<(), EditorError> {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.surfaces.remove(&page_index);
-        inner.core.runtime_mut().detach_surface(page_index);
-        Ok(())
-    }
-
-    // ── Rendering ────────────────────────────────────────────────────────
+    // ── Rendering ───────────────────────────────────────────────────────
 
     pub fn get_page_count(&self) -> Result<u32, EditorError> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        Ok(inner.core.runtime().pages().len() as u32)
+        Ok(inner.runtime.pages().len() as u32)
     }
 
-    pub fn get_surface_info(&self, page_index: u32) -> Result<Option<SurfaceInfo>, EditorError> {
+    pub fn get_render_info(&self, page_index: u32) -> Result<Option<PageRenderInfo>, EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         Ok(inner
-            .core
-            .runtime_mut()
-            .get_surface_info(page_index as usize)
-            .map(|info| SurfaceInfo {
+            .runtime
+            .get_render_info(page_index as usize)
+            .map(|info| PageRenderInfo {
                 width: info.width as u32,
                 height: info.height as u32,
                 buffer_size: info.buffer_size as u64,
             }))
-    }
-
-    /// 단일 surface를 렌더링하여 SurfaceHandle의 pixel buffer에 기록한다.
-    pub fn render_surface(&self, page_index: u32) -> Result<bool, EditorError> {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(handle) = inner.surfaces.get(&page_index).cloned() else {
-            return Ok(false);
-        };
-
-        let info = inner
-            .core
-            .runtime_mut()
-            .get_surface_info(page_index as usize)
-            .ok_or_else(|| EditorError::General {
-                msg: format!("invalid page index: {page_index}"),
-            })?;
-        let buf_size = info.buffer_size;
-
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            let mut pixels = vec![0u8; buf_size];
-            let ok = inner
-                .core
-                .runtime_mut()
-                .render_surface_into(page_index as usize, &mut pixels);
-            if ok {
-                let mut guard = handle.resources.lock().unwrap_or_else(|e| e.into_inner());
-                if let Some(PlatformBuffer::Desktop { ref mut pixel_data }) = *guard {
-                    pixel_data.clear();
-                    pixel_data.extend_from_slice(&pixels);
-                }
-            }
-            Ok(ok)
-        }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            let mut pixels = vec![0u8; buf_size];
-            let ok = inner
-                .core
-                .runtime_mut()
-                .render_surface_into(page_index as usize, &mut pixels);
-            // TODO: 네이티브 버퍼에 복사 (AHardwareBuffer / IOSurface)
-            Ok(ok)
-        }
     }
 
     pub fn render_drag_image(
@@ -384,8 +265,7 @@ impl Editor {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let visible: Vec<usize> = visible_pages.into_iter().map(|p| p as usize).collect();
         Ok(inner
-            .core
-            .runtime_mut()
+            .runtime
             .render_drag_image(&visible, page_idx as usize)
             .map(|result| {
                 let data = unsafe { std::slice::from_raw_parts(result.ptr(), result.len()) };
@@ -404,23 +284,23 @@ impl Editor {
 
     pub fn is_selection_hit(&self, page_idx: u32, x: f32, y: f32) -> Result<bool, EditorError> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let runtime = inner.core.runtime();
-        Ok(runtime
+        Ok(inner
+            .runtime
             .pages()
             .get(page_idx as usize)
             .map_or(false, |page| {
-                is_selection_hit(runtime.doc(), page, runtime.selection(), x, y)
+                is_selection_hit(inner.runtime.doc(), page, inner.runtime.selection(), x, y)
             }))
     }
 
     pub fn is_cursor_hit(&self, page_idx: u32, x: f32, y: f32) -> Result<bool, EditorError> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let runtime = inner.core.runtime();
-        Ok(runtime
+        Ok(inner
+            .runtime
             .pages()
             .get(page_idx as usize)
             .map_or(false, |page| {
-                is_cursor_hit(runtime.doc(), page, runtime.selection(), x, y)
+                is_cursor_hit(inner.runtime.doc(), page, inner.runtime.selection(), x, y)
             }))
     }
 
@@ -445,18 +325,13 @@ impl Editor {
                 });
             }
         };
-        inner
-            .core
-            .runtime_mut()
-            .export(export_mode)
-            .map_err(EditorError::from)
+        inner.runtime.export(export_mode).map_err(EditorError::from)
     }
 
     pub fn import_updates(&self, data: Vec<u8>) -> Result<(), EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner
-            .core
-            .runtime_mut()
+            .runtime
             .import_updates(&data)
             .map_err(|e| format!("Failed to import updates: {e}"))?;
         Ok(())
@@ -465,8 +340,7 @@ impl Editor {
     pub fn import_updates_batch(&self, updates: Vec<Vec<u8>>) -> Result<(), EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner
-            .core
-            .runtime_mut()
+            .runtime
             .import_updates_batch(&updates)
             .map_err(|e| format!("Failed to import updates batch: {e}"))?;
         Ok(())
@@ -476,26 +350,65 @@ impl Editor {
 
     pub fn get_character_counts(&self) -> Result<CharacterCounts, EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        Ok(inner.core.get_character_counts())
+        let doc_text = inner.runtime.get_cached_plain_text();
+        let selection_text = {
+            let state = inner.runtime.state();
+            state.selection.to_plain_text(&state.doc)
+        };
+
+        let doc_counts = count_all(&doc_text);
+        let sel_counts = count_all(&selection_text);
+
+        Ok(CharacterCounts {
+            doc_with_whitespace: doc_counts.0,
+            doc_without_whitespace: doc_counts.1,
+            doc_without_whitespace_and_punctuation: doc_counts.2,
+            selection_with_whitespace: sel_counts.0,
+            selection_without_whitespace: sel_counts.1,
+            selection_without_whitespace_and_punctuation: sel_counts.2,
+        })
     }
 
     pub fn get_clipboard_data(&self) -> Result<Option<String>, EditorError> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let data = inner.core.get_clipboard_data();
-        match data {
-            None => Ok(None),
-            Some(clip) => {
-                let json = serde_json::json!({ "html": clip.html, "text": clip.text });
-                let json_str = serde_json::to_string(&json)
-                    .map_err(|e| format!("Failed to serialize: {e}"))?;
-                Ok(Some(json_str))
-            }
+        let state = inner.runtime.state();
+        if state.selection.is_collapsed() {
+            return Ok(None);
         }
+
+        let fragment = match state.selection.extract_fragment(&state.doc) {
+            Ok(f) => f,
+            Err(_) => return Ok(None),
+        };
+
+        if fragment.is_empty() {
+            return Ok(None);
+        }
+
+        let html = fragment.to_html();
+        let text = fragment.to_plain_text();
+
+        let json = serde_json::json!({
+            "html": html,
+            "text": text,
+        });
+        let json_str =
+            serde_json::to_string(&json).map_err(|e| format!("Failed to serialize: {e}"))?;
+        Ok(Some(json_str))
     }
 
     pub fn get_text_with_mappings(&self) -> Result<String, EditorError> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let result = inner.core.get_text_with_mappings();
+
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct TextWithMappingsResult {
+            text: String,
+            mappings: Vec<TextMapping>,
+        }
+
+        let (text, mappings) = inner.runtime.doc().to_text_with_mappings();
+        let result = TextWithMappingsResult { text, mappings };
         serde_json::to_string(&result).map_err(|e| format!("Failed to serialize: {e}").into())
     }
 
@@ -507,7 +420,26 @@ impl Editor {
         match_whole_word: bool,
     ) -> Result<String, EditorError> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let results = inner.core.perform_search(&query, match_whole_word);
+        let search_query = SearchQuery::new(query, match_whole_word);
+        let matches = perform_search(inner.runtime.doc(), &search_query);
+
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct MatchResult {
+            node_id: String,
+            start_offset: usize,
+            end_offset: usize,
+        }
+
+        let results: Vec<MatchResult> = matches
+            .into_iter()
+            .map(|m| MatchResult {
+                node_id: m.node_id.to_string(),
+                start_offset: m.start_offset,
+                end_offset: m.end_offset,
+            })
+            .collect();
+
         serde_json::to_string(&results).map_err(|e| format!("Failed to serialize: {e}").into())
     }
 
@@ -517,7 +449,7 @@ impl Editor {
         let items: Vec<RawTrackedItem> =
             serde_json::from_str(&items_json).map_err(|e| format!("Failed to parse items: {e}"))?;
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.core.runtime_mut().set_tracked_items(group, items);
+        inner.runtime.set_tracked_items(group, items);
         Ok(())
     }
 
@@ -525,13 +457,13 @@ impl Editor {
         let ids: Vec<String> =
             serde_json::from_str(&ids_json).map_err(|e| format!("Failed to parse ids: {e}"))?;
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.core.runtime_mut().remove_tracked_items(group, &ids);
+        inner.runtime.remove_tracked_items(group, &ids);
         Ok(())
     }
 
     pub fn reveal_tracked_item(&self, group: u32, id: String) -> Result<bool, EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        Ok(inner.core.runtime_mut().reveal_tracked_item(group, &id))
+        Ok(inner.runtime.reveal_tracked_item(group, &id))
     }
 
     // ── Block Operations ────────────────────────────────────────────────
@@ -548,8 +480,7 @@ impl Editor {
         })?;
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         Ok(inner
-            .core
-            .runtime_mut()
+            .runtime
             .replace_text_in_block(
                 node_id,
                 start_offset as usize,
@@ -572,8 +503,7 @@ impl Editor {
 
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner
-            .core
-            .runtime_mut()
+            .runtime
             .replace_text_in_blocks(&replacements)
             .map_err(|e| format!("Failed to replace: {e}"))?;
         Ok(())
@@ -582,8 +512,7 @@ impl Editor {
     pub fn insert_template_fragment(&self, snapshot: Vec<u8>) -> Result<(), EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner
-            .core
-            .runtime_mut()
+            .runtime
             .insert_template_fragment(snapshot)
             .map_err(|e| format!("Failed to insert template: {e}"))?;
         Ok(())
@@ -597,23 +526,91 @@ impl Editor {
             .map_err(|e| format!("Invalid trace_id: {e}"))?;
         let parent_span_id = opentelemetry::trace::SpanId::from_hex(&parent_span_id)
             .map_err(|e| format!("Invalid parent_span_id: {e}"))?;
-        inner
-            .core
-            .runtime_mut()
-            .tracing
-            .set_tracing(trace_id, parent_span_id);
+        inner.runtime.tracing.set_tracing(trace_id, parent_span_id);
         Ok(())
     }
 
     pub fn clear_tracing(&self) -> Result<(), EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.core.runtime_mut().tracing.clear_tracing();
+        inner.runtime.tracing.clear_tracing();
         Ok(())
     }
 
     pub fn drain_traces(&self) -> Result<String, EditorError> {
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let traces = inner.core.runtime_mut().tracing.drain();
+        let traces = inner.runtime.tracing.drain();
         serde_json::to_string(&traces).map_err(|e| format!("Failed to serialize: {e}").into())
     }
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+fn count_all(text: &str) -> (u32, u32, u32) {
+    let Some(gc_data) = get_general_category_map() else {
+        return (0, 0, 0);
+    };
+    let gc_map = gc_data.as_borrowed();
+
+    let mut with_ws: u32 = 0;
+    let mut without_ws: u32 = 0;
+    let mut without_ws_punct: u32 = 0;
+    let mut prev_whitespace = false;
+
+    for c in text.chars() {
+        if c == '\u{200B}' {
+            continue;
+        }
+
+        if c.is_whitespace() {
+            if !prev_whitespace {
+                with_ws += 1;
+            }
+            prev_whitespace = true;
+        } else {
+            with_ws += 1;
+            without_ws += 1;
+            prev_whitespace = false;
+
+            let gc = gc_map.get(c);
+            if !matches!(
+                gc,
+                GeneralCategory::ConnectorPunctuation
+                    | GeneralCategory::DashPunctuation
+                    | GeneralCategory::ClosePunctuation
+                    | GeneralCategory::FinalPunctuation
+                    | GeneralCategory::InitialPunctuation
+                    | GeneralCategory::OtherPunctuation
+                    | GeneralCategory::OpenPunctuation
+            ) {
+                without_ws_punct += 1;
+            }
+        }
+    }
+
+    let first_non_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}' && !c.is_whitespace());
+
+    if first_non_ws.is_none() {
+        return (0, without_ws, without_ws_punct);
+    }
+
+    let starts_with_ws = text
+        .chars()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+    let ends_with_ws = text
+        .chars()
+        .rev()
+        .find(|&c| c != '\u{200B}')
+        .map_or(false, |c| c.is_whitespace());
+
+    if starts_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+    if ends_with_ws && with_ws > 0 {
+        with_ws = with_ws.saturating_sub(1);
+    }
+
+    (with_ws, without_ws, without_ws_punct)
 }

@@ -45,7 +45,7 @@ fn clip_intersection_uses_ruby_overhang_bounds() {
         }),
     };
 
-    let clip = LayoutRect::from_xywh(0.0, line_y - 8.0, 300.0, 6.0).expect("valid clip rect");
+    let clip = CacheRect::from_xywh(0.0, line_y - 8.0, 300.0, 6.0).expect("valid clip rect");
     let with_ruby = make_positioned_line(vec![RubySegment {
         start_offset: 0,
         end_offset: 1,
@@ -73,9 +73,9 @@ fn next_page_ruby_clip_intersects_boundary_root() {
     let page_width = 300.0;
     let page_height = 200.0;
     let boundary_root =
-        LayoutRect::from_xywh(0.0, page_height, page_width, page_height).expect("valid root rect");
+        CacheRect::from_xywh(0.0, page_height, page_width, page_height).expect("valid root rect");
 
-    let narrow_clip = LayoutRect::from_xywh(
+    let narrow_clip = CacheRect::from_xywh(
         0.0,
         page_height - PAGE_EDGE_OVERFLOW_BAND,
         page_width,
@@ -233,7 +233,7 @@ fn overflow_overlay_reuses_cached_tile_when_next_page_is_unchanged() {
         Size::new(page_width, page_height),
     );
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_size(page_width, page_height, 1.0);
 
@@ -241,7 +241,7 @@ fn overflow_overlay_reuses_cached_tile_when_next_page_is_unchanged() {
     let height = renderer.height() as usize;
     let mut buffer = vec![0u8; width * height * 4];
 
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(
         &current_page,
         0,
         Some(&next_page),
@@ -261,13 +261,13 @@ fn overflow_overlay_reuses_cached_tile_when_next_page_is_unchanged() {
             .overflow_cache
             .get_mut(&0)
             .expect("overflow cache entry should exist");
-        for pixel in entry.tile.data_mut().chunks_exact_mut(4) {
+        for pixel in entry.tile_pixmap.data_mut().chunks_exact_mut(4) {
             pixel.copy_from_slice(&poison);
         }
     }
 
     buffer.fill(0);
-    assert!(renderer.render_into(
+    assert!(renderer.render_to(
         &current_page,
         0,
         Some(&next_page),

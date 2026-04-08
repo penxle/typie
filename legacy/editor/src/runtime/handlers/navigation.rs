@@ -35,7 +35,11 @@ impl Runtime {
             .map(|ancestor| ancestor.node_id())
     }
 
-    pub fn handle_navigate(&mut self, direction: Direction, extend_selection: bool) -> Vec<Effect> {
+    pub(crate) fn handle_navigate(
+        &mut self,
+        direction: Direction,
+        extend_selection: bool,
+    ) -> Vec<Effect> {
         let is_upward = matches!(
             direction,
             Direction::Up | Direction::PageUp | Direction::SentenceUp
@@ -87,7 +91,7 @@ impl Runtime {
         })
     }
 
-    pub fn is_at_document_start(&self) -> bool {
+    pub(crate) fn is_at_document_start(&self) -> bool {
         let selection = &self.state.selection;
         if !selection.is_collapsed() {
             return false;
@@ -101,7 +105,7 @@ impl Runtime {
         selection.head == doc_start_selection.head
     }
 
-    pub fn handle_select_all(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_select_all(&mut self) -> Vec<Effect> {
         let mut effects = if self.state.preedit.is_some() {
             self.handle_commit_preedit()
         } else {
@@ -147,7 +151,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_select_word(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_select_word(&mut self) -> Vec<Effect> {
         let selection = self.state.selection;
         if selection.is_collapsed() {
             let position = selection.head;
@@ -187,7 +191,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_select_sentence(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_select_sentence(&mut self) -> Vec<Effect> {
         let selection = self.state.selection;
         if selection.is_collapsed() {
             let position = selection.head;
@@ -227,7 +231,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_select_paragraph(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_select_paragraph(&mut self) -> Vec<Effect> {
         let selection = self.state.selection;
         if selection.is_collapsed() {
             let position = selection.head;
@@ -245,7 +249,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_set_selection(
+    pub(crate) fn handle_set_selection(
         &mut self,
         anchor_node_id: String,
         anchor_offset: usize,
@@ -283,7 +287,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_collapse_selection(&mut self, to_anchor: bool) -> Vec<Effect> {
+    pub(crate) fn handle_collapse_selection(&mut self, to_anchor: bool) -> Vec<Effect> {
         let selection = self.state.selection;
         if selection.is_collapsed() {
             return vec![];

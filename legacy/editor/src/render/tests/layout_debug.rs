@@ -92,7 +92,7 @@ fn layout_debug_rects_coalesce_nested_recomputed_nodes() {
     );
     assert!(
         rects[0]
-            .approx_eq(LayoutRect::from_xywh(8.0, 12.0, 180.0, 80.0).expect("valid parent rect")),
+            .approx_eq(CacheRect::from_xywh(8.0, 12.0, 180.0, 80.0).expect("valid parent rect")),
         "상위 노드가 dirty rect로 선택되어야 함"
     );
 
@@ -106,7 +106,7 @@ fn layout_debug_rects_coalesce_nested_recomputed_nodes() {
     );
     assert!(
         child_rects[0]
-            .approx_eq(LayoutRect::from_xywh(20.0, 28.0, 60.0, 24.0).expect("valid child rect")),
+            .approx_eq(CacheRect::from_xywh(20.0, 28.0, 60.0, 24.0).expect("valid child rect")),
         "자식 단독 recompute는 자식 위치를 정확히 표시해야 함"
     );
 }
@@ -170,7 +170,7 @@ fn layout_debug_reuses_same_revision() {
         }]),
         Size::new(300.0, 200.0),
     );
-    let doc = Doc::default();
+    let doc = Doc::new();
     let diagnostics = FrameDiagnostics::new();
     let mut renderer = Renderer::new(1.0, diagnostics.clone());
     renderer.set_layout_debug(true);

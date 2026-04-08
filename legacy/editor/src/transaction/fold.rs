@@ -1,5 +1,4 @@
 use crate::model::{FoldContentNode, FoldNode, FoldTitleNode, Node, NodeId, NodeType};
-use crate::schema::Schema;
 use crate::state::position_helpers::leaf_block_start;
 use crate::state::{
     Position, Selection, collect_top_level_blocks_in_range, selected_single_block_id,
@@ -14,7 +13,7 @@ impl Transaction {
 
         let target = self.expand_selection_until(|parent, blocks| {
             let parent_type = parent.as_type();
-            let parent_spec = Schema::node_spec(parent_type);
+            let parent_spec = self.doc().schema().node_spec(parent_type);
             let fold_type = NodeType::Fold;
 
             if !parent_spec.content.matches(fold_type) {
@@ -22,7 +21,7 @@ impl Transaction {
             }
 
             let fold_content_type = NodeType::FoldContent;
-            let fold_content_spec = Schema::node_spec(fold_content_type);
+            let fold_content_spec = self.doc().schema().node_spec(fold_content_type);
             let block_types: Vec<NodeType> = blocks
                 .iter()
                 .filter_map(|id| self.node(*id).and_then(|n| n.node().map(|n| n.as_type())))
