@@ -12,12 +12,10 @@ pub fn handle_navigation_intent(
         NavigationIntent::Move { movement, extend } => {
             let selection = editor.state.selection;
             let resource_guard = editor.resource.lock().unwrap();
-            let new_selection = editor.view.resolve_movement(
-                &selection.head,
-                &movement,
-                &editor.state.doc,
-                &resource_guard,
-            );
+            let new_selection =
+                editor
+                    .view
+                    .resolve_movement(&selection.head, &movement, &resource_guard);
             drop(resource_guard);
             if let Some(new_selection) = new_selection {
                 editor.transact(|tr| {

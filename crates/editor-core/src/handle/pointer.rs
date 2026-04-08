@@ -28,9 +28,10 @@ pub fn handle_pointer_event(editor: &mut Editor, event: PointerEvent) -> Result<
                 }
                 2 => {
                     editor.is_dragging = false;
-                    let pos = hit.as_ref().map(|s| &s.head);
+                    let resolved = hit.as_ref().and_then(|s| s.head.resolve(&editor.state.doc));
                     let resource = editor.resource.lock().unwrap();
-                    pos.and_then(|p| editor.view.select_word_at(p, &editor.state.doc, &resource))
+                    resolved
+                        .and_then(|rp| editor.view.select_word_at(&rp, &resource))
                         .or(hit)
                 }
                 3.. => {

@@ -50,10 +50,9 @@ pub fn handle_deletion_intent(
         DeletionIntent::Move { movement } => {
             let head = editor.state().selection.head;
             let resource_guard = editor.resource.lock().unwrap();
-            let target =
-                editor
-                    .view
-                    .resolve_movement(&head, &movement, &editor.state.doc, &resource_guard);
+            let target = editor
+                .view
+                .resolve_movement(&head, &movement, &resource_guard);
             drop(resource_guard);
 
             if let Some(target) = target {

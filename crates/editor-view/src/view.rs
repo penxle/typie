@@ -1,7 +1,7 @@
 use editor_common::{EdgeInsets, Movement};
 use editor_model::{Doc, LayoutMode, NodeId};
 use editor_resource::Resource;
-use editor_state::{Position, ResolvedSelection, Selection};
+use editor_state::{Position, ResolvedPosition, ResolvedSelection, Selection};
 use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
@@ -126,13 +126,12 @@ impl View {
 
     pub fn select_word_at(
         &self,
-        pos: &Position,
-        doc: &Doc,
+        pos: &ResolvedPosition<'_>,
         resource: &Resource,
     ) -> Option<Selection> {
         let result = self.layout.as_ref()?;
         let segmenters = resource.segmenters.as_deref()?;
-        query::segmentation::select_word_at(&result.tree, doc, pos, segmenters)
+        query::segmentation::select_word_at(&result.tree, pos, segmenters)
     }
 
     pub fn select_paragraph_at(&self, pos: &Position) -> Option<Selection> {
@@ -144,7 +143,6 @@ impl View {
         &mut self,
         pos: &Position,
         movement: &Movement,
-        _doc: &Doc,
         resource: &Resource,
     ) -> Option<Selection> {
         let result = self.layout.as_ref()?;

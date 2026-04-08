@@ -1,7 +1,6 @@
 use editor_common::StrExt;
-use editor_model::Doc;
 use editor_resource::TextSegmenters;
-use editor_state::{Affinity, Position, Selection};
+use editor_state::{Affinity, Position, ResolvedPosition, Selection};
 use icu_segmenter::{SentenceSegmenter, WordSegmenter};
 
 use crate::paginate::*;
@@ -99,18 +98,18 @@ pub fn move_sentence_backward(
 
 pub fn select_word_at(
     tree: &LayoutTree,
-    doc: &Doc,
-    pos: &Position,
+    pos: &ResolvedPosition<'_>,
     segmenters: &TextSegmenters,
 ) -> Option<Selection> {
-    let line_node = search::find_line_at(tree, pos)?;
+    let position = Position::from(pos);
+    let line_node = search::find_line_at(tree, &position)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
         _ => return None,
     };
 
     if line.glyph_runs.is_empty() {
-        let para = doc.node(line.node_id)?;
+        let para = pos.doc().node(line.node_id)?;
         let parent_id = para.parent()?.id();
         let index = para.index()?;
         return Some(Selection::new(
@@ -127,7 +126,7 @@ pub fn select_word_at(
         ));
     }
 
-    let char_idx = line_char_index(line, pos)?;
+    let char_idx = line_char_index(line, &position)?;
     let text = line_text(line);
     let byte_idx = text.nth_char_byte_offset(char_idx);
 
@@ -263,7 +262,7 @@ fn prev_sentence_boundary(
 mod tests {
     use editor_common::{Alignment, EdgeInsets, Rect};
     use editor_macros::doc;
-    use editor_model::{Doc, NodeId};
+    use editor_model::NodeId;
 
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
@@ -428,7 +427,7 @@ mod tests {
 
     #[test]
     fn select_word_at_middle_of_word() {
-        let id = NodeId::new();
+        let (doc, id) = doc! { root { paragraph { id: text("hello world") } } };
         let line_node = LayoutNode {
             rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
             content: LayoutContent::Line(make_line(id, "hello world")),
@@ -443,11 +442,10 @@ mod tests {
                 }),
             },
         };
-        let doc = Doc::new_test();
         let segmenters = TextSegmenters::new_test();
-        let pos = Position::new(id, 2); // "he|llo world"
+        let pos = Position::new(id, 2).resolve(&doc).unwrap(); // "he|llo world"
 
-        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
         assert_eq!(sel.anchor, Position::new(id, 0));
         assert_eq!(sel.head.node_id, id);
         assert!(sel.head.offset > 0 && sel.head.offset <= 5);
@@ -455,7 +453,7 @@ mod tests {
 
     #[test]
     fn select_word_at_word_boundary() {
-        let id = NodeId::new();
+        let (doc, id) = doc! { root { paragraph { id: text("hello world") } } };
         let line_node = LayoutNode {
             rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
             content: LayoutContent::Line(make_line(id, "hello world")),
@@ -470,17 +468,16 @@ mod tests {
                 }),
             },
         };
-        let doc = Doc::new_test();
         let segmenters = TextSegmenters::new_test();
-        let pos = Position::new(id, 5); // "hello| world"
+        let pos = Position::new(id, 5).resolve(&doc).unwrap(); // "hello| world"
 
-        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
         assert_ne!(sel.anchor, sel.head);
     }
 
     #[test]
     fn select_word_at_end_of_word() {
-        let id = NodeId::new();
+        let (doc, id) = doc! { root { paragraph { id: text("hello world") } } };
         let line_node = LayoutNode {
             rect: Rect::from_xywh(0.0, 0.0, 110.0, 20.0),
             content: LayoutContent::Line(make_line(id, "hello world")),
@@ -495,11 +492,10 @@ mod tests {
                 }),
             },
         };
-        let doc = Doc::new_test();
         let segmenters = TextSegmenters::new_test();
-        let pos = Position::new(id, 11); // "hello world|"
+        let pos = Position::new(id, 11).resolve(&doc).unwrap(); // "hello world|"
 
-        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
         assert_eq!(sel.anchor.node_id, id);
         assert!(sel.anchor.offset >= 6);
         assert_eq!(sel.head.node_id, id);
@@ -536,9 +532,9 @@ mod tests {
             },
         };
         let segmenters = TextSegmenters::new_test();
-        let pos = Position::new(p1, 0);
+        let pos = Position::new(p1, 0).resolve(&doc).unwrap();
 
-        let sel = select_word_at(&tree, &doc, &pos, &segmenters).unwrap();
+        let sel = select_word_at(&tree, &pos, &segmenters).unwrap();
         assert_eq!(sel.anchor.node_id, NodeId::ROOT);
         assert_eq!(sel.anchor.offset, 0);
         assert_eq!(sel.head.node_id, NodeId::ROOT);

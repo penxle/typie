@@ -1104,7 +1104,6 @@ mod integration_tests {
                     direction: Direction::Forward,
                     axis: Axis::Vertical,
                 },
-                &state.doc,
                 &Resource::new(),
             )
             .unwrap();
@@ -1137,7 +1136,6 @@ mod integration_tests {
                     direction: Direction::Forward,
                     axis: Axis::Horizontal,
                 },
-                &state.doc,
                 &Resource::new(),
             )
             .unwrap();
@@ -1169,7 +1167,6 @@ mod integration_tests {
                 &Movement::Grapheme {
                     direction: Direction::Forward,
                 },
-                &state.doc,
                 &Resource::new(),
             )
             .unwrap();
@@ -1201,7 +1198,6 @@ mod integration_tests {
                 &Movement::Grapheme {
                     direction: Direction::Backward,
                 },
-                &state.doc,
                 &Resource::new(),
             )
             .unwrap();
