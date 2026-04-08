@@ -12,6 +12,7 @@
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
   import { graphql } from '$mearie';
+  import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import TrashEntity from './TrashEntity.svelte';
   import type { DashboardLayout_TrashTree_TrashFolder_folder$key } from '$mearie';
 
@@ -33,6 +34,8 @@
           slug
           order
           depth
+
+          ...EntityIcon_entity
 
           ancestors {
             id
@@ -187,7 +190,7 @@
   >
     <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
       <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
-      <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={FolderIcon} size={14} />
+      <EntityIcon style={css.raw({ flexShrink: '0' })} entity$key={folder.data.entity} fallback={FolderIcon} size={14} />
 
       <span
         class={css({

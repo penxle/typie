@@ -6,10 +6,10 @@
   import { Icon } from '@typie/ui/components';
   import { Dialog, Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
-  import FileIcon from '~icons/lucide/file';
   import Trash2Icon from '~icons/lucide/trash-2';
   import Undo2Icon from '~icons/lucide/undo-2';
   import { graphql } from '$mearie';
+  import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import type { DashboardLayout_TrashTree_TrashDocument_document$key } from '$mearie';
 
   type Props = {
@@ -28,6 +28,8 @@
         entity {
           id
           slug
+
+          ...EntityIcon_entity
 
           ancestors {
             id
@@ -138,7 +140,7 @@
   role="treeitem"
 >
   <div class={css({ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0', flexGrow: '1' })}>
-    <Icon style={css.raw({ color: 'text.faint', flexShrink: '0' })} icon={FileIcon} size={14} />
+    <EntityIcon style={css.raw({ flexShrink: '0' })} entity$key={document.data.entity} size={14} />
 
     <span
       class={css({

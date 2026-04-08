@@ -33,6 +33,8 @@
             id
             slug
 
+            ...EntityIcon_entity
+
             node {
               __typename
             }
@@ -53,6 +55,8 @@
           entities {
             id
             slug
+
+            ...EntityIcon_entity
 
             node {
               __typename
@@ -93,6 +97,8 @@
             id
             slug
 
+            ...EntityIcon_entity
+
             node {
               __typename
             }
@@ -118,6 +124,8 @@
           entities {
             id
             slug
+
+            ...EntityIcon_entity
 
             node {
               __typename

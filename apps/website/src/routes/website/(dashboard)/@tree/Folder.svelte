@@ -12,7 +12,7 @@
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FolderIcon from '~icons/lucide/folder';
   import { graphql } from '$mearie';
-  import { entityIconMap, getEntityIconColor } from '../@context-menu/entity-icons';
+  import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import FolderMenu from '../@context-menu/FolderMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
@@ -42,6 +42,8 @@
           url
           icon
           iconColor
+
+          ...EntityIcon_entity
 
           lastChild {
             id
@@ -96,6 +98,18 @@
   const selected = $derived(treeState.selectedEntityIds.has(folder.data.entity.id));
   const isCut = $derived(app.state.clipboard?.mode === 'cut' && app.state.clipboard.entityIds.includes(folder.data.entity.id));
 
+  $effect(() => {
+    const entityId = folder.data.entity.id;
+    const icon = folder.data.entity.icon;
+    const iconColor = folder.data.entity.iconColor;
+    untrack(() => {
+      const entry = treeState.entityMap.get(entityId);
+      if (entry) {
+        treeState.entityMap.set(entityId, { ...entry, icon, iconColor });
+      }
+    });
+  });
+
   let detailsEl = $state<HTMLDetailsElement>();
   let inputEl = $state<HTMLInputElement>();
 
@@ -122,6 +136,8 @@
     const childEntities = children.data.entity.children.map((child) => ({
       id: child.id,
       type: child.node.__typename as 'Document' | 'Folder',
+      icon: '',
+      iconColor: 'gray',
       parentId: folder.data.entity.id,
     }));
 
@@ -161,6 +177,8 @@
 <details
   bind:this={detailsEl}
   style:opacity={isCut ? 0.5 : 1}
+  data-icon={folder.data.entity.icon}
+  data-icon-color={folder.data.entity.iconColor}
   data-id={folder.data.entity.id}
   data-name={folder.data.name}
   data-order={folder.data.entity.order}
@@ -215,9 +233,7 @@
     <EntitySelectionIndicator entityId={folder.data.entity.id} visibility={folder.data.entity.visibility} />
 
     <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
-    <span style:color={getEntityIconColor(folder.data.entity.iconColor)}>
-      <Icon icon={entityIconMap.get(folder.data.entity.icon) ?? FolderIcon} size={14} />
-    </span>
+    <EntityIcon entity$key={folder.data.entity} fallback={FolderIcon} size={14} />
 
     {#if editing}
       <form

@@ -5,11 +5,12 @@
   import { contextMenu } from '@typie/ui/actions';
   import { Icon, Menu } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
+  import { untrack } from 'svelte';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
-  import { entityIconMap, getEntityIconColor } from '../@context-menu/entity-icons';
+  import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import { getTreeContext } from './state.svelte';
@@ -42,6 +43,8 @@
           icon
           iconColor
 
+          ...EntityIcon_entity
+
           parent {
             id
           }
@@ -56,6 +59,18 @@
   const active = $derived(app.state.current === document.data.entity.slug);
   const selected = $derived(treeState.selectedEntityIds.has(document.data.entity.id));
   const isCut = $derived(app.state.clipboard?.mode === 'cut' && app.state.clipboard.entityIds.includes(document.data.entity.id));
+
+  $effect(() => {
+    const entityId = document.data.entity.id;
+    const icon = document.data.entity.icon;
+    const iconColor = document.data.entity.iconColor;
+    untrack(() => {
+      const entry = treeState.entityMap.get(entityId);
+      if (entry) {
+        treeState.entityMap.set(entityId, { ...entry, icon, iconColor });
+      }
+    });
+  });
 
   let element = $state<HTMLAnchorElement>();
 
@@ -106,6 +121,8 @@
   )}
   aria-selected="false"
   data-document-type={document.data.documentType}
+  data-icon={document.data.entity.icon}
+  data-icon-color={document.data.entity.iconColor}
   data-id={document.data.entity.id}
   data-name={document.data.title}
   data-order={document.data.entity.order}
@@ -119,9 +136,7 @@
 >
   <EntitySelectionIndicator entityId={document.data.entity.id} visibility={document.data.entity.visibility} />
 
-  <span style:color={getEntityIconColor(document.data.entity.iconColor)}>
-    <Icon icon={entityIconMap.get(document.data.entity.icon) ?? FileIcon} size={14} />
-  </span>
+  <EntityIcon entity$key={document.data.entity} fallback={FileIcon} size={14} />
 
   <span
     class={css(

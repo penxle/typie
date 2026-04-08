@@ -8,11 +8,12 @@
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CheckIcon from '~icons/lucide/check';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
-  import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import SearchIcon from '~icons/lucide/search';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import EntityIcon from '../@context-menu/EntityIcon.svelte';
+  import type { EntityIcon_entity$key } from '$mearie';
 
   type Props = {
     noteId: string;
@@ -54,6 +55,7 @@
           recentlyViewedEntities(siteId: $siteId) {
             id
             slug
+            ...EntityIcon_entity
             node {
               __typename
               ... on Document {
@@ -86,6 +88,7 @@
                 entity {
                   id
                   slug
+                  ...EntityIcon_entity
                 }
               }
             }
@@ -96,6 +99,7 @@
                 entity {
                   id
                   slug
+                  ...EntityIcon_entity
                 }
               }
             }
@@ -123,19 +127,21 @@
     title: string;
     type: 'document' | 'folder';
     isLinked: boolean;
+    entity: EntityIcon_entity$key;
   };
 
   const results = $derived.by((): ResultItem[] => {
     if (debouncedQuery && searchQuery.data?.search) {
       return searchQuery.data.search.hits
-        .map((hit) => {
+        .map((hit): ResultItem | null => {
           if (hit.__typename === 'SearchHitDocument' && hit.document) {
             return {
               entityId: hit.document.entity.id,
               slug: hit.document.entity.slug,
               title: hit.document.title || '(제목 없음)',
-              type: 'document' as const,
+              type: 'document',
               isLinked: existingEntityIds.includes(hit.document.entity.id),
+              entity: hit.document.entity,
             };
           }
           if (hit.__typename === 'SearchHitFolder' && hit.folder) {
@@ -143,8 +149,9 @@
               entityId: hit.folder.entity.id,
               slug: hit.folder.entity.slug,
               title: hit.folder.title || '(제목 없음)',
-              type: 'folder' as const,
+              type: 'folder',
               isLinked: existingEntityIds.includes(hit.folder.entity.id),
+              entity: hit.folder.entity,
             };
           }
           return null;
@@ -164,6 +171,7 @@
               : '(제목 없음)',
         type: entity.node.__typename === 'Folder' ? ('folder' as const) : ('document' as const),
         isLinked: existingEntityIds.includes(entity.id),
+        entity,
       }));
     }
 
@@ -267,9 +275,10 @@
             onpointermove={() => (selectedIndex = index)}
             type="button"
           >
-            <Icon
-              style={css.raw({ flexShrink: '0', color: 'text.faint' })}
-              icon={item.type === 'folder' ? FolderIcon : FileIcon}
+            <EntityIcon
+              style={css.raw({ flexShrink: '0' })}
+              entity$key={item.entity}
+              fallback={item.type === 'folder' ? FolderIcon : undefined}
               size={16}
             />
             <span class={css({ fontSize: '14px', fontWeight: 'medium', color: 'text.default', textAlign: 'left', lineClamp: '1' })}>

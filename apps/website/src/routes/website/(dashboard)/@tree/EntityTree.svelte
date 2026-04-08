@@ -1,6 +1,5 @@
 <script lang="ts">
   import { createFragment, createMutation } from '@mearie/svelte';
-  import { DocumentType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { contextMenu, portal } from '@typie/ui/actions';
@@ -14,10 +13,10 @@
   import { fade } from 'svelte/transition';
   import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
-  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
+  import { entityIconMap } from '../@context-menu/entity-icons';
   import TreeRootMenu from '../@context-menu/TreeRootMenu.svelte';
   import SelectedEntitiesBar from './@selection/SelectedEntitiesBar.svelte';
   import Entity from './Entity.svelte';
@@ -259,6 +258,8 @@
         const entities = children.map((entity) => ({
           id: entity.id,
           type: entity.node.__typename,
+          icon: '',
+          iconColor: 'gray',
           children: entity.children ? collect(entity.children, entity.id) : undefined,
           parentId,
         }));
@@ -969,11 +970,7 @@
         <div class={flex({ alignItems: 'center', gap: '2px', minWidth: '0' })}>
           <Icon
             style={css.raw({ color: 'text.bright', flexShrink: '0' })}
-            icon={ghostEntityType === 'folder'
-              ? FolderIcon
-              : dragging?.element.dataset.documentType === DocumentType.TEMPLATE
-                ? LayoutTemplateIcon
-                : FileIcon}
+            icon={entityIconMap.get(dragging?.element.dataset.icon ?? '') ?? (ghostEntityType === 'folder' ? FolderIcon : FileIcon)}
             size={14}
           />
           <span

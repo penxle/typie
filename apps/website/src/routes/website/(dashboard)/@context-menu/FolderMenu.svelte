@@ -347,6 +347,18 @@
     `),
   );
 
+  const [updateEntityIcon] = createMutation(
+    graphql(`
+      mutation FolderMenu_UpdateEntityIcon_Mutation($input: UpdateEntityIconInput!) {
+        updateEntityIcon(input: $input) {
+          id
+          icon
+          iconColor
+        }
+      }
+    `),
+  );
+
   const close = getContext<undefined | (() => void)>('close');
   const app = getAppContext();
   const paneGroup = getPaneGroup();
@@ -364,7 +376,22 @@
   이름 변경
 </MenuItem>
 
-<EntityIconPicker entityId={entity.id} icon={entity.icon} iconColor={entity.iconColor} />
+<EntityIconPicker
+  icon={entity.icon}
+  iconColor={entity.iconColor}
+  onColorSelect={async (color) => {
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
+    );
+  }}
+  onIconSelect={async (name) => {
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
+    );
+  }}
+/>
 
 <HorizontalDivider color="secondary" />
 

@@ -766,6 +766,61 @@ builder.mutationFields((t) => ({
     },
   }),
 
+  updateEntitiesIcon: t.withAuth({ session: true }).fieldWithInput({
+    type: [Entity],
+    input: {
+      entityIds: t.input.idList({ validate: { items: validateDbId(TableCode.ENTITIES) } }),
+      icon: t.input.string({ required: false }),
+      iconColor: t.input.string({ required: false }),
+    },
+    resolve: async (_, { input }, ctx) => {
+      if (!input.icon && !input.iconColor) {
+        return [];
+      }
+
+      const entities = await db
+        .select({ id: Entities.id, siteId: Entities.siteId, parentId: Entities.parentId })
+        .from(Entities)
+        .where(and(inArray(Entities.id, input.entityIds), eq(Entities.state, EntityState.ACTIVE)));
+
+      if (entities.length === 0) {
+        return [];
+      }
+
+      const siteId = entities[0].siteId;
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId,
+      });
+
+      if (entities.some((entity) => entity.siteId !== siteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
+
+      const set: Record<string, unknown> = {};
+      if (input.icon) {
+        set.icon = input.icon;
+      }
+      if (input.iconColor) {
+        set.iconColor = input.iconColor;
+      }
+
+      const entityIds = entities.map((e) => e.id);
+      const updatedEntities = await db.update(Entities).set(set).where(inArray(Entities.id, entityIds)).returning();
+
+      const parentIds = new Set(entities.map((e) => e.parentId).filter((id): id is string => id !== null));
+      for (const parentId of parentIds) {
+        pubsub.publish('site:update', siteId, { scope: 'entity', entityId: parentId });
+      }
+      if (entities.some((e) => e.parentId === null)) {
+        pubsub.publish('site:update', siteId, { scope: 'site' });
+      }
+
+      return updatedEntities;
+    },
+  }),
+
   viewEntity: t.withAuth({ session: true }).fieldWithInput({
     type: Entity,
     input: { entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }) },

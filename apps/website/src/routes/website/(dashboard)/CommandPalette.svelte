@@ -1,6 +1,5 @@
 <script lang="ts">
   import { createFragment, createMutation, createQuery } from '@mearie/svelte';
-  import { DocumentType } from '@typie/lib/enums';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { Icon, Modal } from '@typie/ui/components';
@@ -16,9 +15,7 @@
   import ArrowDownIcon from '~icons/lucide/arrow-down';
   import ArrowUpIcon from '~icons/lucide/arrow-up';
   import CornerDownLeftIcon from '~icons/lucide/corner-down-left';
-  import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
-  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import Maximize2Icon from '~icons/lucide/maximize-2';
   import SearchIcon from '~icons/lucide/search';
   import SettingsIcon from '~icons/lucide/settings';
@@ -26,6 +23,7 @@
   import XIcon from '~icons/lucide/x';
   import { beforeNavigate, goto, pushState } from '$app/navigation';
   import { graphql } from '$mearie';
+  import EntityIcon from './@context-menu/EntityIcon.svelte';
   import type { Component } from 'svelte';
   import type { DashboardLayout_CommandPalette_user$key } from '$mearie';
 
@@ -82,6 +80,7 @@
                 entity {
                   id
                   slug
+                  ...EntityIcon_entity
                 }
               }
             }
@@ -96,6 +95,7 @@
                 entity {
                   id
                   slug
+                  ...EntityIcon_entity
                 }
               }
             }
@@ -164,6 +164,8 @@
           recentlyViewedEntities(siteId: $siteId) {
             id
             slug
+
+            ...EntityIcon_entity
 
             node {
               __typename
@@ -302,7 +304,6 @@
                 __typename: 'SearchHitRecent' as const,
                 entity,
                 title: node.title || '제목 없음',
-                icon: node.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon,
               }))
               .with({ __typename: 'Folder' }, () => null)
               .otherwise(() => null),
@@ -579,11 +580,7 @@
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
             >
-              {#if hit.document.type === DocumentType.TEMPLATE}
-                <Icon icon={LayoutTemplateIcon} size={16} />
-              {:else}
-                <Icon icon={FileIcon} size={16} />
-              {/if}
+              <EntityIcon entity$key={hit.document.entity} size={16} />
             </div>
 
             <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
@@ -605,7 +602,7 @@
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
             >
-              <Icon icon={FolderIcon} size={16} />
+              <EntityIcon entity$key={hit.folder.entity} fallback={FolderIcon} size={16} />
             </div>
 
             <div class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>
@@ -620,7 +617,7 @@
             <div
               class={center({ flexShrink: '0', borderRadius: '6px', size: '24px', color: 'text.faint', backgroundColor: 'surface.muted' })}
             >
-              <Icon icon={hit.icon} size={16} />
+              <EntityIcon entity$key={hit.entity} size={16} />
             </div>
 
             <span class={css({ fontSize: '14px', fontWeight: 'medium', truncate: true })}>{hit.title}</span>

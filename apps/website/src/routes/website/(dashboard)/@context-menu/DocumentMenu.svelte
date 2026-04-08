@@ -301,6 +301,18 @@
     `),
   );
 
+  const [updateEntityIcon] = createMutation(
+    graphql(`
+      mutation DocumentMenu_UpdateEntityIcon_Mutation($input: UpdateEntityIconInput!) {
+        updateEntityIcon(input: $input) {
+          id
+          icon
+          iconColor
+        }
+      }
+    `),
+  );
+
   const getUpperOrder = () => {
     const el = globalThis.document.querySelector<HTMLElement>(`[data-id="${entity.id}"]`);
     if (!el) return;
@@ -414,7 +426,22 @@
   </div>
 {/snippet}
 
-<EntityIconPicker entityId={entity.id} icon={entity.icon} iconColor={entity.iconColor} />
+<EntityIconPicker
+  icon={entity.icon}
+  iconColor={entity.iconColor}
+  onColorSelect={async (color) => {
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: entity.icon, iconColor: color } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: entity.icon, iconColor: color } } } } },
+    );
+  }}
+  onIconSelect={async (name) => {
+    await updateEntityIcon(
+      { input: { entityId: entity.id, icon: name, iconColor: entity.iconColor } },
+      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entity.id, icon: name, iconColor: entity.iconColor } } } } },
+    );
+  }}
+/>
 
 <HorizontalDivider color="secondary" />
 

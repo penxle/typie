@@ -9,14 +9,19 @@
   import CircleIcon from '~icons/lucide/circle';
   import CircleCheckIcon from '~icons/lucide/circle-check';
   import EllipsisIcon from '~icons/lucide/ellipsis';
-  import FileIcon from '~icons/lucide/file';
   import FolderIcon from '~icons/lucide/folder';
   import LinkIcon from '~icons/lucide/link';
   import Trash2Icon from '~icons/lucide/trash-2';
   import UnlinkIcon from '~icons/lucide/unlink';
+  import EntityIcon from '../@context-menu/EntityIcon.svelte';
   import { getNoteColor, noteColors } from './colors';
+  import type { EntityIcon_entity$key } from '$mearie';
 
-  type NoteEntity = { id: string; slug: string; node: { __typename: string; id?: string; title?: string; name?: string } };
+  type NoteEntity = EntityIcon_entity$key & {
+    id: string;
+    slug: string;
+    node: { __typename: string; id?: string; title?: string; name?: string };
+  };
 
   type Props = {
     note: {
@@ -353,7 +358,7 @@
             {#each note.entities as entity (entity.id)}
               {#if entity.node.__typename === 'Folder'}
                 <span class={flex({ alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 'medium', color: 'text.faint' })}>
-                  <Icon icon={FolderIcon} size={12} />
+                  <EntityIcon entity$key={entity} fallback={FolderIcon} size={12} />
                   <span class={css({ lineClamp: '1' })}>{getEntityTitle(entity)}</span>
                 </span>
               {:else}
@@ -371,7 +376,7 @@
                   href={`/${entity.slug}`}
                   onclick={(e) => e.stopPropagation()}
                 >
-                  <Icon icon={FileIcon} size={12} />
+                  <EntityIcon entity$key={entity} size={12} />
                   <span class={css({ lineClamp: '1' })}>{getEntityTitle(entity)}</span>
                 </a>
               {/if}
@@ -451,7 +456,12 @@
           <div class={flex({ alignItems: 'center', gap: '6px', flexWrap: 'wrap' })}>
             {#each note.entities as entity (entity.id)}
               <div class={flex({ alignItems: 'center', gap: '2px', fontSize: '12px', color: 'text.faint', minWidth: '0' })}>
-                <Icon style={css.raw({ flexShrink: '0' })} icon={entity.node.__typename === 'Folder' ? FolderIcon : FileIcon} size={12} />
+                <EntityIcon
+                  style={css.raw({ flexShrink: '0' })}
+                  entity$key={entity}
+                  fallback={entity.node.__typename === 'Folder' ? FolderIcon : undefined}
+                  size={12}
+                />
                 <span class={css({ lineClamp: '1' })}>{getEntityTitle(entity)}</span>
                 <button
                   class={center({

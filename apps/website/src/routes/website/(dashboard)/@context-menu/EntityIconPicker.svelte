@@ -1,48 +1,21 @@
 <script lang="ts">
-  import { createMutation } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { Icon, Submenu } from '@typie/ui/components';
   import CheckIcon from '~icons/lucide/check';
   import PaletteIcon from '~icons/lucide/palette';
-  import { graphql } from '$mearie';
   import { entityIconColors, entityIcons, getEntityIconColor } from './entity-icons';
 
   type Props = {
-    entityId: string;
-    icon: string;
-    iconColor: string;
+    icon?: string;
+    iconColor?: string;
+    onIconSelect: (name: string) => void;
+    onColorSelect: (color: string) => void;
   };
 
-  let { entityId, icon, iconColor }: Props = $props();
+  let { icon, iconColor, onIconSelect, onColorSelect }: Props = $props();
 
-  const [updateEntityIcon] = createMutation(
-    graphql(`
-      mutation EntityIconPicker_UpdateEntityIcon_Mutation($input: UpdateEntityIconInput!) {
-        updateEntityIcon(input: $input) {
-          id
-          icon
-          iconColor
-        }
-      }
-    `),
-  );
-
-  const handleIconSelect = async (name: string) => {
-    await updateEntityIcon(
-      { input: { entityId, icon: name, iconColor } },
-      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entityId, icon: name, iconColor } } } } },
-    );
-  };
-
-  const handleColorSelect = async (color: string) => {
-    await updateEntityIcon(
-      { input: { entityId, icon, iconColor: color } },
-      { metadata: { cache: { optimisticResponse: { updateEntityIcon: { id: entityId, icon, iconColor: color } } } } },
-    );
-  };
-
-  const currentIconColor = $derived(getEntityIconColor(iconColor));
+  const currentIconColor = $derived(getEntityIconColor(iconColor ?? 'gray'));
 </script>
 
 <Submenu icon={PaletteIcon} label="아이콘 변경">
@@ -67,10 +40,10 @@
           _hover: { boxShadow: '[0 0 0 2px token(colors.border.strong)]' },
         })}
         aria-label={c.label}
-        onclick={() => handleColorSelect(c.value)}
+        onclick={() => onColorSelect(c.value)}
         type="button"
       >
-        {#if c.value === iconColor}
+        {#if iconColor !== undefined && c.value === iconColor}
           <Icon style={css.raw({ color: 'surface.default' })} icon={CheckIcon} size={10} />
         {/if}
       </button>
@@ -102,13 +75,13 @@
           transition: 'common',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        onclick={() => handleIconSelect(entry.name)}
+        onclick={() => onIconSelect(entry.name)}
         type="button"
       >
         <span style:color={currentIconColor} style:transition="color 200ms ease" style:transition-delay="{wave * 20}ms">
           <Icon icon={entry.icon} size={14} />
         </span>
-        {#if entry.name === icon}
+        {#if icon !== undefined && entry.name === icon}
           <div
             style:background-color={currentIconColor}
             class={css({ position: 'absolute', bottom: '0', width: '3px', height: '3px', borderRadius: 'full' })}

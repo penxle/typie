@@ -16,6 +16,7 @@
   import TriangleAlertIcon from '~icons/lucide/triangle-alert';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import EntityIconPicker from '../../@context-menu/EntityIconPicker.svelte';
   import { getTreeContext } from '../state.svelte';
   import type { TreeEntity } from './types';
 
@@ -68,6 +69,18 @@
     `),
   );
 
+  const [updateEntitiesIcon] = createMutation(
+    graphql(`
+      mutation MultiEntitiesMenu_UpdateEntitiesIcon_Mutation($input: UpdateEntitiesIconInput!) {
+        updateEntitiesIcon(input: $input) {
+          id
+          icon
+          iconColor
+        }
+      }
+    `),
+  );
+
   const { folderIds, documentIds } = $derived.by(() => {
     const folderIds: string[] = [];
     const documentIds: string[] = [];
@@ -94,6 +107,37 @@
 
     return { folderIds, documentIds };
   });
+
+  const { allSameIcon, allSameIconColor } = $derived.by(() => {
+    const entityIds = tree.selectedEntityIds;
+    let firstIcon: string | undefined;
+    let firstIconColor: string | undefined;
+    let allSameIcon: string | undefined;
+    let allSameIconColor: string | undefined;
+    let first = true;
+
+    for (const entityId of entityIds) {
+      const entity = tree.entityMap.get(entityId);
+      if (!entity) continue;
+
+      if (first) {
+        firstIcon = entity.icon;
+        firstIconColor = entity.iconColor;
+        allSameIcon = firstIcon;
+        allSameIconColor = firstIconColor;
+        first = false;
+      } else {
+        if (allSameIcon !== undefined && entity.icon !== firstIcon) {
+          allSameIcon = undefined;
+        }
+        if (allSameIconColor !== undefined && entity.iconColor !== firstIconColor) {
+          allSameIconColor = undefined;
+        }
+      }
+    }
+
+    return { allSameIcon, allSameIconColor };
+  });
 </script>
 
 <div class={css({ paddingX: '10px', paddingY: '4px', fontSize: '12px', color: 'text.disabled', fontWeight: 'medium' })}>
@@ -112,6 +156,51 @@
     {/if}
   </div>
 </div>
+
+<HorizontalDivider color="secondary" />
+
+<EntityIconPicker
+  icon={allSameIcon}
+  iconColor={allSameIconColor}
+  onColorSelect={async (color) => {
+    const entityIds = [...tree.selectedEntityIds];
+    await updateEntitiesIcon(
+      { input: { entityIds, icon: allSameIcon, iconColor: color } },
+      {
+        metadata: {
+          cache: {
+            optimisticResponse: {
+              updateEntitiesIcon: entityIds.map((id) => ({
+                id,
+                icon: allSameIcon ?? tree.entityMap.get(id)?.icon ?? 'file',
+                iconColor: color,
+              })),
+            },
+          },
+        },
+      },
+    );
+  }}
+  onIconSelect={async (name) => {
+    const entityIds = [...tree.selectedEntityIds];
+    await updateEntitiesIcon(
+      { input: { entityIds, icon: name, iconColor: allSameIconColor } },
+      {
+        metadata: {
+          cache: {
+            optimisticResponse: {
+              updateEntitiesIcon: entityIds.map((id) => ({
+                id,
+                icon: name,
+                iconColor: allSameIconColor ?? tree.entityMap.get(id)?.iconColor ?? 'gray',
+              })),
+            },
+          },
+        },
+      },
+    );
+  }}
+/>
 
 <HorizontalDivider color="secondary" />
 
@@ -170,6 +259,8 @@
 >
   잘라내기
 </MenuItem>
+
+<HorizontalDivider color="secondary" />
 
 <MenuItem
   icon={TrashIcon}
