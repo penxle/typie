@@ -2,6 +2,8 @@ package co.typie.editor.compose
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Size
+import co.typie.editor.globalToLocal
+import co.typie.editor.localToGlobal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

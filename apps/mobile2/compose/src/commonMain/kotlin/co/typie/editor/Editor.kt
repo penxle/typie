@@ -108,45 +108,11 @@ class Editor private constructor(
     focusManager?.clearFocus()
   }
 
-  fun localToGlobal(page: Int, x: Float, y: Float): Offset? {
-    val offset = pageOffsets[page] ?: return null
-    return Offset(offset.x + x, offset.y + y)
-  }
+  fun localToGlobal(page: Int, x: Float, y: Float): Offset? =
+    localToGlobal(page, x, y, pageOffsets)
 
-  fun globalToLocal(x: Float, y: Float): PagePoint? {
-    val sizes = pageSizes
-    if (sizes.isEmpty()) return null
-
-    var lo = 0
-    var hi = sizes.lastIndex
-
-    while (lo < hi) {
-      val mid = (lo + hi) ushr 1
-      val midOffset = pageOffsets[mid] ?: return null
-      if (midOffset.y + sizes[mid].height <= y) lo = mid + 1
-      else hi = mid
-    }
-
-    val loOffset = pageOffsets[lo] ?: return null
-    var localY = y - loOffset.y
-
-    if (localY < 0 && lo > 0) {
-      val prevOffset = pageOffsets[lo - 1] ?: return null
-      val prevBottom = prevOffset.y + sizes[lo - 1].height
-      if (y < (prevBottom + loOffset.y) / 2) {
-        lo--
-        localY = sizes[lo].height
-      } else {
-        localY = 0f
-      }
-    }
-
-    val finalOffset = pageOffsets[lo] ?: return null
-    val size = sizes[lo]
-    val localX = (x - finalOffset.x).coerceIn(0f, size.width)
-    localY = localY.coerceIn(0f, size.height)
-    return PagePoint(lo, localX, localY)
-  }
+  fun globalToLocal(x: Float, y: Float): PagePoint? =
+    globalToLocal(x, y, pageOffsets, pageSizes)
 
   fun attachSurface(page: Int, handle: Long, width: Int, height: Int, scaleFactor: Double) =
     inner.attachSurface(page, handle, width, height, scaleFactor)
