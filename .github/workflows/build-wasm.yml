@@ -54,5 +54,5 @@ jobs:
         uses: actions/upload-artifact/merge@v7
         with:
           name: editor-wasm
-          pattern: editor-wasm-*
+          pattern: editor-wasm-{browser,server}
           delete-merged: true

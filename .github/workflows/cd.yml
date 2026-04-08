@@ -19,7 +19,7 @@ jobs:
     uses: ./.github/workflows/build-wasm.yml
 
   build-wasm-legacy:
-    name: Build (legay wasm)
+    name: Build (legacy wasm)
     uses: ./.github/workflows/build-wasm-legacy.yml
 
   build-api:
