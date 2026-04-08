@@ -11,15 +11,31 @@ pub struct LayoutPage {
 }
 
 #[ffi]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct CursorRect {
+pub struct PageRect<T = ()> {
     pub page_idx: usize,
     pub rect: Rect,
+    #[serde(skip)]
+    pub meta: T,
 }
 
-impl CursorRect {
+impl PageRect {
     pub fn new(page_idx: usize, rect: Rect) -> Self {
-        Self { page_idx, rect }
+        Self {
+            page_idx,
+            rect,
+            meta: (),
+        }
+    }
+}
+
+impl<T> PageRect<T> {
+    pub fn with_meta(page_idx: usize, rect: Rect, meta: T) -> Self {
+        Self {
+            page_idx,
+            rect,
+            meta,
+        }
     }
 }

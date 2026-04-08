@@ -153,11 +153,6 @@ export interface CalloutNode {
     variant?: CalloutVariant;
 }
 
-export interface CursorRect {
-    page_idx: number;
-    rect: Rect;
-}
-
 export interface Doc {
     nodes: Record<NodeId, NodeEntry>;
     attrs: DocumentAttrs;
@@ -255,6 +250,11 @@ export interface NodeEntry {
 export interface OrderedListNode {}
 
 export interface PageBreakNode {}
+
+export interface PageRect {
+    page_idx: number;
+    rect: Rect;
+}
 
 export interface ParagraphNode {
     align?: TextAlign;
@@ -369,7 +369,7 @@ declare class Editor {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
-    cursor(): CursorRect | undefined;
+    cursor(): PageRect | undefined;
     enqueue(message: Message): void;
     input_context(before_limit: number, after_limit: number): InputContext;
     inspect_state(options?: InspectStateOptions | null): string;

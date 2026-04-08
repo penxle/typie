@@ -1,8 +1,10 @@
 use editor_common::{EdgeInsets, Rect};
 use editor_state::Position;
 
-use crate::page::LayoutPage;
+use crate::page::{LayoutPage, PageRect};
 use crate::paginate::*;
+
+use super::common::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SelectionRectKind {
@@ -11,19 +13,7 @@ pub enum SelectionRectKind {
     Block,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct SelectionRect {
-    pub page_idx: usize,
-    pub rect: Rect,
-    pub kind: SelectionRectKind,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Phase {
-    Before,
-    Inside,
-    After,
-}
+pub type SelectionRect = PageRect<SelectionRectKind>;
 
 pub fn selection_rects(
     tree: &LayoutTree,
@@ -42,10 +32,6 @@ pub fn selection_rects(
     visit_node(&tree.root, &from, &to, &mut phase, &mut rects, pages);
 
     rects
-}
-
-fn page_for_y(pages: &[LayoutPage], y: f32) -> Option<usize> {
-    pages.iter().position(|p| y >= p.y_start && y < p.y_end)
 }
 
 fn has_visual_boundary(style: &crate::style::BoxStyle) -> bool {
@@ -120,16 +106,16 @@ fn visit_line(
     };
 
     if let Some(page_idx) = page_for_y(pages, node.rect.y) {
-        rects.push(SelectionRect {
+        rects.push(PageRect::with_meta(
             page_idx,
-            rect: Rect::from_xywh(
+            Rect::from_xywh(
                 node.rect.x + x_start,
                 node.rect.y - pages[page_idx].y_start,
                 width,
                 node.rect.height,
             ),
-            kind: SelectionRectKind::Text,
-        });
+            SelectionRectKind::Text,
+        ));
     }
 
     fully_selected
@@ -156,16 +142,16 @@ fn visit_atom(
     }
 
     if let Some(page_idx) = page_for_y(pages, node.rect.y) {
-        rects.push(SelectionRect {
+        rects.push(PageRect::with_meta(
             page_idx,
-            rect: Rect::from_xywh(
+            Rect::from_xywh(
                 node.rect.x,
                 node.rect.y - pages[page_idx].y_start,
                 node.rect.width,
                 node.rect.height,
             ),
-            kind: SelectionRectKind::Atom,
-        });
+            SelectionRectKind::Atom,
+        ));
     }
 
     if is_to {
@@ -220,49 +206,20 @@ fn visit_box(
     if fully && has_visual_boundary(&bx.style) {
         rects.truncate(rects_before);
         if let Some(page_idx) = page_for_y(pages, node.rect.y) {
-            rects.push(SelectionRect {
+            rects.push(PageRect::with_meta(
                 page_idx,
-                rect: Rect::from_xywh(
+                Rect::from_xywh(
                     node.rect.x,
                     node.rect.y - pages[page_idx].y_start,
                     node.rect.width,
                     node.rect.height,
                 ),
-                kind: SelectionRectKind::Block,
-            });
+                SelectionRectKind::Block,
+            ));
         }
     }
 
     fully
-}
-
-fn line_contains_position(line: &LayoutLine, pos: &Position) -> bool {
-    if line.glyph_runs.is_empty() {
-        return line.node_id == pos.node_id && pos.offset == 0;
-    }
-    for run in &line.glyph_runs {
-        if run.node_id == pos.node_id
-            && pos.offset >= run.offset
-            && pos.offset <= run.offset + super::grapheme::run_codepoint_count(run)
-        {
-            return true;
-        }
-    }
-    false
-}
-
-fn line_start_x(line: &LayoutLine) -> f32 {
-    line.glyph_runs
-        .first()
-        .map(|r| r.x)
-        .unwrap_or(line.text_indent)
-}
-
-fn line_end_x(line: &LayoutLine) -> f32 {
-    line.glyph_runs
-        .last()
-        .map(|r| r.x + r.width)
-        .unwrap_or(line.text_indent)
 }
 
 #[cfg(test)]
@@ -300,7 +257,7 @@ mod tests {
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].kind, SelectionRectKind::Text);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
         assert!(rects[0].rect.height > 0.0);
     }
@@ -320,8 +277,8 @@ mod tests {
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 2);
-        assert_eq!(rects[0].kind, SelectionRectKind::Text);
-        assert_eq!(rects[1].kind, SelectionRectKind::Text);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
+        assert_eq!(rects[1].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.y < rects[1].rect.y);
     }
 
@@ -343,7 +300,7 @@ mod tests {
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].kind, SelectionRectKind::Atom);
+        assert_eq!(rects[0].meta, SelectionRectKind::Atom);
     }
 
     #[test]
@@ -362,7 +319,7 @@ mod tests {
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].kind, SelectionRectKind::Block);
+        assert_eq!(rects[0].meta, SelectionRectKind::Block);
     }
 
     #[test]
@@ -381,7 +338,7 @@ mod tests {
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 1);
-        assert_eq!(rects[0].kind, SelectionRectKind::Text);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
     }
 
     #[test]
@@ -403,9 +360,9 @@ mod tests {
         let rects = view.selection_rects(&resolved);
 
         assert_eq!(rects.len(), 2);
-        assert_eq!(rects[0].kind, SelectionRectKind::Text);
+        assert_eq!(rects[0].meta, SelectionRectKind::Text);
         assert!(rects[0].rect.width > 0.0);
-        assert_eq!(rects[1].kind, SelectionRectKind::Text);
+        assert_eq!(rects[1].meta, SelectionRectKind::Text);
         assert!(rects[1].rect.width > 0.0);
     }
 }

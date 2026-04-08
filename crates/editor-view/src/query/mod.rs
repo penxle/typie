@@ -1,3 +1,4 @@
+pub(crate) mod common;
 pub(crate) mod composition;
 pub(crate) mod cursor;
 pub(crate) mod grapheme;
@@ -9,6 +10,7 @@ pub(crate) mod selection;
 mod visit;
 
 pub use composition::CompositionRect;
+pub use cursor::CursorRect;
 pub(crate) use cursor::cursor_rect;
 pub(crate) use hit_test::{closest_hit_test, exact_hit_test};
 pub(crate) use navigation::resolve_movement;

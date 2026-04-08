@@ -153,11 +153,6 @@ export interface CalloutNode {
     variant?: CalloutVariant;
 }
 
-export interface CursorRect {
-    page_idx: number;
-    rect: Rect;
-}
-
 export interface Doc {
     nodes: Record<NodeId, NodeEntry>;
     attrs: DocumentAttrs;
@@ -237,6 +232,11 @@ export interface NodeEntry {
 export interface OrderedListNode {}
 
 export interface PageBreakNode {}
+
+export interface PageRect {
+    page_idx: number;
+    rect: Rect;
+}
 
 export interface ParagraphNode {
     align?: TextAlign;
@@ -352,7 +352,7 @@ declare class Editor {
     free(): void;
     [Symbol.dispose](): void;
     attach_surface(page: number, handle: HTMLCanvasElement, width: number, height: number, scale_factor: number): void;
-    cursor(): CursorRect | undefined;
+    cursor(): PageRect | undefined;
     detach_surface(page: number): void;
     enqueue(message: Message): void;
     input_context(before_limit: number, after_limit: number): InputContext;

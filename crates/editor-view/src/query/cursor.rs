@@ -1,10 +1,14 @@
 use editor_common::Rect;
+use editor_macros::ffi;
 use editor_state::Position;
 
-use crate::page::{CursorRect, LayoutPage};
+use crate::page::{LayoutPage, PageRect};
 use crate::paginate::*;
 
 use super::search;
+
+#[ffi]
+pub type CursorRect = PageRect;
 
 pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> Option<CursorRect> {
     let line_node = search::find_line_at(tree, pos)?;
@@ -106,7 +110,7 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 0);
-        let CursorRect { page_idx, rect } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
 
         assert_eq!(page_idx, 0);
         assert_eq!(rect.x, 0.0);
@@ -217,7 +221,7 @@ mod tests {
             },
         ];
         let pos = Position::new(id, 0);
-        let CursorRect { page_idx, rect } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
 
         assert_eq!(page_idx, 1);
         // y should be relative to page start: 500 + (16 - 14) - 400 = 102

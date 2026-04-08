@@ -6,10 +6,10 @@ use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
 use crate::measure::{MeasuredTree, Measurer};
-use crate::page::{CursorRect, LayoutPage};
+use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
-use crate::query::selection::SelectionRect;
+use crate::query::{CursorRect, SelectionRect};
 use crate::view_state::ViewState;
 use crate::viewport::Viewport;
 

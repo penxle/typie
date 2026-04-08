@@ -2,7 +2,7 @@ use editor_common::Rect;
 use editor_model::{Doc, Node, NodeId};
 use editor_resource::Resource;
 use editor_view::style::{BoxStyle, DecorationData};
-use editor_view::{CompositionRect, Edges, PageVisitor, SelectionRect};
+use editor_view::{CompositionRect, Edges, PageRect, PageVisitor, SelectionRect};
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{GlyphCache, ScaleContext};
@@ -10,7 +10,7 @@ use crate::icons::ICONS;
 use crate::sink::RenderSink;
 use crate::theme::Theme;
 use crate::theme_data::ThemeVariant;
-use crate::types::{Path, Transform};
+use crate::types::{Color, Path, Transform};
 
 pub struct Renderer {
     pub(crate) theme: Theme,
@@ -57,13 +57,7 @@ impl Renderer {
         scale_factor: f32,
     ) {
         let color = self.theme.color_with_alpha("selection", 64);
-        let transform = Transform::scale(scale_factor);
-        for rect in rects {
-            if rect.page_idx != page_idx {
-                continue;
-            }
-            sink.fill_rect(rect.rect, color, transform);
-        }
+        self.draw_page_rects(sink, rects, page_idx, scale_factor, color);
     }
 
     pub fn draw_composition(
@@ -74,6 +68,17 @@ impl Renderer {
         scale_factor: f32,
     ) {
         let color = self.theme.color("ui.text.default");
+        self.draw_page_rects(sink, rects, page_idx, scale_factor, color);
+    }
+
+    fn draw_page_rects<T>(
+        &self,
+        sink: &mut dyn RenderSink,
+        rects: &[PageRect<T>],
+        page_idx: usize,
+        scale_factor: f32,
+        color: Color,
+    ) {
         let transform = Transform::scale(scale_factor);
         for rect in rects {
             if rect.page_idx != page_idx {
