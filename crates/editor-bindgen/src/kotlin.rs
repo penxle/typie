@@ -61,7 +61,12 @@ pub fn generate_all(metas: &[FfiMeta], output_dir: &Path) {
     std::fs::create_dir_all(&pkg_dir).expect("failed to create output directory");
 
     for meta in metas {
-        if matches!(meta.kind, FfiKind::Custom { .. }) {
+        if let FfiKind::Custom { target } = &meta.kind {
+            if ctx.known_types.contains(target.as_str()) {
+                let content = generate_type_alias(meta, target);
+                let path = pkg_dir.join(format!("{}.kt", meta.name));
+                std::fs::write(&path, content).expect("failed to write file");
+            }
             continue;
         }
         if ctx.inlined_types.contains(&meta.name) {
@@ -295,6 +300,14 @@ impl CodeWriter {
     fn finish(self) -> String {
         self.buf
     }
+}
+
+fn generate_type_alias(meta: &FfiMeta, target: &str) -> String {
+    let mut w = CodeWriter::new();
+    w.line(&format!("package {}", PACKAGE));
+    w.line("");
+    w.line(&format!("typealias {} = {}", meta.name, target));
+    w.finish()
 }
 
 fn generate_data_class(meta: &FfiMeta, fields: &[FfiField], ctx: &CodegenContext) -> String {

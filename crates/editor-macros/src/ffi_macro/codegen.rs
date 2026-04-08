@@ -81,6 +81,7 @@ pub fn generate_type_alias(item: &syn::ItemType) -> TokenStream {
     let ident = format_ident!("FFI_META_{}_{}", crate_name, item.ident);
 
     quote! {
+        #[cfg_attr(feature = "wasm", ::tsify::declare)]
         #item
 
         #[used]

@@ -292,6 +292,8 @@ export type ClipboardIntent = { type: "paste"; html: string | undefined; text: s
 
 export type CompositionIntent = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" };
 
+export type CursorRect = PageRect;
+
 export type DeletionIntent = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
 
 export type Direction = "forward" | "backward";

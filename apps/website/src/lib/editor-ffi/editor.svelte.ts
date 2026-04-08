@@ -3,7 +3,7 @@ import { createContext } from 'svelte';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler, fontManifestMissingHandler, initFonts } from './fonts';
-import type { Doc, Editor as WasmEditor, EditorEvent, Message, PageRect, Selection, Size, Viewport } from '@typie/editor-ffi/browser';
+import type { CursorRect, Doc, Editor as WasmEditor, EditorEvent, Message, Selection, Size, Viewport } from '@typie/editor-ffi/browser';
 import type { EditorEventListener } from './types';
 
 let initPromise: Promise<void> | null = null;
@@ -46,7 +46,7 @@ export class Editor {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   #listeners = new Map<EditorEvent['type'], Set<EditorEventListener<EditorEvent['type']>>>();
 
-  #cursor = $state<PageRect>();
+  #cursor = $state<CursorRect>();
   #selection = $state<Selection>();
   #pageSizes = $state<Size[]>([]);
 

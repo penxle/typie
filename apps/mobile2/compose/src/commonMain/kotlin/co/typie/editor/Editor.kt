@@ -7,13 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
+import co.typie.editor.ffi.CursorRect
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.InputContext
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.PageRect
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StateField
@@ -30,7 +30,7 @@ class Editor private constructor(
   private val inner: co.typie.editor.ffi.Editor,
   val scope: CoroutineScope,
 ) {
-  var cursor by mutableStateOf<PageRect?>(null)
+  var cursor by mutableStateOf<CursorRect?>(null)
     private set
 
   var selection by mutableStateOf<Selection?>(null)
