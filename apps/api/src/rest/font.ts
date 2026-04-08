@@ -8,8 +8,10 @@ import { HTTPException } from 'hono/http-exception';
 import { redis } from '#/cache.ts';
 import { db, first, Fonts } from '#/db/index.ts';
 import * as aws from '#/external/aws.ts';
+import { normalizeHexColor } from '#/utils/color.ts';
 import { decompressZstd } from '#/utils/compression.ts';
 import { outlineTextToSvg } from '#/utils/font.ts';
+import { normalizeSpecimenFallbacks, renderFontSpecimenSvg } from './font-specimen.ts';
 import type { Env } from '#/context.ts';
 
 const defaultFontMap = new Map(defaultFontFamilies.flatMap((f) => f.fonts.map((v) => [v.id, v.path] as const)));
@@ -20,13 +22,21 @@ font.use(cors());
 
 font.get('/:fontId/specimen', async (c) => {
   const fontId = c.req.param('fontId');
-  const text = c.req.query('text');
+  const url = new URL(c.req.url);
+  const text = url.searchParams.get('text')?.trim();
+  const fallbacks = normalizeSpecimenFallbacks(text ?? '', url.searchParams.getAll('fallbacks'));
+  const rawColor = url.searchParams.get('color');
+  const color = normalizeHexColor(rawColor);
 
   if (!text) {
     throw new HTTPException(400);
   }
 
-  const textHash = createHash('sha256').update(text).digest('hex').slice(0, 16);
+  if (rawColor != null && color == null) {
+    throw new HTTPException(400);
+  }
+
+  const textHash = createHash('sha256').update(JSON.stringify({ text, fallbacks, color })).digest('hex').slice(0, 16);
   const cacheKey = `font:specimen:${fontId}:${textHash}`;
   const cached = await redis.get(cacheKey);
 
@@ -61,15 +71,12 @@ font.get('/:fontId/specimen', async (c) => {
   const compressed = await object.Body!.transformToByteArray();
   const fontData = await decompressZstd(compressed);
 
-  let svg: string;
-  try {
-    svg = await outlineTextToSvg(fontData, text);
-  } catch (err) {
-    if (String(err).includes('missing glyph')) {
-      throw new HTTPException(422);
-    }
-    throw err;
-  }
+  const svg = await renderFontSpecimenSvg({
+    text,
+    fallbacks,
+    color,
+    renderTextToSvg: (candidate) => outlineTextToSvg(fontData, candidate),
+  });
 
   await redis.set(cacheKey, svg, 'EX', 60 * 60 * 24 * 30);
 
