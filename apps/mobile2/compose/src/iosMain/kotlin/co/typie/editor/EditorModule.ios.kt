@@ -3,6 +3,7 @@
 package co.typie.editor
 
 import co.typie.di.PlatformContext
+import co.typie.editor.ffi.BackendKind
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.IosEditorHost
 import kotlinx.cinterop.BetaInteropApi
@@ -21,16 +22,12 @@ import platform.posix.memcpy
 actual class EditorModule {
   @Single
   actual fun editorHost(ctx: PlatformContext): EditorHost {
-    val host = runBlocking { IosEditorHost.create() }
-
     val path = NSBundle.mainBundle.pathForResource("icu", "zst")!!
     val nsData = NSData.create(contentsOfFile = path)!!
-    val icu = ByteArray(nsData.length.toInt()).apply {
+    val icuData = ByteArray(nsData.length.toInt()).apply {
       usePinned { memcpy(it.addressOf(0), nsData.bytes, nsData.length) }
     }
 
-    host.loadIcuData(icu)
-
-    return host
+    return runBlocking { IosEditorHost.create(BackendKind.Gpu, icuData) }
   }
 }

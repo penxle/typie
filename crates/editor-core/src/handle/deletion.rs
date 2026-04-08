@@ -180,7 +180,6 @@ fn utf16_count_forward_as_chars(text: &str, target: usize) -> usize {
 mod tests {
     use editor_macros::state;
     use editor_resource::Resource;
-    use editor_resource::TextSegmenters;
     use editor_state::assert_state_eq;
     use std::sync::{Arc, Mutex};
 
@@ -253,8 +252,7 @@ mod tests {
     }
 
     fn editor_with_layout(state: editor_state::State) -> Editor {
-        let resource = Arc::new(Mutex::new(Resource::new()));
-        resource.lock().unwrap().segmenters = Some(Arc::new(TextSegmenters::new_test()));
+        let resource = Arc::new(Mutex::new(Resource::new_test()));
         let mut editor = Editor::new_test_with_resource(state.clone(), resource);
         editor.view.layout(&state.doc);
         editor
@@ -373,30 +371,6 @@ mod tests {
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("hello") } } }
             selection: (t1, 0)
-        };
-        assert_state_eq!(editor.state(), &expected);
-    }
-
-    #[test]
-    fn delete_word_without_segmenters_is_noop() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 11)
-        };
-        let mut editor = Editor::new_test(state);
-        editor.view.layout(&editor.state.doc);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Word {
-                        direction: Direction::Backward,
-                    },
-                },
-            },
-        });
-        let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("hello world") } } }
-            selection: (t1, 11)
         };
         assert_state_eq!(editor.state(), &expected);
     }
@@ -685,8 +659,7 @@ mod tests {
             doc { root { paragraph { t1: text("ae\u{0301}b") } } }
             selection: (t1, 3)
         };
-        let resource = Arc::new(Mutex::new(Resource::new()));
-        resource.lock().unwrap().segmenters = Some(Arc::new(TextSegmenters::new_test()));
+        let resource = Arc::new(Mutex::new(Resource::new_test()));
         let mut editor = Editor::new_test_with_resource(state, resource);
         editor.apply(Message::Intent {
             intent: Intent::Deletion {

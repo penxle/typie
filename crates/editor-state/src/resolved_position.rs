@@ -64,7 +64,7 @@ impl<'a> ResolvedPosition<'a> {
             return None;
         };
         let text = &text_node.text;
-        let segmenters = resource.segmenters.as_ref()?;
+        let segmenters = &resource.segmenters;
 
         let mut boundaries = vec![0usize];
         for byte_offset in segmenters.grapheme.as_borrowed().segment_str(text) {
@@ -102,18 +102,7 @@ impl<'a> ResolvedPosition<'a> {
     }
 
     pub fn next_grapheme(&self, resource: &Resource) -> Option<ResolvedPosition<'a>> {
-        let Some(boundaries) = self.grapheme_boundaries(resource) else {
-            let node = self.doc.node(self.position.node_id)?;
-            let Node::Text(text_node) = node.node() else {
-                return None;
-            };
-            let next_offset = self.position.offset + 1;
-            if next_offset > text_node.text.char_count() {
-                return None;
-            }
-            let new_pos = Position::new(self.position.node_id, next_offset);
-            return Self::resolve(self.doc, new_pos);
-        };
+        let boundaries = self.grapheme_boundaries(resource)?;
         let offset = self.position.offset;
         let next = boundaries.iter().copied().find(|&b| b > offset)?;
         let new_pos = Position::new(self.position.node_id, next);
@@ -125,10 +114,7 @@ impl<'a> ResolvedPosition<'a> {
         if offset == 0 {
             return None;
         }
-        let Some(boundaries) = self.grapheme_boundaries(resource) else {
-            let new_pos = Position::new(self.position.node_id, offset - 1);
-            return Self::resolve(self.doc, new_pos);
-        };
+        let boundaries = self.grapheme_boundaries(resource)?;
         let prev = boundaries.iter().copied().rfind(|&b| b < offset)?;
         let new_pos = Position::new(self.position.node_id, prev);
         Self::resolve(self.doc, new_pos)
@@ -180,13 +166,10 @@ mod tests {
 
     use crate::{Affinity, Position};
 
-    use editor_resource::{Resource, TextSegmenters};
-    use std::sync::Arc;
+    use editor_resource::Resource;
 
     fn resource_with_segmenters() -> Resource {
-        let mut r = Resource::new();
-        r.segmenters = Some(Arc::new(TextSegmenters::new_test()));
-        r
+        Resource::new_test()
     }
 
     /// Build:
@@ -372,14 +355,6 @@ mod tests {
     }
 
     #[test]
-    fn snap_without_segmenters_is_noop() {
-        let r = Resource::new();
-        let (doc, t) = doc! { root { paragraph { t: text("abc") } } };
-        let rp = Position::new(t, 1).resolve(&doc).unwrap();
-        assert_eq!(rp.snap_to_grapheme(&r).offset(), 1);
-    }
-
-    #[test]
     fn next_grapheme_ascii() {
         let r = resource_with_segmenters();
         let (doc, t) = doc! { root { paragraph { t: text("abc") } } };
@@ -426,14 +401,6 @@ mod tests {
         let (doc, t) = doc! { root { paragraph { t: text("") } } };
         let rp = Position::new(t, 0).resolve(&doc).unwrap();
         assert!(rp.next_grapheme(&r).is_none());
-    }
-
-    #[test]
-    fn next_grapheme_without_segmenters_falls_back() {
-        let r = Resource::new();
-        let (doc, t) = doc! { root { paragraph { t: text("abc") } } };
-        let rp = Position::new(t, 0).resolve(&doc).unwrap();
-        assert_eq!(rp.next_grapheme(&r).unwrap().offset(), 1);
     }
 
     #[test]

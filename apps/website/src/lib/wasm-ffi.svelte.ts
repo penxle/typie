@@ -1,4 +1,5 @@
 import { createInstance } from '@typie/editor-ffi/browser';
+import icuUrl from '@typie/editor-ffi/browser/icu.zst?url';
 import wasmUrl from '@typie/editor-ffi/browser/wasm?url';
 import type { EditorHost } from '@typie/editor-ffi/browser';
 
@@ -8,9 +9,15 @@ const panicked = $state(false);
 
 export function initWasm(): Promise<EditorHost> {
   return (hostPromise ??= (async () => {
-    const mod = await WebAssembly.compileStreaming(fetch(wasmUrl));
+    const [mod, icuData] = await Promise.all([
+      WebAssembly.compileStreaming(fetch(wasmUrl)),
+      fetch(icuUrl)
+        .then((r) => r.arrayBuffer())
+        .then((b) => new Uint8Array(b)),
+    ]);
+
     const { EditorHost } = await createInstance(mod);
-    host = await EditorHost.create('gpu');
+    host = await EditorHost.create('gpu', icuData);
     return host;
   })());
 }

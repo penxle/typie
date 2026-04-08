@@ -16,7 +16,7 @@ pub fn resolve_movement(
     resource: &Resource,
     preferred_x: Option<f32>,
 ) -> (Option<Selection>, Option<f32>) {
-    let segmenters = resource.segmenters.as_deref();
+    let segmenters = &resource.segmenters;
     match movement {
         Movement::Grapheme {
             direction: Direction::Forward,
@@ -26,26 +26,23 @@ pub fn resolve_movement(
         } => (move_grapheme_backward(tree, pos), None),
         Movement::Word {
             direction: Direction::Forward,
-        } => (
-            segmenters.and_then(|s| segmentation::move_word_forward(tree, pos, s)),
-            None,
-        ),
+        } => (segmentation::move_word_forward(tree, pos, segmenters), None),
         Movement::Word {
             direction: Direction::Backward,
         } => (
-            segmenters.and_then(|s| segmentation::move_word_backward(tree, pos, s)),
+            segmentation::move_word_backward(tree, pos, segmenters),
             None,
         ),
         Movement::Sentence {
             direction: Direction::Forward,
         } => (
-            segmenters.and_then(|s| segmentation::move_sentence_forward(tree, pos, s)),
+            segmentation::move_sentence_forward(tree, pos, segmenters),
             None,
         ),
         Movement::Sentence {
             direction: Direction::Backward,
         } => (
-            segmenters.and_then(|s| segmentation::move_sentence_backward(tree, pos, s)),
+            segmentation::move_sentence_backward(tree, pos, segmenters),
             None,
         ),
         Movement::Line {
@@ -494,7 +491,7 @@ mod tests {
     };
 
     fn mov(tree: &LayoutTree, pos: Position, movement: Movement) -> Option<Selection> {
-        resolve_movement(tree, &pos, &movement, &VP, &Resource::new(), None).0
+        resolve_movement(tree, &pos, &movement, &VP, &Resource::new_test(), None).0
     }
 
     #[test]
@@ -557,21 +554,6 @@ mod tests {
         assert_eq!(sel.head, sel.anchor);
         assert_eq!(sel.head.node_id, f.lines[0]);
         assert_eq!(sel.head.offset, 11);
-    }
-
-    #[test]
-    fn word_movement_without_segmenters_returns_none() {
-        let f = fixture();
-        assert!(
-            mov(
-                &f.tree,
-                Position::new(f.lines[0], 0),
-                Movement::Word {
-                    direction: Direction::Forward
-                },
-            )
-            .is_none()
-        );
     }
 
     #[test]
@@ -763,7 +745,7 @@ mod tests {
                 direction: Direction::Forward,
             },
             &vp,
-            &Resource::new(),
+            &Resource::new_test(),
             None,
         )
         .0
@@ -787,7 +769,7 @@ mod tests {
                 direction: Direction::Backward,
             },
             &vp,
-            &Resource::new(),
+            &Resource::new_test(),
             None,
         );
         let sel = sel.unwrap();
@@ -964,7 +946,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
             &VP,
-            &Resource::new(),
+            &Resource::new_test(),
             None,
         );
         let sel1 = sel1.unwrap();
@@ -980,7 +962,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
             &VP,
-            &Resource::new(),
+            &Resource::new_test(),
             px1,
         );
         let sel2 = sel2.unwrap();
@@ -1000,7 +982,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
             &VP,
-            &Resource::new(),
+            &Resource::new_test(),
             None,
         );
         assert!(px.is_some());
@@ -1012,7 +994,7 @@ mod tests {
                 direction: Direction::Forward,
             },
             &VP,
-            &Resource::new(),
+            &Resource::new_test(),
             px,
         );
         assert_eq!(px2, None);
@@ -1029,7 +1011,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
             &VP,
-            &Resource::new(),
+            &Resource::new_test(),
             None,
         );
         assert_eq!(px, Some(30.0));
@@ -1054,7 +1036,7 @@ mod tests {
                 axis: Axis::Vertical,
             },
             &vp,
-            &Resource::new(),
+            &Resource::new_test(),
             None,
         );
         assert_eq!(px, Some(50.0));
@@ -1066,7 +1048,7 @@ mod tests {
                 direction: Direction::Forward,
             },
             &vp,
-            &Resource::new(),
+            &Resource::new_test(),
             px,
         );
         assert_eq!(px2, Some(50.0));
@@ -1104,7 +1086,7 @@ mod integration_tests {
                     direction: Direction::Forward,
                     axis: Axis::Vertical,
                 },
-                &Resource::new(),
+                &Resource::new_test(),
             )
             .unwrap();
 
@@ -1136,7 +1118,7 @@ mod integration_tests {
                     direction: Direction::Forward,
                     axis: Axis::Horizontal,
                 },
-                &Resource::new(),
+                &Resource::new_test(),
             )
             .unwrap();
 
@@ -1167,7 +1149,7 @@ mod integration_tests {
                 &Movement::Grapheme {
                     direction: Direction::Forward,
                 },
-                &Resource::new(),
+                &Resource::new_test(),
             )
             .unwrap();
 
@@ -1198,7 +1180,7 @@ mod integration_tests {
                 &Movement::Grapheme {
                     direction: Direction::Backward,
                 },
-                &Resource::new(),
+                &Resource::new_test(),
             )
             .unwrap();
 

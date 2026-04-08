@@ -388,7 +388,7 @@ declare class EditorHost {
     [Symbol.dispose](): void;
     build_fallback_font_manifests(entries: any): Uint8Array;
     build_font_manifest(chunk_codepoints: any): Uint8Array;
-    static create(kind?: BackendKind | null): Promise<EditorHost>;
+    static create(kind: BackendKind | null | undefined, icu_data: Uint8Array): Promise<EditorHost>;
     create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
     encode_font(ttf_data: Uint8Array, chunk_codepoints: any): EncodedFont;
     get_font_codepoints(ttf_data: Uint8Array): any;
@@ -397,7 +397,6 @@ declare class EditorHost {
     load_font_base(family: string, weight: number, data: Uint8Array): void;
     load_font_chunk(family: string, weight: number, data: Uint8Array): void;
     load_font_manifest(family: string, weight: number, data: Uint8Array): void;
-    load_icu_data(data: Uint8Array): void;
     set_font_families(families: FontFamily[]): void;
     set_phantom_font_families(families: string[]): void;
 }

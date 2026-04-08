@@ -130,7 +130,7 @@ impl View {
         resource: &Resource,
     ) -> Option<Selection> {
         let result = self.layout.as_ref()?;
-        let segmenters = resource.segmenters.as_deref()?;
+        let segmenters = &resource.segmenters;
         query::segmentation::select_word_at(&result.tree, pos, segmenters)
     }
 

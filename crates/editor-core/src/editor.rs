@@ -338,7 +338,7 @@ impl Editor {
 #[cfg(any(test, feature = "test-utils"))]
 impl Editor {
     pub fn new_test(state: State) -> Self {
-        let resource = Arc::new(Mutex::new(Resource::new()));
+        let resource = Arc::new(Mutex::new(Resource::new_test()));
         Self {
             state,
             view: View::new_test(),

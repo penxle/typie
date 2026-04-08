@@ -12,11 +12,7 @@ import org.koin.core.annotation.Single
 actual class EditorModule {
   @Single
   actual fun editorHost(ctx: PlatformContext): EditorHost {
-    val host = runBlocking { JnaEditorHost.create(BackendKind.Cpu) }
-
-    val icu = JnaEditorHost::class.java.classLoader.getResourceAsStream("icu.zst")!!.readBytes()
-    host.loadIcuData(icu)
-
-    return host
+    val icuData = JnaEditorHost::class.java.classLoader.getResourceAsStream("icu.zst")!!.readBytes()
+    return runBlocking { JnaEditorHost.create(BackendKind.Cpu, icuData) }
   }
 }

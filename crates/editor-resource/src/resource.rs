@@ -12,16 +12,16 @@ pub struct Resource {
     pub font_registry: FontRegistry,
     pub font_context: FontContext,
     pub layout_context: LayoutContext<TextBrush>,
-    pub segmenters: Option<Arc<TextSegmenters>>,
+    pub segmenters: Arc<TextSegmenters>,
 }
 
 impl Resource {
-    pub fn new() -> Self {
+    pub fn new(segmenters: Arc<TextSegmenters>) -> Self {
         Self {
             font_registry: FontRegistry::new(),
             font_context: FontContext::new(),
             layout_context: LayoutContext::new(),
-            segmenters: None,
+            segmenters,
         }
     }
 
@@ -123,8 +123,9 @@ impl Resource {
     }
 }
 
-impl Default for Resource {
-    fn default() -> Self {
-        Self::new()
+#[cfg(any(test, feature = "test-utils"))]
+impl Resource {
+    pub fn new_test() -> Self {
+        Self::new(Arc::new(TextSegmenters::new_test()))
     }
 }

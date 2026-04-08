@@ -558,7 +558,7 @@ mod tests {
     }
 
     fn make_resource(families: impl IntoIterator<Item = (&'static str, Vec<u16>)>) -> Resource {
-        let mut resource = Resource::new();
+        let mut resource = Resource::new_test();
         resource.font_registry = FontRegistry::from_families(families);
         resource
     }

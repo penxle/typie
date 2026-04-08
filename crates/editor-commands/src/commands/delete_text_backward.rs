@@ -146,7 +146,7 @@ mod tests {
         };
         transact_fail!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
     }
 
@@ -158,7 +158,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Helo") } } }
@@ -175,7 +175,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Hell") } } }
@@ -192,7 +192,7 @@ mod tests {
         };
         transact_fail!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
     }
 
@@ -211,7 +211,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
         let (expected, ..) = state! {
             doc {
@@ -243,7 +243,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
         let (expected, ..) = state! {
             doc {
@@ -274,7 +274,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
         let (expected, ..) = state! {
             doc {
@@ -297,7 +297,7 @@ mod tests {
         };
         transact_fail!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
     }
 
@@ -309,7 +309,7 @@ mod tests {
         };
         let (actual, ..) = transact!(initial, |tr| delete_text_backward(
             &mut tr,
-            &Resource::new()
+            &Resource::new_test()
         ));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("한") } } }

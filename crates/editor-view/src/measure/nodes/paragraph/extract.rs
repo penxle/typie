@@ -69,43 +69,29 @@ fn resolve_text_colors(doc: &Doc, node_id: NodeId) -> (String, Option<String>) {
 fn segment_graphemes(
     cluster_text: &str,
     cluster_advance: f32,
-    segmenter: Option<&GraphemeClusterSegmenter>,
+    segmenter: &GraphemeClusterSegmenter,
 ) -> Vec<GraphemeSpan> {
-    if let Some(seg) = segmenter {
-        let boundaries: Vec<usize> = seg
-            .as_borrowed()
-            .segment_str(cluster_text)
-            .filter(|&b| b > 0)
-            .collect();
-        let count = boundaries.len();
-        if count == 0 {
-            return vec![];
-        }
-        let per_grapheme = cluster_advance / count as f32;
-        let mut spans = Vec::with_capacity(count);
-        let mut prev = 0;
-        for b in boundaries {
-            let grapheme = &cluster_text[prev..b];
-            spans.push(GraphemeSpan {
-                advance: per_grapheme,
-                codepoints: grapheme.char_count() as u8,
-            });
-            prev = b;
-        }
-        spans
-    } else {
-        let codepoints = cluster_text.char_count();
-        if codepoints == 0 {
-            return vec![];
-        }
-        let per_char = cluster_advance / codepoints as f32;
-        (0..codepoints)
-            .map(|_| GraphemeSpan {
-                advance: per_char,
-                codepoints: 1,
-            })
-            .collect()
+    let boundaries: Vec<usize> = segmenter
+        .as_borrowed()
+        .segment_str(cluster_text)
+        .filter(|&b| b > 0)
+        .collect();
+    let count = boundaries.len();
+    if count == 0 {
+        return vec![];
     }
+    let per_grapheme = cluster_advance / count as f32;
+    let mut spans = Vec::with_capacity(count);
+    let mut prev = 0;
+    for b in boundaries {
+        let grapheme = &cluster_text[prev..b];
+        spans.push(GraphemeSpan {
+            advance: per_grapheme,
+            codepoints: grapheme.char_count() as u8,
+        });
+        prev = b;
+    }
+    spans
 }
 
 #[cfg(test)]
@@ -118,7 +104,7 @@ mod tests {
 
     #[test]
     fn segment_single_ascii_char() {
-        let spans = segment_graphemes("h", 10.0, Some(&segmenter()));
+        let spans = segment_graphemes("h", 10.0, &segmenter());
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].codepoints, 1);
         assert_eq!(spans[0].advance, 10.0);
@@ -126,7 +112,7 @@ mod tests {
 
     #[test]
     fn segment_multiple_ascii_chars() {
-        let spans = segment_graphemes("ab", 20.0, Some(&segmenter()));
+        let spans = segment_graphemes("ab", 20.0, &segmenter());
         assert_eq!(spans.len(), 2);
         assert_eq!(spans[0].codepoints, 1);
         assert_eq!(spans[0].advance, 10.0);
@@ -138,7 +124,7 @@ mod tests {
     fn segment_multi_codepoint_grapheme() {
         // 👨‍👩 = U+1F468 U+200D U+1F469 (3 codepoints, 1 grapheme cluster)
         let text = "\u{1F468}\u{200D}\u{1F469}";
-        let spans = segment_graphemes(text, 20.0, Some(&segmenter()));
+        let spans = segment_graphemes(text, 20.0, &segmenter());
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].codepoints, 3);
         assert_eq!(spans[0].advance, 20.0);
@@ -146,7 +132,7 @@ mod tests {
 
     #[test]
     fn segment_no_phantom_zero_codepoint_span() {
-        let spans = segment_graphemes("hello", 50.0, Some(&segmenter()));
+        let spans = segment_graphemes("hello", 50.0, &segmenter());
         assert!(spans.iter().all(|s| s.codepoints > 0));
         assert_eq!(spans.len(), 5);
     }
@@ -160,7 +146,7 @@ pub fn extract_lines(
     text_runs: &[TextRun],
     strut: &StrutMetrics,
     height_config: LineHeightConfig,
-    grapheme_segmenter: Option<&GraphemeClusterSegmenter>,
+    grapheme_segmenter: &GraphemeClusterSegmenter,
 ) -> Vec<ExtractedLine> {
     let LineHeightConfig {
         line_height_ratio,

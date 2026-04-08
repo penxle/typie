@@ -144,7 +144,10 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0) -> (t1, 3)
         };
-        transact_fail!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        transact_fail!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
     }
 
     #[test]
@@ -153,7 +156,10 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("ello") } } }
             selection: (t1, 0)
@@ -167,7 +173,10 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 2)
         };
-        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Helo") } } }
             selection: (t1, 2)
@@ -181,7 +190,10 @@ mod tests {
             doc { root { paragraph { t1: text("Hello") } } }
             selection: (t1, 5)
         };
-        transact_fail!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        transact_fail!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
     }
 
     #[test]
@@ -197,7 +209,10 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -226,7 +241,10 @@ mod tests {
             }
             selection: (t2, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -254,7 +272,10 @@ mod tests {
             }
             selection: (t1, 5)
         };
-        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -274,7 +295,10 @@ mod tests {
             doc { root { p1: paragraph {} } }
             selection: (p1, 0)
         };
-        transact_fail!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        transact_fail!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
     }
 
     #[test]
@@ -283,7 +307,10 @@ mod tests {
             doc { root { paragraph { t1: text("한글") } } }
             selection: (t1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| delete_text_forward(&mut tr, &Resource::new()));
+        let (actual, ..) = transact!(initial, |tr| delete_text_forward(
+            &mut tr,
+            &Resource::new_test()
+        ));
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("글") } } }
             selection: (t1, 0)

@@ -37,11 +37,11 @@ pub fn measure_paragraph(
     let strut = compute_strut(&mut resource, &base_style);
     let style_runs = resolve_style_runs(&text, &runs, &mut resource.font_registry);
     let layout = build_layout(&text, &style_runs, align, indent, width, &mut resource);
-    let segmenters = resource.segmenters.clone();
+    let segmenters = Arc::clone(&resource.segmenters);
     drop(resource);
 
     let strut = strut.expect("strut layout should have one line and run");
-    let grapheme_segmenter = segmenters.as_ref().map(|s| &s.grapheme);
+    let grapheme_segmenter = &segmenters.grapheme;
 
     let old_lines = extract_lines(
         doc,

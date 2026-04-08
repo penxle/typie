@@ -45,6 +45,7 @@ impl EditorHost {
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
     pub async fn create(
         kind: Option<Complex<editor_renderer::BackendKind>>,
+        icu_data: Vec<u8>,
     ) -> EditorResult<Owned<Self>> {
         #[cfg(feature = "wasm")]
         console_error_panic_hook::set_once();
@@ -70,8 +71,10 @@ impl EditorHost {
         #[cfg(feature = "wasm-server")]
         let _ = kind;
 
+        let segmenters = Arc::new(editor_resource::TextSegmenters::from_icu_data(&icu_data)?);
+
         Ok(into_owned(Self {
-            resource: Arc::new(Mutex::new(editor_resource::Resource::new())),
+            resource: Arc::new(Mutex::new(editor_resource::Resource::new(segmenters))),
             #[cfg(not(feature = "wasm-server"))]
             backend,
         }))
@@ -101,14 +104,6 @@ impl EditorHost {
         {
             Ok(into_owned(crate::editor::Editor::new(core)))
         }
-    }
-
-    pub fn load_icu_data(&self, data: Vec<u8>) -> EditorResult<()> {
-        let segmenters = editor_resource::TextSegmenters::from_icu_data(&data)?;
-        self.with_resource(|resource| {
-            resource.segmenters = Some(Arc::new(segmenters));
-            Ok(())
-        })
     }
 
     pub fn load_font_base(&self, family: String, weight: u16, data: Vec<u8>) -> EditorResult<()> {

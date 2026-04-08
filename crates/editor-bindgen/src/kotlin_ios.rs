@@ -101,6 +101,13 @@ fn generate_ios_wrapper(
             w.line("suspendCancellableCoroutine { cont ->");
             w.indent += 1;
 
+            let needs_mem_scope = ctor.params.iter().any(|p| is_byte_array(&p.ty));
+            if needs_mem_scope {
+                w.line("memScoped {");
+                w.indent += 1;
+                emit_pre_call_conversions(&mut w, &ctor.params);
+            }
+
             let selector = if ctor.params.is_empty() {
                 format!("{}WithCompletion", kt_name)
             } else {
@@ -125,6 +132,11 @@ fn generate_ios_wrapper(
             w.line("else cont.resumeWith(Result.success(Unit))");
             w.indent -= 1;
             w.line("}");
+
+            if needs_mem_scope {
+                w.indent -= 1;
+                w.line("}");
+            }
 
             w.indent -= 1;
             w.line("}");
@@ -605,6 +617,45 @@ mod tests {
         assert!(
             output.contains("return IosEditorHost(native)"),
             "Expected IosEditorHost wrapper return:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn constructor_with_byte_array_emits_mem_scope_and_nsdata() {
+        let iface = FfiInterface {
+            name: "EditorHost".into(),
+            methods: vec![FfiMethod {
+                name: "create".into(),
+                is_async: true,
+                is_constructor: true,
+                params: vec![
+                    FfiParam {
+                        name: "kind".into(),
+                        ty: FfiParamType::Option(FfiScalarParam::Complex("BackendKind".into())),
+                    },
+                    FfiParam {
+                        name: "icu_data".into(),
+                        ty: FfiParamType::Vec(FfiScalarParam::Primitive("u8".into())),
+                    },
+                ],
+                return_type: FfiReturnType::Owned("EditorHost".into()),
+            }],
+        };
+        let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
+        assert!(
+            output.contains("memScoped {"),
+            "Expected memScoped block for ByteArray conversion:\n{}",
+            output
+        );
+        assert!(
+            output.contains("val icuDataNsData = NSData.create(bytes = allocArrayOf(icuData), length = icuData.size.toULong())"),
+            "Expected NSData conversion for ByteArray param:\n{}",
+            output
+        );
+        assert!(
+            output.contains("icuData = icuDataNsData"),
+            "Expected icuDataNsData passed to native call:\n{}",
             output
         );
     }

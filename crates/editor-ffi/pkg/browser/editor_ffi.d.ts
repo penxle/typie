@@ -372,13 +372,12 @@ declare class EditorHost {
     free(): void;
     [Symbol.dispose](): void;
     backend_kind(): BackendKind;
-    static create(kind?: BackendKind | null): Promise<EditorHost>;
+    static create(kind: BackendKind | null | undefined, icu_data: Uint8Array): Promise<EditorHost>;
     create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
     load_fallback_font_manifests(data: Uint8Array): void;
     load_font_base(family: string, weight: number, data: Uint8Array): void;
     load_font_chunk(family: string, weight: number, data: Uint8Array): void;
     load_font_manifest(family: string, weight: number, data: Uint8Array): void;
-    load_icu_data(data: Uint8Array): void;
     set_font_families(families: FontFamily[]): void;
     set_phantom_font_families(families: string[]): void;
 }
