@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "bootstrap": "lefthook install",
+    "bootstrap": "husky",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint:eslint": "turbo run lint:eslint",
@@ -19,7 +19,8 @@
     "@typie/lintconfig": "workspace:*",
     "cspell": "^10.0.0",
     "eslint": "^10.2.0",
-    "lefthook": "^2.1.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
     "syncpack": "^14.3.0",
     "turbo": "^2.9.5",
