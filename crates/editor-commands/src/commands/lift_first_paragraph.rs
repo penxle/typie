@@ -1,11 +1,10 @@
-use editor_model::{Node, NodeType};
-use editor_schema::NodeSpecExt;
-use editor_state::{Affinity, Position, Selection};
-use editor_transaction::{Transaction, dissolve, prune};
+use editor_model::Node;
+use editor_transaction::Transaction;
 
+use crate::helpers::{LiftDirection, lift};
 use crate::{CommandError, CommandResult};
 
-pub fn lift_paragraph(tr: &mut Transaction) -> CommandResult {
+pub fn lift_first_paragraph(tr: &mut Transaction) -> CommandResult {
     let selection = tr.selection();
     if !selection.is_collapsed() {
         return Ok(false);
@@ -44,71 +43,7 @@ pub fn lift_paragraph(tr: &mut Transaction) -> CommandResult {
         return Ok(false);
     }
 
-    let wrapper = match paragraph.parent() {
-        Some(parent) if !matches!(parent.node(), Node::Root(_)) => parent,
-        _ => return Ok(false),
-    };
-
-    if wrapper.spec().isolating {
-        return Ok(false);
-    }
-
-    let wrapper_id = wrapper.id();
-    let wrapper_parent = wrapper.parent().ok_or(CommandError::NoParent(wrapper_id))?;
-    let wrapper_parent_id = wrapper_parent.id();
-
-    let wrapper_index = wrapper
-        .index()
-        .ok_or(CommandError::Corrupted("wrapper has no index".into()))?;
-
-    // Content spec validation: can wrapper's parent accept a Paragraph at this position?
-    let mut children_types: Vec<NodeType> =
-        wrapper_parent.children().map(|c| c.as_type()).collect();
-    children_types.insert(wrapper_index, NodeType::Paragraph);
-    if !wrapper_parent
-        .spec()
-        .content
-        .matches_sequence(&children_types)
-    {
-        return Ok(false);
-    }
-
-    tr.batch::<_, CommandError>(|tr| {
-        tr.move_node(paragraph_id, wrapper_parent_id, wrapper_index)?;
-
-        let doc = tr.doc();
-        if let Some(wrapper) = doc.node(wrapper_id) {
-            let remaining: Vec<NodeType> = wrapper.children().map(|c| c.as_type()).collect();
-
-            if wrapper.entry().children.is_empty() {
-                tr.apply_steps(prune(&wrapper))?;
-            } else if !wrapper.spec().content.matches_sequence(&remaining) {
-                tr.apply_steps(dissolve(&wrapper))?;
-            }
-        }
-        Ok(())
-    })?;
-
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
-
-    let new_selection = match paragraph.first_child() {
-        Some(child) if matches!(child.node(), Node::Text(_)) => Selection::collapsed(Position {
-            node_id: child.id(),
-            offset: 0,
-            affinity: Affinity::Downstream,
-        }),
-        _ => Selection::collapsed(Position {
-            node_id: paragraph_id,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        }),
-    };
-    tr.set_selection(new_selection)?;
-
-    Ok(true)
+    lift(tr, paragraph_id, LiftDirection::Front)
 }
 
 #[cfg(test)]
@@ -129,7 +64,7 @@ mod tests {
             }
             selection: (t1, 0) -> (t1, 1)
         };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
+        transact_fail!(initial, |tr| lift_first_paragraph(&mut tr));
     }
 
     #[test]
@@ -143,7 +78,7 @@ mod tests {
             }
             selection: (t1, 1)
         };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
+        transact_fail!(initial, |tr| lift_first_paragraph(&mut tr));
     }
 
     #[test]
@@ -160,7 +95,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
+        transact_fail!(initial, |tr| lift_first_paragraph(&mut tr));
     }
 
     #[test]
@@ -173,7 +108,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
+        transact_fail!(initial, |tr| lift_first_paragraph(&mut tr));
     }
 
     #[test]
@@ -189,7 +124,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
+        transact_fail!(initial, |tr| lift_first_paragraph(&mut tr));
     }
 
     #[test]
@@ -206,7 +141,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| lift_first_paragraph(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -236,7 +171,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| lift_first_paragraph(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -265,7 +200,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| lift_first_paragraph(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -291,7 +226,7 @@ mod tests {
             }
             selection: (p1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| lift_first_paragraph(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {
@@ -318,7 +253,7 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
+        let (actual, ..) = transact!(initial, |tr| lift_first_paragraph(&mut tr));
         let (expected, ..) = state! {
             doc {
                 root {

@@ -22,7 +22,11 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                 commands::chain!(
                     tr,
                     commands::optional!(commands::delete_selection()),
-                    commands::split_paragraph(),
+                    |tr| commands::first!(
+                        tr,
+                        commands::lift_last_paragraph(),
+                        commands::split_paragraph(),
+                    ),
                 )?;
             }
             (Key::Backspace, _) => {
@@ -33,7 +37,7 @@ pub fn handle_key_event(editor: &mut Editor, event: KeyEvent) -> Result<(), Edit
                     commands::delete_node_backward(),
                     commands::join_paragraph_backward(),
                     commands::sink_paragraph_backward(),
-                    commands::lift_paragraph(),
+                    commands::lift_first_paragraph(),
                 )?;
             }
             (Key::Delete, _) => {

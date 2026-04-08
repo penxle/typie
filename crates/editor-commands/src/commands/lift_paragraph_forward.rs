@@ -1,8 +1,10 @@
 use editor_common::StrExt;
 use editor_model::{Doc, Node, NodeId, NodeRef, NodeType};
 use editor_schema::NodeSpecExt;
+use editor_state::Selection;
 use editor_transaction::{Transaction, compact, dissolve, prune};
 
+use crate::helpers::find_first_cursor_position;
 use crate::{CommandError, CommandResult};
 
 pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
@@ -66,6 +68,8 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         .id();
 
     let cursor_selection = tr.selection();
+    let cursor_on_empty_paragraph =
+        matches!(node.node(), Node::Paragraph(_)) && node.entry().children.is_empty();
 
     tr.batch::<_, CommandError>(|tr| {
         tr.merge_node(source_paragraph_id, paragraph_id)?;
@@ -93,6 +97,15 @@ pub fn lift_paragraph_forward(tr: &mut Transaction) -> CommandResult {
         Ok(())
     })?;
 
+    if cursor_on_empty_paragraph {
+        let doc = tr.doc();
+        if let Some(p) = doc.node(paragraph_id) {
+            if let Some(pos) = find_first_cursor_position(&p) {
+                tr.set_selection(Selection::collapsed(pos))?;
+                return Ok(true);
+            }
+        }
+    }
     tr.set_selection(cursor_selection)?;
 
     Ok(true)
@@ -251,10 +264,41 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    p1: paragraph { t1: text("A") }
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        assert_state_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn empty_paragraph_lift_from_callout_selects_text() {
+        let (initial, ..) = state! {
+            doc {
+                root {
+                    p1: paragraph {}
+                    callout {
+                        paragraph { t1: text("Hello, World!") }
+                        paragraph { text("안녕하세요!") }
+                    }
+                    paragraph {}
                 }
             }
             selection: (p1, 0)
+        };
+        let (actual, ..) = transact!(initial, |tr| lift_paragraph_forward(&mut tr));
+        let (expected, ..) = state! {
+            doc {
+                root {
+                    paragraph { t1: text("Hello, World!") }
+                    callout {
+                        paragraph { text("안녕하세요!") }
+                    }
+                    paragraph {}
+                }
+            }
+            selection: (t1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }

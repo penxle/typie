@@ -3,6 +3,7 @@ use editor_schema::NodeSpecExt;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, fulfill};
 
+use crate::helpers::find_last_cursor_position;
 use crate::{CommandError, CommandResult};
 
 pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
@@ -40,6 +41,8 @@ pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         .node(paragraph_id)
         .ok_or(CommandError::NodeNotFound(paragraph_id))?;
 
+    let is_empty = paragraph.first_child().is_none();
+
     let prev = match paragraph.prev_sibling() {
         Some(prev) => prev,
         None => return Ok(false),
@@ -59,39 +62,65 @@ pub fn sink_paragraph_backward(tr: &mut Transaction) -> CommandResult {
         .ok_or(CommandError::NoParent(paragraph_id))?
         .id();
 
-    let doc = tr.doc();
-    let target = doc
-        .node(target_id)
-        .ok_or(CommandError::NodeNotFound(target_id))?;
-    let target_children_count = target.entry().children.len();
-
-    tr.batch::<_, CommandError>(|tr| {
-        tr.move_node(paragraph_id, target_id, target_children_count)?;
+    if is_empty {
         let doc = tr.doc();
-        if let Some(parent) = doc.node(source_parent_id) {
-            tr.apply_steps(fulfill(&parent))?;
-        }
-        Ok(())
-    })?;
+        let target = doc
+            .node(target_id)
+            .ok_or(CommandError::NodeNotFound(target_id))?;
+        let cursor_pos =
+            find_last_cursor_position(&target).ok_or(CommandError::NodeNotFound(target_id))?;
 
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
+        tr.batch::<_, CommandError>(|tr| {
+            tr.remove_subtree(paragraph_id)?;
+            let doc = tr.doc();
+            if let Some(parent) = doc.node(source_parent_id) {
+                tr.apply_steps(fulfill(&parent))?;
+            }
+            Ok(())
+        })?;
 
-    let new_selection = match paragraph.first_child() {
-        Some(child) if matches!(child.node(), Node::Text(_)) => Selection::collapsed(Position {
-            node_id: child.id(),
-            offset: 0,
+        tr.set_selection(Selection::collapsed(Position {
+            node_id: cursor_pos.node_id,
+            offset: cursor_pos.offset,
             affinity: Affinity::Downstream,
-        }),
-        _ => Selection::collapsed(Position {
-            node_id: paragraph_id,
-            offset: 0,
-            affinity: Affinity::Downstream,
-        }),
-    };
-    tr.set_selection(new_selection)?;
+        }))?;
+    } else {
+        let doc = tr.doc();
+        let target = doc
+            .node(target_id)
+            .ok_or(CommandError::NodeNotFound(target_id))?;
+        let target_children_count = target.entry().children.len();
+
+        tr.batch::<_, CommandError>(|tr| {
+            tr.move_node(paragraph_id, target_id, target_children_count)?;
+            let doc = tr.doc();
+            if let Some(parent) = doc.node(source_parent_id) {
+                tr.apply_steps(fulfill(&parent))?;
+            }
+            Ok(())
+        })?;
+
+        let doc = tr.doc();
+        let paragraph = doc
+            .node(paragraph_id)
+            .ok_or(CommandError::NodeNotFound(paragraph_id))?;
+
+        let new_selection = match paragraph.first_child() {
+            Some(child) if matches!(child.node(), Node::Text(_)) => {
+                Selection::collapsed(Position {
+                    node_id: child.id(),
+                    offset: 0,
+                    affinity: Affinity::Downstream,
+                })
+            }
+            _ => Selection::collapsed(Position {
+                node_id: paragraph_id,
+                offset: 0,
+                affinity: Affinity::Downstream,
+            }),
+        };
+        tr.set_selection(new_selection)?;
+    }
 
     Ok(true)
 }
@@ -346,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn sink_empty_paragraph_into_blockquote() {
+    fn empty_paragraph_deleted_and_cursor_moves_to_target() {
         let (initial, ..) = state! {
             doc {
                 root {
@@ -360,14 +389,11 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    blockquote {
-                        paragraph { t1: text("A") }
-                        p2: paragraph {}
-                    }
+                    blockquote { paragraph { t1: text("A") } }
                     paragraph {}
                 }
             }
-            selection: (p2, 0)
+            selection: (t1, 1)
         };
         assert_state_eq!(&actual, &expected);
     }
