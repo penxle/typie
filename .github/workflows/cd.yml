@@ -18,9 +18,13 @@ jobs:
     name: Build (wasm)
     uses: ./.github/workflows/build-wasm.yml
 
+  build-wasm-legacy:
+    name: Build (legay wasm)
+    uses: ./.github/workflows/build-wasm-legacy.yml
+
   build-api:
     name: Build (api)
-    needs: [build-wasm]
+    needs: [build-wasm, build-wasm-legacy]
     uses: ./.github/workflows/build.yml
     with:
       app: api
@@ -28,7 +32,7 @@ jobs:
 
   build-website:
     name: Build (website)
-    needs: [build-wasm]
+    needs: [build-wasm, build-wasm-legacy]
     uses: ./.github/workflows/build.yml
     with:
       app: website

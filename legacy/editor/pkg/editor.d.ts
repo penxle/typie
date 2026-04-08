@@ -322,11 +322,7 @@ export class Editor {
     isSelectionHit(page_idx: number, x: number, y: number): boolean;
     performSearch(query: string, match_whole_word: boolean): any;
     removeTrackedItems(group: number, ids: string[]): void;
-    render(): void;
     renderDragImage(visible_pages: Uint32Array, page_idx: number): DragImageInfo | undefined;
-    /**
-     * 단일 surface를 렌더링한다.
-     */
     renderSurface(page_index: number): void;
     replaceTextInBlock(block_id: string, start_offset: number, end_offset: number, replacement: string): boolean;
     replaceTextInBlocks(items: any): boolean;
@@ -347,13 +343,11 @@ export class EditorEngine {
     [Symbol.dispose](): void;
     addFontBase(family: string, weight: number, data: Uint8Array): void;
     addFontChunk(family: string, weight: number, data: Uint8Array): void;
-    clearTextReplacementRules(): void;
     createEditor(scale_factor: number, snapshot?: Uint8Array | null): Editor;
     encodeFont(ttf_data: Uint8Array, chunk_codepoints_json: string): EncodedFont;
     getFontCodepoints(ttf_data: Uint8Array): Codepoints;
     getFontMetadata(data: Uint8Array): FontMetadata;
     getMemory(): any;
-    initGpu(): Promise<boolean>;
     jsonToSnapshot(json: any): Uint8Array;
     loadIcuData(icu_data: Uint8Array): void;
     constructor();
@@ -362,7 +356,7 @@ export class EditorEngine {
     setAvailableFonts(fonts: any): void;
     setTextReplacementRules(rules: any): void;
     snapshotToJson(snapshot: Uint8Array): any;
-    validateDocumentJson(json: any): void;
+    tryInitGpu(): Promise<boolean>;
     validateRegex(pattern: string): boolean;
 }
 
@@ -370,27 +364,9 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly __wbg_charactercounts_free: (a: number, b: number) => void;
-    readonly __wbg_clipboarddata_free: (a: number, b: number) => void;
     readonly __wbg_dragimageinfo_free: (a: number, b: number) => void;
     readonly __wbg_editor_free: (a: number, b: number) => void;
     readonly __wbg_editorengine_free: (a: number, b: number) => void;
-    readonly __wbg_get_charactercounts_doc_with_whitespace: (a: number) => number;
-    readonly __wbg_get_charactercounts_doc_without_whitespace: (a: number) => number;
-    readonly __wbg_get_charactercounts_doc_without_whitespace_and_punctuation: (a: number) => number;
-    readonly __wbg_get_charactercounts_selection_with_whitespace: (a: number) => number;
-    readonly __wbg_get_charactercounts_selection_without_whitespace: (a: number) => number;
-    readonly __wbg_get_charactercounts_selection_without_whitespace_and_punctuation: (a: number) => number;
-    readonly __wbg_get_clipboarddata_html: (a: number) => [number, number];
-    readonly __wbg_get_clipboarddata_text: (a: number) => [number, number];
-    readonly __wbg_set_charactercounts_doc_with_whitespace: (a: number, b: number) => void;
-    readonly __wbg_set_charactercounts_doc_without_whitespace: (a: number, b: number) => void;
-    readonly __wbg_set_charactercounts_doc_without_whitespace_and_punctuation: (a: number, b: number) => void;
-    readonly __wbg_set_charactercounts_selection_with_whitespace: (a: number, b: number) => void;
-    readonly __wbg_set_charactercounts_selection_without_whitespace: (a: number, b: number) => void;
-    readonly __wbg_set_charactercounts_selection_without_whitespace_and_punctuation: (a: number, b: number) => void;
-    readonly __wbg_set_clipboarddata_html: (a: number, b: number, c: number) => void;
-    readonly __wbg_set_clipboarddata_text: (a: number, b: number, c: number) => void;
     readonly dragimageinfo_height: (a: number) => number;
     readonly dragimageinfo_len: (a: number) => number;
     readonly dragimageinfo_offsetX: (a: number) => number;
@@ -430,7 +406,6 @@ export interface InitOutput {
     readonly editor_isSelectionHit: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly editor_performSearch: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly editor_removeTrackedItems: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly editor_render: (a: number) => [number, number];
     readonly editor_renderDragImage: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly editor_renderSurface: (a: number, b: number) => [number, number];
     readonly editor_replaceTextInBlock: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
@@ -447,13 +422,11 @@ export interface InitOutput {
     readonly editor_tick: (a: number) => [number, number];
     readonly editorengine_addFontBase: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly editorengine_addFontChunk: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
-    readonly editorengine_clearTextReplacementRules: (a: number) => [number, number];
     readonly editorengine_createEditor: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly editorengine_encodeFont: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly editorengine_getFontCodepoints: (a: number, b: number, c: number) => [number, number, number];
     readonly editorengine_getFontMetadata: (a: number, b: number, c: number) => [number, number, number];
     readonly editorengine_getMemory: (a: number) => [number, number, number];
-    readonly editorengine_initGpu: (a: number) => any;
     readonly editorengine_jsonToSnapshot: (a: number, b: any) => [number, number, number, number];
     readonly editorengine_loadIcuData: (a: number, b: number, c: number) => [number, number];
     readonly editorengine_new: () => number;
@@ -462,19 +435,36 @@ export interface InitOutput {
     readonly editorengine_setAvailableFonts: (a: number, b: any) => [number, number];
     readonly editorengine_setTextReplacementRules: (a: number, b: any) => [number, number];
     readonly editorengine_snapshotToJson: (a: number, b: number, c: number) => [number, number, number];
-    readonly editorengine_validateDocumentJson: (a: number, b: any) => [number, number];
+    readonly editorengine_tryInitGpu: (a: number) => any;
     readonly editorengine_validateRegex: (a: number, b: number, c: number) => [number, number, number];
-    readonly wasm_bindgen__closure__destroy__h745e9951ea245b84: (a: number, b: number) => void;
-    readonly wasm_bindgen__closure__destroy__h716949ead8df24cf: (a: number, b: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h225ed9afb2319e96: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen__convert__closures_____invoke__h609a84b31dc976c1: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h22d6c429998622c6: (a: number, b: number, c: any) => void;
+    readonly __wbg_charactercounts_free: (a: number, b: number) => void;
+    readonly __wbg_clipboarddata_free: (a: number, b: number) => void;
+    readonly __wbg_get_charactercounts_doc_with_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_doc_without_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_doc_without_whitespace_and_punctuation: (a: number) => number;
+    readonly __wbg_get_charactercounts_selection_with_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_selection_without_whitespace: (a: number) => number;
+    readonly __wbg_get_charactercounts_selection_without_whitespace_and_punctuation: (a: number) => number;
+    readonly __wbg_get_clipboarddata_html: (a: number) => [number, number];
+    readonly __wbg_get_clipboarddata_text: (a: number) => [number, number];
+    readonly __wbg_set_charactercounts_doc_with_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_doc_without_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_doc_without_whitespace_and_punctuation: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_selection_with_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_selection_without_whitespace: (a: number, b: number) => void;
+    readonly __wbg_set_charactercounts_selection_without_whitespace_and_punctuation: (a: number, b: number) => void;
+    readonly __wbg_set_clipboarddata_html: (a: number, b: number, c: number) => void;
+    readonly __wbg_set_clipboarddata_text: (a: number, b: number, c: number) => void;
+    readonly wasm_bindgen_dab7cedfe7ffa4c5___convert__closures_____invoke___wasm_bindgen_dab7cedfe7ffa4c5___JsValue__core_260d1872709b9755___result__Result_____wasm_bindgen_dab7cedfe7ffa4c5___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_dab7cedfe7ffa4c5___convert__closures_____invoke___js_sys_177b45fd6bc9cd1c___Function_fn_wasm_bindgen_dab7cedfe7ffa4c5___JsValue_____wasm_bindgen_dab7cedfe7ffa4c5___sys__Undefined___js_sys_177b45fd6bc9cd1c___Function_fn_wasm_bindgen_dab7cedfe7ffa4c5___JsValue_____wasm_bindgen_dab7cedfe7ffa4c5___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen_dab7cedfe7ffa4c5___convert__closures_____invoke___wasm_bindgen_dab7cedfe7ffa4c5___JsValue______true_: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
     readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_destroy_closure: (a: number, b: number) => void;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }

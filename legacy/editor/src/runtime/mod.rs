@@ -522,6 +522,7 @@ impl Runtime {
             loro::event::Diff::Map(_) => MutationKind::Attr,
             loro::event::Diff::List(_) => MutationKind::UnknownRemote,
             loro::event::Diff::Tree(_) => MutationKind::UnknownRemote,
+            loro::event::Diff::Counter(_) => MutationKind::UnknownRemote,
             loro::event::Diff::Unknown => MutationKind::UnknownRemote,
         }
     }
