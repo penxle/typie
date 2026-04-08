@@ -44,7 +44,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: editor-wasm
-          path: out/full/crates/editor/pkg/
+          path: out/full/crates/editor-ffi/pkg/
+
+      - name: Download Legacy WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: editor-wasm-legacy
+          path: out/full/legacy/editor/pkg/
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4

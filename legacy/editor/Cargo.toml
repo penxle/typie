@@ -1,7 +1,13 @@
 [package]
 name = "editor"
-version.workspace = true
-edition.workspace = true
+version = "0.0.1"
+edition = "2024"
+
+[workspace]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib", "rlib", "staticlib"]
@@ -35,7 +41,7 @@ bytecount = "0.6"
 console_error_panic_hook = { version = "0.1", optional = true }
 csscolorparser = "0.8"
 fancy-regex = "0.17"
-fontique = { version = "0.7", default-features = false }
+fontique = { version = "0.8", default-features = false }
 heck = "0.5"
 kurbo = "0.13"
 icu_properties = { version = "2.1", default-features = false, features = [
@@ -53,7 +59,7 @@ macros = { path = "./macros" }
 opentelemetry = { version = "0.31", default-features = false, features = [
   "trace",
 ] }
-parley = { version = "0.7", default-features = false, features = ["std"] }
+parley = { version = "0.8", default-features = false, features = ["std"] }
 peniko = "0.6"
 pretty_assertions = "1.4"
 rstar = "0.12"

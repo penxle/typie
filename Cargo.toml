@@ -33,7 +33,11 @@ kurbo = "0.13"
 log = "0.4"
 objc2 = "0.6"
 objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
-objc2-metal = { version = "0.3", features = ["MTLTexture", "MTLDrawable", "MTLTypes"] }
+objc2-metal = { version = "0.3", features = [
+  "MTLTexture",
+  "MTLDrawable",
+  "MTLTypes",
+] }
 object = { version = "0.36", default-features = false, features = ["read"] }
 parley = { version = "0.8", default-features = false, features = ["std"] }
 peniko = "0.6"
