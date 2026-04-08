@@ -8,6 +8,7 @@ import co.typie.screen.editor.EditorScreen
 import co.typie.screen.editor_settings.EditorSettingsScreen
 import co.typie.screen.font_settings.FontSettingsScreen
 import co.typie.screen.folder.FolderScreen
+import co.typie.screen.home.HomeSearchScreen
 import co.typie.screen.home.HomeScreen
 import co.typie.screen.login.LoginScreen
 import co.typie.screen.more.MoreScreen
@@ -36,6 +37,7 @@ import co.typie.screen.text_replacements.TextReplacementsScreen
 fun MainRoutes(route: Route) {
   when (route) {
     is Route.Home -> HomeScreen()
+    is Route.HomeSearch -> HomeSearchScreen()
     is Route.Space -> SpaceScreen()
     is Route.Notes -> NotesScreen()
     is Route.More -> MoreScreen()

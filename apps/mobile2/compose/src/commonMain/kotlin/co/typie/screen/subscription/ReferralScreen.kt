@@ -236,6 +236,8 @@ fun ReferralScreen() {
             ReferralBulletPoint("초대 횟수에는 제한이 없어요.")
           }
         }
+
+        Spacer(Modifier.height(72.dp))
   }
 }
 

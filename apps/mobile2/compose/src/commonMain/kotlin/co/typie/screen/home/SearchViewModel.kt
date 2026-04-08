@@ -18,6 +18,8 @@ class SearchViewModel(
   private val siteService: SiteService,
   prefs: Prefs,
 ) : GraphQLViewModel() {
+  var shouldAnimateHeaderOnEnter by mutableStateOf(true)
+    private set
 
   var query by mutableStateOf("")
     private set
@@ -77,9 +79,7 @@ class SearchViewModel(
     storedRecentSearches = updated
   }
 
-  fun reset() {
-    query = ""
-    activeQuery = ""
-    debounceJob?.cancel()
+  fun onHeaderEnterAnimationConsumed() {
+    shouldAnimateHeaderOnEnter = false
   }
 }

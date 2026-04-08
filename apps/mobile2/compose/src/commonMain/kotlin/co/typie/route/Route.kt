@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.dp
 
 sealed interface Route {
   data object Home : Route
+  data object HomeSearch : Route
   data object Space : Route
   data object Notes : Route
   data object More : Route
@@ -34,6 +35,15 @@ sealed interface Route {
   data class Folder(val entityId: String) : Route
   data class Editor(val slug: String) : Route
   data object Login : Route
+}
+
+enum class RouteTransitionStyle { Slide, Fade }
+
+fun Route.transitionStyleTo(route: Route): RouteTransitionStyle = when {
+  (this is Route.Home && route is Route.HomeSearch) ||
+    (this is Route.HomeSearch && route is Route.Home) -> RouteTransitionStyle.Fade
+
+  else -> RouteTransitionStyle.Slide
 }
 
 val Route.toastBottomInset: Dp

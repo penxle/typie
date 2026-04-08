@@ -1,19 +1,17 @@
 package co.typie.screen.home
 
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,7 +44,6 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.type.DocumentType
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.navigation.PlatformBackHandler
 import co.typie.route.Route
 import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.DocumentThumbnailPreview
@@ -60,7 +57,6 @@ import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.resolveResponsiveContainerMetrics
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
@@ -71,104 +67,64 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun HomeScreen() {
   val model = koinViewModel<HomeViewModel>()
-  val searchModel = koinViewModel<SearchViewModel>()
+  val nav = Nav.current
   val scrollState = rememberScrollState()
-  val searchScrollState = rememberScrollState("home-search")
   val bottomBarState = LocalBottomBarState.current
 
-  LaunchedEffect(model.searching) {
-    bottomBarState.visible = !model.searching
+  LaunchedEffect(Unit) {
+    bottomBarState.visible = true
   }
 
   ProvideTopBar(
-    leadingKey = if (model.searching) SearchTopBarKey else SpacePopoverLeadingKey,
-    leading = if (model.searching) {
-      { TopBarBackButton(onClick = { model.exitSearch() }) }
-    } else {
-      { SpacePopover() }
-    },
-    center = if (model.searching) null else { { Text("홈", style = AppTheme.typography.title) } },
-    scrollOffset = if (model.searching) null else scrollState.topBarScrollOffset(),
+    leadingKey = SpacePopoverLeadingKey,
+    leading = { SpacePopover() },
+    center = { Text("홈", style = AppTheme.typography.title) },
+    scrollOffset = scrollState.topBarScrollOffset(),
   )
-
-  PlatformBackHandler(enabled = model.searching) {
-    model.exitSearch()
-  }
 
   if (model.query.state is QueryState.Error) {
     ErrorDialog { model.query.refetch() }
   }
 
-  Crossfade(
-    targetState = model.searching,
-    animationSpec = tween(200),
-    modifier = Modifier.fillMaxSize(),
-  ) { isSearching ->
-    Screen(
-      loading = model.query.state !is QueryState.Success,
-      background = AppTheme.colors.surfaceBase,
-      responsive = isSearching,
-      contentPadding = PaddingValues(0.dp),
-      primaryScrollableState = if (isSearching) searchScrollState else scrollState,
-      body = { contentPadding ->
-        if (isSearching) {
-          Column(
-            Modifier
-              .fillMaxSize()
-              .padding(contentPadding)
-          ) {
-            SearchHeader(
-              animateOnEnter = model.shouldAnimateSearchHeader,
-              query = searchModel.query,
-              onQueryChange = { searchModel.updateQuery(it) },
-              onSubmit = { searchModel.submitQuery() },
-              onEnterAnimationConsumed = { model.onSearchHeaderAnimationConsumed() },
+  Screen(
+    loading = model.query.state !is QueryState.Success,
+    background = AppTheme.colors.surfaceBase,
+    contentPadding = PaddingValues(0.dp),
+    primaryScrollableState = scrollState,
+    body = { contentPadding ->
+      Column(
+        Modifier
+          .fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding)
+          .navigationBarsPadding()
+      ) {
+        HomeFramedSection {
+          Skeleton.Keep {
+            Text(
+              "홈",
+              style = AppTheme.typography.display,
+              modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            SearchContent(
-              modifier = Modifier.weight(1f),
-              searchViewModel = searchModel,
-              contentPadding = PaddingValues(0.dp),
-              scrollState = searchScrollState,
-            )
-          }
-        } else {
-          Column(
-            Modifier
-              .fillMaxSize()
-              .verticalScroll(scrollState)
-              .padding(contentPadding)
-              .navigationBarsPadding()
-          ) {
-            HomeFramedSection {
-              Skeleton.Keep {
-                Text(
-                  "홈",
-                  style = AppTheme.typography.display,
-                  modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
-                SearchBar(onClick = {
-                  searchModel.reset()
-                  model.enterSearch()
-                })
-              }
-            }
-
-            RecentDocuments(data = model.query.data)
-
-            RecentFolders(data = model.query.data)
-
-            HomeFramedSection {
-              MoreDocuments(data = model.query.data)
-            }
-
-            Spacer(Modifier.height(140.dp))
+            SearchBar(onClick = {
+              nav.navigate(Route.HomeSearch)
+            })
           }
         }
-      },
-    )
-  }
+
+        RecentDocuments(data = model.query.data)
+
+        RecentFolders(data = model.query.data)
+
+        HomeFramedSection {
+          MoreDocuments(data = model.query.data)
+        }
+
+        Spacer(Modifier.height(140.dp))
+      }
+    },
+  )
 }
 
 @Composable
@@ -206,7 +162,7 @@ private fun HomeFullBleedRail(
 }
 
 @Composable
-private fun SearchBar(onClick: () -> Unit) {
+private fun SearchBar(onClick: suspend () -> Unit) {
   HomeSearchFieldFrame(
     modifier = Modifier
       .padding(horizontal = 16.dp)

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.route.Route
+import co.typie.route.RouteTransitionStyle
+import co.typie.route.transitionStyleTo
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.NavDirection
 import co.typie.ui.component.topbar.TopBarState
@@ -74,6 +75,7 @@ fun NavigationStack(
   var visibleRoute by remember { mutableStateOf(navigator.current) }
   // behindRoute: 애니메이션/제스처 중 뒤에 깔리는 화면. Idle에서는 null.
   var behindRoute by remember { mutableStateOf<Route?>(null) }
+  var transitionStyle by remember { mutableStateOf(RouteTransitionStyle.Slide) }
 
   val progress = remember { Animatable(0f) }
 
@@ -83,6 +85,7 @@ fun NavigationStack(
       .collect { requested ->
         if (requested && animState == AnimState.Idle) {
           behindRoute = navigator.previous
+          behindRoute?.let { transitionStyle = visibleRoute.transitionStyleTo(it) }
           animState = AnimState.Pop
           progress.snapTo(0f)
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
@@ -105,6 +108,7 @@ fun NavigationStack(
       when (navigator.lastOperation) {
         NavOperation.Push -> {
           // Push: visibleRoute(이전 화면)가 뒤로, navigator.current(새 화면)가 앞으로
+          transitionStyle = visibleRoute.transitionStyleTo(navigator.current)
           behindRoute = visibleRoute
           animState = AnimState.Push
           progress.snapTo(0f)
@@ -116,6 +120,7 @@ fun NavigationStack(
         else -> {
           // Pop: visibleRoute(현재 화면)가 앞에서 나가고, navigator.current(이전 화면)가 뒤에서 나타남
           val poppedRoute = visibleRoute
+          transitionStyle = poppedRoute.transitionStyleTo(navigator.current)
           behindRoute = navigator.current
           animState = AnimState.Pop
           progress.snapTo(0f)
@@ -140,14 +145,18 @@ fun NavigationStack(
         .fillMaxSize()
         .onSizeChanged { containerWidth = it.width.toFloat() }
     ) {
+      val useFadeTransition = transitionStyle == RouteTransitionStyle.Fade
+
       // 전환 progress에 연동: 0→1f, 0.5→0f, 1→1f
-      topBarState.blurFactor = if (animState == AnimState.Idle) 1f else abs(progress.value * 2f - 1f)
+      topBarState.blurFactor = if (animState == AnimState.Idle || useFadeTransition) 1f else abs(progress.value * 2f - 1f)
 
       when (animState) {
         AnimState.Idle -> topBarState.navDirection = NavDirection.Switch
-        AnimState.Push -> topBarState.navDirection = NavDirection.Push
-        AnimState.Pop -> topBarState.navDirection = NavDirection.Pop
-        AnimState.Dragging -> if (navigator.popRequested) topBarState.navDirection = NavDirection.Pop
+        AnimState.Push -> topBarState.navDirection = if (useFadeTransition) NavDirection.Switch else NavDirection.Push
+        AnimState.Pop -> topBarState.navDirection = if (useFadeTransition) NavDirection.Switch else NavDirection.Pop
+        AnimState.Dragging -> if (navigator.popRequested) {
+          topBarState.navDirection = if (useFadeTransition) NavDirection.Switch else NavDirection.Pop
+        }
       }
 
       val p = progress.value
@@ -171,17 +180,32 @@ fun NavigationStack(
           else -> topBarState
         }
 
-        Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }) {
-          CompositionLocalProvider(LocalTopBarState provides behindTopBar) {
-            RouteContent(behindRoute!!)
+        if (useFadeTransition) {
+          val behindAlpha = when (animState) {
+            AnimState.Push -> 1f - p
+            AnimState.Pop -> p
+            AnimState.Dragging -> if (navigator.popRequested) p else 0f
+            AnimState.Idle -> 1f
           }
+
+          Box(Modifier.fillMaxSize().graphicsLayer { alpha = behindAlpha }) {
+            CompositionLocalProvider(LocalTopBarState provides behindTopBar) {
+              RouteContent(behindRoute!!)
+            }
+          }
+        } else {
+          Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }) {
+            CompositionLocalProvider(LocalTopBarState provides behindTopBar) {
+              RouteContent(behindRoute!!)
+            }
+          }
+          // Dim overlay — 전환 중 behind 화면 터치 차단
+          Box(
+            Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
+              .background(AppTheme.colors.shadow.copy(alpha = dimAlpha))
+              .pointerIgnore()
+          )
         }
-        // Dim overlay — 전환 중 behind 화면 터치 차단
-        Box(
-          Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
-            .background(AppTheme.colors.shadow.copy(alpha = dimAlpha))
-            .pointerIgnore()
-        )
       }
 
       // Main layer (현재 화면 — 항상 같은 composition slot을 유지하여
@@ -201,22 +225,31 @@ fun NavigationStack(
 
       Box(Modifier.fillMaxSize().graphicsLayer {
         if (animState != AnimState.Idle) {
-          translationX = when (animState) {
-            // Push: 오른쪽에서 왼쪽으로 슬라이드 in
-            AnimState.Push -> containerWidth * (1f - p)
-            // Pop/Dragging: 오른쪽으로 슬라이드 out
-            else -> containerWidth * p
-          }
-          shadowElevation = 12.dp.toPx()
-          shape = RoundedCornerShape(
-            cornerRadius(
-              when (animState) {
-                AnimState.Push -> p
-                else -> 1f - p
-              }
+          if (useFadeTransition) {
+            alpha = when (animState) {
+              AnimState.Push -> p
+              AnimState.Pop -> 1f - p
+              AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
+              AnimState.Idle -> 1f
+            }
+          } else {
+            translationX = when (animState) {
+              // Push: 오른쪽에서 왼쪽으로 슬라이드 in
+              AnimState.Push -> containerWidth * (1f - p)
+              // Pop/Dragging: 오른쪽으로 슬라이드 out
+              else -> containerWidth * p
+            }
+            shadowElevation = 12.dp.toPx()
+            shape = RoundedCornerShape(
+              cornerRadius(
+                when (animState) {
+                  AnimState.Push -> p
+                  else -> 1f - p
+                }
+              )
             )
-          )
-          clip = true
+            clip = true
+          }
         }
       }) {
         CompositionLocalProvider(LocalTopBarState provides mainTopBar) {
@@ -235,9 +268,12 @@ fun NavigationStack(
             .pointerInput(Unit) {
               detectHorizontalDragGestures(
                 onDragStart = {
-                  behindRoute = navigator.previous
-                  animState = AnimState.Dragging
-                  scope.launch { progress.snapTo(0f) }
+                  navigator.previous?.let {
+                    transitionStyle = visibleRoute.transitionStyleTo(it)
+                    behindRoute = it
+                    animState = AnimState.Dragging
+                    scope.launch { progress.snapTo(0f) }
+                  }
                 },
                 onDragEnd = {
                   val velocity = lastDragAmount * 1000f / 16f

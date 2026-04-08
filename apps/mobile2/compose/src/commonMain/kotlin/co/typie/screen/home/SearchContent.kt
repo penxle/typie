@@ -30,7 +30,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.graphql.HomeScreen_Search_Query
@@ -67,8 +66,7 @@ fun SearchContent(
       modifier = Modifier
         .fillMaxWidth()
         .verticalScroll(scrollState)
-        .padding(contentPadding)
-        .navigationBarsPadding(),
+        .padding(contentPadding),
     ) {
       if (searchViewModel.activeQuery.isBlank()) {
         RecentSearchesList(

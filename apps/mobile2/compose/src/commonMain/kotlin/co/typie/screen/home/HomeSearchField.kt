@@ -39,7 +39,7 @@ fun HomeSearchFieldFrame(
   modifier: Modifier = Modifier,
   focused: Boolean = false,
   enabled: Boolean = true,
-  onClick: (() -> Unit)? = null,
+  onClick: (suspend () -> Unit)? = null,
   content: @Composable RowScope.() -> Unit,
 ) {
   val colorSpec = tween<Color>(220)

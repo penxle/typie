@@ -1,8 +1,5 @@
 package co.typie.screen.home
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.HomeScreen_Query
 import co.typie.graphql.PlaceholderResolver
@@ -20,23 +17,6 @@ class HomeViewModel(
 ) : GraphQLViewModel() {
   val query =
     watchQuery(placeholderData()) { HomeScreen_Query(siteId = siteService.siteId) }
-
-  var searching by mutableStateOf(false)
-  var shouldAnimateSearchHeader by mutableStateOf(false)
-
-  fun enterSearch() {
-    shouldAnimateSearchHeader = true
-    searching = true
-  }
-
-  fun onSearchHeaderAnimationConsumed() {
-    shouldAnimateSearchHeader = false
-  }
-
-  fun exitSearch() {
-    shouldAnimateSearchHeader = false
-    searching = false
-  }
 }
 
 private fun placeholderData() = HomeScreen_Query.Data(PlaceholderResolver) {
