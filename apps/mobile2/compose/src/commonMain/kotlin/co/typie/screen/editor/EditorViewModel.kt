@@ -30,7 +30,7 @@ class EditorViewModel : ViewModel() {
           Modifier.ParagraphIndent(100),
           Modifier.BlockGap(100),
         ),
-        children = listOf("10"),
+        children = listOf("10", "7"),
       ),
       "10" to NodeEntry(
         node = Node.Blockquote(),
@@ -43,7 +43,7 @@ class EditorViewModel : ViewModel() {
         children = listOf("2"),
       ),
       "2" to NodeEntry(
-        node = Node.Text("A"),
+        node = Node.Text("ABC"),
         parent = "1",
       ),
       "3" to NodeEntry(
@@ -64,8 +64,12 @@ class EditorViewModel : ViewModel() {
         node = Node.Text("안녕하세요!"),
         parent = "5",
       ),
+      "7" to NodeEntry(
+        node = Node.Paragraph(),
+        parent = "0",
+      ),
     ),
-    attrs = DocumentAttrs(layoutMode = LayoutMode.Continuous(maxWidth = 400f)),
+    attrs = DocumentAttrs(layoutMode = LayoutMode.Continuous(maxWidth = 600f)),
   )
 
   val selection = Selection(
