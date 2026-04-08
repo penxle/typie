@@ -95,9 +95,6 @@ fn rasterize_inner(
                 return None;
             }
 
-            let snapped_x = glyph.x.floor();
-            let snapped_y = glyph.y.floor();
-
             let key = GlyphCacheKey::new(
                 input.font_id,
                 glyph.id,
@@ -124,8 +121,8 @@ fn rasterize_inner(
 
             result.map(|r| PositionedGlyph {
                 raster: r,
-                x: snapped_x,
-                y: snapped_y,
+                x: glyph.x,
+                y: glyph.y,
             })
         })
         .collect()
