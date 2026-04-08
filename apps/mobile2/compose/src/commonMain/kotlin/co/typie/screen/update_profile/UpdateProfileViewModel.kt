@@ -21,9 +21,8 @@ import co.typie.graphql.type.buildUser
 import co.typie.platform.PlatformFile
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
-import kotlinx.coroutines.CancellationException
+import co.typie.ui.state.AsyncAction
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 class UpdateProfileForm(scope: CoroutineScope) : FormState(scope) {
@@ -43,7 +42,6 @@ class UpdateProfileForm(scope: CoroutineScope) : FormState(scope) {
 class UpdateProfileScreenState(scope: CoroutineScope) {
   val form = UpdateProfileForm(scope)
   var avatarPreviewUrl: String? by mutableStateOf(null)
-  var isSubmitting by mutableStateOf(false)
 }
 
 @KoinViewModel
@@ -52,6 +50,7 @@ class UpdateProfileViewModel(
   private val toast: Toast,
 ) : GraphQLViewModel() {
   val state = UpdateProfileScreenState(viewModelScope)
+  val submitAction = AsyncAction(viewModelScope)
 
   val query =
     watchQuery(
@@ -92,9 +91,12 @@ class UpdateProfileViewModel(
   }
 
   fun submit(onSubmit: suspend () -> Unit) {
-    viewModelScope.launch {
-      state.isSubmitting = true
-      try {
+    submitAction.launch(
+      onFailure = { e ->
+        Logger.e(e) { "Failed to update profile" }
+        toast.show(ToastType.Error, e.message ?: "프로필 변경에 실패했어요. 다시 시도해주세요.")
+      },
+    ) {
         if (!state.form.validate()) return@launch
 
         executeMutation(
@@ -110,14 +112,6 @@ class UpdateProfileViewModel(
 
         state.form.commit()
         onSubmit()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to update profile" }
-        toast.show(ToastType.Error, e.message ?: "프로필 변경에 실패했어요. 다시 시도해주세요.")
-      } finally {
-        state.isSubmitting = false
-      }
     }
   }
 }

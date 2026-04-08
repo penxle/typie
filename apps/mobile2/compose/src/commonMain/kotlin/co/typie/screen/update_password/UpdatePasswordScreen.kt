@@ -54,7 +54,7 @@ fun UpdatePasswordScreen() {
         modifier = Modifier
           .padding(horizontal = 16.dp)
           .padding(bottom = 16.dp),
-        loading = model.state.isSubmitting,
+        loading = model.submitAction.running,
         loadingText = loadingText,
         onClick = { model.submit { nav.pop() } },
       )

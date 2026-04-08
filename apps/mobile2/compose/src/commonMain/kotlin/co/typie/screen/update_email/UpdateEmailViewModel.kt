@@ -1,8 +1,5 @@
 package co.typie.screen.update_email
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import co.typie.form.FormState
@@ -17,9 +14,8 @@ import co.typie.graphql.type.SendEmailUpdateEmailInput
 import co.typie.graphql.type.buildUser
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
-import kotlinx.coroutines.CancellationException
+import co.typie.ui.state.AsyncAction
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 internal fun updateEmailErrorMessage(code: String): String? {
@@ -38,7 +34,6 @@ class UpdateEmailForm(scope: CoroutineScope) : FormState(scope) {
 
 class UpdateEmailScreenState(scope: CoroutineScope) {
   val form = UpdateEmailForm(scope)
-  var isSubmitting by mutableStateOf(false)
 }
 
 @KoinViewModel
@@ -46,15 +41,32 @@ class UpdateEmailViewModel(
   private val toast: Toast,
 ) : GraphQLViewModel() {
   val state = UpdateEmailScreenState(viewModelScope)
+  val submitAction = AsyncAction(viewModelScope)
 
   val query = watchQuery(
     placeholderData = placeholderData(),
   ) { UpdateEmailScreen_Query() }
 
   fun submit(onSuccess: suspend () -> Unit) {
-    viewModelScope.launch {
-      state.isSubmitting = true
-      try {
+    submitAction.launch(
+      onFailure = { e ->
+        when (e) {
+          is TypieError -> {
+            val message = updateEmailErrorMessage(e.code)
+            if (message != null) {
+              toast.show(ToastType.Error, message)
+            } else {
+              toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+            }
+          }
+
+          else -> {
+            Logger.e(e) { "Failed to send update email request" }
+            toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+          }
+        }
+      },
+    ) {
         if (!state.form.validate()) return@launch
 
         executeMutation(
@@ -68,21 +80,6 @@ class UpdateEmailViewModel(
         // TODO: 이메일 변경 트래킹
         state.form.commit()
         onSuccess()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: TypieError) {
-        val message = updateEmailErrorMessage(e.code)
-        if (message != null) {
-          toast.show(ToastType.Error, message)
-        } else {
-          toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-        }
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to send update email request" }
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      } finally {
-        state.isSubmitting = false
-      }
     }
   }
 }

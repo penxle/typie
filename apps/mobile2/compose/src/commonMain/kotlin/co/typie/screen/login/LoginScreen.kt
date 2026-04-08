@@ -232,7 +232,7 @@ private fun LoginEmailContent(
     Button(
       text = "로그인",
       onClick = { model.submit(onSuccess) },
-      loading = model.state.isSubmitting,
+      loading = model.submitAction.running,
       loadingText = "로그인 중...",
     )
 

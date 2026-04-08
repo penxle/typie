@@ -134,7 +134,7 @@ fun SpaceSettingsScreen() {
         modifier = Modifier
           .padding(horizontal = 16.dp)
           .padding(bottom = 16.dp),
-        loading = model.state.isSubmitting,
+        loading = model.submitAction.running,
         loadingText = "저장 중...",
         onClick = { model.submit { nav.pop() } },
       )
@@ -392,7 +392,7 @@ private fun MoreMenu(
                     bottomSheetHost.show {
                       DeleteSiteConfirmSheet(
                         totalCount = totalCount,
-                        isDeleting = model.state.isDeleting,
+                        isDeleting = model.deleteSiteAction.running,
                         onDelete = {
                           model.deleteSite {
                             dismiss()

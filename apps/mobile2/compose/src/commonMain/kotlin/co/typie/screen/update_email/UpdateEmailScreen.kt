@@ -70,7 +70,7 @@ fun UpdateEmailScreen() {
         modifier = Modifier
           .padding(horizontal = 16.dp)
           .padding(bottom = 16.dp),
-        loading = model.state.isSubmitting,
+        loading = model.submitAction.running,
         loadingText = "변경 중...",
         onClick = { model.submit(showSuccessModal) },
       )

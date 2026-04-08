@@ -34,12 +34,11 @@ import co.typie.platform.PlatformFile
 import co.typie.screen.subscription.CurrentSubscriptionStore
 import co.typie.screen.subscription.hasSubscriptionOrNull
 import co.typie.service.SiteService
+import co.typie.ui.state.AsyncAction
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.api.CacheKey
 import com.apollographql.cache.normalized.apolloStore
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 private val UNAVAILABLE_SITE_SLUGS =
@@ -77,8 +76,6 @@ class SpaceSettingsForm(scope: CoroutineScope) : FormState(scope) {
 class SpaceSettingsScreenState(scope: CoroutineScope) {
   val form = SpaceSettingsForm(scope)
   var logoPreviewUrl: String? by mutableStateOf(null)
-  var isSubmitting by mutableStateOf(false)
-  var isDeleting by mutableStateOf(false)
 }
 
 @KoinViewModel
@@ -89,6 +86,8 @@ class SpaceSettingsViewModel(
   private val currentSubscriptionStore: CurrentSubscriptionStore,
 ) : GraphQLViewModel() {
   val state = SpaceSettingsScreenState(viewModelScope)
+  val submitAction = AsyncAction(viewModelScope)
+  val deleteSiteAction = AsyncAction(viewModelScope)
 
   val query = watchQuery(
     placeholderData = placeholderData(),
@@ -134,10 +133,24 @@ class SpaceSettingsViewModel(
   }
 
   fun submit(onSubmit: suspend () -> Unit) {
-    // TODO: 이름/주소/날짜 개별 저장으로 맞추기
-    viewModelScope.launch {
-      state.isSubmitting = true
-      try {
+    submitAction.launch(
+      onFailure = { e ->
+        when (e) {
+          is TypieError -> {
+            if (e.code == "site_slug_already_exists") {
+              state.form.slug.errors = listOf("이미 존재하는 스페이스 주소예요.")
+            } else {
+              toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+            }
+          }
+
+          else -> {
+            Logger.e(e) { "Failed to update site settings" }
+            toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+          }
+        }
+      },
+    ) {
         if (!state.form.validate()) return@launch
 
         executeMutation(
@@ -175,28 +188,17 @@ class SpaceSettingsViewModel(
         state.form.commit()
 
         onSubmit()
-      } catch (e: TypieError) {
-        if (e.code == "site_slug_already_exists") {
-          state.form.slug.errors = listOf("이미 존재하는 스페이스 주소예요.")
-        } else {
-          toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-        }
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to update site settings" }
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      } finally {
-        state.isSubmitting = false
-      }
     }
   }
 
   fun deleteSite(onDeleted: suspend () -> Unit) {
     // TODO: 스페이스 삭제 트래킹
-    viewModelScope.launch {
-      state.isDeleting = true
-      try {
+    deleteSiteAction.launch(
+      onFailure = { e ->
+        Logger.e(e) { "Failed to delete site" }
+        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+      },
+    ) {
         executeMutation(
           SpaceSettingsScreen_DeleteSite_Mutation(
             input = DeleteSiteInput(siteId = siteService.siteId),
@@ -211,14 +213,6 @@ class SpaceSettingsViewModel(
         toast.show(ToastType.Success, "스페이스가 삭제되었어요.")
 
         onDeleted()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to delete site" }
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      } finally {
-        state.isDeleting = false
-      }
     }
   }
 }

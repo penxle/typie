@@ -1,8 +1,5 @@
 package co.typie.screen.login
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import co.typie.auth.sso.AppleSingleSignOnProvider
@@ -21,6 +18,7 @@ import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.overlay.Loader
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.ui.state.AsyncAction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -81,7 +79,6 @@ class LoginWithEmailForm(scope: CoroutineScope) : FormState(scope) {
 
 class LoginWithEmailState(scope: CoroutineScope) {
   val form = LoginWithEmailForm(scope)
-  var isSubmitting by mutableStateOf(false)
 }
 
 @KoinViewModel
@@ -89,11 +86,27 @@ class LoginWithEmailViewModel(
   private val toast: Toast,
 ) : GraphQLViewModel() {
   val state = LoginWithEmailState(viewModelScope)
+  val submitAction = AsyncAction(viewModelScope)
 
   fun submit(onSubmit: () -> Unit) {
-    viewModelScope.launch {
-      state.isSubmitting = true
-      try {
+    submitAction.launch(
+      onFailure = { e ->
+        when (e) {
+          is TypieError -> {
+            when (e.code) {
+              "invalid_credentials" -> toast.show(ToastType.Error, "이메일 또는 비밀번호가 올바르지 않아요.")
+              "password_not_set" -> toast.show(ToastType.Error, "비밀번호가 설정되지 않았어요.")
+              else -> toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+            }
+          }
+
+          else -> {
+            Logger.e(e) { "Failed to login with email" }
+            toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+          }
+        }
+      },
+    ) {
         if (!state.form.validate()) return@launch
 
         executeMutation(
@@ -106,20 +119,6 @@ class LoginWithEmailViewModel(
         )
 
         onSubmit()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: TypieError) {
-        when (e.code) {
-          "invalid_credentials" -> toast.show(ToastType.Error, "이메일 또는 비밀번호가 올바르지 않아요.")
-          "password_not_set" -> toast.show(ToastType.Error, "비밀번호가 설정되지 않았어요.")
-          else -> toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-        }
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to login with email" }
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      } finally {
-        state.isSubmitting = false
-      }
     }
   }
 }

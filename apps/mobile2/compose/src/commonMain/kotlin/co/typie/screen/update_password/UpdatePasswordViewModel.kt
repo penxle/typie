@@ -1,8 +1,5 @@
 package co.typie.screen.update_password
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import co.typie.form.FormState
@@ -15,10 +12,9 @@ import co.typie.graphql.type.UpdatePasswordInput
 import co.typie.graphql.type.buildUser
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.ui.state.AsyncAction
 import com.apollographql.apollo.api.Optional
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 enum class PasswordField {
@@ -70,7 +66,6 @@ class UpdatePasswordForm(scope: CoroutineScope) : FormState(scope) {
 
 class UpdatePasswordScreenState(scope: CoroutineScope) {
   val form = UpdatePasswordForm(scope)
-  var isSubmitting by mutableStateOf(false)
 }
 
 @KoinViewModel
@@ -78,6 +73,7 @@ class UpdatePasswordViewModel(
   private val toast: Toast,
 ) : GraphQLViewModel() {
   val state = UpdatePasswordScreenState(viewModelScope)
+  val submitAction = AsyncAction(viewModelScope)
 
   val query =
     watchQuery(
@@ -88,9 +84,22 @@ class UpdatePasswordViewModel(
     ) { UpdatePasswordScreen_Query() }
 
   fun submit(onSubmit: suspend () -> Unit) {
-    viewModelScope.launch {
-      state.isSubmitting = true
-      try {
+    submitAction.launch(
+      onFailure = { e ->
+        when (e) {
+          is TypieError -> {
+            if (!applyServerError(e)) {
+              toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+            }
+          }
+
+          else -> {
+            Logger.e(e) { "Failed to update password" }
+            toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
+          }
+        }
+      },
+    ) {
         val hasPassword = query.data.me.hasPassword
         state.form.updateHasPassword(hasPassword)
 
@@ -123,18 +132,6 @@ class UpdatePasswordViewModel(
         // TODO: 비밀번호 변경 트래킹
         toast.show(ToastType.Success, "비밀번호가 변경되었어요.")
         onSubmit()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: TypieError) {
-        if (!applyServerError(e)) {
-          toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-        }
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to update password" }
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      } finally {
-        state.isSubmitting = false
-      }
     }
   }
 
