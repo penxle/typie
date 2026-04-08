@@ -34,11 +34,14 @@ impl Measurer {
         self.cache.clear();
     }
 
-    pub fn invalidate_with_steps(&mut self, doc: &Doc, steps: &[Step]) -> bool {
+    pub fn invalidate_with_steps(&mut self, old_doc: &Doc, new_doc: &Doc, steps: &[Step]) -> bool {
         let mut invalidated = false;
         for step in steps {
             for id in step.affected_node_ids() {
-                invalidated = self.invalidate_with_ancestors(doc, id) || invalidated;
+                invalidated = self.invalidate_with_ancestors(new_doc, id) || invalidated;
+                if new_doc.node(id).is_none() {
+                    invalidated = self.invalidate_with_ancestors(old_doc, id) || invalidated;
+                }
             }
         }
         invalidated
@@ -155,7 +158,7 @@ mod tests {
             text: " world".into(),
         }];
 
-        measurer.invalidate_with_steps(&doc, &steps);
+        measurer.invalidate_with_steps(&doc, &doc, &steps);
 
         assert!(
             measurer.cache.get(text_id).is_none(),
@@ -208,6 +211,7 @@ mod tests {
 
         measurer.invalidate_with_steps(
             &doc,
+            &doc,
             &[Step::InsertText {
                 node_id: text_id,
                 offset: 0,
@@ -224,6 +228,98 @@ mod tests {
     }
 
     #[test]
+    fn merge_node_invalidates_source_parent() {
+        let mut measurer = Measurer::new_test();
+
+        let target_id = NodeId::new();
+        let wrapper_id = NodeId::new();
+        let remaining_id = NodeId::new();
+        let source_id = NodeId::new();
+
+        measurer.cache.insert(NodeId::ROOT, dummy());
+        measurer.cache.insert(target_id, dummy());
+        measurer.cache.insert(wrapper_id, dummy());
+        measurer.cache.insert(remaining_id, dummy());
+        measurer.cache.insert(source_id, dummy());
+
+        // Before merge: root > [target, wrapper > [source, remaining]]
+        let old_doc = Doc::new_test()
+            .insert_node(
+                target_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(NodeId::ROOT),
+            )
+            .insert_node(
+                wrapper_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(NodeId::ROOT),
+            )
+            .insert_node(
+                source_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(wrapper_id),
+            )
+            .insert_node(
+                remaining_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(wrapper_id),
+            );
+
+        // After merge: root > [target, wrapper > [remaining]]
+        let new_doc = Doc::new_test()
+            .insert_node(
+                target_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(NodeId::ROOT),
+            )
+            .insert_node(
+                wrapper_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(NodeId::ROOT),
+            )
+            .insert_node(
+                remaining_id,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(wrapper_id),
+            );
+
+        let steps = vec![Step::MergeNode {
+            node_id: source_id,
+            target_id,
+            offset: 0,
+        }];
+
+        measurer.invalidate_with_steps(&old_doc, &new_doc, &steps);
+
+        assert!(
+            measurer.cache.get(target_id).is_none(),
+            "target should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(NodeId::ROOT).is_none(),
+            "root should be invalidated"
+        );
+        assert!(
+            measurer.cache.get(wrapper_id).is_none(),
+            "wrapper (former parent of merged-away source) should be invalidated"
+        );
+    }
+
+    #[test]
     fn selection_step_invalidates_nothing() {
         let mut measurer = Measurer::new_test();
 
@@ -232,7 +328,7 @@ mod tests {
 
         let doc = Doc::new_test();
         let sel = Selection::collapsed(Position::new(id, 0));
-        measurer.invalidate_with_steps(&doc, &[Step::SetSelection { old: sel, new: sel }]);
+        measurer.invalidate_with_steps(&doc, &doc, &[Step::SetSelection { old: sel, new: sel }]);
 
         assert!(measurer.cache.get(id).is_some());
     }

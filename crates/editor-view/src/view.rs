@@ -37,9 +37,9 @@ impl View {
         }
     }
 
-    pub fn reconcile(&mut self, doc: &Doc, steps: &[Step]) -> bool {
-        if self.measurer.invalidate_with_steps(doc, steps) {
-            self.compute(doc);
+    pub fn reconcile(&mut self, old_doc: &Doc, new_doc: &Doc, steps: &[Step]) -> bool {
+        if self.measurer.invalidate_with_steps(old_doc, new_doc, steps) {
+            self.compute(new_doc);
             self.view_state.preferred_x = None;
             true
         } else {
@@ -241,7 +241,7 @@ mod tests {
             offset: 5,
             text: " world".into(),
         }];
-        assert!(view.reconcile(&doc, &steps));
+        assert!(view.reconcile(&doc, &doc, &steps));
     }
 
     #[test]

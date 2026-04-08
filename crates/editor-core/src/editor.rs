@@ -114,6 +114,8 @@ impl Editor {
     }
 
     pub fn tick(&mut self) -> Result<Vec<EditorEvent>, EditorError> {
+        let old_doc = self.state.doc.clone();
+
         let messages = std::mem::take(&mut self.message_queue);
         for msg in messages {
             self.process_message(msg)?;
@@ -127,7 +129,7 @@ impl Editor {
         let steps = std::mem::take(&mut self.pending_steps);
         let mut fields = Vec::new();
 
-        if !steps.is_empty() && self.view.reconcile(&self.state.doc, &steps) {
+        if !steps.is_empty() && self.view.reconcile(&old_doc, &self.state.doc, &steps) {
             fields.push(StateField::PageSizes);
             self.push_event(EditorEvent::RenderInvalidated);
         }
