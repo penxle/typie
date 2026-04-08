@@ -1,6 +1,5 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
-  import { DocumentType } from '@typie/lib/enums';
   import { css, cx } from '@typie/styled-system/css';
   import { center } from '@typie/styled-system/patterns';
   import { contextMenu } from '@typie/ui/actions';
@@ -8,9 +7,9 @@
   import { getAppContext } from '@typie/ui/context';
   import EllipsisIcon from '~icons/lucide/ellipsis';
   import FileIcon from '~icons/lucide/file';
-  import LayoutTemplateIcon from '~icons/lucide/layout-template';
   import { graphql } from '$mearie';
   import DocumentMenu from '../@context-menu/DocumentMenu.svelte';
+  import { entityIconMap, getEntityIconColor } from '../@context-menu/entity-icons';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
   import { getTreeContext } from './state.svelte';
@@ -40,6 +39,8 @@
           visibility
           availability
           url
+          icon
+          iconColor
 
           parent {
             id
@@ -118,11 +119,9 @@
 >
   <EntitySelectionIndicator entityId={document.data.entity.id} visibility={document.data.entity.visibility} />
 
-  <Icon
-    style={css.raw({ color: 'text.faint' })}
-    icon={document.data.documentType === DocumentType.TEMPLATE ? LayoutTemplateIcon : FileIcon}
-    size={14}
-  />
+  <span style:color={getEntityIconColor(document.data.entity.iconColor)}>
+    <Icon icon={entityIconMap.get(document.data.entity.icon) ?? FileIcon} size={14} />
+  </span>
 
   <span
     class={css(

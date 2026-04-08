@@ -29,6 +29,7 @@
   import { graphql } from '$mearie';
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { maxDepth } from '../@tree/utils';
+  import EntityIconPicker from './EntityIconPicker.svelte';
 
   type Props = {
     folder: {
@@ -40,6 +41,8 @@
       url: string;
       depth: number;
       visibility: EntityVisibility;
+      icon: string;
+      iconColor: string;
       lastChild?: {
         id: string;
         order: string;
@@ -360,6 +363,8 @@
 >
   이름 변경
 </MenuItem>
+
+<EntityIconPicker entityId={entity.id} icon={entity.icon} iconColor={entity.iconColor} />
 
 <HorizontalDivider color="secondary" />
 

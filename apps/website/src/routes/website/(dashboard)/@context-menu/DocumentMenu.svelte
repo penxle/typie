@@ -27,6 +27,7 @@
   import { cache, unwrapError } from '$lib/graphql';
   import { graphql } from '$mearie';
   import { getPane, getPaneGroup } from '../[slug]/@pane/context.svelte';
+  import EntityIconPicker from './EntityIconPicker.svelte';
   import type { Snippet } from 'svelte';
 
   type Props = {
@@ -45,6 +46,8 @@
       url: string;
       visibility: EntityVisibility;
       availability: EntityAvailability;
+      icon: string;
+      iconColor: string;
       parent?: { id: string } | null;
     };
     via: 'tree' | 'editor';
@@ -410,6 +413,10 @@
     <span class={css({ fontSize: '13px', fontWeight: 'medium', color: 'text.muted' })}>삭제 후 30일 동안 휴지통에 보관돼요</span>
   </div>
 {/snippet}
+
+<EntityIconPicker entityId={entity.id} icon={entity.icon} iconColor={entity.iconColor} />
+
+<HorizontalDivider color="secondary" />
 
 <MenuItem icon={Columns2Icon} onclick={() => handleAddPane('horizontal')}>오른쪽에 열기</MenuItem>
 <MenuItem icon={Rows2Icon} onclick={() => handleAddPane('vertical')}>아래에 열기</MenuItem>

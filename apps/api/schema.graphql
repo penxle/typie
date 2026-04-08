@@ -375,6 +375,8 @@ type Entity implements IEntity {
   depth: Int!
   descendants: [Entity!]!
   firstChild: Entity
+  icon: String!
+  iconColor: String!
   id: ID!
   lastChild: Entity
   node: EntityNode!
@@ -419,6 +421,8 @@ type EntityView implements IEntity {
   availability: EntityAvailability!
   children: [EntityView!]!
   depth: Int!
+  icon: String!
+  iconColor: String!
   id: ID!
   next: EntityView
   node: EntityViewNode!
@@ -546,6 +550,8 @@ interface IDocument {
 interface IEntity {
   availability: EntityAvailability!
   depth: Int!
+  icon: String!
+  iconColor: String!
   id: ID!
   order: String!
   permalink: String!
@@ -755,6 +761,7 @@ type Mutation {
   updateDocumentType(input: UpdateDocumentTypeInput!): Document!
   updateDocumentsOption(input: UpdateDocumentsOptionInput!): [Document!]!
   updateEmail(input: UpdateEmailInput!): Boolean!
+  updateEntityIcon(input: UpdateEntityIconInput!): Entity!
   updateFolderOption(input: UpdateFolderOptionInput!): Folder!
   updateFoldersOption(input: UpdateFoldersOptionInput!): [Folder!]!
   updateMarketingConsent(input: UpdateMarketingConsentInput!): User!
@@ -1321,6 +1328,12 @@ input UpdateDocumentsOptionInput {
 
 input UpdateEmailInput {
   code: String!
+}
+
+input UpdateEntityIconInput {
+  entityId: ID!
+  icon: String!
+  iconColor: String!
 }
 
 input UpdateFolderOptionInput {

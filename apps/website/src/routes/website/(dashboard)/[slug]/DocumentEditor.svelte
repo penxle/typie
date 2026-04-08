@@ -86,6 +86,8 @@
           url
           visibility
           availability
+          icon
+          iconColor
 
           site {
             id

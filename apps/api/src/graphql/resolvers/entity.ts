@@ -58,6 +58,8 @@ IEntity.implement({
     depth: t.exposeInt('depth'),
     visibility: t.expose('visibility', { type: EntityVisibility }),
     availability: t.expose('availability', { type: EntityAvailability }),
+    icon: t.exposeString('icon'),
+    iconColor: t.exposeString('iconColor'),
 
     url: t.string({ resolve: (self) => `${env.USERSITE_URL.replace('*.', '')}/${self.permalink}` }),
   }),
@@ -723,6 +725,42 @@ builder.mutationFields((t) => ({
       });
 
       pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+
+      return updatedEntity;
+    },
+  }),
+
+  updateEntityIcon: t.withAuth({ session: true }).fieldWithInput({
+    type: Entity,
+    input: {
+      entityId: t.input.id({ validate: validateDbId(TableCode.ENTITIES) }),
+      icon: t.input.string(),
+      iconColor: t.input.string(),
+    },
+    resolve: async (_, { input }, ctx) => {
+      const entity = await db
+        .select({ id: Entities.id, siteId: Entities.siteId, parentId: Entities.parentId })
+        .from(Entities)
+        .where(and(eq(Entities.id, input.entityId), eq(Entities.state, EntityState.ACTIVE)))
+        .then(firstOrThrow);
+
+      await assertSitePermission({
+        userId: ctx.session.userId,
+        siteId: entity.siteId,
+      });
+
+      const updatedEntity = await db
+        .update(Entities)
+        .set({ icon: input.icon, iconColor: input.iconColor })
+        .where(eq(Entities.id, input.entityId))
+        .returning()
+        .then(firstOrThrow);
+
+      if (entity.parentId) {
+        pubsub.publish('site:update', entity.siteId, { scope: 'entity', entityId: entity.parentId });
+      } else {
+        pubsub.publish('site:update', entity.siteId, { scope: 'site' });
+      }
 
       return updatedEntity;
     },

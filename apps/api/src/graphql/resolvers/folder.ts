@@ -286,6 +286,7 @@ builder.mutationFields((t) => ({
             slug: generateSlug(),
             permalink: generatePermalink(),
             type: EntityType.FOLDER,
+            icon: 'folder',
             order: generateFractionalOrder({ lower: orderLower, upper: input.upperOrder ?? null }),
             depth,
           })

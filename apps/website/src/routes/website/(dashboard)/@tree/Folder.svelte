@@ -10,7 +10,9 @@
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import ChevronRightIcon from '~icons/lucide/chevron-right';
   import EllipsisIcon from '~icons/lucide/ellipsis';
+  import FolderIcon from '~icons/lucide/folder';
   import { graphql } from '$mearie';
+  import { entityIconMap, getEntityIconColor } from '../@context-menu/entity-icons';
   import FolderMenu from '../@context-menu/FolderMenu.svelte';
   import EntitySelectionIndicator from './@selection/EntitySelectionIndicator.svelte';
   import MultiEntitiesMenu from './@selection/MultiEntitiesMenu.svelte';
@@ -38,6 +40,8 @@
           depth
           visibility
           url
+          icon
+          iconColor
 
           lastChild {
             id
@@ -211,6 +215,9 @@
     <EntitySelectionIndicator entityId={folder.data.entity.id} visibility={folder.data.entity.visibility} />
 
     <Icon style={css.raw({ color: 'text.faint' })} icon={open ? ChevronDownIcon : ChevronRightIcon} size={14} />
+    <span style:color={getEntityIconColor(folder.data.entity.iconColor)}>
+      <Icon icon={entityIconMap.get(folder.data.entity.icon) ?? FolderIcon} size={14} />
+    </span>
 
     {#if editing}
       <form

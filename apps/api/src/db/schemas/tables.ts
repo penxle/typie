@@ -310,6 +310,8 @@ export const Entities = pgTable(
     state: E._EntityState('state').notNull().default('ACTIVE'),
     visibility: E._EntityVisibility('visibility').notNull().default('PRIVATE'),
     availability: E._EntityAvailability('availability').notNull().default('PRIVATE'),
+    icon: text('icon').notNull().default('file'),
+    iconColor: text('icon_color').notNull().default('gray'),
     viewedAt: datetime('viewed_at'),
     deletedAt: datetime('deleted_at'),
     purgedAt: datetime('purged_at'),
