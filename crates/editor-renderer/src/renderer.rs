@@ -10,7 +10,112 @@ use crate::icons::ICONS;
 use crate::sink::RenderSink;
 use crate::theme::Theme;
 use crate::theme_data::ThemeVariant;
-use crate::types::{Color, Path, Transform};
+use crate::types::{Color, CornerRadii, Path, Stroke, Transform};
+
+fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
+    match variant {
+        editor_model::CalloutVariant::Info => "ui.callout.info",
+        editor_model::CalloutVariant::Success => "ui.callout.success",
+        editor_model::CalloutVariant::Warning => "ui.callout.warning",
+        editor_model::CalloutVariant::Danger => "ui.callout.danger",
+    }
+}
+
+const CALLOUT_BORDER_RADIUS: f32 = 8.0;
+const CALLOUT_BORDER_WIDTH: f32 = 1.0;
+
+fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Path {
+    use crate::types::PathElement;
+
+    let CornerRadii {
+        top_left: tl,
+        top_right: tr,
+        bottom_right: br,
+        bottom_left: bl,
+    } = radii;
+    let mut elements = Vec::new();
+
+    if !edges.top && !edges.bottom {
+        elements.push(PathElement::MoveTo { x: r.x, y: r.y });
+        elements.push(PathElement::LineTo {
+            x: r.x,
+            y: r.y + r.height,
+        });
+        elements.push(PathElement::MoveTo {
+            x: r.x + r.width,
+            y: r.y,
+        });
+        elements.push(PathElement::LineTo {
+            x: r.x + r.width,
+            y: r.y + r.height,
+        });
+    } else if !edges.top {
+        elements.push(PathElement::MoveTo { x: r.x, y: r.y });
+        elements.push(PathElement::LineTo {
+            x: r.x,
+            y: r.y + r.height - bl,
+        });
+        if bl > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x,
+                y1: r.y + r.height,
+                x: r.x + bl,
+                y: r.y + r.height,
+            });
+        }
+        elements.push(PathElement::LineTo {
+            x: r.x + r.width - br,
+            y: r.y + r.height,
+        });
+        if br > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x + r.width,
+                y1: r.y + r.height,
+                x: r.x + r.width,
+                y: r.y + r.height - br,
+            });
+        }
+        elements.push(PathElement::LineTo {
+            x: r.x + r.width,
+            y: r.y,
+        });
+    } else if !edges.bottom {
+        elements.push(PathElement::MoveTo {
+            x: r.x,
+            y: r.y + r.height,
+        });
+        elements.push(PathElement::LineTo {
+            x: r.x,
+            y: r.y + tl,
+        });
+        if tl > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x,
+                y1: r.y,
+                x: r.x + tl,
+                y: r.y,
+            });
+        }
+        elements.push(PathElement::LineTo {
+            x: r.x + r.width - tr,
+            y: r.y,
+        });
+        if tr > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x + r.width,
+                y1: r.y,
+                x: r.x + r.width,
+                y: r.y + tr,
+            });
+        }
+        elements.push(PathElement::LineTo {
+            x: r.x + r.width,
+            y: r.y + r.height,
+        });
+    }
+
+    Path { elements }
+}
 
 pub struct Renderer {
     pub(crate) theme: Theme,
@@ -120,14 +225,11 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
         match &node {
             Some(Node::Callout(callout)) => {
-                let token = match callout.variant {
-                    editor_model::CalloutVariant::Info => "ui.callout.info",
-                    editor_model::CalloutVariant::Success => "ui.callout.success",
-                    editor_model::CalloutVariant::Warning => "ui.callout.warning",
-                    editor_model::CalloutVariant::Danger => "ui.callout.danger",
-                };
+                let token = callout_token(callout.variant);
                 let color = self.renderer.theme.color_with_alpha(token, 8);
-                self.sink.fill_rect(inner_rect, color, t);
+                let radii = CornerRadii::from_edges(CALLOUT_BORDER_RADIUS, &edges);
+                let path = Path::rrect(inner_rect, radii);
+                self.sink.fill_path(&path, color, t);
             }
             Some(Node::Fold(_)) => {
                 let color = self.renderer.theme.color("ui.surface.muted");
@@ -152,6 +254,33 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         let t = self
             .root_transform
             .translate(frame.local_rect.x, frame.local_rect.y);
+
+        if let Some(Node::Callout(callout)) = &frame.node {
+            let token = callout_token(callout.variant);
+            let border_color = self.renderer.theme.color(token);
+            let stroke = Stroke::new(CALLOUT_BORDER_WIDTH);
+            let mb = CALLOUT_BORDER_WIDTH / 2.0;
+            let inner_radius = (CALLOUT_BORDER_RADIUS - mb).max(0.0);
+            let radii = CornerRadii::from_edges(inner_radius, &frame.edges);
+
+            let stroke_rect = Rect::from_xywh(
+                mb,
+                mb,
+                frame.local_rect.width - CALLOUT_BORDER_WIDTH,
+                frame.local_rect.height - CALLOUT_BORDER_WIDTH,
+            );
+
+            if frame.edges.top && frame.edges.bottom {
+                let path = Path::rrect(stroke_rect, radii);
+                self.sink.stroke_path(&path, border_color, &stroke, t);
+            } else {
+                let path = build_partial_border(stroke_rect, radii, &frame.edges);
+                self.sink.stroke_path(&path, border_color, &stroke, t);
+            }
+
+            return;
+        }
+
         let b = &frame.border;
 
         let border_color = match &frame.node {
@@ -280,7 +409,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     editor_model::CalloutVariant::Warning => "lucide/circle-alert",
                     editor_model::CalloutVariant::Danger => "lucide/triangle-alert",
                 };
-                let color = self.renderer.theme.color("ui.text.muted");
+                let color = self.renderer.theme.color(callout_token(callout.variant));
                 let path = ICONS.resolve(icon_name, inner_rect);
                 self.sink.fill_path(&path, color, t);
             }

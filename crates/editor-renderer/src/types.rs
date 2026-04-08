@@ -1,4 +1,5 @@
 use editor_common::Rect;
+use editor_view::Edges;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Color {
@@ -98,6 +99,27 @@ pub enum PathElement {
     Close,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct CornerRadii {
+    pub top_left: f32,
+    pub top_right: f32,
+    pub bottom_right: f32,
+    pub bottom_left: f32,
+}
+
+impl CornerRadii {
+    pub fn from_edges(radius: f32, edges: &Edges<bool>) -> Self {
+        let top = if edges.top { radius } else { 0.0 };
+        let bottom = if edges.bottom { radius } else { 0.0 };
+        Self {
+            top_left: top,
+            top_right: top,
+            bottom_right: bottom,
+            bottom_left: bottom,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Path {
     pub elements: Vec<PathElement>,
@@ -123,6 +145,72 @@ impl Path {
                 PathElement::Close,
             ],
         }
+    }
+
+    pub fn rrect(r: Rect, radii: CornerRadii) -> Self {
+        let CornerRadii {
+            top_left: tl,
+            top_right: tr,
+            bottom_right: br,
+            bottom_left: bl,
+        } = radii;
+        let mut elements = Vec::new();
+
+        elements.push(PathElement::MoveTo {
+            x: r.x + tl,
+            y: r.y,
+        });
+        elements.push(PathElement::LineTo {
+            x: r.x + r.width - tr,
+            y: r.y,
+        });
+        if tr > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x + r.width,
+                y1: r.y,
+                x: r.x + r.width,
+                y: r.y + tr,
+            });
+        }
+        elements.push(PathElement::LineTo {
+            x: r.x + r.width,
+            y: r.y + r.height - br,
+        });
+        if br > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x + r.width,
+                y1: r.y + r.height,
+                x: r.x + r.width - br,
+                y: r.y + r.height,
+            });
+        }
+        elements.push(PathElement::LineTo {
+            x: r.x + bl,
+            y: r.y + r.height,
+        });
+        if bl > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x,
+                y1: r.y + r.height,
+                x: r.x,
+                y: r.y + r.height - bl,
+            });
+        }
+        elements.push(PathElement::LineTo {
+            x: r.x,
+            y: r.y + tl,
+        });
+        if tl > 0.0 {
+            elements.push(PathElement::QuadTo {
+                x1: r.x,
+                y1: r.y,
+                x: r.x + tl,
+                y: r.y,
+            });
+        }
+        elements.push(PathElement::Close);
+
+        Self { elements }
     }
 }
 
@@ -171,4 +259,92 @@ pub struct Image {
     pub data: Vec<u8>,
     pub width: u32,
     pub height: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rrect_all_corners_rounded() {
+        let r = Rect::from_xywh(0.0, 0.0, 100.0, 50.0);
+        let radii = CornerRadii {
+            top_left: 8.0,
+            top_right: 8.0,
+            bottom_right: 8.0,
+            bottom_left: 8.0,
+        };
+        let path = Path::rrect(r, radii);
+        let quad_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::QuadTo { .. }))
+            .count();
+        assert_eq!(quad_count, 4);
+        assert!(matches!(path.elements.last(), Some(PathElement::Close)));
+    }
+
+    #[test]
+    fn rrect_zero_radius_no_quads() {
+        let r = Rect::from_xywh(0.0, 0.0, 100.0, 50.0);
+        let radii = CornerRadii {
+            top_left: 0.0,
+            top_right: 0.0,
+            bottom_right: 0.0,
+            bottom_left: 0.0,
+        };
+        let path = Path::rrect(r, radii);
+        let quad_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::QuadTo { .. }))
+            .count();
+        assert_eq!(quad_count, 0);
+    }
+
+    #[test]
+    fn rrect_partial_corners() {
+        let r = Rect::from_xywh(0.0, 0.0, 100.0, 50.0);
+        let radii = CornerRadii {
+            top_left: 8.0,
+            top_right: 8.0,
+            bottom_right: 0.0,
+            bottom_left: 0.0,
+        };
+        let path = Path::rrect(r, radii);
+        let quad_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::QuadTo { .. }))
+            .count();
+        assert_eq!(quad_count, 2);
+    }
+
+    #[test]
+    fn corner_radii_from_edges_all_visible() {
+        let edges = Edges {
+            top: true,
+            bottom: true,
+            left: true,
+            right: true,
+        };
+        let radii = CornerRadii::from_edges(8.0, &edges);
+        assert_eq!(radii.top_left, 8.0);
+        assert_eq!(radii.bottom_right, 8.0);
+    }
+
+    #[test]
+    fn corner_radii_from_edges_top_split() {
+        let edges = Edges {
+            top: false,
+            bottom: true,
+            left: true,
+            right: true,
+        };
+        let radii = CornerRadii::from_edges(8.0, &edges);
+        assert_eq!(radii.top_left, 0.0);
+        assert_eq!(radii.top_right, 0.0);
+        assert_eq!(radii.bottom_left, 8.0);
+        assert_eq!(radii.bottom_right, 8.0);
+    }
 }
