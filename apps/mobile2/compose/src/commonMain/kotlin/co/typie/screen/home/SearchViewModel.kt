@@ -5,7 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.GraphQLViewModel
+import co.typie.graphql.HomeSearch_Header_Query
 import co.typie.graphql.HomeScreen_Search_Query
+import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.type.buildSite
 import co.typie.service.SiteService
 import co.typie.storage.Prefs
 import kotlinx.coroutines.Job
@@ -28,6 +31,8 @@ class SearchViewModel(
 
   var activeQuery by mutableStateOf("")
     private set
+
+  val siteQuery = watchQuery(placeholderSiteData()) { HomeSearch_Header_Query(siteId = siteService.siteId) }
 
   val searchResults = watchQuery(
     skip = { activeQuery.isBlank() },
@@ -81,5 +86,11 @@ class SearchViewModel(
 
   fun onHeaderEnterAnimationConsumed() {
     shouldAnimateHeaderOnEnter = false
+  }
+}
+
+private fun placeholderSiteData() = HomeSearch_Header_Query.Data(PlaceholderResolver) {
+  site = buildSite {
+    name = ""
   }
 }

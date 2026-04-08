@@ -7,6 +7,7 @@ import co.typie.graphql.text
 import co.typie.graphql.type.buildDocument
 import co.typie.graphql.type.buildEntity
 import co.typie.graphql.type.buildFolder
+import co.typie.graphql.type.buildSite
 import co.typie.graphql.type.buildUser
 import co.typie.service.SiteService
 import org.koin.core.annotation.KoinViewModel
@@ -20,6 +21,9 @@ class HomeViewModel(
 }
 
 private fun placeholderData() = HomeScreen_Query.Data(PlaceholderResolver) {
+  site = buildSite {
+    name = ""
+  }
   me = buildUser {
     recentlyViewedEntities = List(15) {
       buildEntity {

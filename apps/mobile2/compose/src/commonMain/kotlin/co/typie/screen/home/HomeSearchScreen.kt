@@ -47,6 +47,7 @@ fun HomeSearchScreen() {
       ) {
         SearchHeader(
           animateOnEnter = model.shouldAnimateHeaderOnEnter,
+          placeholder = resolveHomeSearchPlaceholder(model.siteQuery.data.site.name),
           query = model.query,
           onQueryChange = { model.updateQuery(it) },
           onSubmit = { model.submitQuery() },

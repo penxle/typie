@@ -1,4 +1,9 @@
 query HomeScreen_Query($siteId: ID!) {
+  site(siteId: $siteId) @catch(to: THROW) {
+    id
+    name
+  }
+
   me @catch(to: THROW) {
     id
 

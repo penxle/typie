@@ -34,6 +34,16 @@ object HomeSearchFieldDefaults {
   val Shape = RoundedCornerShape(CornerRadius)
 }
 
+internal fun resolveHomeSearchPlaceholder(spaceName: String?): String {
+  val trimmedSpaceName = spaceName?.trim().orEmpty()
+
+  return if (trimmedSpaceName.isNotEmpty()) {
+    "${trimmedSpaceName}에서 검색..."
+  } else {
+    "문서 검색..."
+  }
+}
+
 @Composable
 fun HomeSearchFieldFrame(
   modifier: Modifier = Modifier,

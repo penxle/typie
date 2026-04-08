@@ -107,9 +107,12 @@ fun HomeScreen() {
               modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            SearchBar(onClick = {
-              nav.navigate(Route.HomeSearch)
-            })
+            SearchBar(
+              placeholder = resolveHomeSearchPlaceholder(model.query.data.site.name),
+              onClick = {
+                nav.navigate(Route.HomeSearch)
+              },
+            )
           }
         }
 
@@ -162,7 +165,10 @@ private fun HomeFullBleedRail(
 }
 
 @Composable
-private fun SearchBar(onClick: suspend () -> Unit) {
+private fun SearchBar(
+  placeholder: String,
+  onClick: suspend () -> Unit,
+) {
   HomeSearchFieldFrame(
     modifier = Modifier
       .padding(horizontal = 16.dp)
@@ -179,7 +185,7 @@ private fun SearchBar(onClick: suspend () -> Unit) {
     Spacer(Modifier.width(HomeSearchFieldDefaults.IconGap))
 
     Text(
-      "문서 검색...",
+      placeholder,
       style = AppTheme.typography.body,
       color = AppTheme.colors.textMuted,
     )

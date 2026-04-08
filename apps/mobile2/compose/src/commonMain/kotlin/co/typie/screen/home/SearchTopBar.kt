@@ -44,6 +44,7 @@ private val SearchScreenHorizontalPadding = 20.dp
 @Composable
 fun SearchHeader(
   animateOnEnter: Boolean,
+  placeholder: String,
   query: String,
   onQueryChange: (String) -> Unit,
   onSubmit: () -> Unit,
@@ -119,7 +120,7 @@ fun SearchHeader(
           Box(Modifier.weight(1f)) {
             if (textFieldValue.text.isEmpty()) {
               Text(
-                "문서 검색...",
+                placeholder,
                 style = AppTheme.typography.body,
                 color = AppTheme.colors.textMuted,
               )
