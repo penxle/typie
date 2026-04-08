@@ -144,9 +144,9 @@ impl Selection {
         };
 
         if from.node_id == to.node_id {
-            let is_textblock = doc
-                .node(from.node_id)
-                .map_or(false, |n| n.spec().map_or(false, |s| s.is_textblock()));
+            let is_textblock = doc.node(from.node_id).map_or(false, |n| {
+                n.spec().map_or(false, |s| s.is_textblock(doc.schema()))
+            });
 
             if is_textblock {
                 return extract_block_text_range(doc, from.node_id, from.offset, to.offset);

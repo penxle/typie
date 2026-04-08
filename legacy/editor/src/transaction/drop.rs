@@ -1,4 +1,5 @@
 use crate::model::{Doc, Fragment, Node, NodeId};
+use crate::schema::Schema;
 use crate::state::position_helpers::compare_positions;
 use crate::state::selection_helpers::{StructureSelectionInfo, compute_structure_selection};
 use crate::state::{Position, Selection, SelectionKind, is_block_position, position_in_selection};
@@ -45,7 +46,7 @@ impl Transaction {
         }
 
         let is_block_drop = is_block_position(self.doc(), target);
-        let fragment = prepare_fragment(fragment, self.doc(), is_block_drop);
+        let fragment = prepare_fragment(fragment, self.doc().schema(), self.doc(), is_block_drop);
 
         self.set_selection(Selection::collapsed(target));
         let result = self.insert_fragment(target, fragment)?;
@@ -108,7 +109,7 @@ impl Transaction {
         let selection_kind = source.classify(self.doc())?;
         let anchor_before_head = source.anchor_before_head(self.doc());
         let children_before = collect_children(self.doc(), target.node_id);
-        let fragment = prepare_fragment(fragment, self.doc(), is_block_drop);
+        let fragment = prepare_fragment(fragment, self.doc().schema(), self.doc(), is_block_drop);
 
         let cell_selection = compute_structure_selection(self.doc(), &source);
 
@@ -195,8 +196,8 @@ impl Transaction {
 
         let cascade = self.resolve_style_cascade(target.node_id);
         let is_block_drop = is_block_position(self.doc(), target);
-        let fragment =
-            prepare_fragment(fragment, self.doc(), is_block_drop).fill_missing_styles(&cascade);
+        let fragment = prepare_fragment(fragment, self.doc().schema(), self.doc(), is_block_drop)
+            .fill_missing_styles(&cascade);
 
         self.set_selection(Selection::collapsed(target));
         let result = self.insert_fragment(target, fragment)?;
@@ -209,15 +210,25 @@ impl Transaction {
     }
 }
 
-fn prepare_fragment(fragment: Fragment, doc: &Doc, is_block_drop: bool) -> Fragment {
+fn prepare_fragment(
+    fragment: Fragment,
+    schema: &Schema,
+    doc: &Doc,
+    is_block_drop: bool,
+) -> Fragment {
     if is_block_drop {
-        fragment.into_blocks().closed().with_fresh_ids_for_doc(doc)
+        fragment
+            .into_blocks(schema)
+            .closed()
+            .with_fresh_ids_for_doc(doc)
     } else {
         let has_page_break = fragment
             .iter()
             .any(|(_, n)| matches!(n.data(), Node::PageBreak(_)));
         if has_page_break {
-            fragment.split_at_page_breaks().with_fresh_ids_for_doc(doc)
+            fragment
+                .split_at_page_breaks(schema)
+                .with_fresh_ids_for_doc(doc)
         } else {
             fragment.with_fresh_ids_for_doc(doc)
         }

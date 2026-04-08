@@ -25,7 +25,7 @@ use color::ColorProxy;
 use zeno::Placement;
 use zeno::{Format, Mask, Origin as ZenoOrigin, Point, Scratch, Style, Transform, Vector};
 
-pub use bitmap::decode_png;
+pub(crate) use bitmap::decode_png;
 
 /// Index of a color palette.
 pub type PaletteIndex = u16;
@@ -660,111 +660,6 @@ impl<'a> Render<'a> {
                     if !scaler.has_color_outlines() {
                         continue;
                     }
-                    scaler.state.outline.clear();
-                    if scaler.scale_color_outline_impl(glyph_id) {
-                        let font_data = scaler.font.data().as_bytes();
-                        let color_proxy = &scaler.color;
-                        let state = &mut scaler.state;
-                        let scratch = &mut state.scratch0;
-                        let rcx = &mut state.rcx;
-                        let outline = &mut state.outline;
-                        if let Some(transform) = &self.transform {
-                            outline.transform(transform);
-                        }
-                        let palette = color_proxy.palette(font_data, *palette_index);
-                        let total_bounds = outline.bounds();
-                        let base_x = (total_bounds.min.x + self.offset.x).floor() as i32;
-                        let base_y = (total_bounds.min.y + self.offset.y).ceil() as i32;
-                        let base_w = total_bounds.width().ceil() as u32;
-                        let base_h = total_bounds.height().ceil() as u32;
-
-                        image.data.resize((base_w * base_h * 4) as usize, 0);
-                        image.placement.left = base_x;
-                        image.placement.top = base_h as i32 + base_y;
-                        image.placement.width = total_bounds.width().ceil() as u32;
-                        image.placement.height = total_bounds.height().ceil() as u32;
-
-                        let mut ok = true;
-                        for i in 0..outline.len() {
-                            let layer = match outline.get(i) {
-                                Some(layer) => layer,
-                                _ => {
-                                    ok = false;
-                                    break;
-                                }
-                            };
-
-                            scratch.clear();
-                            let placement = Mask::with_scratch(layer.path(), rcx)
-                                .origin(ZenoOrigin::BottomLeft)
-                                .style(self.style)
-                                .offset(self.offset)
-                                .render_offset(self.offset)
-                                .inspect(|fmt, w, h| {
-                                    scratch.resize(fmt.buffer_size(w, h), 0);
-                                })
-                                .render_into(&mut scratch[..], None);
-                            let color = layer
-                                .color_index()
-                                .and_then(|i| palette.map(|p| p.get(i)))
-                                .unwrap_or(self.foreground);
-                            bitmap::blit(
-                                &scratch[..],
-                                placement.width,
-                                placement.height,
-                                placement.left.wrapping_sub(base_x),
-                                (base_h as i32 + base_y).wrapping_sub(placement.top),
-                                color,
-                                &mut image.data,
-                                base_w,
-                                base_h,
-                            );
-                        }
-                        if ok {
-                            image.source = Source::ColorOutline(*palette_index);
-                            image.content = Content::Color;
-                            return true;
-                        }
-                    }
-                }
-                Source::Bitmap(mode) => {
-                    if scaler.scale_bitmap_impl(glyph_id, false, *mode, image) == Some(true) {
-                        return true;
-                    }
-                }
-                Source::ColorBitmap(mode) => {
-                    if scaler.scale_bitmap_impl(glyph_id, true, *mode, image) == Some(true) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    /// 글리프 소스를 판별한다. zeno 래스터라이제이션 없이 소스 타입만 결정한다.
-    ///
-    /// - `Source::Outline`: 아웃라인 존재 확인만 수행. `image.data`는 비어있음.
-    /// - `Source::ColorOutline`: 래스터라이즈된 이미지 반환 (GPU에서도 이미지로 합성 필요).
-    /// - `Source::Bitmap` / `Source::ColorBitmap`: 디코딩된 이미지 반환.
-    pub fn detect_source(&self, scaler: &mut Scaler, glyph_id: GlyphId, image: &mut Image) -> bool {
-        for source in self.sources {
-            match source {
-                Source::Outline => {
-                    if !scaler.has_outlines() {
-                        continue;
-                    }
-                    scaler.state.outline.clear();
-                    if scaler.scale_outline_impl(glyph_id, None, None) {
-                        image.source = Source::Outline;
-                        return true;
-                    }
-                }
-                Source::ColorOutline(palette_index) => {
-                    if !scaler.has_color_outlines() {
-                        continue;
-                    }
-                    // ColorOutline은 래스터라이즈 필요 — render_into와 동일 경로
                     scaler.state.outline.clear();
                     if scaler.scale_color_outline_impl(glyph_id) {
                         let font_data = scaler.font.data().as_bytes();

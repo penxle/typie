@@ -12,7 +12,7 @@ pub mod search;
 pub mod slate;
 mod state;
 mod table;
-pub mod text_replacement;
+pub(crate) mod text_replacement;
 pub mod tracked_items;
 mod view_state;
 
@@ -24,10 +24,9 @@ use crate::layout::Page;
 use crate::layout::cursor::{Cursor, NavigationContext};
 use crate::layout::query::{find_drag_image_bounds, find_node_bounds, is_selectable_block_hit};
 use crate::model::*;
-#[cfg(any(feature = "native", feature = "uniffi", test))]
+#[cfg(any(feature = "native", feature = "uniffi"))]
 use crate::render::RenderInfo;
-use crate::render::backend::RenderBackend;
-use crate::render::{DragImageResult, Renderer, SurfaceSize};
+use crate::render::{DragImageResult, RenderResult, Renderer};
 use crate::runtime::history_state::RuntimeHistory;
 use crate::runtime::text_replacement::ReplacementUndoState;
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
@@ -138,25 +137,15 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    #[allow(dead_code)]
     pub fn new(width: f32, scale_factor: f64, state: State) -> Self {
-        Self::with_backend(width, scale_factor, state, RenderBackend::new_cpu())
-    }
-
-    pub fn with_backend(
-        width: f32,
-        scale_factor: f64,
-        state: State,
-        backend: RenderBackend,
-    ) -> Self {
-        let mut undo_manager = UndoManager::new(state.doc.loro());
+        let mut undo_manager = UndoManager::new(state.doc.loro_doc());
         let history = RuntimeHistory::new();
         history.configure_undo_manager(&mut undo_manager);
         let diagnostics = FrameDiagnostics::new();
 
         Self {
-            layout_engine: LayoutEngine::new(width, diagnostics.clone()),
-            renderer: Renderer::with_backend(backend, scale_factor, diagnostics),
+            layout_engine: LayoutEngine::new(width, scale_factor, diagnostics.clone()),
+            renderer: Renderer::new(scale_factor, diagnostics),
             state,
             undo_manager,
             loaded_font_codepoints: FxHashMap::default(),
@@ -310,7 +299,7 @@ impl Runtime {
     pub fn import_updates(&mut self, updates: &[u8]) -> Result<()> {
         self.flush();
         let old_frontiers = self.state.doc.frontiers();
-        let old_state_frontiers = self.state.doc.loro().state_frontiers();
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         self.state.doc.import_updates(updates, ORIGIN_REMOTE_SYNC)?;
         let new_frontiers = self.state.doc.frontiers();
 
@@ -321,10 +310,13 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn import_updates_batch(&mut self, _updates_batch: &[Vec<u8>]) -> Result<()> {
+    pub fn import_updates_batch(&mut self, updates_batch: &[Vec<u8>]) -> Result<()> {
         self.flush();
         let old_frontiers = self.state.doc.frontiers();
-        let old_state_frontiers = self.state.doc.loro().state_frontiers();
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
+        self.state
+            .doc
+            .import_updates_batch(updates_batch, ORIGIN_REMOTE_SYNC)?;
         let new_frontiers = self.state.doc.frontiers();
 
         if old_frontiers != new_frontiers {
@@ -342,11 +334,11 @@ impl Runtime {
     pub fn checkout(&mut self, version: &[u8]) -> Result<()> {
         self.flush();
         let vv = loro::VersionVector::decode(version)?;
-        if !self.state.doc.loro().oplog_vv().includes_vv(&vv) {
+        if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
             anyhow::bail!("Cannot checkout to unknown version");
         }
-        let old_state_frontiers = self.state.doc.loro().state_frontiers();
-        let frontiers = self.state.doc.loro().vv_to_frontiers(&vv);
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
+        let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
         self.state.doc.checkout(&frontiers)?;
         self.handle_external_doc_change(Some(old_state_frontiers));
         Ok(())
@@ -354,7 +346,7 @@ impl Runtime {
 
     pub fn checkout_to_latest(&mut self) -> Result<()> {
         self.flush();
-        let old_state_frontiers = self.state.doc.loro().state_frontiers();
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         self.state.doc.checkout_to_latest()?;
         self.handle_external_doc_change(Some(old_state_frontiers));
         Ok(())
@@ -367,11 +359,11 @@ impl Runtime {
     pub fn revert_to(&mut self, version: &[u8]) -> Result<()> {
         self.flush();
         let vv = loro::VersionVector::decode(version)?;
-        if !self.state.doc.loro().oplog_vv().includes_vv(&vv) {
+        if !self.state.doc.loro_doc().oplog_vv().includes_vv(&vv) {
             anyhow::bail!("Cannot revert to unknown version");
         }
-        let old_state_frontiers = self.state.doc.loro().state_frontiers();
-        let frontiers = self.state.doc.loro().vv_to_frontiers(&vv);
+        let old_state_frontiers = self.state.doc.loro_doc().state_frontiers();
+        let frontiers = self.state.doc.loro_doc().vv_to_frontiers(&vv);
         self.state.doc.revert_to(&frontiers)?;
         self.handle_external_doc_change(Some(old_state_frontiers));
         Ok(())
@@ -433,7 +425,7 @@ impl Runtime {
             return;
         };
 
-        let new_state_frontiers = self.state.doc.loro().state_frontiers();
+        let new_state_frontiers = self.state.doc.loro_doc().state_frontiers();
         let Some((node_mutations, settings_changed)) =
             self.analyze_external_doc_diff(old_state_frontiers, &new_state_frontiers)
         else {
@@ -550,7 +542,7 @@ impl Runtime {
         let diff = self
             .state
             .doc
-            .loro()
+            .loro_doc()
             .diff(old_state_frontiers, new_state_frontiers)
             .ok()?;
 
@@ -558,7 +550,11 @@ impl Runtime {
         let mut settings_changed = false;
 
         for (container_id, container_diff) in diff.iter() {
-            let path = self.state.doc.loro().get_path_to_container(container_id)?;
+            let path = self
+                .state
+                .doc
+                .loro_doc()
+                .get_path_to_container(container_id)?;
 
             let key_path: Vec<String> = path
                 .iter()
@@ -617,7 +613,7 @@ impl Runtime {
     ) -> Result<()> {
         use anyhow::Context;
         let previous_selection_snapshot = self.capture_history_selection(self.state.selection);
-        let pending_txn_len_before = self.state.doc.loro().get_pending_txn_len();
+        let pending_txn_len_before = self.state.doc.loro_doc().get_pending_txn_len();
         let doc_handle = self.state.doc.clone();
 
         let node = doc_handle
@@ -665,7 +661,7 @@ impl Runtime {
             reapply_styles(&text_node, start_internal, replacement_len, &styles);
         }
 
-        let pending_txn_len_after = self.state.doc.loro().get_pending_txn_len();
+        let pending_txn_len_after = self.state.doc.loro_doc().get_pending_txn_len();
         let doc_changed = pending_txn_len_after > pending_txn_len_before;
 
         if doc_changed {
@@ -684,7 +680,7 @@ impl Runtime {
     ) -> Result<()> {
         use anyhow::Context;
         let previous_selection_snapshot = self.capture_history_selection(self.state.selection);
-        let pending_txn_len_before = self.state.doc.loro().get_pending_txn_len();
+        let pending_txn_len_before = self.state.doc.loro_doc().get_pending_txn_len();
 
         let mut indices: Vec<usize> = (0..replacements.len()).collect();
         indices.sort_by(|&a, &b| {
@@ -743,7 +739,7 @@ impl Runtime {
             }
         }
 
-        let pending_txn_len_after = self.state.doc.loro().get_pending_txn_len();
+        let pending_txn_len_after = self.state.doc.loro_doc().get_pending_txn_len();
         let doc_changed = pending_txn_len_after > pending_txn_len_before;
 
         if doc_changed {
@@ -970,61 +966,53 @@ impl Runtime {
         }
     }
 
-    // ── Mount / Unmount API ───────────────────────────────────────────
+    pub fn render_page(&mut self, page_index: usize) -> Option<RenderResult> {
+        use crate::tracing::TRACER;
+        use opentelemetry::KeyValue;
+        use opentelemetry::trace::{Tracer, mark_span_as_active};
 
-    /// 스크롤 모드: 최대 높이(1024px)로 할당하여 높이 변경 시 resize 불필요.
-    /// 페이지 모드: 정확한 페이지 크기로 할당.
-    pub fn attach_surface(&mut self, page_index: u32) -> Option<SurfaceSize> {
-        let (page_width, page_height) = self.compute_page_dimensions(page_index)?;
-        Some(
-            self.renderer
-                .attach_surface(page_index, page_width, page_height),
-        )
-    }
+        let mut span = TRACER.start("render.page");
+        opentelemetry::trace::Span::set_attribute(
+            &mut span,
+            KeyValue::new("page_index", page_index as i64),
+        );
+        let _guard = mark_span_as_active(span);
 
-    pub fn detach_surface(&mut self, page_index: u32) {
-        self.renderer.detach_surface(page_index);
-    }
-
-    /// 페이지의 Vello scene을 빌드한다. GPU surface 렌더링용.
-    pub fn build_surface_scene(&mut self, page_index: u32) -> Option<vello::Scene> {
         let snapshot = self.selection_snapshot();
+
         let doc = self.state.doc.as_ref();
         let selection = self.state.selection;
+
         let selections = if let Some(snapshot) = snapshot.as_ref() {
             build_selection_decorations(doc, &selection, Some(&snapshot.block_ids))
         } else {
             build_selection_decorations(doc, &selection, None)
         };
 
-        let page = self.layout_engine.pages().get(page_index as usize)?;
-        self.renderer.set_focused(self.is_focused);
-        Some(self.renderer.build_surface_scene(page, &selections, doc))
-    }
-
-    /// 할당된 surface의 크기가 현재 레이아웃과 다르면 갱신한다.
-    /// 변경 시 Some(새 크기), 변경 없으면 None.
-    pub fn resize_surface(&mut self, page_index: u32) -> Option<SurfaceSize> {
-        let (page_width, page_height) = self.compute_page_dimensions(page_index)?;
-        self.renderer
-            .resize_surface(page_index, page_width, page_height)
-    }
-
-    /// 현재 레이아웃 상태에서 페이지의 마운트 크기를 계산한다 (DPI 미적용, layout 좌표).
-    fn compute_page_dimensions(&self, page_index: u32) -> Option<(f32, f32)> {
-        const SCROLL_MODE_MAX_HEIGHT: f32 = 1024.0;
-
-        let _ = self.layout_engine.pages().get(page_index as usize)?;
-        let layout_mode = self.doc().settings().layout_mode;
+        let layout_mode = doc.settings().layout_mode;
+        let pages = self.layout_engine.pages();
+        let page = pages.get(page_index)?;
+        let next_page = pages.get(page_index + 1);
+        let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
-        let page_height = match layout_mode {
-            LayoutMode::Paginated { page_height, .. } => page_height.ceil(),
-            LayoutMode::Continuous { .. } => SCROLL_MODE_MAX_HEIGHT,
-        };
-        Some((page_width, page_height))
+        let scale_factor = self.layout_engine.scale_factor();
+
+        let drop_indicator = self.pending.drop_indicator.as_ref();
+        let renderer = &mut self.renderer;
+        renderer.set_size(page_width, page_height, scale_factor);
+        renderer.set_focused(self.is_focused);
+
+        Some(renderer.render(
+            page,
+            page_index,
+            next_page,
+            &selections,
+            drop_indicator,
+            doc,
+        ))
     }
 
-    pub fn export_page(&mut self, page_index: usize) -> Option<Vec<u8>> {
+    pub fn export_page_vector(&mut self, page_index: usize) -> Option<Vec<u8>> {
         let doc = self.state.doc.as_ref();
         let layout_mode = doc.settings().layout_mode;
         let pages = self.layout_engine.pages();
@@ -1033,25 +1021,25 @@ impl Runtime {
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
 
-        let export_page = self
-            .renderer
-            .export_page(page, next_page, doc, page_width, page_height);
+        let vector_page =
+            self.renderer
+                .export_page_vector(page, next_page, doc, page_width, page_height);
 
-        Some(crate::render::encode_export_page(&export_page))
+        Some(crate::render::encode_vector_page(&vector_page))
     }
 
-    #[cfg(any(feature = "native", feature = "uniffi", test))]
-    pub fn get_surface_info(&mut self, page_index: usize) -> Option<RenderInfo> {
+    #[cfg(any(feature = "native", feature = "uniffi"))]
+    pub fn get_render_info(&mut self, page_index: usize) -> Option<RenderInfo> {
         let layout_mode = self.doc().settings().layout_mode;
         let page = self.layout_engine.pages().get(page_index)?;
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
-        let scale_factor = self.renderer.scale_factor();
+        let scale_factor = self.layout_engine.scale_factor();
         self.renderer
             .set_size(page_width, page_height, scale_factor);
 
-        let width = (page_width as f64 * scale_factor).round().max(1.0) as u16;
-        let height = (page_height as f64 * scale_factor).round().max(1.0) as u16;
+        let width = self.renderer.width();
+        let height = self.renderer.height();
         let buffer_size = width as usize * height as usize * 4;
 
         Some(RenderInfo {
@@ -1061,12 +1049,13 @@ impl Runtime {
         })
     }
 
-    pub fn render_surface_into(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
+    #[cfg(any(feature = "native", feature = "uniffi"))]
+    pub fn render_page_to(&mut self, page_index: usize, dst: &mut [u8]) -> bool {
         use crate::tracing::TRACER;
         use opentelemetry::KeyValue;
         use opentelemetry::trace::{Tracer, mark_span_as_active};
 
-        let mut span = TRACER.start("render.surface");
+        let mut span = TRACER.start("render.page");
         opentelemetry::trace::Span::set_attribute(
             &mut span,
             KeyValue::new("page_index", page_index as i64),
@@ -1092,13 +1081,13 @@ impl Runtime {
         let next_page = pages.get(page_index + 1);
         let page_height = Self::page_height_for_rendering(layout_mode, page);
         let page_width = self.layout_engine.width().ceil();
-        let scale_factor = self.renderer.scale_factor();
+        let scale_factor = self.layout_engine.scale_factor();
         let drop_indicator = self.pending.drop_indicator.as_ref();
         let renderer = &mut self.renderer;
 
         renderer.set_size(page_width, page_height, scale_factor);
         renderer.set_focused(self.is_focused);
-        renderer.render_into(
+        renderer.render_to(
             page,
             page_index,
             next_page,
@@ -1203,7 +1192,7 @@ impl Runtime {
     pub fn flush(&mut self) {
         if self.state.pending_loro_commit {
             let history_flush = self.begin_history_flush();
-            self.state.doc.loro().commit();
+            self.state.doc.loro_doc().commit();
             self.state.pending_loro_commit = false;
             self.finish_history_flush(history_flush);
         }
@@ -1288,7 +1277,7 @@ impl Runtime {
             self.layout();
 
             let layout_mode = self.doc().settings().layout_mode;
-            let scale_factor = self.renderer.scale_factor();
+            let scale_factor = self.layout_engine.scale_factor();
 
             // Snap logical size to a value whose physical pixel count (round(logical * scale))
             // exactly equals CSS size * DPR, preventing sub-pixel stretching on fractional DPR
@@ -1661,7 +1650,7 @@ impl Runtime {
                     .node(node_id)
                     .and_then(|node| {
                         let spec = node.spec()?;
-                        let is_textblock = spec.is_textblock();
+                        let is_textblock = spec.is_textblock(self.doc().schema());
                         let node_text = if is_textblock {
                             self.doc().get_block_text(node_id)
                         } else {
@@ -1766,7 +1755,7 @@ impl Runtime {
         Some(self.inspect_fragment_as_macro(&fragment))
     }
 
-    pub fn is_position_in_selection(&self, position: Position) -> bool {
+    pub(crate) fn is_position_in_selection(&self, position: Position) -> bool {
         let selection = self.state.selection;
         if selection.is_collapsed() {
             return false;
@@ -1774,7 +1763,7 @@ impl Runtime {
         position_in_selection(&self.state.doc, position, &selection)
     }
 
-    pub fn is_block_selectable_hit(&self, hit_selection: &Selection) -> bool {
+    pub(crate) fn is_block_selectable_hit(&self, hit_selection: &Selection) -> bool {
         is_selectable_block_hit(&self.state.doc, hit_selection)
     }
 
@@ -2605,7 +2594,10 @@ mod tests {
                     continue;
                 };
 
-                if node.spec().map_or(false, |spec| spec.is_textblock()) {
+                if node
+                    .spec()
+                    .map_or(false, |spec| spec.is_textblock(runtime.doc().schema()))
+                {
                     ids.push(node_id);
                 }
 
@@ -3909,9 +3901,9 @@ mod tests {
             .export(DocExportMode::Version)
             .expect("source should export version");
 
-        let meta = source.doc().loro().get_map("meta");
+        let meta = source.doc().loro_doc().get_map("meta");
         meta.insert("v", 1).expect("source should update meta map");
-        source.doc().loro().commit();
+        source.doc().loro_doc().commit();
 
         let updates = source
             .export(DocExportMode::UpdatesFrom { version })
@@ -5671,7 +5663,7 @@ mod tests {
 
         rt.layout();
 
-        let template_doc = Rc::new(Doc::default());
+        let template_doc = Rc::new(Doc::new());
         let root = template_doc.node(NodeId::ROOT).unwrap();
         let tp_id = root
             .as_mut()
@@ -5686,7 +5678,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        template_doc.loro().commit();
+        template_doc.loro_doc().commit();
 
         let snapshot = template_doc.export(DocExportMode::Snapshot).unwrap();
         rt.insert_template_fragment(snapshot).unwrap();
@@ -5726,7 +5718,7 @@ mod tests {
             Ok(true)
         });
 
-        let template_doc = Rc::new(Doc::default());
+        let template_doc = Rc::new(Doc::new());
         let root = template_doc.node(NodeId::ROOT).unwrap();
         let tp_id = root
             .as_mut()
@@ -5741,7 +5733,7 @@ mod tests {
                 }),
             )
             .unwrap();
-        template_doc.loro().commit();
+        template_doc.loro_doc().commit();
 
         let snapshot = template_doc.export(DocExportMode::Snapshot).unwrap();
         rt.insert_template_fragment(snapshot).unwrap();
@@ -5785,7 +5777,7 @@ mod tests {
         });
         assert_eq!(rt.layout_engine.width(), 320.0);
 
-        let template_doc = Rc::new(Doc::default());
+        let template_doc = Rc::new(Doc::new());
         let root = template_doc.node(NodeId::ROOT).unwrap();
         let tp_id = root
             .as_mut()
@@ -5810,7 +5802,7 @@ mod tests {
                 page_margin_right: 80.0,
             };
         });
-        template_doc.loro().commit();
+        template_doc.loro_doc().commit();
 
         let snapshot = template_doc.export(DocExportMode::Snapshot).unwrap();
         rt.insert_template_fragment(snapshot).unwrap();

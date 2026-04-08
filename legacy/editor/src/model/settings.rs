@@ -72,6 +72,11 @@ impl Default for DocumentSettings {
     }
 }
 
+impl DocumentSettings {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 impl Hash for DocumentSettings {
     fn hash<H: Hasher>(&self, state: &mut H) {

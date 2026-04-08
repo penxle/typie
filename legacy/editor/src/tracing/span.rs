@@ -10,22 +10,22 @@ use std::time::SystemTime;
 static INVALID_SPAN_CONTEXT: SpanContext = SpanContext::NONE;
 
 pub struct TracingSpan {
-    pub inner: Option<TracingSpanInner>,
+    pub(crate) inner: Option<TracingSpanInner>,
 }
 
-pub struct TracingSpanInner {
-    pub span_context: SpanContext,
-    pub parent_span_id: SpanId,
-    pub name: Cow<'static, str>,
-    pub kind: SpanKind,
-    pub start_time: SystemTime,
-    pub status: trace::Status,
-    pub attributes: Vec<KeyValue>,
-    pub events: Vec<(Cow<'static, str>, SystemTime, Vec<KeyValue>)>,
+pub(crate) struct TracingSpanInner {
+    pub(crate) span_context: SpanContext,
+    pub(crate) parent_span_id: SpanId,
+    pub(crate) name: Cow<'static, str>,
+    pub(crate) kind: SpanKind,
+    pub(crate) start_time: SystemTime,
+    pub(crate) status: trace::Status,
+    pub(crate) attributes: Vec<KeyValue>,
+    pub(crate) events: Vec<(Cow<'static, str>, SystemTime, Vec<KeyValue>)>,
 }
 
 impl TracingSpan {
-    pub fn non_recording() -> Self {
+    pub(crate) fn non_recording() -> Self {
         Self { inner: None }
     }
 }

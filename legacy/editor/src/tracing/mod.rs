@@ -5,19 +5,19 @@ mod span;
 mod tracer;
 
 pub use reporter::TracingReporter;
-pub use tracer::TracingTracer;
+pub(crate) use tracer::TracingTracer;
 
 use collector::TracingCollector;
 use std::cell::RefCell;
 
 thread_local! {
-    pub static TRACING_COLLECTOR: RefCell<Option<TracingCollector>> = const { RefCell::new(None) };
+    pub(crate) static TRACING_COLLECTOR: RefCell<Option<TracingCollector>> = const { RefCell::new(None) };
 }
 
-pub const TRACER: TracingTracer = TracingTracer;
+pub(crate) const TRACER: TracingTracer = TracingTracer;
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-pub fn now() -> std::time::SystemTime {
+pub(crate) fn now() -> std::time::SystemTime {
     let epoch_ms = web_sys::window()
         .and_then(|w| w.performance())
         .map(|p| p.time_origin() + p.now())
@@ -27,6 +27,6 @@ pub fn now() -> std::time::SystemTime {
 }
 
 #[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
-pub fn now() -> std::time::SystemTime {
+pub(crate) fn now() -> std::time::SystemTime {
     std::time::SystemTime::now()
 }

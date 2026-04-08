@@ -26,13 +26,13 @@ impl Renderer {
 
         let pixel_width = ((total_width * scale).ceil() as u32).max(1);
         let pixel_height = ((total_height * scale).ceil() as u32).max(1);
-        let mut drag_buf = PixelBuf::new(pixel_width, pixel_height)?;
+        let mut drag_pixmap = Pixmap::new(pixel_width, pixel_height)?;
 
         for pb in &visible_bounds {
             let page = pages.get(pb.page_idx)?;
             let page_y = page_y_offsets[pb.page_idx];
 
-            let ctx = RenderParams {
+            let ctx = RenderContext {
                 scale_factor: self.scale_factor,
                 selections: &[],
                 theme: &self.theme,
@@ -44,6 +44,7 @@ impl Renderer {
             };
 
             Self::render_page_part_inner(
+                &mut self.glyph_renderer,
                 page,
                 pb,
                 selections,
@@ -54,14 +55,14 @@ impl Renderer {
                 pixel_width,
                 pixel_height,
                 &ctx,
-                &mut drag_buf,
+                &mut drag_pixmap,
             )?;
         }
 
         let drag_page_y = page_y_offsets.get(drag_page_idx).copied().unwrap_or(0.0);
 
         Some(DragImageResult {
-            buf: drag_buf,
+            pixmap: drag_pixmap,
             width: pixel_width as u16,
             height: pixel_height as u16,
             offset_x: min_x,
@@ -112,6 +113,7 @@ impl Renderer {
 
     #[allow(clippy::too_many_arguments)]
     pub(super) fn render_page_part_inner(
+        glyph_renderer: &mut GlyphRenderer,
         page: &Page,
         pb: &DragImagePageBounds,
         selections: &[SelectionDecor],
@@ -121,8 +123,8 @@ impl Renderer {
         scale: f32,
         pixel_width: u32,
         pixel_height: u32,
-        ctx: &RenderParams<'_>,
-        drag_buf: &mut PixelBuf,
+        ctx: &RenderContext<'_>,
+        drag_pixmap: &mut Pixmap,
     ) -> Option<()> {
         let dest_x = pb.bounds.x - min_x;
         let dest_y = (page_y + pb.bounds.y) - min_y;
@@ -130,15 +132,13 @@ impl Renderer {
         let part_pixel_w = ((pb.bounds.width * scale).ceil() as u32).max(1);
         let part_pixel_h = ((pb.bounds.height * scale).ceil() as u32).max(1);
 
-        let mut temp_buf = PixelBuf::new(part_pixel_w, part_pixel_h)?;
-        let transform = Affine::scale_non_uniform(scale as f64, scale as f64)
-            * Affine::translate((-pb.bounds.x as f64, -pb.bounds.y as f64));
+        let mut temp_pixmap = Pixmap::new(part_pixel_w, part_pixel_h)?;
+        let transform =
+            Transform::from_scale(scale, scale).pre_translate(-pb.bounds.x, -pb.bounds.y);
 
-        let w = temp_buf.width() as u16;
-        let h = temp_buf.height() as u16;
-        let mut sink = CpuSink::new(w, h);
         Self::render_node(
-            &mut sink,
+            &mut temp_pixmap.as_mut(),
+            glyph_renderer,
             &page.root,
             Point::zero(),
             transform,
@@ -146,7 +146,6 @@ impl Renderer {
             &RenderHints::default(),
             None,
         );
-        sink.flush_to(temp_buf.data_mut(), w, h);
 
         let mut clip_rects = Vec::new();
         Self::collect_selection_clip_rects(
@@ -161,7 +160,7 @@ impl Renderer {
 
         if clip_rects.is_empty() {
             for cr in &pb.clip_rects {
-                if let Some(rect) = LayoutRect::from_xywh(
+                if let Some(rect) = Rect::from_xywh(
                     (cr.x - pb.bounds.x) * scale,
                     (cr.y - pb.bounds.y) * scale,
                     cr.width * scale,
@@ -173,8 +172,8 @@ impl Renderer {
         }
 
         Self::copy_clipped_pixels(
-            &temp_buf,
-            drag_buf,
+            &temp_pixmap,
+            drag_pixmap,
             &clip_rects,
             (dest_x * scale).round() as i32,
             (dest_y * scale).round() as i32,
@@ -189,9 +188,9 @@ impl Renderer {
 
     #[allow(clippy::too_many_arguments)]
     pub(super) fn copy_clipped_pixels(
-        src: &PixelBuf,
-        dest: &mut PixelBuf,
-        clip_rects: &[LayoutRect],
+        src: &Pixmap,
+        dest: &mut Pixmap,
+        clip_rects: &[Rect],
         dest_base_x: i32,
         dest_base_y: i32,
         src_width: u32,
@@ -203,10 +202,10 @@ impl Renderer {
         let dest_data = dest.data_mut();
 
         for rect in clip_rects {
-            let x_start = rect.x.floor() as i32;
-            let y_start = rect.y.floor() as i32;
-            let x_end = (rect.x + rect.width).ceil() as i32;
-            let y_end = (rect.y + rect.height).ceil() as i32;
+            let x_start = rect.x().floor() as i32;
+            let y_start = rect.y().floor() as i32;
+            let x_end = rect.right().ceil() as i32;
+            let y_end = rect.bottom().ceil() as i32;
 
             for y in y_start..y_end {
                 for x in x_start..x_end {

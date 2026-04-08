@@ -2,34 +2,49 @@ use crate::layout::elements::SplitEdges;
 use crate::layout::elements::{CalloutBackgroundElement, CalloutIconElement};
 use crate::model::CalloutVariant;
 use crate::model::{CALLOUT_BORDER_RADIUS, CALLOUT_BORDER_WIDTH};
-use crate::render::sink::RenderSink;
-use crate::render::{Render, RenderParams, RenderPhase};
-use kurbo::{Affine, BezPath, Cap, Join, Stroke};
+use crate::render::outline::ElementSink;
+use crate::render::{GlyphRenderer, Outline, RasterSink, Render, RenderContext, RenderPhase};
 use macros::svg_icon_path;
-use peniko::{Brush, Fill};
+use tiny_skia::{Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
 const ICON_SIZE: f32 = 20.0;
 const ICON_STROKE_WIDTH: f32 = 1.5;
 
 impl Render for CalloutBackgroundElement {
-    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
+    fn render(
+        &self,
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        ctx: &RenderContext,
+    ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for CalloutBackgroundElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
 impl CalloutBackgroundElement {
-    fn paint_to(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         let color_key = format!("ui.callout.{}", self.variant);
         let is_selected = ctx.is_block_selected(self.node_id);
 
         match ctx.phase {
             RenderPhase::Background => {
                 let bg_color = ctx.theme.color_with_alpha(&color_key, 8);
-                let bg_brush = Brush::Solid(bg_color);
+
+                let mut bg_paint = Paint::default();
+                bg_paint.set_color(bg_color);
+                bg_paint.anti_alias = true;
 
                 let (tl, tr, br, bl) = corner_radii(CALLOUT_BORDER_RADIUS, &self.split_edges);
 
-                let path = build_rounded_rect_corners(
+                if let Some(path) = build_rounded_rect_corners(
                     0.0,
                     0.0,
                     self.size.width,
@@ -38,21 +53,27 @@ impl CalloutBackgroundElement {
                     tr,
                     br,
                     bl,
-                );
-                sink.fill_path(&path, &bg_brush, Fill::NonZero, transform);
+                ) {
+                    sink.fill_path(&path, &bg_paint, tiny_skia::FillRule::Winding, transform);
+                }
             }
             RenderPhase::Content => {
                 let border_color = ctx.theme.color(&color_key);
-                let border_brush = Brush::Solid(border_color);
+                let mut border_paint = Paint::default();
+                border_paint.set_color(border_color);
+                border_paint.anti_alias = true;
 
-                let stroke = Stroke::new(CALLOUT_BORDER_WIDTH as f64);
+                let stroke = Stroke {
+                    width: CALLOUT_BORDER_WIDTH,
+                    ..Stroke::default()
+                };
 
                 let mb = CALLOUT_BORDER_WIDTH / 2.0;
                 let inner_radius = (CALLOUT_BORDER_RADIUS - mb).max(0.0);
                 let (tl_inner, tr_inner, br_inner, bl_inner) =
                     corner_radii(inner_radius, &self.split_edges);
 
-                let path = build_partial_border(
+                if let Some(path) = build_partial_border(
                     mb,
                     mb,
                     self.size.width - CALLOUT_BORDER_WIDTH,
@@ -62,18 +83,19 @@ impl CalloutBackgroundElement {
                     br_inner,
                     bl_inner,
                     &self.split_edges,
-                );
-                sink.stroke_path(&path, &border_brush, &stroke, transform);
+                ) {
+                    sink.stroke_path(&path, &border_paint, &stroke, transform);
+                }
             }
             RenderPhase::Selection => {
                 if !is_selected {
                     return;
                 }
 
-                let selection_brush = ctx.selection_paint();
+                let selection_paint = ctx.selection_paint();
 
                 let (tl, tr, br, bl) = corner_radii(CALLOUT_BORDER_RADIUS, &self.split_edges);
-                let path = build_rounded_rect_corners(
+                if let Some(path) = build_rounded_rect_corners(
                     0.0,
                     0.0,
                     self.size.width,
@@ -82,30 +104,54 @@ impl CalloutBackgroundElement {
                     tr,
                     br,
                     bl,
-                );
-                sink.fill_path(&path, &selection_brush, Fill::NonZero, transform);
+                ) {
+                    sink.fill_path(
+                        &path,
+                        &selection_paint,
+                        tiny_skia::FillRule::Winding,
+                        transform,
+                    );
+                }
             }
         }
     }
 }
 
 impl Render for CalloutIconElement {
-    fn render(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
+    fn render(
+        &self,
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        transform: Transform,
+        ctx: &RenderContext,
+    ) {
+        let mut sink = RasterSink::new(pixmap, glyph_renderer);
+        self.paint_to(&mut sink, transform, ctx);
+    }
+}
+
+impl Outline for CalloutIconElement {
+    fn outline(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         self.paint_to(sink, transform, ctx);
     }
 }
 
 impl CalloutIconElement {
-    fn paint_to(&self, sink: &mut dyn RenderSink, transform: Affine, ctx: &RenderParams<'_>) {
+    fn paint_to(&self, sink: &mut dyn ElementSink, transform: Transform, ctx: &RenderContext<'_>) {
         if let RenderPhase::Content = ctx.phase {
             let color_key = format!("ui.callout.{}", self.variant);
             let icon_color = ctx.theme.color(&color_key);
 
-            let icon_brush = Brush::Solid(icon_color);
+            let mut icon_paint = Paint::default();
+            icon_paint.set_color(icon_color);
+            icon_paint.anti_alias = true;
 
-            let icon_stroke = Stroke::new(ICON_STROKE_WIDTH as f64)
-                .with_caps(Cap::Round)
-                .with_join(Join::Round);
+            let icon_stroke = Stroke {
+                width: ICON_STROKE_WIDTH,
+                line_cap: tiny_skia::LineCap::Round,
+                line_join: tiny_skia::LineJoin::Round,
+                ..Stroke::default()
+            };
 
             let cx = self.size.width / 2.0;
             let cy = self.size.height / 2.0;
@@ -120,7 +166,7 @@ impl CalloutIconElement {
             };
 
             if let Some(path) = path {
-                sink.stroke_path(&path, &icon_brush, &icon_stroke, transform);
+                sink.stroke_path(&path, &icon_paint, &icon_stroke, transform);
             }
         }
     }
@@ -141,38 +187,29 @@ fn build_rounded_rect_corners(
     top_right: f32,
     bottom_right: f32,
     bottom_left: f32,
-) -> BezPath {
-    let mut bp = BezPath::new();
+) -> Option<tiny_skia::Path> {
+    let mut pb = PathBuilder::new();
 
-    bp.move_to(((x + top_left) as f64, y as f64));
-    bp.line_to(((x + width - top_right) as f64, y as f64));
+    pb.move_to(x + top_left, y);
+    pb.line_to(x + width - top_right, y);
     if top_right > 0.0 {
-        bp.quad_to(
-            ((x + width) as f64, y as f64),
-            ((x + width) as f64, (y + top_right) as f64),
-        );
+        pb.quad_to(x + width, y, x + width, y + top_right);
     }
-    bp.line_to(((x + width) as f64, (y + height - bottom_right) as f64));
+    pb.line_to(x + width, y + height - bottom_right);
     if bottom_right > 0.0 {
-        bp.quad_to(
-            ((x + width) as f64, (y + height) as f64),
-            ((x + width - bottom_right) as f64, (y + height) as f64),
-        );
+        pb.quad_to(x + width, y + height, x + width - bottom_right, y + height);
     }
-    bp.line_to(((x + bottom_left) as f64, (y + height) as f64));
+    pb.line_to(x + bottom_left, y + height);
     if bottom_left > 0.0 {
-        bp.quad_to(
-            (x as f64, (y + height) as f64),
-            (x as f64, (y + height - bottom_left) as f64),
-        );
+        pb.quad_to(x, y + height, x, y + height - bottom_left);
     }
-    bp.line_to((x as f64, (y + top_left) as f64));
+    pb.line_to(x, y + top_left);
     if top_left > 0.0 {
-        bp.quad_to((x as f64, y as f64), ((x + top_left) as f64, y as f64));
+        pb.quad_to(x, y, x + top_left, y);
     }
-    bp.close_path();
+    pb.close();
 
-    bp
+    pb.finish()
 }
 
 fn build_partial_border(
@@ -185,45 +222,36 @@ fn build_partial_border(
     bottom_right: f32,
     bottom_left: f32,
     split: &SplitEdges,
-) -> BezPath {
-    let mut bp = BezPath::new();
+) -> Option<tiny_skia::Path> {
+    let mut pb = PathBuilder::new();
 
     if split.top && split.bottom {
-        bp.move_to((x as f64, y as f64));
-        bp.line_to((x as f64, (y + height) as f64));
-        bp.move_to(((x + width) as f64, y as f64));
-        bp.line_to(((x + width) as f64, (y + height) as f64));
+        pb.move_to(x, y);
+        pb.line_to(x, y + height);
+        pb.move_to(x + width, y);
+        pb.line_to(x + width, y + height);
     } else if split.top {
-        bp.move_to((x as f64, y as f64));
-        bp.line_to((x as f64, (y + height - bottom_left) as f64));
+        pb.move_to(x, y);
+        pb.line_to(x, y + height - bottom_left);
         if bottom_left > 0.0 {
-            bp.quad_to(
-                (x as f64, (y + height) as f64),
-                ((x + bottom_left) as f64, (y + height) as f64),
-            );
+            pb.quad_to(x, y + height, x + bottom_left, y + height);
         }
-        bp.line_to(((x + width - bottom_right) as f64, (y + height) as f64));
+        pb.line_to(x + width - bottom_right, y + height);
         if bottom_right > 0.0 {
-            bp.quad_to(
-                ((x + width) as f64, (y + height) as f64),
-                ((x + width) as f64, (y + height - bottom_right) as f64),
-            );
+            pb.quad_to(x + width, y + height, x + width, y + height - bottom_right);
         }
-        bp.line_to(((x + width) as f64, y as f64));
+        pb.line_to(x + width, y);
     } else if split.bottom {
-        bp.move_to((x as f64, (y + height) as f64));
-        bp.line_to((x as f64, (y + top_left) as f64));
+        pb.move_to(x, y + height);
+        pb.line_to(x, y + top_left);
         if top_left > 0.0 {
-            bp.quad_to((x as f64, y as f64), ((x + top_left) as f64, y as f64));
+            pb.quad_to(x, y, x + top_left, y);
         }
-        bp.line_to(((x + width - top_right) as f64, y as f64));
+        pb.line_to(x + width - top_right, y);
         if top_right > 0.0 {
-            bp.quad_to(
-                ((x + width) as f64, y as f64),
-                ((x + width) as f64, (y + top_right) as f64),
-            );
+            pb.quad_to(x + width, y, x + width, y + top_right);
         }
-        bp.line_to(((x + width) as f64, (y + height) as f64));
+        pb.line_to(x + width, y + height);
     } else {
         return build_rounded_rect_corners(
             x,
@@ -237,5 +265,5 @@ fn build_partial_border(
         );
     }
 
-    bp
+    pb.finish()
 }

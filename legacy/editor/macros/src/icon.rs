@@ -553,7 +553,7 @@ pub fn generate_svg_icon_path(args: &SvgIconArgs) -> Result<TokenStream, String>
 
     Ok(quote! {
         {
-            use kurbo::BezPath;
+            use tiny_skia::PathBuilder;
 
             let __icon_size: f32 = #size_expr;
             let __icon_cx: f32 = #cx_expr;
@@ -570,9 +570,9 @@ pub fn generate_svg_icon_path(args: &SvgIconArgs) -> Result<TokenStream, String>
             #[allow(unused_assignments)]
             let mut __icon_cur_y = 0.0_f32;
 
-            let mut __pb = BezPath::new();
+            let mut __pb = PathBuilder::new();
             #path_ops
-            Some(__pb)
+            __pb.finish()
         }
     })
 }
@@ -584,34 +584,34 @@ fn generate_path_building_ops(commands: &[ParsedCommand]) -> TokenStream {
                 {
                     __icon_cur_x = #x * __icon_scale + __icon_offset_x;
                     __icon_cur_y = #y * __icon_scale + __icon_offset_y;
-                    __pb.move_to((__icon_cur_x as f64, __icon_cur_y as f64));
+                    __pb.move_to(__icon_cur_x, __icon_cur_y);
                 }
             },
             ParsedCommand::LineTo(x, y) => quote! {
                 {
                     __icon_cur_x = #x * __icon_scale + __icon_offset_x;
                     __icon_cur_y = #y * __icon_scale + __icon_offset_y;
-                    __pb.line_to((__icon_cur_x as f64, __icon_cur_y as f64));
+                    __pb.line_to(__icon_cur_x, __icon_cur_y);
                 }
             },
             ParsedCommand::HLineTo(x) => quote! {
                 {
                     __icon_cur_x = #x * __icon_scale + __icon_offset_x;
-                    __pb.line_to((__icon_cur_x as f64, __icon_cur_y as f64));
+                    __pb.line_to(__icon_cur_x, __icon_cur_y);
                 }
             },
             ParsedCommand::VLineTo(y) => quote! {
                 {
                     __icon_cur_y = #y * __icon_scale + __icon_offset_y;
-                    __pb.line_to((__icon_cur_x as f64, __icon_cur_y as f64));
+                    __pb.line_to(__icon_cur_x, __icon_cur_y);
                 }
             },
             ParsedCommand::CurveTo(x1, y1, x2, y2, x, y) => quote! {
                 {
-                    __pb.curve_to(
-                        ((#x1 * __icon_scale + __icon_offset_x) as f64, (#y1 * __icon_scale + __icon_offset_y) as f64),
-                        ((#x2 * __icon_scale + __icon_offset_x) as f64, (#y2 * __icon_scale + __icon_offset_y) as f64),
-                        ((#x * __icon_scale + __icon_offset_x) as f64, (#y * __icon_scale + __icon_offset_y) as f64)
+                    __pb.cubic_to(
+                        #x1 * __icon_scale + __icon_offset_x, #y1 * __icon_scale + __icon_offset_y,
+                        #x2 * __icon_scale + __icon_offset_x, #y2 * __icon_scale + __icon_offset_y,
+                        #x * __icon_scale + __icon_offset_x, #y * __icon_scale + __icon_offset_y
                     );
                     __icon_cur_x = #x * __icon_scale + __icon_offset_x;
                     __icon_cur_y = #y * __icon_scale + __icon_offset_y;
@@ -620,8 +620,8 @@ fn generate_path_building_ops(commands: &[ParsedCommand]) -> TokenStream {
             ParsedCommand::QuadTo(x1, y1, x, y) => quote! {
                 {
                     __pb.quad_to(
-                        ((#x1 * __icon_scale + __icon_offset_x) as f64, (#y1 * __icon_scale + __icon_offset_y) as f64),
-                        ((#x * __icon_scale + __icon_offset_x) as f64, (#y * __icon_scale + __icon_offset_y) as f64)
+                        #x1 * __icon_scale + __icon_offset_x, #y1 * __icon_scale + __icon_offset_y,
+                        #x * __icon_scale + __icon_offset_x, #y * __icon_scale + __icon_offset_y
                     );
                     __icon_cur_x = #x * __icon_scale + __icon_offset_x;
                     __icon_cur_y = #y * __icon_scale + __icon_offset_y;
@@ -635,18 +635,18 @@ fn generate_path_building_ops(commands: &[ParsedCommand]) -> TokenStream {
                         let __ccy = #cy * __icon_scale + __icon_offset_y;
                         let __cr = #r * __icon_scale;
                         let __ck = 0.5522847498 * __cr;
-                        __pb.move_to(((__ccx + __cr) as f64, __ccy as f64));
-                        __pb.curve_to(((__ccx + __cr) as f64, (__ccy + __ck) as f64), ((__ccx + __ck) as f64, (__ccy + __cr) as f64), (__ccx as f64, (__ccy + __cr) as f64));
-                        __pb.curve_to(((__ccx - __ck) as f64, (__ccy + __cr) as f64), ((__ccx - __cr) as f64, (__ccy + __ck) as f64), ((__ccx - __cr) as f64, __ccy as f64));
-                        __pb.curve_to(((__ccx - __cr) as f64, (__ccy - __ck) as f64), ((__ccx - __ck) as f64, (__ccy - __cr) as f64), (__ccx as f64, (__ccy - __cr) as f64));
-                        __pb.curve_to(((__ccx + __ck) as f64, (__ccy - __cr) as f64), ((__ccx + __cr) as f64, (__ccy - __ck) as f64), ((__ccx + __cr) as f64, __ccy as f64));
-                        __pb.close_path();
+                        __pb.move_to(__ccx + __cr, __ccy);
+                        __pb.cubic_to(__ccx + __cr, __ccy + __ck, __ccx + __ck, __ccy + __cr, __ccx, __ccy + __cr);
+                        __pb.cubic_to(__ccx - __ck, __ccy + __cr, __ccx - __cr, __ccy + __ck, __ccx - __cr, __ccy);
+                        __pb.cubic_to(__ccx - __cr, __ccy - __ck, __ccx - __ck, __ccy - __cr, __ccx, __ccy - __cr);
+                        __pb.cubic_to(__ccx + __ck, __ccy - __cr, __ccx + __cr, __ccy - __ck, __ccx + __cr, __ccy);
+                        __pb.close();
                         __icon_cur_x = __ccx + __cr;
                         __icon_cur_y = __ccy;
                     }
                 }
             },
-            ParsedCommand::Close => quote! { __pb.close_path(); },
+            ParsedCommand::Close => quote! { __pb.close(); },
         }
     }).collect();
 

@@ -3,7 +3,7 @@ use crate::runtime::{Effect, Runtime};
 use crate::types::Theme;
 
 impl Runtime {
-    pub fn handle_initialize(
+    pub(crate) fn handle_initialize(
         &mut self,
         theme: Theme,
         viewport_width: f32,
@@ -16,7 +16,7 @@ impl Runtime {
 
         let layout_mode = self.doc().settings().layout_mode;
         self.sync_layout_width(layout_mode);
-        self.renderer.set_scale_factor(scale_factor);
+        self.layout_engine.set_scale_factor(scale_factor);
 
         let mut effects = vec![
             Effect::DocChanged,
@@ -39,11 +39,11 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_set_layout_mode(&mut self, mode: LayoutMode) -> Vec<Effect> {
+    pub(crate) fn handle_set_layout_mode(&mut self, mode: LayoutMode) -> Vec<Effect> {
         self.transact(|tr| tr.set_layout_mode(mode))
     }
 
-    pub fn handle_resize(
+    pub(crate) fn handle_resize(
         &mut self,
         viewport_width: f32,
         viewport_height: f32,
@@ -55,18 +55,17 @@ impl Runtime {
 
         let layout_mode = self.doc().settings().layout_mode;
         let width_changed = self.sync_layout_width(layout_mode);
-        let scale_changed = self.renderer.set_scale_factor(scale_factor);
+        let scale_changed = self.layout_engine.scale_factor() != scale_factor;
+        self.layout_engine.set_scale_factor(scale_factor);
 
-        if width_changed || viewport_changed {
+        if width_changed || scale_changed || viewport_changed {
             vec![Effect::FullLayoutInvalidation, Effect::LayoutChanged]
-        } else if scale_changed {
-            vec![Effect::LayoutChanged]
         } else {
             vec![]
         }
     }
 
-    pub fn sync_layout_width(&mut self, layout_mode: LayoutMode) -> bool {
+    pub(crate) fn sync_layout_width(&mut self, layout_mode: LayoutMode) -> bool {
         let new_width = match layout_mode {
             LayoutMode::Paginated { page_width, .. } => page_width,
             LayoutMode::Continuous { max_width } => {
@@ -82,12 +81,12 @@ impl Runtime {
         width_changed
     }
 
-    pub fn handle_set_theme(&mut self, theme: Theme) -> Vec<Effect> {
+    pub(crate) fn handle_set_theme(&mut self, theme: Theme) -> Vec<Effect> {
         self.renderer.set_theme(theme);
         vec![Effect::LayoutChanged]
     }
 
-    pub fn handle_set_focused(&mut self, focused: bool) -> Vec<Effect> {
+    pub(crate) fn handle_set_focused(&mut self, focused: bool) -> Vec<Effect> {
         if self.is_focused != focused {
             self.is_focused = focused;
             vec![Effect::LayoutChanged]

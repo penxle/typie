@@ -1,6 +1,5 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::schema::Schema;
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, Selection, block_content_len, collect_top_level_blocks_in_range};
 use crate::transaction::Transaction;
@@ -29,7 +28,7 @@ fn common_parent_if_same(tr: &Transaction, block_ids: &[NodeId]) -> Result<Optio
 
 impl Transaction {
     pub fn insert_node(&mut self, node: Node) -> Result<bool> {
-        if node.is_external() {
+        if node.is_external(self.doc().schema()) {
             self.push_effect(Effect::ExternalElementChanged);
         }
 
@@ -346,11 +345,11 @@ impl Transaction {
     pub fn wrap_in_ancestor(&mut self, wrapper: Node) -> Result<bool> {
         let original_selection = self.selection().clone();
         let wrapper_type = wrapper.as_type();
-        let wrapper_spec = Schema::node_spec(wrapper_type);
+        let wrapper_spec = self.doc().schema().node_spec(wrapper_type);
 
         let target = self.expand_selection_until(|parent, blocks| {
             let parent_type = parent.as_type();
-            let parent_spec = Schema::node_spec(parent_type);
+            let parent_spec = self.doc().schema().node_spec(parent_type);
 
             let block_types: Vec<NodeType> = blocks
                 .iter()
@@ -411,7 +410,7 @@ impl Transaction {
             return Ok(false);
         }
 
-        let wrapper_spec = Schema::node_spec(wrapper.as_type());
+        let wrapper_spec = self.doc().schema().node_spec(wrapper.as_type());
         let block_types: Vec<NodeType> = block_ids
             .iter()
             .filter_map(|id| self.node(*id).and_then(|n| n.node().map(|n| n.as_type())))

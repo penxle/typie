@@ -2,7 +2,7 @@ use crate::runtime::{Effect, Runtime};
 use crate::state::Position;
 
 impl Runtime {
-    pub fn handle_composition_update(
+    pub(crate) fn handle_composition_update(
         &mut self,
         text: &str,
         replace_length: Option<usize>,
@@ -19,11 +19,11 @@ impl Runtime {
         })
     }
 
-    pub fn handle_composition_end(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_composition_end(&mut self) -> Vec<Effect> {
         self.transact(|tr| tr.complete_preedit())
     }
 
-    pub fn handle_commit_preedit(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_commit_preedit(&mut self) -> Vec<Effect> {
         let input_byte_len = self.state.preedit.as_ref().map_or(0, |p| p.text.len());
         self.transact(|tr| {
             tr.commit_preedit()?;

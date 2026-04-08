@@ -2,14 +2,14 @@ use crate::model::{NodeId, TableAlign};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_insert_table(&mut self, rows: u32, cols: u32) -> Vec<Effect> {
+    pub(crate) fn handle_insert_table(&mut self, rows: u32, cols: u32) -> Vec<Effect> {
         self.transact(|tr| {
             let table_id = tr.insert_table(rows, cols)?;
             Ok(table_id.is_some())
         })
     }
 
-    pub fn handle_set_column_widths(
+    pub(crate) fn handle_set_column_widths(
         &mut self,
         table_id: String,
         col_widths: Vec<f32>,
@@ -21,7 +21,7 @@ impl Runtime {
         self.transact(|tr| tr.set_column_widths(node_id, col_widths))
     }
 
-    pub fn handle_add_table_row(
+    pub(crate) fn handle_add_table_row(
         &mut self,
         table_id: String,
         row: usize,
@@ -34,7 +34,7 @@ impl Runtime {
         self.transact(|tr| tr.add_table_row(node_id, row, before))
     }
 
-    pub fn handle_add_table_column(
+    pub(crate) fn handle_add_table_column(
         &mut self,
         table_id: String,
         col: usize,
@@ -47,7 +47,7 @@ impl Runtime {
         self.transact(|tr| tr.add_table_column(node_id, col, before))
     }
 
-    pub fn handle_delete_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
+    pub(crate) fn handle_delete_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
@@ -55,7 +55,11 @@ impl Runtime {
         self.transact(|tr| tr.delete_table_row(node_id, row))
     }
 
-    pub fn handle_delete_table_column(&mut self, table_id: String, col: usize) -> Vec<Effect> {
+    pub(crate) fn handle_delete_table_column(
+        &mut self,
+        table_id: String,
+        col: usize,
+    ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
@@ -63,7 +67,7 @@ impl Runtime {
         self.transact(|tr| tr.delete_table_column(node_id, col))
     }
 
-    pub fn handle_set_table_border_style(
+    pub(crate) fn handle_set_table_border_style(
         &mut self,
         table_id: String,
         style: String,
@@ -75,7 +79,11 @@ impl Runtime {
         self.transact(|tr| tr.set_table_border_style(node_id, &style))
     }
 
-    pub fn handle_set_table_align(&mut self, table_id: String, align: TableAlign) -> Vec<Effect> {
+    pub(crate) fn handle_set_table_align(
+        &mut self,
+        table_id: String,
+        align: TableAlign,
+    ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
@@ -83,7 +91,7 @@ impl Runtime {
         self.transact(|tr| tr.set_table_align(node_id, align))
     }
 
-    pub fn handle_set_table_proportion(
+    pub(crate) fn handle_set_table_proportion(
         &mut self,
         table_id: String,
         proportion: f32,
@@ -95,7 +103,7 @@ impl Runtime {
         self.transact(|tr| tr.set_table_proportion(node_id, proportion))
     }
 
-    pub fn handle_set_table_width(
+    pub(crate) fn handle_set_table_width(
         &mut self,
         table_id: String,
         width: f32,
@@ -108,7 +116,7 @@ impl Runtime {
         self.transact(|tr| tr.set_table_width(node_id, width, content_width))
     }
 
-    pub fn handle_select_table(&mut self, table_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_select_table(&mut self, table_id: String) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
@@ -116,7 +124,7 @@ impl Runtime {
         self.transact(|tr| tr.select_table(node_id))
     }
 
-    pub fn handle_select_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
+    pub(crate) fn handle_select_table_row(&mut self, table_id: String, row: usize) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
@@ -124,7 +132,11 @@ impl Runtime {
         self.transact(|tr| tr.select_table_row(node_id, row))
     }
 
-    pub fn handle_select_table_column(&mut self, table_id: String, col: usize) -> Vec<Effect> {
+    pub(crate) fn handle_select_table_column(
+        &mut self,
+        table_id: String,
+        col: usize,
+    ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&table_id) else {
             return vec![];
         };
@@ -132,7 +144,7 @@ impl Runtime {
         self.transact(|tr| tr.select_table_column(node_id, col))
     }
 
-    pub fn handle_move_table_row(
+    pub(crate) fn handle_move_table_row(
         &mut self,
         table_id: String,
         from_row: usize,
@@ -145,7 +157,7 @@ impl Runtime {
         self.transact(|tr| tr.move_table_row(node_id, from_row, to_row))
     }
 
-    pub fn handle_move_table_column(
+    pub(crate) fn handle_move_table_column(
         &mut self,
         table_id: String,
         from_col: usize,

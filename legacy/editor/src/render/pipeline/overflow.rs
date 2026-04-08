@@ -1,11 +1,147 @@
 use super::*;
-
 impl Renderer {
-    /// 다음 페이지에 현재 페이지 하단으로 넘치는(overflow) 콘텐츠가 있는지 검사한다.
+    pub(in super::super) fn render_next_page_overflow(
+        pixmap: &mut PixmapMut,
+        glyph_renderer: &mut GlyphRenderer,
+        scale_factor: f64,
+        theme: &Theme,
+        page_idx: usize,
+        next_page: &Page,
+        doc: &Doc,
+        overflow_cache: &mut FxHashMap<usize, OverflowRenderCacheEntry>,
+        debug_rects: Option<&mut Vec<CacheRect>>,
+    ) {
+        let scale = scale_factor as f32;
+        let page_height = pixmap.height() as f32 / scale;
+        let page_width = pixmap.width() as f32 / scale;
+        let Some(cull_clip) = next_page_overflow_cull_clip(page_width, page_height) else {
+            overflow_cache.remove(&page_idx);
+            return;
+        };
+        let Some(pixel_rect) =
+            PixelRect::from_layout_rect(cull_clip, scale, pixmap.width(), pixmap.height())
+        else {
+            overflow_cache.remove(&page_idx);
+            return;
+        };
+        if !Self::has_visible_next_page_overflow(next_page, page_height, cull_clip) {
+            overflow_cache.remove(&page_idx);
+            return;
+        }
+        let next_root_ptr = Rc::as_ptr(&next_page.root.node) as usize;
+        if let Some(cache_entry) = overflow_cache.get(&page_idx)
+            && same_scale_factor(cache_entry.scale_factor, scale_factor)
+            && cache_entry.canvas_width == pixmap.width()
+            && cache_entry.canvas_height == pixmap.height()
+            && cache_entry.pixel_rect == pixel_rect
+            && cache_entry.next_root_ptr == next_root_ptr
+        {
+            let paint = PixmapPaint::default();
+            pixmap.draw_pixmap(
+                pixel_rect.x as i32,
+                pixel_rect.y as i32,
+                cache_entry.tile_pixmap.as_ref(),
+                &paint,
+                Transform::identity(),
+                None,
+            );
+
+            if let Some(debug_rects) = debug_rects {
+                debug_rects.extend(cache_entry.debug_rects.iter().copied());
+            }
+            return;
+        }
+        let next_snapshot = Self::next_page_overflow_snapshot(next_page, page_height, cull_clip);
+        if let Some(cache_entry) = overflow_cache.get(&page_idx)
+            && same_scale_factor(cache_entry.scale_factor, scale_factor)
+            && cache_entry.canvas_width == pixmap.width()
+            && cache_entry.canvas_height == pixmap.height()
+            && cache_entry.pixel_rect == pixel_rect
+            && cache_entry.next_snapshot == next_snapshot
+        {
+            let paint = PixmapPaint::default();
+            pixmap.draw_pixmap(
+                pixel_rect.x as i32,
+                pixel_rect.y as i32,
+                cache_entry.tile_pixmap.as_ref(),
+                &paint,
+                Transform::identity(),
+                None,
+            );
+
+            if let Some(debug_rects) = debug_rects {
+                debug_rects.extend(cache_entry.debug_rects.iter().copied());
+            }
+            return;
+        }
+
+        let hard_clip_layout_rect = pixel_rect.to_layout_rect(scale);
+        let Some(mut tile_pixmap) = Pixmap::new(pixel_rect.width, pixel_rect.height) else {
+            overflow_cache.remove(&page_idx);
+            return;
+        };
+        let ctx = RenderContext {
+            scale_factor,
+            selections: &[],
+            theme,
+            doc,
+            default_text_color: None,
+            is_focused: true,
+            phase: RenderPhase::Content,
+            render_origin: Point::zero(),
+        };
+
+        let transform = Transform::from_scale(scale, scale)
+            .pre_translate(-hard_clip_layout_rect.x, -hard_clip_layout_rect.y);
+        Self::render_node_for_next_page_overflow(
+            &mut tile_pixmap.as_mut(),
+            glyph_renderer,
+            &next_page.root,
+            Point::new(0.0, page_height),
+            transform,
+            &ctx,
+            &RenderHints::default(),
+            cull_clip,
+        );
+        let paint = PixmapPaint::default();
+        pixmap.draw_pixmap(
+            pixel_rect.x as i32,
+            pixel_rect.y as i32,
+            tile_pixmap.as_ref(),
+            &paint,
+            Transform::identity(),
+            None,
+        );
+
+        let cache_debug_rects = Self::collect_next_page_overflow_debug_rects(
+            next_page,
+            page_width,
+            page_height,
+            cull_clip,
+        );
+        if let Some(debug_rects) = debug_rects {
+            debug_rects.extend(cache_debug_rects.iter().copied());
+        }
+
+        overflow_cache.insert(
+            page_idx,
+            OverflowRenderCacheEntry {
+                scale_factor,
+                canvas_width: pixmap.width(),
+                canvas_height: pixmap.height(),
+                pixel_rect,
+                next_root_ptr,
+                next_snapshot,
+                tile_pixmap,
+                debug_rects: cache_debug_rects,
+            },
+        );
+    }
+
     pub(in super::super) fn has_visible_next_page_overflow(
         next_page: &Page,
         page_height: f32,
-        cull_clip: LayoutRect,
+        cull_clip: CacheRect,
     ) -> bool {
         let local_clip = AABB::from_corners(
             [cull_clip.x, cull_clip.y - page_height],
@@ -24,7 +160,7 @@ impl Renderer {
                     return false;
                 }
 
-                let Some(node_rect) = LayoutRect::from_xywh(
+                let Some(node_rect) = CacheRect::from_xywh(
                     entry.pos.x - overflow.left,
                     page_height + entry.pos.y - overflow.top,
                     entry.size.width + overflow.left + overflow.right,
@@ -36,11 +172,10 @@ impl Renderer {
             })
     }
 
-    /// 다음 페이지 overflow의 렌더 snapshot을 수집한다.
     pub(in super::super) fn next_page_overflow_snapshot(
         next_page: &Page,
         page_height: f32,
-        cull_clip: LayoutRect,
+        cull_clip: CacheRect,
     ) -> OverflowRenderSnapshot {
         let mut items = Vec::new();
         Self::collect_next_page_overflow_snapshot_recursive(
@@ -55,7 +190,7 @@ impl Renderer {
     pub(in super::super) fn collect_next_page_overflow_snapshot_recursive(
         positioned: &PositionedNode,
         offset: Point,
-        cull_clip: LayoutRect,
+        cull_clip: CacheRect,
         out: &mut Vec<OverflowSnapshotItem>,
     ) {
         let pos = Point::new(
@@ -133,13 +268,12 @@ impl Renderer {
         hasher.finish()
     }
 
-    /// 다음 페이지 overflow 영역의 디버그 rect를 수집한다.
     pub(in super::super) fn collect_next_page_overflow_debug_rects(
         next_page: &Page,
         page_width: f32,
         page_height: f32,
-        cull_clip: LayoutRect,
-    ) -> Vec<LayoutRect> {
+        cull_clip: CacheRect,
+    ) -> Vec<CacheRect> {
         let mut rects = Vec::new();
         Self::collect_overflow_debug_rects_recursive(
             &next_page.root,
@@ -155,10 +289,10 @@ impl Renderer {
     pub(in super::super) fn collect_overflow_debug_rects_recursive(
         positioned: &PositionedNode,
         offset: Point,
-        cull_clip: LayoutRect,
+        cull_clip: CacheRect,
         page_width: f32,
         page_height: f32,
-        out: &mut Vec<LayoutRect>,
+        out: &mut Vec<CacheRect>,
     ) {
         let pos = Point::new(
             offset.x + positioned.position.x,
@@ -177,7 +311,7 @@ impl Renderer {
                 let bottom = node_rect.bottom().min(cull_clip.bottom());
 
                 if let Some(intersection) =
-                    LayoutRect::from_xywh(left, top, right - left, bottom - top)
+                    CacheRect::from_xywh(left, top, right - left, bottom - top)
                     && let Some(visible_rect) = intersection.clamp(page_width, page_height)
                 {
                     out.push(visible_rect);
@@ -197,45 +331,5 @@ impl Renderer {
                 );
             }
         }
-    }
-
-    /// Overflow 영역을 sink를 통해 렌더링한다 (노드 순회 부분만).
-    #[allow(clippy::too_many_arguments)]
-    pub(in super::super) fn render_next_page_overflow_to_sink(
-        sink: &mut dyn RenderSink,
-        scale_factor: f64,
-        theme: &Theme,
-        next_page: &Page,
-        doc: &Doc,
-        page_height: f32,
-        hard_clip_layout_rect: LayoutRect,
-        cull_clip: LayoutRect,
-    ) {
-        let scale = scale_factor as f32;
-        let ctx = RenderParams {
-            scale_factor,
-            selections: &[],
-            theme,
-            doc,
-            default_text_color: None,
-            is_focused: true,
-            phase: RenderPhase::Content,
-            render_origin: Point::zero(),
-        };
-
-        let transform = Affine::scale_non_uniform(scale as f64, scale as f64)
-            * Affine::translate((
-                -hard_clip_layout_rect.x as f64,
-                -hard_clip_layout_rect.y as f64,
-            ));
-        Self::render_node_for_next_page_overflow(
-            sink,
-            &next_page.root,
-            Point::new(0.0, page_height),
-            transform,
-            &ctx,
-            &RenderHints::default(),
-            cull_clip,
-        );
     }
 }

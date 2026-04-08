@@ -2,7 +2,7 @@ use crate::model::{ImageNode, Node, NodeId};
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_insert_image(&mut self, upload_id: Option<String>) -> Vec<Effect> {
+    pub(crate) fn handle_insert_image(&mut self, upload_id: Option<String>) -> Vec<Effect> {
         self.transact(|tr| {
             tr.insert_node(Node::Image(ImageNode {
                 id: None,
@@ -12,7 +12,11 @@ impl Runtime {
         })
     }
 
-    pub fn handle_set_image_proportion(&mut self, node_id: String, proportion: f32) -> Vec<Effect> {
+    pub(crate) fn handle_set_image_proportion(
+        &mut self,
+        node_id: String,
+        proportion: f32,
+    ) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };
@@ -39,7 +43,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_set_image_id(&mut self, node_id: String, image_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_set_image_id(&mut self, node_id: String, image_id: String) -> Vec<Effect> {
         let Some(node_id) = NodeId::from_string(&node_id) else {
             return vec![];
         };
@@ -63,7 +67,7 @@ impl Runtime {
         })
     }
 
-    pub fn handle_set_external_element_height(
+    pub(crate) fn handle_set_external_element_height(
         &mut self,
         node_id: String,
         height: f32,

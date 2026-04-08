@@ -22,7 +22,7 @@ impl<'a> HtmlContext<'a> {
         }
     }
 
-    pub fn node_to_dom(&self, node: &Node) -> Option<DomSpec> {
+    pub(crate) fn node_to_dom(&self, node: &Node) -> Option<DomSpec> {
         match node {
             Node::Text(text_node) => {
                 let specs: Vec<DomSpec> = text_node

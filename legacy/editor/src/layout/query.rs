@@ -237,7 +237,7 @@ fn collect_selected_non_text_blocks(doc: &Doc, selection: &Selection) -> Vec<Nod
         .into_iter()
         .filter(|&id| {
             doc.node(id)
-                .map(|n| !n.spec().map_or(false, |s| s.is_textblock()))
+                .map(|n| !n.spec().map_or(false, |s| s.is_textblock(doc.schema())))
                 .unwrap_or(false)
         })
         .collect()

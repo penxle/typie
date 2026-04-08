@@ -4,7 +4,6 @@ version = "0.0.1"
 edition = "2024"
 
 [workspace]
-
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
@@ -24,16 +23,12 @@ wasm = [
   "dep:js-sys",
   "uuid/js",
 ]
+native = ["dep:jni"]
 uniffi = ["dep:uniffi"]
 bench = []
 
 [target.'cfg(target_os = "android")'.dependencies]
-ash = { version = "0.38", default-features = false }
 jni = { version = "0.22", optional = true }
-
-[target.'cfg(target_vendor = "apple")'.dependencies]
-metal = "0.33"
-objc = "0.2.7"
 
 [dependencies]
 anyhow = "1.0"
@@ -43,7 +38,6 @@ csscolorparser = "0.8"
 fancy-regex = "0.17"
 fontique = { version = "0.8", default-features = false }
 heck = "0.5"
-kurbo = "0.13"
 icu_properties = { version = "2.1", default-features = false, features = [
   "serde",
 ] }
@@ -60,7 +54,6 @@ opentelemetry = { version = "0.31", default-features = false, features = [
   "trace",
 ] }
 parley = { version = "0.8", default-features = false, features = ["std"] }
-peniko = "0.6"
 pretty_assertions = "1.4"
 rstar = "0.12"
 rustc-hash = "2"
@@ -71,22 +64,17 @@ serde-wasm-bindgen = { version = "0.6", optional = true }
 serde_bytes = "0.11"
 serde_json = "1.0"
 skrifa = "0.40"
-vello_cpu = "0.0.7"
+tiny-skia = "0.12"
 tsify = { version = "0.5", features = ["js"], optional = true }
-uuid = { version = "1.23", features = ["v4", "serde"] }
+uuid = { version = "1.21", features = ["v4", "serde"] }
 wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
 web-sys = { version = "0.3", features = [
   "console",
   "Window",
   "Performance",
-  "OffscreenCanvas",
-  "OffscreenCanvasRenderingContext2d",
-  "ImageData",
 ], optional = true }
 uniffi = { version = "0.31", optional = true }
-vello = "0.8"
-wgpu = "28.0"
 write-fonts = "0.45"
 yazi = "0.2"
 zeno = "0.3"
@@ -98,12 +86,6 @@ criterion = "0.8"
 name = "benchmarks"
 harness = false
 required-features = ["bench"]
-
-[lints.rust]
-warnings = "allow"
-unexpected_cfgs = { level = "allow", check-cfg = [
-  'cfg(feature, values("cargo-clippy"))',
-] }
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ['-O', '--enable-bulk-memory']

@@ -5,7 +5,10 @@ use crate::runtime::{Effect, Runtime};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 impl Runtime {
-    pub fn collect_doc_fonts_from_nodes<I>(&self, node_ids: I) -> Vec<(String, u16, FxHashSet<u32>)>
+    pub(crate) fn collect_doc_fonts_from_nodes<I>(
+        &self,
+        node_ids: I,
+    ) -> Vec<(String, u16, FxHashSet<u32>)>
     where
         I: IntoIterator<Item = NodeId>,
     {
@@ -121,7 +124,7 @@ impl Runtime {
         fonts
     }
 
-    pub fn handle_fonts_loaded(
+    pub(crate) fn handle_fonts_loaded(
         &mut self,
         family: String,
         weight: u16,

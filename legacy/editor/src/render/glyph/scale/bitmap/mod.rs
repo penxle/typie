@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-pub mod png;
+pub(crate) mod png;
 
 /// Decodes a PNG image.
 pub fn decode_png(data: &[u8], scratch: &mut Vec<u8>, target: &mut [u8]) -> Option<(u32, u32)> {

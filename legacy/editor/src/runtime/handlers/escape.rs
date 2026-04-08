@@ -1,7 +1,7 @@
 use crate::runtime::{Effect, Runtime};
 
 impl Runtime {
-    pub fn handle_escape(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_escape(&mut self) -> Vec<Effect> {
         if !self.state.selection.is_collapsed() {
             return self.transact(|tr| {
                 tr.collapse_selection()?;

@@ -1,6 +1,6 @@
 use crate::model::attr::Attr;
 use crate::model::tree::DocInner;
-use crate::model::tree::{CASCADE_ATTRS_KEY, REMARKS_KEY};
+use crate::model::tree::node_ref::{CASCADE_ATTRS_KEY, REMARKS_KEY};
 use crate::model::*;
 use anyhow::{Context, Result};
 use loro::LoroMap;

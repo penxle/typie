@@ -4,7 +4,6 @@ use crate::model::{
     nearest_weight,
 };
 use crate::schema::Schema;
-
 use crate::state::position_helpers::find_child_at_offset;
 use crate::state::{Position, Selection, StructureSelectionInfo, compute_structure_selection};
 use crate::types::Affinity;
@@ -41,8 +40,8 @@ impl FragmentNode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fragment {
     pub nodes: IndexMap<NodeId, FragmentNode>,
-    pub open_start: usize,
-    pub open_end: usize,
+    pub(crate) open_start: usize,
+    pub(crate) open_end: usize,
 }
 
 #[derive(Debug)]
@@ -352,18 +351,18 @@ impl Fragment {
         }
     }
 
-    pub fn into_blocks(self) -> Self {
+    pub fn into_blocks(self, schema: &Schema) -> Self {
         let top_levels = self.top_level_node_ids();
-        let has_inline_top_level = top_levels.iter().any(|&id| self.is_inline_node(id));
+        let has_inline_top_level = top_levels.iter().any(|&id| self.is_inline_node(id, schema));
 
         if !has_inline_top_level {
             return self.closed();
         }
 
-        self.wrap_inline_nodes_in_paragraphs()
+        self.wrap_inline_nodes_in_paragraphs(schema)
     }
 
-    pub fn split_at_page_breaks(self) -> Self {
+    pub fn split_at_page_breaks(self, schema: &Schema) -> Self {
         let ends_with_page_break = self
             .nodes
             .values()
@@ -385,7 +384,7 @@ impl Fragment {
                 continue;
             }
 
-            if self.is_inline_node(*id) {
+            if self.is_inline_node(*id, schema) {
                 let pid = *current_para.get_or_insert_with(|| {
                     let pid = NodeId::new();
                     new_nodes.insert(
@@ -413,13 +412,13 @@ impl Fragment {
         }
     }
 
-    fn is_inline_node(&self, id: NodeId) -> bool {
+    fn is_inline_node(&self, id: NodeId, schema: &Schema) -> bool {
         self.node(id)
-            .map(|n| Schema::node_spec(n.data().as_type()).inline)
+            .map(|n| schema.node_spec(n.data().as_type()).inline)
             .unwrap_or(false)
     }
 
-    fn wrap_inline_nodes_in_paragraphs(self) -> Self {
+    fn wrap_inline_nodes_in_paragraphs(self, schema: &Schema) -> Self {
         let all_ids = self.collect_all_ids();
         let mut new_nodes = IndexMap::with_capacity(self.nodes.len());
         let mut current_para: Option<NodeId> = None;
@@ -430,7 +429,7 @@ impl Fragment {
                 continue;
             }
 
-            if self.is_inline_node(*id) {
+            if self.is_inline_node(*id, schema) {
                 let pid = *current_para.get_or_insert_with(|| {
                     let pid = NodeId::new();
                     new_nodes.insert(
@@ -622,7 +621,7 @@ impl Fragment {
             .collect()
     }
 
-    pub fn content_node_ids(&self) -> Vec<NodeId> {
+    pub fn content_node_ids(&self, schema: &Schema) -> Vec<NodeId> {
         if self.open_start == 0 {
             return self.top_level_node_ids();
         }
@@ -633,7 +632,7 @@ impl Fragment {
             let mut next_level = Vec::new();
             for node_id in &current_level {
                 if let Some(node) = self.nodes.get(node_id) {
-                    let spec = Schema::node_spec(node.data().as_type());
+                    let spec = schema.node_spec(node.data().as_type());
                     if spec.content.is_leaf() {
                         next_level.push(*node_id);
                         continue;
@@ -937,15 +936,15 @@ impl Fragment {
         }
     }
 
-    pub fn inline_len(&self) -> usize {
+    pub fn inline_len(&self, schema: &Schema) -> usize {
         self.nodes
             .iter()
-            .filter(|(_, n)| Schema::node_spec(n.data().as_type()).inline)
+            .filter(|(_, n)| schema.node_spec(n.data().as_type()).inline)
             .map(|(_, n)| n.data().len())
             .sum()
     }
 
-    pub fn last_top_level_inline_len(&self) -> usize {
+    pub fn last_top_level_inline_len(&self, schema: &Schema) -> usize {
         let top_levels = self.top_level_node_ids();
         let last_id = match top_levels.last() {
             Some(id) => *id,
@@ -955,7 +954,7 @@ impl Fragment {
         self.nodes
             .iter()
             .filter(|(_, n)| {
-                n.parent() == Some(last_id) && Schema::node_spec(n.data().as_type()).inline
+                n.parent() == Some(last_id) && schema.node_spec(n.data().as_type()).inline
             })
             .map(|(_, n)| n.data().len())
             .sum()
@@ -1319,7 +1318,7 @@ mod tests {
 
     #[test]
     fn test_empty_fragment_from_collapsed_selection() {
-        let doc = Rc::new(Doc::default());
+        let doc = Rc::new(Doc::new());
         let selection = Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::Downstream));
 
         let fragment = selection.extract_fragment(&doc).unwrap();

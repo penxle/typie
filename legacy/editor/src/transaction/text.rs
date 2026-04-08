@@ -1,6 +1,5 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::schema::Schema;
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 use crate::state::position_helpers::{
     calculate_offset_before_child, compare_positions, find_child_at_offset,
@@ -202,7 +201,7 @@ impl Transaction {
                 let Some(ancestor_data) = ancestor.node() else {
                     continue;
                 };
-                let spec = Schema::node_spec(ancestor_data.as_type());
+                let spec = self.doc().schema().node_spec(ancestor_data.as_type());
                 match spec.styles {
                     Some(items) if !items.is_empty() => {
                         for &item in items {
@@ -684,7 +683,10 @@ impl Transaction {
             lowest_common_ancestor_id(self.doc(), from.node_id, to.node_id).unwrap_or(NodeId::ROOT);
         let lca = self.doc().node(lca_id).context("LCA not found")?;
 
-        if lca.spec().map_or(false, |s| s.is_textblock()) {
+        if lca
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             self.mark_text_mutation(from.node_id);
             if from.node_id != to.node_id {
                 self.mark_text_mutation(to.node_id);
@@ -870,7 +872,10 @@ impl Transaction {
             let Some(container) = self.doc().node(container_id) else {
                 break;
             };
-            if !container.spec().map_or(false, |s| s.is_textblock()) {
+            if !container
+                .spec()
+                .map_or(false, |s| s.is_textblock(self.doc().schema()))
+            {
                 if let Some(first_child) = container.first_child() {
                     self.try_lift_block(first_child.node_id(), lca_id, start_group)?;
                     continue;
@@ -883,7 +888,10 @@ impl Transaction {
 
     fn find_first_textblock_pos(&self, node_id: NodeId) -> Option<Position> {
         let node = self.doc().node(node_id)?;
-        if node.spec().map_or(false, |s| s.is_textblock()) {
+        if node
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             return Some(Position::new(node_id, 0, Affinity::Downstream));
         }
         for child in node.children() {
@@ -896,7 +904,10 @@ impl Transaction {
 
     fn find_last_textblock_pos(&self, node_id: NodeId) -> Option<Position> {
         let node = self.doc().node(node_id)?;
-        if node.spec().map_or(false, |s| s.is_textblock()) {
+        if node
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             let len = block_content_len(&node);
             return Some(Position::new(node_id, len, Affinity::Downstream));
         }
@@ -909,7 +920,7 @@ impl Transaction {
         None
     }
 
-    pub fn is_ancestor_of(&self, ancestor_id: NodeId, node_id: NodeId) -> bool {
+    pub(crate) fn is_ancestor_of(&self, ancestor_id: NodeId, node_id: NodeId) -> bool {
         if ancestor_id == node_id {
             return false;
         }

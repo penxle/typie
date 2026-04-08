@@ -5,7 +5,6 @@ mod utils;
 use crate::model::*;
 use crate::schema::Schema;
 use anyhow::Result;
-
 pub use builder::DomSpec;
 use builder::HtmlBuilder;
 pub use codec::{
@@ -56,6 +55,7 @@ impl Fragment {
 
         let (open_start, open_end) = parse_meta(&doc);
 
+        let schema = parse_schema();
         let node_rules = node_parse_rules();
         let style_rules = style_parse_rules();
         let annotation_rules = annotation_parse_rules();
@@ -69,6 +69,7 @@ impl Fragment {
             &mut builder,
             &[],
             &[],
+            schema,
             node_rules,
             style_rules,
             annotation_rules,
@@ -82,6 +83,11 @@ impl Fragment {
             .normalize_font_weights()
             .merge_adjacent_text_nodes())
     }
+}
+
+fn parse_schema() -> &'static Schema {
+    static SCHEMA: OnceLock<Schema> = OnceLock::new();
+    SCHEMA.get_or_init(Schema::default)
 }
 
 fn node_parse_rules() -> &'static [NodeParseRule] {
@@ -147,6 +153,7 @@ fn parse_children(
     builder: &mut FragmentBuilder,
     styles: &[Style],
     annotations: &[Annotation],
+    schema: &Schema,
     node_rules: &[NodeParseRule],
     style_rules: &[StyleParseRule],
     annotation_rules: &[AnnotationParseRule],
@@ -163,6 +170,7 @@ fn parse_children(
                     builder,
                     styles,
                     annotations,
+                    schema,
                     node_rules,
                     style_rules,
                     annotation_rules,
@@ -172,7 +180,7 @@ fn parse_children(
             ScraperNode::Text(t) => {
                 let s = t.text.to_string();
                 let is_textblock_parent = parent_type
-                    .map(|pt| Schema::node_spec(pt).is_textblock())
+                    .map(|pt| schema.node_spec(pt).is_textblock(schema))
                     .unwrap_or(false);
                 let is_whitespace_only = s.chars().all(|c| c.is_ascii_whitespace());
                 let has_inline_styles = !styles.is_empty();
@@ -204,6 +212,7 @@ fn parse_element(
     builder: &mut FragmentBuilder,
     styles: &[Style],
     annotations: &[Annotation],
+    schema: &Schema,
     node_rules: &[NodeParseRule],
     style_rules: &[StyleParseRule],
     annotation_rules: &[AnnotationParseRule],
@@ -218,12 +227,12 @@ fn parse_element(
     if let Some(node) = try_parse_node(elem, node_rules) {
         let node_type = node.as_type();
         let allowed = parent_type
-            .map(|pt| Schema::node_spec(pt).content.matches(node_type))
+            .map(|pt| schema.node_spec(pt).content.matches(node_type))
             .unwrap_or(true);
 
         if allowed {
             let id = read_node_id(elem).unwrap_or_else(NodeId::new);
-            let has_content = !Schema::node_spec(node_type).content.is_leaf();
+            let has_content = !schema.node_spec(node_type).content.is_leaf();
             *builder = std::mem::take(builder).add((id, FragmentNode::new(node, parent_id)));
 
             if has_content {
@@ -235,6 +244,7 @@ fn parse_element(
                     builder,
                     &[],
                     &[],
+                    schema,
                     node_rules,
                     style_rules,
                     annotation_rules,
@@ -292,6 +302,7 @@ fn parse_element(
             builder,
             &combined_styles,
             &combined_annotations,
+            schema,
             node_rules,
             style_rules,
             annotation_rules,

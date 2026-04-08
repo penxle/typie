@@ -1,5 +1,4 @@
 use crate::model::{Doc, NodeId};
-use crate::schema::Schema;
 use anyhow::Result;
 use std::rc::Rc;
 
@@ -91,7 +90,7 @@ impl<'a> BlockTraverser<'a> {
             *idx += 1;
 
             if let Some(node_type) = self.doc.get_node_type(child_id) {
-                let spec = Schema::node_spec(node_type);
+                let spec = self.doc.schema().node_spec(node_type);
                 if !spec.inline {
                     let grandchildren = self.doc.get_children_ids(child_id);
                     self.stack.push((child_id, grandchildren, 0));
@@ -119,7 +118,7 @@ impl<'a> BlockTraverser<'a> {
             let child_id = children[*idx];
 
             if let Some(node_type) = self.doc.get_node_type(child_id) {
-                let spec = Schema::node_spec(node_type);
+                let spec = self.doc.schema().node_spec(node_type);
                 if !spec.inline {
                     let grandchildren = self.doc.get_children_ids(child_id);
                     let len = grandchildren.len();

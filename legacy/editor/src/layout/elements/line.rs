@@ -1339,6 +1339,7 @@ pub struct LineMetric {
 pub fn build_metrics(
     layout: &parley::Layout<TextBrush>,
     text: &str,
+    scale_factor: f64,
     default_strut: StrutMetrics,
     per_line_struts: Option<&[StrutMetrics]>,
     line_height_ratio: f32,
@@ -1519,16 +1520,16 @@ pub fn build_metrics(
         };
         let cluster_origin = min_cluster_x.unwrap_or(0.0);
         for cluster in &mut clusters {
-            cluster.x = cluster.x - cluster_origin;
+            cluster.x = snap_to_pixel(cluster.x - cluster_origin, scale_factor);
         }
 
         lines.push(LineMetric {
-            top: line_top,
-            left,
+            top: snap_to_pixel(line_top, scale_factor),
+            left: snap_to_pixel(left, scale_factor),
             height,
             leading,
-            baseline,
-            ascent,
+            baseline: snap_to_pixel(baseline, scale_factor),
+            ascent: snap_to_pixel(ascent, scale_factor),
             // NOTE: width를 스냅하면 실제 glyph 폭보다 작아져 overflow가 생길 수 있어 원본값 유지
             content_width,
             start_offset: line_start_char,
@@ -1542,6 +1543,14 @@ pub fn build_metrics(
     }
 
     lines
+}
+
+fn snap_to_pixel(logical: f32, scale: f64) -> f32 {
+    if (scale * 4.0).fract() == 0.0 {
+        (logical * scale as f32).floor() / scale as f32
+    } else {
+        logical
+    }
 }
 
 #[cfg(test)]
@@ -1581,6 +1590,7 @@ mod tests {
         let metrics = build_metrics(
             &layout,
             text,
+            1.0,
             StrutMetrics {
                 ascent: 0.0,
                 descent: 0.0,
@@ -1597,7 +1607,7 @@ mod tests {
             "line ascent should recover from zero strut using Parley metrics"
         );
         assert!(
-            (line.ascent - parley_metrics.ascent).abs() <= eps,
+            (line.ascent - snap_to_pixel(parley_metrics.ascent, 1.0)).abs() <= eps,
             "line ascent should fall back to Parley ascent: build_metrics={}, parley={}",
             line.ascent,
             parley_metrics.ascent

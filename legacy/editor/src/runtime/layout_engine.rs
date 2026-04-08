@@ -12,10 +12,11 @@ use std::cell::RefCell;
 #[cfg(test)]
 use std::rc::Rc;
 
-pub struct LayoutEngine {
+pub(crate) struct LayoutEngine {
     viewport_width: f32,
     viewport_height: f32,
     width: f32,
+    scale_factor: f64,
     pages: Vec<Page>,
     layout_cache: RefCell<LayoutCache>,
     view_states: ViewStates,
@@ -25,11 +26,12 @@ pub struct LayoutEngine {
 }
 
 impl LayoutEngine {
-    pub fn new(width: f32, diagnostics: FrameDiagnostics) -> Self {
+    pub(crate) fn new(width: f32, scale_factor: f64, diagnostics: FrameDiagnostics) -> Self {
         Self {
             viewport_width: width,
             viewport_height: 0.0,
             width,
+            scale_factor,
             pages: Vec::new(),
             layout_cache: RefCell::new(LayoutCache::new()),
             view_states: ViewStates::default(),
@@ -39,40 +41,48 @@ impl LayoutEngine {
         }
     }
 
-    pub fn set_max_pages(&mut self, max_pages: Option<usize>) {
+    pub(crate) fn set_max_pages(&mut self, max_pages: Option<usize>) {
         self.max_pages = max_pages;
     }
 
-    pub fn viewport_width(&self) -> f32 {
+    pub(crate) fn viewport_width(&self) -> f32 {
         self.viewport_width
     }
 
-    pub fn viewport_height(&self) -> f32 {
+    pub(crate) fn viewport_height(&self) -> f32 {
         self.viewport_height
     }
 
-    pub fn set_viewport(&mut self, width: f32, height: f32) {
+    pub(crate) fn set_viewport(&mut self, width: f32, height: f32) {
         self.viewport_width = width;
         self.viewport_height = height;
     }
 
-    pub fn width(&self) -> f32 {
+    pub(crate) fn width(&self) -> f32 {
         self.width
     }
 
-    pub fn set_width(&mut self, width: f32) {
+    pub(crate) fn set_width(&mut self, width: f32) {
         self.width = width;
     }
 
-    pub fn pages(&self) -> &[Page] {
+    pub(crate) fn scale_factor(&self) -> f64 {
+        self.scale_factor
+    }
+
+    pub(crate) fn set_scale_factor(&mut self, scale_factor: f64) {
+        self.scale_factor = scale_factor;
+    }
+
+    pub(crate) fn pages(&self) -> &[Page] {
         &self.pages
     }
 
-    pub fn page_count(&self) -> usize {
+    pub(crate) fn page_count(&self) -> usize {
         self.pages.len()
     }
 
-    pub fn set_layout_debug_enabled(&mut self, enabled: bool) {
+    pub(crate) fn set_layout_debug_enabled(&mut self, enabled: bool) {
         self.layout_debug_enabled = enabled;
         if !enabled {
             self.diagnostics.clear_layout_pass();
@@ -80,39 +90,39 @@ impl LayoutEngine {
     }
 
     #[cfg(test)]
-    pub fn is_layout_cached(&self, node_id: NodeId) -> bool {
+    pub(crate) fn is_layout_cached(&self, node_id: NodeId) -> bool {
         self.layout_cache.borrow().get(node_id).is_some()
     }
 
     #[cfg(test)]
-    pub fn cached_layout(&self, node_id: NodeId) -> Option<Rc<LayoutNode>> {
+    pub(crate) fn cached_layout(&self, node_id: NodeId) -> Option<Rc<LayoutNode>> {
         self.layout_cache.borrow().get(node_id)
     }
 
-    pub fn set_fold_state(&mut self, node_id: NodeId, expanded: bool) {
+    pub(crate) fn set_fold_state(&mut self, node_id: NodeId, expanded: bool) {
         self.view_states
             .insert(node_id, NodeViewState::Fold { expanded });
     }
 
-    pub fn fold_expanded(&self, node_id: NodeId) -> bool {
+    pub(crate) fn fold_expanded(&self, node_id: NodeId) -> bool {
         self.view_states
             .get(&node_id)
             .map(|state| state.fold_expanded())
             .unwrap_or(false)
     }
 
-    pub fn set_external_height(&mut self, node_id: NodeId, height: f32) {
+    pub(crate) fn set_external_height(&mut self, node_id: NodeId, height: f32) {
         self.view_states
             .insert(node_id, NodeViewState::ExternalHeight { height });
     }
 
-    pub fn external_height(&self, node_id: NodeId) -> Option<f32> {
+    pub(crate) fn external_height(&self, node_id: NodeId) -> Option<f32> {
         self.view_states
             .get(&node_id)
             .and_then(|state| state.external_height())
     }
 
-    pub fn apply_invalidation(&mut self, doc: &Doc, batch: &LayoutInvalidationBatch) {
+    pub(crate) fn apply_invalidation(&mut self, doc: &Doc, batch: &LayoutInvalidationBatch) {
         if batch.is_empty() {
             return;
         }
@@ -147,7 +157,7 @@ impl LayoutEngine {
         }
     }
 
-    pub fn recompute(
+    pub(crate) fn recompute(
         &mut self,
         doc: &Doc,
         settings: &DocumentSettings,
@@ -200,6 +210,7 @@ impl LayoutEngine {
                 settings,
                 default_attrs,
                 decorations,
+                self.scale_factor,
                 &self.view_states,
                 &self.layout_cache,
                 Some(trace_ref),
@@ -210,6 +221,7 @@ impl LayoutEngine {
                 settings,
                 default_attrs,
                 decorations,
+                self.scale_factor,
                 &self.view_states,
                 &self.layout_cache,
             )

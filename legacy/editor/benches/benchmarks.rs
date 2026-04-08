@@ -38,7 +38,7 @@ fn test_theme() -> Theme {
 fn runtime_with_paragraphs(count: usize) -> Runtime {
     init_test_env();
 
-    let doc = Rc::new(Doc::default());
+    let doc = Rc::new(Doc::new());
     let initial_state = State::new(
         doc,
         Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
@@ -154,7 +154,7 @@ fn bench_editing(c: &mut Criterion) {
             || {
                 init_test_env();
 
-                let doc = Rc::new(Doc::default());
+                let doc = Rc::new(Doc::new());
                 let initial_state = State::new(
                     doc,
                     Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
@@ -210,7 +210,7 @@ fn bench_editing(c: &mut Criterion) {
             || {
                 init_test_env();
 
-                let doc = Rc::new(Doc::default());
+                let doc = Rc::new(Doc::new());
                 let initial_state = State::new(
                     doc,
                     Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),
@@ -404,7 +404,7 @@ const KOREAN_PROSE: &str = include_str!("fixtures/korean_prose.txt");
 fn runtime_with_long_paragraph() -> (Runtime, NodeId, usize) {
     init_bench_env();
 
-    let doc = Rc::new(Doc::default());
+    let doc = Rc::new(Doc::new());
     let initial_state = State::new(
         doc,
         Selection::collapsed(Position::new(NodeId::ROOT, 0, Affinity::default())),

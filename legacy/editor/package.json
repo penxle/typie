@@ -30,5 +30,8 @@
     "mobile:release": "scripts/build_mobile.sh all release",
     "wasm:build": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build --target=web --no-pack --dev",
     "wasm:release": "RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build --target=web --no-pack"
+  },
+  "devDependencies": {
+    "wasm-pack": "^0.14.0"
   }
 }

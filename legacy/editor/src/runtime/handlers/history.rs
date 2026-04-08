@@ -2,7 +2,7 @@ use crate::runtime::{Effect, Runtime};
 use crate::transaction::compute_styles_at_cursor;
 
 impl Runtime {
-    pub fn handle_undo(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_undo(&mut self) -> Vec<Effect> {
         self.flush();
 
         if !self.undo_manager.can_undo() {
@@ -61,7 +61,7 @@ impl Runtime {
         effects
     }
 
-    pub fn handle_redo(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_redo(&mut self) -> Vec<Effect> {
         self.flush();
 
         if !self.undo_manager.can_redo() {

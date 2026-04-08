@@ -1,6 +1,6 @@
 use crate::model::*;
 use crate::runtime::Effect;
-use crate::schema::{NodeSpec, Schema};
+use crate::schema::NodeSpec;
 use crate::state::position_helpers::{find_child_at_offset, leaf_block_end, leaf_block_start};
 use crate::state::{Position, Selection, block_content_len};
 use crate::transaction::Transaction;
@@ -246,7 +246,7 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn delete_node_recursive(&mut self, node_id: NodeId) -> Result<()> {
+    pub(crate) fn delete_node_recursive(&mut self, node_id: NodeId) -> Result<()> {
         let parent_id = self
             .doc()
             .node(node_id)
@@ -263,7 +263,7 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn delete_text_range(
+    pub(crate) fn delete_text_range(
         &mut self,
         node_id: NodeId,
         from_byte: Option<usize>,
@@ -436,7 +436,7 @@ impl Transaction {
         Ok(node_ids)
     }
 
-    pub fn merge_blocks_content(
+    pub(crate) fn merge_blocks_content(
         &mut self,
         from_block_id: NodeId,
         to_block_id: NodeId,
@@ -492,7 +492,7 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn clean_up_empty_ancestors(&mut self, mut node_id: NodeId) -> Result<()> {
+    pub(crate) fn clean_up_empty_ancestors(&mut self, mut node_id: NodeId) -> Result<()> {
         loop {
             let Some(node) = self.doc().node(node_id) else {
                 break;
@@ -899,10 +899,11 @@ impl Transaction {
             };
 
             let container_type = container.node_type();
+            let schema = self.doc().schema();
             let mut nested_container_ids = Vec::new();
 
             match first_child.spec() {
-                Some(spec) if spec.is_textblock() => {
+                Some(spec) if spec.is_textblock(schema) => {
                     if block_content_len(&first_child) != 0 {
                         return Ok(false);
                     }
@@ -1000,7 +1001,7 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn insert_fragment(
+    pub(crate) fn insert_fragment(
         &mut self,
         position: Position,
         fragment: Fragment,
@@ -1060,7 +1061,7 @@ impl Transaction {
         let top_level_ids = fragment.top_level_node_ids();
         let is_selectable = top_level_ids.len() == 1
             && fragment.node(top_level_ids[0]).map_or(false, |n| {
-                let spec = Schema::node_spec(n.data().as_type());
+                let spec = self.doc().schema().node_spec(n.data().as_type());
                 spec.selectable
             });
 
@@ -1086,7 +1087,10 @@ impl Transaction {
             .and_then(|node| {
                 node.parent().map(|parent| {
                     let index = node.index().unwrap_or(0);
-                    let offset = if parent.spec().map_or(false, |s| s.is_textblock()) {
+                    let offset = if parent
+                        .spec()
+                        .map_or(false, |s| s.is_textblock(self.doc().schema()))
+                    {
                         parent
                             .children()
                             .take(index)
@@ -1273,7 +1277,7 @@ impl Transaction {
                 let target = open_end_survivor.or(*last_top_level);
                 if *had_open_start {
                     if let Some(target_id) = target {
-                        let offset = fragment.last_top_level_inline_len();
+                        let offset = fragment.last_top_level_inline_len(self.doc().schema());
                         return Ok(Position::new(target_id, offset, Affinity::Downstream));
                     }
                     Ok(position)
@@ -1317,7 +1321,7 @@ impl Transaction {
         } else {
             let target_id = merged_start_node.unwrap_or(position.node_id);
             let base_offset = merged_start_node.map_or(position.offset, |_| start_merge_offset);
-            let end_offset = base_offset + fragment.inline_len();
+            let end_offset = base_offset + fragment.inline_len(self.doc().schema());
             Ok(Position::new(target_id, end_offset, Affinity::Downstream))
         }
     }
@@ -1349,11 +1353,12 @@ impl Transaction {
         position: Position,
         fragment: &Fragment,
     ) -> Result<Position> {
+        let schema = self.doc().schema();
         let has_open_start = fragment.has_open_start();
 
         let fragment_top_types: Vec<_> = if has_open_start {
             fragment
-                .content_node_ids()
+                .content_node_ids(schema)
                 .into_iter()
                 .filter_map(|id| fragment.node(id))
                 .map(|n| n.data().as_type())
@@ -1369,7 +1374,7 @@ impl Transaction {
 
         let has_block_nodes = fragment_top_types
             .iter()
-            .any(|t| !Schema::node_spec(*t).inline);
+            .any(|t| !schema.node_spec(*t).inline);
 
         if !has_block_nodes {
             return Ok(position);
@@ -1467,7 +1472,7 @@ impl Transaction {
         Ok(pos)
     }
 
-    pub fn delete_node_with_selection_adjustment(&mut self, node_id: NodeId) -> Result<()> {
+    pub(crate) fn delete_node_with_selection_adjustment(&mut self, node_id: NodeId) -> Result<()> {
         let selection_before = *self.selection();
 
         let (parent_id, node_index, anchor_in_deleted_subtree, head_in_deleted_subtree) =
@@ -1564,10 +1569,14 @@ impl Transaction {
         let top_level_ids = remapped.top_level_node_ids();
 
         // For selectable nodes inserted into non-textblock, return block position after
-        if !target.spec().map_or(false, |s| s.is_textblock()) && top_level_ids.len() == 1 {
+        if !target
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+            && top_level_ids.len() == 1
+        {
             if let Some(frag_node) = remapped.node(top_level_ids[0]) {
                 let node_type = frag_node.data().as_type();
-                let spec = Schema::node_spec(node_type);
+                let spec = self.state.doc.schema().node_spec(node_type);
                 if spec.selectable {
                     return Ok(Position::new(
                         position.node_id,
@@ -1578,7 +1587,10 @@ impl Transaction {
             }
         }
 
-        let inserted_count = if target.spec().map_or(false, |s| s.is_textblock()) {
+        let inserted_count = if target
+            .spec()
+            .map_or(false, |s| s.is_textblock(self.doc().schema()))
+        {
             let top_level_set: std::collections::HashSet<_> = top_level_ids.iter().collect();
             remapped
                 .iter()
@@ -1627,11 +1639,12 @@ impl Transaction {
         if let Some(survivor) = last_survivor {
             let pos = Position::new(survivor, 0, Affinity::Downstream);
             if let Some(node) = self.doc().node(survivor) {
+                let schema = self.doc().schema();
                 let mut textblock_ids = Vec::new();
                 let mut stack: Vec<NodeId> = node.children().map(|c| c.node_id()).collect();
                 while let Some(id) = stack.pop() {
                     if let Some(child) = self.doc().node(id) {
-                        if child.spec().map_or(false, |s| s.is_textblock()) {
+                        if child.spec().map_or(false, |s| s.is_textblock(schema)) {
                             textblock_ids.push(id);
                         }
                         for g in child.children() {
@@ -1689,7 +1702,7 @@ impl Transaction {
         Ok(position)
     }
 
-    pub fn merge_adjacent_text_nodes(&mut self, position: Position) -> Result<()> {
+    pub(crate) fn merge_adjacent_text_nodes(&mut self, position: Position) -> Result<()> {
         let block = self
             .doc()
             .node(position.node_id)
@@ -1937,7 +1950,7 @@ impl Transaction {
             (parent_node.children().count(), None)
         };
 
-        let nodes_to_insert = fragment.content_node_ids();
+        let nodes_to_insert = fragment.content_node_ids(self.doc().schema());
 
         let mut index = insert_index;
         for (node_id, fragment_node) in fragment.iter() {
@@ -2049,7 +2062,7 @@ impl Transaction {
     }
 
     // 블록을 타겟 부모 위치로 구조적 제약(structural/isolating)을 준수하며 lift하고 빈 조상을 정리
-    pub fn try_lift_block(
+    pub(crate) fn try_lift_block(
         &mut self,
         block_id: NodeId,
         target_parent_id: NodeId,

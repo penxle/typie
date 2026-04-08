@@ -28,7 +28,7 @@ const AUTO_SURROUND_PAIRS: &[(&str, &str, &str)] = &[
 ];
 
 impl Runtime {
-    pub fn try_auto_surround(&mut self, text: &str) -> Option<Vec<Effect>> {
+    pub(crate) fn try_auto_surround(&mut self, text: &str) -> Option<Vec<Effect>> {
         if !is_auto_surround_enabled() {
             return None;
         }

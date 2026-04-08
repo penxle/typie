@@ -3,7 +3,7 @@ use crate::runtime::{Effect, Runtime};
 use crate::state::ancestor_helpers::lowest_common_ancestor_id;
 
 impl Runtime {
-    pub fn cycle_callout_variant(&mut self, node_id: NodeId) -> Vec<Effect> {
+    pub(crate) fn cycle_callout_variant(&mut self, node_id: NodeId) -> Vec<Effect> {
         let Some(node_ref) = self.state.doc.node(node_id) else {
             return vec![];
         };
@@ -29,14 +29,14 @@ impl Runtime {
         }]
     }
 
-    pub fn handle_cycle_callout_variant_at(&mut self, node_id: String) -> Vec<Effect> {
+    pub(crate) fn handle_cycle_callout_variant_at(&mut self, node_id: String) -> Vec<Effect> {
         let Ok(node_id) = node_id.parse::<NodeId>() else {
             return vec![];
         };
         self.cycle_callout_variant(node_id)
     }
 
-    pub fn handle_cycle_callout_variant_in_selection(&mut self) -> Vec<Effect> {
+    pub(crate) fn handle_cycle_callout_variant_in_selection(&mut self) -> Vec<Effect> {
         let selection = self.state.selection;
         let Some(lca_id) =
             lowest_common_ancestor_id(self.doc(), selection.anchor.node_id, selection.head.node_id)

@@ -8,7 +8,7 @@ use crate::state::{
 use crate::transaction::Transaction;
 use anyhow::{Context, Result};
 
-pub fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<Style> {
+pub(crate) fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<Style> {
     let Some(node) = doc.node(position.node_id) else {
         return resolve_style_cascade(doc, position.node_id);
     };
@@ -43,7 +43,7 @@ pub fn compute_styles_at_cursor(doc: &Doc, position: &Position) -> Vec<Style> {
 /// Character-at semantics: returns the styles of the segment containing the character
 /// at the given offset (>= start, < end), unlike `compute_styles_at_cursor` which
 /// uses cursor semantics (> start, <= end).
-pub fn compute_styles_at_char_position(doc: &Doc, position: &Position) -> Vec<Style> {
+pub(crate) fn compute_styles_at_char_position(doc: &Doc, position: &Position) -> Vec<Style> {
     let Some(node) = doc.node(position.node_id) else {
         return resolve_style_cascade(doc, position.node_id);
     };
@@ -72,7 +72,7 @@ pub fn compute_styles_at_char_position(doc: &Doc, position: &Position) -> Vec<St
     resolve_style_cascade(doc, position.node_id)
 }
 
-pub fn resolve_style_cascade(doc: &Doc, node_id: NodeId) -> Vec<Style> {
+pub(crate) fn resolve_style_cascade(doc: &Doc, node_id: NodeId) -> Vec<Style> {
     let mut attrs: Vec<Attr> = Vec::new();
     let Some(node) = doc.node(node_id) else {
         return Vec::new();
@@ -127,7 +127,9 @@ fn collect_empty_textblocks_in_range(
 
     if !is_rectangular && to.offset == 0 && from.node_id != to.node_id {
         if let Some(block) = tr.node(to.node_id) {
-            if block.spec().map_or(false, |s| s.is_textblock())
+            if block
+                .spec()
+                .map_or(false, |s| s.is_textblock(tr.doc().schema()))
                 && block_content_len(&block) == 0
                 && !block_ids.contains(&to.node_id)
             {
@@ -138,7 +140,11 @@ fn collect_empty_textblocks_in_range(
 
     block_ids.retain(|&id| {
         tr.node(id)
-            .map(|b| b.spec().map_or(false, |s| s.is_textblock()) && block_content_len(&b) == 0)
+            .map(|b| {
+                b.spec()
+                    .map_or(false, |s| s.is_textblock(tr.doc().schema()))
+                    && block_content_len(&b) == 0
+            })
             .unwrap_or(false)
     });
 
@@ -1271,7 +1277,7 @@ impl Transaction {
         Ok(true)
     }
 
-    pub fn resolved_font(&self, node_id: NodeId) -> (String, u16) {
+    pub(crate) fn resolved_font(&self, node_id: NodeId) -> (String, u16) {
         let cascade = self.resolve_style_cascade(node_id);
         let mut family = cascade
             .iter()

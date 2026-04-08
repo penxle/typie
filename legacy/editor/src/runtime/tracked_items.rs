@@ -22,9 +22,28 @@ pub enum TrackedItemGroup {
 #[serde(rename_all = "camelCase")]
 pub struct RawTrackedItem {
     pub id: String,
+    #[serde(
+        serialize_with = "serialize_node_id",
+        deserialize_with = "deserialize_node_id"
+    )]
     pub node_id: NodeId,
     pub start_offset: usize,
     pub end_offset: usize,
+}
+
+fn serialize_node_id<S>(node_id: &NodeId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&node_id.to_string())
+}
+
+fn deserialize_node_id<'de, D>(deserializer: D) -> Result<NodeId, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    NodeId::from_string(&s).ok_or_else(|| serde::de::Error::custom("invalid node_id"))
 }
 
 #[derive(Clone)]
@@ -40,7 +59,7 @@ pub struct TrackedItem {
 
 impl TrackedItem {
     pub fn resolve_range(&self, doc: &Doc) -> Option<(NodeId, usize, usize)> {
-        let loro = doc.loro();
+        let loro = doc.loro_doc();
 
         let start_internal = loro
             .get_cursor_pos(&self.start_cursor)

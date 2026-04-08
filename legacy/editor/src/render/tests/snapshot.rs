@@ -5,8 +5,8 @@ fn snapshot_ignores_non_renderable_nodes() {
     let page1 = root_with_children(None, Size::new(300.0, 200.0));
     let page2 = root_with_children(None, Size::new(300.0, 200.0));
 
-    let snapshot1 = PageSnapshot::from_page(&page1);
-    let snapshot2 = PageSnapshot::from_page(&page2);
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
 
     assert!(
         snapshot1.dirty_rects(&snapshot2).is_empty(),
@@ -33,8 +33,8 @@ fn snapshot_reuses_renderable_child_when_root_rc_changes() {
         Size::new(300.0, 200.0),
     );
 
-    let snapshot1 = PageSnapshot::from_page(&page1);
-    let snapshot2 = PageSnapshot::from_page(&page2);
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
 
     assert!(
         snapshot1.dirty_rects(&snapshot2).is_empty(),
@@ -83,8 +83,8 @@ fn snapshot_reuses_wrapper_by_stable_identity() {
         Size::new(300.0, 200.0),
     );
 
-    let snapshot1 = PageSnapshot::from_page(&page1);
-    let snapshot2 = PageSnapshot::from_page(&page2);
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
 
     assert!(
         snapshot1.dirty_rects(&snapshot2).is_empty(),
@@ -125,8 +125,8 @@ fn snapshot_expands_dirty_rect_for_message_blockquote_tail() {
     let sent_page = make_page(BlockquoteVariant::MessageSent);
     let received_page = make_page(BlockquoteVariant::MessageReceived);
 
-    let snapshot_sent = PageSnapshot::from_page(&sent_page);
-    let snapshot_received = PageSnapshot::from_page(&received_page);
+    let snapshot_sent = PageRenderSnapshot::from_page(&sent_page);
+    let snapshot_received = PageRenderSnapshot::from_page(&received_page);
     let rects = snapshot_sent.dirty_rects(&snapshot_received);
 
     assert!(
@@ -180,8 +180,8 @@ fn snapshot_ignores_selection_only_table_cell_element() {
         Size::new(300.0, 200.0),
     );
 
-    let snapshot1 = PageSnapshot::from_page(&page1);
-    let snapshot2 = PageSnapshot::from_page(&page2);
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
 
     assert!(
         snapshot1.dirty_rects(&snapshot2).is_empty(),
@@ -250,8 +250,8 @@ fn snapshot_reuses_line_in_scoped_node_when_layout_is_unchanged() {
         Size::new(300.0, 200.0),
     );
 
-    let snapshot1 = PageSnapshot::from_page(&page1);
-    let snapshot2 = PageSnapshot::from_page(&page2);
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
 
     assert!(
         snapshot1.dirty_rects(&snapshot2).is_empty(),
@@ -322,8 +322,8 @@ fn snapshot_expands_dirty_rect_upward_for_ruby_line() {
         Size::new(300.0, 200.0),
     );
 
-    let snapshot1 = PageSnapshot::from_page(&page_without_ruby);
-    let snapshot2 = PageSnapshot::from_page(&page_with_ruby);
+    let snapshot1 = PageRenderSnapshot::from_page(&page_without_ruby);
+    let snapshot2 = PageRenderSnapshot::from_page(&page_with_ruby);
     let rects = snapshot1.dirty_rects(&snapshot2);
 
     assert!(
@@ -409,8 +409,8 @@ fn snapshot_distinguishes_ruby_and_background_segments() {
         Size::new(300.0, 200.0),
     );
 
-    let snapshot_ruby = PageSnapshot::from_page(&page_with_ruby);
-    let snapshot_background = PageSnapshot::from_page(&page_with_background);
+    let snapshot_ruby = PageRenderSnapshot::from_page(&page_with_ruby);
+    let snapshot_background = PageRenderSnapshot::from_page(&page_with_background);
 
     assert!(
         !snapshot_ruby.dirty_rects(&snapshot_background).is_empty(),
@@ -423,7 +423,7 @@ fn dense_line_shift_rects_are_coalesced_before_full_promotion() {
     let mut rects = Vec::new();
     for i in 0..40 {
         rects.push(
-            LayoutRect::from_xywh(20.0, 32.0 + i as f32 * 14.0, 260.0, 12.0).expect("valid rect"),
+            CacheRect::from_xywh(20.0, 32.0 + i as f32 * 14.0, 260.0, 12.0).expect("valid rect"),
         );
     }
 
@@ -466,7 +466,7 @@ fn height_only_resize_reuses_snapshot_and_repaints_exposed_strip() {
     let page1 = make_page(200.0);
     let page2 = make_page(260.0);
 
-    let doc = Doc::default();
+    let doc = Doc::new();
     let mut renderer = Renderer::new(1.0, FrameDiagnostics::new());
     renderer.set_render_debug(true);
 
@@ -532,8 +532,8 @@ fn snapshot_marks_table_border_dirty_when_columns_change_without_bounds_change()
     let page1 = make_page(3, vec![98.0, 98.0, 98.0]);
     let page2 = make_page(2, vec![148.0, 148.0]);
 
-    let snapshot1 = PageSnapshot::from_page(&page1);
-    let snapshot2 = PageSnapshot::from_page(&page2);
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
 
     assert!(
         !snapshot1.dirty_rects(&snapshot2).is_empty(),
@@ -581,8 +581,8 @@ fn snapshot_marks_removed_overflowing_table_strip_dirty() {
     let page1 = make_page(4, 420.0, vec![101.0, 101.0, 101.0, 101.0]);
     let page2 = make_page(3, 300.0, vec![98.0, 98.0, 98.0]);
 
-    let snapshot1 = PageSnapshot::from_page(&page1);
-    let snapshot2 = PageSnapshot::from_page(&page2);
+    let snapshot1 = PageRenderSnapshot::from_page(&page1);
+    let snapshot2 = PageRenderSnapshot::from_page(&page2);
     let rects = snapshot1.dirty_rects(&snapshot2);
 
     assert!(
