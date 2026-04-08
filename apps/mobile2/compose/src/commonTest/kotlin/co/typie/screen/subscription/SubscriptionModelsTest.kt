@@ -9,8 +9,10 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 class SubscriptionModelsTest {
@@ -138,6 +140,39 @@ class SubscriptionModelsTest {
     assertEquals(
       SubscriptionEntryDestination.EnrollPlan,
       subscriptionEntryDestination(hasSubscription = false),
+    )
+  }
+
+  @Test
+  fun `shouldAutoCloseCurrentPlan returns true when success has no subscription`() {
+    assertTrue(shouldAutoCloseCurrentPlan(QueryState.Success(null)))
+  }
+
+  @Test
+  fun `shouldAutoCloseCurrentPlan returns true when success is missing expiration`() {
+    assertTrue(
+      shouldAutoCloseCurrentPlan(
+        QueryState.Success(
+          SubscriptionSnapshot(
+            id = "subscription-id",
+            expiresAt = null,
+          ),
+        ),
+      ),
+    )
+  }
+
+  @Test
+  fun `shouldAutoCloseCurrentPlan returns false when subscription can render`() {
+    assertFalse(
+      shouldAutoCloseCurrentPlan(
+        QueryState.Success(
+          SubscriptionSnapshot(
+            id = "subscription-id",
+            expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
+          ),
+        ),
+      ),
     )
   }
 

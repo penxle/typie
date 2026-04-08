@@ -181,6 +181,20 @@ fun subscriptionRoute(destination: SubscriptionEntryDestination): Route {
   }
 }
 
+fun shouldAutoCloseCurrentPlan(
+  state: QueryState<SubscriptionSnapshot?>,
+): Boolean {
+  return when (state) {
+    is QueryState.Success -> {
+      val subscription = state.data ?: return true
+      subscription.expiresAt == null
+    }
+    QueryState.Loading,
+    is QueryState.Error,
+    -> false
+  }
+}
+
 fun currentPlanDetailLines(
   availability: SubscriptionAvailability,
   fee: Int,
