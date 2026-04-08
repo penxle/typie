@@ -37,8 +37,16 @@ fun InteractionScope(content: @Composable () -> Unit) {
 
 expect fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier
 expect fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier
-expect fun Modifier.overscroll(): Modifier
-expect fun Modifier.dragScrollable(state: ScrollableState, orientation: Orientation, enabled: Boolean = true): Modifier
+expect fun Modifier.desktopScrollBehavior(
+  state: ScrollableState,
+  orientation: Orientation,
+  enabled: Boolean = true,
+): Modifier
+internal expect fun Modifier.desktopDragScroll(
+  state: ScrollableState,
+  orientation: Orientation,
+  enabled: Boolean = true,
+): Modifier
 
 fun Modifier.clickable(onClick: suspend () -> Unit): Modifier = clickable(
   enabled = true,

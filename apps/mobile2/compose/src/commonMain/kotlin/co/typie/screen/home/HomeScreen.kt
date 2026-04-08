@@ -1,7 +1,6 @@
 package co.typie.screen.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -17,16 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.InlineTextContent
-import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -46,8 +41,6 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.shell.LocalBottomBarState
-import co.typie.ui.component.DocumentThumbnailPreview
-import co.typie.ui.component.EntityPreview
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainer
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -116,12 +109,10 @@ fun HomeScreen() {
           }
         }
 
-        RecentDocuments(data = model.query.data)
-
         RecentFolders(data = model.query.data)
 
         HomeFramedSection {
-          MoreDocuments(data = model.query.data)
+          RecentDocuments(data = model.query.data)
         }
 
         Spacer(Modifier.height(140.dp))
@@ -193,78 +184,6 @@ private fun SearchBar(
 }
 
 @Composable
-private fun RecentDocuments(data: HomeScreen_Query.Data) {
-  val nav = Nav.current
-  val documents = data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument }.take(5)
-
-  Column {
-    HomeFramedSection {
-      Skeleton.Keep {
-        Text(
-          "자주 찾은 글",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-          modifier = Modifier.padding(horizontal = 16.dp).padding(top = 24.dp, bottom = 12.dp),
-        )
-      }
-    }
-
-    if (documents.isEmpty()) {
-      HomeFramedSection {
-        Box(
-          modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .fillMaxWidth()
-            .height(110.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(AppTheme.colors.surfaceDefault),
-          contentAlignment = Alignment.Center,
-        ) {
-          Text(
-            "자주 찾은 글이 여기 나타나요",
-            style = AppTheme.typography.action,
-            color = AppTheme.colors.textTertiary,
-          )
-        }
-      }
-    } else {
-      val scrollState = rememberScrollState("recent-documents")
-
-      HomeFullBleedRail(scrollState = scrollState) {
-        for (document in documents) {
-          InteractionScope {
-            Row(
-              modifier = Modifier
-                .width(139.dp)
-                .clickable { nav.navigate(Route.Editor(document.entity.id)) }
-                .pressScale(),
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
-              verticalAlignment = Alignment.CenterVertically,
-            ) {
-              val shadowColor = AppTheme.colors.shadowAmbient
-
-              EntityPreview(
-                url = document.previewUrl,
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .dropShadow(RoundedCornerShape(12.dp)) {
-                    color = shadowColor
-                    radius = 16f
-                    spread = 8f
-                  }
-                  .clip(RoundedCornerShape(12.dp))
-                  .border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(12.dp)),
-                placeholderColor = AppTheme.colors.surfaceDefault
-              )
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
 private fun RecentFolders(data: HomeScreen_Query.Data) {
   val nav = Nav.current
   val folders = data.me.recentlyViewedEntities.mapNotNull { it.node.onFolder }
@@ -332,7 +251,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
               Spacer(Modifier.height(2.dp))
 
               Text(
-                "문서 ${folder.documentCount}개",
+                if (folder.documentCount == 0) "빈 폴더" else "문서 ${folder.documentCount}개",
                 style = AppTheme.typography.caption,
                 color = AppTheme.colors.textMuted,
               )
@@ -345,14 +264,14 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
 }
 
 @Composable
-private fun MoreDocuments(data: HomeScreen_Query.Data) {
+private fun RecentDocuments(data: HomeScreen_Query.Data) {
   val nav = Nav.current
-  val documents = data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument }.drop(5)
+  val documents = data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument }
 
   Column {
     Skeleton.Keep {
       Text(
-        "더 많은 최근 문서",
+        "최근 문서",
         style = AppTheme.typography.caption,
         color = AppTheme.colors.textTertiary,
         modifier = Modifier.padding(horizontal = 16.dp).padding(top = 24.dp, bottom = 12.dp),
@@ -370,7 +289,7 @@ private fun MoreDocuments(data: HomeScreen_Query.Data) {
         contentAlignment = Alignment.Center,
       ) {
         Text(
-          "최근 사용한 문서가 여기 나타나요",
+          "최근 문서가 여기 나타나요",
           style = AppTheme.typography.action,
           color = AppTheme.colors.textTertiary,
         )
@@ -394,111 +313,91 @@ private fun MoreDocuments(data: HomeScreen_Query.Data) {
           },
         ) { document ->
           InteractionScope {
-            Row(
+            val folderName = document.entity.parent?.node?.onFolder?.name
+            val metaColor = AppTheme.colors.textMuted
+
+            Column(
               modifier = Modifier
                 .fillMaxWidth()
                 .clickable { nav.navigate(Route.Editor(document.entity.slug)) }
                 .pressScale()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-              verticalAlignment = Alignment.CenterVertically,
             ) {
-              val shadowColor = AppTheme.colors.shadowAmbient
-
-              DocumentThumbnailPreview(
-                url = document.previewUrl,
-                modifier = Modifier
-                  .width(35.dp)
-                  .height(49.dp)
-                  .dropShadow(RoundedCornerShape(2.dp)) {
-                    color = shadowColor
-                    radius = 8f
-                    spread = 4f
-                  }
-                  .clip(RoundedCornerShape(2.dp))
-                  .border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(2.dp)),
-                placeholderColor = AppTheme.colors.surfaceSunken
-              )
-
-              Spacer(Modifier.width(12.dp))
-
-              Column(modifier = Modifier.weight(1f)) {
+              if (folderName != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                  if (document.type == DocumentType.TEMPLATE) {
-                    Icon(
-                      icon = Lucide.LayoutTemplate,
-                      modifier = Modifier.size(14.dp),
-                      tint = AppTheme.colors.textPrimary,
-                    )
-
-                    Spacer(Modifier.width(4.dp))
-                  }
-
-                  Text(
-                    document.title,
-                    style = AppTheme.typography.label,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                  Icon(
+                    icon = Lucide.Folder,
+                    modifier = Modifier.size(12.dp),
+                    tint = metaColor,
                   )
 
-                  Spacer(Modifier.width(8.dp))
+                  Spacer(Modifier.width(4.dp))
 
                   Text(
-                    document.updatedAt.timeAgo(),
+                    folderName,
                     style = AppTheme.typography.caption,
-                    color = AppTheme.colors.textMuted,
+                    color = metaColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                   )
                 }
 
-                val folderName = document.entity.parent?.node?.onFolder?.name
-
                 Spacer(Modifier.height(4.dp))
+              }
 
-                val text = buildAnnotatedString {
-                  if (folderName != null) {
-                    appendInlineContent("folder")
-                    append(" $folderName")
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                  icon = if (document.type == DocumentType.TEMPLATE) Lucide.LayoutTemplate else Lucide.File,
+                  modifier = Modifier.size(18.dp),
+                  tint = metaColor,
+                )
 
-                    if (document.excerpt.isNotEmpty()) {
-                      appendInlineContent("dot")
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                  val subtitle = document.subtitle?.takeIf { it.isNotBlank() }
+
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    val titleText = buildAnnotatedString {
+                      append(document.title)
+
+                      if (subtitle != null) {
+                        pushStyle(SpanStyle(color = metaColor))
+                        append(" — ")
+                        append(subtitle)
+                        pop()
+                      }
                     }
+
+                    Text(
+                      titleText,
+                      style = AppTheme.typography.label,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                      modifier = Modifier.weight(1f),
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Text(
+                      document.updatedAt.timeAgo(),
+                      style = AppTheme.typography.caption,
+                      color = AppTheme.colors.textMuted,
+                    )
                   }
 
                   if (document.excerpt.isNotEmpty()) {
-                    append(document.excerpt)
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                      document.excerpt,
+                      style = AppTheme.typography.caption,
+                      color = metaColor,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
                   }
                 }
-
-                val color = AppTheme.colors.textMuted
-                val iconSize = AppTheme.typography.caption.fontSize
-
-                Text(
-                  text = text,
-                  style = AppTheme.typography.caption,
-                  color = color,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                  inlineContent = mapOf(
-                    "folder" to InlineTextContent(
-                      Placeholder(iconSize, iconSize, PlaceholderVerticalAlign.TextCenter),
-                    ) {
-                      Icon(
-                        icon = Lucide.Folder,
-                        modifier = Modifier.fillMaxSize(),
-                        tint = color,
-                      )
-                    },
-                    "dot" to InlineTextContent(
-                      Placeholder(iconSize, iconSize, PlaceholderVerticalAlign.TextCenter),
-                    ) {
-                      Icon(
-                        icon = Lucide.Dot,
-                        modifier = Modifier.fillMaxSize(),
-                        tint = color,
-                      )
-                    },
-                  ),
-                )
               }
             }
           }

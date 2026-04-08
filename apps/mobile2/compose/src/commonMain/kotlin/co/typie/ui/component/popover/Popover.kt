@@ -55,7 +55,6 @@ import androidx.compose.ui.window.PopupProperties
 import co.typie.ext.EdgeAutoScrollState
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.edgeAutoScroll
-import co.typie.ext.overscroll
 import co.typie.ext.rememberEdgeAutoScrollState
 import co.typie.ext.safeDrawing
 import co.typie.ext.toDp
@@ -411,8 +410,7 @@ private fun ShrinkWrappedPane(content: @Composable () -> Unit) {
       modifier = Modifier
         .width(IntrinsicSize.Max)
         .edgeAutoScroll(edgeAutoScrollState)
-        .verticalScroll(scrollState)
-        .overscroll(),
+        .verticalScroll(scrollState),
     ) {
       content()
     }

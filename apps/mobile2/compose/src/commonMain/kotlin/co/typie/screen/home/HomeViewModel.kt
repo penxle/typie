@@ -34,6 +34,7 @@ private fun placeholderData() = HomeScreen_Query.Data(PlaceholderResolver) {
         } else {
           buildDocument {
             title = text(5..20)
+            subtitle = if (it % 2 == 0) text(4..12) else null
             excerpt = text(20..30)
           }
         }

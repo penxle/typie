@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -82,12 +83,29 @@ actual fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean): Modi
     .then(Modifier.elasticOverscroll(ElasticAxis.Horizontal, overscrollState))
 }
 
-actual fun Modifier.overscroll(): Modifier = composed {
+actual fun Modifier.desktopScrollBehavior(
+  state: ScrollableState,
+  orientation: Orientation,
+  enabled: Boolean,
+): Modifier = composed {
+  val isLocked = LocalScrollGestureLockState.current.isLocked
+  if (!enabled || isLocked) {
+    return@composed this
+  }
+
   val overscrollState = rememberElasticOverscrollState()
-  elasticOverscroll(ElasticAxis.Vertical, overscrollState)
+
+  Modifier
+    .dragScroll(
+      state = state,
+      axis = orientation.toElasticAxis(),
+      overscrollState = overscrollState,
+      invertFlingVelocity = true,
+    )
+    .then(Modifier.elasticOverscroll(orientation.toElasticAxis(), overscrollState))
 }
 
-actual fun Modifier.dragScrollable(
+internal actual fun Modifier.desktopDragScroll(
   state: ScrollableState,
   orientation: Orientation,
   enabled: Boolean,
@@ -285,10 +303,8 @@ private fun Modifier.elasticOverscroll(axis: ElasticAxis, overscrollState: Elast
         available: Offset,
         source: NestedScrollSource
       ): Offset {
-        val delta = axis.extract(available)
-        if (delta != 0f && source == NestedScrollSource.UserInput) {
-          overscrollState.applyUnconsumed(delta)
-        }
+        // Keep elastic overscroll for direct drag gestures handled by dragScroll(),
+        // but do not translate the whole container for trackpad or wheel scrolling.
         return Offset.Zero
       }
 
@@ -304,10 +320,12 @@ private fun Modifier.elasticOverscroll(axis: ElasticAxis, overscrollState: Elast
     }
   }
 
-  nestedScroll(connection).graphicsLayer {
-    when (axis) {
-      ElasticAxis.Horizontal -> translationX = overscrollState.offset
-      ElasticAxis.Vertical -> translationY = overscrollState.offset
+  clipToBounds()
+    .nestedScroll(connection)
+    .graphicsLayer {
+      when (axis) {
+        ElasticAxis.Horizontal -> translationX = overscrollState.offset
+        ElasticAxis.Vertical -> translationY = overscrollState.offset
+      }
     }
-  }
 }

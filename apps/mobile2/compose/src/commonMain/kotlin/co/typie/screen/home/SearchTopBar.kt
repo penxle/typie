@@ -100,7 +100,7 @@ fun SearchHeader(
       keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
       modifier = Modifier
         .padding(horizontal = SearchScreenHorizontalPadding)
-        .padding(top = 12.dp, bottom = 4.dp)
+        .padding(bottom = 4.dp)
         .fillMaxWidth()
         .focusRequester(focusRequester)
         .onFocusChanged { isFocused = it.isFocused },

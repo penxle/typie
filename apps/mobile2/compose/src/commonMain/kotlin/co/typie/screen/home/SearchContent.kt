@@ -1,163 +1,110 @@
 package co.typie.screen.home
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.datetime.timeAgo
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
-import co.typie.ext.verticalScroll
 import co.typie.graphql.HomeScreen_Search_Query
 import co.typie.graphql.QueryState
 import co.typie.graphql.type.DocumentType
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
-import co.typie.route.Route
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.DocumentThumbnailPreview
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
 private val SearchScreenHorizontalPadding = 20.dp
-private val SearchScreenTopFadeHeight = 24.dp
 
 @Composable
 fun SearchContent(
   modifier: Modifier = Modifier,
   searchViewModel: SearchViewModel,
-  contentPadding: PaddingValues,
-  scrollState: ScrollState,
+  headerHeight: Dp,
+  onDocumentClick: suspend (slug: String, queryText: String) -> Unit,
+  onFolderClick: suspend (entityId: String, queryText: String) -> Unit,
 ) {
-  val nav = Nav.current
-
-  Box(
-    modifier = modifier
-      .fillMaxWidth(),
-  ) {
-    Column(
+  Column(modifier = modifier.fillMaxWidth()) {
+    Spacer(
       modifier = Modifier
         .fillMaxWidth()
-        .verticalScroll(scrollState)
-        .padding(contentPadding),
-    ) {
-      if (searchViewModel.activeQuery.isBlank()) {
-        RecentSearchesList(
-          recentSearches = searchViewModel.recentSearches,
-          onSelect = { query ->
-            searchViewModel.updateQuery(query)
-            searchViewModel.submitQuery()
-          },
-          onRemove = { searchViewModel.removeRecentSearch(it) },
-        )
-      } else {
-        when (val state = searchViewModel.searchResults.state) {
-          is QueryState.Loading -> {
-            Box(
-              modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
-              contentAlignment = Alignment.Center,
-            ) {
-              Text(
-                "검색 중...",
-                style = AppTheme.typography.action,
-                color = AppTheme.colors.textTertiary,
-              )
-            }
-          }
+        .height(headerHeight),
+    )
 
-          is QueryState.Success -> {
-            if (state.data.search.hits.isEmpty()) {
-              Box(
-                modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
-                contentAlignment = Alignment.Center,
-              ) {
-                Text(
-                  "검색 결과가 없습니다",
-                  style = AppTheme.typography.action,
-                  color = AppTheme.colors.textTertiary,
-                )
-              }
-            } else {
-              SearchResultsList(
-                data = state.data,
-                queryText = searchViewModel.query,
-                onDocumentClick = { slug, query ->
-                  searchViewModel.saveRecentSearch(query)
-                  nav.navigate(Route.Editor(slug))
-                },
-                onFolderClick = { entityId, query ->
-                  searchViewModel.saveRecentSearch(query)
-                  nav.navigate(Route.Folder(entityId))
-                },
-              )
-            }
-          }
+    if (searchViewModel.activeQuery.isBlank()) {
+      RecentSearchesList(
+        recentSearches = searchViewModel.recentSearches,
+        onSelect = { query ->
+          searchViewModel.updateQuery(query)
+          searchViewModel.submitQuery()
+        },
+        onRemove = { searchViewModel.removeRecentSearch(it) },
+      )
+    } else {
+      when (val state = searchViewModel.searchResults.state) {
+        is QueryState.Loading -> {
+          SearchStateMessage("검색 중...")
+        }
 
-          is QueryState.Error -> {
-            Box(
-              modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
-              contentAlignment = Alignment.Center,
-            ) {
-              Text(
-                "검색 중 오류가 발생했습니다",
-                style = AppTheme.typography.action,
-                color = AppTheme.colors.textTertiary,
-              )
-            }
+        is QueryState.Success -> {
+          if (state.data.search.hits.isEmpty()) {
+            SearchStateMessage("검색 결과가 없습니다")
+          } else {
+            SearchResultsList(
+              data = state.data,
+              queryText = searchViewModel.query,
+              onDocumentClick = onDocumentClick,
+              onFolderClick = onFolderClick,
+            )
           }
+        }
+
+        is QueryState.Error -> {
+          SearchStateMessage("검색 중 오류가 발생했습니다")
         }
       }
     }
-
-    SearchTopFade(
-      modifier = Modifier
-        .align(Alignment.TopCenter)
-        .fillMaxWidth(),
-    )
   }
 }
 
 @Composable
-private fun SearchTopFade(modifier: Modifier = Modifier) {
+private fun SearchStateMessage(
+  text: String,
+) {
   Box(
-    modifier = modifier
-      .height(SearchScreenTopFadeHeight)
-      .background(
-        Brush.verticalGradient(
-          colors = listOf(
-            AppTheme.colors.surfaceBase,
-            AppTheme.colors.surfaceBase.copy(alpha = 0f),
-          ),
-        )
-      ),
-  )
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(top = 64.dp),
+    contentAlignment = Alignment.Center,
+  ) {
+    Text(
+      text,
+      style = AppTheme.typography.action,
+      color = AppTheme.colors.textTertiary,
+    )
+  }
 }
 
 @Composable
@@ -234,7 +181,7 @@ private fun SearchResultsList(
   Column(
     modifier = Modifier
       .padding(horizontal = SearchScreenHorizontalPadding)
-      .padding(top = 16.dp, bottom = 12.dp),
+      .padding(top = 16.dp),
   ) {
     CardSurface(
       modifier = Modifier.fillMaxWidth(),
@@ -247,10 +194,14 @@ private fun SearchResultsList(
           when {
             onDocument != null -> {
               SearchDocumentResultRow(
-                previewUrl = onDocument.document.previewUrl,
                 documentType = onDocument.document.type,
                 highlightedTitle = onDocument.title,
+                highlightedSubtitle = onDocument.subtitle,
                 fallbackTitle = onDocument.document.title,
+                fallbackSubtitle = onDocument.document.subtitle,
+                folderName = onDocument.document.entity.parent?.node?.onFolder?.name,
+                excerpt = onDocument.document.excerpt,
+                updatedAt = onDocument.document.updatedAt,
                 highlightedText = onDocument.text,
                 highlightColor = highlightColor,
                 onClick = { onDocumentClick(onDocument.document.entity.slug, queryText) },
@@ -261,6 +212,7 @@ private fun SearchResultsList(
               SearchFolderResultRow(
                 highlightedName = onFolder.name,
                 fallbackName = onFolder.folder.name,
+                documentCount = onFolder.folder.documentCount,
                 highlightColor = highlightColor,
                 onClick = { onFolderClick(onFolder.folder.entity.id, queryText) },
               )
@@ -278,78 +230,109 @@ private fun SearchResultsList(
 
 @Composable
 private fun SearchDocumentResultRow(
-  previewUrl: String,
   documentType: DocumentType,
   highlightedTitle: String?,
+  highlightedSubtitle: String?,
   fallbackTitle: String,
+  fallbackSubtitle: String?,
+  folderName: String?,
+  excerpt: String,
+  updatedAt: kotlin.time.Instant,
   highlightedText: String?,
   highlightColor: Color,
   onClick: suspend () -> Unit,
 ) {
-  CardRow(
-    onClick = onClick,
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-    spacing = 12.dp,
-  ) {
-    val shadowColor = AppTheme.colors.shadowAmbient
-
-    DocumentThumbnailPreview(
-      url = previewUrl,
-      modifier = Modifier
-        .width(35.dp)
-        .height(49.dp)
-        .dropShadow(RoundedCornerShape(2.dp)) {
-          color = shadowColor
-          radius = 8f
-          spread = 4f
-        }
-        .clip(RoundedCornerShape(2.dp))
-        .border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(2.dp)),
-      placeholderColor = AppTheme.colors.surfaceSunken,
+  InteractionScope {
+    val metaColor = AppTheme.colors.textMuted
+    val titleText = buildSearchDocumentTitleText(
+      highlightedTitle = highlightedTitle,
+      highlightedSubtitle = highlightedSubtitle,
+      fallbackTitle = fallbackTitle,
+      fallbackSubtitle = fallbackSubtitle,
+      highlightColor = highlightColor,
+      subtitleColor = metaColor,
     )
+    val detailText = highlightedText?.takeIf { it.isNotEmpty() }
 
-    Column(Modifier.weight(1f)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        if (documentType == DocumentType.TEMPLATE) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .clickable(onClick)
+        .pressScale()
+        .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+      if (folderName != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
           Icon(
-            icon = Lucide.LayoutTemplate,
-            modifier = Modifier.size(14.dp),
-            tint = AppTheme.colors.textPrimary,
+            icon = Lucide.Folder,
+            modifier = Modifier.size(12.dp),
+            tint = metaColor,
           )
 
           Spacer(Modifier.width(4.dp))
-        }
 
-        val titleModifier = Modifier.weight(1f)
-
-        if (highlightedTitle != null) {
           Text(
-            parseEmHighlight(highlightedTitle, highlightColor),
-            style = AppTheme.typography.label,
+            folderName,
+            style = AppTheme.typography.caption,
+            color = metaColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = titleModifier,
-          )
-        } else {
-          Text(
-            fallbackTitle,
-            style = AppTheme.typography.label,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = titleModifier,
           )
         }
+
+        Spacer(Modifier.height(4.dp))
       }
 
-      if (!highlightedText.isNullOrEmpty()) {
-        Spacer(Modifier.height(4.dp))
-        Text(
-          parseEmHighlight(highlightedText, highlightColor),
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          icon = if (documentType == DocumentType.TEMPLATE) Lucide.LayoutTemplate else Lucide.File,
+          modifier = Modifier.size(18.dp),
+          tint = metaColor,
         )
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(Modifier.weight(1f)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              titleText,
+              style = AppTheme.typography.label,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f),
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            Text(
+              updatedAt.timeAgo(),
+              style = AppTheme.typography.caption,
+              color = metaColor,
+            )
+          }
+
+          if (detailText != null) {
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+              parseEmHighlight(detailText, highlightColor),
+              style = AppTheme.typography.caption,
+              color = metaColor,
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
+            )
+          } else if (excerpt.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+              excerpt,
+              style = AppTheme.typography.caption,
+              color = metaColor,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+        }
       }
     }
   }
@@ -359,6 +342,7 @@ private fun SearchDocumentResultRow(
 private fun SearchFolderResultRow(
   highlightedName: String?,
   fallbackName: String,
+  documentCount: Int,
   highlightColor: Color,
   onClick: suspend () -> Unit,
 ) {
@@ -367,21 +351,11 @@ private fun SearchFolderResultRow(
     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     spacing = 12.dp,
   ) {
-    Box(
-      modifier = Modifier
-        .width(35.dp)
-        .height(49.dp)
-        .clip(RoundedCornerShape(8.dp))
-        .background(AppTheme.colors.surfaceSunken)
-        .border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(8.dp)),
-      contentAlignment = Alignment.Center,
-    ) {
-      Icon(
-        icon = Lucide.Folder,
-        modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.brand,
-      )
-    }
+    Icon(
+      icon = Lucide.Folder,
+      modifier = Modifier.size(18.dp),
+      tint = AppTheme.colors.brand,
+    )
 
     Column(Modifier.weight(1f)) {
       if (highlightedName != null) {
@@ -403,7 +377,7 @@ private fun SearchFolderResultRow(
       Spacer(Modifier.height(4.dp))
 
       Text(
-        "폴더",
+        if (documentCount == 0) "빈 폴더" else "문서 ${documentCount}개",
         style = AppTheme.typography.caption,
         color = AppTheme.colors.textTertiary,
         maxLines = 1,
@@ -413,19 +387,45 @@ private fun SearchFolderResultRow(
   }
 }
 
-private fun parseEmHighlight(text: String, highlightColor: Color): AnnotatedString {
+private fun buildSearchDocumentTitleText(
+  highlightedTitle: String?,
+  highlightedSubtitle: String?,
+  fallbackTitle: String,
+  fallbackSubtitle: String?,
+  highlightColor: Color,
+  subtitleColor: Color,
+): AnnotatedString {
+  val subtitle = highlightedSubtitle ?: fallbackSubtitle?.takeIf { it.isNotBlank() }
+
+  return buildAnnotatedString {
+    append(parseEmHighlight(highlightedTitle ?: fallbackTitle, highlightColor))
+
+    if (subtitle != null) {
+      pushStyle(SpanStyle(color = subtitleColor))
+      append(" — ")
+      pop()
+      append(parseEmHighlight(subtitle, highlightColor, subtitleColor))
+    }
+  }
+}
+
+private fun parseEmHighlight(
+  text: String,
+  highlightColor: Color,
+  baseColor: Color? = null,
+): AnnotatedString {
   return buildAnnotatedString {
     var remaining = text
     while (remaining.isNotEmpty()) {
       val startIdx = remaining.indexOf("<em>")
       if (startIdx == -1) {
-        append(remaining)
+        appendWithColor(remaining, baseColor)
         break
       }
-      append(remaining.substring(0, startIdx))
+      appendWithColor(remaining.substring(0, startIdx), baseColor)
       val endIdx = remaining.indexOf("</em>", startIdx)
       if (endIdx == -1) {
-        append(remaining.substring(startIdx))
+        appendWithColor(remaining.substring(startIdx), baseColor)
         break
       }
       val highlighted = remaining.substring(startIdx + 4, endIdx)
@@ -435,4 +435,20 @@ private fun parseEmHighlight(text: String, highlightColor: Color): AnnotatedStri
       remaining = remaining.substring(endIdx + 5)
     }
   }
+}
+
+private fun AnnotatedString.Builder.appendWithColor(
+  text: String,
+  color: Color?,
+) {
+  if (text.isEmpty()) return
+
+  if (color == null) {
+    append(text)
+    return
+  }
+
+  pushStyle(SpanStyle(color = color))
+  append(text)
+  pop()
 }

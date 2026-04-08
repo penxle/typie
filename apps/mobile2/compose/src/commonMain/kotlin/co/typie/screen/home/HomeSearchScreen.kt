@@ -1,14 +1,34 @@
 package co.typie.screen.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import co.typie.ext.ime
+import co.typie.ext.navigationBars
+import co.typie.ext.plus
+import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
+import co.typie.route.Route
 import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -17,12 +37,17 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.viewmodel.koinViewModel
 
+private val SearchScreenTopFadeHeight = 24.dp
+
 @Composable
 fun HomeSearchScreen() {
   val nav = Nav.current
   val model = koinViewModel<SearchViewModel>()
   val scrollState = rememberScrollState("home-search")
   val bottomBarState = LocalBottomBarState.current
+  var headerHeightPx by remember { mutableIntStateOf(0) }
+  val density = LocalDensity.current
+  val headerHeight = with(density) { headerHeightPx.toDp() }
 
   LaunchedEffect(Unit) {
     bottomBarState.visible = false
@@ -36,31 +61,95 @@ fun HomeSearchScreen() {
   Screen(
     background = AppTheme.colors.surfaceBase,
     responsive = true,
-    imeAware = true,
     contentPadding = PaddingValues(0.dp),
     primaryScrollableState = scrollState,
     body = { contentPadding ->
-      Column(
-        Modifier
-          .fillMaxSize()
-          .padding(contentPadding)
-      ) {
-        SearchHeader(
-          animateOnEnter = model.shouldAnimateHeaderOnEnter,
-          placeholder = resolveHomeSearchPlaceholder(model.siteQuery.data.site.name),
-          query = model.query,
-          onQueryChange = { model.updateQuery(it) },
-          onSubmit = { model.submitQuery() },
-          onEnterAnimationConsumed = { model.onHeaderEnterAnimationConsumed() },
-        )
+      val bottomInset = maxOf(
+        WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+      )
 
-        SearchContent(
-          modifier = Modifier.weight(1f),
-          searchViewModel = model,
-          contentPadding = PaddingValues(0.dp),
-          scrollState = scrollState,
-        )
+      Box(Modifier.fillMaxSize()) {
+        Column(
+          modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(contentPadding + PaddingValues(bottom = bottomInset + 12.dp)),
+        ) {
+          SearchContent(
+            searchViewModel = model,
+            headerHeight = headerHeight,
+            onDocumentClick = { slug, query ->
+              model.saveRecentSearch(query)
+              nav.navigate(Route.Editor(slug))
+            },
+            onFolderClick = { entityId, query ->
+              model.saveRecentSearch(query)
+              nav.navigate(Route.Folder(entityId))
+            },
+          )
+        }
+
+        SearchHeaderOverlay(
+          modifier = Modifier
+            .align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .padding(top = contentPadding.calculateTopPadding()),
+          onHeightChanged = { headerHeightPx = it },
+        ) {
+          SearchHeader(
+            animateOnEnter = model.shouldAnimateHeaderOnEnter,
+            placeholder = resolveHomeSearchPlaceholder(model.siteQuery.data.site.name),
+            query = model.query,
+            onQueryChange = { model.updateQuery(it) },
+            onSubmit = { model.submitQuery() },
+            onEnterAnimationConsumed = { model.onHeaderEnterAnimationConsumed() },
+          )
+        }
       }
     },
+  )
+}
+
+@Composable
+private fun SearchHeaderOverlay(
+  modifier: Modifier = Modifier,
+  onHeightChanged: (Int) -> Unit,
+  header: @Composable () -> Unit,
+) {
+  Box(
+    modifier = modifier,
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .background(AppTheme.colors.surfaceBase)
+        .onSizeChanged { onHeightChanged(it.height) },
+    ) {
+      header()
+    }
+
+    SearchTopFade(
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .offset(y = SearchScreenTopFadeHeight)
+        .fillMaxWidth(),
+    )
+  }
+}
+
+@Composable
+private fun SearchTopFade(modifier: Modifier = Modifier) {
+  Box(
+    modifier = modifier
+      .height(SearchScreenTopFadeHeight)
+      .background(
+        Brush.verticalGradient(
+          colors = listOf(
+            AppTheme.colors.surfaceBase,
+            AppTheme.colors.surfaceBase.copy(alpha = 0f),
+          ),
+        ),
+      ),
   )
 }

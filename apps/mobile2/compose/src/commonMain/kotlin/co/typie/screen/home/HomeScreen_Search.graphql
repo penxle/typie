@@ -10,16 +10,30 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
     hits {
       ... on SearchHitDocument {
         title
+        subtitle
         text
         document {
           id
           title
+          subtitle
           type
-          previewUrl
+          excerpt
           updatedAt
           entity {
             id
             slug
+            parent {
+              id
+
+              node {
+                __typename
+
+                ... on Folder {
+                  id
+                  name
+                }
+              }
+            }
           }
         }
       }
@@ -27,6 +41,7 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
         name
         folder {
           name
+          documentCount
           entity {
             id
           }

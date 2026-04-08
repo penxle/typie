@@ -19,8 +19,8 @@ query HomeScreen_Query($siteId: ID!) {
           id
           type
           title
+          subtitle
           excerpt
-          previewUrl
           updatedAt
 
           entity {

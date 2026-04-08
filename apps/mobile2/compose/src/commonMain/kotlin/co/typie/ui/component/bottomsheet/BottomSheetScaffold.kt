@@ -33,7 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.imePadding
+import co.typie.ext.imeOrNavigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -101,7 +101,7 @@ fun BottomSheetScaffold(
         .fillMaxWidth()
         .weight(1f, fill = false)
         .padding(top = 8.dp)
-        .imePadding()
+        .imeOrNavigationBarsPadding()
         .verticalScroll(scrollState),
     ) {
       Column(
