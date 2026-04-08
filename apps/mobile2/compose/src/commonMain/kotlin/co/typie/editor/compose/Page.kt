@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -26,8 +24,6 @@ internal fun Page(
   val density = LocalDensity.current
   val scaleFactor = density.density.toDouble()
 
-  val lastRendered = remember { floatArrayOf(width, height) }
-
   Box(modifier = Modifier.background(AppTheme.colors.surfaceDefault)) {
     Surface(
       modifier = modifier.width(Dp(width)).height(Dp(height)),
@@ -38,6 +34,10 @@ internal fun Page(
       onDetach = {
         editor.detachSurface(page)
       },
+      onResize = {
+        editor.resizeSurface(page, width.toInt(), height.toInt(), scaleFactor)
+        editor.renderSurface(page)
+      },
     )
   }
 
@@ -47,14 +47,5 @@ internal fun Page(
     }
 
     onDispose { off() }
-  }
-
-  SideEffect {
-    if (lastRendered[0] != width || lastRendered[1] != height) {
-      editor.resizeSurface(page, width.toInt(), height.toInt(), scaleFactor)
-      editor.renderSurface(page)
-      lastRendered[0] = width
-      lastRendered[1] = height
-    }
   }
 }

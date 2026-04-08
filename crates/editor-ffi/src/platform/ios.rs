@@ -32,42 +32,8 @@ impl SurfaceHandle {
         let pw = (width as f64 * scale_factor).round() as u32;
         let ph = (height as f64 * scale_factor).round() as u32;
 
-        let layer_ptr = handle as *mut AnyObject;
-        if !layer_ptr.is_null() {
-            unsafe {
-                let ca = objc2::runtime::AnyClass::get(c"CATransaction").unwrap();
-                let _: () = msg_send![ca, begin];
-                let _: () = msg_send![ca, setDisableActions: true];
-
-                let drawable_size = objc2_core_foundation::CGSize {
-                    width: pw as f64,
-                    height: ph as f64,
-                };
-                let frame = objc2_core_foundation::CGRect {
-                    origin: objc2_core_foundation::CGPoint { x: 0.0, y: 0.0 },
-                    size: objc2_core_foundation::CGSize {
-                        width: width as f64,
-                        height: height as f64,
-                    },
-                };
-                let _: () = msg_send![&*layer_ptr, setFrame: frame];
-                let _: () = msg_send![&*layer_ptr, setDrawableSize: drawable_size];
-                let _: () = msg_send![&*layer_ptr, setContentsScale: scale_factor];
-                let _: () = msg_send![&*layer_ptr, setOpaque: false];
-
-                let _: () = msg_send![ca, commit];
-            }
-        }
-
         let backend = match mode {
-            BackendMode::Cpu => {
-                if !layer_ptr.is_null() {
-                    unsafe {
-                        let _: () = msg_send![&*layer_ptr, setFramebufferOnly: false];
-                    }
-                }
-                RenderBackend::new_cpu(pw as u16, ph as u16)
-            }
+            BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
             BackendMode::Gpu { device } => {
                 let layer_ptr_void = handle as *mut c_void;
                 if layer_ptr_void.is_null() {
@@ -88,14 +54,7 @@ impl SurfaceHandle {
                         backend.resize(pw as u16, ph as u16);
                         backend
                     }
-                    Err(_) => {
-                        if !layer_ptr.is_null() {
-                            unsafe {
-                                let _: () = msg_send![&*layer_ptr, setFramebufferOnly: false];
-                            }
-                        }
-                        RenderBackend::new_cpu(pw as u16, ph as u16)
-                    }
+                    Err(_) => RenderBackend::new_cpu(pw as u16, ph as u16),
                 }
             }
         };
@@ -173,32 +132,6 @@ impl SurfaceHandle {
         self.width = pw;
         self.height = ph;
         self.scale_factor = scale_factor;
-
-        let layer_ptr = self.handle as *mut AnyObject;
-        if !layer_ptr.is_null() {
-            unsafe {
-                let ca = objc2::runtime::AnyClass::get(c"CATransaction").unwrap();
-                let _: () = msg_send![ca, begin];
-                let _: () = msg_send![ca, setDisableActions: true];
-
-                let drawable_size = objc2_core_foundation::CGSize {
-                    width: pw as f64,
-                    height: ph as f64,
-                };
-                let frame = objc2_core_foundation::CGRect {
-                    origin: objc2_core_foundation::CGPoint { x: 0.0, y: 0.0 },
-                    size: objc2_core_foundation::CGSize {
-                        width: width as f64,
-                        height: height as f64,
-                    },
-                };
-                let _: () = msg_send![&*layer_ptr, setFrame: frame];
-                let _: () = msg_send![&*layer_ptr, setDrawableSize: drawable_size];
-                let _: () = msg_send![&*layer_ptr, setContentsScale: scale_factor];
-
-                let _: () = msg_send![ca, commit];
-            }
-        }
 
         self.backend.resize(pw as u16, ph as u16);
     }

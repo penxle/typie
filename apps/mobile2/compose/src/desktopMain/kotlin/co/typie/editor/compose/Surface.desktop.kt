@@ -24,6 +24,7 @@ internal actual fun Surface(
   modifier: Modifier,
   onAttach: (handle: Long) -> Unit,
   onDetach: () -> Unit,
+  onResize: () -> Unit,
 ) {
   var bufferHandle by remember { mutableStateOf(0L) }
   var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -32,7 +33,12 @@ internal actual fun Surface(
     modifier = modifier.onSizeChanged { size ->
       if (bufferHandle == 0L && size.width > 0 && size.height > 0) {
         bufferHandle = DesktopSurfaceBridge.allocatePixelBuffer(size.width, size.height)
-        if (bufferHandle != 0L) onAttach(bufferHandle)
+        if (bufferHandle != 0L) {
+          onAttach(bufferHandle)
+          onResize()
+        }
+      } else if (bufferHandle != 0L) {
+        onResize()
       }
     },
   ) {

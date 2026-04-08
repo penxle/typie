@@ -13,8 +13,9 @@ internal actual fun Surface(
   modifier: Modifier,
   onAttach: (handle: Long) -> Unit,
   onDetach: () -> Unit,
+  onResize: () -> Unit,
 ) {
-  val callback = remember(onAttach, onDetach) {
+  val callback = remember(onAttach, onDetach, onResize) {
     var currentHandle = 0L
 
     object : SurfaceHolder.Callback {
@@ -23,7 +24,9 @@ internal actual fun Surface(
         onAttach(currentHandle)
       }
 
-      override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+      override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        onResize()
+      }
 
       override fun surfaceDestroyed(holder: SurfaceHolder) {
         onDetach()

@@ -37,7 +37,7 @@
           editor.renderSurface(page);
         });
 
-        $effect(() => {
+        $effect.pre(() => {
           editor.resizeSurface(page, width, height);
           editor.renderSurface(page);
         });
