@@ -1,14 +1,9 @@
-use editor_model::{Node, NodeId, NodeType};
+use editor_model::{Node, NodeType};
 use editor_schema::NodeSpecExt;
 use editor_state::{Affinity, Position, Selection};
 use editor_transaction::{Transaction, dissolve, prune};
 
 use crate::{CommandError, CommandResult};
-
-enum LiftDirection {
-    Front,
-    End,
-}
 
 pub fn lift_paragraph(tr: &mut Transaction) -> CommandResult {
     let selection = tr.selection();
@@ -45,20 +40,9 @@ pub fn lift_paragraph(tr: &mut Transaction) -> CommandResult {
         .node(paragraph_id)
         .ok_or(CommandError::NodeNotFound(paragraph_id))?;
 
-    if paragraph.prev_sibling().is_none() {
-        lift(tr, paragraph_id, LiftDirection::Front)
-    } else if paragraph.next_sibling().is_none() && paragraph.first_child().is_none() {
-        lift(tr, paragraph_id, LiftDirection::End)
-    } else {
-        Ok(false)
+    if paragraph.prev_sibling().is_some() {
+        return Ok(false);
     }
-}
-
-fn lift(tr: &mut Transaction, paragraph_id: NodeId, direction: LiftDirection) -> CommandResult {
-    let doc = tr.doc();
-    let paragraph = doc
-        .node(paragraph_id)
-        .ok_or(CommandError::NodeNotFound(paragraph_id))?;
 
     let wrapper = match paragraph.parent() {
         Some(parent) if !matches!(parent.node(), Node::Root(_)) => parent,
@@ -77,14 +61,10 @@ fn lift(tr: &mut Transaction, paragraph_id: NodeId, direction: LiftDirection) ->
         .index()
         .ok_or(CommandError::Corrupted("wrapper has no index".into()))?;
 
-    let target_index = match direction {
-        LiftDirection::Front => wrapper_index,
-        LiftDirection::End => wrapper_index + 1,
-    };
-
+    // Content spec validation: can wrapper's parent accept a Paragraph at this position?
     let mut children_types: Vec<NodeType> =
         wrapper_parent.children().map(|c| c.as_type()).collect();
-    children_types.insert(target_index, NodeType::Paragraph);
+    children_types.insert(wrapper_index, NodeType::Paragraph);
     if !wrapper_parent
         .spec()
         .content
@@ -94,7 +74,7 @@ fn lift(tr: &mut Transaction, paragraph_id: NodeId, direction: LiftDirection) ->
     }
 
     tr.batch::<_, CommandError>(|tr| {
-        tr.move_node(paragraph_id, wrapper_parent_id, target_index)?;
+        tr.move_node(paragraph_id, wrapper_parent_id, wrapper_index)?;
 
         let doc = tr.doc();
         if let Some(wrapper) = doc.node(wrapper_id) {
@@ -350,167 +330,6 @@ mod tests {
                 }
             }
             selection: (t1, 0)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn lift_end_non_empty_returns_false() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    blockquote {
-                        paragraph { text("A") }
-                        paragraph { t1: text("B") }
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (t1, 0)
-        };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
-    }
-
-    #[test]
-    fn lift_end_not_last_returns_false() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    blockquote {
-                        paragraph { text("A") }
-                        p1: paragraph {}
-                        paragraph { text("B") }
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
-    }
-
-    #[test]
-    fn lift_end_isolating_returns_false() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    fold {
-                        fold_title { text("Title") }
-                        fold_content {
-                            paragraph { text("A") }
-                            p1: paragraph {}
-                        }
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
-    }
-
-    #[test]
-    fn lift_end_content_spec_mismatch_returns_false() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    bullet_list {
-                        list_item {
-                            paragraph { text("A") }
-                            p1: paragraph {}
-                        }
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        transact_fail!(initial, |tr| lift_paragraph(&mut tr));
-    }
-
-    #[test]
-    fn lift_end_empty_last_paragraph() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    blockquote {
-                        paragraph { text("A") }
-                        p1: paragraph {}
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    blockquote {
-                        paragraph { text("A") }
-                    }
-                    p1: paragraph {}
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn lift_end_from_callout() {
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    callout {
-                        paragraph { text("A") }
-                        p1: paragraph {}
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    callout {
-                        paragraph { text("A") }
-                    }
-                    p1: paragraph {}
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        assert_state_eq!(&actual, &expected);
-    }
-
-    #[test]
-    fn lift_end_sole_child_uses_front() {
-        // prev_sibling check takes priority, so sole child always lifts front
-        let (initial, ..) = state! {
-            doc {
-                root {
-                    blockquote {
-                        p1: paragraph {}
-                    }
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
-        };
-        let (actual, ..) = transact!(initial, |tr| lift_paragraph(&mut tr));
-        let (expected, ..) = state! {
-            doc {
-                root {
-                    p1: paragraph {}
-                    paragraph {}
-                }
-            }
-            selection: (p1, 0)
         };
         assert_state_eq!(&actual, &expected);
     }
