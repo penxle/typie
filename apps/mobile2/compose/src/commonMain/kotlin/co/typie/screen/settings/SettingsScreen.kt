@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,10 +34,11 @@ import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.DeviceInfo
 import co.typie.route.Route
+import co.typie.screen.subscription.CurrentSubscriptionStore
 import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.hasSubscriptionOrNull
 import co.typie.screen.subscription.subscriptionEntryDestination
 import co.typie.screen.subscription.subscriptionRoute
-import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.service.DeveloperPreferencesService
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
@@ -270,6 +272,7 @@ fun SettingsScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
+  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val subscriptionService = koinInject<SubscriptionService>()
   val model = koinViewModel<SettingsViewModel>()
   val authService = koinInject<AuthService>()
@@ -279,6 +282,7 @@ fun SettingsScreen() {
   val scrollState = rememberScrollState()
   val themeModeState = LocalThemeMode.current
   val devModeEnabled = developerPreferences.devMode
+  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
   val sections = remember(devModeEnabled) { settingsSections(devModeEnabled = devModeEnabled) }
   var appVersion by remember { mutableStateOf<String?>(null) }
   var devModeTapCount by remember { mutableStateOf(0) }
@@ -306,67 +310,72 @@ fun SettingsScreen() {
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    val hasSubscription = subscriptionService.hasSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot())
-      Text(
-        "설정",
-        style = AppTheme.typography.display,
-        modifier = Modifier.padding(top = 4.dp),
-      )
+    val hasSubscription = currentSubscriptionState.hasSubscriptionOrNull()
 
-      sections.forEach { section ->
-        SettingsSectionCard(
-          section = section,
-          themeMode = themeModeState.value,
-          appVersion = appVersion,
-          devModeEnabled = devModeEnabled,
-          onThemeClick = {
-            bottomSheetHost.show {
-              SettingsThemeSheet(
-                themeMode = themeModeState.value,
-                onThemeModeChange = {
-                  // TODO: 테마 변경 트래킹
-                  themeModeState.value = it
-                },
-              )
-            }
-          },
-          onVersionInfoClick = {
-            val result = settingsVersionTapResult(
-              devModeEnabled = devModeEnabled,
-              tapCount = devModeTapCount,
+    Text(
+      "설정",
+      style = AppTheme.typography.display,
+      modifier = Modifier.padding(top = 4.dp),
+    )
+
+    sections.forEach { section ->
+      SettingsSectionCard(
+        section = section,
+        themeMode = themeModeState.value,
+        appVersion = appVersion,
+        devModeEnabled = devModeEnabled,
+        onThemeClick = {
+          bottomSheetHost.show {
+            SettingsThemeSheet(
+              themeMode = themeModeState.value,
+              onThemeModeChange = {
+                // TODO: 테마 변경 트래킹
+                themeModeState.value = it
+              },
             )
+          }
+        },
+        onVersionInfoClick = {
+          val result = settingsVersionTapResult(
+            devModeEnabled = devModeEnabled,
+            tapCount = devModeTapCount,
+          )
 
-            devModeTapCount = result.nextTapCount
+          devModeTapCount = result.nextTapCount
 
-            if (result.enableDeveloperMode) {
-              developerPreferences.devMode = true
-            }
+          if (result.enableDeveloperMode) {
+            developerPreferences.devMode = true
+          }
 
-            result.message?.let { message ->
-              toast.show(ToastType.Success, message)
-            }
-          },
-          onDeveloperModeChange = { next ->
-            developerPreferences.devMode = next
-          },
-          onItemClick = { item ->
-            val route = settingsRouteFor(item)
+          result.message?.let { message ->
+            toast.show(ToastType.Success, message)
+          }
+        },
+        onDeveloperModeChange = { next ->
+          developerPreferences.devMode = next
+        },
+        onItemClick = { item ->
+          val route = settingsRouteFor(item)
 
-            if (route != null) {
-              nav.navigate(route)
-            } else if (item.externalUrl != null) {
-              uriHandler.openUri(item.externalUrl)
-            } else if (item.action == SettingsItemAction.Plan) {
+          if (route != null) {
+            nav.navigate(route)
+          } else if (item.externalUrl != null) {
+            uriHandler.openUri(item.externalUrl)
+          } else if (item.action == SettingsItemAction.Plan) {
+            if (hasSubscription != null) {
               nav.navigate(
                 subscriptionRoute(
                   subscriptionEntryDestination(hasSubscription = hasSubscription),
                 ),
               )
-            } else if (item.action == SettingsItemAction.Logout) {
-              showLogoutConfirm = true
             } else {
-              toast.show(ToastType.Notification, "준비 중인 기능이에요.")
+              toast.show(ToastType.Notification, "이용권 상태를 확인 중이에요.")
             }
+          } else if (item.action == SettingsItemAction.Logout) {
+            showLogoutConfirm = true
+          } else {
+            toast.show(ToastType.Notification, "준비 중인 기능이에요.")
+          }
           },
         )
       }

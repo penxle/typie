@@ -36,7 +36,6 @@ class SubscriptionService(
   private val platform: Platform,
   private val purchaseService: PurchaseService,
   private val subscriptionDevSandbox: SubscriptionDevSandbox,
-  private val subscriptionSync: SubscriptionSync,
 ) {
   val usesSandbox: Boolean
     get() = platform == Platform.Desktop && subscriptionDevSandbox.usesSandbox
@@ -54,26 +53,6 @@ class SubscriptionService(
 
   fun isQueryLoading(state: QueryState<*>): Boolean {
     return !usesSandbox && state !is QueryState.Success
-  }
-
-  fun currentSubscription(remoteSubscription: SubscriptionSnapshot?): SubscriptionSnapshot? {
-    return if (usesSandbox) {
-      subscriptionDevSandbox.currentSubscription
-    } else {
-      remoteSubscription
-    }
-  }
-
-  fun hasSubscription(remoteSubscription: SubscriptionSnapshot?): Boolean {
-    return currentSubscription(remoteSubscription) != null
-  }
-
-  fun summary(remoteSubscription: SubscriptionSnapshot?): SubscriptionSummary {
-    val data = currentSubscription(remoteSubscription)
-    return SubscriptionSummary(
-      hasSubscription = data != null,
-      subscriptionName = data?.planName ?: "타이피 BASIC ACCESS",
-    )
   }
 
   fun canStartTrial(remoteCanStartTrial: Boolean): Boolean {
@@ -95,8 +74,6 @@ class SubscriptionService(
       remoteAction()
     }
 
-    subscriptionSync.notifyChanged()
-
     return trialCelebration()
   }
 
@@ -106,7 +83,6 @@ class SubscriptionService(
   ): PurchaseStartResult {
     if (usesSandbox) {
       subscriptionDevSandbox.purchase(product.interval)
-      subscriptionSync.notifyChanged()
 
       return PurchaseStartResult(
         started = true,
@@ -125,7 +101,6 @@ class SubscriptionService(
   suspend fun openSubscriptionManagement(): SubscriptionManagementResult {
     if (usesSandbox) {
       subscriptionDevSandbox.scheduleCancel()
-      subscriptionSync.notifyChanged()
       return SubscriptionManagementResult.CompletedLocally
     }
 
@@ -134,10 +109,6 @@ class SubscriptionService(
     } else {
       SubscriptionManagementResult.FailedToOpen
     }
-  }
-
-  fun notifyChanged() {
-    subscriptionSync.notifyChanged()
   }
 }
 

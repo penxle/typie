@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,10 +34,10 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.rememberFilePicker
-import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.CurrentSubscriptionStore
+import co.typie.screen.subscription.hasSubscriptionOrNull
 import co.typie.screen.subscription.planUpgradeRoute
 import co.typie.screen.subscription.showPlanUpgradeSheet
-import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
@@ -73,14 +74,13 @@ private data class PendingFontDeletion(
 fun FontSettingsScreen() {
   val model = koinViewModel<FontSettingsViewModel>()
   val nav = Nav.current
-  val subscriptionService = koinInject<SubscriptionService>()
+  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
   var pendingFamilyDeletion by remember { mutableStateOf<FontSettingsFamily?>(null) }
   var pendingFontDeletion by remember { mutableStateOf<PendingFontDeletion?>(null) }
-  val remoteSubscription = model.query.data.me.subscription?.toSubscriptionSnapshot()
-  val hasSubscription = subscriptionService.hasSubscription(remoteSubscription)
+  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
 
   val filePicker = rememberFilePicker(
     selectionMode = FilePickerSelectionMode.Multiple,
@@ -93,12 +93,11 @@ fun FontSettingsScreen() {
     if (model.query.state !is QueryState.Success) return
     if (model.state.isUploading) return
 
-    when (fontUploadAction(hasSubscription)) {
+    when (currentSubscriptionState.hasSubscriptionOrNull()?.let(::fontUploadAction)) {
       FontUploadAction.PickFont -> {
         scope.launch {
           bottomSheetHost.show {
             FontUploadSheet(
-              hasSubscription = hasSubscription,
               isUploading = model.state.isUploading,
               uploadCurrentIndex = model.state.uploadCurrentIndex,
               uploadTotalCount = model.state.uploadTotalCount,
@@ -122,6 +121,8 @@ fun FontSettingsScreen() {
           }
         }
       }
+
+      null -> return
     }
   }
 
@@ -215,7 +216,6 @@ fun FontSettingsScreen() {
 
 @Composable
 private fun BottomSheetScope<Unit>.FontUploadSheet(
-  hasSubscription: Boolean,
   isUploading: Boolean,
   uploadCurrentIndex: Int,
   uploadTotalCount: Int,
@@ -248,15 +248,6 @@ private fun BottomSheetScope<Unit>.FontUploadSheet(
         FontSettingsBullet("업로드한 폰트는 내 글이라면 어디서나 사용할 수 있어요.")
         FontSettingsBullet("무료 폰트이거나 웹 사용 라이선스가 있는 폰트만 이용해 주세요.")
         FontSettingsBullet("저작권에 위배되는 폰트는 삭제될 수 있어요.")
-
-        if (!hasSubscription) {
-          Text(
-            "폰트 업로드는 FULL ACCESS 플랜에서 사용할 수 있어요.",
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
-            modifier = Modifier.padding(top = 4.dp),
-          )
-        }
       }
     }
 

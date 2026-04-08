@@ -144,7 +144,7 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
             tint = color,
           )
         },
-        loading = model.isStartingTrial,
+        loading = model.startTrialAction.running,
         loadingText = "무료 체험 시작 중...",
         onClick = { showTrialStartConfirm = true },
       )

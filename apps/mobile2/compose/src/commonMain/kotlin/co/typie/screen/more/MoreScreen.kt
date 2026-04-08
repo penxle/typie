@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,10 +28,12 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
+import co.typie.screen.subscription.CurrentSubscriptionStore
 import co.typie.screen.subscription.SubscriptionService
+import co.typie.screen.subscription.hasSubscriptionOrNull
+import co.typie.screen.subscription.subscriptionSummaryOrNull
 import co.typie.screen.subscription.subscriptionEntryDestination
 import co.typie.screen.subscription.subscriptionRoute
-import co.typie.screen.subscription.toSubscriptionSnapshot
 import co.typie.ui.component.ActivityGrid
 import co.typie.ui.component.ActivityGridChange
 import co.typie.ui.component.ActivityGridHeight
@@ -59,9 +63,11 @@ fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
+  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val subscriptionService = koinInject<SubscriptionService>()
 
   val model = koinViewModel<MoreViewModel>()
+  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
 
   val scrollState = rememberScrollState()
 
@@ -83,70 +89,75 @@ fun MoreScreen() {
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
     val data = model.query.data
-    val subscriptionSummary = subscriptionService.summary(data.me.subscription?.toSubscriptionSnapshot())
-      val subscriptionActionLabel = if (subscriptionSummary.hasSubscription) "이용권 정보" else "구매하기"
+    val subscriptionSummary = currentSubscriptionState.subscriptionSummaryOrNull()
+    val hasSubscription = currentSubscriptionState.hasSubscriptionOrNull()
+    val subscriptionActionLabel = when (hasSubscription) {
+      true -> "이용권 정보"
+      false -> "구매하기"
+      null -> "확인 중"
+    }
 
-      val activityChanges = data.me.characterCountChanges.map { change ->
-        ActivityGridChange(
-          date = change.date.toLocalDate(),
-          additions = change.additions,
-        )
-      }
+    val activityChanges = data.me.characterCountChanges.map { change ->
+      ActivityGridChange(
+        date = change.date.toLocalDate(),
+        additions = change.additions,
+      )
+    }
 
-      Skeleton.Keep {
-        Text("더 보기", style = AppTheme.typography.display)
-      }
+    Skeleton.Keep {
+      Text("더 보기", style = AppTheme.typography.display)
+    }
 
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
+    CardSurface(
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      CardRow(
+        onClick = { nav.navigate(Route.UpdateProfile) },
+        contentPadding = PaddingValues(
+          horizontal = 18.dp,
+          vertical = 18.dp,
+        ),
+        spacing = 16.dp,
       ) {
-        CardRow(
-          onClick = { nav.navigate(Route.UpdateProfile) },
-          contentPadding = PaddingValues(
-            horizontal = 18.dp,
-            vertical = 18.dp,
-          ),
-          spacing = 16.dp,
+        Img(
+          image = data.me.avatar.img_image,
+          modifier = Modifier.clip(CircleShape).size(72.dp),
+        )
+
+        Column(
+          modifier = Modifier.weight(1f),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-          Img(
-            image = data.me.avatar.img_image,
-            modifier = Modifier.clip(CircleShape).size(72.dp),
+          Text(
+            data.me.name,
+            style = AppTheme.typography.heading,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
           )
 
-          Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-          ) {
-            Text(
-              data.me.name,
-              style = AppTheme.typography.heading,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
+          Text(
+            data.me.email,
+            style = AppTheme.typography.action,
+            color = AppTheme.colors.textTertiary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
 
-            Text(
-              data.me.email,
-              style = AppTheme.typography.action,
-              color = AppTheme.colors.textTertiary,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-
-          Skeleton.Ignore {
-            Icon(
-              icon = Lucide.ChevronRight,
-              modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
-            )
-          }
+        Skeleton.Ignore {
+          Icon(
+            icon = Lucide.ChevronRight,
+            modifier = Modifier.size(16.dp),
+            tint = AppTheme.colors.textTertiary,
+          )
         }
       }
+    }
 
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        Column {
+    CardSurface(
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Column {
           Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -211,17 +222,19 @@ fun MoreScreen() {
         }
       }
 
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        Column {
+    CardSurface(
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Column {
           CardRow(
             onClick = {
-              nav.navigate(
-                subscriptionRoute(
-                  subscriptionEntryDestination(hasSubscription = subscriptionSummary.hasSubscription),
-                ),
-              )
+              hasSubscription?.let { resolved ->
+                nav.navigate(
+                  subscriptionRoute(
+                    subscriptionEntryDestination(hasSubscription = resolved),
+                  ),
+                )
+              }
             },
           ) {
             Skeleton.Unite {
@@ -243,7 +256,7 @@ fun MoreScreen() {
                 )
 
                 Text(
-                  subscriptionSummary.subscriptionName,
+                  subscriptionSummary?.subscriptionName ?: "이용권 확인 중...",
                   style = AppTheme.typography.caption,
                   color = AppTheme.colors.textTertiary,
                   maxLines = 1,
@@ -382,7 +395,7 @@ fun MoreScreen() {
         modifier = Modifier.fillMaxWidth(),
       ) {
         Column {
-          if (subscriptionSummary.hasSubscription) {
+          if (hasSubscription == true) {
             CardRow(
               onClick = { uriHandler.openUri("https://typie.link/community") },
             ) {

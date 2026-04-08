@@ -3,6 +3,7 @@ package co.typie.screen.subscription
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
 import co.typie.graphql.EnrollPlanScreen_SubscribePlanWithTrial_Mutation
 import co.typie.graphql.GraphQLViewModel
@@ -12,40 +13,42 @@ import co.typie.graphql.TypieError
 import co.typie.graphql.type.buildUser
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.ui.state.AsyncAction
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
 class PlanUpgradeSheetViewModel(
   private val toast: Toast,
   private val subscriptionService: SubscriptionService,
+  private val currentSubscriptionStore: CurrentSubscriptionStore,
 ) : GraphQLViewModel() {
   val query = watchQuery(
     placeholderData(),
     skip = { subscriptionService.usesSandbox },
   ) { PlanUpgradeSheet_Query() }
 
-  var isStartingTrial by mutableStateOf(false)
-    private set
+  val startTrialAction = AsyncAction(viewModelScope)
 
   var celebration by mutableStateOf<SubscriptionCelebration?>(null)
     private set
 
-  suspend fun startTrial() {
-    if (isStartingTrial) return
-
-    isStartingTrial = true
-    try {
-      celebration = subscriptionService.startTrial {
-        executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
-        query.refetch()
-      }
-    } catch (e: TypieError) {
-      toast.show(ToastType.Error, e.message ?: DEFAULT_ERROR_MESSAGE)
-    } catch (e: Exception) {
-      // TODO: sentry
-      toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-    } finally {
-      isStartingTrial = false
+  fun startTrial() {
+    startTrialAction.launch(
+      onFailure = { e ->
+        when (e) {
+          is TypieError -> toast.show(ToastType.Error, e.message ?: DEFAULT_ERROR_MESSAGE)
+          else -> {
+            Logger.e(e) { "Failed to start subscription trial from upgrade sheet" }
+            toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+          }
+        }
+      },
+    ) {
+        celebration = subscriptionService.startTrial {
+          executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+          currentSubscriptionStore.refresh()
+          query.refetch()
+        }
     }
   }
 }

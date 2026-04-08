@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -21,6 +23,7 @@ import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
+import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.ui.component.Button
@@ -35,14 +38,13 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun CurrentPlanScreen() {
   val nav = Nav.current
-  val subscriptionService = koinInject<SubscriptionService>()
-  val model = koinViewModel<CurrentPlanViewModel>()
+  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scrollState = rememberScrollState()
+  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -50,17 +52,17 @@ fun CurrentPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (subscriptionService.hasQueryError(model.query.state)) {
-    ErrorDialog { model.query.refetch() }
+  if (currentSubscriptionState is QueryState.Error) {
+    ErrorDialog { currentSubscriptionStore.refresh() }
   }
 
   Screen(
     scrollState = scrollState,
-    loading = subscriptionService.isQueryLoading(model.query.state),
+    loading = currentSubscriptionState !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    val subscription = subscriptionService.currentSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot()) ?: return@Screen
+    val subscription = (currentSubscriptionState as? QueryState.Success)?.data ?: return@Screen
     val availability = subscription.availability
     val footer = availability?.let(::currentPlanFooter)
     val detailLines = currentPlanDetailLines(
@@ -70,69 +72,69 @@ fun CurrentPlanScreen() {
       expiresAt = subscription.expiresAt ?: return@Screen,
     )
 
-      Text(
-        "이용권 정보",
-        style = AppTheme.typography.display,
-        modifier = Modifier.padding(top = 4.dp),
-      )
+    Text(
+      "이용권 정보",
+      style = AppTheme.typography.display,
+      modifier = Modifier.padding(top = 4.dp),
+    )
 
-      CardSurface(
+    CardSurface(
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Column(
         modifier = Modifier.fillMaxWidth(),
       ) {
         Column(
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(18.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
           Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
           ) {
-            Column(
-              modifier = Modifier.fillMaxWidth(),
-              verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-              Text(
-                "현재 이용권",
-                style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
-              )
+            Text(
+              "현재 이용권",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textTertiary,
+            )
 
-              Text(
-                subscription.planName ?: "",
-                style = AppTheme.typography.heading,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-              )
-            }
-
-            Column(
-              modifier = Modifier.fillMaxWidth(),
-              verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-              detailLines.forEach { line ->
-                Text(
-                  text = line,
-                  style = AppTheme.typography.body,
-                  color = AppTheme.colors.textTertiary,
-                )
-              }
-            }
-          }
-
-          if (footer != null) {
-            CardDivider()
-            CurrentPlanFooterSection(
-              footer = footer,
-              onCancelClick = { nav.navigate(Route.CancelPlan) },
-              onChangeClick = { nav.navigate(Route.EnrollPlan) },
-              onUpgradeClick = { nav.navigate(Route.EnrollPlan) },
+            Text(
+              subscription.planName ?: "",
+              style = AppTheme.typography.heading,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
             )
           }
+
+          Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+          ) {
+            detailLines.forEach { line ->
+              Text(
+                text = line,
+                style = AppTheme.typography.body,
+                color = AppTheme.colors.textTertiary,
+              )
+            }
+          }
+        }
+
+        if (footer != null) {
+          CardDivider()
+          CurrentPlanFooterSection(
+            footer = footer,
+            onCancelClick = { nav.navigate(Route.CancelPlan) },
+            onChangeClick = { nav.navigate(Route.EnrollPlan) },
+            onUpgradeClick = { nav.navigate(Route.EnrollPlan) },
+          )
         }
       }
+    }
 
-      Spacer(Modifier.height(72.dp))
+    Spacer(Modifier.height(72.dp))
   }
 }
 

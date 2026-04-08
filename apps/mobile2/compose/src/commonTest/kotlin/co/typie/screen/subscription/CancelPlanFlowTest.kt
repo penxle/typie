@@ -1,6 +1,4 @@
 package co.typie.screen.subscription
-
-import co.typie.graphql.type.SubscriptionState as GraphqlSubscriptionState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -45,7 +43,7 @@ class CancelPlanFlowTest {
   fun `subscription refresh closes screen after external cancellation is reflected`() {
     val state = reduceCancelPlanFlowOnSubscriptionState(
       current = CancelPlanFlowState(awaitingStoreResult = true),
-      subscriptionState = GraphqlSubscriptionState.WILL_EXPIRE,
+      subscriptionState = SubscriptionState.Canceled,
     )
 
     assertFalse(state.awaitingStoreResult)
@@ -56,7 +54,7 @@ class CancelPlanFlowTest {
   fun `subscription refresh keeps waiting when subscription is still active`() {
     val state = reduceCancelPlanFlowOnSubscriptionState(
       current = CancelPlanFlowState(awaitingStoreResult = true),
-      subscriptionState = GraphqlSubscriptionState.ACTIVE,
+      subscriptionState = SubscriptionState.Active,
     )
 
     assertTrue(state.awaitingStoreResult)

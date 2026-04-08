@@ -3,28 +3,24 @@ package co.typie.screen.subscription
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.graphql.CancelPlanScreen_Query
-import co.typie.graphql.GraphQLViewModel
-import co.typie.graphql.PlaceholderResolver
+import co.touchlab.kermit.Logger
 import co.typie.graphql.QueryState
-import co.typie.graphql.type.buildUser
-import kotlinx.coroutines.flow.distinctUntilChanged
+import co.typie.ui.state.AsyncAction
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
 class CancelPlanViewModel(
+  private val currentSubscriptionStore: CurrentSubscriptionStore,
   private val subscriptionService: SubscriptionService,
-) : GraphQLViewModel() {
-  val query = watchQuery(
-    placeholderData(),
-    skip = { subscriptionService.usesSandbox },
-  ) { CancelPlanScreen_Query() }
-
+) : ViewModel() {
   var flowState by mutableStateOf(CancelPlanFlowState())
     private set
+
+  val openSubscriptionManagementAction = AsyncAction(viewModelScope)
 
   val shouldClose: Boolean
     get() = flowState.shouldClose
@@ -34,16 +30,15 @@ class CancelPlanViewModel(
 
   init {
     viewModelScope.launch {
-      snapshotFlow { (query.state as? QueryState.Success)?.data?.me?.subscription?.state }
-        .distinctUntilChanged()
-        .collect { subscriptionState ->
-          updateFlowState(
-            reduceCancelPlanFlowOnSubscriptionState(
-              current = flowState,
-              subscriptionState = subscriptionState,
-            ),
-          )
-        }
+      currentSubscriptionStore.state.collect { state ->
+        val subscriptionState = (state as? QueryState.Success)?.data?.state
+        updateFlowState(
+          reduceCancelPlanFlowOnSubscriptionState(
+            current = flowState,
+            subscriptionState = subscriptionState,
+          ),
+        )
+      }
     }
   }
 
@@ -58,9 +53,20 @@ class CancelPlanViewModel(
     )
   }
 
+  fun openSubscriptionManagement() {
+    openSubscriptionManagementAction.launch(
+      onFailure = { e ->
+        Logger.e(e) { "Failed to open subscription management" }
+        onOpenSubscriptionManagementResult(SubscriptionManagementResult.FailedToOpen)
+      },
+    ) {
+        onOpenSubscriptionManagementResult(subscriptionService.openSubscriptionManagement())
+    }
+  }
+
   fun onResumed() {
     if (flowState.awaitingStoreResult) {
-      query.refetch()
+      currentSubscriptionStore.refresh()
     }
   }
 
@@ -73,16 +79,6 @@ class CancelPlanViewModel(
   }
 
   private fun updateFlowState(next: CancelPlanFlowState) {
-    if (!flowState.shouldClose && next.shouldClose) {
-      subscriptionService.notifyChanged()
-    }
-
     flowState = next
-  }
-}
-
-private fun placeholderData() = CancelPlanScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    subscription = null
   }
 }

@@ -31,8 +31,8 @@ import co.typie.graphql.type.buildUser
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.PlatformFile
-import co.typie.screen.subscription.SubscriptionService
-import co.typie.screen.subscription.toSubscriptionSnapshot
+import co.typie.screen.subscription.CurrentSubscriptionStore
+import co.typie.screen.subscription.hasSubscriptionOrNull
 import co.typie.service.SiteService
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.api.CacheKey
@@ -86,7 +86,7 @@ class SpaceSettingsViewModel(
   val siteService: SiteService,
   private val blobService: BlobService,
   private val toast: Toast,
-  private val subscriptionService: SubscriptionService,
+  private val currentSubscriptionStore: CurrentSubscriptionStore,
 ) : GraphQLViewModel() {
   val state = SpaceSettingsScreenState(viewModelScope)
 
@@ -151,18 +151,24 @@ class SpaceSettingsViewModel(
           ),
         )
 
-        if (
-          subscriptionService.hasSubscription(query.data.me.subscription?.toSubscriptionSnapshot()) &&
-          state.form.slug.isDirty
-        ) {
-          executeMutation(
-            SpaceSettingsScreen_UpdateSiteSlug_Mutation(
-              input = UpdateSiteSlugInput(
-                siteId = siteService.siteId,
-                slug = state.form.slug.value.trim().lowercase(),
+        if (state.form.slug.isDirty) {
+          when (currentSubscriptionStore.state.value.hasSubscriptionOrNull()) {
+            true -> executeMutation(
+              SpaceSettingsScreen_UpdateSiteSlug_Mutation(
+                input = UpdateSiteSlugInput(
+                  siteId = siteService.siteId,
+                  slug = state.form.slug.value.trim().lowercase(),
+                ),
               ),
-            ),
-          )
+            )
+
+            false -> Unit
+
+            null -> {
+              toast.show(ToastType.Error, "이용권 상태를 확인하는 중이에요. 잠시 후 다시 시도해주세요.")
+              return@launch
+            }
+          }
         }
 
         toast.show(ToastType.Success, "스페이스 설정이 변경되었어요.")

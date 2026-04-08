@@ -21,8 +21,8 @@ import co.typie.platform.PurchaseEvent
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
 import co.typie.platform.PurchaseStore
+import co.typie.ui.state.AsyncAction
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
@@ -30,8 +30,10 @@ class EnrollPlanViewModel(
   private val loader: Loader,
   private val toast: Toast,
   private val subscriptionService: SubscriptionService,
+  private val currentSubscriptionStore: CurrentSubscriptionStore,
 ) : GraphQLViewModel() {
-  private val purchaseStartMutex = Mutex()
+  val startTrialAction = AsyncAction(viewModelScope)
+  private val purchaseAction = AsyncAction(viewModelScope)
 
   val query = watchQuery(
     placeholderData(),
@@ -59,46 +61,48 @@ class EnrollPlanViewModel(
     }
   }
 
-  suspend fun startTrial() {
-    try {
-      celebration = loader.runWith {
-        subscriptionService.startTrial {
-          executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
-          query.refetch()
+  fun startTrial() {
+    startTrialAction.launch(
+      onFailure = { e ->
+        when (e) {
+          is TypieError -> toast.show(ToastType.Error, e.message ?: DEFAULT_ERROR_MESSAGE)
+          else -> {
+            Logger.e(e) { "Failed to start subscription trial" }
+            toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+          }
         }
-      }
-      // TODO: Mixpanel start_trial
-    } catch (e: TypieError) {
-      toast.show(ToastType.Error, e.message ?: DEFAULT_ERROR_MESSAGE)
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to start subscription trial" }
-      toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+      },
+    ) {
+        celebration = loader.runWith {
+          subscriptionService.startTrial {
+            executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+            currentSubscriptionStore.refresh()
+            query.refetch()
+          }
+        }
+        // TODO: Mixpanel start_trial
     }
   }
 
-  suspend fun purchase(product: PurchaseProduct) {
-    if (!purchaseStartMutex.tryLock()) {
-      return
-    }
-
-    try {
-      val result = loader.runWith {
-        subscriptionService.purchase(
-          product = product,
-          accountId = query.data.me.uuid,
-        )
-      }
-
-      celebration = result.celebration
-
-      if (!result.started) {
+  fun purchase(product: PurchaseProduct) {
+    purchaseAction.launch(
+      onFailure = { e ->
+        Logger.e(e) { "Failed to start subscription purchase" }
         toast.show(ToastType.Error, PURCHASE_START_FAILURE_MESSAGE)
-      }
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to start subscription purchase" }
-      toast.show(ToastType.Error, PURCHASE_START_FAILURE_MESSAGE)
-    } finally {
-      purchaseStartMutex.unlock()
+      },
+    ) {
+        val result = loader.runWith {
+          subscriptionService.purchase(
+            product = product,
+            accountId = query.data.me.uuid,
+          )
+        }
+
+        celebration = result.celebration
+
+        if (!result.started) {
+          toast.show(ToastType.Error, PURCHASE_START_FAILURE_MESSAGE)
+        }
     }
   }
 
@@ -133,7 +137,7 @@ class EnrollPlanViewModel(
       )
 
       query.refetch()
-      subscriptionService.notifyChanged()
+      currentSubscriptionStore.refresh()
 
       if (
         shouldShowPurchaseCelebration(

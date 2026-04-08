@@ -1,29 +1,15 @@
 package co.typie.screen.more
 
-import androidx.lifecycle.viewModelScope
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.MoreScreen_Query
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.text
 import co.typie.graphql.type.buildUser
-import co.typie.screen.subscription.SubscriptionSync
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
-class MoreViewModel(
-  private val subscriptionSync: SubscriptionSync,
-) : GraphQLViewModel() {
+class MoreViewModel : GraphQLViewModel() {
   val query = watchQuery(placeholderData()) { MoreScreen_Query() }
-
-  init {
-    viewModelScope.launch {
-      subscriptionSync.events.collect {
-        query.refetch()
-      }
-    }
-  }
 }
 
 private fun placeholderData() = MoreScreen_Query.Data(PlaceholderResolver) {

@@ -1,7 +1,5 @@
 package co.typie.screen.subscription
 
-import co.typie.graphql.type.SubscriptionState as GraphqlSubscriptionState
-
 data class CancelPlanFlowState(
   val awaitingStoreResult: Boolean = false,
   val shouldClose: Boolean = false,
@@ -35,7 +33,7 @@ fun reduceCancelPlanFlowOnManagementResult(
 
 fun reduceCancelPlanFlowOnSubscriptionState(
   current: CancelPlanFlowState,
-  subscriptionState: GraphqlSubscriptionState?,
+  subscriptionState: SubscriptionState?,
 ): CancelPlanFlowState {
   return if (shouldCloseCancelPlanAfterStoreReturn(current.awaitingStoreResult, subscriptionState)) {
     current.copy(

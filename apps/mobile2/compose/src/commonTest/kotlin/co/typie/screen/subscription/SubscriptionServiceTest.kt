@@ -28,7 +28,6 @@ class SubscriptionServiceTest {
       platform = Platform.Desktop,
       purchaseService = FakePurchaseService(),
       subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
     )
 
     assertFalse(service.hasQueryError(QueryState.Error(Exception("offline"))))
@@ -44,7 +43,6 @@ class SubscriptionServiceTest {
       platform = Platform.Desktop,
       purchaseService = FakePurchaseService(),
       subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
     )
 
     assertTrue(service.hasQueryError(QueryState.Error(Exception("offline"))))
@@ -58,81 +56,11 @@ class SubscriptionServiceTest {
       platform = Platform.iOS,
       purchaseService = FakePurchaseService(),
       subscriptionDevSandbox = SubscriptionDevSandbox(Platform.iOS),
-      subscriptionSync = SubscriptionSync(),
     )
 
     assertTrue(service.hasQueryError(QueryState.Error(Exception("offline"))))
     assertTrue(service.isQueryLoading(QueryState.Loading))
     assertFalse(service.isQueryLoading(QueryState.Success(remoteSubscriptionSnapshot())))
-  }
-
-  @Test
-  fun `desktop real data mode uses remote subscription snapshot`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      select(SubscriptionDevScenario.RemoteData)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
-    )
-
-    val subscription = service.currentSubscription(remoteSubscription = remoteSubscriptionSnapshot())
-
-    assertEquals(FULL_ACCESS_MONTHLY_PLAN_ID, subscription?.planId)
-    assertEquals("원격 FULL ACCESS", subscription?.planName)
-  }
-
-  @Test
-  fun `desktop summary uses sandbox subscription instead of remote snapshot`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      purchase(PurchasePlanInterval.Monthly)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
-    )
-
-    val summary = service.summary(remoteSubscription = null)
-
-    assertTrue(summary.hasSubscription)
-    assertEquals("타이피 FULL ACCESS", summary.subscriptionName)
-  }
-
-  @Test
-  fun `remote summary uses remote snapshot when sandbox is disabled`() {
-    val service = SubscriptionService(
-      platform = Platform.iOS,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = SubscriptionDevSandbox(Platform.iOS),
-      subscriptionSync = SubscriptionSync(),
-    )
-
-    val summary = service.summary(remoteSubscription = remoteSubscriptionSnapshot())
-
-    assertTrue(summary.hasSubscription)
-    assertEquals("원격 FULL ACCESS", summary.subscriptionName)
-  }
-
-  @Test
-  fun `desktop currentSubscription returns sandbox snapshot instead of remote snapshot`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      purchase(PurchasePlanInterval.Yearly)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
-    )
-
-    val subscription = service.currentSubscription(remoteSubscription = remoteSubscriptionSnapshot())
-
-    assertEquals(FULL_ACCESS_YEARLY_PLAN_ID, subscription?.planId)
-    assertEquals("타이피 FULL ACCESS", subscription?.planName)
   }
 
   @Test
@@ -144,14 +72,13 @@ class SubscriptionServiceTest {
       platform = Platform.Desktop,
       purchaseService = FakePurchaseService(),
       subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
     )
 
     assertTrue(service.canStartTrial(remoteCanStartTrial = false))
   }
 
   @Test
-  fun `desktop startTrial updates sandbox and notifies sync without running remote action`() = runTest {
+  fun `desktop startTrial updates sandbox without running remote action`() = runTest {
     val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
       select(SubscriptionDevScenario.NoSubscription)
     }
@@ -159,7 +86,6 @@ class SubscriptionServiceTest {
       platform = Platform.Desktop,
       purchaseService = FakePurchaseService(),
       subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
     )
     var remoteCalled = false
 
@@ -179,7 +105,6 @@ class SubscriptionServiceTest {
       platform = Platform.iOS,
       purchaseService = FakePurchaseService(),
       subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
     )
     var remoteCalled = false
 
@@ -202,7 +127,6 @@ class SubscriptionServiceTest {
       platform = Platform.Desktop,
       purchaseService = purchaseService,
       subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
     )
 
     val result = service.purchase(
@@ -223,7 +147,6 @@ class SubscriptionServiceTest {
       platform = Platform.Android,
       purchaseService = purchaseService,
       subscriptionDevSandbox = SubscriptionDevSandbox(Platform.Android),
-      subscriptionSync = SubscriptionSync(),
     )
 
     val result = service.purchase(
@@ -245,7 +168,6 @@ class SubscriptionServiceTest {
       platform = Platform.Desktop,
       purchaseService = FakePurchaseService(),
       subscriptionDevSandbox = sandbox,
-      subscriptionSync = SubscriptionSync(),
     )
 
     val result = service.openSubscriptionManagement()
@@ -261,7 +183,6 @@ class SubscriptionServiceTest {
       platform = Platform.Android,
       purchaseService = purchaseService,
       subscriptionDevSandbox = SubscriptionDevSandbox(Platform.Android),
-      subscriptionSync = SubscriptionSync(),
     )
 
     val result = service.openSubscriptionManagement()

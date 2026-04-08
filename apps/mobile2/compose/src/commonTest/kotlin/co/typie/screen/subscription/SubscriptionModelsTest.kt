@@ -1,6 +1,7 @@
 package co.typie.screen.subscription
 
 import co.typie.di.Platform
+import co.typie.graphql.QueryState
 import co.typie.platform.PurchasePlanInterval
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -9,6 +10,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.time.Instant
 
 class SubscriptionModelsTest {
@@ -251,6 +253,53 @@ class SubscriptionModelsTest {
     assertEquals(
       "지금 해지하더라도 2026년 04월 12일까지는 계속해서 타이피 FULL ACCESS 혜택을 이용할 수 있어요.",
       text,
+    )
+  }
+
+  @Test
+  fun `subscription state helpers keep loading unknown until state resolves`() {
+    assertNull(QueryState.Loading.hasSubscriptionOrNull())
+    assertNull(QueryState.Loading.subscriptionSummaryOrNull())
+  }
+
+  @Test
+  fun `subscription state helpers keep error unknown instead of defaulting to basic`() {
+    val error = QueryState.Error(Exception("failed"))
+
+    assertNull(error.hasSubscriptionOrNull())
+    assertNull(error.subscriptionSummaryOrNull())
+  }
+
+  @Test
+  fun `subscription state helpers derive basic summary only after success without subscription`() {
+    val state = QueryState.Success<SubscriptionSnapshot?>(null)
+
+    assertEquals(false, state.hasSubscriptionOrNull())
+    assertEquals(
+      SubscriptionSummary(
+        hasSubscription = false,
+        subscriptionName = "타이피 BASIC ACCESS",
+      ),
+      state.subscriptionSummaryOrNull(),
+    )
+  }
+
+  @Test
+  fun `subscription state helpers derive full access summary from active subscription`() {
+    val state = QueryState.Success(
+      SubscriptionSnapshot(
+        id = "subscription",
+        planName = "타이피 FULL ACCESS",
+      ),
+    )
+
+    assertEquals(true, state.hasSubscriptionOrNull())
+    assertEquals(
+      SubscriptionSummary(
+        hasSubscription = true,
+        subscriptionName = "타이피 FULL ACCESS",
+      ),
+      state.subscriptionSummaryOrNull(),
     )
   }
 }

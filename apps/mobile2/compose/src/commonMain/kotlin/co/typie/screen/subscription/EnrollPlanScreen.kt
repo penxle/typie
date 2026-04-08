@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,7 @@ import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
+import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
@@ -61,10 +63,12 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun EnrollPlanScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
+  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val subscriptionService = koinInject<SubscriptionService>()
   val model = koinViewModel<EnrollPlanViewModel>()
   val scrollState = rememberScrollState()
   var showTrialStartConfirm by remember { mutableStateOf(false) }
+  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
 
   LaunchedEffect(model.celebration) {
     val celebration = model.celebration ?: return@LaunchedEffect
@@ -89,55 +93,55 @@ fun EnrollPlanScreen() {
 
   Screen(
     scrollState = scrollState,
-    loading = subscriptionService.isQueryLoading(model.query.state),
+    loading = subscriptionService.isQueryLoading(model.query.state) || currentSubscriptionState !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    val subscription = subscriptionService.currentSubscription(model.query.data.me.subscription?.toSubscriptionSnapshot())
-    val currentPlanId = subscription?.planId
-    val hasSubscription = subscription != null
-    val isOnTrial = subscription?.availability == SubscriptionAvailability.Trial
+    val currentSubscription = (currentSubscriptionState as? QueryState.Success)?.data
+    val currentPlanId = currentSubscription?.planId
+    val hasSubscription = currentSubscription != null
+    val isOnTrial = currentSubscription?.availability == SubscriptionAvailability.Trial
     val canStartTrial = subscriptionService.canStartTrial(model.query.data.me.canStartTrial)
 
-      Text(
-        text = "이용권 구매/변경",
-        style = AppTheme.typography.display,
-        modifier = Modifier.padding(top = 4.dp),
+    Text(
+      text = "이용권 구매/변경",
+      style = AppTheme.typography.display,
+      modifier = Modifier.padding(top = 4.dp),
+    )
+
+    if (!hasSubscription) {
+      SectionTitle("현재 이용 중인 이용권")
+
+      SubscriptionPlanCard(
+        title = "타이피 BASIC ACCESS",
+        badge = SubscriptionStatusBadge.Current,
+        features = basicPlanFeatures,
       )
+    }
 
-      if (!hasSubscription) {
-        SectionTitle("현재 이용 중인 이용권")
+    SectionTitle("FULL ACCESS")
 
-        SubscriptionPlanCard(
-          title = "타이피 BASIC ACCESS",
-          badge = SubscriptionStatusBadge.Current,
-          features = basicPlanFeatures,
-        )
-      }
+    FullAccessCard(
+      isOnTrial = isOnTrial,
+      canStartTrial = canStartTrial,
+      currentPlanId = currentPlanId,
+      productsLoaded = model.productsLoaded,
+      monthlyProduct = model.products[PurchasePlanInterval.Monthly],
+      yearlyProduct = model.products[PurchasePlanInterval.Yearly],
+      onStartTrial = {
+        showTrialStartConfirm = true
+      },
+      onPurchaseMonthly = { product ->
+        // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
+        model.purchase(product)
+      },
+      onPurchaseYearly = { product ->
+        // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
+        model.purchase(product)
+      },
+    )
 
-      SectionTitle("FULL ACCESS")
-
-      FullAccessCard(
-        isOnTrial = isOnTrial,
-        canStartTrial = canStartTrial,
-        currentPlanId = currentPlanId,
-        productsLoaded = model.productsLoaded,
-        monthlyProduct = model.products[PurchasePlanInterval.Monthly],
-        yearlyProduct = model.products[PurchasePlanInterval.Yearly],
-        onStartTrial = {
-          showTrialStartConfirm = true
-        },
-        onPurchaseMonthly = { product ->
-          // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-          model.purchase(product)
-        },
-        onPurchaseYearly = { product ->
-          // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-          model.purchase(product)
-        },
-      )
-
-      Spacer(Modifier.height(72.dp))
+    Spacer(Modifier.height(72.dp))
   }
 
   if (showTrialStartConfirm) {

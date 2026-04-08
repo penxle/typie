@@ -1,7 +1,7 @@
 package co.typie.screen.subscription
 
 import co.typie.datetime.formatKoreanDate
-import co.typie.graphql.type.SubscriptionState as GraphqlSubscriptionState
+import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
@@ -33,6 +33,33 @@ data class SubscriptionSnapshot(
   val fee: Int? = null,
   val availability: SubscriptionAvailability? = null,
 )
+
+fun subscriptionSummary(
+  subscription: SubscriptionSnapshot?,
+): SubscriptionSummary {
+  return SubscriptionSummary(
+    hasSubscription = subscription != null,
+    subscriptionName = subscription?.planName ?: "타이피 BASIC ACCESS",
+  )
+}
+
+fun QueryState<SubscriptionSnapshot?>.hasSubscriptionOrNull(): Boolean? {
+  return when (this) {
+    is QueryState.Success -> data != null
+    QueryState.Loading,
+    is QueryState.Error,
+    -> null
+  }
+}
+
+fun QueryState<SubscriptionSnapshot?>.subscriptionSummaryOrNull(): SubscriptionSummary? {
+  return when (this) {
+    is QueryState.Success -> subscriptionSummary(data)
+    QueryState.Loading,
+    is QueryState.Error,
+    -> null
+  }
+}
 
 enum class SubscriptionStatusBadge {
   Current,
@@ -198,13 +225,13 @@ fun cancelPlanBodyText(
 
 fun shouldCloseCancelPlanAfterStoreReturn(
   awaitingStoreResult: Boolean,
-  subscriptionState: GraphqlSubscriptionState?,
+  subscriptionState: SubscriptionState?,
 ): Boolean {
   if (!awaitingStoreResult) {
     return false
   }
 
-  return subscriptionState == null || subscriptionState != GraphqlSubscriptionState.ACTIVE
+  return subscriptionState == null || subscriptionState != SubscriptionState.Active
 }
 
 private fun Int.formatGrouped(): String {

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +52,10 @@ import kotlin.math.roundToInt
 @Composable
 fun BottomSheetHost(state: BottomSheetHostState) {
   for (entry in state.entries) {
-    @Suppress("UNCHECKED_CAST")
-    BottomSheetOverlay(entry = entry as BottomSheetEntry<Any?>)
+    key(entry) {
+      @Suppress("UNCHECKED_CAST")
+      BottomSheetOverlay(entry = entry as BottomSheetEntry<Any?>)
+    }
   }
 }
 
