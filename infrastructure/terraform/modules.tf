@@ -32,6 +32,10 @@ module "s3" {
   source = "./modules/s3"
 }
 
+module "kms" {
+  source = "./modules/kms"
+}
+
 module "ses" {
   source = "./modules/ses"
 
