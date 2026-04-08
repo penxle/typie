@@ -515,7 +515,7 @@ mod tests {
         };
         let all_interfaces = vec![editor_iface.clone(), host_iface.clone()];
         let output = generate_ios_wrapper(&host_iface, &all_interfaces, &empty_ct());
-        assert!(output.contains("IosEditor(result)"));
+        assert!(output.contains("IosEditor(result!!)"));
     }
 
     #[test]
@@ -671,9 +671,9 @@ mod tests {
             )],
         };
         let output = generate_ios_wrapper(&iface, &[iface.clone()], &empty_ct());
-        assert!(output.contains("@Suppress(\"UNCHECKED_CAST\") val result ="));
-        assert!(output.contains("as List<String>"));
-        assert!(output.contains("result.map { json.decodeFromString(it) }"));
+        assert!(output.contains("@Suppress(\"UNCHECKED_CAST\")"));
+        assert!(output.contains("result!! as List<String>"));
+        assert!(output.contains(".map { json.decodeFromString(it) }"));
     }
 
     #[test]
