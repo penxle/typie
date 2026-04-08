@@ -59,6 +59,10 @@ export const handleBeforeInput: EditorEventHandler<HTMLInputElement, InputEvent>
   }
 };
 
+export const handleCompositionStart: EditorEventHandler<HTMLInputElement, CompositionEvent> = () => {
+  clearCommitPending();
+};
+
 export const handleCompositionEnd: EditorEventHandler<HTMLInputElement, CompositionEvent> = (editor) => {
   editor.enqueue({ type: 'intent', intent: { type: 'composition', intent: { type: 'commit_as_is' } } });
   setCommitPending();
