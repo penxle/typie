@@ -67,8 +67,12 @@ private const val THUMBNAIL_HEIGHT_DP = 38
 private class FolderShareForm(
   scope: CoroutineScope,
   initialVisibility: EntityVisibility,
+  initialThumbnailUrl: String?,
 ) : FormState(scope) {
   val visibility = field(initialVisibility) {
+    focusable = false
+  }
+  val thumbnailUrl = field(initialThumbnailUrl) {
     focusable = false
   }
 }
@@ -114,10 +118,9 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   val share = koinInject<Share>()
   val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
-  val form = remember(folderId, initialVisibility) {
-    FolderShareForm(scope, initialVisibility)
+  val form = remember(folderId, initialVisibility, initialThumbnailUrl) {
+    FolderShareForm(scope, initialVisibility, initialThumbnailUrl)
   }
-  var thumbnailUrl by remember(folderId, initialThumbnailUrl) { mutableStateOf(initialThumbnailUrl) }
   var isUpdatingVisibility by remember { mutableStateOf(false) }
   var isUploadingThumbnail by remember { mutableStateOf(false) }
   var isRemovingThumbnail by remember { mutableStateOf(false) }
@@ -129,18 +132,17 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   fun updateVisibility(nextVisibility: EntityVisibility) {
     if (isUpdatingVisibility) return
 
-    val previousVisibility = form.visibility.initialValue
-    if (previousVisibility == nextVisibility) return
+    if (form.visibility.initialValue == nextVisibility) return
 
     isUpdatingVisibility = true
     model.updateFolderVisibility(
       folderId = folderId,
       visibility = nextVisibility,
     ) { success ->
-      if (!success) {
-        form.visibility.setValue(previousVisibility)
-      } else {
+      if (success) {
         form.visibility.commit()
+      } else {
+        form.visibility.rollback()
       }
       isUpdatingVisibility = false
     }
@@ -149,12 +151,13 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   fun removeThumbnail() {
     if (isUploadingThumbnail || isRemovingThumbnail) return
 
-    val previousThumbnailUrl = thumbnailUrl
-    thumbnailUrl = null
+    form.thumbnailUrl.setValue(null)
     isRemovingThumbnail = true
     model.removeFolderThumbnail(folderId = folderId) { success ->
-      if (!success) {
-        thumbnailUrl = previousThumbnailUrl
+      if (success) {
+        form.thumbnailUrl.commit()
+      } else {
+        form.thumbnailUrl.rollback()
       }
       isRemovingThumbnail = false
     }
@@ -206,7 +209,8 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
       file = file,
     ) { result ->
       if (result != null) {
-        thumbnailUrl = result.url
+        form.thumbnailUrl.setValue(result.url)
+        form.thumbnailUrl.commit()
       }
       isUploadingThumbnail = false
     }
@@ -261,7 +265,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
           label = "미리보기 이미지",
           trailing = {
             FolderThumbnailControl(
-              thumbnailUrl = thumbnailUrl,
+              thumbnailUrl = form.thumbnailUrl.value,
               isUploading = isUploadingThumbnail,
               isRemoving = isRemovingThumbnail,
               onUploadClick = {

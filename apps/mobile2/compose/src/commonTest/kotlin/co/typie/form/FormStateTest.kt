@@ -96,6 +96,36 @@ class FormStateTest {
   }
 
   @Test
+  fun formCommit_marks_current_values_as_clean() {
+    val form = TestLoginForm()
+    form.email.setValue("test@test.com")
+    form.password.setValue("secret123")
+
+    form.commit()
+
+    assertFalse(form.isDirty)
+    assertEquals("test@test.com", form.email.initialValue)
+    assertEquals("secret123", form.password.initialValue)
+  }
+
+  @Test
+  fun formRollback_restores_last_committed_values() {
+    val form = TestLoginForm()
+    form.email.setValue("saved@test.com")
+    form.password.setValue("secret123")
+    form.commit()
+
+    form.email.setValue("draft@test.com")
+    form.password.setValue("draft")
+
+    form.rollback()
+
+    assertEquals("saved@test.com", form.email.value)
+    assertEquals("secret123", form.password.value)
+    assertFalse(form.isDirty)
+  }
+
+  @Test
   fun dynamicInitialValues() {
     val form = TestProfileForm(nickname = "기존닉네임", bio = "기존소개")
     assertEquals("기존닉네임", form.nickname.value)

@@ -248,21 +248,36 @@ class FolderViewModel(
     }
   }
 
-  suspend fun renameFolder(
+  fun renameFolder(
     folderId: String,
     currentName: String,
     name: String,
-    onRenamed: () -> Unit,
+    onFinished: (Boolean) -> Unit = {},
   ) {
+    viewModelScope.launch {
+      onFinished(
+        renameFolderInternal(
+          folderId = folderId,
+          currentName = currentName,
+          name = name,
+        ),
+      )
+    }
+  }
+
+  private suspend fun renameFolderInternal(
+    folderId: String,
+    currentName: String,
+    name: String,
+  ): Boolean {
     val trimmedName = name.trim()
     val normalizedCurrentName = currentName.trim()
     if (trimmedName.isEmpty()) {
-      return
+      return false
     }
 
     if (trimmedName == normalizedCurrentName) {
-      onRenamed()
-      return
+      return true
     }
 
     try {
@@ -277,41 +292,48 @@ class FolderViewModel(
 
       refetch()
       toast.show(ToastType.Success, RENAME_FOLDER_SUCCESS_MESSAGE)
-      onRenamed()
+      return true
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       Logger.e(e) { "Failed to rename folder" }
       toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
+      return false
     }
   }
 
-  suspend fun updateEntityIcon(
+  fun updateEntityIcon(
     entityId: String,
-    currentIcon: String,
-    currentColor: String,
-    nextIcon: String,
-    nextColor: String,
-  ): Boolean {
-    val normalizedCurrentIcon = currentIcon.trim()
-    val normalizedCurrentColor = currentColor.trim()
-    val normalizedNextIcon = nextIcon.trim()
-    val normalizedNextColor = nextColor.trim()
-
-    if (
-      normalizedCurrentIcon == normalizedNextIcon &&
-      normalizedCurrentColor == normalizedNextColor
-    ) {
-      return true
+    icon: String,
+    iconColor: String,
+    onFinished: (Boolean) -> Unit = {},
+  ) {
+    viewModelScope.launch {
+      onFinished(
+        updateEntityIconInternal(
+          entityId = entityId,
+          icon = icon,
+          iconColor = iconColor,
+        ),
+      )
     }
+  }
+
+  private suspend fun updateEntityIconInternal(
+    entityId: String,
+    icon: String,
+    iconColor: String,
+  ): Boolean {
+    val normalizedIcon = icon.trim()
+    val normalizedColor = iconColor.trim()
 
     try {
       executeMutation(
         FolderActions_UpdateEntityIcon_Mutation(
           input = UpdateEntityIconInput(
             entityId = entityId,
-            icon = normalizedNextIcon,
-            iconColor = normalizedNextColor,
+            icon = normalizedIcon,
+            iconColor = normalizedColor,
           ),
         ),
       )
@@ -327,7 +349,26 @@ class FolderViewModel(
     }
   }
 
-  suspend fun moveChildEntity(
+  fun moveChildEntity(
+    entityId: String,
+    parentEntityId: String,
+    lowerOrder: String?,
+    upperOrder: String?,
+    onFinished: (Boolean) -> Unit = {},
+  ) {
+    viewModelScope.launch {
+      onFinished(
+        moveChildEntityInternal(
+          entityId = entityId,
+          parentEntityId = parentEntityId,
+          lowerOrder = lowerOrder,
+          upperOrder = upperOrder,
+        ),
+      )
+    }
+  }
+
+  private suspend fun moveChildEntityInternal(
     entityId: String,
     parentEntityId: String,
     lowerOrder: String?,

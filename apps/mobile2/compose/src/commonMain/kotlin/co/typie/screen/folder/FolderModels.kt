@@ -2,41 +2,20 @@ package co.typie.screen.folder
 
 import co.typie.graphql.FolderScreen_Query
 import co.typie.ui.component.EntityListItem
-import co.typie.ui.component.entity_container.EntityReorderOrders
 import co.typie.ui.component.entity_container.OrderedEntityItem
-import co.typie.ui.component.entity_container.calculateEntityReorderOrdersFromOrderedKeys
-import co.typie.ui.component.entity_container.displayOrderedEntityItems
-
-typealias NormalizedFolderChild = OrderedEntityItem
-typealias FolderReorderOrders = EntityReorderOrders
 
 fun normalizeFolderChildren(
   children: List<FolderScreen_Query.Child>,
-): List<NormalizedFolderChild> {
+): List<OrderedEntityItem> {
   return children.mapNotNull(::normalizeFolderChild)
-}
-
-fun displayFolderChildren(
-  items: List<NormalizedFolderChild>,
-  orderedKeys: List<String>,
-): List<NormalizedFolderChild> {
-  return displayOrderedEntityItems(items, orderedKeys)
-}
-
-fun calculateFolderReorderOrdersFromOrderedKeys(
-  items: List<NormalizedFolderChild>,
-  orderedKeys: List<String>,
-  movedKey: String,
-): FolderReorderOrders? {
-  return calculateEntityReorderOrdersFromOrderedKeys(items, orderedKeys, movedKey)
 }
 
 private fun normalizeFolderChild(
   child: FolderScreen_Query.Child,
-): NormalizedFolderChild? {
+): OrderedEntityItem? {
   val childFolder = child.node.onFolder
   if (childFolder != null) {
-    return NormalizedFolderChild(
+    return OrderedEntityItem(
       id = child.id,
       order = child.order,
       item = EntityListItem.Folder(
@@ -52,7 +31,7 @@ private fun normalizeFolderChild(
 
   val document = child.node.onDocument
   if (document != null) {
-    return NormalizedFolderChild(
+    return OrderedEntityItem(
       id = child.id,
       order = child.order,
       item = EntityListItem.Document(

@@ -142,8 +142,12 @@ open class FormState(
   }
 
   fun reset() {
+    rollback()
+  }
+
+  fun rollback() {
     for (field in registeredFields) {
-      field.reset()
+      field.rollback()
     }
 
     debounceJobs.values.forEach { it.cancel() }

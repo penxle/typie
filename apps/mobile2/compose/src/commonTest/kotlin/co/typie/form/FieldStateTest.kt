@@ -93,6 +93,39 @@ class FieldStateTest {
   }
 
   @Test
+  fun rollback_restores_last_committed_value() {
+    val field = stringField(initialValue = "init")
+    field.setValue("saved")
+    field.commit()
+
+    field.setValue("draft")
+    field.setErrors(listOf("에러"))
+    field.onBlur()
+
+    field.rollback()
+
+    assertEquals("saved", field.value)
+    assertEquals(emptyList(), field.errors)
+    assertFalse(field.isDirty)
+    assertFalse(field.isTouched)
+  }
+
+  @Test
+  fun commit_updates_rollback_target() {
+    val field = stringField(initialValue = "init")
+    field.setValue("first")
+    field.commit()
+    field.setValue("second")
+    field.commit()
+    field.setValue("draft")
+
+    field.rollback()
+
+    assertEquals("second", field.value)
+    assertFalse(field.isDirty)
+  }
+
+  @Test
   fun destructuring() {
     val field = stringField(initialValue = "hello")
     field.setErrors(listOf("에러"))

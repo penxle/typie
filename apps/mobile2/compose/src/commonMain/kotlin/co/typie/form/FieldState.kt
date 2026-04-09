@@ -65,6 +65,10 @@ class FieldState<V>(
   }
 
   fun reset() {
+    rollback()
+  }
+
+  fun rollback() {
     value = _initialValue
     errors = emptyList()
     isTouched = false

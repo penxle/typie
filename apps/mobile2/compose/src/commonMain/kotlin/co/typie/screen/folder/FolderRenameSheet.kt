@@ -68,15 +68,16 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
     }
 
     isSubmitting = true
-    try {
-      model.renameFolder(
-        folderId = folderId,
-        currentName = normalizedInitialName,
-        name = nextName,
-        onRenamed = { dismiss() },
-      )
-    } finally {
+    model.renameFolder(
+      folderId = folderId,
+      currentName = normalizedInitialName,
+      name = nextName,
+    ) { success ->
       isSubmitting = false
+      if (success) {
+        form.name.commit()
+        dismiss()
+      }
     }
   }
 

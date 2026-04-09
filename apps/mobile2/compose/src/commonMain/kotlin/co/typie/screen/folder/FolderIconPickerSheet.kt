@@ -16,9 +16,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
+import co.typie.form.FormState
 import co.typie.icons.Lucide
 import co.typie.screen.home.EntityIconColorOption
 import co.typie.screen.home.EntityIconOption
@@ -43,6 +45,7 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.CoroutineScope
 
 private const val DEFAULT_ENTITY_ICON_NAME = "folder"
 private const val DEFAULT_ENTITY_ICON_COLOR = "gray"
@@ -54,6 +57,19 @@ private val FolderIconPickerSelectionDotBottomInset = 4.dp
 private val FolderIconPickerGridBottomInset = 12.dp
 private val FolderIconPickerTopFadeHeight = 16.dp
 
+private class FolderIconPickerForm(
+  scope: CoroutineScope,
+  initialIconName: String,
+  initialColor: String,
+) : FormState(scope) {
+  val iconName = field(initialIconName) {
+    focusable = false
+  }
+  val color = field(initialColor) {
+    focusable = false
+  }
+}
+
 @Composable
 fun BottomSheetScope<Unit>.FolderIconPickerSheet(
   model: FolderViewModel,
@@ -63,45 +79,45 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
 ) {
   val normalizedInitialIcon = initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
   val normalizedInitialColor = initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
+  val scope = rememberCoroutineScope()
+  val form = remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
+    FolderIconPickerForm(
+      scope = scope,
+      initialIconName = normalizedInitialIcon,
+      initialColor = normalizedInitialColor,
+    )
+  }
 
-  var selectedIconName by remember(initialIcon, initialColor) { mutableStateOf(normalizedInitialIcon) }
-  var selectedIconColor by remember(initialIcon, initialColor) { mutableStateOf(normalizedInitialColor) }
   var isUpdating by remember { mutableStateOf(false) }
 
-  suspend fun updateSelection(nextIconName: String, nextColor: String) {
+  fun updateSelection(nextIconName: String, nextColor: String) {
     if (isUpdating) {
       return
     }
 
-    if (selectedIconName == nextIconName && selectedIconColor == nextColor) {
+    if (form.iconName.initialValue == nextIconName && form.color.initialValue == nextColor) {
       return
     }
 
-    val previousIconName = selectedIconName
-    val previousColor = selectedIconColor
-    selectedIconName = nextIconName
-    selectedIconColor = nextColor
+    form.iconName.setValue(nextIconName)
+    form.color.setValue(nextColor)
     isUpdating = true
 
-    try {
-      val success = model.updateEntityIcon(
-        entityId = entityId,
-        currentIcon = previousIconName,
-        currentColor = previousColor,
-        nextIcon = nextIconName,
-        nextColor = nextColor,
-      )
-
-      if (!success) {
-        selectedIconName = previousIconName
-        selectedIconColor = previousColor
+    model.updateEntityIcon(
+      entityId = entityId,
+      icon = nextIconName,
+      iconColor = nextColor,
+    ) { success ->
+      if (success) {
+        form.commit()
+      } else {
+        form.rollback()
       }
-    } finally {
       isUpdating = false
     }
   }
 
-  val currentTint = resolveEntityIconTint(selectedIconColor, AppTheme.colors) ?: AppTheme.colors.textSecondary
+  val currentTint = resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
   val iconGridScrollState = rememberScrollState()
 
   BottomSheetScaffold(
@@ -121,9 +137,9 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
     ) {
       IconColorRow(
         colors = entityIconColors,
-        selectedColor = selectedIconColor,
+        selectedColor = form.color.value,
         enabled = !isUpdating,
-        onColorSelect = { nextColor -> updateSelection(selectedIconName, nextColor) },
+        onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
       )
 
       Box(modifier = Modifier.fillMaxWidth()) {
@@ -150,10 +166,10 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
                   IconGridCell(
                     icon = icon,
                     tint = currentTint,
-                    selected = selectedIconName == icon.name,
+                    selected = form.iconName.value == icon.name,
                     enabled = !isUpdating,
                     size = cellSize,
-                    onSelect = { updateSelection(icon.name, selectedIconColor) },
+                    onSelect = { updateSelection(icon.name, form.color.value) },
                   )
                 }
               }
@@ -187,7 +203,7 @@ private fun IconColorRow(
   colors: List<EntityIconColorOption>,
   selectedColor: String,
   enabled: Boolean,
-  onColorSelect: suspend (String) -> Unit,
+  onColorSelect: (String) -> Unit,
 ) {
   Row(
     modifier = Modifier.fillMaxWidth(),
@@ -210,7 +226,7 @@ private fun IconColorChip(
   color: EntityIconColorOption,
   selected: Boolean,
   enabled: Boolean,
-  onClick: suspend () -> Unit,
+  onClick: () -> Unit,
 ) {
   InteractionScope {
     Box(
@@ -224,7 +240,7 @@ private fun IconColorChip(
           color = if (selected) AppTheme.colors.borderStrong else Color.Transparent,
           shape = CircleShape,
         )
-        .clickable(enabled = enabled, onClick = onClick)
+        .clickable(enabled = enabled) { onClick() }
         .pressScale(0.96f),
     ) {
       if (selected) {
@@ -245,7 +261,7 @@ private fun IconGridCell(
   selected: Boolean,
   enabled: Boolean,
   size: androidx.compose.ui.unit.Dp,
-  onSelect: suspend () -> Unit,
+  onSelect: () -> Unit,
 ) {
   InteractionScope {
     Box(
@@ -254,7 +270,7 @@ private fun IconGridCell(
         .size(size)
         .clip(RoundedCornerShape(4.dp))
         .background(if (selected) AppTheme.colors.surfaceSunken else Color.Transparent)
-        .clickable(enabled = enabled, onClick = onSelect)
+        .clickable(enabled = enabled) { onSelect() }
         .pressScale(0.98f),
     ) {
       Icon(
