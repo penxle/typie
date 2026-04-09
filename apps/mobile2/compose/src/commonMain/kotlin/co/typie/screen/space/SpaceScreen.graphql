@@ -1,5 +1,35 @@
-query SpaceScreen_Query {
-  me @catch(to: THROW) {
+query SpaceScreen_Query($siteId: ID!) {
+  site(siteId: $siteId) @catch(to: THROW) {
     id
+    name
+    folderCount
+    documentCount
+
+    entities {
+      id
+      slug
+      icon
+      iconColor
+      type
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          name
+          folderCount
+          documentCount
+        }
+
+        ... on Document {
+          id
+          title
+          subtitle
+          excerpt
+          updatedAt
+        }
+      }
+    }
   }
 }

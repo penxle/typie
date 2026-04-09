@@ -45,6 +45,20 @@ data class PopoverListItem(
 fun PopoverScope.PopoverList(
   items: List<PopoverListItem>,
 ) {
+  PopoverList(
+    items = items,
+    pointerState = pointerState,
+    inputEnabled = acceptsInput,
+  )
+}
+
+@Composable
+fun PopoverList(
+  items: List<PopoverListItem>,
+  pointerState: AnchorPointerState?,
+  inputEnabled: Boolean,
+  armDelayMs: Long = PopoverDefaults.ArmDelayMs,
+) {
   val haptic = LocalHapticFeedback.current
   val density = LocalDensity.current
   val gestureScope = rememberCoroutineScope()
@@ -111,7 +125,6 @@ fun PopoverScope.PopoverList(
 
   // Scope pointer tracking (drag from anchor)
   val currentPointerState = pointerState
-  val inputEnabled = acceptsInput
   LaunchedEffect(currentPointerState, inputEnabled) {
     if (!inputEnabled) {
       edgeAutoScrollState?.stop()
@@ -205,7 +218,7 @@ fun PopoverScope.PopoverList(
                       activeIndex = null
 
                       val armJob = gestureScope.launch {
-                        delay(PopoverDefaults.ArmDelayMs)
+                        delay(armDelayMs)
                         if (isPanScroll) {
                           return@launch
                         }

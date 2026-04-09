@@ -48,7 +48,7 @@ fun Route.transitionStyleTo(route: Route): RouteTransitionStyle = when {
 
 val Route.toastBottomInset: Dp
   get() = when (this) {
-    is Route.Home, is Route.Space, is Route.Notes, is Route.More -> 72.dp // nav bar가 있는 스크린
+    is Route.Home, is Route.Space, is Route.Folder, is Route.Notes, is Route.More -> 72.dp // nav bar가 있는 스크린
     is Route.DeleteUser -> 120.dp // 하단 버튼이 2개인 스크린
     is Route.UpdateEmail,
     is Route.UpdateProfile,

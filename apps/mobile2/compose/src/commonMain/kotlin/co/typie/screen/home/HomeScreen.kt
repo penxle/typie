@@ -408,17 +408,15 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
                     )
                   }
 
-                  if (document.excerpt.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
+                  Spacer(Modifier.height(4.dp))
 
-                    Text(
-                      document.excerpt,
-                      style = AppTheme.typography.caption,
-                      color = metaColor,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                    )
-                  }
+                  Text(
+                    if (document.excerpt.isNotEmpty()) document.excerpt else "(내용 없음)",
+                    style = AppTheme.typography.caption,
+                    color = metaColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
                 }
               }
             }

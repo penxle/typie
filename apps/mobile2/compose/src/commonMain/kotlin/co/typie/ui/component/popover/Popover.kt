@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -116,6 +117,8 @@ fun Popover(
   pane: @Composable PopoverScope.() -> Unit,
   placement: PopoverPlacement = PopoverPlacement.BelowEnd,
   maxWidth: Dp? = null,
+  minWidth: Dp = 0.dp,
+  expandToMaxWidth: Boolean = false,
   screenPadding: PaddingValues = PaddingValues(all = PopoverDefaults.ScreenPadding),
   collapsedCornerRadius: Dp = 0.dp,
 ) {
@@ -265,9 +268,7 @@ fun Popover(
       0f
     }
 
-    Box(modifier = Modifier.alpha(1f - progress)) {
-      anchor()
-    }
+    Box(modifier = Modifier.alpha(1f - progress)) { anchor() }
 
     if (isOverlayVisible) {
       val placementProvider = remember(placement, resolvedScreenPadding) {
@@ -302,6 +303,8 @@ fun Popover(
             collapsedCornerRadius = collapsedCornerRadius,
             screenPadding = resolvedScreenPadding,
             maxWidth = maxWidth,
+            minWidth = minWidth,
+            expandToMaxWidth = expandToMaxWidth,
           )
         }
       }
@@ -320,10 +323,15 @@ private fun PopoverPanePopup(
   collapsedCornerRadius: Dp,
   screenPadding: PopoverScreenPadding,
   maxWidth: Dp?,
+  minWidth: Dp,
+  expandToMaxWidth: Boolean,
 ) {
+  val density = LocalDensity.current
+
   SubcomposeLayout(
     modifier = Modifier.then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier),
   ) { constraints ->
+    val minWidthPx = minWidth.toPx(density).roundToInt()
     val preferredPaneMaxWidth = availableWidthForPlacement(
       windowWidth = constraints.maxWidth,
       anchorBounds = anchorBounds,
@@ -341,7 +349,10 @@ private fun PopoverPanePopup(
     )
 
     val initialPanePlaceables = subcompose(PopoverSlot.InitialMeasurePane) {
-      ShrinkWrappedPane(content = pane)
+      ShrinkWrappedPane(
+        expandToMaxWidth = expandToMaxWidth,
+        content = pane,
+      )
     }.map { it.measure(paneConstraints) }
 
     val initiallyMeasuredWidth =
@@ -364,12 +375,20 @@ private fun PopoverPanePopup(
       ),
     )
     val finalPanePlaceables = subcompose(PopoverSlot.FinalMeasurePane) {
-      ShrinkWrappedPane(content = pane)
+      ShrinkWrappedPane(
+        expandToMaxWidth = expandToMaxWidth,
+        content = pane,
+      )
     }.map { it.measure(finalPaneConstraints) }
 
     val paneWidth = finalPanePlaceables.maxOfOrNull { it.width } ?: initiallyMeasuredWidth
     val paneHeight = finalPanePlaceables.maxOfOrNull { it.height } ?: initiallyMeasuredHeight
-    val paneSize = IntSize(paneWidth, paneHeight)
+    val resolvedPaneWidth = if (expandToMaxWidth) {
+      finalPaneConstraints.maxWidth
+    } else {
+      paneWidth.coerceAtLeast(minWidthPx).coerceAtMost(finalPaneConstraints.maxWidth)
+    }
+    val paneSize = IntSize(resolvedPaneWidth, paneHeight)
     val anchorSize = anchorBounds.size
     val resolvedPlacement = resolvedPlacement(placement, showBelow)
     val transition = PopoverPaneTransition(
@@ -381,7 +400,12 @@ private fun PopoverPanePopup(
       CompositionLocalProvider(LocalPopoverPaneTransition provides transition) {
         PopoverPaneSurface(
           anchor = anchor,
-          pane = { ShrinkWrappedPane(content = pane) },
+          pane = {
+            ShrinkWrappedPane(
+              expandToMaxWidth = expandToMaxWidth,
+              content = pane,
+            )
+          },
           paneSize = paneSize,
           anchorSize = anchorSize,
           resolvedPlacement = resolvedPlacement,
@@ -390,16 +414,19 @@ private fun PopoverPanePopup(
           collapsedCornerRadius = collapsedCornerRadius,
         )
       }
-    }.single().measure(Constraints.fixed(paneWidth, paneHeight))
+    }.single().measure(Constraints.fixed(resolvedPaneWidth, paneHeight))
 
-    layout(paneWidth, paneHeight) {
+    layout(resolvedPaneWidth, paneHeight) {
       surfacePlaceable.place(0, 0)
     }
   }
 }
 
 @Composable
-private fun ShrinkWrappedPane(content: @Composable () -> Unit) {
+private fun ShrinkWrappedPane(
+  expandToMaxWidth: Boolean = false,
+  content: @Composable () -> Unit,
+) {
   val scrollState = rememberScrollState()
   val edgeAutoScrollState = rememberEdgeAutoScrollState(verticalScrollableState = scrollState)
 
@@ -408,7 +435,13 @@ private fun ShrinkWrappedPane(content: @Composable () -> Unit) {
   ) {
     Box(
       modifier = Modifier
-        .width(IntrinsicSize.Max)
+        .then(
+          if (expandToMaxWidth) {
+            Modifier.fillMaxWidth()
+          } else {
+            Modifier.width(IntrinsicSize.Max)
+          }
+        )
         .edgeAutoScroll(edgeAutoScrollState)
         .verticalScroll(scrollState),
     ) {

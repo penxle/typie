@@ -1,0 +1,65 @@
+query FolderScreen_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+    icon
+    iconColor
+    visibility
+    availability
+
+    site {
+      id
+      name
+    }
+
+    ancestors {
+      id
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          name
+        }
+      }
+    }
+
+    node {
+      __typename
+
+      ... on Folder {
+        id
+        name
+        folderCount
+        documentCount
+      }
+    }
+
+    children {
+      id
+      slug
+      icon
+      iconColor
+      type
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          name
+          folderCount
+          documentCount
+        }
+
+        ... on Document {
+          id
+          title
+          subtitle
+          excerpt
+          updatedAt
+        }
+      }
+    }
+  }
+}

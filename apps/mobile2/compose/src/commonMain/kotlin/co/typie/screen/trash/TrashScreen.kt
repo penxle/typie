@@ -20,10 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
-import co.typie.datetime.timeAgo
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.QueryState
 import co.typie.graphql.TrashScreen_PurgeEntities_Mutation
@@ -40,7 +38,6 @@ import co.typie.overlay.ToastType
 import co.typie.route.Route
 import co.typie.service.SiteService
 import co.typie.ui.component.CardDivider
-import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
@@ -63,6 +60,8 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
+import co.typie.ui.component.TrashDocumentRow
+import co.typie.ui.component.TrashFolderRow
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.state.rememberScrollState
@@ -77,16 +76,18 @@ import org.koin.core.annotation.KoinViewModel
 
 internal enum class TrashItemType(
   val label: String,
-  val icon: IconData,
 ) {
-  Folder("폴더", Lucide.Folder),
-  Document("문서", Lucide.FileText),
+  Folder("폴더"),
+  Document("문서"),
 }
 
 internal data class TrashItem(
   val id: String,
   val title: String,
   val type: TrashItemType,
+  val iconName: String,
+  val iconColor: String,
+  val subtitle: String? = null,
   val excerpt: String? = null,
   val updatedAt: Instant? = null,
 )
@@ -335,46 +336,59 @@ fun TrashScreen(entityId: String? = null) {
                 CardDivider()
               }
 
-              CardRow(
-                onClick = {
-                  if (item.type == TrashItemType.Folder) {
-                    nav.navigate(Route.Trash(item.id))
-                  } else {
-                    bottomSheetHost.show {
-                      TrashActionsSheet(
-                        title = item.title,
-                        actionScope = screenScope,
-                        actions = listOf(
-                          TrashActionItem(
-                            label = "복원",
-                            icon = Lucide.Undo2,
-                            onClick = {
-                              if (model.recoverEntity(item)) {
-                                model.refetch()
-                              }
-                            },
+              when (item.type) {
+                TrashItemType.Folder -> {
+                  TrashFolderRow(
+                    title = item.title,
+                    iconName = item.iconName,
+                    iconColor = item.iconColor,
+                    onClick = { nav.navigate(Route.Trash(item.id)) },
+                  )
+                }
+
+                TrashItemType.Document -> {
+                  TrashDocumentRow(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    excerpt = item.excerpt,
+                    updatedAt = item.updatedAt,
+                    iconName = item.iconName,
+                    iconColor = item.iconColor,
+                    onClick = {
+                      bottomSheetHost.show {
+                        TrashActionsSheet(
+                          title = item.title,
+                          actionScope = screenScope,
+                          actions = listOf(
+                            TrashActionItem(
+                              label = "복원",
+                              icon = Lucide.Undo2,
+                              onClick = {
+                                if (model.recoverEntity(item)) {
+                                  model.refetch()
+                                }
+                              },
+                            ),
+                            TrashActionItem(
+                              label = "영구 삭제",
+                              icon = Lucide.Trash2,
+                              tint = AppTheme.colors.danger,
+                              onClick = {
+                                purgeRequest = TrashPurgeRequest(
+                                  title = "${item.type.label} 영구 삭제",
+                                  message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
+                                  confirmText = "삭제",
+                                  entityIds = listOf(item.id),
+                                  successMessage = "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
+                                )
+                              },
+                            ),
                           ),
-                          TrashActionItem(
-                            label = "영구 삭제",
-                            icon = Lucide.Trash2,
-                            tint = AppTheme.colors.danger,
-                            onClick = {
-                              purgeRequest = TrashPurgeRequest(
-                                title = "${item.type.label} 영구 삭제",
-                                message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
-                                confirmText = "삭제",
-                                entityIds = listOf(item.id),
-                                successMessage = "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
-                              )
-                            },
-                          ),
-                        ),
-                      )
-                    }
-                  }
-                },
-              ) {
-                TrashItemRow(item)
+                        )
+                      }
+                    },
+                  )
+                }
               }
             }
           }
@@ -407,73 +421,6 @@ fun TrashScreen(entityId: String? = null) {
       },
       onDismiss = { purgeRequest = null },
     )
-  }
-}
-
-@Composable
-private fun TrashItemRow(item: TrashItem) {
-  when (item.type) {
-    TrashItemType.Folder -> {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-      ) {
-        Icon(
-          icon = item.type.icon,
-          modifier = Modifier.size(18.dp),
-          tint = AppTheme.colors.textPrimary,
-        )
-        Text(
-          text = item.title,
-          style = AppTheme.typography.label,
-          modifier = Modifier.weight(1f),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-        Icon(
-          icon = Lucide.ChevronRight,
-          modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.textTertiary,
-        )
-      }
-    }
-
-    TrashItemType.Document -> {
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(
-            text = item.title,
-            style = AppTheme.typography.label,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-          if (item.updatedAt != null) {
-            Text(
-              text = item.updatedAt.timeAgo(),
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
-            )
-          }
-        }
-
-        Text(
-          text = item.excerpt?.takeIf { it.isNotBlank() } ?: "(내용 없음)",
-          style = AppTheme.typography.body,
-          color = AppTheme.colors.textTertiary,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-    }
   }
 }
 
@@ -610,12 +557,17 @@ private fun TrashScreen_WithEntityId_Query.Entity.toTrashItem(): TrashItem {
       id = id,
       title = node.onFolder.name,
       type = TrashItemType.Folder,
+      iconName = icon,
+      iconColor = iconColor,
     )
 
     node.onDocument != null -> TrashItem(
       id = id,
       title = node.onDocument.title,
       type = TrashItemType.Document,
+      iconName = icon,
+      iconColor = iconColor,
+      subtitle = node.onDocument.subtitle,
       excerpt = node.onDocument.excerpt,
       updatedAt = node.onDocument.updatedAt,
     )
@@ -624,6 +576,8 @@ private fun TrashScreen_WithEntityId_Query.Entity.toTrashItem(): TrashItem {
       id = id,
       title = "삭제된 항목",
       type = TrashItemType.Document,
+      iconName = "",
+      iconColor = "",
     )
   }
 }
@@ -634,12 +588,17 @@ private fun TrashScreen_WithSiteId_Query.DeletedEntity.toTrashItem(): TrashItem 
       id = id,
       title = node.onFolder.name,
       type = TrashItemType.Folder,
+      iconName = icon,
+      iconColor = iconColor,
     )
 
     node.onDocument != null -> TrashItem(
       id = id,
       title = node.onDocument.title,
       type = TrashItemType.Document,
+      iconName = icon,
+      iconColor = iconColor,
+      subtitle = node.onDocument.subtitle,
       excerpt = node.onDocument.excerpt,
       updatedAt = node.onDocument.updatedAt,
     )
@@ -648,6 +607,8 @@ private fun TrashScreen_WithSiteId_Query.DeletedEntity.toTrashItem(): TrashItem 
       id = id,
       title = "삭제된 항목",
       type = TrashItemType.Document,
+      iconName = "",
+      iconColor = "",
     )
   }
 }
@@ -658,12 +619,17 @@ private fun TrashScreen_WithEntityId_Query.DeletedChildren.toTrashItem(): TrashI
       id = id,
       title = node.onFolder.name,
       type = TrashItemType.Folder,
+      iconName = icon,
+      iconColor = iconColor,
     )
 
     node.onDocument != null -> TrashItem(
       id = id,
       title = node.onDocument.title,
       type = TrashItemType.Document,
+      iconName = icon,
+      iconColor = iconColor,
+      subtitle = node.onDocument.subtitle,
       excerpt = node.onDocument.excerpt,
       updatedAt = node.onDocument.updatedAt,
     )
@@ -672,6 +638,8 @@ private fun TrashScreen_WithEntityId_Query.DeletedChildren.toTrashItem(): TrashI
       id = id,
       title = "삭제된 항목",
       type = TrashItemType.Document,
+      iconName = "",
+      iconColor = "",
     )
   }
 }

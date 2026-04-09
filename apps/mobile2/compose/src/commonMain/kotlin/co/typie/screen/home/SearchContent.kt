@@ -2,7 +2,6 @@ package co.typie.screen.home
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,8 +28,8 @@ import co.typie.graphql.HomeScreen_Search_Query
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
-import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
+import co.typie.ui.component.SearchFolderRow
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
@@ -216,6 +215,7 @@ private fun SearchResultsList(
                 iconColor = onFolder.folder.entity.iconColor,
                 highlightedName = onFolder.name,
                 fallbackName = onFolder.folder.name,
+                folderCount = onFolder.folder.folderCount,
                 documentCount = onFolder.folder.documentCount,
                 highlightColor = highlightColor,
                 onClick = { onFolderClick(onFolder.folder.entity.id, queryText) },
@@ -342,11 +342,11 @@ private fun SearchDocumentResultRow(
               maxLines = 2,
               overflow = TextOverflow.Ellipsis,
             )
-          } else if (excerpt.isNotEmpty()) {
+          } else {
             Spacer(Modifier.height(4.dp))
 
             Text(
-              excerpt,
+              if (excerpt.isNotEmpty()) excerpt else "(내용 없음)",
               style = AppTheme.typography.caption,
               color = metaColor,
               maxLines = 1,
@@ -365,57 +365,21 @@ private fun SearchFolderResultRow(
   iconColor: String,
   highlightedName: String?,
   fallbackName: String,
+  folderCount: Int,
   documentCount: Int,
   highlightColor: Color,
   onClick: suspend () -> Unit,
 ) {
-  val entityIcon = resolveEntityIconAppearance(
+  val titleText = highlightedName?.let { parseEmHighlight(it, highlightColor) } ?: AnnotatedString(fallbackName)
+
+  SearchFolderRow(
+    title = titleText,
     iconName = iconName,
     iconColor = iconColor,
-    fallbackIcon = Lucide.Folder,
-    fallbackTint = AppTheme.colors.brand,
-    colors = AppTheme.colors,
-  )
-
-  CardRow(
+    folderCount = folderCount,
+    documentCount = documentCount,
     onClick = onClick,
-    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-    spacing = 12.dp,
-  ) {
-    Icon(
-      icon = entityIcon.icon,
-      modifier = Modifier.size(18.dp),
-      tint = entityIcon.tint,
-    )
-
-    Column(Modifier.weight(1f)) {
-      if (highlightedName != null) {
-        Text(
-          parseEmHighlight(highlightedName, highlightColor),
-          style = AppTheme.typography.label,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      } else {
-        Text(
-          fallbackName,
-          style = AppTheme.typography.label,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-
-      Spacer(Modifier.height(4.dp))
-
-      Text(
-        if (documentCount == 0) "빈 폴더" else "문서 ${documentCount}개",
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
-  }
+  )
 }
 
 private fun buildSearchDocumentTitleText(

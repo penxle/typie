@@ -1,0 +1,399 @@
+package co.typie.ui.component
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import co.typie.datetime.timeAgo
+import co.typie.ext.InteractionScope
+import co.typie.ext.clickable
+import co.typie.ext.pressScale
+import co.typie.ext.separated
+import co.typie.icons.Lucide
+import co.typie.screen.home.resolveEntityIconAppearance
+import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppTheme
+import kotlin.time.Instant
+
+sealed interface EntityListItem {
+  val id: String
+  val iconName: String
+  val iconColor: String
+
+  data class Document(
+    override val id: String,
+    override val iconName: String,
+    override val iconColor: String,
+    val slug: String,
+    val title: String,
+    val subtitle: String?,
+    val excerpt: String,
+    val updatedAt: Instant,
+  ) : EntityListItem
+
+  data class Folder(
+    override val id: String,
+    override val iconName: String,
+    override val iconColor: String,
+    val name: String,
+    val folderCount: Int,
+    val documentCount: Int,
+  ) : EntityListItem
+}
+
+fun formatSpaceSummary(
+  folderCount: Int,
+  documentCount: Int,
+): String = formatEntitySummary(folderCount, documentCount, emptyText = "비어 있는 스페이스")
+
+fun formatFolderSummary(
+  folderCount: Int,
+  documentCount: Int,
+): String = formatEntitySummary(folderCount, documentCount, emptyText = "빈 폴더")
+
+fun formatFolderRowSummary(
+  folderCount: Int,
+  documentCount: Int,
+): String {
+  if (folderCount == 0 && documentCount == 0) {
+    return "빈 폴더"
+  }
+
+  if (folderCount == 0) {
+    return "문서 ${documentCount}개"
+  }
+
+  return "폴더 ${folderCount}개 · 문서 ${documentCount}개"
+}
+
+@Composable
+fun EntityListCard(
+  items: List<EntityListItem>,
+  emptyMessage: String,
+  modifier: Modifier = Modifier,
+  onDocumentClick: suspend (slug: String) -> Unit,
+  onFolderClick: suspend (entityId: String) -> Unit,
+) {
+  if (items.isEmpty()) {
+    Box(
+      modifier = modifier
+        .fillMaxWidth()
+        .height(110.dp)
+        .background(AppTheme.colors.surfaceDefault, RoundedCornerShape(12.dp)),
+      contentAlignment = Alignment.Center,
+    ) {
+      Text(
+        emptyMessage,
+        style = AppTheme.typography.action,
+        color = AppTheme.colors.textTertiary,
+      )
+    }
+    return
+  }
+
+  CardSurface(modifier = modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth()) {
+      items.separated(separator = { CardDivider() }) { item ->
+        when (item) {
+          is EntityListItem.Document -> SpaceFolderDocumentRow(
+            item = item,
+            onClick = { onDocumentClick(item.slug) },
+          )
+
+          is EntityListItem.Folder -> SpaceFolderFolderRow(
+            item = item,
+            onClick = { onFolderClick(item.id) },
+          )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+fun SpaceFolderDocumentRow(
+  item: EntityListItem.Document,
+  modifier: Modifier = Modifier,
+  onClick: suspend () -> Unit,
+) {
+  DocumentRowContent(
+    modifier = modifier,
+    iconName = item.iconName,
+    iconColor = item.iconColor,
+    title = item.title,
+    subtitle = item.subtitle,
+    excerpt = item.excerpt,
+    updatedAt = item.updatedAt,
+    onClick = onClick,
+  )
+}
+
+@Composable
+fun SpaceFolderFolderRow(
+  item: EntityListItem.Folder,
+  modifier: Modifier = Modifier,
+  onClick: suspend () -> Unit,
+) {
+  FolderRowContent(
+    title = AnnotatedString(item.name),
+    iconName = item.iconName,
+    iconColor = item.iconColor,
+    metaText = formatFolderRowSummary(
+      folderCount = item.folderCount,
+      documentCount = item.documentCount,
+    ),
+    modifier = modifier,
+    onClick = onClick,
+  )
+}
+
+@Composable
+fun SearchFolderRow(
+  title: AnnotatedString,
+  iconName: String,
+  iconColor: String,
+  folderCount: Int,
+  documentCount: Int,
+  modifier: Modifier = Modifier,
+  onClick: suspend () -> Unit,
+) {
+  FolderRowContent(
+    title = title,
+    iconName = iconName,
+    iconColor = iconColor,
+    metaText = formatFolderRowSummary(
+      folderCount = folderCount,
+      documentCount = documentCount,
+    ),
+    modifier = modifier,
+    onClick = onClick,
+  )
+}
+
+@Composable
+fun TrashDocumentRow(
+  title: String,
+  subtitle: String?,
+  excerpt: String?,
+  updatedAt: Instant?,
+  iconName: String,
+  iconColor: String,
+  modifier: Modifier = Modifier,
+  onClick: suspend () -> Unit,
+) {
+  DocumentRowContent(
+    modifier = modifier,
+    iconName = iconName,
+    iconColor = iconColor,
+    title = title,
+    subtitle = subtitle,
+    excerpt = excerpt.orEmpty(),
+    updatedAt = updatedAt,
+    onClick = onClick,
+  )
+}
+
+@Composable
+fun TrashFolderRow(
+  title: String,
+  iconName: String,
+  iconColor: String,
+  modifier: Modifier = Modifier,
+  onClick: suspend () -> Unit,
+) {
+  FolderRowContent(
+    title = AnnotatedString(title),
+    iconName = iconName,
+    iconColor = iconColor,
+    metaText = "삭제된 폴더",
+    modifier = modifier,
+    onClick = onClick,
+  )
+}
+
+@Composable
+private fun DocumentRowContent(
+  iconName: String,
+  iconColor: String,
+  title: String,
+  subtitle: String?,
+  excerpt: String,
+  updatedAt: Instant?,
+  modifier: Modifier = Modifier,
+  emptyExcerptText: String? = "(내용 없음)",
+  onClick: suspend () -> Unit,
+) {
+  val metaColor = AppTheme.colors.textMuted
+  val entityIcon = resolveEntityIconAppearance(
+    iconName = iconName,
+    iconColor = iconColor,
+    fallbackIcon = Lucide.File,
+    fallbackTint = metaColor,
+    colors = AppTheme.colors,
+  )
+  val resolvedSubtitle = subtitle?.takeIf { it.isNotBlank() }
+  val titleText = buildAnnotatedString {
+    append(title)
+
+    if (resolvedSubtitle != null) {
+      pushStyle(SpanStyle(color = metaColor))
+      append(" — ")
+      append(resolvedSubtitle)
+      pop()
+    }
+  }
+  val resolvedExcerpt = excerpt.takeIf { it.isNotEmpty() } ?: emptyExcerptText
+
+  EntityListRowFrame(
+    modifier = modifier,
+    icon = entityIcon.icon,
+    iconTint = entityIcon.tint,
+    onClick = onClick,
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text(
+        text = titleText,
+        style = AppTheme.typography.label,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+      )
+
+      if (updatedAt != null) {
+        Spacer(Modifier.width(8.dp))
+
+        Text(
+          updatedAt.timeAgo(),
+          style = AppTheme.typography.caption,
+          color = metaColor,
+        )
+      }
+    }
+
+    if (resolvedExcerpt != null) {
+      Spacer(Modifier.height(4.dp))
+
+      Text(
+        resolvedExcerpt,
+        style = AppTheme.typography.caption,
+        color = metaColor,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+  }
+}
+
+@Composable
+private fun FolderRowContent(
+  title: AnnotatedString,
+  iconName: String,
+  iconColor: String,
+  metaText: String,
+  modifier: Modifier = Modifier,
+  onClick: suspend () -> Unit,
+) {
+  val metaColor = AppTheme.colors.textMuted
+  val entityIcon = resolveEntityIconAppearance(
+    iconName = iconName,
+    iconColor = iconColor,
+    fallbackIcon = Lucide.Folder,
+    fallbackTint = AppTheme.colors.brand,
+    colors = AppTheme.colors,
+  )
+
+  EntityListRowFrame(
+    modifier = modifier,
+    icon = entityIcon.icon,
+    iconTint = entityIcon.tint,
+    onClick = onClick,
+    trailing = {
+      Icon(
+        icon = Lucide.ChevronRight,
+        modifier = Modifier.size(18.dp),
+        tint = AppTheme.colors.textTertiary,
+      )
+    },
+  ) {
+    Text(
+      text = title,
+      style = AppTheme.typography.label,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+
+    Spacer(Modifier.height(4.dp))
+
+    Text(
+      text = metaText,
+      style = AppTheme.typography.caption,
+      color = metaColor,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+}
+
+@Composable
+private fun EntityListRowFrame(
+  icon: co.typie.ui.icon.IconData,
+  iconTint: Color,
+  modifier: Modifier = Modifier,
+  trailing: (@Composable () -> Unit)? = null,
+  onClick: suspend () -> Unit,
+  content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+  InteractionScope {
+    Row(
+      modifier = modifier
+        .fillMaxWidth()
+        .clickable(onClick)
+        .pressScale()
+        .padding(horizontal = 16.dp, vertical = 12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      Icon(
+        icon = icon,
+        modifier = Modifier.size(18.dp),
+        tint = iconTint,
+      )
+
+      Column(modifier = Modifier.weight(1f), content = content)
+
+      if (trailing != null) {
+        trailing()
+      }
+    }
+  }
+}
+
+private fun formatEntitySummary(
+  folderCount: Int,
+  documentCount: Int,
+  emptyText: String,
+): String {
+  val parts = buildList {
+    if (folderCount > 0) add("폴더 ${folderCount}개")
+    if (documentCount > 0) add("문서 ${documentCount}개")
+  }
+
+  return if (parts.isEmpty()) emptyText else parts.joinToString(" · ")
+}
