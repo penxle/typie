@@ -9,17 +9,21 @@ pub(crate) struct Labeler {
 impl Labeler {
     pub fn new(doc: &Doc, selection: &Selection) -> Self {
         let mut needed = HashSet::new();
-        if selection.anchor.node_id != NodeId::ROOT {
-            needed.insert(selection.anchor.node_id);
-        }
-        if selection.head.node_id != NodeId::ROOT {
-            needed.insert(selection.head.node_id);
-        }
+        needed.insert(selection.anchor.node_id);
+        needed.insert(selection.head.node_id);
 
         let mut labels = HashMap::new();
         let mut counters: HashMap<NodeType, usize> = HashMap::new();
 
-        for node_ref in doc.root().descendants() {
+        let root = doc.root();
+        if needed.contains(&root.id()) {
+            let abbrev = node_type_abbreviation(root.node());
+            let counter = counters.entry(root.as_type()).or_insert(0);
+            *counter += 1;
+            labels.insert(root.id(), format!("{}{}", abbrev, counter));
+        }
+
+        for node_ref in root.descendants() {
             if needed.contains(&node_ref.id()) {
                 let abbrev = node_type_abbreviation(node_ref.node());
                 let counter = counters.entry(node_ref.as_type()).or_insert(0);
@@ -147,12 +151,12 @@ mod tests {
     }
 
     #[test]
-    fn root_selection_excluded_from_labels() {
+    fn root_selection_labeled() {
         let (state, ..) = state! {
             doc { r: root { paragraph { t1: text("A") } } }
             selection: (r, 0)
         };
         let labeler = Labeler::new(&state.doc, &state.selection);
-        assert_eq!(labeler.label(NodeId::ROOT), None);
+        assert_eq!(labeler.label(NodeId::ROOT), Some("r1"));
     }
 }

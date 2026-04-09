@@ -1,4 +1,5 @@
 use editor_model::*;
+use editor_schema::NodeSpecExt;
 use editor_state::{Affinity, PendingModifier, State};
 use std::fmt::Write;
 
@@ -16,6 +17,9 @@ pub fn inspect_state_as_macro(state: &State) -> String {
     let children: Vec<_> = root.children().collect();
 
     write_indent(&mut output, 2);
+    if let Some(l) = labeler.label(root.id()) {
+        write!(output, "{l}: ").unwrap();
+    }
     output.push_str("root");
     write_modifiers_macro(&non_default_root_modifiers(root.modifiers()), &mut output);
     if children.is_empty() {
@@ -67,7 +71,7 @@ fn write_macro_node(
     write_modifiers_macro(node_ref.modifiers(), output);
 
     let children: Vec<_> = node_ref.children().collect();
-    if matches!(node_ref.node(), Node::Text(_)) {
+    if node_ref.spec().is_leaf() {
         output.push('\n');
     } else if children.is_empty() {
         output.push_str(" {}\n");

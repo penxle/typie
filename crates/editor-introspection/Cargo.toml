@@ -10,6 +10,7 @@ wasm = ["dep:tsify", "dep:wasm-bindgen", "editor-model/wasm", "editor-state/wasm
 [dependencies]
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model", features = ["test-utils"] }
+editor-schema = { path = "../editor-schema" }
 editor-state = { path = "../editor-state" }
 serde.workspace = true
 tsify = { workspace = true, optional = true }

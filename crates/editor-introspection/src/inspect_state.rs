@@ -18,6 +18,9 @@ pub fn inspect_state(state: &State, options: &InspectStateOptions) -> String {
     let mut output = String::new();
 
     let root = state.doc.root();
+    if let Some(l) = labeler.label(root.id()) {
+        write!(output, "{l}: ").unwrap();
+    }
     output.push_str("root");
     if options.show_node_ids {
         write!(output, " ({})", root.id()).unwrap();

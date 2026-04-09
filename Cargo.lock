@@ -745,6 +745,7 @@ version = "0.0.1"
 dependencies = [
  "editor-macros",
  "editor-model",
+ "editor-schema",
  "editor-state",
  "serde",
  "tsify",
