@@ -1,0 +1,11 @@
+mutation EntityClipboard_MoveEntities_Mutation($input: MoveEntitiesInput!) {
+  moveEntities(input: $input) @catch(to: THROW) {
+    id
+  }
+}
+
+mutation EntityClipboard_CopyEntities_Mutation($input: CopyEntitiesInput!) {
+  copyEntities(input: $input) @catch(to: THROW) {
+    id
+  }
+}

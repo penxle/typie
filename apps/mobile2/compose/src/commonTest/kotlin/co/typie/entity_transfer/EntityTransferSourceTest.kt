@@ -1,14 +1,14 @@
-package co.typie.screen.entity_move
+package co.typie.entity_transfer
 
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class MoveSourceEntityTest {
+class EntityTransferSourceTest {
 
   @Test
   fun folderInternalDepthContributionUsesMaxDescendantDepth() {
-    val source = MoveSourceEntity.Folder(
+    val source = EntityTransferSource.Folder(
       id = "folder-1",
       title = "프로젝트",
       depth = 4,
@@ -20,7 +20,7 @@ class MoveSourceEntityTest {
 
   @Test
   fun documentInternalDepthContributionIsZero() {
-    val source = MoveSourceEntity.Document(
+    val source = EntityTransferSource.Document(
       id = "document-1",
       title = "문서",
       depth = 7,
@@ -30,15 +30,15 @@ class MoveSourceEntityTest {
   }
 
   @Test
-  fun folderMoveDepthValidationMatchesFlutterParity() {
-    val source = MoveSourceEntity.Folder(
+  fun folderTransferDepthValidationMatchesFlutterParity() {
+    val source = EntityTransferSource.Folder(
       id = "folder-1",
       title = "프로젝트",
       depth = 4,
       maxDescendantFoldersDepth = 6,
     )
 
-    assertTrue(source.canMoveIntoDestinationDepth(destinationDepth = 96))
-    assertFalse(source.canMoveIntoDestinationDepth(destinationDepth = 97))
+    assertTrue(source.canTransferIntoDestinationDepth(destinationDepth = 96))
+    assertFalse(source.canTransferIntoDestinationDepth(destinationDepth = 97))
   }
 }

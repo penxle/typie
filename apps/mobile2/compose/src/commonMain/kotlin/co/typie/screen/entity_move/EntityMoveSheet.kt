@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ui.component.CardDefaults
+import co.typie.entity_transfer.EntityTransferSource
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.horizontalScroll
@@ -90,7 +91,7 @@ private data class MoveDestinationContent(
 
 @Composable
 fun BottomSheetScope<Unit>.EntityMoveSheet(
-  source: MoveSourceEntity,
+  source: EntityTransferSource,
   onMoved: () -> Unit = {},
 ) {
   val toast = koinInject<Toast>()
@@ -119,7 +120,7 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
 
   val isLoadingDestination = queryState is QueryState.Loading
   val canSubmit = destinationContent != null && queryState is QueryState.Success && !isMoving
-  val isMoveAllowed = destinationContent?.let { source.canMoveIntoDestinationDepth(it.destinationDepth) } == true
+  val isMoveAllowed = destinationContent?.let { source.canTransferIntoDestinationDepth(it.destinationDepth) } == true
 
   suspend fun submit() {
     val resolvedDestination = destinationContent ?: return
@@ -161,7 +162,7 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
 
   BottomSheetScaffold(
     modifier = Modifier.fillMaxHeight(),
-    title = source.moveActionLabel,
+    title = source.transferActionLabel,
     fillAvailableHeight = true,
     scrollContent = false,
     footer = {
@@ -252,7 +253,7 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
 @Composable
 private fun MoveDestinationAnimatedBody(
   modifier: Modifier = Modifier,
-  source: MoveSourceEntity,
+  source: EntityTransferSource,
   content: MoveDestinationContent,
   navigationDirection: MoveDestinationNavigationDirection,
   navigationEnabled: Boolean,
@@ -285,7 +286,7 @@ private fun MoveDestinationAnimatedBody(
 
 @Composable
 private fun MoveDestinationBody(
-  source: MoveSourceEntity,
+  source: EntityTransferSource,
   content: MoveDestinationContent,
   navigationEnabled: Boolean,
   onNavigate: (String?) -> Unit,
@@ -335,7 +336,7 @@ private fun MoveDestinationBody(
             item = folder.item,
             enabled = navigationEnabled &&
               folder.item.id != source.id &&
-              source.canMoveIntoDestinationDepth(folder.depth),
+              source.canTransferIntoDestinationDepth(folder.depth),
             onClick = { onNavigate(folder.item.id) },
           )
           hasRow = true

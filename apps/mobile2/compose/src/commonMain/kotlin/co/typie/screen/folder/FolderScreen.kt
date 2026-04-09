@@ -1,5 +1,11 @@
 package co.typie.screen.folder
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,19 +25,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.unit.dp
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.verticalScroll
+import co.typie.entity_transfer.EntityClipboardMode
+import co.typie.entity_transfer.EntityClipboardService
+import co.typie.entity_transfer.EntityPasteBar
+import co.typie.entity_transfer.EntityPasteTarget
 import co.typie.graphql.QueryState
 import co.typie.graphql.RefetchOnAppResumeEffect
 import co.typie.graphql.RefetchOnScreenEnterEffect
 import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.icons.Lucide
+import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.route.Route
+import co.typie.route.toastBottomInset
+import co.typie.entity_transfer.EntityTransferSource
 import co.typie.screen.entity_move.EntityMoveSheet
-import co.typie.screen.entity_move.MoveSourceEntity
 import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -52,6 +66,9 @@ import co.typie.ui.theme.AppTheme
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
+private val FolderScreenPasteBarBottomSpacerHeight = 176.dp
+private val FolderScreenPasteBarBottomOffset = 28.dp
+
 @Composable
 fun FolderScreen(entityId: String) {
   val nav = Nav.current
@@ -60,11 +77,14 @@ fun FolderScreen(entityId: String) {
   val bottomSheetHost = LocalBottomSheetHost.current
   val presenterScope = rememberCoroutineScope()
   val toast = koinInject<Toast>()
+  val clipboard = koinInject<EntityClipboardService>()
   val model = koinViewModel<FolderViewModel>(key = "folder:$entityId")
   val scrollState = rememberScrollState("folder-scroll:$entityId")
   val bottomBarState = LocalBottomBarState.current
   var isReordering by remember { mutableStateOf(false) }
   var isPersistingReorder by remember { mutableStateOf(false) }
+  var isPasting by remember { mutableStateOf(false) }
+  var animatedPasteBarVisible by remember { mutableStateOf(false) }
   val siteId = model.siteId
 
   LaunchedEffect(Unit) {
@@ -104,6 +124,57 @@ fun FolderScreen(entityId: String) {
     displayOrderedEntityItems(serverChildren, reorderState.displayedKeys)
   }
   val centerActions = remember { folderTopBarCenterActions() }
+  val clipboardState = clipboard.state
+  val cutDimmedItemIds = remember(clipboardState) {
+    if (clipboardState?.mode == EntityClipboardMode.Cut) {
+      clipboardState.items.mapTo(mutableSetOf()) { it.id }
+    } else {
+      emptySet()
+    }
+  }
+  val pasteTarget = remember(entity) {
+    entity?.let { currentEntity ->
+      EntityPasteTarget(
+        siteId = currentEntity.site.id,
+        destinationEntityId = currentEntity.id,
+        destinationDepth = currentEntity.depth,
+        ancestorFolderIds = currentEntity.ancestors.mapTo(mutableSetOf()) { it.id },
+        lowerOrder = currentEntity.children.lastOrNull()?.order,
+        upperOrder = null,
+      )
+    }
+  }
+  val isPasteBarVisible = clipboardState != null &&
+    pasteTarget != null &&
+    clipboard.canPaste(requireNotNull(pasteTarget))
+  val isCurrentRoute = nav.current == LocalRoute.current
+  val shouldShowPasteBar = isPasteBarVisible && isCurrentRoute
+  val reservedBottomSpacerHeight = if (animatedPasteBarVisible) {
+    FolderScreenPasteBarBottomSpacerHeight
+  } else {
+    140.dp
+  }
+
+  LaunchedEffect(shouldShowPasteBar) {
+    animatedPasteBarVisible = shouldShowPasteBar
+  }
+
+  LaunchedEffect(isCurrentRoute, animatedPasteBarVisible) {
+    if (!isCurrentRoute) {
+      return@LaunchedEffect
+    }
+    toast.bottomInset = if (animatedPasteBarVisible) {
+      Route.Folder(entityId).toastBottomInset + 84.dp
+    } else {
+      Route.Folder(entityId).toastBottomInset
+    }
+  }
+
+  DisposableEffect(entityId) {
+    onDispose {
+      toast.bottomInset = Route.Folder(entityId).toastBottomInset
+    }
+  }
 
   fun showUnavailable(closePopover: () -> Unit) {
     closePopover()
@@ -184,7 +255,7 @@ fun FolderScreen(entityId: String) {
           bottomSheetHost = bottomSheetHost,
         ) {
           EntityMoveSheet(
-            source = MoveSourceEntity.Folder(
+            source = EntityTransferSource.Folder(
               id = resolvedEntity.id,
               title = resolvedFolder.name,
               depth = resolvedEntity.depth,
@@ -206,9 +277,49 @@ fun FolderScreen(entityId: String) {
       }
 
       FolderAction.SelectMultiple,
-      FolderAction.Copy,
-      FolderAction.Cut,
       FolderAction.Delete -> showUnavailable(closePopover)
+
+      FolderAction.Copy -> {
+        val resolvedEntity = entity
+        val resolvedFolder = folder
+        if (resolvedEntity == null || resolvedFolder == null) {
+          closePopover()
+          return
+        }
+        clipboard.setCopy(
+          sourceSiteId = resolvedEntity.site.id,
+          items = listOf(
+            EntityTransferSource.Folder(
+              id = resolvedEntity.id,
+              title = resolvedFolder.name,
+              depth = resolvedEntity.depth,
+              maxDescendantFoldersDepth = resolvedFolder.maxDescendantFoldersDepth,
+            ),
+          ),
+        )
+        closePopover()
+      }
+
+      FolderAction.Cut -> {
+        val resolvedEntity = entity
+        val resolvedFolder = folder
+        if (resolvedEntity == null || resolvedFolder == null) {
+          closePopover()
+          return
+        }
+        clipboard.setCut(
+          sourceSiteId = resolvedEntity.site.id,
+          items = listOf(
+            EntityTransferSource.Folder(
+              id = resolvedEntity.id,
+              title = resolvedFolder.name,
+              depth = resolvedEntity.depth,
+              maxDescendantFoldersDepth = resolvedFolder.maxDescendantFoldersDepth,
+            ),
+          ),
+        )
+        closePopover()
+      }
     }
   }
 
@@ -286,59 +397,95 @@ fun FolderScreen(entityId: String) {
     contentPadding = PaddingValues(),
     primaryScrollableState = scrollState,
     body = { contentPadding ->
-      EntityContainerListContent(
-        items = displayChildren,
-        emptyMessage = "폴더가 비어 있어요",
-        isReordering = isReordering,
-        reorderState = reorderState,
-        isPersistingReorder = isPersistingReorder,
-        modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .safeBottomPadding()
-          .reorderableListContainer(reorderState),
-        onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
-        onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
-        onDragStarted = {
-          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-        },
-        onDragMoved = {
-          haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-        },
-        onDragStopped = onDragStopped@{ commit ->
-          haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-          if (commit == null || commit.orderedKeys == serverChildIds) {
-            return@onDragStopped
-          }
+      Box(modifier = Modifier.fillMaxSize()) {
+        EntityContainerListContent(
+          items = displayChildren,
+          emptyMessage = "폴더가 비어 있어요",
+          isReordering = isReordering,
+          reorderState = reorderState,
+          isPersistingReorder = isPersistingReorder,
+          dimmedItemIds = cutDimmedItemIds,
+          bottomSpacerHeight = reservedBottomSpacerHeight,
+          modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(contentPadding)
+            .safeBottomPadding()
+            .reorderableListContainer(reorderState),
+          onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
+          onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
+          onDragStarted = {
+            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+          },
+          onDragMoved = {
+            haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+          },
+          onDragStopped = onDragStopped@{ commit ->
+            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+            if (commit == null || commit.orderedKeys == serverChildIds) {
+              return@onDragStopped
+            }
 
-          val parentEntityId = entity?.id ?: run {
-            reorderState.resetToServerKeys(serverChildIds)
-            return@onDragStopped
-          }
-          val reorderOrders = calculateEntityReorderOrdersFromOrderedKeys(
-            items = serverChildren,
-            orderedKeys = commit.orderedKeys,
-            movedKey = commit.movedKey,
-          ) ?: run {
-            reorderState.resetToServerKeys(serverChildIds)
-            return@onDragStopped
-          }
-
-          isPersistingReorder = true
-          model.moveChildEntity(
-            entityId = commit.movedKey,
-            parentEntityId = parentEntityId,
-            lowerOrder = reorderOrders.lowerOrder,
-            upperOrder = reorderOrders.upperOrder,
-          ) { success ->
-            isPersistingReorder = false
-            if (!success) {
+            val parentEntityId = entity?.id ?: run {
               reorderState.resetToServerKeys(serverChildIds)
+              return@onDragStopped
+            }
+            val reorderOrders = calculateEntityReorderOrdersFromOrderedKeys(
+              items = serverChildren,
+              orderedKeys = commit.orderedKeys,
+              movedKey = commit.movedKey,
+            ) ?: run {
+              reorderState.resetToServerKeys(serverChildIds)
+              return@onDragStopped
+            }
+
+            isPersistingReorder = true
+            model.moveChildEntity(
+              entityId = commit.movedKey,
+              parentEntityId = parentEntityId,
+              lowerOrder = reorderOrders.lowerOrder,
+              upperOrder = reorderOrders.upperOrder,
+            ) { success ->
+              isPersistingReorder = false
+              if (!success) {
+                reorderState.resetToServerKeys(serverChildIds)
+              }
+            }
+          },
+        )
+
+        pasteTarget?.let { resolvedPasteTarget ->
+          Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+            AnimatedVisibility(
+              visible = animatedPasteBarVisible,
+              enter = fadeIn(animationSpec = tween(220)) + slideInVertically(
+                animationSpec = tween(220),
+                initialOffsetY = { it / 2 },
+              ),
+              exit = fadeOut(animationSpec = tween(180)) + slideOutVertically(
+                animationSpec = tween(180),
+                targetOffsetY = { it / 2 },
+              ),
+            ) {
+            EntityPasteBar(
+              bottomOffset = Route.Folder(entityId).toastBottomInset + FolderScreenPasteBarBottomOffset,
+              loading = isPasting,
+              onClear = { clipboard.clear() },
+              onPaste = {
+                if (!isPasting) {
+                  isPasting = true
+                  try {
+                    clipboard.pasteInto(resolvedPasteTarget)
+                  } finally {
+                    isPasting = false
+                  }
+                }
+              },
+            )
             }
           }
-        },
-      )
+        }
+      }
     },
   )
 }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.touchlab.kermit.Logger
+import co.typie.entity_transfer.EntityTransferSource
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
 import co.typie.graphql.EntityMoveSheet_Folder_Query
 import co.typie.graphql.EntityMoveSheet_Root_Query
@@ -54,7 +55,7 @@ class EntityMoveSheetViewModel(
   }
 
   suspend fun moveEntity(
-    source: MoveSourceEntity,
+    source: EntityTransferSource,
     parentEntityId: String?,
     lowerOrder: String?,
     upperOrder: String?,

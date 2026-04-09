@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import co.typie.icons.Lucide
@@ -87,6 +88,8 @@ fun EntityContainerListContent(
   isReordering: Boolean,
   reorderState: ReorderableListState<String>,
   isPersistingReorder: Boolean,
+  dimmedItemIds: Set<String> = emptySet(),
+  bottomSpacerHeight: Dp = 140.dp,
   modifier: Modifier = Modifier,
   header: @Composable ColumnScope.() -> Unit = {},
   onDocumentClick: suspend (slug: String) -> Unit,
@@ -114,13 +117,14 @@ fun EntityContainerListContent(
       EntityListCard(
         items = items.map { it.item },
         emptyMessage = emptyMessage,
+        dimmedItemIds = dimmedItemIds,
         modifier = Modifier.padding(horizontal = 16.dp),
         onDocumentClick = onDocumentClick,
         onFolderClick = onFolderClick,
       )
     }
 
-    Spacer(Modifier.height(140.dp))
+    Spacer(Modifier.height(bottomSpacerHeight))
   }
 }
 

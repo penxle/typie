@@ -1,5 +1,12 @@
 package co.typie.screen.space
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -8,12 +15,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -21,13 +30,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.verticalScroll
+import co.typie.entity_transfer.EntityClipboardMode
+import co.typie.entity_transfer.EntityClipboardService
+import co.typie.entity_transfer.EntityPasteBar
+import co.typie.entity_transfer.EntityPasteTarget
 import co.typie.graphql.RefetchOnAppResumeEffect
 import co.typie.graphql.RefetchOnScreenEnterEffect
 import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
+import co.typie.overlay.Toast
 import co.typie.route.Route
+import co.typie.route.toastBottomInset
 import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
@@ -48,18 +64,26 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+
+private val SpaceScreenPasteBarBottomSpacerHeight = 176.dp
+private val SpaceScreenPasteBarBottomOffset = 28.dp
 
 @Composable
 fun SpaceScreen() {
   val nav = Nav.current
   val haptic = LocalHapticFeedback.current
+  val toast = koinInject<Toast>()
+  val clipboard = koinInject<EntityClipboardService>()
   val model = koinViewModel<SpaceViewModel>()
   val scrollState = rememberScrollState("space")
   val bottomBarState = LocalBottomBarState.current
   val presenterScope = rememberCoroutineScope()
   var isReordering by remember { mutableStateOf(false) }
   var isPersistingReorder by remember { mutableStateOf(false) }
+  var isPasting by remember { mutableStateOf(false) }
+  var animatedPasteBarVisible by remember { mutableStateOf(false) }
   val siteId = model.siteId
 
   LaunchedEffect(Unit) {
@@ -71,6 +95,58 @@ fun SpaceScreen() {
   RefetchOnSiteUpdateEffect(siteId = siteId, onRefetch = model::refetch)
 
   val site = (model.query.state as? QueryState.Success)?.data?.site
+  val clipboardState = clipboard.state
+  val cutDimmedItemIds = remember(clipboardState) {
+    if (clipboardState?.mode == EntityClipboardMode.Cut) {
+      clipboardState.items.mapTo(mutableSetOf()) { it.id }
+    } else {
+      emptySet()
+    }
+  }
+  val pasteTarget = remember(site) {
+    site?.let { currentSite ->
+      EntityPasteTarget(
+        siteId = currentSite.id,
+        destinationEntityId = null,
+        destinationDepth = -1,
+        ancestorFolderIds = emptySet(),
+        lowerOrder = currentSite.entities.lastOrNull()?.order,
+        upperOrder = null,
+      )
+    }
+  }
+  val isPasteBarVisible = clipboardState != null &&
+    pasteTarget != null &&
+    clipboard.canPaste(requireNotNull(pasteTarget))
+  val isCurrentRoute = nav.current == LocalRoute.current
+  val shouldShowPasteBar = isPasteBarVisible && isCurrentRoute
+  val reservedBottomSpacerHeight = if (animatedPasteBarVisible) {
+    SpaceScreenPasteBarBottomSpacerHeight
+  } else {
+    140.dp
+  }
+
+  LaunchedEffect(shouldShowPasteBar) {
+    animatedPasteBarVisible = shouldShowPasteBar
+  }
+
+  LaunchedEffect(isCurrentRoute, animatedPasteBarVisible) {
+    if (!isCurrentRoute) {
+      return@LaunchedEffect
+    }
+    toast.bottomInset = if (animatedPasteBarVisible) {
+      Route.Space.toastBottomInset + 84.dp
+    } else {
+      Route.Space.toastBottomInset
+    }
+  }
+
+  DisposableEffect(Unit) {
+    onDispose {
+      toast.bottomInset = Route.Space.toastBottomInset
+    }
+  }
+
   LaunchedEffect(site?.id) {
     isReordering = false
     isPersistingReorder = false
@@ -137,65 +213,101 @@ fun SpaceScreen() {
         displayOrderedEntityItems(serverEntities, reorderState.displayedKeys)
       }
 
-      EntityContainerListContent(
-        items = displayEntities,
-        emptyMessage = "문서와 폴더가 여기 나타나요",
-        isReordering = isReordering,
-        reorderState = reorderState,
-        isPersistingReorder = isPersistingReorder,
-        modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .safeBottomPadding()
-          .reorderableListContainer(reorderState),
-        header = {
-          SpaceHeader(
-            title = site?.name.orEmpty(),
-            summary = formatSpaceSummary(
-              folderCount = site?.folderCount ?: 0,
-              documentCount = site?.documentCount ?: 0,
-            ),
-          )
-        },
-        onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
-        onFolderClick = { entityId -> nav.navigate(Route.Folder(entityId)) },
-        onDragStarted = {
-          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-        },
-        onDragMoved = {
-          haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-        },
-        onDragStopped = onDragStopped@{ commit ->
-          haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-          if (commit == null || commit.orderedKeys == serverEntityIds) {
-            return@onDragStopped
-          }
-
-          val reorderOrders = calculateEntityReorderOrdersFromOrderedKeys(
-            items = serverEntities,
-            orderedKeys = commit.orderedKeys,
-            movedKey = commit.movedKey,
-          ) ?: run {
-            reorderState.resetToServerKeys(serverEntityIds)
-            return@onDragStopped
-          }
-
-          isPersistingReorder = true
-          presenterScope.launch {
-            val success = model.moveRootEntity(
-              entityId = commit.movedKey,
-              lowerOrder = reorderOrders.lowerOrder,
-              upperOrder = reorderOrders.upperOrder,
+      Box(modifier = Modifier.fillMaxSize()) {
+        EntityContainerListContent(
+          items = displayEntities,
+          emptyMessage = "문서와 폴더가 여기 나타나요",
+          isReordering = isReordering,
+          reorderState = reorderState,
+          isPersistingReorder = isPersistingReorder,
+          dimmedItemIds = cutDimmedItemIds,
+          bottomSpacerHeight = reservedBottomSpacerHeight,
+          modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(contentPadding)
+            .safeBottomPadding()
+            .reorderableListContainer(reorderState),
+          header = {
+            SpaceHeader(
+              title = site?.name.orEmpty(),
+              summary = formatSpaceSummary(
+                folderCount = site?.folderCount ?: 0,
+                documentCount = site?.documentCount ?: 0,
+              ),
             )
-            isPersistingReorder = false
+          },
+          onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
+          onFolderClick = { entityId -> nav.navigate(Route.Folder(entityId)) },
+          onDragStarted = {
+            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+          },
+          onDragMoved = {
+            haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+          },
+          onDragStopped = onDragStopped@{ commit ->
+            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+            if (commit == null || commit.orderedKeys == serverEntityIds) {
+              return@onDragStopped
+            }
 
-            if (!success) {
+            val reorderOrders = calculateEntityReorderOrdersFromOrderedKeys(
+              items = serverEntities,
+              orderedKeys = commit.orderedKeys,
+              movedKey = commit.movedKey,
+            ) ?: run {
               reorderState.resetToServerKeys(serverEntityIds)
+              return@onDragStopped
+            }
+
+            isPersistingReorder = true
+            presenterScope.launch {
+              val success = model.moveRootEntity(
+                entityId = commit.movedKey,
+                lowerOrder = reorderOrders.lowerOrder,
+                upperOrder = reorderOrders.upperOrder,
+              )
+              isPersistingReorder = false
+
+              if (!success) {
+                reorderState.resetToServerKeys(serverEntityIds)
+              }
+            }
+          },
+        )
+
+        pasteTarget?.let { resolvedPasteTarget ->
+          Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+            AnimatedVisibility(
+              visible = animatedPasteBarVisible,
+              enter = fadeIn(animationSpec = tween(220)) + slideInVertically(
+                animationSpec = tween(220),
+                initialOffsetY = { it / 2 },
+              ),
+              exit = fadeOut(animationSpec = tween(180)) + slideOutVertically(
+                animationSpec = tween(180),
+                targetOffsetY = { it / 2 },
+              ),
+            ) {
+              EntityPasteBar(
+                bottomOffset = Route.Space.toastBottomInset + SpaceScreenPasteBarBottomOffset,
+                loading = isPasting,
+                onClear = { clipboard.clear() },
+                onPaste = {
+                  if (!isPasting) {
+                    isPasting = true
+                    try {
+                      clipboard.pasteInto(resolvedPasteTarget)
+                    } finally {
+                      isPasting = false
+                    }
+                  }
+                },
+              )
             }
           }
-        },
-      )
+        }
+      }
     },
   )
 }

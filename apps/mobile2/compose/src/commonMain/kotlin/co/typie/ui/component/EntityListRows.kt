@@ -88,6 +88,7 @@ fun formatFolderRowSummary(
 fun EntityListCard(
   items: List<EntityListItem>,
   emptyMessage: String,
+  dimmedItemIds: Set<String> = emptySet(),
   modifier: Modifier = Modifier,
   onDocumentClick: suspend (slug: String) -> Unit,
   onFolderClick: suspend (entityId: String) -> Unit,
@@ -115,11 +116,13 @@ fun EntityListCard(
         when (item) {
           is EntityListItem.Document -> EntityListDocumentRow(
             item = item,
+            opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
             onClick = { onDocumentClick(item.slug) },
           )
 
           is EntityListItem.Folder -> EntityListFolderRow(
             item = item,
+            opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
             onClick = { onFolderClick(item.id) },
           )
         }
@@ -133,6 +136,7 @@ fun EntityListDocumentRow(
   item: EntityListItem.Document,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  opacity: Float = 1f,
   onClick: suspend () -> Unit,
 ) {
   DocumentRowContent(
@@ -144,6 +148,7 @@ fun EntityListDocumentRow(
     excerpt = item.excerpt,
     updatedAt = item.updatedAt,
     enabled = enabled,
+    opacity = opacity,
     onClick = onClick,
   )
 }
@@ -153,6 +158,7 @@ fun EntityListFolderRow(
   item: EntityListItem.Folder,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  opacity: Float = 1f,
   onClick: suspend () -> Unit,
 ) {
   FolderRowContent(
@@ -164,6 +170,7 @@ fun EntityListFolderRow(
       documentCount = item.documentCount,
     ),
     enabled = enabled,
+    opacity = opacity,
     modifier = modifier,
     onClick = onClick,
   )
@@ -244,6 +251,7 @@ private fun DocumentRowContent(
   modifier: Modifier = Modifier,
   emptyExcerptText: String? = "(내용 없음)",
   enabled: Boolean = true,
+  opacity: Float = 1f,
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
@@ -272,6 +280,7 @@ private fun DocumentRowContent(
     icon = entityIcon.icon,
     iconTint = entityIcon.tint,
     enabled = enabled,
+    opacity = opacity,
     onClick = onClick,
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -316,6 +325,7 @@ private fun FolderRowContent(
   metaText: String,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  opacity: Float = 1f,
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
@@ -332,6 +342,7 @@ private fun FolderRowContent(
     icon = entityIcon.icon,
     iconTint = entityIcon.tint,
     enabled = enabled,
+    opacity = opacity,
     onClick = onClick,
     trailing = {
       Icon(
@@ -366,6 +377,7 @@ private fun EntityListRowFrame(
   iconTint: Color,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  opacity: Float = 1f,
   trailing: (@Composable () -> Unit)? = null,
   onClick: suspend () -> Unit,
   content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
@@ -374,7 +386,7 @@ private fun EntityListRowFrame(
     Row(
       modifier = modifier
         .fillMaxWidth()
-        .alpha(if (enabled) 1f else 0.48f)
+        .alpha((if (enabled) 1f else 0.48f) * opacity)
         .then(if (enabled) Modifier.clickable(onClick) else Modifier)
         .then(if (enabled) Modifier.pressScale() else Modifier)
         .padding(horizontal = 16.dp, vertical = 12.dp),
