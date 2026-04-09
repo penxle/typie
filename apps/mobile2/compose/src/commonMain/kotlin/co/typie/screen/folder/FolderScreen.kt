@@ -29,6 +29,8 @@ import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.route.Route
+import co.typie.screen.entity_move.EntityMoveSheet
+import co.typie.screen.entity_move.MoveSourceEntity
 import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -165,6 +167,30 @@ fun FolderScreen(entityId: String) {
             folderUrl = resolvedEntity.url,
             initialVisibility = resolvedEntity.visibility,
             initialThumbnailUrl = resolvedFolder.thumbnail?.url,
+          )
+        }
+      }
+
+      FolderAction.Move -> {
+        val resolvedEntity = entity
+        val resolvedFolder = folder
+        if (resolvedEntity == null || resolvedFolder == null) {
+          closePopover()
+          return
+        }
+        showBottomSheetFromPopoverAction(
+          closePopover = closePopover,
+          presenterScope = presenterScope,
+          bottomSheetHost = bottomSheetHost,
+        ) {
+          EntityMoveSheet(
+            source = MoveSourceEntity.Folder(
+              id = resolvedEntity.id,
+              title = resolvedFolder.name,
+              depth = resolvedEntity.depth,
+              maxDescendantFoldersDepth = resolvedFolder.maxDescendantFoldersDepth,
+            ),
+            onMoved = model::refetch,
           )
         }
       }

@@ -36,8 +36,8 @@ import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.EntityListCard
 import co.typie.ui.component.EntityListItem
-import co.typie.ui.component.SpaceFolderDocumentRow
-import co.typie.ui.component.SpaceFolderFolderRow
+import co.typie.ui.component.EntityListDocumentRow
+import co.typie.ui.component.EntityListFolderRow
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
@@ -342,14 +342,14 @@ private fun EntityContainerReorderRow(
         }
 
         when (val child = item.item) {
-          is EntityListItem.Document -> SpaceFolderDocumentRow(
+          is EntityListItem.Document -> EntityListDocumentRow(
             item = child,
             modifier = Modifier.weight(1f),
             enabled = false,
             onClick = {},
           )
 
-          is EntityListItem.Folder -> SpaceFolderFolderRow(
+          is EntityListItem.Folder -> EntityListFolderRow(
             item = child,
             modifier = Modifier.weight(1f),
             enabled = false,

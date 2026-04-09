@@ -123,8 +123,8 @@ fun ActivityGrid(
     val canScrollRight by remember(scrollState) {
       derivedStateOf { scrollState.value < scrollState.maxValue - ScrollEdgeVisibilityThresholdPx }
     }
-    val leftArrowAlpha by animateFloatAsState(if (canScrollLeft) 1f else 0f, tween(100))
-    val rightArrowAlpha by animateFloatAsState(if (canScrollRight) 1f else 0f, tween(100))
+    val leftArrowAlpha by animateFloatAsState(if (canScrollLeft) 1f else 0f, tween(250))
+    val rightArrowAlpha by animateFloatAsState(if (canScrollRight) 1f else 0f, tween(250))
 
     fun clearSelection() {
       tooltipAutoHideArmed = false

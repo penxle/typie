@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.imeOrNavigationBarsPadding
@@ -47,6 +49,10 @@ fun BottomSheetScaffold(
   modifier: Modifier = Modifier,
   leadingAction: (@Composable () -> Unit)? = null,
   trailingAction: (@Composable () -> Unit)? = null,
+  contentBackgroundColor: Color? = null,
+  fillAvailableHeight: Boolean = false,
+  scrollContent: Boolean = true,
+  footer: (@Composable ColumnScope.() -> Unit)? = null,
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val scrollState = rememberScrollState()
@@ -57,6 +63,7 @@ fun BottomSheetScaffold(
   Column(
     modifier = modifier
       .fillMaxWidth()
+      .then(if (fillAvailableHeight) Modifier.fillMaxHeight() else Modifier)
       .padding(horizontal = 16.dp),
   ) {
     Box(
@@ -97,20 +104,42 @@ fun BottomSheetScaffold(
       }
     }
 
-    Box(
+    Column(
       modifier = Modifier
         .fillMaxWidth()
-        .weight(1f, fill = false)
         .padding(top = 8.dp)
         .imeOrNavigationBarsPadding()
-        .verticalScroll(scrollState),
+        .then(
+          if (contentBackgroundColor != null) {
+            Modifier
+              .background(contentBackgroundColor, RoundedCornerShape(24.dp))
+              .padding(12.dp)
+          } else {
+            Modifier
+          },
+        ),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Column(
+      Box(
         modifier = Modifier
-          .fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = content,
-      )
+          .fillMaxWidth()
+          .weight(1f, fill = fillAvailableHeight)
+          .then(if (scrollContent) Modifier.verticalScroll(scrollState) else Modifier),
+      ) {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+          content = content,
+        )
+      }
+
+      if (footer != null) {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+          content = footer,
+        )
+      }
     }
   }
 }

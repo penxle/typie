@@ -1,12 +1,34 @@
-query FolderScreen_Query($entityId: ID!) {
+query EntityMoveSheet_Root_Query($siteId: ID!) {
+  site(siteId: $siteId) @catch(to: THROW) {
+    id
+    name
+
+    entities {
+      id
+      depth
+      order
+      icon
+      iconColor
+      type
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          name
+          folderCount
+          documentCount
+        }
+      }
+    }
+  }
+}
+
+query EntityMoveSheet_Folder_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
     id
     depth
-    url
-    icon
-    iconColor
-    visibility
-    availability
 
     site {
       id
@@ -32,20 +54,13 @@ query FolderScreen_Query($entityId: ID!) {
       ... on Folder {
         id
         name
-        maxDescendantFoldersDepth
-        thumbnail {
-          id
-          url
-        }
-        folderCount
-        documentCount
       }
     }
 
     children {
       id
+      depth
       order
-      slug
       icon
       iconColor
       type
@@ -58,14 +73,6 @@ query FolderScreen_Query($entityId: ID!) {
           name
           folderCount
           documentCount
-        }
-
-        ... on Document {
-          id
-          title
-          subtitle
-          excerpt
-          updatedAt
         }
       }
     }

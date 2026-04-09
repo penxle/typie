@@ -8,6 +8,7 @@ internal sealed interface FolderAction {
   data object ChangeIcon : FolderAction
   data object OpenExternal : FolderAction
   data object Share : FolderAction
+  data object Move : FolderAction
   data object Copy : FolderAction
   data object Cut : FolderAction
   data object Delete : FolderAction
@@ -50,6 +51,11 @@ internal fun folderTopBarCenterActions(): List<FolderTopBarActionItem> {
       icon = Lucide.Blend,
       label = "공유 및 게시",
       action = FolderAction.Share,
+    ),
+    FolderTopBarActionItem(
+      icon = Lucide.FolderSymlink,
+      label = "다른 폴더로 옮기기",
+      action = FolderAction.Move,
     ),
     FolderTopBarActionItem(
       icon = Lucide.ClipboardCopy,

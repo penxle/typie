@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -112,12 +113,12 @@ fun EntityListCard(
     Column(Modifier.fillMaxWidth()) {
       items.separated(separator = { CardDivider() }) { item ->
         when (item) {
-          is EntityListItem.Document -> SpaceFolderDocumentRow(
+          is EntityListItem.Document -> EntityListDocumentRow(
             item = item,
             onClick = { onDocumentClick(item.slug) },
           )
 
-          is EntityListItem.Folder -> SpaceFolderFolderRow(
+          is EntityListItem.Folder -> EntityListFolderRow(
             item = item,
             onClick = { onFolderClick(item.id) },
           )
@@ -128,7 +129,7 @@ fun EntityListCard(
 }
 
 @Composable
-fun SpaceFolderDocumentRow(
+fun EntityListDocumentRow(
   item: EntityListItem.Document,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
@@ -148,7 +149,7 @@ fun SpaceFolderDocumentRow(
 }
 
 @Composable
-fun SpaceFolderFolderRow(
+fun EntityListFolderRow(
   item: EntityListItem.Folder,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
@@ -373,6 +374,7 @@ private fun EntityListRowFrame(
     Row(
       modifier = modifier
         .fillMaxWidth()
+        .alpha(if (enabled) 1f else 0.48f)
         .then(if (enabled) Modifier.clickable(onClick) else Modifier)
         .then(if (enabled) Modifier.pressScale() else Modifier)
         .padding(horizontal = 16.dp, vertical = 12.dp),
