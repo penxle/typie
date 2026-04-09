@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { center } from '@typie/styled-system/patterns';
+  import { css } from '@typie/styled-system/css';
+  import { flex } from '@typie/styled-system/patterns';
   import Editor from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
   import type { Doc, Selection } from '@typie/editor-ffi/browser';
@@ -68,6 +69,6 @@
   });
 </script>
 
-<div class={center({ position: 'fixed', inset: '0', paddingX: '20px' })}>
-  <Editor style={center.raw({ size: 'full' })} {doc} {selection} />
+<div class={flex({ position: 'fixed', inset: '0', paddingX: '20px' })}>
+  <Editor style={css.raw({ size: 'full' })} {doc} {selection} />
 </div>

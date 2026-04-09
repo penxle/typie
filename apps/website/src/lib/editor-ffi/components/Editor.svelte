@@ -50,7 +50,7 @@
 </script>
 
 <div
-  class={css({ position: 'relative', userSelect: 'none' }, style)}
+  class={css({ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', userSelect: 'none' }, style)}
   onfocusin={() => ctx.editor?.focus()}
   onfocusout={() => ctx.editor?.blur()}
   onpointerdown={handle(ctx.editor, handlePointerDown)}
