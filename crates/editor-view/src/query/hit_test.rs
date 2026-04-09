@@ -158,7 +158,7 @@ mod tests {
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::*;
-    use editor_common::{Alignment, EdgeInsets};
+    use editor_common::EdgeInsets;
     use editor_model::NodeId;
 
     fn make_line_node(id: NodeId, x: f32, y: f32, text: &str, char_w: f32) -> LayoutNode {

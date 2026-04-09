@@ -358,8 +358,9 @@ fn compute_preferred_x(line_node: &LayoutNode, pos: &Position) -> f32 {
 mod tests {
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
+    use crate::style::Alignment;
     use crate::style::{BorderMode, BoxStyle, Direction as LayoutDirection};
-    use editor_common::{Alignment, Direction, EdgeInsets, Rect};
+    use editor_common::{Direction, EdgeInsets, Rect};
     use editor_model::NodeId;
 
     fn gs(n: usize) -> Vec<GraphemeSpan> {

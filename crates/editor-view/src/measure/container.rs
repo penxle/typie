@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use editor_common::{Alignment, EdgeInsets};
+use editor_common::EdgeInsets;
+
+use crate::style::Alignment;
 use editor_model::{Doc, Modifier, ModifierType, NodeRef};
 
 use crate::measure::Measurer;

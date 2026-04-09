@@ -9,14 +9,6 @@ pub enum Axis {
     Vertical,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Alignment {
-    #[default]
-    Start,
-    Center,
-    End,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct EdgeInsets {
     pub top: f32,

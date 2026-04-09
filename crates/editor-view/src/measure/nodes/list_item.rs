@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 
-use editor_common::{Alignment, EdgeInsets, Rect};
+use editor_common::{EdgeInsets, Rect};
+
+use crate::style::Alignment;
 use editor_model::{Doc, Node, NodeRef};
 use parley::setting::{FontFeature, Tag};
 use parley::style::{FontFamily, FontFamilyName, FontFeatures, FontWeight, TextStyle};

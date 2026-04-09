@@ -1,4 +1,6 @@
-use editor_common::{Alignment, EdgeInsets, Rect};
+use editor_common::{EdgeInsets, Rect};
+
+use crate::style::Alignment;
 use editor_model::{Doc, NodeRef};
 
 use crate::measure::Measurer;

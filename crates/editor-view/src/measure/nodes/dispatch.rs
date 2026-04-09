@@ -1,4 +1,6 @@
-use editor_common::{Alignment, EdgeInsets};
+use editor_common::EdgeInsets;
+
+use crate::style::Alignment;
 use editor_model::{Doc, Node, NodeRef};
 
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};

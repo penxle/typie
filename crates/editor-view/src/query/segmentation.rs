@@ -260,7 +260,8 @@ fn prev_sentence_boundary(
 
 #[cfg(test)]
 mod tests {
-    use editor_common::{Alignment, EdgeInsets, Rect};
+    use crate::style::Alignment;
+    use editor_common::{EdgeInsets, Rect};
     use editor_macros::doc;
     use editor_model::NodeId;
 

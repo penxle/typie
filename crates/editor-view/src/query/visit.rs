@@ -92,7 +92,8 @@ fn visit_node(node: &LayoutNode, page: &LayoutPage, visitor: &mut impl PageVisit
 #[cfg(test)]
 mod tests {
     use super::*;
-    use editor_common::{Alignment, EdgeInsets, Size};
+    use crate::style::Alignment;
+    use editor_common::{EdgeInsets, Size};
     use editor_model::NodeId;
 
     use crate::style::*;

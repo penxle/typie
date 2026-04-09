@@ -1,5 +1,13 @@
 use crate::glyph_run::GlyphRun;
-use editor_common::{Alignment, EdgeInsets, Rect};
+use editor_common::{EdgeInsets, Rect};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Alignment {
+    #[default]
+    Start,
+    Center,
+    End,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {

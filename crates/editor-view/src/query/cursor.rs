@@ -56,7 +56,7 @@ mod tests {
     use super::*;
     use crate::glyph_run::{GlyphRun, GraphemeSpan};
     use crate::style::*;
-    use editor_common::{Alignment, EdgeInsets, Size};
+    use editor_common::{EdgeInsets, Size};
     use editor_model::NodeId;
 
     fn gs(n: usize) -> Vec<GraphemeSpan> {
