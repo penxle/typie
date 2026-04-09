@@ -119,9 +119,12 @@ impl RenderSink for GpuSink {
 
     fn stroke_path(&mut self, path: &Path, color: Color, stroke: &Stroke, transform: Transform) {
         let brush = peniko::Brush::Solid(color.into());
-        let kurbo_stroke = kurbo::Stroke::new(stroke.width as f64);
+        let mut ks = kurbo::Stroke::new(stroke.width as f64);
+        ks.start_cap = stroke.cap.into();
+        ks.end_cap = stroke.cap.into();
+        ks.join = stroke.join.into();
         self.scene.stroke(
-            &kurbo_stroke,
+            &ks,
             transform.into(),
             &brush,
             None,

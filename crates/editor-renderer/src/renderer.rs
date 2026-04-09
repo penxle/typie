@@ -10,7 +10,7 @@ use crate::icons::ICONS;
 use crate::sink::RenderSink;
 use crate::theme::Theme;
 use crate::theme_data::ThemeVariant;
-use crate::types::{Color, CornerRadii, Path, Stroke, Transform};
+use crate::types::{Color, CornerRadii, IconData, IconElement, Path, Stroke, Transform};
 
 fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
     match variant {
@@ -23,6 +23,7 @@ fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
 
 const CALLOUT_BORDER_RADIUS: f32 = 8.0;
 const CALLOUT_BORDER_WIDTH: f32 = 1.0;
+const ICON_STROKE_WIDTH: f32 = 1.5;
 
 fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Path {
     use crate::types::PathElement;
@@ -210,6 +211,48 @@ pub struct RenderVisitor<'a> {
     box_stack: Vec<BoxFrame>,
 }
 
+impl<'a> RenderVisitor<'a> {
+    fn render_icon(
+        &mut self,
+        icon: &'static IconData,
+        color: Color,
+        rect: Rect,
+        base_transform: Transform,
+        stroke_width: f32,
+    ) {
+        let s = (rect.width / icon.viewport.0).min(rect.height / icon.viewport.1);
+        let dx = (rect.width - icon.viewport.0 * s) / 2.0;
+        let dy = (rect.height - icon.viewport.1 * s) / 2.0;
+        let icon_t = base_transform.translate(dx, dy).post_scale(s);
+
+        for elem in icon.elements {
+            match *elem {
+                IconElement::Fill { path, .. } => {
+                    let p = Path {
+                        elements: path.to_vec(),
+                    };
+                    self.sink.fill_path(&p, color, icon_t);
+                }
+                IconElement::Stroke {
+                    path,
+                    stroke_cap,
+                    stroke_join,
+                } => {
+                    let p = Path {
+                        elements: path.to_vec(),
+                    };
+                    let stroke = Stroke {
+                        width: stroke_width / s,
+                        cap: stroke_cap,
+                        join: stroke_join,
+                    };
+                    self.sink.stroke_path(&p, color, &stroke, icon_t);
+                }
+            }
+        }
+    }
+}
+
 impl<'a> PageVisitor for RenderVisitor<'a> {
     fn box_enter(
         &mut self,
@@ -374,6 +417,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         let node = self.doc.node(node_id);
 
         match node.map(|n| n.node()) {
+            // TODO: HR은 아이콘이 아닌 기하학적 프리미티브로 렌더링해야 함
             Some(Node::HorizontalRule(hr)) => {
                 let color = self.renderer.theme.color("ui.border");
                 let icon = match hr.variant {
@@ -387,8 +431,9 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     editor_model::HorizontalRuleVariant::CircleLine => "hr/circle-line",
                     editor_model::HorizontalRuleVariant::DiamondLine => "hr/diamond-line",
                 };
-                let path = ICONS.resolve(icon, inner_rect);
-                self.sink.fill_path(&path, color, t);
+                if let Some(icon_data) = ICONS.resolve(icon) {
+                    self.render_icon(icon_data, color, inner_rect, t, ICON_STROKE_WIDTH);
+                }
             }
             Some(Node::Image(_) | Node::File(_) | Node::Embed(_) | Node::Archived(_)) => {}
             _ => {}
@@ -410,16 +455,18 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     editor_model::CalloutVariant::Danger => "lucide/triangle-alert",
                 };
                 let color = self.renderer.theme.color(callout_token(callout.variant));
-                let path = ICONS.resolve(icon_name, inner_rect);
-                self.sink.fill_path(&path, color, t);
+                if let Some(icon) = ICONS.resolve(icon_name) {
+                    self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
+                }
             }
 
             (Some(Node::Blockquote(bq)), _)
                 if bq.variant == editor_model::BlockquoteVariant::LeftQuote =>
             {
                 let color = self.renderer.theme.color("ui.text.muted");
-                let path = ICONS.resolve("typie/blockquote-quote", inner_rect);
-                self.sink.fill_path(&path, color, t);
+                if let Some(icon) = ICONS.resolve("typie/blockquote-quote") {
+                    self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
+                }
             }
 
             (Some(Node::Blockquote(bq)), _)
@@ -437,15 +484,18 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                     "lucide/chevron-down"
                 };
                 let color = self.renderer.theme.color("ui.text.muted");
-                let path = ICONS.resolve(icon_name, inner_rect);
-                self.sink.fill_path(&path, color, t);
+                if let Some(icon) = ICONS.resolve(icon_name) {
+                    self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
+                }
             }
 
             (Some(Node::ListItem(_)), _) => match data {
                 DecorationData::Text(_label) => {
                     let color = self.renderer.theme.color("ui.text.muted");
-                    let path = ICONS.resolve("list/ordered", inner_rect);
-                    self.sink.fill_path(&path, color, t);
+                    // TODO: list/ordered 아이콘 정의 필요
+                    if let Some(icon) = ICONS.resolve("list/ordered") {
+                        self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
+                    }
                 }
                 _ => {
                     let color = self.renderer.theme.color("ui.text");

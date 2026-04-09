@@ -72,7 +72,11 @@ impl RenderSink for CpuSink {
     fn stroke_path(&mut self, path: &Path, color: Color, stroke: &Stroke, transform: Transform) {
         self.ctx.set_transform(transform.into());
         self.ctx.set_paint(peniko::color::AlphaColor::from(color));
-        self.ctx.set_stroke(kurbo::Stroke::new(stroke.width as f64));
+        let mut ks = kurbo::Stroke::new(stroke.width as f64);
+        ks.start_cap = stroke.cap.into();
+        ks.end_cap = stroke.cap.into();
+        ks.join = stroke.join.into();
+        self.ctx.set_stroke(ks);
         self.ctx.stroke_path(&kurbo::BezPath::from(path));
     }
 

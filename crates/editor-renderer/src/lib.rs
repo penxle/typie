@@ -3,6 +3,7 @@ editor_macros::preamble!();
 pub mod backend;
 pub mod error;
 pub(crate) mod glyph;
+pub mod icon_data;
 pub mod icons;
 pub mod renderer;
 pub mod sink;

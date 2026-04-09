@@ -57,6 +57,7 @@ smallvec = "1"
 strum = { version = "0.28", features = ["derive"] }
 syn = { version = "2", features = ["full", "extra-traits"] }
 thiserror = "2"
+toml = "0.8"
 tsify = { version = "0.5", features = ["js"] }
 unicode-segmentation = "1"
 uniffi = "0.31"

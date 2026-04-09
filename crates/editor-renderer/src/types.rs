@@ -243,14 +243,79 @@ impl From<&Path> for kurbo::BezPath {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FillRule {
+    NonZero,
+    EvenOdd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StrokeCap {
+    Butt,
+    Round,
+    Square,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StrokeJoin {
+    Miter,
+    Round,
+    Bevel,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum IconElement {
+    Fill {
+        path: &'static [PathElement],
+        fill_rule: FillRule,
+    },
+    Stroke {
+        path: &'static [PathElement],
+        stroke_cap: StrokeCap,
+        stroke_join: StrokeJoin,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct IconData {
+    pub viewport: (f32, f32),
+    pub elements: &'static [IconElement],
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Stroke {
     pub width: f32,
+    pub cap: StrokeCap,
+    pub join: StrokeJoin,
 }
 
 impl Stroke {
     pub fn new(width: f32) -> Self {
-        Self { width }
+        Self {
+            width,
+            cap: StrokeCap::Butt,
+            join: StrokeJoin::Miter,
+        }
+    }
+}
+
+impl From<StrokeCap> for kurbo::Cap {
+    fn from(cap: StrokeCap) -> Self {
+        match cap {
+            StrokeCap::Butt => Self::Butt,
+            StrokeCap::Round => Self::Round,
+            StrokeCap::Square => Self::Square,
+        }
+    }
+}
+
+impl From<StrokeJoin> for kurbo::Join {
+    fn from(join: StrokeJoin) -> Self {
+        match join {
+            StrokeJoin::Miter => Self::Miter,
+            StrokeJoin::Round => Self::Round,
+            StrokeJoin::Bevel => Self::Bevel,
+        }
     }
 }
 

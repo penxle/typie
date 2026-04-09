@@ -569,7 +569,14 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
 
-  assets: {}
+  assets:
+    devDependencies:
+      '@iconify-json/lucide':
+        specifier: ^1.2.101
+        version: 1.2.101
+      '@iconify/tools':
+        specifier: ^5.0.11
+        version: 5.0.11
 
   crates/editor-ffi: {}
 

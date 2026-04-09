@@ -12,5 +12,9 @@
   },
   "files": [
     "./"
-  ]
+  ],
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.101",
+    "@iconify/tools": "^5.0.11"
+  }
 }

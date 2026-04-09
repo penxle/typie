@@ -1,12 +1,12 @@
-use crate::types::Path;
-use editor_common::Rect;
+use crate::icon_data;
+use crate::types::IconData;
 
 pub struct IconRegistry;
 
 pub static ICONS: IconRegistry = IconRegistry;
 
 impl IconRegistry {
-    pub fn resolve(&self, _name: &str, rect: Rect) -> Path {
-        Path::rect(rect)
+    pub fn resolve(&self, name: &str) -> Option<&'static IconData> {
+        icon_data::ICONS.get(name)
     }
 }

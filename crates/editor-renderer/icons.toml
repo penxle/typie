@@ -1,0 +1,15 @@
+[lucide]
+icons = [
+    "info",
+    "circle-check",
+    "circle-alert",
+    "triangle-alert",
+    "chevron-up",
+    "chevron-down",
+    "images",
+]
+
+[typie]
+icons = [
+    "blockquote-quote",
+]
