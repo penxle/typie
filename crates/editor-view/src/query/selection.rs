@@ -342,6 +342,70 @@ mod tests {
     }
 
     #[test]
+    fn fold_title_selection() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {}
+                fold {
+                    fold_title {
+                        t1: text("hello")
+                    }
+                    fold_content {
+                        paragraph {
+                            text("body")
+                        }
+                    }
+                }
+                paragraph {}
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(t1, 0), Position::new(t1, 5));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(
+            !rects.is_empty(),
+            "fold title selection should produce rects"
+        );
+        assert!(rects[0].rect.width > 0.0);
+        assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
+    fn fold_content_selection() {
+        let (doc, t1) = doc! {
+            root {
+                paragraph {}
+                fold {
+                    fold_title {
+                        text("title")
+                    }
+                    fold_content {
+                        paragraph {
+                            t1: text("body!")
+                        }
+                    }
+                }
+                paragraph {}
+            }
+        };
+        let view = layout(&doc);
+
+        let sel = Selection::new(Position::new(t1, 5), Position::new(t1, 0));
+        let resolved = sel.resolve(&doc).unwrap();
+        let rects = view.selection_rects(&resolved);
+
+        assert!(
+            !rects.is_empty(),
+            "fold content selection should produce rects"
+        );
+        assert!(rects[0].rect.width > 0.0);
+        assert!(rects[0].rect.height > 0.0);
+    }
+
+    #[test]
     fn cross_block_selection() {
         let (doc, t1, p1) = doc! {
             root {

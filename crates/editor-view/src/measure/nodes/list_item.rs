@@ -8,7 +8,7 @@ use parley::style::{FontFamily, FontFamilyName, FontFeatures, FontWeight, TextSt
 use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis};
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
-use crate::measure::nodes::paragraph::resolve::resolve_text_style;
+use crate::measure::text::resolve::resolve_text_style;
 use crate::measure::{MeasuredContent, MeasuredNode};
 use crate::style::{Decoration, DecorationData};
 use crate::view_state::ViewState;

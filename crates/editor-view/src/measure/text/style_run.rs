@@ -81,7 +81,7 @@ mod tests {
     use editor_resource::FontRegistry;
 
     use super::*;
-    use crate::measure::nodes::paragraph::text_run::collect_text_runs;
+    use crate::measure::text::text_run::collect_text_runs;
 
     fn registry_with_families(families: &[&str]) -> FontRegistry {
         FontRegistry::from_families(families.iter().map(|f| (f.to_string(), vec![400, 700])))

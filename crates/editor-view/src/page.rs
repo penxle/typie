@@ -38,4 +38,28 @@ impl<T> PageRect<T> {
             meta,
         }
     }
+
+    pub fn without_meta(&self) -> PageRect<()> {
+        PageRect {
+            page_idx: self.page_idx,
+            rect: self.rect,
+            meta: (),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use editor_common::Rect;
+
+    use super::*;
+
+    #[test]
+    fn without_meta_strips_meta() {
+        let rect = PageRect::with_meta(2, Rect::from_xywh(10.0, 20.0, 100.0, 50.0), 42u32);
+        let stripped = rect.without_meta();
+        assert_eq!(stripped.page_idx, 2);
+        assert_eq!(stripped.rect, Rect::from_xywh(10.0, 20.0, 100.0, 50.0));
+        assert_eq!(stripped.meta, ());
+    }
 }

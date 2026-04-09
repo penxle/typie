@@ -15,7 +15,7 @@ pub use backend::RenderBackend;
 pub use backend::gpu::GpuDevice;
 pub use backend::kind::BackendKind;
 pub use error::RendererError;
-pub use renderer::Renderer;
+pub use renderer::{Mark, MarkData, MarkRect, Renderer};
 pub use sink::RenderSink;
 pub use theme::Theme;
 pub use theme_data::ThemeVariant;

@@ -1,6 +1,6 @@
 use editor_common::time::Duration;
 use editor_model::NodeId;
-use editor_renderer::{RenderSink, Renderer, ThemeVariant};
+use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
 use editor_schema::{DocFlatExt, ResolvedPositionFlatExt};
 use editor_state::{Position, ResolvedPosition, State};
@@ -154,20 +154,22 @@ impl Editor {
     }
 
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
+        let mut marks: Vec<Mark> = Vec::new();
+
         if let Some(resolved) = self.state.selection.resolve(&self.state.doc) {
             if !resolved.is_collapsed() {
-                let rects = self.view.selection_rects(&resolved);
-                self.renderer
-                    .draw_selection(sink, &rects, page_idx as usize, scale_factor);
+                let rects = self
+                    .view
+                    .selection_rects(&resolved)
+                    .iter()
+                    .map(|r| r.without_meta())
+                    .collect();
+                marks.push(Mark {
+                    data: MarkData::Selection,
+                    rects,
+                });
             }
         }
-
-        self.view.visit_page(
-            page_idx as usize,
-            &mut self
-                .renderer
-                .page_visitor(sink, &self.state.doc, scale_factor),
-        );
 
         if let Some(composition) = self.state.composition {
             if let (Some(from), Some(to)) = (
@@ -176,11 +178,25 @@ impl Editor {
             ) {
                 let rects = self
                     .view
-                    .composition_rects(&Position::from(&from), &Position::from(&to));
-                self.renderer
-                    .draw_composition(sink, &rects, page_idx as usize, scale_factor);
+                    .composition_rects(&Position::from(&from), &Position::from(&to))
+                    .iter()
+                    .map(|r| r.without_meta())
+                    .collect();
+                marks.push(Mark {
+                    data: MarkData::Composition,
+                    rects,
+                });
             }
         }
+
+        self.renderer.render_page(
+            sink,
+            &self.state.doc,
+            &self.view,
+            page_idx as usize,
+            scale_factor,
+            &marks,
+        );
     }
 
     fn process_message(&mut self, msg: Message) -> Result<(), EditorError> {

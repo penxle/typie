@@ -3,6 +3,7 @@ pub(crate) mod container;
 pub(crate) mod measurer;
 pub(crate) mod nodes;
 pub(crate) mod resolve;
+pub(crate) mod text;
 pub(crate) mod types;
 
 pub(crate) use measurer::Measurer;

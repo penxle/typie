@@ -1,8 +1,9 @@
 use editor_common::{Alignment, EdgeInsets, Rect};
-use editor_model::{Doc, Node, NodeRef};
+use editor_model::{Doc, Node, NodeRef, TextAlign};
 
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
+use crate::measure::text::measure::measure_inline_text;
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
 use crate::style::{BorderMode, BoxStyle, Decoration, DecorationData, Direction};
 use crate::view_state::ViewState;
@@ -34,34 +35,36 @@ pub fn measure_fold_title(
         .map(|p| view_state.fold_expanded(p.id()))
         .unwrap_or(true);
 
-    let mut measured = layout_padded(
-        measurer,
-        doc,
-        node,
+    let inner_width = width - padding.left - padding.right;
+    let (children, children_height) =
+        measure_inline_text(measurer, doc, node, inner_width, TextAlign::Left, 0.0);
+
+    MeasuredNode {
         width,
-        view_state,
-        PaddedLayoutConfig {
-            padding,
-            border: EdgeInsets::ZERO,
-            scope: false,
-            alignment: Alignment::Start,
-        },
-    );
-
-    if let MeasuredContent::Box(ref mut b) = measured.content {
-        b.style.decorations.push(Decoration {
-            id: 0,
-            rect: Rect {
-                x: FOLD_TITLE_PADDING_X,
-                y: FOLD_TITLE_PADDING_Y,
-                width: FOLD_TITLE_ICON_WIDTH,
-                height: FOLD_TITLE_ICON_WIDTH,
+        height: children_height + padding.top + padding.bottom,
+        content: MeasuredContent::Box(MeasuredBox {
+            node_id: node.id(),
+            style: BoxStyle {
+                direction: Direction::Vertical,
+                padding,
+                border: EdgeInsets::ZERO,
+                border_mode: BorderMode::Separate,
+                alignment: Alignment::Start,
+                scope: false,
+                decorations: vec![Decoration {
+                    id: 0,
+                    rect: Rect {
+                        x: FOLD_TITLE_PADDING_X,
+                        y: FOLD_TITLE_PADDING_Y,
+                        width: FOLD_TITLE_ICON_WIDTH,
+                        height: FOLD_TITLE_ICON_WIDTH,
+                    },
+                    data: DecorationData::Bool(expanded),
+                }],
             },
-            data: DecorationData::Bool(expanded),
-        });
+            children,
+        }),
     }
-
-    measured
 }
 
 pub fn measure_fold_content(
@@ -143,7 +146,7 @@ mod tests {
         let (doc, f1) = doc! {
             root {
                 f1: fold {
-                    fold_title { paragraph { text("Title") } }
+                    fold_title { text("Title") }
                     fold_content { paragraph { text("Content") } }
                 }
             }
@@ -175,7 +178,7 @@ mod tests {
         let (doc, f1) = doc! {
             root {
                 f1: fold {
-                    fold_title { paragraph { text("Title") } }
+                    fold_title { text("Title") }
                     fold_content { paragraph { text("Content") } }
                 }
             }
@@ -205,7 +208,7 @@ mod tests {
         let (doc, ft1) = doc! {
             root {
                 fold {
-                    ft1: fold_title { paragraph { text("Title") } }
+                    ft1: fold_title { text("Title") }
                     fold_content { paragraph { text("Content") } }
                 }
             }
@@ -230,7 +233,7 @@ mod tests {
         let (doc, fc1) = doc! {
             root {
                 fold {
-                    fold_title { paragraph { text("Title") } }
+                    fold_title { text("Title") }
                     fc1: fold_content { paragraph { text("Content") } }
                 }
             }

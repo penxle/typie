@@ -2,7 +2,7 @@ use editor_common::Rect;
 use editor_model::{Doc, Node, NodeId};
 use editor_resource::Resource;
 use editor_view::style::{BoxStyle, DecorationData};
-use editor_view::{CompositionRect, Edges, PageRect, PageVisitor, SelectionRect};
+use editor_view::{Edges, PageRect, PageVisitor};
 use std::sync::{Arc, Mutex};
 
 use crate::glyph::{GlyphCache, ScaleContext};
@@ -179,6 +179,59 @@ fn diamond_path(cx: f32, cy: f32, r: f32) -> Path {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum RenderLayer {
+    Background = 0,
+    Content = 1,
+    Border = 2,
+}
+
+#[derive(Clone, Copy)]
+pub struct LayerSet(u32);
+
+impl LayerSet {
+    pub fn of(layers: &[RenderLayer]) -> Self {
+        Self(layers.iter().fold(0u32, |s, l| s | (1 << *l as u32)))
+    }
+
+    pub fn contains(self, layer: RenderLayer) -> bool {
+        self.0 & (1 << layer as u32) != 0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkLayer {
+    BelowContent,
+    AboveContent,
+}
+
+#[derive(Debug, Clone)]
+pub enum MarkData {
+    Selection,
+    Composition,
+}
+
+impl MarkData {
+    pub fn layer(&self) -> MarkLayer {
+        match self {
+            Self::Selection => MarkLayer::BelowContent,
+            Self::Composition => MarkLayer::AboveContent,
+        }
+    }
+}
+
+pub type MarkRect = PageRect<()>;
+
+pub struct Mark {
+    pub data: MarkData,
+    pub rects: Vec<MarkRect>,
+}
+
+struct MarkStyle {
+    color: Color,
+}
+
 pub struct Renderer {
     pub(crate) theme: Theme,
     pub(crate) resource: Arc<Mutex<Resource>>,
@@ -200,11 +253,80 @@ impl Renderer {
         self.theme.set_variant(variant);
     }
 
+    fn resolve_mark(&self, data: &MarkData) -> MarkStyle {
+        match data {
+            MarkData::Selection => MarkStyle {
+                color: self.theme.color_with_alpha("selection", 64),
+            },
+            MarkData::Composition => MarkStyle {
+                color: self.theme.color("ui.text.default"),
+            },
+        }
+    }
+
+    fn draw_marks(
+        &self,
+        sink: &mut dyn RenderSink,
+        marks: &[Mark],
+        layer: MarkLayer,
+        page_idx: usize,
+        scale_factor: f32,
+    ) {
+        let transform = Transform::scale(scale_factor);
+        for mark in marks {
+            if mark.data.layer() != layer {
+                continue;
+            }
+            let style = self.resolve_mark(&mark.data);
+            for rect in &mark.rects {
+                if rect.page_idx != page_idx {
+                    continue;
+                }
+                sink.fill_rect(rect.rect, style.color, transform);
+            }
+        }
+    }
+
+    pub fn render_page(
+        &mut self,
+        sink: &mut dyn RenderSink,
+        doc: &Doc,
+        view: &editor_view::View,
+        page_idx: usize,
+        scale_factor: f32,
+        marks: &[Mark],
+    ) {
+        view.visit_page(
+            page_idx,
+            &mut self.page_visitor(
+                sink,
+                doc,
+                scale_factor,
+                LayerSet::of(&[RenderLayer::Background]),
+            ),
+        );
+
+        self.draw_marks(sink, marks, MarkLayer::BelowContent, page_idx, scale_factor);
+
+        view.visit_page(
+            page_idx,
+            &mut self.page_visitor(
+                sink,
+                doc,
+                scale_factor,
+                LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]),
+            ),
+        );
+
+        self.draw_marks(sink, marks, MarkLayer::AboveContent, page_idx, scale_factor);
+    }
+
     pub fn page_visitor<'a>(
         &'a mut self,
         sink: &'a mut dyn RenderSink,
         doc: &'a Doc,
         scale_factor: f32,
+        active: LayerSet,
     ) -> RenderVisitor<'a> {
         RenderVisitor {
             renderer: self,
@@ -213,45 +335,7 @@ impl Renderer {
             scale_factor,
             root_transform: Transform::scale(scale_factor),
             box_stack: Vec::new(),
-        }
-    }
-
-    pub fn draw_selection(
-        &self,
-        sink: &mut dyn RenderSink,
-        rects: &[SelectionRect],
-        page_idx: usize,
-        scale_factor: f32,
-    ) {
-        let color = self.theme.color_with_alpha("selection", 64);
-        self.draw_page_rects(sink, rects, page_idx, scale_factor, color);
-    }
-
-    pub fn draw_composition(
-        &self,
-        sink: &mut dyn RenderSink,
-        rects: &[CompositionRect],
-        page_idx: usize,
-        scale_factor: f32,
-    ) {
-        let color = self.theme.color("ui.text.default");
-        self.draw_page_rects(sink, rects, page_idx, scale_factor, color);
-    }
-
-    fn draw_page_rects<T>(
-        &self,
-        sink: &mut dyn RenderSink,
-        rects: &[PageRect<T>],
-        page_idx: usize,
-        scale_factor: f32,
-        color: Color,
-    ) {
-        let transform = Transform::scale(scale_factor);
-        for rect in rects {
-            if rect.page_idx != page_idx {
-                continue;
-            }
-            sink.fill_rect(rect.rect, color, transform);
+            active,
         }
     }
 }
@@ -270,6 +354,13 @@ pub struct RenderVisitor<'a> {
     scale_factor: f32,
     root_transform: Transform,
     box_stack: Vec<BoxFrame>,
+    active: LayerSet,
+}
+
+impl RenderVisitor<'_> {
+    fn on(&self, layer: RenderLayer) -> bool {
+        self.active.contains(layer)
+    }
 }
 
 impl<'a> RenderVisitor<'a> {
@@ -358,24 +449,26 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         style: &BoxStyle,
         edges: Edges<bool>,
     ) {
-        let t = self.root_transform.translate(local_rect.x, local_rect.y);
-        let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
-
         let node = self.doc.node(node_id).map(|n| n.node().clone());
 
-        match &node {
-            Some(Node::Callout(callout)) => {
-                let token = callout_token(callout.variant);
-                let color = self.renderer.theme.color_with_alpha(token, 8);
-                let radii = CornerRadii::from_edges(CALLOUT_BORDER_RADIUS, &edges);
-                let path = Path::rrect(inner_rect, radii);
-                self.sink.fill_path(&path, color, t);
+        if self.on(RenderLayer::Background) {
+            let t = self.root_transform.translate(local_rect.x, local_rect.y);
+            let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
+
+            match &node {
+                Some(Node::Callout(callout)) => {
+                    let token = callout_token(callout.variant);
+                    let color = self.renderer.theme.color_with_alpha(token, 8);
+                    let radii = CornerRadii::from_edges(CALLOUT_BORDER_RADIUS, &edges);
+                    let path = Path::rrect(inner_rect, radii);
+                    self.sink.fill_path(&path, color, t);
+                }
+                Some(Node::Fold(_)) => {
+                    let color = self.renderer.theme.color("ui.surface.muted");
+                    self.sink.fill_rect(inner_rect, color, t);
+                }
+                _ => {}
             }
-            Some(Node::Fold(_)) => {
-                let color = self.renderer.theme.color("ui.surface.muted");
-                self.sink.fill_rect(inner_rect, color, t);
-            }
-            _ => {}
         }
 
         self.box_stack.push(BoxFrame {
@@ -390,6 +483,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         let Some(frame) = self.box_stack.pop() else {
             return;
         };
+
+        if !self.on(RenderLayer::Border) {
+            return;
+        }
 
         let t = self
             .root_transform
@@ -468,6 +565,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         _baseline: f32,
         glyph_runs: &[editor_view::glyph_run::GlyphRun],
     ) {
+        if !self.on(RenderLayer::Content) {
+            return;
+        }
+
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
 
         for run in glyph_runs {
@@ -485,6 +586,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
     }
 
     fn atom(&mut self, node_id: NodeId, local_rect: Rect) {
+        if !self.on(RenderLayer::Content) {
+            return;
+        }
+
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
         let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
@@ -628,6 +733,10 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
     }
 
     fn decoration(&mut self, local_rect: Rect, data: &DecorationData) {
+        if !self.on(RenderLayer::Content) {
+            return;
+        }
+
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
         let inner_rect = Rect::from_xywh(0.0, 0.0, local_rect.width, local_rect.height);
 
@@ -663,7 +772,7 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 self.sink.fill_rect(inner_rect, color, t);
             }
 
-            (Some(Node::Fold(_)), _) => {
+            (Some(Node::FoldTitle(_)), _) => {
                 let expanded = matches!(data, DecorationData::Bool(true));
                 let icon_name = if expanded {
                     "lucide/chevron-up"
@@ -734,5 +843,39 @@ mod tests {
             Some(PathElement::MoveTo { .. })
         ));
         assert!(matches!(path.elements.last(), Some(PathElement::Close)));
+    }
+
+    #[test]
+    fn layer_set_contains_single() {
+        let set = LayerSet::of(&[RenderLayer::Background]);
+        assert!(set.contains(RenderLayer::Background));
+        assert!(!set.contains(RenderLayer::Content));
+        assert!(!set.contains(RenderLayer::Border));
+    }
+
+    #[test]
+    fn layer_set_contains_multiple() {
+        let set = LayerSet::of(&[RenderLayer::Content, RenderLayer::Border]);
+        assert!(!set.contains(RenderLayer::Background));
+        assert!(set.contains(RenderLayer::Content));
+        assert!(set.contains(RenderLayer::Border));
+    }
+
+    #[test]
+    fn layer_set_empty() {
+        let set = LayerSet::of(&[]);
+        assert!(!set.contains(RenderLayer::Background));
+        assert!(!set.contains(RenderLayer::Content));
+        assert!(!set.contains(RenderLayer::Border));
+    }
+
+    #[test]
+    fn mark_data_layer_below_content() {
+        assert_eq!(MarkData::Selection.layer(), MarkLayer::BelowContent);
+    }
+
+    #[test]
+    fn mark_data_layer_above_content() {
+        assert_eq!(MarkData::Composition.layer(), MarkLayer::AboveContent);
     }
 }

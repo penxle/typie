@@ -12,7 +12,7 @@ use super::blockquote::measure_blockquote;
 use super::callout::measure_callout;
 use super::fold::{measure_fold, measure_fold_content, measure_fold_title};
 use super::list_item::measure_list_item;
-use super::paragraph::measure::measure_paragraph;
+use super::paragraph::measure_paragraph;
 use super::table::{measure_table, measure_table_cell};
 
 pub(crate) fn measure_node(
