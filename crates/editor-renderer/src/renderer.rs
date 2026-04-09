@@ -10,7 +10,10 @@ use crate::icons::ICONS;
 use crate::sink::RenderSink;
 use crate::theme::Theme;
 use crate::theme_data::ThemeVariant;
-use crate::types::{Color, CornerRadii, IconData, IconElement, Path, Stroke, Transform};
+use crate::types::{
+    Color, CornerRadii, IconData, IconElement, Path, PathElement, Stroke, StrokeCap, StrokeJoin,
+    Transform,
+};
 
 fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
     match variant {
@@ -24,10 +27,12 @@ fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
 const CALLOUT_BORDER_RADIUS: f32 = 8.0;
 const CALLOUT_BORDER_WIDTH: f32 = 1.0;
 const ICON_STROKE_WIDTH: f32 = 1.5;
+const HR_LINE_HEIGHT: f32 = 1.0;
+const HR_SHAPE_SIZE_LARGE: f32 = 10.0;
+const HR_SHAPE_SIZE_SMALL: f32 = 8.0;
+const HR_SHAPE_GAP: f32 = 8.0;
 
 fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Path {
-    use crate::types::PathElement;
-
     let CornerRadii {
         top_left: tl,
         top_right: tr,
@@ -116,6 +121,62 @@ fn build_partial_border(r: Rect, radii: CornerRadii, edges: &Edges<bool>) -> Pat
     }
 
     Path { elements }
+}
+
+fn circle_path(cx: f32, cy: f32, r: f32) -> Path {
+    const K: f32 = 0.5522847498;
+    let kx = r * K;
+    let ky = r * K;
+    Path {
+        elements: vec![
+            PathElement::MoveTo { x: cx + r, y: cy },
+            PathElement::CurveTo {
+                x1: cx + r,
+                y1: cy + ky,
+                x2: cx + kx,
+                y2: cy + r,
+                x: cx,
+                y: cy + r,
+            },
+            PathElement::CurveTo {
+                x1: cx - kx,
+                y1: cy + r,
+                x2: cx - r,
+                y2: cy + ky,
+                x: cx - r,
+                y: cy,
+            },
+            PathElement::CurveTo {
+                x1: cx - r,
+                y1: cy - ky,
+                x2: cx - kx,
+                y2: cy - r,
+                x: cx,
+                y: cy - r,
+            },
+            PathElement::CurveTo {
+                x1: cx + kx,
+                y1: cy - r,
+                x2: cx + r,
+                y2: cy - ky,
+                x: cx + r,
+                y: cy,
+            },
+            PathElement::Close,
+        ],
+    }
+}
+
+fn diamond_path(cx: f32, cy: f32, r: f32) -> Path {
+    Path {
+        elements: vec![
+            PathElement::MoveTo { x: cx, y: cy - r },
+            PathElement::LineTo { x: cx + r, y: cy },
+            PathElement::LineTo { x: cx, y: cy + r },
+            PathElement::LineTo { x: cx - r, y: cy },
+            PathElement::Close,
+        ],
+    }
 }
 
 pub struct Renderer {
@@ -251,6 +312,42 @@ impl<'a> RenderVisitor<'a> {
             }
         }
     }
+
+    fn render_glyph_runs(
+        &mut self,
+        glyph_runs: &[editor_view::glyph_run::GlyphRun],
+        color: Color,
+        base_transform: Transform,
+    ) {
+        let inv_scale = 1.0 / self.scale_factor;
+
+        for run in glyph_runs {
+            let resource = Arc::clone(&self.renderer.resource);
+            let resource_guard = resource.lock().unwrap();
+            let positioned = crate::glyph::rasterize(
+                run,
+                &resource_guard.font_registry,
+                &mut self.renderer.scale_ctx,
+                &mut self.renderer.glyph_cache,
+                self.scale_factor,
+            );
+            drop(resource_guard);
+
+            for pg in &positioned {
+                let gt = base_transform.translate(pg.x, pg.y).post_scale(inv_scale);
+                match &pg.raster {
+                    crate::glyph::RasterizedGlyph::Path(path) => {
+                        self.sink.fill_path(path, color, gt);
+                    }
+                    crate::glyph::RasterizedGlyph::Bitmap(image) => {
+                        let rect =
+                            Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
+                        self.sink.draw_image(image, rect, gt);
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl<'a> PageVisitor for RenderVisitor<'a> {
@@ -372,7 +469,6 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         glyph_runs: &[editor_view::glyph_run::GlyphRun],
     ) {
         let t = self.root_transform.translate(local_rect.x, local_rect.y);
-        let inv_scale = 1.0 / self.scale_factor;
 
         for run in glyph_runs {
             if let Some(ref bg_token) = run.background_color {
@@ -380,33 +476,11 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
                 let run_rect = Rect::from_xywh(run.x, 0.0, run.width, local_rect.height);
                 self.sink.fill_rect(run_rect, bg_color, t);
             }
+        }
 
+        for run in glyph_runs {
             let color = self.renderer.theme.color(&run.color);
-
-            let resource = Arc::clone(&self.renderer.resource);
-            let resource_guard = resource.lock().unwrap();
-            let positioned = crate::glyph::rasterize(
-                run,
-                &resource_guard.font_registry,
-                &mut self.renderer.scale_ctx,
-                &mut self.renderer.glyph_cache,
-                self.scale_factor,
-            );
-            drop(resource_guard);
-
-            for pg in &positioned {
-                let gt = t.translate(pg.x, pg.y).post_scale(inv_scale);
-                match &pg.raster {
-                    crate::glyph::RasterizedGlyph::Path(path) => {
-                        self.sink.fill_path(path, color, gt);
-                    }
-                    crate::glyph::RasterizedGlyph::Bitmap(image) => {
-                        let rect =
-                            Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
-                        self.sink.draw_image(image, rect, gt);
-                    }
-                }
-            }
+            self.render_glyph_runs(std::slice::from_ref(run), color, t);
         }
     }
 
@@ -417,22 +491,135 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
         let node = self.doc.node(node_id);
 
         match node.map(|n| n.node()) {
-            // TODO: HR은 아이콘이 아닌 기하학적 프리미티브로 렌더링해야 함
             Some(Node::HorizontalRule(hr)) => {
-                let color = self.renderer.theme.color("ui.border");
-                let icon = match hr.variant {
-                    editor_model::HorizontalRuleVariant::Line => "hr/line",
-                    editor_model::HorizontalRuleVariant::DashedLine => "hr/dashed-line",
-                    editor_model::HorizontalRuleVariant::Circle => "hr/circle",
-                    editor_model::HorizontalRuleVariant::Diamond => "hr/diamond",
-                    editor_model::HorizontalRuleVariant::ThreeCircles => "hr/three-circles",
-                    editor_model::HorizontalRuleVariant::ThreeDiamonds => "hr/three-diamonds",
-                    editor_model::HorizontalRuleVariant::Zigzag => "hr/zigzag",
-                    editor_model::HorizontalRuleVariant::CircleLine => "hr/circle-line",
-                    editor_model::HorizontalRuleVariant::DiamondLine => "hr/diamond-line",
-                };
-                if let Some(icon_data) = ICONS.resolve(icon) {
-                    self.render_icon(icon_data, color, inner_rect, t, ICON_STROKE_WIDTH);
+                let color = self.renderer.theme.color("ui.text.default");
+                let w = inner_rect.width;
+                let h = inner_rect.height;
+                let cx = w / 2.0;
+                let cy = h / 2.0;
+
+                match hr.variant {
+                    editor_model::HorizontalRuleVariant::Line => {
+                        let y = (h - HR_LINE_HEIGHT) / 2.0;
+                        self.sink
+                            .fill_rect(Rect::from_xywh(0.0, y, w, HR_LINE_HEIGHT), color, t);
+                    }
+                    editor_model::HorizontalRuleVariant::DashedLine => {
+                        let y = cy - HR_LINE_HEIGHT / 2.0;
+                        let segment_width: f32 = 16.0;
+                        let dash_width: f32 = segment_width * 0.5;
+                        let mut x = 0.0_f32;
+                        while x < w {
+                            let dw = dash_width.min(w - x);
+                            self.sink.fill_rect(
+                                Rect::from_xywh(x, y, dw, HR_LINE_HEIGHT),
+                                color,
+                                t,
+                            );
+                            x += segment_width;
+                        }
+                    }
+                    editor_model::HorizontalRuleVariant::Circle => {
+                        let path = circle_path(cx, cy, HR_SHAPE_SIZE_LARGE / 2.0);
+                        self.sink.fill_path(&path, color, t);
+                    }
+                    editor_model::HorizontalRuleVariant::Diamond => {
+                        let path = diamond_path(cx, cy, HR_SHAPE_SIZE_LARGE / 2.0);
+                        let stroke = Stroke::new(1.0);
+                        self.sink.stroke_path(&path, color, &stroke, t);
+                    }
+                    editor_model::HorizontalRuleVariant::ThreeCircles => {
+                        let r = HR_SHAPE_SIZE_SMALL / 2.0;
+                        let gap = HR_SHAPE_GAP + HR_SHAPE_SIZE_SMALL;
+                        for offset in [-gap, 0.0, gap] {
+                            let path = circle_path(cx + offset, cy, r);
+                            self.sink.fill_path(&path, color, t);
+                        }
+                    }
+                    editor_model::HorizontalRuleVariant::ThreeDiamonds => {
+                        let r = HR_SHAPE_SIZE_SMALL / 2.0;
+                        let gap = HR_SHAPE_GAP + HR_SHAPE_SIZE_SMALL;
+                        let stroke = Stroke::new(1.0);
+                        for offset in [-gap, 0.0, gap] {
+                            let path = diamond_path(cx + offset, cy, r);
+                            self.sink.stroke_path(&path, color, &stroke, t);
+                        }
+                    }
+                    editor_model::HorizontalRuleVariant::CircleLine => {
+                        let shape_half = (HR_SHAPE_SIZE_LARGE / 2.0) + 10.0;
+                        let line_y = cy - HR_LINE_HEIGHT / 2.0;
+                        let container_half = w / 4.0;
+                        let line_width = container_half - shape_half;
+                        self.sink.fill_rect(
+                            Rect::from_xywh(
+                                cx - container_half,
+                                line_y,
+                                line_width,
+                                HR_LINE_HEIGHT,
+                            ),
+                            color,
+                            t,
+                        );
+                        self.sink.fill_rect(
+                            Rect::from_xywh(cx + shape_half, line_y, line_width, HR_LINE_HEIGHT),
+                            color,
+                            t,
+                        );
+                        let path = circle_path(cx, cy, HR_SHAPE_SIZE_LARGE / 2.0);
+                        self.sink.fill_path(&path, color, t);
+                    }
+                    editor_model::HorizontalRuleVariant::DiamondLine => {
+                        let shape_half = (HR_SHAPE_SIZE_LARGE / 2.0) + 10.0;
+                        let line_y = cy - HR_LINE_HEIGHT / 2.0;
+                        let container_half = w / 4.0;
+                        let line_width = container_half - shape_half;
+                        self.sink.fill_rect(
+                            Rect::from_xywh(
+                                cx - container_half,
+                                line_y,
+                                line_width,
+                                HR_LINE_HEIGHT,
+                            ),
+                            color,
+                            t,
+                        );
+                        self.sink.fill_rect(
+                            Rect::from_xywh(cx + shape_half, line_y, line_width, HR_LINE_HEIGHT),
+                            color,
+                            t,
+                        );
+                        let path = diamond_path(cx, cy, HR_SHAPE_SIZE_LARGE / 2.0);
+                        let stroke = Stroke::new(1.0);
+                        self.sink.stroke_path(&path, color, &stroke, t);
+                    }
+                    editor_model::HorizontalRuleVariant::Zigzag => {
+                        const POINTS: usize = 8;
+                        const SEGMENT_WIDTH: f32 = 8.0;
+                        const AMPLITUDE: f32 = 4.0;
+                        let total_width = (POINTS - 1) as f32 * SEGMENT_WIDTH;
+                        let start_x = cx - total_width / 2.0;
+                        let mut elements = Vec::new();
+                        for i in 0..POINTS {
+                            let px = start_x + i as f32 * SEGMENT_WIDTH;
+                            let py = if i % 2 == 0 {
+                                cy + AMPLITUDE
+                            } else {
+                                cy - AMPLITUDE
+                            };
+                            if i == 0 {
+                                elements.push(PathElement::MoveTo { x: px, y: py });
+                            } else {
+                                elements.push(PathElement::LineTo { x: px, y: py });
+                            }
+                        }
+                        let path = Path { elements };
+                        let stroke = Stroke {
+                            width: 1.0,
+                            cap: StrokeCap::Round,
+                            join: StrokeJoin::Round,
+                        };
+                        self.sink.stroke_path(&path, color, &stroke, t);
+                    }
                 }
             }
             Some(Node::Image(_) | Node::File(_) | Node::Embed(_) | Node::Archived(_)) => {}
@@ -490,12 +677,12 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
             }
 
             (Some(Node::ListItem(_)), _) => match data {
-                DecorationData::Text(_label) => {
-                    let color = self.renderer.theme.color("ui.text.muted");
-                    // TODO: list/ordered 아이콘 정의 필요
-                    if let Some(icon) = ICONS.resolve("list/ordered") {
-                        self.render_icon(icon, color, inner_rect, t, ICON_STROKE_WIDTH);
-                    }
+                DecorationData::Glyphs(glyph_runs) => {
+                    let color = self.renderer.theme.color("ui.text.default");
+                    let total_width: f32 = glyph_runs.iter().map(|r| r.width).sum();
+                    let x_offset = inner_rect.width - total_width;
+                    let offset_t = t.translate(x_offset, 0.0);
+                    self.render_glyph_runs(glyph_runs, color, offset_t);
                 }
                 _ => {
                     let color = self.renderer.theme.color("ui.text");
@@ -510,5 +697,42 @@ impl<'a> PageVisitor for RenderVisitor<'a> {
 
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn circle_path_has_four_curves_and_close() {
+        let path = circle_path(10.0, 10.0, 5.0);
+        let curve_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::CurveTo { .. }))
+            .count();
+        assert_eq!(curve_count, 4);
+        assert!(matches!(
+            path.elements.first(),
+            Some(PathElement::MoveTo { .. })
+        ));
+        assert!(matches!(path.elements.last(), Some(PathElement::Close)));
+    }
+
+    #[test]
+    fn diamond_path_has_four_lines_and_close() {
+        let path = diamond_path(10.0, 10.0, 5.0);
+        let line_count = path
+            .elements
+            .iter()
+            .filter(|e| matches!(e, PathElement::LineTo { .. }))
+            .count();
+        assert_eq!(line_count, 3); // 3 LineTo + 1 MoveTo + Close
+        assert!(matches!(
+            path.elements.first(),
+            Some(PathElement::MoveTo { .. })
+        ));
+        assert!(matches!(path.elements.last(), Some(PathElement::Close)));
     }
 }

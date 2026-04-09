@@ -1,8 +1,14 @@
+use std::borrow::Cow;
+
 use editor_common::{Alignment, EdgeInsets, Rect};
 use editor_model::{Doc, Node, NodeRef};
+use parley::setting::{FontFeature, Tag};
+use parley::style::{FontFamily, FontFamilyName, FontFeatures, FontWeight, TextStyle};
 
+use crate::glyph_run::{Glyph, GlyphRun, GraphemeSpan, Synthesis};
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
+use crate::measure::nodes::paragraph::resolve::resolve_text_style;
 use crate::measure::{MeasuredContent, MeasuredNode};
 use crate::style::{Decoration, DecorationData};
 use crate::view_state::ViewState;
@@ -10,7 +16,9 @@ use crate::view_state::ViewState;
 const LIST_ITEM_MARKER_WIDTH: f32 = 20.0;
 const LIST_ITEM_MARKER_GAP: f32 = 8.0;
 
-fn resolve_marker_data(node: &NodeRef<'_>) -> DecorationData {
+const MARKER_FONT_SIZE: f32 = 14.0;
+
+fn resolve_marker_data(measurer: &mut Measurer, node: &NodeRef<'_>) -> DecorationData {
     let parent = match node.parent() {
         Some(p) => p,
         None => return DecorationData::Text("\u{2022}".to_string()),
@@ -19,10 +27,92 @@ fn resolve_marker_data(node: &NodeRef<'_>) -> DecorationData {
     match parent.node() {
         Node::OrderedList(_) => {
             let index = node.index().unwrap_or(0);
-            DecorationData::Number((index + 1) as f32)
+            let text = format!("{}.", index + 1);
+            shape_marker_label(measurer, node, &text)
         }
         _ => DecorationData::Text("\u{2022}".to_string()),
     }
+}
+
+fn shape_marker_label(measurer: &mut Measurer, node: &NodeRef<'_>, text: &str) -> DecorationData {
+    let base_style = resolve_text_style(node);
+
+    let mut resource = measurer.resource.lock().unwrap();
+    let font_id = resource.font_registry.intern(&base_style.font_family);
+    let font_family_name = resource
+        .font_registry
+        .resolve_opt(font_id)
+        .unwrap_or_default()
+        .to_owned();
+
+    let style = TextStyle {
+        font_family: FontFamily::Single(FontFamilyName::Named(Cow::Owned(font_family_name))),
+        font_size: MARKER_FONT_SIZE,
+        font_weight: FontWeight::new(400.0),
+        font_features: FontFeatures::List(Cow::Borrowed(&[FontFeature {
+            tag: Tag::new(b"tnum"),
+            value: 1,
+        }])),
+        ..TextStyle::default()
+    };
+
+    let resource = &mut *resource;
+    let mut builder =
+        resource
+            .layout_context
+            .style_run_builder(&mut resource.font_context, text, 1.0, false);
+    let idx = builder.push_style(style);
+    builder.push_style_run(idx, 0..text.len());
+    let mut layout = builder.build(text);
+    layout.break_all_lines(None);
+
+    let mut glyph_runs = Vec::new();
+
+    if let Some(line) = layout.lines().next() {
+        for item in line.items() {
+            if let parley::PositionedLayoutItem::GlyphRun(glyph_run) = item {
+                let run = glyph_run.run();
+                let run_x = glyph_run.offset();
+                let mut glyph_x_advance = 0.0;
+                let glyphs: Vec<Glyph> = glyph_run
+                    .glyphs()
+                    .map(|g| {
+                        let gx = glyph_x_advance + g.x;
+                        glyph_x_advance += g.advance;
+                        Glyph {
+                            id: g.id,
+                            x: run_x + gx,
+                            y: g.y,
+                        }
+                    })
+                    .collect();
+
+                let run_advance = glyph_run.advance();
+                let font_size = run.font_size();
+
+                glyph_runs.push(GlyphRun {
+                    font_id,
+                    font_weight: 400,
+                    font_size,
+                    synthesis: Synthesis::default(),
+                    color: String::new(),
+                    background_color: None,
+                    glyphs,
+                    node_id: node.id(),
+                    offset: 0,
+                    text: text.to_string(),
+                    x: 0.0,
+                    width: run_advance,
+                    graphemes: vec![GraphemeSpan {
+                        advance: run_advance,
+                        codepoints: text.chars().count() as u8,
+                    }],
+                });
+            }
+        }
+    }
+
+    DecorationData::Glyphs(glyph_runs)
 }
 
 pub fn measure_list_item(
@@ -60,7 +150,7 @@ pub fn measure_list_item(
                 width: LIST_ITEM_MARKER_WIDTH,
                 height: LIST_ITEM_MARKER_WIDTH,
             },
-            data: resolve_marker_data(node),
+            data: resolve_marker_data(measurer, node),
         });
     }
 
@@ -97,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn ordered_list_uses_number() {
+    fn ordered_list_uses_glyphs() {
         let (doc, li1) = doc! {
             root {
                 ordered_list {
@@ -116,7 +206,7 @@ mod tests {
         };
 
         assert!(
-            matches!(b.style.decorations[0].data, DecorationData::Number(n) if (n - 1.0).abs() < f32::EPSILON)
+            matches!(&b.style.decorations[0].data, DecorationData::Glyphs(runs) if !runs.is_empty())
         );
     }
 

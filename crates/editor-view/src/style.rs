@@ -1,3 +1,4 @@
+use crate::glyph_run::GlyphRun;
 use editor_common::{Alignment, EdgeInsets, Rect};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,4 +38,5 @@ pub enum DecorationData {
     Bool(bool),
     Number(f32),
     Text(String),
+    Glyphs(Vec<GlyphRun>),
 }
