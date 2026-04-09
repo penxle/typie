@@ -2,6 +2,8 @@
   import { css } from '@typie/styled-system/css';
   import Editor from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import BottomToolbar from './BottomToolbar.svelte';
+  import TopToolbar from './TopToolbar.svelte';
   import type { Doc, Selection } from '@typie/editor-ffi/browser';
 
   const ctx = setupEditorContext();
@@ -20,8 +22,8 @@
           { type: 'paragraph_indent', value: 100 },
           { type: 'block_gap', value: 100 },
         ],
-        // children: ['10', '7', '20', '21', '22', '23', '24', '25', '26', '27', '28', '50', '60', '100'],
-        children: ['7', '20', '21', '100'],
+        children: ['10', '7', '20', '21', '22', '23', '24', '25', '26', '27', '28', '50', '60', '100'],
+        // children: ['7', '20', '21', '100'],
       },
       '10': { node: { type: 'callout', variant: 'danger' }, parent: '0', children: ['1', '3', '5'] },
       '1': { node: { type: 'paragraph' }, parent: '10', children: ['2'] },
@@ -69,4 +71,8 @@
   });
 </script>
 
-<Editor style={css.raw({ size: 'full' })} {doc} {selection} />
+<div class={css({ display: 'flex', flexDirection: 'column', size: 'full' })}>
+  <TopToolbar />
+  <BottomToolbar />
+  <Editor style={css.raw({ flex: '1', overflow: 'auto' })} {doc} {selection} />
+</div>
