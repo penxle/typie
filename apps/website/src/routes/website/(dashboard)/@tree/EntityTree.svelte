@@ -247,6 +247,30 @@
   const treeState = setupTreeContext();
   const paneGroup = getPaneGroup();
 
+  const countSelectedEntitiesForDragGhost = (selectedEntityIds: Iterable<string>) => {
+    const count = {
+      document: 0,
+      folder: 0,
+    };
+
+    for (const entityId of selectedEntityIds) {
+      const entity = treeState.entityMap.get(entityId);
+
+      if (!entity) {
+        continue;
+      }
+
+      if (entity.type === 'Folder') {
+        count.folder++;
+        continue;
+      }
+
+      count.document++;
+    }
+
+    return count;
+  };
+
   $effect(() => {
     treeState.element = tree;
   });
@@ -800,32 +824,7 @@
   };
 
   const draggingEntityCount = $derived.by(() => {
-    let count = {
-      document: 0,
-      folder: 0,
-    };
-
-    const entityIds = new Set(treeState.selectedEntityIds);
-
-    const collect = (entities: EntityNode[]) => {
-      entities.forEach((entity) => {
-        if (entity.node.__typename === 'Folder') {
-          if (entityIds.has(entity.id)) {
-            count.folder++;
-          }
-
-          if (entity.children) {
-            collect(entity.children);
-          }
-        } else if (entityIds.has(entity.id)) {
-          count.document++;
-        }
-      });
-    };
-
-    collect(site.data.entities as unknown as EntityNode[]);
-
-    return count;
+    return countSelectedEntitiesForDragGhost(treeState.selectedEntityIds);
   });
 
   const ghostEntityCount = $derived.by(() => {
