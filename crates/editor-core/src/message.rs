@@ -70,7 +70,7 @@ pub enum Break {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum InsertionIntent {
+pub enum InsertionOp {
     Text { text: String },
     Break { kind: Break },
     Node { node: Node },
@@ -79,7 +79,7 @@ pub enum InsertionIntent {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum DeletionIntent {
+pub enum DeletionOp {
     Selection,
     Move { movement: Movement },
 }
@@ -87,7 +87,7 @@ pub enum DeletionIntent {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum FormattingIntent {
+pub enum FormattingOp {
     ToggleModifier { modifier_type: ModifierType },
     SetModifier { modifier: Modifier },
     ClearModifiers,
@@ -96,7 +96,7 @@ pub enum FormattingIntent {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum SelectionIntent {
+pub enum SelectionOp {
     All,
     Set { selection: Selection },
 }
@@ -130,7 +130,7 @@ pub enum TableOp {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum NodeIntent {
+pub enum NodeOp {
     Delete { id: NodeId },
     SetAttrs { id: NodeId, attrs: Node },
     ToggleFold { id: NodeId },
@@ -140,7 +140,7 @@ pub enum NodeIntent {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum ClipboardIntent {
+pub enum ClipboardOp {
     Paste { html: Option<String>, text: String },
     Cut,
     Copy,
@@ -149,7 +149,7 @@ pub enum ClipboardIntent {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum CompositionIntent {
+pub enum CompositionOp {
     Update {
         text: String,
         replace_length: Option<usize>,
@@ -168,31 +168,16 @@ pub enum CompositionIntent {
 #[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum NavigationIntent {
+pub enum NavigationOp {
     Move { movement: Movement, extend: bool },
 }
 
 #[ffi]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum HistoryIntent {
+pub enum HistoryOp {
     Undo,
     Redo,
-}
-
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Intent {
-    Insertion { intent: InsertionIntent },
-    Deletion { intent: DeletionIntent },
-    Formatting { intent: FormattingIntent },
-    Selection { intent: SelectionIntent },
-    Node { intent: NodeIntent },
-    Clipboard { intent: ClipboardIntent },
-    Composition { intent: CompositionIntent },
-    Navigation { intent: NavigationIntent },
-    History { intent: HistoryIntent },
 }
 
 #[ffi]
@@ -246,7 +231,15 @@ pub enum FlatImeOp {
 pub enum Message {
     Key { event: KeyEvent },
     Pointer { event: PointerEvent },
-    Intent { intent: Intent },
+    Insertion { op: InsertionOp },
+    Deletion { op: DeletionOp },
+    Formatting { op: FormattingOp },
+    Selection { op: SelectionOp },
+    Node { op: NodeOp },
+    Clipboard { op: ClipboardOp },
+    Composition { op: CompositionOp },
+    Navigation { op: NavigationOp },
+    History { op: HistoryOp },
     System { event: SystemEvent },
     FlatIme { ops: Vec<FlatImeOp> },
 }

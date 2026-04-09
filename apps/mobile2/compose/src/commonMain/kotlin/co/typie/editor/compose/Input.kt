@@ -18,8 +18,7 @@ import co.typie.di.Platform
 import co.typie.editor.Editor
 import co.typie.editor.createBindings
 import co.typie.editor.ffi.EditorEvent
-import co.typie.editor.ffi.InsertionIntent
-import co.typie.editor.ffi.Intent
+import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StateField
 import co.typie.editor.handleKeyDown
@@ -64,14 +63,14 @@ internal class EditorInputNode(
         (((cp - 0x10000) ushr 10) + 0xD800).toChar(),
         (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
       ).concatToString()
-      editor.enqueue(Message.Intent(Intent.Insertion(InsertionIntent.Text(text))))
+      editor.enqueue(Message.Insertion(InsertionOp.Text(text)))
       return true
     }
 
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl()) return false
 
-    editor.enqueue(Message.Intent(Intent.Insertion(InsertionIntent.Text(ch.toString()))))
+    editor.enqueue(Message.Insertion(InsertionOp.Text(ch.toString())))
     return true
   }
 

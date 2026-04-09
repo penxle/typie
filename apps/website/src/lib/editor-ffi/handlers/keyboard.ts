@@ -66,32 +66,28 @@ const bindings: KeyBinding[] = [
   {
     key: 'a',
     modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'intent', intent: { type: 'selection', intent: { type: 'all' } } }),
+    action: (ed) => ed.enqueue({ type: 'selection', op: { type: 'all' } }),
   },
 
   {
     key: 'b',
     modifiers: ['mod'],
-    action: (ed) =>
-      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'bold' } } }),
+    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'bold' } }),
   },
   {
     key: 'i',
     modifiers: ['mod'],
-    action: (ed) =>
-      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'italic' } } }),
+    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'italic' } }),
   },
   {
     key: 's',
     modifiers: ['mod', 'shift'],
-    action: (ed) =>
-      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'strikethrough' } } }),
+    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'strikethrough' } }),
   },
   {
     key: 'u',
     modifiers: ['mod', 'shift'],
-    action: (ed) =>
-      ed.enqueue({ type: 'intent', intent: { type: 'formatting', intent: { type: 'toggle_modifier', modifier_type: 'underline' } } }),
+    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'underline' } }),
   },
 
   { key: 'q', modifiers: ['ctrl'], predicate: () => isMac, action: (ed) => ed.inspect('state') },
@@ -101,8 +97,8 @@ const bindings: KeyBinding[] = [
 const isMac = navigator.platform.toUpperCase().includes('MAC');
 
 const move = (movement: Movement, extend: boolean): Message => ({
-  type: 'intent',
-  intent: { type: 'navigation', intent: { type: 'move', movement, extend } },
+  type: 'navigation',
+  op: { type: 'move', movement, extend },
 });
 
 const matchBinding = (binding: KeyBinding, e: KeyboardEvent): boolean => {

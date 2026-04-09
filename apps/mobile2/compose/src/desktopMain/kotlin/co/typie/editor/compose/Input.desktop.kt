@@ -16,9 +16,8 @@ import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
 import co.typie.editor.InputEditCommandHandler
-import co.typie.editor.ffi.CompositionIntent
-import co.typie.editor.ffi.DeletionIntent
-import co.typie.editor.ffi.Intent
+import co.typie.editor.ffi.CompositionOp
+import co.typie.editor.ffi.DeletionOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
@@ -89,20 +88,18 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
             if (text.toString() == "\n") {
               editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
             } else {
-              editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(text.toString()))))
+              editor.enqueue(Message.Composition(CompositionOp.Commit(text.toString())))
             }
           }
 
           override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
             editor.enqueue(
-              Message.Intent(
-                Intent.Composition(CompositionIntent.Update(text.toString(), null))
-              )
+              Message.Composition(CompositionOp.Update(text.toString(), null))
             )
           }
 
           override fun finishComposingText() {
-            editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.CommitAsIs)))
+            editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
           }
 
           override fun deleteSurroundingTextInCodePoints(
@@ -110,10 +107,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
             lengthAfterCursor: Int
           ) {
             editor.enqueue(
-              Message.Intent(
-                Intent.Deletion(
-                  DeletionIntent.SurroundingCodePoints(lengthBeforeCursor, lengthAfterCursor)
-                )
+              Message.Deletion(
+                DeletionOp.SurroundingCodePoints(lengthBeforeCursor, lengthAfterCursor)
               )
             )
           }

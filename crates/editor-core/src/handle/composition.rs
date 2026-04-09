@@ -9,21 +9,18 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_composition_intent(
-    editor: &mut Editor,
-    intent: CompositionIntent,
-) -> Result<(), EditorError> {
+pub fn handle_composition_op(editor: &mut Editor, op: CompositionOp) -> Result<(), EditorError> {
     editor.transact(|tr| {
-        match intent {
-            CompositionIntent::SetRegion { start, end } => {
+        match op {
+            CompositionOp::SetRegion { start, end } => {
                 let new_comp = composition_range_valid(&tr.doc(), start, end)
                     .then_some(Composition { start, end });
                 tr.set_composition(new_comp)?;
             }
-            CompositionIntent::CommitAsIs => {
+            CompositionOp::CommitAsIs => {
                 tr.set_composition(None)?;
             }
-            CompositionIntent::Cancel => {
+            CompositionOp::Cancel => {
                 if let Some(comp) = tr.composition().copied()
                     && composition_range_valid(&tr.doc(), comp.start, comp.end)
                 {
@@ -31,7 +28,7 @@ pub fn handle_composition_intent(
                 }
                 tr.set_composition(None)?;
             }
-            CompositionIntent::Update {
+            CompositionOp::Update {
                 text,
                 replace_length,
             } => {
@@ -43,7 +40,7 @@ pub fn handle_composition_intent(
                     end: new_end,
                 }))?;
             }
-            CompositionIntent::Commit { text } => {
+            CompositionOp::Commit { text } => {
                 let (target_start, target_end) = resolve_target(tr, None)?;
                 replace_text_range(tr, target_start, target_end, &text)?;
                 tr.set_composition(None)?;
@@ -230,10 +227,8 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 2, end: 5 },
         });
         assert_eq!(
             editor.state().composition,
@@ -253,10 +248,8 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 6 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 1, end: 6 },
         });
         assert_eq!(editor.state().composition, None);
     }
@@ -268,19 +261,15 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 6 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 1, end: 6 },
         });
         assert_eq!(
             editor.state().composition,
             Some(Composition { start: 1, end: 6 })
         );
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 7, end: 12 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 7, end: 12 },
         });
         assert_eq!(
             editor.state().composition,
@@ -300,20 +289,16 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 1, end: 4 },
         });
         assert_eq!(
             editor.state().composition,
             Some(Composition { start: 1, end: 4 })
         );
         // Now apply invalid cross-block range → should clear prior composition
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 6 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 1, end: 6 },
         });
         assert_eq!(editor.state().composition, None);
     }
@@ -330,10 +315,8 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         // Range 1..3 crosses the image atom
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 3 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 1, end: 3 },
         });
         assert_eq!(editor.state().composition, None);
     }
@@ -345,15 +328,11 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 1, end: 4 },
         });
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::CommitAsIs,
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::CommitAsIs,
         });
         assert_eq!(editor.state().composition, None);
         let (expected, ..) = state! {
@@ -370,15 +349,11 @@ mod tests {
             selection: (t1, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 2, end: 5 },
         });
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Cancel,
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Cancel,
         });
         assert_eq!(editor.state().composition, None);
         let (expected, ..) = state! {
@@ -395,10 +370,8 @@ mod tests {
             selection: (t1, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Cancel,
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Cancel,
         });
         assert_eq!(editor.state().composition, None);
         let (expected, ..) = state! {
@@ -415,12 +388,10 @@ mod tests {
             selection: (t1, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Update {
-                    text: "X".into(),
-                    replace_length: None,
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "X".into(),
+                replace_length: None,
             },
         });
         let (expected, ..) = state! {
@@ -441,12 +412,10 @@ mod tests {
             selection: (t1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Update {
-                    text: "XY".into(),
-                    replace_length: Some(2),
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "XY".into(),
+                replace_length: Some(2),
             },
         });
         let (expected, ..) = state! {
@@ -467,17 +436,13 @@ mod tests {
             selection: (t1, 4)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 2, end: 5 },
         });
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Update {
-                    text: "XYZ".into(),
-                    replace_length: None,
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "XYZ".into(),
+                replace_length: None,
             },
         });
         let (expected, ..) = state! {
@@ -500,12 +465,10 @@ mod tests {
         // Manually inject a stale composition (range exceeds doc size of 2).
         state.composition = Some(Composition { start: 10, end: 20 });
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Update {
-                    text: "X".into(),
-                    replace_length: None,
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "X".into(),
+                replace_length: None,
             },
         });
         // resolve_target should detect stale composition, clear it,
@@ -528,15 +491,11 @@ mod tests {
             selection: (t1, 4)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 2, end: 5 },
         });
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Commit { text: "Y".into() },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "Y".into() },
         });
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("hYo") } } }
@@ -553,10 +512,8 @@ mod tests {
             selection: (t1, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Commit { text: "!".into() },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "!".into() },
         });
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("hi!") } } }
@@ -574,12 +531,10 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
         // Type "한" (Korean "Han"): single Unicode scalar, 3 UTF-8 bytes, 1 flat offset unit.
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Update {
-                    text: "한".into(),
-                    replace_length: None,
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "한".into(),
+                replace_length: None,
             },
         });
         assert_eq!(
@@ -587,12 +542,10 @@ mod tests {
             Some(Composition { start: 1, end: 2 })
         );
         // Replace with "안녕": 2 scalars, 2 flat offset units.
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Update {
-                    text: "안녕".into(),
-                    replace_length: None,
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "안녕".into(),
+                replace_length: None,
             },
         });
         assert_eq!(
@@ -613,15 +566,11 @@ mod tests {
             selection: (t1, 4)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 2, end: 5 },
         });
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Commit { text: "".into() },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "".into() },
         });
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("ho") } } }
@@ -638,11 +587,9 @@ mod tests {
             selection: (t1, 2)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Commit {
-                    text: "안녕".into(),
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit {
+                text: "안녕".into(),
             },
         });
         let (expected, ..) = state! {
@@ -662,10 +609,8 @@ mod tests {
         // Inject stale composition (range exceeds doc size of 2).
         state.composition = Some(Composition { start: 10, end: 20 });
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Commit { text: "X".into() },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Commit { text: "X".into() },
         });
         // resolve_target detects stale composition, clears it, inserts "X" at cursor (flat 2).
         let (expected, ..) = state! {
@@ -689,10 +634,8 @@ mod tests {
         let mut editor = Editor::new_test(state);
 
         // IME: SetComposingRegion(1, 3) covers "안녕" (cross-node)
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 3 },
-            },
+        editor.apply(Message::Composition {
+            op: CompositionOp::SetRegion { start: 1, end: 3 },
         });
         assert_eq!(
             editor.state().composition,
@@ -700,12 +643,10 @@ mod tests {
         );
 
         // IME: Update("안녕하", None) — replace composing region with new text
-        editor.apply(Message::Intent {
-            intent: Intent::Composition {
-                intent: CompositionIntent::Update {
-                    text: "안녕하".into(),
-                    replace_length: None,
-                },
+        editor.apply(Message::Composition {
+            op: CompositionOp::Update {
+                text: "안녕하".into(),
+                replace_length: None,
             },
         });
 

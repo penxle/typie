@@ -15,13 +15,11 @@ export const setCommitPending = () => {
 const messageForInputType = (inputType: string, data: string | null): Message | undefined => {
   switch (inputType) {
     case 'insertText': {
-      return data == null ? undefined : { type: 'intent', intent: { type: 'insertion', intent: { type: 'text', text: data } } };
+      return data == null ? undefined : { type: 'insertion', op: { type: 'text', text: data } };
     }
 
     case 'insertCompositionText': {
-      return data == null
-        ? undefined
-        : { type: 'intent', intent: { type: 'composition', intent: { type: 'update', text: data, replace_length: undefined } } };
+      return data == null ? undefined : { type: 'composition', op: { type: 'update', text: data, replace_length: undefined } };
     }
 
     case 'deleteContentBackward': {
@@ -64,6 +62,6 @@ export const handleCompositionStart: EditorEventHandler<HTMLInputElement, Compos
 };
 
 export const handleCompositionEnd: EditorEventHandler<HTMLInputElement, CompositionEvent> = (editor) => {
-  editor.enqueue({ type: 'intent', intent: { type: 'composition', intent: { type: 'commit_as_is' } } });
+  editor.enqueue({ type: 'composition', op: { type: 'commit_as_is' } });
   setCommitPending();
 };

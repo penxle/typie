@@ -5,18 +5,15 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_selection_intent(
-    editor: &mut Editor,
-    intent: SelectionIntent,
-) -> Result<(), EditorError> {
+pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), EditorError> {
     editor.view.clear_preferred_x();
     editor.transact(|tr| {
         tr.update_meta(|m| m.history = HistoryMeta::Skip);
-        match intent {
-            SelectionIntent::Set { selection } => {
+        match op {
+            SelectionOp::Set { selection } => {
                 commands::set_selection(tr, selection)?;
             }
-            SelectionIntent::All => {
+            SelectionOp::All => {
                 commands::select_all(tr)?;
             }
         }
@@ -39,10 +36,8 @@ mod tests {
         };
         let target = Selection::collapsed(Position::new(t1, 3));
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Selection {
-                intent: SelectionIntent::Set { selection: target },
-            },
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set { selection: target },
         });
         assert_eq!(editor.state().selection, target);
         assert!(!editor.history.can_undo());

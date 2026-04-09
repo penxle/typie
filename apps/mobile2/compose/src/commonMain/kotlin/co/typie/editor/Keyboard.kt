@@ -10,12 +10,11 @@ import androidx.compose.ui.input.key.key
 import co.typie.di.Platform
 import co.typie.editor.ffi.Axis
 import co.typie.editor.ffi.Direction
-import co.typie.editor.ffi.FormattingIntent
-import co.typie.editor.ffi.Intent
+import co.typie.editor.ffi.FormattingOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
-import co.typie.editor.ffi.NavigationIntent
+import co.typie.editor.ffi.NavigationOp
 import co.typie.editor.ffi.Key as FfiKey
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 
@@ -29,10 +28,10 @@ internal data class KeyBinding(
 )
 
 private fun move(movement: Movement, extend: Boolean): Message =
-  Message.Intent(Intent.Navigation(NavigationIntent.Move(movement, extend)))
+  Message.Navigation(NavigationOp.Move(movement, extend))
 
 private fun toggleModifier(type: ModifierType): Message =
-  Message.Intent(Intent.Formatting(FormattingIntent.ToggleModifier(type)))
+  Message.Formatting(FormattingOp.ToggleModifier(type))
 
 internal fun createBindings(platform: Platform): List<KeyBinding> {
   val isMac = platform != Platform.Android

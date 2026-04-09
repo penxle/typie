@@ -14,12 +14,11 @@ import android.view.inputmethod.SurroundingText
 import android.view.inputmethod.TextAttribute
 import androidx.annotation.RequiresApi
 import co.typie.editor.Editor
-import co.typie.editor.ffi.CompositionIntent
-import co.typie.editor.ffi.DeletionIntent
-import co.typie.editor.ffi.Intent
+import co.typie.editor.ffi.CompositionOp
+import co.typie.editor.ffi.DeletionOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.SelectionIntent
+import co.typie.editor.ffi.SelectionOp
 import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 
 internal class EditorInputConnection(
@@ -70,7 +69,7 @@ internal class EditorInputConnection(
     if (value == "\n") {
       editor.enqueue(Message.Key(FfiKeyEvent(Key.Enter)))
     } else {
-      editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(value))))
+      editor.enqueue(Message.Composition(CompositionOp.Commit(value)))
     }
     return true
   }
@@ -78,29 +77,27 @@ internal class EditorInputConnection(
   override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
     editor.enqueue(
-      Message.Intent(Intent.Composition(CompositionIntent.Update(value, null)))
+      Message.Composition(CompositionOp.Update(value, null))
     )
     return true
   }
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
     editor.enqueue(
-      Message.Intent(Intent.Composition(CompositionIntent.SetRegion(start, end)))
+      Message.Composition(CompositionOp.SetRegion(start, end))
     )
     return true
   }
 
   override fun finishComposingText(): Boolean {
-    editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.CommitAsIs)))
+    editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
     return true
   }
 
   override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
     editor.enqueue(
-      Message.Intent(
-        Intent.Deletion(
-          DeletionIntent.Surrounding(beforeLength, afterLength)
-        )
+      Message.Deletion(
+        DeletionOp.Surrounding(beforeLength, afterLength)
       )
     )
     return true
@@ -108,10 +105,8 @@ internal class EditorInputConnection(
 
   override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
     editor.enqueue(
-      Message.Intent(
-        Intent.Deletion(
-          DeletionIntent.SurroundingCodePoints(beforeLength, afterLength)
-        )
+      Message.Deletion(
+        DeletionOp.SurroundingCodePoints(beforeLength, afterLength)
       )
     )
     return true
@@ -119,7 +114,7 @@ internal class EditorInputConnection(
 
   override fun setSelection(start: Int, end: Int): Boolean {
     editor.enqueue(
-      Message.Intent(Intent.Selection(SelectionIntent.SetFlat(start, end)))
+      Message.Selection(SelectionOp.SetFlat(start, end))
     )
     return true
   }
@@ -163,7 +158,7 @@ internal class EditorInputConnection(
   override fun getHandler() = null
 
   override fun closeConnection() {
-    editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.CommitAsIs)))
+    editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
     batchLevel = 0
   }
 

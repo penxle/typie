@@ -4,12 +4,9 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_navigation_intent(
-    editor: &mut Editor,
-    nav: NavigationIntent,
-) -> Result<(), EditorError> {
-    match nav {
-        NavigationIntent::Move { movement, extend } => {
+pub fn handle_navigation_op(editor: &mut Editor, op: NavigationOp) -> Result<(), EditorError> {
+    match op {
+        NavigationOp::Move { movement, extend } => {
             let selection = editor.state.selection;
             let resource_guard = editor.resource.lock().unwrap();
             let new_selection =

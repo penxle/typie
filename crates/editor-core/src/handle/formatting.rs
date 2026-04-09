@@ -6,12 +6,9 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_formatting_intent(
-    editor: &mut Editor,
-    intent: FormattingIntent,
-) -> Result<(), EditorError> {
-    match intent {
-        FormattingIntent::ToggleModifier {
+pub fn handle_formatting_op(editor: &mut Editor, op: FormattingOp) -> Result<(), EditorError> {
+    match op {
+        FormattingOp::ToggleModifier {
             modifier_type: ModifierType::Bold,
         } => {
             let resource = Arc::clone(&editor.resource);
@@ -38,10 +35,8 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state.clone());
-        editor.apply(Message::Intent {
-            intent: Intent::Formatting {
-                intent: FormattingIntent::ClearModifiers,
-            },
+        editor.apply(Message::Formatting {
+            op: FormattingOp::ClearModifiers,
         });
         assert_eq!(editor.state().selection, state.selection);
     }

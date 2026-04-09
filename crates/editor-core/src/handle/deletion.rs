@@ -7,18 +7,15 @@ use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
 
-pub fn handle_deletion_intent(
-    editor: &mut Editor,
-    intent: DeletionIntent,
-) -> Result<(), EditorError> {
-    match intent {
-        DeletionIntent::Selection => {
+pub fn handle_deletion_op(editor: &mut Editor, op: DeletionOp) -> Result<(), EditorError> {
+    match op {
+        DeletionOp::Selection => {
             editor.transact(|tr| {
                 commands::delete_selection(tr)?;
                 Ok(())
             })?;
         }
-        DeletionIntent::Move {
+        DeletionOp::Move {
             movement:
                 Movement::Grapheme {
                     direction: Direction::Backward,
@@ -31,7 +28,7 @@ pub fn handle_deletion_intent(
                 Ok(())
             })?;
         }
-        DeletionIntent::Move {
+        DeletionOp::Move {
             movement:
                 Movement::Grapheme {
                     direction: Direction::Forward,
@@ -44,7 +41,7 @@ pub fn handle_deletion_intent(
                 Ok(())
             })?;
         }
-        DeletionIntent::Move { movement } => {
+        DeletionOp::Move { movement } => {
             let head = editor.state().selection.head;
             let resource_guard = editor.resource.lock().unwrap();
             let target = editor
@@ -82,10 +79,8 @@ mod tests {
             selection: (t1, 2) -> (t1, 8)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Selection,
-            },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Selection,
         });
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("herld") } } }
@@ -101,12 +96,10 @@ mod tests {
             selection: (t1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Grapheme {
-                        direction: Direction::Backward,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Backward,
                 },
             },
         });
@@ -124,12 +117,10 @@ mod tests {
             selection: (t1, 3)
         };
         let mut editor = Editor::new_test(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Grapheme {
-                        direction: Direction::Forward,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Forward,
                 },
             },
         });
@@ -154,12 +145,10 @@ mod tests {
             selection: (t1, 11)
         };
         let mut editor = editor_with_layout(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Word {
-                        direction: Direction::Backward,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Word {
+                    direction: Direction::Backward,
                 },
             },
         });
@@ -177,12 +166,10 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = editor_with_layout(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Word {
-                        direction: Direction::Forward,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Word {
+                    direction: Direction::Forward,
                 },
             },
         });
@@ -200,13 +187,11 @@ mod tests {
             selection: (t1, 5)
         };
         let mut editor = editor_with_layout(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Line {
-                        direction: Direction::Backward,
-                        axis: editor_common::Axis::Horizontal,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Line {
+                    direction: Direction::Backward,
+                    axis: editor_common::Axis::Horizontal,
                 },
             },
         });
@@ -224,13 +209,11 @@ mod tests {
             selection: (t1, 5)
         };
         let mut editor = editor_with_layout(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Line {
-                        direction: Direction::Forward,
-                        axis: editor_common::Axis::Horizontal,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Line {
+                    direction: Direction::Forward,
+                    axis: editor_common::Axis::Horizontal,
                 },
             },
         });
@@ -248,12 +231,10 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = editor_with_layout(state);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Word {
-                        direction: Direction::Backward,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Word {
+                    direction: Direction::Backward,
                 },
             },
         });
@@ -273,12 +254,10 @@ mod tests {
         };
         let resource = Arc::new(Mutex::new(Resource::new_test()));
         let mut editor = Editor::new_test_with_resource(state, resource);
-        editor.apply(Message::Intent {
-            intent: Intent::Deletion {
-                intent: DeletionIntent::Move {
-                    movement: Movement::Grapheme {
-                        direction: Direction::Backward,
-                    },
+        editor.apply(Message::Deletion {
+            op: DeletionOp::Move {
+                movement: Movement::Grapheme {
+                    direction: Direction::Backward,
                 },
             },
         });

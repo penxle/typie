@@ -203,17 +203,15 @@ impl Editor {
         match msg {
             Message::Key { event } => handle::handle_key_event(self, event)?,
             Message::Pointer { event } => handle::handle_pointer_event(self, event)?,
-            Message::Intent { intent } => match intent {
-                Intent::History { intent } => handle::handle_history_intent(self, intent)?,
-                Intent::Navigation { intent } => handle::handle_navigation_intent(self, intent)?,
-                Intent::Insertion { intent } => handle::handle_insertion_intent(self, intent)?,
-                Intent::Deletion { intent } => handle::handle_deletion_intent(self, intent)?,
-                Intent::Selection { intent } => handle::handle_selection_intent(self, intent)?,
-                Intent::Formatting { intent } => handle::handle_formatting_intent(self, intent)?,
-                Intent::Node { intent } => handle::handle_node_intent(self, intent)?,
-                Intent::Clipboard { intent } => handle::handle_clipboard_intent(self, intent)?,
-                Intent::Composition { intent } => handle::handle_composition_intent(self, intent)?,
-            },
+            Message::Insertion { op } => handle::handle_insertion_op(self, op)?,
+            Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
+            Message::Formatting { op } => handle::handle_formatting_op(self, op)?,
+            Message::Selection { op } => handle::handle_selection_op(self, op)?,
+            Message::Node { op } => handle::handle_node_op(self, op)?,
+            Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
+            Message::Composition { op } => handle::handle_composition_op(self, op)?,
+            Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
+            Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,
             Message::FlatIme { ops } => handle::handle_flat_ime(self, ops)?,
         }
@@ -414,10 +412,8 @@ mod tests {
         let (mut editor, t) = test_editor();
         let target = Selection::collapsed(Position::new(t, 3));
 
-        editor.apply(Message::Intent {
-            intent: Intent::Selection {
-                intent: SelectionIntent::Set { selection: target },
-            },
+        editor.apply(Message::Selection {
+            op: SelectionOp::Set { selection: target },
         });
 
         assert_eq!(editor.state().selection, target);
@@ -427,10 +423,8 @@ mod tests {
     fn undo_on_empty_history_is_noop() {
         let (mut editor, _) = test_editor();
         let before = editor.state().selection;
-        editor.apply(Message::Intent {
-            intent: Intent::History {
-                intent: HistoryIntent::Undo,
-            },
+        editor.apply(Message::History {
+            op: HistoryOp::Undo,
         });
         assert_eq!(editor.state().selection, before);
     }
@@ -461,10 +455,8 @@ mod tests {
                 scale_factor: 2.0,
             },
         });
-        editor.enqueue(Message::Intent {
-            intent: Intent::Selection {
-                intent: SelectionIntent::Set { selection },
-            },
+        editor.enqueue(Message::Selection {
+            op: SelectionOp::Set { selection },
         });
         editor.tick().unwrap();
 
@@ -482,10 +474,8 @@ mod tests {
     fn tick_returns_state_changed_on_selection_set() {
         let (mut editor, t) = test_editor();
         let target = Selection::collapsed(Position::new(t, 3));
-        editor.enqueue(Message::Intent {
-            intent: Intent::Selection {
-                intent: SelectionIntent::Set { selection: target },
-            },
+        editor.enqueue(Message::Selection {
+            op: SelectionOp::Set { selection: target },
         });
 
         let events = editor.tick().unwrap();
@@ -528,11 +518,9 @@ mod tests {
     #[test]
     fn tick_returns_doc_changed_on_text_insert() {
         let (mut editor, _) = test_editor();
-        let events = editor.apply(Message::Intent {
-            intent: Intent::Insertion {
-                intent: InsertionIntent::Text {
-                    text: "a".to_string(),
-                },
+        let events = editor.apply(Message::Insertion {
+            op: InsertionOp::Text {
+                text: "a".to_string(),
             },
         });
 

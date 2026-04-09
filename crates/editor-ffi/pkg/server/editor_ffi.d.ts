@@ -306,13 +306,13 @@ export type Break = "line" | "paragraph" | "page";
 
 export type CalloutVariant = "info" | "success" | "warning" | "danger";
 
-export type ClipboardIntent = { type: "paste"; html: string | undefined; text: string } | { type: "cut" } | { type: "copy" };
+export type ClipboardOp = { type: "paste"; html: string | undefined; text: string } | { type: "cut" } | { type: "copy" };
 
-export type CompositionIntent = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" };
+export type CompositionOp = { type: "update"; text: string; replace_length: number | undefined } | { type: "set_region"; start: number; end: number } | { type: "commit"; text: string } | { type: "commit_as_is" } | { type: "cancel" };
 
 export type CursorRect = PageRect;
 
-export type DeletionIntent = { type: "selection" } | { type: "move"; movement: Movement };
+export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movement };
 
 export type Direction = "forward" | "backward";
 
@@ -324,37 +324,35 @@ export type FlatImeOp = { type: "set_selection"; start: number; end: number } | 
 
 export type FontData = { type: "base" } | { type: "chunk"; index: number };
 
-export type FormattingIntent = { type: "toggle_modifier"; modifier_type: ModifierType } | { type: "set_modifier"; modifier: Modifier } | { type: "clear_modifiers" };
+export type FormattingOp = { type: "toggle_modifier"; modifier_type: ModifierType } | { type: "set_modifier"; modifier: Modifier } | { type: "clear_modifiers" };
 
-export type HistoryIntent = { type: "undo" } | { type: "redo" };
+export type HistoryOp = { type: "undo" } | { type: "redo" };
 
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
 
-export type InsertionIntent = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "node"; node: Node };
-
-export type Intent = { type: "insertion"; intent: InsertionIntent } | { type: "deletion"; intent: DeletionIntent } | { type: "formatting"; intent: FormattingIntent } | { type: "selection"; intent: SelectionIntent } | { type: "node"; intent: NodeIntent } | { type: "clipboard"; intent: ClipboardIntent } | { type: "composition"; intent: CompositionIntent } | { type: "navigation"; intent: NavigationIntent } | { type: "history"; intent: HistoryIntent };
+export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "node"; node: Node };
 
 export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
 export type LayoutMode = { type: "paginated"; page_width: number; page_height: number; page_margin_top: number; page_margin_bottom: number; page_margin_left: number; page_margin_right: number } | { type: "continuous"; max_width: number };
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "intent"; intent: Intent } | { type: "system"; event: SystemEvent } | { type: "flat_ime"; ops: FlatImeOp[] };
+export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "insertion"; op: InsertionOp } | { type: "deletion"; op: DeletionOp } | { type: "formatting"; op: FormattingOp } | { type: "selection"; op: SelectionOp } | { type: "node"; op: NodeOp } | { type: "clipboard"; op: ClipboardOp } | { type: "composition"; op: CompositionOp } | { type: "navigation"; op: NavigationOp } | { type: "history"; op: HistoryOp } | { type: "system"; event: SystemEvent } | { type: "flat_ime"; ops: FlatImeOp[] };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number };
 
 export type Movement = { type: "grapheme"; direction: Direction } | { type: "word"; direction: Direction } | { type: "sentence"; direction: Direction } | { type: "line"; direction: Direction; axis: Axis } | { type: "block"; direction: Direction } | { type: "page"; direction: Direction } | { type: "document"; direction: Direction };
 
-export type NavigationIntent = { type: "move"; movement: Movement; extend: boolean };
+export type NavigationOp = { type: "move"; movement: Movement; extend: boolean };
 
 export type Node = ({ type: "root" } & RootNode) | ({ type: "paragraph" } & ParagraphNode) | ({ type: "blockquote" } & BlockquoteNode) | ({ type: "callout" } & CalloutNode) | ({ type: "text" } & TextNode) | ({ type: "bullet_list" } & BulletListNode) | ({ type: "ordered_list" } & OrderedListNode) | ({ type: "list_item" } & ListItemNode) | ({ type: "fold" } & FoldNode) | ({ type: "fold_title" } & FoldTitleNode) | ({ type: "fold_content" } & FoldContentNode) | ({ type: "table" } & TableNode) | ({ type: "table_row" } & TableRowNode) | ({ type: "table_cell" } & TableCellNode) | ({ type: "image" } & ImageNode) | ({ type: "file" } & FileNode) | ({ type: "embed" } & EmbedNode) | ({ type: "archived" } & ArchivedNode) | ({ type: "hard_break" } & HardBreakNode) | ({ type: "horizontal_rule" } & HorizontalRuleNode) | ({ type: "page_break" } & PageBreakNode);
 
 export type NodeId = string;
 
-export type NodeIntent = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: Node } | { type: "toggle_fold"; id: NodeId } | { type: "table"; id: NodeId; op: TableOp };
+export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: NodeId; attrs: Node } | { type: "toggle_fold"; id: NodeId } | { type: "table"; id: NodeId; op: TableOp };
 
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" };
 
-export type SelectionIntent = { type: "all" } | { type: "set"; selection: Selection };
+export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection };
 
 export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "input_context" | "modifiers";
 
