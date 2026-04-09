@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
 import { defaultValues } from '@typie/lib/const';
 import { EntityState, EntityType, NoteState } from '@typie/lib/enums';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { LoroDoc, LoroList, LoroMap } from 'loro-crdt';
 import {
   db,
@@ -395,7 +395,7 @@ const copyFolder = async (
   const children = await tx
     .select()
     .from(Entities)
-    .where(and(eq(Entities.parentId, sourceEntityId), eq(Entities.state, EntityState.ACTIVE)))
+    .where(and(eq(Entities.parentId, sourceEntityId), eq(Entities.state, EntityState.ACTIVE), ne(Entities.id, newEntityId)))
     .orderBy(asc(Entities.order));
 
   let prevOrder: string | undefined;

@@ -2,7 +2,6 @@
   import { createMutation } from '@mearie/svelte';
   import { HorizontalDivider, MenuItem } from '@typie/ui/components';
   import { getAppContext } from '@typie/ui/context';
-  import { Toast } from '@typie/ui/notification';
   import mixpanel from 'mixpanel-browser';
   import ClipboardPasteIcon from '~icons/lucide/clipboard-paste';
   import FolderPlusIcon from '~icons/lucide/folder-plus';
@@ -10,6 +9,7 @@
   import { goto } from '$app/navigation';
   import { cache } from '$lib/graphql';
   import { graphql } from '$mearie';
+  import { showPasteToast } from './paste-toast';
 
   let { siteId, lastRootEntityOrder }: { siteId: string; lastRootEntityOrder: string | null } = $props();
 
@@ -230,13 +230,7 @@
       }
     })();
 
-    if (count >= 2) {
-      Toast.promise(promise, {
-        loading: `${count}개의 항목을 붙여넣는 중이에요`,
-        success: `${count}개의 항목을 붙여넣었어요`,
-        error: '붙여넣기 중 오류가 발생했어요',
-      });
-    }
+    showPasteToast(promise, count);
   };
 </script>
 

@@ -30,6 +30,7 @@
   import { getPaneGroup } from '../[slug]/@pane/context.svelte';
   import { maxDepth } from '../@tree/utils';
   import EntityIconPicker from './EntityIconPicker.svelte';
+  import { showPasteToast } from './paste-toast';
 
   type Props = {
     folder: {
@@ -474,13 +475,7 @@
         }
       })();
 
-      if (count >= 2) {
-        Toast.promise(promise, {
-          loading: `${count}개의 항목을 붙여넣는 중이에요`,
-          success: `${count}개의 항목을 붙여넣었어요`,
-          error: '붙여넣기 중 오류가 발생했어요',
-        });
-      }
+      showPasteToast(promise, count);
     }}
   >
     여기에 붙여넣기

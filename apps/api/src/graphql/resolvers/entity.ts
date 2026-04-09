@@ -1148,7 +1148,7 @@ builder.mutationFields((t) => ({
       `);
 
       if (entities.length === 0) {
-        return [];
+        throw new TypieError({ code: 'paste_source_not_found' });
       }
 
       // 원본 사이트 권한 확인
@@ -1157,6 +1157,10 @@ builder.mutationFields((t) => ({
         userId: ctx.session.userId,
         siteId: sourceSiteId,
       });
+
+      if (entities.some((entity) => entity.site_id !== sourceSiteId)) {
+        throw new TypieError({ code: 'site_mismatch' });
+      }
 
       // 대상 사이트 권한 확인
       await assertSitePermission({
@@ -1179,6 +1183,36 @@ builder.mutationFields((t) => ({
 
         if (parentEntity.siteId !== input.targetSiteId) {
           throw new TypieError({ code: 'site_mismatch' });
+        }
+
+        if (input.entityIds.includes(input.parentEntityId)) {
+          throw new TypieError({ code: 'circular_reference' });
+        }
+
+        if (sourceSiteId === input.targetSiteId) {
+          const [hasCycle] = await db.execute<{ exists: boolean }>(
+            sql`
+              WITH RECURSIVE sq AS (
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                WHERE ${eq(Entities.id, input.parentEntityId)}
+                UNION ALL
+                SELECT ${Entities.id}, ${Entities.parentId}
+                FROM ${Entities}
+                JOIN sq ON ${Entities.id} = sq.parent_id
+              )
+              SELECT EXISTS (
+                SELECT 1 FROM sq WHERE ${inArray(
+                  sql`id`,
+                  entities.map((entity) => entity.id),
+                )}
+              ) as exists
+            `,
+          );
+
+          if (hasCycle.exists) {
+            throw new TypieError({ code: 'circular_reference' });
+          }
         }
 
         targetDepth = parentEntity.depth + 1;
