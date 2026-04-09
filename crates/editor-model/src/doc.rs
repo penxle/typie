@@ -165,23 +165,15 @@ mod tests {
         let p1 = root.entry().children[0];
 
         let doc2 = doc.with_node_updated(p1, |mut entry| {
-            entry.node = Node::Paragraph(ParagraphNode {
-                align: TextAlign::Center,
-            });
+            entry.modifiers.push(Modifier::Bold);
             entry
         });
 
         let updated = doc2.node(p1).unwrap();
-        if let Node::Paragraph(p) = updated.node() {
-            assert_eq!(p.align, TextAlign::Center);
-        } else {
-            panic!("expected Paragraph");
-        }
+        assert!(updated.modifiers().contains(&Modifier::Bold));
 
         let original = doc.node(p1).unwrap();
-        if let Node::Paragraph(p) = original.node() {
-            assert_eq!(p.align, TextAlign::Left);
-        }
+        assert!(!original.modifiers().contains(&Modifier::Bold));
     }
 
     #[test]

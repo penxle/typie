@@ -189,7 +189,7 @@ mod tests {
         let (initial, ..) = state! {
             doc {
                 root {
-                    paragraph(align: TextAlign::Center) {
+                    paragraph [alignment(Alignment::Center)] {
                         t1: text("Hello")
                     }
                 }
@@ -200,8 +200,8 @@ mod tests {
         let (expected, ..) = state! {
             doc {
                 root {
-                    paragraph(align: TextAlign::Center) { t1: text("He") }
-                    paragraph(align: TextAlign::Center) { t2: text("llo") }
+                    paragraph [alignment(Alignment::Center)] { t1: text("He") }
+                    paragraph [alignment(Alignment::Center)] { t2: text("llo") }
                 }
             }
             selection: (t2, 0)

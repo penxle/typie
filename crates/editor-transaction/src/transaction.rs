@@ -665,23 +665,23 @@ mod tests {
 
     #[test]
     fn set_node_derives_old_node_from_state() {
-        let (state, p1) = state! {
-            doc { root { p1: paragraph { text("Hello World") } } }
-            selection: (p1, 0)
+        let (state, c1) = state! {
+            doc { root { c1: callout { paragraph { text("Hello World") } } } }
+            selection: (c1, 0)
         };
 
         let mut tr = Transaction::new(&state);
-        let new_node = Node::Paragraph(ParagraphNode {
-            align: TextAlign::Center,
+        let new_node = Node::Callout(CalloutNode {
+            variant: CalloutVariant::Warning,
         });
-        tr.set_node(p1, new_node.clone()).unwrap();
+        tr.set_node(c1, new_node.clone()).unwrap();
 
-        assert_eq!(tr.doc().get_entry(p1).unwrap().node, new_node);
+        assert_eq!(tr.doc().get_entry(c1).unwrap().node, new_node);
 
         let (_, steps, _, _) = tr.commit();
         match &steps[0] {
             Step::SetNode { old_node, .. } => {
-                assert_eq!(*old_node, Node::Paragraph(ParagraphNode::default()));
+                assert_eq!(*old_node, Node::Callout(CalloutNode::default()));
             }
             _ => panic!("expected SetNode"),
         }

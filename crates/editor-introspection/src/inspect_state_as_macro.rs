@@ -150,9 +150,6 @@ fn write_pending_modifiers(pending: &editor_state::PendingModifiers, output: &mu
 fn write_node_attrs_macro(node: &Node, output: &mut String) {
     let mut attrs = Vec::new();
     match node {
-        Node::Paragraph(p) if p.align != TextAlign::default() => {
-            attrs.push(format!("align: TextAlign::{:?}", p.align));
-        }
         Node::Blockquote(bq) if bq.variant != BlockquoteVariant::default() => {
             attrs.push(format!("variant: BlockquoteVariant::{:?}", bq.variant));
         }
@@ -168,9 +165,6 @@ fn write_node_attrs_macro(node: &Node, output: &mut String) {
                     "border_style: TableBorderStyle::{:?}",
                     t.border_style
                 ));
-            }
-            if t.align != TableAlign::default() {
-                attrs.push(format!("align: TableAlign::{:?}", t.align));
             }
             if (t.proportion - 1.0).abs() > f32::EPSILON {
                 attrs.push(format!("proportion: {}", format_f32(t.proportion)));
@@ -233,6 +227,9 @@ fn write_modifier_macro(m: &Modifier, output: &mut String) {
         }
         Modifier::Ruby { text } => {
             write!(output, "{name}(text: \"{text}\".to_string())").unwrap();
+        }
+        Modifier::Alignment { value } => {
+            write!(output, "{name}(Alignment::{value:?})").unwrap();
         }
     }
 }
@@ -362,11 +359,11 @@ state! {
     #[test]
     fn non_default_paragraph_align() {
         let (state, ..) = state! {
-            doc { root { paragraph(align: TextAlign::Center) { t1: text("Hi") } } }
+            doc { root { paragraph [alignment(Alignment::Center)] { t1: text("Hi") } } }
             selection: (t1, 0)
         };
         let output = inspect_state_as_macro(&state);
-        assert!(output.contains("paragraph(align: TextAlign::Center)"));
+        assert!(output.contains("[alignment(Alignment::Center)]"));
     }
 
     #[test]

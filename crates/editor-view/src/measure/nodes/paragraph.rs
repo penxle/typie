@@ -1,5 +1,5 @@
-use editor_common::{Alignment, EdgeInsets};
-use editor_model::{Doc, Node, NodeRef, TextAlign};
+use editor_common::{Alignment as LayoutAlignment, EdgeInsets};
+use editor_model::{Alignment, Doc, Modifier, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::text::measure::measure_inline_text;
@@ -14,13 +14,17 @@ pub fn measure_paragraph(
     width: f32,
 ) -> MeasuredNode {
     let indent = resolve_paragraph_indent(node);
-    let align = match node.node() {
-        Node::Paragraph(p) => p.align,
-        _ => TextAlign::Left,
-    };
+    let align = node
+        .modifiers()
+        .iter()
+        .find_map(|m| match m {
+            Modifier::Alignment { value } => Some(*value),
+            _ => None,
+        })
+        .unwrap_or_default();
 
     let (children, total_height) = measure_inline_text(measurer, doc, node, width, align, indent);
-    let alignment = text_align_to_alignment(align);
+    let alignment = align_to_layout(align);
 
     MeasuredNode {
         width,
@@ -41,12 +45,12 @@ pub fn measure_paragraph(
     }
 }
 
-fn text_align_to_alignment(align: TextAlign) -> Alignment {
+fn align_to_layout(align: Alignment) -> LayoutAlignment {
     match align {
-        TextAlign::Left => Alignment::Start,
-        TextAlign::Center => Alignment::Center,
-        TextAlign::Right => Alignment::End,
-        TextAlign::Justify => Alignment::Start,
+        Alignment::Left => LayoutAlignment::Start,
+        Alignment::Center => LayoutAlignment::Center,
+        Alignment::Right => LayoutAlignment::End,
+        Alignment::Justify => LayoutAlignment::Start,
     }
 }
 

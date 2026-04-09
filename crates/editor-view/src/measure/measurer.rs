@@ -111,9 +111,7 @@ impl Measurer {
 
 #[cfg(test)]
 mod tests {
-    use editor_model::{
-        Doc, HorizontalRuleNode, Node, NodeEntry, NodeId, ParagraphNode, TextAlign, TextNode,
-    };
+    use editor_model::{Doc, HorizontalRuleNode, Node, NodeEntry, NodeId, ParagraphNode, TextNode};
     use editor_state::{Position, Selection};
 
     use super::*;
@@ -141,10 +139,7 @@ mod tests {
         let doc = Doc::new_test()
             .insert_node(
                 paragraph_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             )
             .insert_node(
                 text_id,
@@ -191,10 +186,7 @@ mod tests {
         let doc = Doc::new_test()
             .insert_node(
                 paragraph1_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             )
             .insert_node(
                 text_id,
@@ -205,10 +197,7 @@ mod tests {
             )
             .insert_node(
                 paragraph2_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             );
 
         measurer.invalidate_with_steps(
@@ -248,55 +237,34 @@ mod tests {
         let old_doc = Doc::new_test()
             .insert_node(
                 target_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             )
             .insert_node(
                 wrapper_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             )
             .insert_node(
                 source_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(wrapper_id),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(wrapper_id),
             )
             .insert_node(
                 remaining_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(wrapper_id),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(wrapper_id),
             );
 
         // After merge: root > [target, wrapper > [remaining]]
         let new_doc = Doc::new_test()
             .insert_node(
                 target_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             )
             .insert_node(
                 wrapper_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             )
             .insert_node(
                 remaining_id,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(wrapper_id),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(wrapper_id),
             );
 
         let steps = vec![Step::MergeNode {
@@ -357,10 +325,7 @@ mod tests {
             )
             .with_node(
                 p1,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             )
             .with_node(
                 hr,
@@ -369,10 +334,7 @@ mod tests {
             )
             .with_node(
                 p2,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             );
 
         // Measure full doc — hr gets cached
@@ -382,12 +344,7 @@ mod tests {
         let steps = vec![Step::RemoveSubtree {
             parent_id: NodeId::ROOT,
             index: 0,
-            subtree: editor_model::Subtree::leaf(
-                p1,
-                Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }),
-            ),
+            subtree: editor_model::Subtree::leaf(p1, Node::Paragraph(ParagraphNode::default())),
         }];
 
         let doc2 = Doc::new_test()
@@ -403,10 +360,7 @@ mod tests {
             )
             .with_node(
                 p2,
-                NodeEntry::new(Node::Paragraph(ParagraphNode {
-                    align: TextAlign::Left,
-                }))
-                .with_parent(NodeId::ROOT),
+                NodeEntry::new(Node::Paragraph(ParagraphNode::default())).with_parent(NodeId::ROOT),
             );
 
         measurer.invalidate_with_steps(&doc1, &doc2, &steps);

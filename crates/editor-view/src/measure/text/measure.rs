@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use editor_model::{Doc, NodeRef, TextAlign};
+use editor_model::{Alignment, Doc, NodeRef};
 
 use crate::measure::{MeasuredContent, MeasuredLine, MeasuredNode, Measurer};
 
@@ -16,7 +16,7 @@ pub fn measure_inline_text(
     doc: &Doc,
     node: &NodeRef<'_>,
     width: f32,
-    align: TextAlign,
+    align: Alignment,
     indent: f32,
 ) -> (Vec<Arc<MeasuredNode>>, f32) {
     let (text, runs) = collect_text_runs(doc, node);

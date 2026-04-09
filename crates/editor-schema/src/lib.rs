@@ -222,6 +222,12 @@ impl Default for SchemaInner {
                     inheritable: false,
                     ..Default::default()
                 },
+                ModifierType::Alignment => ModifierSpec {
+                    context: context_expr!(Paragraph | Image | Table),
+                    expand: Expand::None,
+                    inheritable: false,
+                    ..Default::default()
+                },
             },
         }
     }

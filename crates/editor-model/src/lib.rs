@@ -1,5 +1,6 @@
 editor_macros::preamble!();
 
+mod alignment;
 mod doc;
 mod document_attrs;
 mod entry;
@@ -12,6 +13,7 @@ mod subtree;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
 
+pub use alignment::*;
 pub use doc::*;
 pub use document_attrs::*;
 pub use entry::*;

@@ -1,5 +1,5 @@
-use editor_common::{Alignment, EdgeInsets, Rect};
-use editor_model::{Doc, Node, NodeRef, TextAlign};
+use editor_common::{Alignment as LayoutAlignment, EdgeInsets, Rect};
+use editor_model::{Alignment, Doc, Node, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
@@ -37,7 +37,7 @@ pub fn measure_fold_title(
 
     let inner_width = width - padding.left - padding.right;
     let (children, children_height) =
-        measure_inline_text(measurer, doc, node, inner_width, TextAlign::Left, 0.0);
+        measure_inline_text(measurer, doc, node, inner_width, Alignment::Left, 0.0);
 
     MeasuredNode {
         width,
@@ -49,7 +49,7 @@ pub fn measure_fold_title(
                 padding,
                 border: EdgeInsets::ZERO,
                 border_mode: BorderMode::Separate,
-                alignment: Alignment::Start,
+                alignment: LayoutAlignment::Start,
                 scope: false,
                 decorations: vec![Decoration {
                     id: 0,
@@ -86,7 +86,7 @@ pub fn measure_fold_content(
             padding,
             border: EdgeInsets::ZERO,
             scope: false,
-            alignment: Alignment::Start,
+            alignment: LayoutAlignment::Start,
         },
     )
 }
@@ -126,7 +126,7 @@ pub fn measure_fold(
                 padding: EdgeInsets::ZERO,
                 border,
                 border_mode: BorderMode::Separate,
-                alignment: Alignment::Start,
+                alignment: LayoutAlignment::Start,
                 scope: false,
                 decorations: vec![],
             },

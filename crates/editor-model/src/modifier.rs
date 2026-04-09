@@ -1,3 +1,4 @@
+use crate::alignment::Alignment;
 use editor_macros::ffi;
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
@@ -75,6 +76,10 @@ pub enum Modifier {
     ParagraphIndent {
         value: u32,
     },
+
+    Alignment {
+        value: Alignment,
+    },
 }
 
 impl Modifier {
@@ -105,11 +110,18 @@ mod tests {
             Modifier::LineHeight { value: 160 }.as_type(),
             ModifierType::LineHeight
         );
+        assert_eq!(
+            Modifier::Alignment {
+                value: Alignment::Center
+            }
+            .as_type(),
+            ModifierType::Alignment
+        );
     }
 
     #[test]
     fn as_type_count() {
-        assert_eq!(ModifierType::COUNT, 15);
+        assert_eq!(ModifierType::COUNT, 16);
     }
 
     #[test]
@@ -156,6 +168,17 @@ mod tests {
         let m = Modifier::ParagraphIndent { value: 200 };
         let json = serde_json::to_string(&m).unwrap();
         assert_eq!(json, r#"{"type":"paragraph_indent","value":200}"#);
+        let parsed: Modifier = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, m);
+    }
+
+    #[test]
+    fn serde_alignment() {
+        let m = Modifier::Alignment {
+            value: Alignment::Center,
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        assert_eq!(json, r#"{"type":"alignment","value":"center"}"#);
         let parsed: Modifier = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, m);
     }

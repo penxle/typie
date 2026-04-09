@@ -110,17 +110,15 @@ fn doc_link_modifier() {
 fn doc_node_params() {
     let (doc, p) = doc! {
         root {
-            p: paragraph(align: TextAlign::Center) {
+            p: paragraph [alignment(Alignment::Center)] {
                 text("Hello")
             }
         }
     };
     let p_entry = doc.get_entry(p).unwrap();
-    if let Node::Paragraph(ref para) = p_entry.node {
-        assert_eq!(para.align, TextAlign::Center);
-    } else {
-        panic!("expected Paragraph node");
-    }
+    assert!(p_entry.modifiers.contains(&Modifier::Alignment {
+        value: Alignment::Center,
+    }));
 }
 
 #[test]

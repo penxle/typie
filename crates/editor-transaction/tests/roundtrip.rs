@@ -99,23 +99,25 @@ fn insert_text_then_bold_scenario() {
 
 #[test]
 fn set_node_and_selection_combined() {
-    let (state, p1, t1) = state! {
+    let (state, c1, t1) = state! {
         doc {
             root {
-                p1: paragraph {
-                    t1: text("Hello World")
+                c1: callout {
+                    paragraph {
+                        t1: text("Hello World")
+                    }
                 }
             }
         }
         selection: (t1, 0)
     };
 
-    // Change paragraph alignment
+    // Change callout variant
     let set_node = Step::SetNode {
-        node_id: p1,
-        old_node: Node::Paragraph(ParagraphNode::default()),
-        new_node: Node::Paragraph(ParagraphNode {
-            align: TextAlign::Center,
+        node_id: c1,
+        old_node: Node::Callout(CalloutNode::default()),
+        new_node: Node::Callout(CalloutNode {
+            variant: CalloutVariant::Warning,
         }),
     };
     let state2 = set_node.apply(&state).unwrap().state;
@@ -133,7 +135,7 @@ fn set_node_and_selection_combined() {
 
     assert_eq!(state5.selection, state.selection);
     assert_eq!(
-        *state5.node(p1).node(),
-        Node::Paragraph(ParagraphNode::default())
+        *state5.node(c1).node(),
+        Node::Callout(CalloutNode::default())
     );
 }

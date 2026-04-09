@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use editor_common::{Alignment, EdgeInsets};
-use editor_model::{Doc, Node, NodeRef, TableAlign};
+use editor_common::{Alignment as LayoutAlignment, EdgeInsets};
+use editor_model::{Alignment, Doc, Modifier, Node, NodeRef};
 
 use crate::measure::Measurer;
 use crate::measure::container::{PaddedLayoutConfig, layout_padded};
@@ -126,7 +126,7 @@ pub fn measure_table_cell(
             padding: EdgeInsets::all(TABLE_CELL_PADDING),
             border: EdgeInsets::all(TABLE_BORDER_WIDTH),
             scope: true,
-            alignment: Alignment::Start,
+            alignment: LayoutAlignment::Start,
         },
     )
 }
@@ -155,7 +155,7 @@ pub fn measure_table(
                     padding: EdgeInsets::ZERO,
                     border: EdgeInsets::all(TABLE_BORDER_WIDTH),
                     border_mode: BorderMode::Collapse,
-                    alignment: Alignment::Start,
+                    alignment: LayoutAlignment::Start,
                     scope: false,
                     decorations: vec![],
                 },
@@ -243,7 +243,7 @@ pub fn measure_table(
                     padding: EdgeInsets::ZERO,
                     border: EdgeInsets::all(TABLE_BORDER_WIDTH),
                     border_mode: BorderMode::Collapse,
-                    alignment: Alignment::Start,
+                    alignment: LayoutAlignment::Start,
                     scope: false,
                     decorations: vec![],
                 },
@@ -264,10 +264,19 @@ pub fn measure_table(
         .sum();
     let collapsed_height = (row_count + 1) as f32 * TABLE_BORDER_WIDTH + row_inner_heights_sum;
 
-    let alignment = match table_node.align {
-        TableAlign::Left => Alignment::Start,
-        TableAlign::Center => Alignment::Center,
-        TableAlign::Right => Alignment::End,
+    let align = node
+        .modifiers()
+        .iter()
+        .find_map(|m| match m {
+            Modifier::Alignment { value } => Some(*value),
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    let alignment = match align {
+        Alignment::Left => LayoutAlignment::Start,
+        Alignment::Center => LayoutAlignment::Center,
+        Alignment::Right | Alignment::Justify => LayoutAlignment::End,
     };
 
     MeasuredNode {
@@ -371,7 +380,7 @@ mod tests {
     fn table_align_center() {
         let (doc, t1) = doc! {
             root {
-                t1: table(align: TableAlign::Center) {
+                t1: table [alignment(Alignment::Center)] {
                     table_row {
                         table_cell { paragraph }
                     }
@@ -386,7 +395,7 @@ mod tests {
         let MeasuredContent::Box(MeasuredBox { style, .. }) = &result.content else {
             panic!()
         };
-        assert_eq!(style.alignment, Alignment::Center);
+        assert_eq!(style.alignment, LayoutAlignment::Center);
     }
 
     #[test]

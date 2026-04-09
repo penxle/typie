@@ -125,9 +125,6 @@ fn write_position_tree(pos: &editor_state::Position, labeler: &Labeler, output: 
 
 fn write_node_attrs_tree(node: &Node, output: &mut String) {
     match node {
-        Node::Paragraph(p) if p.align != TextAlign::default() => {
-            write!(output, " align={:?}", p.align).unwrap();
-        }
         Node::Blockquote(bq) => {
             write!(output, " variant={:?}", bq.variant).unwrap();
         }
@@ -139,9 +136,6 @@ fn write_node_attrs_tree(node: &Node, output: &mut String) {
         }
         Node::Table(t) => {
             write!(output, " border_style={:?}", t.border_style).unwrap();
-            if t.align != TableAlign::default() {
-                write!(output, " align={:?}", t.align).unwrap();
-            }
             if (t.proportion - 1.0).abs() > f32::EPSILON {
                 write!(output, " proportion={}", t.proportion).unwrap();
             }
@@ -197,6 +191,7 @@ fn write_modifier_tree(m: &Modifier, output: &mut String) {
         }
         Modifier::Link { href } => write!(output, "{name}(href: \"{href}\")").unwrap(),
         Modifier::Ruby { text } => write!(output, "{name}(text: \"{text}\")").unwrap(),
+        Modifier::Alignment { value } => write!(output, "{name}({value:?})").unwrap(),
     }
 }
 
@@ -336,11 +331,11 @@ selection: (p1, 0, >)
     #[test]
     fn paragraph_shows_non_default_align() {
         let (state, ..) = state! {
-            doc { root { paragraph(align: TextAlign::Center) { t1: text("Hello") } } }
+            doc { root { paragraph [alignment(Alignment::Center)] { t1: text("Hello") } } }
             selection: (t1, 0)
         };
         let output = inspect_state(&state, &opts());
-        assert!(output.contains("paragraph align=Center"));
+        assert!(output.contains("[alignment(Center)]"));
     }
 
     #[test]

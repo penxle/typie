@@ -1,9 +1,9 @@
-use editor_model::TextAlign;
+use editor_model::Alignment;
 use editor_resource::{Resource, TextBrush};
 use parley::style::{
     FontFamily, FontFamilyName, FontFeatures, FontVariations, FontWeight, LineHeight, TextStyle,
 };
-use parley::{Alignment, AlignmentOptions, IndentOptions, Layout};
+use parley::{Alignment as ParleyAlignment, AlignmentOptions, IndentOptions, Layout};
 use std::borrow::Cow;
 
 use super::style_run::StyleRun;
@@ -11,7 +11,7 @@ use super::style_run::StyleRun;
 pub fn build_layout(
     text: &str,
     style_runs: &[StyleRun],
-    align: TextAlign,
+    align: Alignment,
     indent: f32,
     width: f32,
     resource: &mut Resource,
@@ -59,10 +59,10 @@ pub fn build_layout(
     layout.break_all_lines(Some(width));
 
     let alignment = match align {
-        TextAlign::Left => Alignment::Start,
-        TextAlign::Center => Alignment::Center,
-        TextAlign::Right => Alignment::End,
-        TextAlign::Justify => Alignment::Justify,
+        Alignment::Left => ParleyAlignment::Start,
+        Alignment::Center => ParleyAlignment::Center,
+        Alignment::Right => ParleyAlignment::End,
+        Alignment::Justify => ParleyAlignment::Justify,
     };
     layout.align(Some(width), alignment, AlignmentOptions::default());
 

@@ -60,24 +60,24 @@ mod tests {
 
     #[test]
     fn set_node_apply() {
-        let (state, p1) = state! {
+        let (state, c1) = state! {
             doc {
                 root {
-                    p1: paragraph {
-                        text("Hello")
+                    c1: callout {
+                        paragraph { text("Hello") }
                     }
                 }
             }
-            selection: (p1, 0)
+            selection: (c1, 0)
         };
 
-        let old_node = Node::Paragraph(ParagraphNode::default());
-        let new_node = Node::Paragraph(ParagraphNode {
-            align: TextAlign::Center,
+        let old_node = Node::Callout(CalloutNode::default());
+        let new_node = Node::Callout(CalloutNode {
+            variant: CalloutVariant::Warning,
         });
 
         let step = Step::SetNode {
-            node_id: p1,
+            node_id: c1,
             old_node,
             new_node: new_node.clone(),
         };
@@ -85,36 +85,36 @@ mod tests {
         let output = step.apply(&state).unwrap();
         let new_state = output.state;
 
-        assert_eq!(*new_state.node(p1).node(), new_node);
+        assert_eq!(*new_state.node(c1).node(), new_node);
     }
 
     #[test]
     fn set_node_inverse_roundtrip() {
-        let (state, p1) = state! {
+        let (state, c1) = state! {
             doc {
                 root {
-                    p1: paragraph {
-                        text("Hello")
+                    c1: callout {
+                        paragraph { text("Hello") }
                     }
                 }
             }
-            selection: (p1, 0)
+            selection: (c1, 0)
         };
 
-        let original_node = state.node(p1).node().clone();
+        let original_node = state.node(c1).node().clone();
 
         let step = Step::SetNode {
-            node_id: p1,
-            old_node: Node::Paragraph(ParagraphNode::default()),
-            new_node: Node::Paragraph(ParagraphNode {
-                align: TextAlign::Center,
+            node_id: c1,
+            old_node: Node::Callout(CalloutNode::default()),
+            new_node: Node::Callout(CalloutNode {
+                variant: CalloutVariant::Warning,
             }),
         };
 
         let state2 = step.apply(&state).unwrap().state;
         let state3 = step.inverse().apply(&state2).unwrap().state;
 
-        assert_eq!(*state3.node(p1).node(), original_node);
+        assert_eq!(*state3.node(c1).node(), original_node);
     }
 
     #[test]
