@@ -178,6 +178,17 @@ internal fun resolveThemeModeForStartup(
   }
 }
 
+internal fun resolveIsDarkTheme(
+  themeMode: ThemeMode,
+  systemIsDark: Boolean,
+): Boolean {
+  return when (themeMode) {
+    ThemeMode.System -> systemIsDark
+    ThemeMode.Light -> false
+    ThemeMode.Dark -> true
+  }
+}
+
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
   val appStartupService = koinInject<AppStartupService>()
@@ -202,11 +213,10 @@ fun AppTheme(content: @Composable () -> Unit) {
       .collect { themeService.themeMode = it }
   }
 
-  val isDark = when (themeMode.value) {
-    ThemeMode.System -> isSystemInDarkTheme()
-    ThemeMode.Light -> false
-    ThemeMode.Dark -> true
-  }
+  val isDark = resolveIsDarkTheme(
+    themeMode = themeMode.value,
+    systemIsDark = isSystemInDarkTheme(),
+  )
 
   CompositionLocalProvider(
     LocalAppColors provides if (isDark) DarkColors else LightColors,
