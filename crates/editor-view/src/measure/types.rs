@@ -45,6 +45,4 @@ pub struct MeasuredLine {
 #[derive(Debug, Clone)]
 pub struct MeasuredAtom {
     pub node_id: NodeId,
-    pub parent_id: NodeId,
-    pub index: usize,
 }

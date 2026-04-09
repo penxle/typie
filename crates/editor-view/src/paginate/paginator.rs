@@ -1,4 +1,5 @@
 use editor_common::{Alignment, EdgeInsets, Rect, Size};
+use editor_model::NodeId;
 
 use crate::measure::*;
 use crate::page::LayoutPage;
@@ -57,12 +58,17 @@ impl Paginator {
     }
 
     pub fn paginate(mut self, tree: MeasuredTree) -> (LayoutTree, Vec<LayoutPage>) {
-        let root = self.place_node(&tree.root);
+        let root = self.place_node(&tree.root, NodeId::ROOT, 0);
         let pages = self.finish();
         (LayoutTree { root }, pages)
     }
 
-    fn place_node(&mut self, node: &MeasuredNode) -> LayoutNode {
+    fn place_node(
+        &mut self,
+        node: &MeasuredNode,
+        parent_id: NodeId,
+        child_index: usize,
+    ) -> LayoutNode {
         match &node.content {
             MeasuredContent::Box(b) => match b.style.direction {
                 Direction::Vertical => self.place_vertical(b, node.width),
@@ -92,8 +98,8 @@ impl Paginator {
                     rect: Rect::from_xywh(x, y, node.width, node.height),
                     content: LayoutContent::Atom(LayoutAtom {
                         node_id: a.node_id,
-                        parent_id: a.parent_id,
-                        index: a.index,
+                        parent_id,
+                        index: child_index,
                     }),
                 }
             }
@@ -124,7 +130,11 @@ impl Paginator {
         let mut children = Vec::new();
         let mut prev_border_bottom: Option<f32> = None;
 
+        let mut child_index: usize = 0;
+
         for child in &measured.children {
+            let is_doc_child = !matches!(child.content, MeasuredContent::Spacing(_));
+
             // 1. Gap absorption at page start (paginated only)
             if self.is_paginated()
                 && self.is_at_page_start()
@@ -148,6 +158,7 @@ impl Paginator {
                     self.break_page(&mut children);
                 }
                 prev_border_bottom = None;
+                child_index += 1;
                 continue; // PageBreak consumed, not added to output
             }
 
@@ -164,12 +175,15 @@ impl Paginator {
             }
 
             // 5. Place child
-            let layout_child = self.place_node(child);
+            let layout_child = self.place_node(child, measured.node_id, child_index);
+            if is_doc_child {
+                child_index += 1;
+            }
             children.push(layout_child);
 
             prev_border_bottom = child_border_bottom(child);
 
-            // 6. Oversized child: advance pages until the child fits, without resetting accumulated_y
+            // 6. Oversized child: advance pages until the child fits
             let child_bottom = self.accumulated_y;
             if self.is_paginated() {
                 while child_bottom > self.page_content_bottom() {
@@ -205,11 +219,17 @@ impl Paginator {
         let mut child_x = box_x + measured.style.border.left + measured.style.padding.left;
         let child_y = box_y + measured.style.border.top + measured.style.padding.top;
 
+        let mut child_index: usize = 0;
         let children: Vec<LayoutNode> = measured
             .children
             .iter()
             .map(|child| {
-                let layout_child = place_node_at(child, child_x, child_y);
+                let is_doc_child = !matches!(child.content, MeasuredContent::Spacing(_));
+                let layout_child =
+                    place_node_at(child, child_x, child_y, measured.node_id, child_index);
+                if is_doc_child {
+                    child_index += 1;
+                }
                 child_x += child.width;
                 if measured.style.border_mode == BorderMode::Collapse
                     && let MeasuredContent::Box(child_box) = &child.content
@@ -368,30 +388,52 @@ fn child_border_bottom(node: &MeasuredNode) -> Option<f32> {
     }
 }
 
-fn place_node_at(node: &MeasuredNode, x: f32, y: f32) -> LayoutNode {
+fn place_node_at(
+    node: &MeasuredNode,
+    x: f32,
+    y: f32,
+    parent_id: NodeId,
+    child_index: usize,
+) -> LayoutNode {
     match &node.content {
         MeasuredContent::Box(b) => {
             let mut offset_y = b.style.border.top + b.style.padding.top;
             let mut offset_x = b.style.border.left + b.style.padding.left;
             let children: Vec<LayoutNode> = match b.style.direction {
-                Direction::Vertical => b
-                    .children
-                    .iter()
-                    .map(|child| {
-                        let c = place_node_at(child, x + offset_x, y + offset_y);
-                        offset_y += child.height;
-                        c
-                    })
-                    .collect(),
-                Direction::Horizontal => b
-                    .children
-                    .iter()
-                    .map(|child| {
-                        let c = place_node_at(child, x + offset_x, y + offset_y);
-                        offset_x += child.width;
-                        c
-                    })
-                    .collect(),
+                Direction::Vertical => {
+                    let mut idx: usize = 0;
+                    b.children
+                        .iter()
+                        .map(|child| {
+                            let is_doc_child =
+                                !matches!(child.content, MeasuredContent::Spacing(_));
+                            let c =
+                                place_node_at(child, x + offset_x, y + offset_y, b.node_id, idx);
+                            if is_doc_child {
+                                idx += 1;
+                            }
+                            offset_y += child.height;
+                            c
+                        })
+                        .collect()
+                }
+                Direction::Horizontal => {
+                    let mut idx: usize = 0;
+                    b.children
+                        .iter()
+                        .map(|child| {
+                            let is_doc_child =
+                                !matches!(child.content, MeasuredContent::Spacing(_));
+                            let c =
+                                place_node_at(child, x + offset_x, y + offset_y, b.node_id, idx);
+                            if is_doc_child {
+                                idx += 1;
+                            }
+                            offset_x += child.width;
+                            c
+                        })
+                        .collect()
+                }
             };
             LayoutNode {
                 rect: Rect::from_xywh(x, y, node.width, node.height),
@@ -417,8 +459,8 @@ fn place_node_at(node: &MeasuredNode, x: f32, y: f32) -> LayoutNode {
             rect: Rect::from_xywh(x, y, node.width, node.height),
             content: LayoutContent::Atom(LayoutAtom {
                 node_id: a.node_id,
-                parent_id: a.parent_id,
-                index: a.index,
+                parent_id,
+                index: child_index,
             }),
         },
         MeasuredContent::Spacing(h) => LayoutNode {
@@ -489,8 +531,6 @@ mod tests {
             height,
             content: MeasuredContent::Atom(MeasuredAtom {
                 node_id: NodeId::new(),
-                parent_id: NodeId::ROOT,
-                index: 0,
             }),
         })
     }

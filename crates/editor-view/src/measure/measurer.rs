@@ -111,7 +111,9 @@ impl Measurer {
 
 #[cfg(test)]
 mod tests {
-    use editor_model::{Doc, Node, NodeEntry, NodeId, ParagraphNode, TextAlign, TextNode};
+    use editor_model::{
+        Doc, HorizontalRuleNode, Node, NodeEntry, NodeId, ParagraphNode, TextAlign, TextNode,
+    };
     use editor_state::{Position, Selection};
 
     use super::*;
@@ -331,5 +333,107 @@ mod tests {
         measurer.invalidate_with_steps(&doc, &doc, &[Step::SetSelection { old: sel, new: sel }]);
 
         assert!(measurer.cache.get(id).is_some());
+    }
+
+    #[test]
+    fn cached_atom_index_updates_after_sibling_removal() {
+        use crate::measure::MeasuredTree;
+        use crate::paginate::{LayoutContent, Paginator};
+        use editor_common::EdgeInsets;
+
+        let mut measurer = Measurer::new_test();
+        let vs = ViewState::new();
+
+        let p1 = NodeId::new();
+        let hr = NodeId::new();
+        let p2 = NodeId::new();
+
+        // Initial doc: root { p1, hr, p2 } — hr at child index 1
+        let doc1 = Doc::new_test()
+            .with_node(
+                NodeId::ROOT,
+                NodeEntry::new(Node::Root(Default::default()))
+                    .with_children(editor_model::imbl::vector![p1, hr, p2]),
+            )
+            .with_node(
+                p1,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(NodeId::ROOT),
+            )
+            .with_node(
+                hr,
+                NodeEntry::new(Node::HorizontalRule(HorizontalRuleNode::default()))
+                    .with_parent(NodeId::ROOT),
+            )
+            .with_node(
+                p2,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(NodeId::ROOT),
+            );
+
+        // Measure full doc — hr gets cached
+        let _ = measurer.measure(&doc1, NodeId::ROOT, 400.0, &vs);
+
+        // Delete p1
+        let steps = vec![Step::RemoveSubtree {
+            parent_id: NodeId::ROOT,
+            index: 0,
+            subtree: editor_model::Subtree::leaf(
+                p1,
+                Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }),
+            ),
+        }];
+
+        let doc2 = Doc::new_test()
+            .with_node(
+                NodeId::ROOT,
+                NodeEntry::new(Node::Root(Default::default()))
+                    .with_children(editor_model::imbl::vector![hr, p2]),
+            )
+            .with_node(
+                hr,
+                NodeEntry::new(Node::HorizontalRule(HorizontalRuleNode::default()))
+                    .with_parent(NodeId::ROOT),
+            )
+            .with_node(
+                p2,
+                NodeEntry::new(Node::Paragraph(ParagraphNode {
+                    align: TextAlign::Left,
+                }))
+                .with_parent(NodeId::ROOT),
+            );
+
+        measurer.invalidate_with_steps(&doc1, &doc2, &steps);
+
+        // Re-measure and paginate
+        let root = measurer.measure(&doc2, NodeId::ROOT, 400.0, &vs);
+        let tree = MeasuredTree {
+            root: std::sync::Arc::unwrap_or_clone(root),
+        };
+        let paginator = Paginator::continuous(440.0, 1024.0, EdgeInsets::all(20.0));
+        let (layout, _) = paginator.paginate(tree);
+
+        // Find the atom in the layout tree
+        let LayoutContent::Box(root_box) = &layout.root.content else {
+            panic!("expected box");
+        };
+        let atom = root_box
+            .children
+            .iter()
+            .find_map(|c| match &c.content {
+                LayoutContent::Atom(a) => Some(a),
+                _ => None,
+            })
+            .expect("should find atom");
+
+        // After p1 deletion, hr is child index 0
+        assert_eq!(atom.index, 0, "atom index should reflect current position");
+        assert_eq!(atom.parent_id, NodeId::ROOT);
     }
 }

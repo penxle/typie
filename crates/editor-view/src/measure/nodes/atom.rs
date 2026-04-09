@@ -7,8 +7,6 @@ const HORIZONTAL_RULE_HEIGHT: f32 = 24.0;
 
 pub fn measure_atom(node: &NodeRef<'_>, width: f32, view_state: &ViewState) -> MeasuredNode {
     let node_id = node.id();
-    let parent = node.parent().expect("atom must have parent");
-    let index = node.index().expect("atom must have index");
 
     let (w, h) = match node.node() {
         Node::Image(img) => {
@@ -27,18 +25,13 @@ pub fn measure_atom(node: &NodeRef<'_>, width: f32, view_state: &ViewState) -> M
     MeasuredNode {
         width: w,
         height: h,
-        content: MeasuredContent::Atom(MeasuredAtom {
-            node_id,
-            parent_id: parent.id(),
-            index,
-        }),
+        content: MeasuredContent::Atom(MeasuredAtom { node_id }),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use editor_macros::doc;
-    use editor_model::*;
 
     use super::*;
 
@@ -53,8 +46,7 @@ mod tests {
         assert_eq!(result.height, 24.0);
         assert!(matches!(
             result.content,
-            MeasuredContent::Atom(MeasuredAtom { parent_id, index, .. })
-                if parent_id == NodeId::ROOT && index == 0
+            MeasuredContent::Atom(MeasuredAtom { .. })
         ));
     }
 
