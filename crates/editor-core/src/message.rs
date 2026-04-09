@@ -163,6 +163,9 @@ pub enum CompositionOp {
     },
     CommitAsIs,
     Cancel,
+    Flat {
+        ops: Vec<FlatImeOp>,
+    },
 }
 
 #[ffi]
@@ -241,7 +244,6 @@ pub enum Message {
     Navigation { op: NavigationOp },
     History { op: HistoryOp },
     System { event: SystemEvent },
-    FlatIme { ops: Vec<FlatImeOp> },
 }
 
 #[ffi]

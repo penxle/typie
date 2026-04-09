@@ -10,6 +10,7 @@ import androidx.compose.ui.text.input.MoveCursorCommand
 import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
+import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
@@ -23,7 +24,7 @@ internal object InputEditCommandHandler {
       for (command in commands) {
         if (command is CommitTextCommand && command.text == "\n") {
           if (ops.isNotEmpty()) {
-            editor.enqueue(Message.FlatIme(ops.toList()))
+            editor.enqueue(Message.Composition(CompositionOp.Flat(ops.toList())))
             ops.clear()
           }
 
@@ -36,7 +37,7 @@ internal object InputEditCommandHandler {
       }
 
       if (ops.isNotEmpty()) {
-        editor.enqueue(Message.FlatIme(ops))
+        editor.enqueue(Message.Composition(CompositionOp.Flat(ops)))
       }
     }
   }

@@ -1,7 +1,6 @@
 mod clipboard;
 mod composition;
 mod deletion;
-mod flat_ime;
 mod formatting;
 mod history;
 mod insertion;
@@ -15,7 +14,6 @@ mod system;
 pub use clipboard::handle_clipboard_op;
 pub use composition::handle_composition_op;
 pub use deletion::handle_deletion_op;
-pub use flat_ime::handle_flat_ime;
 pub use formatting::handle_formatting_op;
 pub use history::handle_history_op;
 pub use insertion::handle_insertion_op;

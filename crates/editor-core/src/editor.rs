@@ -213,7 +213,6 @@ impl Editor {
             Message::Navigation { op } => handle::handle_navigation_op(self, op)?,
             Message::History { op } => handle::handle_history_op(self, op)?,
             Message::System { event } => handle::handle_system_event(self, event)?,
-            Message::FlatIme { ops } => handle::handle_flat_ime(self, ops)?,
         }
         Ok(())
     }
