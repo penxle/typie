@@ -52,6 +52,7 @@ fun BottomSheetScaffold(
   contentBackgroundColor: Color? = null,
   fillAvailableHeight: Boolean = false,
   scrollContent: Boolean = true,
+  applyContentImeOrNavigationBarsPadding: Boolean = true,
   footer: (@Composable ColumnScope.() -> Unit)? = null,
   content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -108,7 +109,13 @@ fun BottomSheetScaffold(
       modifier = Modifier
         .fillMaxWidth()
         .padding(top = 8.dp)
-        .imeOrNavigationBarsPadding()
+        .then(
+          if (applyContentImeOrNavigationBarsPadding) {
+            Modifier.imeOrNavigationBarsPadding()
+          } else {
+            Modifier
+          }
+        )
         .then(
           if (contentBackgroundColor != null) {
             Modifier

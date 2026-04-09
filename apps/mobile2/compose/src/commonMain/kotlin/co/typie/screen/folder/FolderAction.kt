@@ -1,5 +1,7 @@
 package co.typie.screen.folder
 
+import co.typie.graphql.type.EntityAvailability
+import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.ui.icon.IconData
 
@@ -16,7 +18,7 @@ internal sealed interface FolderAction {
   data object StartReorder : FolderAction
 }
 
-internal data class FolderTopBarActionItem(
+internal data class FolderActionMenuItem(
   val icon: IconData,
   val label: String,
   val action: FolderAction,
@@ -24,69 +26,89 @@ internal data class FolderTopBarActionItem(
   val isDanger: Boolean = false,
 )
 
+internal data class FolderActionSection(
+  val items: List<FolderActionMenuItem>,
+)
+
 internal data class FolderVisibilityPresentation(
   val label: String,
   val isShared: Boolean,
 )
 
-internal fun folderTopBarCenterActions(): List<FolderTopBarActionItem> {
+internal fun folderPrimaryActionSections(): List<FolderActionSection> {
   return listOf(
-    FolderTopBarActionItem(
-      icon = Lucide.PenLine,
-      label = "이름 변경",
-      action = FolderAction.Rename,
+    FolderActionSection(
+      items = listOf(
+        FolderActionMenuItem(
+          icon = Lucide.PenLine,
+          label = "이름 변경",
+          action = FolderAction.Rename,
+        ),
+        FolderActionMenuItem(
+          icon = Lucide.Palette,
+          label = "아이콘 변경",
+          action = FolderAction.ChangeIcon,
+        ),
+      ),
     ),
-    FolderTopBarActionItem(
-      icon = Lucide.Palette,
-      label = "아이콘 변경",
-      action = FolderAction.ChangeIcon,
+    FolderActionSection(
+      items = listOf(
+        FolderActionMenuItem(
+          icon = Lucide.Globe,
+          label = "스페이스에서 열기",
+          trailingIcon = Lucide.ExternalLink,
+          action = FolderAction.OpenExternal,
+        ),
+        FolderActionMenuItem(
+          icon = Lucide.Blend,
+          label = "공유 및 게시",
+          action = FolderAction.Share,
+        ),
+      ),
     ),
-    FolderTopBarActionItem(
-      icon = Lucide.Globe,
-      label = "스페이스에서 열기",
-      trailingIcon = Lucide.ExternalLink,
-      action = FolderAction.OpenExternal,
+    FolderActionSection(
+      items = listOf(
+        FolderActionMenuItem(
+          icon = Lucide.FolderSymlink,
+          label = "다른 폴더로 옮기기",
+          action = FolderAction.Move,
+        ),
+        FolderActionMenuItem(
+          icon = Lucide.ClipboardCopy,
+          label = "복사",
+          action = FolderAction.Copy,
+        ),
+        FolderActionMenuItem(
+          icon = Lucide.Scissors,
+          label = "잘라내기",
+          action = FolderAction.Cut,
+        ),
+      ),
     ),
-    FolderTopBarActionItem(
-      icon = Lucide.Blend,
-      label = "공유 및 게시",
-      action = FolderAction.Share,
-    ),
-    FolderTopBarActionItem(
-      icon = Lucide.FolderSymlink,
-      label = "다른 폴더로 옮기기",
-      action = FolderAction.Move,
-    ),
-    FolderTopBarActionItem(
-      icon = Lucide.ClipboardCopy,
-      label = "복사",
-      action = FolderAction.Copy,
-    ),
-    FolderTopBarActionItem(
-      icon = Lucide.Scissors,
-      label = "잘라내기",
-      action = FolderAction.Cut,
-    ),
-    FolderTopBarActionItem(
-      icon = Lucide.Trash2,
-      label = "삭제",
-      action = FolderAction.Delete,
-      isDanger = true,
+    FolderActionSection(
+      items = listOf(
+        FolderActionMenuItem(
+          icon = Lucide.Trash2,
+          label = "삭제",
+          action = FolderAction.Delete,
+          isDanger = true,
+        ),
+      ),
     ),
   )
 }
 
 internal fun folderVisibilityPresentation(
-  visibilityName: String?,
-  availabilityName: String?,
+  visibility: EntityVisibility?,
+  availability: EntityAvailability?,
 ): FolderVisibilityPresentation {
   return when {
-    visibilityName == "PUBLIC" -> FolderVisibilityPresentation(label = "공개", isShared = true)
-    visibilityName == "UNLISTED" && availabilityName == "UNLISTED" ->
+    visibility == EntityVisibility.PUBLIC -> FolderVisibilityPresentation(label = "공개", isShared = true)
+    visibility == EntityVisibility.UNLISTED && availability == EntityAvailability.UNLISTED ->
       FolderVisibilityPresentation(label = "링크 조회/편집 가능", isShared = true)
-    visibilityName == "UNLISTED" ->
+    visibility == EntityVisibility.UNLISTED ->
       FolderVisibilityPresentation(label = "링크 조회 가능", isShared = true)
-    availabilityName == "UNLISTED" ->
+    availability == EntityAvailability.UNLISTED ->
       FolderVisibilityPresentation(label = "링크 편집 가능", isShared = true)
     else -> FolderVisibilityPresentation(label = "비공개", isShared = false)
   }

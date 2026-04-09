@@ -677,6 +677,7 @@ private fun EntityMoveSheet_Root_Query.Entity.toMoveDestinationFolder(): MoveDes
   return MoveDestinationFolder(
     item = EntityListItem.Folder(
       id = id,
+      folderId = folder.id,
       iconName = icon,
       iconColor = iconColor,
       name = folder.name,
@@ -692,6 +693,7 @@ private fun EntityMoveSheet_Folder_Query.Child.toMoveDestinationFolder(): MoveDe
   return MoveDestinationFolder(
     item = EntityListItem.Folder(
       id = id,
+      folderId = folder.id,
       iconName = icon,
       iconColor = iconColor,
       name = folder.name,

@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,14 +28,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.ext.safeDrawing
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.verticalScroll
 import co.typie.entity_transfer.EntityClipboardMode
 import co.typie.entity_transfer.EntityClipboardService
 import co.typie.entity_transfer.EntityPasteBar
 import co.typie.entity_transfer.EntityPasteTarget
+import co.typie.entity_transfer.entityPasteBarToastBottomInset
+import co.typie.screen.entity_move.EntityMoveSheet
+import co.typie.screen.folder.FolderItemActionsSheet
+import co.typie.screen.folder.FolderAction
+import co.typie.screen.folder.FolderDeleteRequest
+import co.typie.screen.folder.FolderIconPickerSheet
+import co.typie.screen.folder.FolderRenameSheet
+import co.typie.screen.folder.FolderShareSheet
+import co.typie.screen.folder.FolderViewModel
+import co.typie.screen.folder.toTransferSource
 import co.typie.graphql.RefetchOnAppResumeEffect
 import co.typie.graphql.RefetchOnScreenEnterEffect
 import co.typie.graphql.RefetchOnSiteUpdateEffect
@@ -45,12 +59,14 @@ import co.typie.overlay.Toast
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.shell.LocalBottomBarState
+import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.formatSpaceSummary
+import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.entity_container.EntityContainerEditAction
 import co.typie.ui.component.entity_container.EntityContainerListContent
 import co.typie.ui.component.entity_container.EntityContainerTopBarTrailing
@@ -60,6 +76,7 @@ import co.typie.ui.component.entity_container.displayOrderedEntityItems
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
@@ -74,9 +91,12 @@ private val SpaceScreenPasteBarBottomOffset = 28.dp
 fun SpaceScreen() {
   val nav = Nav.current
   val haptic = LocalHapticFeedback.current
+  val uriHandler = LocalUriHandler.current
+  val bottomSheetHost = LocalBottomSheetHost.current
   val toast = koinInject<Toast>()
   val clipboard = koinInject<EntityClipboardService>()
   val model = koinViewModel<SpaceViewModel>()
+  val folderActionModel = koinViewModel<FolderViewModel>(key = "space-folder-actions")
   val scrollState = rememberScrollState("space")
   val bottomBarState = LocalBottomBarState.current
   val presenterScope = rememberCoroutineScope()
@@ -84,6 +104,7 @@ fun SpaceScreen() {
   var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
+  var deleteRequest by remember { mutableStateOf<FolderDeleteRequest?>(null) }
   val siteId = model.siteId
 
   LaunchedEffect(Unit) {
@@ -135,7 +156,7 @@ fun SpaceScreen() {
       return@LaunchedEffect
     }
     toast.bottomInset = if (animatedPasteBarVisible) {
-      Route.Space.toastBottomInset + 84.dp
+      entityPasteBarToastBottomInset(Route.Space.toastBottomInset)
     } else {
       Route.Space.toastBottomInset
     }
@@ -153,7 +174,10 @@ fun SpaceScreen() {
   }
 
   val serverEntities = remember(site?.entities) {
-    normalizeSpaceEntities(site?.entities.orEmpty())
+    normalizeSpaceEntities(
+      siteName = site?.name.orEmpty(),
+      entities = site?.entities.orEmpty(),
+    )
   }
   val serverEntityIds = remember(serverEntities) { serverEntities.map { it.id } }
   val editActions = listOf(
@@ -199,12 +223,36 @@ fun SpaceScreen() {
     ErrorDialog { model.refetch() }
   }
 
+  deleteRequest?.let { request ->
+    ConfirmModal(
+      title = "폴더 삭제",
+      message = "\"${request.folderName}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+      confirmText = "삭제하기",
+      confirmIsDestructive = true,
+      onConfirm = {
+        deleteRequest = null
+        folderActionModel.deleteFolderEntity(request.entityId) { success ->
+          if (success) {
+            model.refetch()
+          }
+        }
+      },
+      onDismiss = { deleteRequest = null },
+    )
+  }
+
   Screen(
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     contentPadding = PaddingValues(0.dp),
     primaryScrollableState = scrollState,
     body = { contentPadding ->
+      val reorderViewportTopInset = maxOf(
+        0.dp,
+        contentPadding.calculateTopPadding() - TopBarDefaults.BlurFadeHeight - TopBarDefaults.ContentTopSpacing,
+      )
+      val reorderViewportBottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
+
       val reorderState = rememberReorderableListState(
         keys = serverEntityIds,
         verticalScrollableState = scrollState,
@@ -213,7 +261,15 @@ fun SpaceScreen() {
         displayOrderedEntityItems(serverEntities, reorderState.displayedKeys)
       }
 
-      Box(modifier = Modifier.fillMaxSize()) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .reorderableListContainer(
+            state = reorderState,
+            viewportTopInset = reorderViewportTopInset,
+            viewportBottomInset = reorderViewportBottomInset,
+          ),
+      ) {
         EntityContainerListContent(
           items = displayEntities,
           emptyMessage = "문서와 폴더가 여기 나타나요",
@@ -226,8 +282,7 @@ fun SpaceScreen() {
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(contentPadding)
-            .safeBottomPadding()
-            .reorderableListContainer(reorderState),
+            .safeBottomPadding(),
           header = {
             SpaceHeader(
               title = site?.name.orEmpty(),
@@ -239,6 +294,89 @@ fun SpaceScreen() {
           },
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
           onFolderClick = { entityId -> nav.navigate(Route.Folder(entityId)) },
+          onFolderLongPress = { item ->
+            bottomSheetHost.show {
+              FolderItemActionsSheet(
+                item = item,
+                actionScope = presenterScope,
+                onAction = { action ->
+                  when (action) {
+                    FolderAction.Rename -> {
+                      bottomSheetHost.show {
+                        FolderRenameSheet(
+                          model = folderActionModel,
+                          folderId = item.folderId,
+                          initialName = item.name,
+                          onUpdated = model::refetch,
+                        )
+                      }
+                    }
+
+                    FolderAction.ChangeIcon -> {
+                      bottomSheetHost.show {
+                        FolderIconPickerSheet(
+                          model = folderActionModel,
+                          entityId = item.id,
+                          initialIcon = item.iconName,
+                          initialColor = item.iconColor,
+                          onUpdated = model::refetch,
+                        )
+                      }
+                    }
+
+                    FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                    FolderAction.Share -> {
+                      bottomSheetHost.show {
+                        FolderShareSheet(
+                          model = folderActionModel,
+                          folderId = item.folderId,
+                          folderUrl = item.url,
+                          initialVisibility = requireNotNull(item.visibility),
+                          initialThumbnailUrl = item.thumbnailUrl,
+                          onUpdated = model::refetch,
+                        )
+                      }
+                    }
+
+                    FolderAction.Move -> {
+                      bottomSheetHost.show {
+                        EntityMoveSheet(
+                          source = item.toTransferSource(),
+                          onMoved = model::refetch,
+                        )
+                      }
+                    }
+
+                    FolderAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = siteId,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = siteId,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Delete -> {
+                      deleteRequest = FolderDeleteRequest(
+                        entityId = item.id,
+                        folderName = item.name,
+                        shouldPopOnSuccess = false,
+                      )
+                    }
+
+                    FolderAction.SelectMultiple,
+                    FolderAction.StartReorder -> Unit
+                  }
+                },
+              )
+            }
+          },
           onDragStarted = {
             haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
           },

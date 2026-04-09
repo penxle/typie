@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import co.typie.blob.BlobService
 import co.touchlab.kermit.Logger
+import co.typie.graphql.FolderActions_DeleteEntities_Mutation
 import co.typie.graphql.FolderActions_UpdateEntityIcon_Mutation
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
 import co.typie.graphql.FolderShare_PersistBlobAsImage_Mutation
@@ -14,6 +15,7 @@ import co.typie.graphql.FolderScreen_Query
 import co.typie.graphql.FolderActions_RenameFolder_Mutation
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.type.EntityVisibility
+import co.typie.graphql.type.DeleteEntitiesInput
 import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.UpdateEntityIconInput
@@ -344,6 +346,36 @@ class FolderViewModel(
       throw e
     } catch (e: Exception) {
       Logger.e(e) { "Failed to update entity icon" }
+      toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
+      return false
+    }
+  }
+
+  fun deleteFolderEntity(
+    entityId: String,
+    onFinished: (Boolean) -> Unit = {},
+  ) {
+    viewModelScope.launch {
+      onFinished(deleteFolderEntityInternal(entityId = entityId))
+    }
+  }
+
+  private suspend fun deleteFolderEntityInternal(
+    entityId: String,
+  ): Boolean {
+    try {
+      executeMutation(
+        FolderActions_DeleteEntities_Mutation(
+          input = DeleteEntitiesInput(
+            entityIds = listOf(entityId),
+          ),
+        ),
+      )
+      return true
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      Logger.e(e) { "Failed to delete folder entity" }
       toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
       return false
     }

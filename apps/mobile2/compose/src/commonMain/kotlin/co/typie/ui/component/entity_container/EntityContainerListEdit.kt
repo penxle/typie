@@ -94,6 +94,7 @@ fun EntityContainerListContent(
   header: @Composable ColumnScope.() -> Unit = {},
   onDocumentClick: suspend (slug: String) -> Unit,
   onFolderClick: suspend (entityId: String) -> Unit,
+  onFolderLongPress: (suspend (item: EntityListItem.Folder) -> Unit)? = null,
   onDragStarted: () -> Unit,
   onDragMoved: () -> Unit,
   onDragStopped: (ReorderCommit<String>?) -> Unit,
@@ -121,6 +122,7 @@ fun EntityContainerListContent(
         modifier = Modifier.padding(horizontal = 16.dp),
         onDocumentClick = onDocumentClick,
         onFolderClick = onFolderClick,
+        onFolderLongPress = onFolderLongPress,
       )
     }
 
@@ -349,14 +351,14 @@ private fun EntityContainerReorderRow(
           is EntityListItem.Document -> EntityListDocumentRow(
             item = child,
             modifier = Modifier.weight(1f),
-            enabled = false,
+            interactive = false,
             onClick = {},
           )
 
           is EntityListItem.Folder -> EntityListFolderRow(
             item = child,
             modifier = Modifier.weight(1f),
-            enabled = false,
+            interactive = false,
             onClick = {},
           )
         }

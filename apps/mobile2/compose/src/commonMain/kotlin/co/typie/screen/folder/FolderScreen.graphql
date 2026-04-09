@@ -33,6 +33,7 @@ query FolderScreen_Query($entityId: ID!) {
         id
         name
         maxDescendantFoldersDepth
+        characterCount
         thumbnail {
           id
           url
@@ -44,11 +45,28 @@ query FolderScreen_Query($entityId: ID!) {
 
     children {
       id
+      depth
       order
       slug
+      url
       icon
       iconColor
       type
+      visibility
+      availability
+
+      ancestors {
+        id
+
+        node {
+          __typename
+
+          ... on Folder {
+            id
+            name
+          }
+        }
+      }
 
       node {
         __typename
@@ -56,6 +74,12 @@ query FolderScreen_Query($entityId: ID!) {
         ... on Folder {
           id
           name
+          maxDescendantFoldersDepth
+          characterCount
+          thumbnail {
+            id
+            url
+          }
           folderCount
           documentCount
         }

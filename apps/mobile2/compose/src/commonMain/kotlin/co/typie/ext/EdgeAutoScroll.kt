@@ -61,7 +61,13 @@ fun rememberEdgeAutoScrollState(
 fun Modifier.edgeAutoScroll(
   state: EdgeAutoScrollState,
   enabled: Boolean = true,
+  viewportTopInset: Dp = 0.dp,
+  viewportBottomInset: Dp = 0.dp,
 ): Modifier = composed {
+  val density = LocalDensity.current
+  val viewportTopInsetPx = with(density) { viewportTopInset.toPx() }
+  val viewportBottomInsetPx = with(density) { viewportBottomInset.toPx() }
+
   SideEffect {
     state.setEnabled(enabled)
   }
@@ -76,14 +82,33 @@ fun Modifier.edgeAutoScroll(
     val position = coordinates.positionInWindow()
     val size = coordinates.size
     state.updateViewportRect(
-      Rect(
-        left = position.x,
-        top = position.y,
-        right = position.x + size.width,
-        bottom = position.y + size.height,
+      insetViewportRect(
+        viewportRect = Rect(
+          left = position.x,
+          top = position.y,
+          right = position.x + size.width,
+          bottom = position.y + size.height,
+        ),
+        topInsetPx = viewportTopInsetPx,
+        bottomInsetPx = viewportBottomInsetPx,
       )
     )
   }
+}
+
+internal fun insetViewportRect(
+  viewportRect: Rect,
+  topInsetPx: Float = 0f,
+  bottomInsetPx: Float = 0f,
+): Rect {
+  val insetTop = (viewportRect.top + topInsetPx).coerceAtMost(viewportRect.bottom)
+  val insetBottom = (viewportRect.bottom - bottomInsetPx).coerceAtLeast(insetTop)
+  return Rect(
+    left = viewportRect.left,
+    top = insetTop,
+    right = viewportRect.right,
+    bottom = insetBottom,
+  )
 }
 
 @Stable

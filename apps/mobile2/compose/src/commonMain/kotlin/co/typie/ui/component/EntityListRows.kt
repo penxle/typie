@@ -25,8 +25,12 @@ import androidx.compose.ui.unit.dp
 import co.typie.datetime.timeAgo
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.combinedClickable
+import co.typie.ext.comma
 import co.typie.ext.pressScale
 import co.typie.ext.separated
+import co.typie.graphql.type.EntityAvailability
+import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.screen.home.resolveEntityIconAppearance
 import co.typie.ui.icon.Icon
@@ -51,11 +55,21 @@ sealed interface EntityListItem {
 
   data class Folder(
     override val id: String,
+    val folderId: String,
     override val iconName: String,
     override val iconColor: String,
     val name: String,
     val folderCount: Int,
     val documentCount: Int,
+    val siteName: String? = null,
+    val ancestorFolderNames: List<String> = emptyList(),
+    val depth: Int = 0,
+    val url: String = "",
+    val visibility: EntityVisibility? = null,
+    val availability: EntityAvailability? = null,
+    val characterCount: Int = 0,
+    val maxDescendantFoldersDepth: Int = 0,
+    val thumbnailUrl: String? = null,
   ) : EntityListItem
 }
 
@@ -69,6 +83,27 @@ fun formatFolderSummary(
   documentCount: Int,
 ): String = formatEntitySummary(folderCount, documentCount, emptyText = "빈 폴더")
 
+fun formatFolderMetadataSummary(
+  folderCount: Int,
+  documentCount: Int,
+  characterCount: Int,
+): String {
+  val parts = buildList {
+    if (folderCount > 0) add("폴더 ${folderCount.comma}개")
+    if (documentCount > 0) add("문서 ${documentCount.comma}개")
+    add("총 ${characterCount.comma}자")
+  }
+
+  return parts.joinToString(" · ")
+}
+
+fun EntityListItem.Folder.breadcrumbNames(): List<String> {
+  return buildList {
+    siteName?.takeIf { it.isNotBlank() }?.let(::add)
+    addAll(ancestorFolderNames)
+  }
+}
+
 fun formatFolderRowSummary(
   folderCount: Int,
   documentCount: Int,
@@ -78,10 +113,10 @@ fun formatFolderRowSummary(
   }
 
   if (folderCount == 0) {
-    return "문서 ${documentCount}개"
+    return "문서 ${documentCount.comma}개"
   }
 
-  return "폴더 ${folderCount}개 · 문서 ${documentCount}개"
+  return "폴더 ${folderCount.comma}개 · 문서 ${documentCount.comma}개"
 }
 
 @Composable
@@ -92,6 +127,7 @@ fun EntityListCard(
   modifier: Modifier = Modifier,
   onDocumentClick: suspend (slug: String) -> Unit,
   onFolderClick: suspend (entityId: String) -> Unit,
+  onFolderLongPress: (suspend (item: EntityListItem.Folder) -> Unit)? = null,
 ) {
   if (items.isEmpty()) {
     Box(
@@ -123,6 +159,7 @@ fun EntityListCard(
           is EntityListItem.Folder -> EntityListFolderRow(
             item = item,
             opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
+            onLongPress = onFolderLongPress?.let { handler -> { handler(item) } },
             onClick = { onFolderClick(item.id) },
           )
         }
@@ -131,11 +168,28 @@ fun EntityListCard(
   }
 }
 
+internal data class EntityListRowBehavior(
+  val alpha: Float,
+  val isInteractive: Boolean,
+)
+
+internal fun entityListRowBehavior(
+  enabled: Boolean,
+  interactive: Boolean,
+  opacity: Float,
+): EntityListRowBehavior {
+  return EntityListRowBehavior(
+    alpha = (if (enabled) 1f else 0.48f) * opacity,
+    isInteractive = enabled && interactive,
+  )
+}
+
 @Composable
 fun EntityListDocumentRow(
   item: EntityListItem.Document,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  interactive: Boolean = enabled,
   opacity: Float = 1f,
   onClick: suspend () -> Unit,
 ) {
@@ -148,6 +202,7 @@ fun EntityListDocumentRow(
     excerpt = item.excerpt,
     updatedAt = item.updatedAt,
     enabled = enabled,
+    interactive = interactive,
     opacity = opacity,
     onClick = onClick,
   )
@@ -158,7 +213,9 @@ fun EntityListFolderRow(
   item: EntityListItem.Folder,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  interactive: Boolean = enabled,
   opacity: Float = 1f,
+  onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
   FolderRowContent(
@@ -170,8 +227,10 @@ fun EntityListFolderRow(
       documentCount = item.documentCount,
     ),
     enabled = enabled,
+    interactive = interactive,
     opacity = opacity,
     modifier = modifier,
+    onLongPress = onLongPress,
     onClick = onClick,
   )
 }
@@ -208,6 +267,7 @@ fun TrashDocumentRow(
   iconName: String,
   iconColor: String,
   modifier: Modifier = Modifier,
+  onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
   DocumentRowContent(
@@ -218,6 +278,7 @@ fun TrashDocumentRow(
     subtitle = subtitle,
     excerpt = excerpt.orEmpty(),
     updatedAt = updatedAt,
+    onLongPress = onLongPress,
     onClick = onClick,
   )
 }
@@ -228,6 +289,7 @@ fun TrashFolderRow(
   iconName: String,
   iconColor: String,
   modifier: Modifier = Modifier,
+  onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
   FolderRowContent(
@@ -236,6 +298,7 @@ fun TrashFolderRow(
     iconColor = iconColor,
     metaText = "삭제된 폴더",
     modifier = modifier,
+    onLongPress = onLongPress,
     onClick = onClick,
   )
 }
@@ -251,7 +314,9 @@ private fun DocumentRowContent(
   modifier: Modifier = Modifier,
   emptyExcerptText: String? = "(내용 없음)",
   enabled: Boolean = true,
+  interactive: Boolean = enabled,
   opacity: Float = 1f,
+  onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
@@ -280,7 +345,9 @@ private fun DocumentRowContent(
     icon = entityIcon.icon,
     iconTint = entityIcon.tint,
     enabled = enabled,
+    interactive = interactive,
     opacity = opacity,
+    onLongPress = onLongPress,
     onClick = onClick,
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -325,7 +392,9 @@ private fun FolderRowContent(
   metaText: String,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  interactive: Boolean = enabled,
   opacity: Float = 1f,
+  onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
@@ -342,7 +411,9 @@ private fun FolderRowContent(
     icon = entityIcon.icon,
     iconTint = entityIcon.tint,
     enabled = enabled,
+    interactive = interactive,
     opacity = opacity,
+    onLongPress = onLongPress,
     onClick = onClick,
     trailing = {
       Icon(
@@ -377,18 +448,34 @@ private fun EntityListRowFrame(
   iconTint: Color,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  interactive: Boolean = enabled,
   opacity: Float = 1f,
+  onLongPress: (suspend () -> Unit)? = null,
   trailing: (@Composable () -> Unit)? = null,
   onClick: suspend () -> Unit,
   content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
+  val behavior = entityListRowBehavior(
+    enabled = enabled,
+    interactive = interactive,
+    opacity = opacity,
+  )
+
   InteractionScope {
     Row(
       modifier = modifier
         .fillMaxWidth()
-        .alpha((if (enabled) 1f else 0.48f) * opacity)
-        .then(if (enabled) Modifier.clickable(onClick) else Modifier)
-        .then(if (enabled) Modifier.pressScale() else Modifier)
+        .alpha(behavior.alpha)
+        .then(
+          if (!behavior.isInteractive) {
+            Modifier
+          } else if (onLongPress != null) {
+            Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress)
+          } else {
+            Modifier.clickable(onClick)
+          }
+        )
+        .then(if (behavior.isInteractive) Modifier.pressScale() else Modifier)
         .padding(horizontal = 16.dp, vertical = 12.dp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -414,8 +501,8 @@ private fun formatEntitySummary(
   emptyText: String,
 ): String {
   val parts = buildList {
-    if (folderCount > 0) add("폴더 ${folderCount}개")
-    if (documentCount > 0) add("문서 ${documentCount}개")
+    if (folderCount > 0) add("폴더 ${folderCount.comma}개")
+    if (documentCount > 0) add("문서 ${documentCount.comma}개")
   }
 
   return if (parts.isEmpty()) emptyText else parts.joinToString(" · ")

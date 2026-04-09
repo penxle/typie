@@ -8,6 +8,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,12 +28,14 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import co.typie.ext.safeDrawing
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.verticalScroll
 import co.typie.entity_transfer.EntityClipboardMode
 import co.typie.entity_transfer.EntityClipboardService
 import co.typie.entity_transfer.EntityPasteBar
 import co.typie.entity_transfer.EntityPasteTarget
+import co.typie.entity_transfer.entityPasteBarToastBottomInset
 import co.typie.graphql.QueryState
 import co.typie.graphql.RefetchOnAppResumeEffect
 import co.typie.graphql.RefetchOnScreenEnterEffect
@@ -46,6 +50,7 @@ import co.typie.route.toastBottomInset
 import co.typie.entity_transfer.EntityTransferSource
 import co.typie.screen.entity_move.EntityMoveSheet
 import co.typie.shell.LocalBottomBarState
+import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
@@ -61,8 +66,10 @@ import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
+import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -85,6 +92,7 @@ fun FolderScreen(entityId: String) {
   var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
+  var deleteRequest by remember(entityId) { mutableStateOf<FolderDeleteRequest?>(null) }
   val siteId = model.siteId
 
   LaunchedEffect(Unit) {
@@ -108,12 +116,20 @@ fun FolderScreen(entityId: String) {
     folderCount = folder?.folderCount ?: 0,
     documentCount = folder?.documentCount ?: 0,
   )
+  val folderMetadataSummary = co.typie.ui.component.formatFolderMetadataSummary(
+    folderCount = folder?.folderCount ?: 0,
+    documentCount = folder?.documentCount ?: 0,
+    characterCount = folder?.characterCount ?: 0,
+  )
   val breadcrumbNames = buildList {
     add(entity?.site?.name ?: "내 스페이스")
     addAll(entity?.ancestors?.mapNotNull { it.node.onFolder?.name }.orEmpty())
   }
   val serverChildren = remember(entity?.children) {
-    normalizeFolderChildren(entity?.children.orEmpty())
+    normalizeFolderChildren(
+      siteName = entity?.site?.name.orEmpty(),
+      children = entity?.children.orEmpty(),
+    )
   }
   val serverChildIds = remember(serverChildren) { serverChildren.map { it.id } }
   val reorderState = rememberReorderableListState(
@@ -123,7 +139,6 @@ fun FolderScreen(entityId: String) {
   val displayChildren = remember(serverChildren, reorderState.displayedKeys) {
     displayOrderedEntityItems(serverChildren, reorderState.displayedKeys)
   }
-  val centerActions = remember { folderTopBarCenterActions() }
   val clipboardState = clipboard.state
   val cutDimmedItemIds = remember(clipboardState) {
     if (clipboardState?.mode == EntityClipboardMode.Cut) {
@@ -164,7 +179,7 @@ fun FolderScreen(entityId: String) {
       return@LaunchedEffect
     }
     toast.bottomInset = if (animatedPasteBarVisible) {
-      Route.Folder(entityId).toastBottomInset + 84.dp
+      entityPasteBarToastBottomInset(Route.Folder(entityId).toastBottomInset)
     } else {
       Route.Folder(entityId).toastBottomInset
     }
@@ -276,8 +291,7 @@ fun FolderScreen(entityId: String) {
         isReordering = true
       }
 
-      FolderAction.SelectMultiple,
-      FolderAction.Delete -> showUnavailable(closePopover)
+      FolderAction.SelectMultiple -> showUnavailable(closePopover)
 
       FolderAction.Copy -> {
         val resolvedEntity = entity
@@ -320,6 +334,20 @@ fun FolderScreen(entityId: String) {
         )
         closePopover()
       }
+
+      FolderAction.Delete -> {
+        val resolvedFolder = folder
+        if (resolvedFolder == null) {
+          closePopover()
+          return
+        }
+        closePopover()
+        deleteRequest = FolderDeleteRequest(
+          entityId = entityId,
+          folderName = resolvedFolder.name,
+          shouldPopOnSuccess = true,
+        )
+      }
     }
   }
 
@@ -360,13 +388,12 @@ fun FolderScreen(entityId: String) {
         } else {
           FolderTopBarCenterMenu(
             title = folderTitle,
-            subtitle = folderSummary,
+            subtitle = folderMetadataSummary,
             breadcrumbNames = breadcrumbNames,
-            visibilityName = entity?.visibility?.name,
-            availabilityName = entity?.availability?.name,
+            visibilityName = entity?.visibility,
+            availabilityName = entity?.availability,
             iconName = entity?.icon,
             iconColor = entity?.iconColor,
-            actions = centerActions,
             onAction = ::onCenterAction,
             modifier = Modifier
               .fillMaxWidth()
@@ -391,13 +418,51 @@ fun FolderScreen(entityId: String) {
     ErrorDialog { model.refetch() }
   }
 
+  deleteRequest?.let { request ->
+    ConfirmModal(
+      title = "폴더 삭제",
+      message = "\"${request.folderName}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+      confirmText = "삭제하기",
+      confirmIsDestructive = true,
+      onConfirm = {
+        deleteRequest = null
+        model.deleteFolderEntity(request.entityId) { success ->
+          if (success) {
+            if (request.shouldPopOnSuccess) {
+              presenterScope.launch {
+                nav.pop()
+              }
+            } else {
+              model.refetch()
+            }
+          }
+        }
+      },
+      onDismiss = { deleteRequest = null },
+    )
+  }
+
   Screen(
     loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     contentPadding = PaddingValues(),
     primaryScrollableState = scrollState,
     body = { contentPadding ->
-      Box(modifier = Modifier.fillMaxSize()) {
+      val reorderViewportTopInset = maxOf(
+        0.dp,
+        contentPadding.calculateTopPadding() - TopBarDefaults.BlurFadeHeight - TopBarDefaults.ContentTopSpacing,
+      )
+      val reorderViewportBottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
+
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .reorderableListContainer(
+            state = reorderState,
+            viewportTopInset = reorderViewportTopInset,
+            viewportBottomInset = reorderViewportBottomInset,
+          ),
+      ) {
         EntityContainerListContent(
           items = displayChildren,
           emptyMessage = "폴더가 비어 있어요",
@@ -410,10 +475,89 @@ fun FolderScreen(entityId: String) {
             .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(contentPadding)
-            .safeBottomPadding()
-            .reorderableListContainer(reorderState),
+            .safeBottomPadding(),
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
           onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
+          onFolderLongPress = { item ->
+            bottomSheetHost.show {
+              FolderItemActionsSheet(
+                item = item,
+                actionScope = presenterScope,
+                onAction = { action ->
+                  when (action) {
+                    FolderAction.Rename -> {
+                      bottomSheetHost.show {
+                        FolderRenameSheet(
+                          model = model,
+                          folderId = item.folderId,
+                          initialName = item.name,
+                        )
+                      }
+                    }
+
+                    FolderAction.ChangeIcon -> {
+                      bottomSheetHost.show {
+                        FolderIconPickerSheet(
+                          model = model,
+                          entityId = item.id,
+                          initialIcon = item.iconName,
+                          initialColor = item.iconColor,
+                        )
+                      }
+                    }
+
+                    FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                    FolderAction.Share -> {
+                      bottomSheetHost.show {
+                        FolderShareSheet(
+                          model = model,
+                          folderId = item.folderId,
+                          folderUrl = item.url,
+                          initialVisibility = requireNotNull(item.visibility),
+                          initialThumbnailUrl = item.thumbnailUrl,
+                        )
+                      }
+                    }
+
+                    FolderAction.Move -> {
+                      bottomSheetHost.show {
+                        EntityMoveSheet(
+                          source = item.toTransferSource(),
+                          onMoved = model::refetch,
+                        )
+                      }
+                    }
+
+                    FolderAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = siteId,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = siteId,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Delete -> {
+                      deleteRequest = FolderDeleteRequest(
+                        entityId = item.id,
+                        folderName = item.name,
+                        shouldPopOnSuccess = false,
+                      )
+                    }
+
+                    FolderAction.SelectMultiple,
+                    FolderAction.StartReorder -> Unit
+                  }
+                },
+              )
+            }
+          },
           onDragStarted = {
             haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
           },

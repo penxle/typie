@@ -135,6 +135,7 @@ class EntityContainerModelsTest {
       order = order,
       item = EntityListItem.Folder(
         id = id,
+        folderId = id,
         iconName = "folder",
         iconColor = "gray",
         name = id,

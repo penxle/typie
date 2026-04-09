@@ -75,6 +75,7 @@ import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
+import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
@@ -141,182 +142,193 @@ fun TextReplacementsScreen() {
         displayCustomItems(serverCustomItems, reorderState.displayedKeys)
       }
 
-      Column(
+      Box(
         modifier = Modifier
           .fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .safeBottomPadding()
-          .reorderableListContainer(reorderState),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+          .reorderableListContainer(
+            state = reorderState,
+            viewportTopInset = maxOf(
+              0.dp,
+              contentPadding.calculateTopPadding() - TopBarDefaults.BlurFadeHeight - TopBarDefaults.ContentTopSpacing,
+            ),
+          ),
       ) {
-        Text(
-          text = "텍스트 대치",
-          style = AppTheme.typography.display,
-          modifier = Modifier.padding(top = 4.dp),
-        )
-
-        Text(
-          text = "입력 중 특정 텍스트를 자동으로 변환해요.",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
-
-        TextReplacementSection(title = "기본 대치") {
-          if (smartQuoteItems.isNotEmpty()) {
-            TextReplacementToggleRow(
-              title = "곧은따옴표를 둥근따옴표로",
-              checked = model.isSmartQuoteEnabled,
-              onClick = {
-                model.toggleSmartQuotes(
-                  items = model.normalizedItems,
-                  enabled = !model.isSmartQuoteEnabled,
-                )
-              },
-              onCheckedChange = { next ->
-                scope.launch {
-                  model.toggleSmartQuotes(
-                    items = model.normalizedItems,
-                    enabled = next,
-                  )
-                }
-              },
-            )
-
-            if (presetItems.isNotEmpty()) {
-              CardDivider()
-            }
-          }
-
-          presetItems.forEachIndexed { index, item ->
-            if (index > 0) {
-              CardDivider()
-            }
-
-            TextReplacementPresetRow(
-              item = item,
-              checked = item.state == TextReplacementState.ACTIVE,
-              onClick = { model.togglePreset(item) },
-              onCheckedChange = {
-                scope.launch {
-                  model.togglePreset(item)
-                }
-              },
-            )
-          }
-        }
-
         Column(
-          verticalArrangement = Arrangement.spacedBy(12.dp),
+          modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(contentPadding)
+            .safeBottomPadding(),
+          verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-          SectionTitle(
-            text = "사용자 대치",
+          Text(
+            text = "텍스트 대치",
+            style = AppTheme.typography.display,
             modifier = Modifier.padding(top = 4.dp),
           )
+
           Text(
-            text = "위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.",
+            text = "입력 중 특정 텍스트를 자동으로 변환해요.",
             style = AppTheme.typography.caption,
             color = AppTheme.colors.textTertiary,
           )
 
-          if (serverCustomItems.isEmpty()) {
-            CardSurface(modifier = Modifier.fillMaxWidth()) {
-              TextReplacementEmptyState()
-            }
-          } else {
-            LookaheadScope {
-              val boundsTransform = remember {
-                androidx.compose.animation.BoundsTransform { _, _ ->
-                  spring(
-                    dampingRatio = 0.9f,
-                    stiffness = Spring.StiffnessMedium,
+          TextReplacementSection(title = "기본 대치") {
+            if (smartQuoteItems.isNotEmpty()) {
+              TextReplacementToggleRow(
+                title = "곧은따옴표를 둥근따옴표로",
+                checked = model.isSmartQuoteEnabled,
+                onClick = {
+                  model.toggleSmartQuotes(
+                    items = model.normalizedItems,
+                    enabled = !model.isSmartQuoteEnabled,
                   )
-                }
+                },
+                onCheckedChange = { next ->
+                  scope.launch {
+                    model.toggleSmartQuotes(
+                      items = model.normalizedItems,
+                      enabled = next,
+                    )
+                  }
+                },
+              )
+
+              if (presetItems.isNotEmpty()) {
+                CardDivider()
+              }
+            }
+
+            presetItems.forEachIndexed { index, item ->
+              if (index > 0) {
+                CardDivider()
               }
 
-              Column(modifier = Modifier.fillMaxWidth()) {
-                displayCustomItems.forEachIndexed { index, item ->
-                  key(item.textReplacementId) {
-                    val isDragging = reorderState.isDragging(item.textReplacementId)
+              TextReplacementPresetRow(
+                item = item,
+                checked = item.state == TextReplacementState.ACTIVE,
+                onClick = { model.togglePreset(item) },
+                onCheckedChange = {
+                  scope.launch {
+                    model.togglePreset(item)
+                  }
+                },
+              )
+            }
+          }
 
-                    TextReplacementCustomRow(
-                      modifier = Modifier
-                        .then(
-                          if (isDragging) {
-                            Modifier
-                          } else {
-                            Modifier.animateBounds(
-                              lookaheadScope = this@LookaheadScope,
-                              boundsTransform = boundsTransform,
-                            )
-                          },
-                        )
-                        .reorderableItem(
+          Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            SectionTitle(
+              text = "사용자 대치",
+              modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+              text = "위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textTertiary,
+            )
+
+            if (serverCustomItems.isEmpty()) {
+              CardSurface(modifier = Modifier.fillMaxWidth()) {
+                TextReplacementEmptyState()
+              }
+            } else {
+              LookaheadScope {
+                val boundsTransform = remember {
+                  androidx.compose.animation.BoundsTransform { _, _ ->
+                    spring(
+                      dampingRatio = 0.9f,
+                      stiffness = Spring.StiffnessMedium,
+                    )
+                  }
+                }
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                  displayCustomItems.forEachIndexed { index, item ->
+                    key(item.textReplacementId) {
+                      val isDragging = reorderState.isDragging(item.textReplacementId)
+
+                      TextReplacementCustomRow(
+                        modifier = Modifier
+                          .then(
+                            if (isDragging) {
+                              Modifier
+                            } else {
+                              Modifier.animateBounds(
+                                lookaheadScope = this@LookaheadScope,
+                                boundsTransform = boundsTransform,
+                              )
+                            },
+                          )
+                          .reorderableItem(
+                            state = reorderState,
+                            key = item.textReplacementId,
+                          ),
+                        dragHandleModifier = Modifier.reorderableDragHandle(
                           state = reorderState,
                           key = item.textReplacementId,
-                        ),
-                      dragHandleModifier = Modifier.reorderableDragHandle(
-                        state = reorderState,
-                        key = item.textReplacementId,
-                        enabled = !isPersistingCustomReorder,
-                        onDragStarted = {
-                          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                        },
-                        onDragMoved = {
-                          haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                        },
-                        onDragStopped = { commit ->
-                          haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                          if (commit == null || commit.orderedKeys == serverCustomItemIds) {
-                            return@reorderableDragHandle
-                          }
-
-                          val reorderOrders = calculateCustomReorderOrdersFromOrderedKeys(
-                            items = serverCustomItems,
-                            orderedKeys = commit.orderedKeys,
-                            movedKey = commit.movedKey,
-                          ) ?: run {
-                            reorderState.resetToServerKeys(serverCustomItemIds)
-                            return@reorderableDragHandle
-                          }
-
-                          isPersistingCustomReorder = true
-                          scope.launch {
-                            val success = model.moveCustom(
-                              textReplacementId = commit.movedKey,
-                              lowerOrder = reorderOrders.lowerOrder,
-                              upperOrder = reorderOrders.upperOrder,
-                            )
-                            isPersistingCustomReorder = false
-
-                            if (!success) {
-                              reorderState.resetToServerKeys(serverCustomItemIds)
+                          enabled = !isPersistingCustomReorder,
+                          onDragStarted = {
+                            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                          },
+                          onDragMoved = {
+                            haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                          },
+                          onDragStopped = { commit ->
+                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                            if (commit == null || commit.orderedKeys == serverCustomItemIds) {
+                              return@reorderableDragHandle
                             }
+
+                            val reorderOrders = calculateCustomReorderOrdersFromOrderedKeys(
+                              items = serverCustomItems,
+                              orderedKeys = commit.orderedKeys,
+                              movedKey = commit.movedKey,
+                            ) ?: run {
+                              reorderState.resetToServerKeys(serverCustomItemIds)
+                              return@reorderableDragHandle
+                            }
+
+                            isPersistingCustomReorder = true
+                            scope.launch {
+                              val success = model.moveCustom(
+                                textReplacementId = commit.movedKey,
+                                lowerOrder = reorderOrders.lowerOrder,
+                                upperOrder = reorderOrders.upperOrder,
+                              )
+                              isPersistingCustomReorder = false
+
+                              if (!success) {
+                                reorderState.resetToServerKeys(serverCustomItemIds)
+                              }
+                            }
+                          },
+                        ),
+                        index = index,
+                        item = item,
+                        isDragging = isDragging,
+                        isFirst = index == 0,
+                        isLast = index == displayCustomItems.lastIndex,
+                        onToggleChange = {
+                          scope.launch {
+                            model.toggleCustom(item)
                           }
                         },
-                      ),
-                      index = index,
-                      item = item,
-                      isDragging = isDragging,
-                      isFirst = index == 0,
-                      isLast = index == displayCustomItems.lastIndex,
-                      onToggleChange = {
-                        scope.launch {
-                          model.toggleCustom(item)
-                        }
-                      },
-                      onEditClick = {
-                        openForm(item)
-                      },
-                    )
+                        onEditClick = {
+                          openForm(item)
+                        },
+                      )
+                    }
                   }
                 }
               }
             }
           }
-        }
 
-        Box(modifier = Modifier.height(72.dp))
+          Box(modifier = Modifier.height(72.dp))
+        }
       }
     },
   )

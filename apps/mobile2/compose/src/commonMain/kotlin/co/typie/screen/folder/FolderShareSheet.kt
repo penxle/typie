@@ -114,6 +114,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   folderUrl: String,
   initialVisibility: EntityVisibility,
   initialThumbnailUrl: String?,
+  onUpdated: () -> Unit = {},
 ) {
   val share = koinInject<Share>()
   val toast = koinInject<Toast>()
@@ -141,6 +142,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
     ) { success ->
       if (success) {
         form.visibility.commit()
+        onUpdated()
       } else {
         form.visibility.rollback()
       }
@@ -156,6 +158,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
     model.removeFolderThumbnail(folderId = folderId) { success ->
       if (success) {
         form.thumbnailUrl.commit()
+        onUpdated()
       } else {
         form.thumbnailUrl.rollback()
       }
@@ -172,6 +175,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
       visibility = form.visibility.value,
     ) { success ->
       if (success) {
+        onUpdated()
         dismiss()
       }
       isApplyingRecursive = false
@@ -211,6 +215,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
       if (result != null) {
         form.thumbnailUrl.setValue(result.url)
         form.thumbnailUrl.commit()
+        onUpdated()
       }
       isUploadingThumbnail = false
     }

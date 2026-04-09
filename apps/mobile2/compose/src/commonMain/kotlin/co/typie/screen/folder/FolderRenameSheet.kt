@@ -39,6 +39,7 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
   model: FolderViewModel,
   folderId: String,
   initialName: String,
+  onUpdated: () -> Unit = {},
 ) {
   val scope = rememberCoroutineScope()
   val form = remember(folderId, initialName) {
@@ -76,6 +77,7 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
       isSubmitting = false
       if (success) {
         form.name.commit()
+        onUpdated()
         dismiss()
       }
     }

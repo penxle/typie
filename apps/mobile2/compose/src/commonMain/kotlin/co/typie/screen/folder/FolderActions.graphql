@@ -12,3 +12,9 @@ mutation FolderActions_UpdateEntityIcon_Mutation($input: UpdateEntityIconInput!)
     iconColor
   }
 }
+
+mutation FolderActions_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
+  deleteEntities(input: $input) @catch(to: THROW) {
+    id
+  }
+}

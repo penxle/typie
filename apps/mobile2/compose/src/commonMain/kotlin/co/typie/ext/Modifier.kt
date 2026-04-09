@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable as foundationClickable
+import androidx.compose.foundation.combinedClickable as foundationCombinedClickable
 
 val LocalInteractionSource = compositionLocalOf<MutableInteractionSource?> { null }
 
@@ -71,6 +72,46 @@ fun Modifier.clickable(
           scope.launch {
             try {
               onClick()
+            } finally {
+              handling = false
+            }
+          }
+        }
+      },
+    )
+}
+
+fun Modifier.combinedClickable(
+  enabled: Boolean = true,
+  onClick: suspend () -> Unit,
+  onLongClick: suspend () -> Unit,
+): Modifier = composed {
+  val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
+  var handling by remember { mutableStateOf(false) }
+  val scope = rememberCoroutineScope()
+  focusProperties { canFocus = false }
+    .foundationCombinedClickable(
+      enabled = enabled,
+      interactionSource = interactionSource,
+      indication = null,
+      onClick = {
+        if (!handling) {
+          handling = true
+          scope.launch {
+            try {
+              onClick()
+            } finally {
+              handling = false
+            }
+          }
+        }
+      },
+      onLongClick = {
+        if (!handling) {
+          handling = true
+          scope.launch {
+            try {
+              onLongClick()
             } finally {
               handling = false
             }

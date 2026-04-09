@@ -76,6 +76,7 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
   entityId: String,
   initialIcon: String?,
   initialColor: String?,
+  onUpdated: () -> Unit = {},
 ) {
   val normalizedInitialIcon = initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
   val normalizedInitialColor = initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
@@ -110,6 +111,7 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
     ) { success ->
       if (success) {
         form.commit()
+        onUpdated()
       } else {
         form.rollback()
       }
@@ -122,6 +124,7 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
 
   BottomSheetScaffold(
     title = "아이콘 변경",
+    applyContentImeOrNavigationBarsPadding = false,
     leadingAction = {
       BottomSheetHeaderTextAction(
         text = "완료",

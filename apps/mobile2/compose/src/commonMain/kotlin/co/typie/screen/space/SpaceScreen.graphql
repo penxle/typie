@@ -7,11 +7,28 @@ query SpaceScreen_Query($siteId: ID!) {
 
     entities {
       id
+      depth
       order
       slug
+      url
       icon
       iconColor
       type
+      visibility
+      availability
+
+      ancestors {
+        id
+
+        node {
+          __typename
+
+          ... on Folder {
+            id
+            name
+          }
+        }
+      }
 
       node {
         __typename
@@ -19,6 +36,12 @@ query SpaceScreen_Query($siteId: ID!) {
         ... on Folder {
           id
           name
+          maxDescendantFoldersDepth
+          characterCount
+          thumbnail {
+            id
+            url
+          }
           folderCount
           documentCount
         }

@@ -34,8 +34,11 @@ import androidx.compose.ui.unit.sp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.graphql.type.EntityAvailability
+import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.screen.home.resolveEntityIconAppearance
+import co.typie.ui.component.CardDivider
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.LocalPopoverPaneTransition
@@ -81,11 +84,10 @@ internal fun FolderTopBarCenterMenu(
   title: String,
   subtitle: String,
   breadcrumbNames: List<String>,
-  visibilityName: String?,
-  availabilityName: String?,
+  visibilityName: EntityVisibility?,
+  availabilityName: EntityAvailability?,
   iconName: String?,
   iconColor: String?,
-  actions: List<FolderTopBarActionItem>,
   onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -114,7 +116,6 @@ internal fun FolderTopBarCenterMenu(
         availabilityName = availabilityName,
         iconName = iconName,
         iconColor = iconColor,
-        actions = actions,
         onAction = onAction,
       )
     },
@@ -126,11 +127,10 @@ internal fun PopoverScope.FolderTopBarCenterPane(
   title: String,
   subtitle: String,
   breadcrumbNames: List<String>,
-  visibilityName: String?,
-  availabilityName: String?,
+  visibilityName: EntityVisibility?,
+  availabilityName: EntityAvailability?,
   iconName: String?,
   iconColor: String?,
-  actions: List<FolderTopBarActionItem>,
   onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
 ) {
   Column(
@@ -144,11 +144,11 @@ internal fun PopoverScope.FolderTopBarCenterPane(
       .fillMaxWidth()
       .widthIn(min = 280.dp, max = ResponsiveContainerDefaults.MaxWidth),
   ) {
-    FolderTopBarPaneHeader(
-      title = title,
-      subtitle = subtitle,
-      breadcrumbNames = breadcrumbNames,
-      visibilityName = visibilityName,
+      FolderTopBarPaneHeader(
+        title = title,
+        subtitle = subtitle,
+        breadcrumbNames = breadcrumbNames,
+        visibilityName = visibilityName,
       availabilityName = availabilityName,
       iconName = iconName,
       iconColor = iconColor,
@@ -158,7 +158,6 @@ internal fun PopoverScope.FolderTopBarCenterPane(
     Spacer(Modifier.height(6.dp))
 
     FolderTopBarActionList(
-      actions = actions,
       onAction = onAction,
     )
   }
@@ -223,8 +222,8 @@ private fun FolderTopBarPaneHeader(
   title: String,
   subtitle: String,
   breadcrumbNames: List<String>,
-  visibilityName: String?,
-  availabilityName: String?,
+  visibilityName: EntityVisibility?,
+  availabilityName: EntityAvailability?,
   iconName: String?,
   iconColor: String?,
   onClose: () -> Unit,
@@ -237,8 +236,8 @@ private fun FolderTopBarPaneHeader(
     colors = AppTheme.colors,
   )
   val visibility = folderVisibilityPresentation(
-    visibilityName = visibilityName,
-    availabilityName = availabilityName,
+    visibility = visibilityName,
+    availability = availabilityName,
   )
 
   Column(
@@ -448,11 +447,29 @@ private fun FolderTopBarCloseButton(
 
 @Composable
 private fun PopoverScope.FolderTopBarActionList(
-  actions: List<FolderTopBarActionItem>,
+  onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
+) {
+  Column(modifier = Modifier.fillMaxWidth()) {
+    folderPrimaryActionSections().forEachIndexed { index, section ->
+      if (index > 0) {
+        FolderActionMenuDivider()
+      }
+
+      FolderTopBarActionSection(
+        items = section.items,
+        onAction = onAction,
+      )
+    }
+  }
+}
+
+@Composable
+private fun PopoverScope.FolderTopBarActionSection(
+  items: List<FolderActionMenuItem>,
   onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
 ) {
   PopoverList(
-    items = actions.map { action ->
+    items = items.map { action ->
       PopoverListItem(
         content = {
           FolderTopBarActionRow(
@@ -471,8 +488,16 @@ private fun PopoverScope.FolderTopBarActionList(
 }
 
 @Composable
+internal fun FolderActionMenuDivider() {
+  CardDivider(
+    inset = 16.dp,
+    color = AppTheme.colors.borderDefault,
+  )
+}
+
+@Composable
 private fun FolderTopBarActionRow(
-  action: FolderTopBarActionItem,
+  action: FolderActionMenuItem,
   modifier: Modifier = Modifier,
 ) {
   val tint = if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textPrimary

@@ -24,6 +24,10 @@ import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
+internal val EntityPasteBarHeight = 48.dp
+
+internal fun entityPasteBarToastBottomInset(baseInset: Dp): Dp = baseInset + EntityPasteBarHeight
+
 @Composable
 fun EntityPasteBar(
   bottomOffset: Dp,
@@ -79,7 +83,7 @@ fun EntityPasteBar(
       InteractionScope {
         Box(
           modifier = Modifier
-            .size(48.dp)
+            .size(EntityPasteBarHeight)
             .clickable(enabled = enabled, onClick = onClear)
             .pressScale(0.96f),
           contentAlignment = Alignment.Center,
