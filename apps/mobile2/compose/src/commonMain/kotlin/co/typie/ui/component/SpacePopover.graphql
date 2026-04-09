@@ -3,6 +3,7 @@ query SpacePopover_Query {
     sites {
       id
       name
+      url
 
       logo {
         id

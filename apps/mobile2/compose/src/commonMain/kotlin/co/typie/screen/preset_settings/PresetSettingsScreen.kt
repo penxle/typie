@@ -19,16 +19,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
+import co.typie.form.FormState
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
@@ -85,6 +87,31 @@ private enum class PresetEditorField {
   PageMargin,
   ParagraphIndent,
   BlockGap,
+}
+
+private class FontSizeSheetForm(
+  scope: kotlinx.coroutines.CoroutineScope,
+  initialFontSize: Int,
+) : FormState(scope) {
+  val fontSize = field(formatPresetPointValue(initialFontSize))
+}
+
+private class PageSizeSheetForm(
+  scope: kotlinx.coroutines.CoroutineScope,
+  initialLayout: PresetLayout.Paginated,
+) : FormState(scope) {
+  val widthMm = field(pxToMm(initialLayout.pageWidth).toString())
+  val heightMm = field(pxToMm(initialLayout.pageHeight).toString())
+}
+
+private class PageMarginSheetForm(
+  scope: kotlinx.coroutines.CoroutineScope,
+  initialLayout: PresetLayout.Paginated,
+) : FormState(scope) {
+  val topMm = field(pxToMm(initialLayout.pageMarginTop).toString())
+  val bottomMm = field(pxToMm(initialLayout.pageMarginBottom).toString())
+  val leftMm = field(pxToMm(initialLayout.pageMarginLeft).toString())
+  val rightMm = field(pxToMm(initialLayout.pageMarginRight).toString())
 }
 
 @Composable
@@ -526,10 +553,17 @@ private fun BottomSheetScope<Unit>.FontSizeSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
+  val scope = rememberCoroutineScope()
+  val form = remember(scope, template.fontSize) {
+    FontSizeSheetForm(scope, template.fontSize)
+  }
   var isSaving by remember { mutableStateOf(false) }
-  var customValue by remember { mutableStateOf(formatPresetPointValue(template.fontSize)) }
   var errorText by remember { mutableStateOf<String?>(null) }
-  val draftValue = parsePointInput(customValue)?.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
+  val draftValue = parsePointInput(form.fontSize.value)?.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
+
+  LaunchedEffect(form.fontSize.value) {
+    errorText = null
+  }
 
   PresetSheetScaffold(
     title = "폰트 크기",
@@ -550,16 +584,11 @@ private fun BottomSheetScope<Unit>.FontSizeSheet(
     },
   ) {
     TextField(
-      value = customValue,
-      onValueChange = {
-        customValue = it
-        errorText = null
-      },
+      field = form.fontSize,
       label = "폰트 크기 (pt)",
       labelPosition = LabelPosition.Internal,
       placeholder = "12",
       keyboardType = KeyboardType.Number,
-      imeAction = ImeAction.Done,
       modifier = Modifier.fillMaxWidth(),
     )
 
@@ -581,8 +610,7 @@ private fun BottomSheetScope<Unit>.FontSizeSheet(
           selected = draftValue == option.value,
           onClick = {
             if (isSaving) return@PresetQuickSelectButton
-            customValue = formatPresetPointValue(option.value)
-            errorText = null
+            form.fontSize.setValue(formatPresetPointValue(option.value))
           },
         )
       }
@@ -648,15 +676,19 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
   template: PresetTemplate,
 ) {
   val initialLayout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
+  val scope = rememberCoroutineScope()
+  val form = remember(scope, initialLayout) {
+    PageSizeSheetForm(scope, initialLayout)
+  }
   var isSaving by remember { mutableStateOf(false) }
   var draftLayout by remember { mutableStateOf(initialLayout) }
-  var widthMm by remember { mutableStateOf(pxToMm(initialLayout.pageWidth).toString()) }
-  var heightMm by remember { mutableStateOf(pxToMm(initialLayout.pageHeight).toString()) }
   var errorText by remember { mutableStateOf<String?>(null) }
 
-  fun syncDraftSizeFromFields() {
-    val parsedWidth = parseMillimeterInput(widthMm, min = 100) ?: return
-    val parsedHeight = parseMillimeterInput(heightMm, min = 100) ?: return
+  LaunchedEffect(form.widthMm.value, form.heightMm.value) {
+    errorText = null
+
+    val parsedWidth = parseMillimeterInput(form.widthMm.value, min = 100) ?: return@LaunchedEffect
+    val parsedHeight = parseMillimeterInput(form.heightMm.value, min = 100) ?: return@LaunchedEffect
 
     draftLayout = clampPaginatedLayout(
       draftLayout
@@ -669,8 +701,8 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
     title = "페이지 크기",
     isSaving = isSaving,
     onSave = {
-      val parsedWidth = parseMillimeterInput(widthMm, min = 100)
-      val parsedHeight = parseMillimeterInput(heightMm, min = 100)
+      val parsedWidth = parseMillimeterInput(form.widthMm.value, min = 100)
+      val parsedHeight = parseMillimeterInput(form.heightMm.value, min = 100)
 
       if (parsedWidth == null || parsedHeight == null) {
         errorText = "페이지 크기를 올바르게 입력해 주세요."
@@ -709,12 +741,7 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
         verticalAlignment = Alignment.CenterVertically,
       ) {
         TextField(
-          value = widthMm,
-          onValueChange = {
-            widthMm = it
-            errorText = null
-            syncDraftSizeFromFields()
-          },
+          field = form.widthMm,
           label = "가로",
           labelPosition = LabelPosition.Internal,
           placeholder = "210",
@@ -729,12 +756,7 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
         )
 
         TextField(
-          value = heightMm,
-          onValueChange = {
-            heightMm = it
-            errorText = null
-            syncDraftSizeFromFields()
-          },
+          field = form.heightMm,
           label = "세로",
           labelPosition = LabelPosition.Internal,
           placeholder = "297",
@@ -761,21 +783,20 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
             selected = pageLayoutPresetOrCustom(draftLayout) == option.value,
             onClick = {
               draftLayout = createPaginatedLayout(option.value)
-              widthMm = pxToMm(draftLayout.pageWidth).toString()
-              heightMm = pxToMm(draftLayout.pageHeight).toString()
-              errorText = null
+              form.widthMm.setValue(pxToMm(draftLayout.pageWidth).toString())
+              form.heightMm.setValue(pxToMm(draftLayout.pageHeight).toString())
             },
           )
         }
       }
-    }
 
-    errorText?.let { message ->
-      Text(
-        text = message,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.danger,
-      )
+      errorText?.let { message ->
+        Text(
+          text = message,
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.danger,
+        )
+      }
     }
   }
 }
@@ -813,21 +834,25 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
   template: PresetTemplate,
 ) {
   val layout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
+  val scope = rememberCoroutineScope()
+  val form = remember(scope, layout) {
+    PageMarginSheetForm(scope, layout)
+  }
   var isSaving by remember { mutableStateOf(false) }
-  var topMm by remember { mutableStateOf(pxToMm(layout.pageMarginTop).toString()) }
-  var bottomMm by remember { mutableStateOf(pxToMm(layout.pageMarginBottom).toString()) }
-  var leftMm by remember { mutableStateOf(pxToMm(layout.pageMarginLeft).toString()) }
-  var rightMm by remember { mutableStateOf(pxToMm(layout.pageMarginRight).toString()) }
   var errorText by remember { mutableStateOf<String?>(null) }
+
+  LaunchedEffect(form.topMm.value, form.bottomMm.value, form.leftMm.value, form.rightMm.value) {
+    errorText = null
+  }
 
   PresetSheetScaffold(
     title = "여백",
     isSaving = isSaving,
     onSave = {
-      val parsedTop = parseMillimeterInput(topMm, min = 0)
-      val parsedBottom = parseMillimeterInput(bottomMm, min = 0)
-      val parsedLeft = parseMillimeterInput(leftMm, min = 0)
-      val parsedRight = parseMillimeterInput(rightMm, min = 0)
+      val parsedTop = parseMillimeterInput(form.topMm.value, min = 0)
+      val parsedBottom = parseMillimeterInput(form.bottomMm.value, min = 0)
+      val parsedLeft = parseMillimeterInput(form.leftMm.value, min = 0)
+      val parsedRight = parseMillimeterInput(form.rightMm.value, min = 0)
 
       if (parsedTop == null || parsedBottom == null || parsedLeft == null || parsedRight == null) {
         errorText = "여백 값을 올바르게 입력해 주세요."
@@ -863,11 +888,7 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
       Spacer(modifier = Modifier.height(12.dp))
 
       TextField(
-        value = topMm,
-        onValueChange = {
-          topMm = it
-          errorText = null
-        },
+        field = form.topMm,
         label = "위쪽 여백 (mm)",
         labelPosition = LabelPosition.Internal,
         placeholder = "25",
@@ -875,11 +896,7 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
       )
 
       TextField(
-        value = bottomMm,
-        onValueChange = {
-          bottomMm = it
-          errorText = null
-        },
+        field = form.bottomMm,
         label = "아래쪽 여백 (mm)",
         labelPosition = LabelPosition.Internal,
         placeholder = "25",
@@ -887,11 +904,7 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
       )
 
       TextField(
-        value = leftMm,
-        onValueChange = {
-          leftMm = it
-          errorText = null
-        },
+        field = form.leftMm,
         label = "왼쪽 여백 (mm)",
         labelPosition = LabelPosition.Internal,
         placeholder = "25",
@@ -899,24 +912,19 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
       )
 
       TextField(
-        value = rightMm,
-        onValueChange = {
-          rightMm = it
-          errorText = null
-        },
+        field = form.rightMm,
         label = "오른쪽 여백 (mm)",
         labelPosition = LabelPosition.Internal,
         placeholder = "25",
         keyboardType = KeyboardType.Number,
       )
-    }
-
-    errorText?.let { message ->
-      Text(
-        text = message,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.danger,
-      )
+      errorText?.let { message ->
+        Text(
+          text = message,
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.danger,
+        )
+      }
     }
   }
 }

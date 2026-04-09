@@ -2,6 +2,7 @@ package co.typie.screen.text_replacements
 
 import co.typie.graphql.TextReplacementsScreen_Query
 import co.typie.graphql.type.TextReplacementState
+import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -224,6 +225,26 @@ class TextReplacementsModelsTest {
   }
 
   @Test
+  fun `text replacement form seeds fields from editing item`() {
+    val form = TextReplacementForm(
+      scope = TestScope(),
+      editingItem = normalizedItem(
+        id = "custom-id",
+        match = "find me",
+        substitute = "replace me",
+        note = "my note",
+        regex = true,
+        preset = false,
+      ),
+    )
+
+    assertEquals("find me", form.match.value)
+    assertEquals("replace me", form.substitute.value)
+    assertEquals("my note", form.note.value)
+    assertTrue(form.regex.value)
+  }
+
+  @Test
   fun `calculateCustomReorderOrdersFromOrderedKeys returns lower and upper neighbors for moved custom items`() {
     val items = listOf(
       normalizedItem(id = "custom-1", preset = false, order = "10"),
@@ -292,17 +313,19 @@ class TextReplacementsModelsTest {
     state: TextReplacementState = TextReplacementState.ACTIVE,
     order: String? = null,
     preferenceId: String? = null,
+    regex: Boolean = false,
+    note: String? = null,
   ): NormalizedTextReplacement {
     return NormalizedTextReplacement(
       textReplacementId = id,
       preferenceId = preferenceId,
       match = match,
       substitute = substitute,
-      regex = false,
+      regex = regex,
       preset = preset,
       state = state,
       order = order,
-      note = null,
+      note = note,
     )
   }
 }

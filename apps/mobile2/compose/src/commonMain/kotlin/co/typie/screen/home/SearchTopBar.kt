@@ -38,7 +38,6 @@ import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
-val SearchTopBarKey = Any()
 private val SearchScreenHorizontalPadding = 20.dp
 
 @Composable

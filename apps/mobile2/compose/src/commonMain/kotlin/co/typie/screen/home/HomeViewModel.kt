@@ -16,8 +16,26 @@ import org.koin.core.annotation.KoinViewModel
 class HomeViewModel(
   private val siteService: SiteService,
 ) : GraphQLViewModel() {
+  private var hasEnteredScreen = false
+
+  val siteId: String
+    get() = siteService.siteId
+
   val query =
     watchQuery(placeholderData()) { HomeScreen_Query(siteId = siteService.siteId) }
+
+  fun refetch() {
+    query.refetch()
+  }
+
+  fun onScreenEntered() {
+    if (hasEnteredScreen) {
+      refetch()
+      return
+    }
+
+    hasEnteredScreen = true
+  }
 }
 
 private fun placeholderData() = HomeScreen_Query.Data(PlaceholderResolver) {

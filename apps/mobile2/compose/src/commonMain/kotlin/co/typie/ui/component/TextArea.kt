@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -48,6 +49,7 @@ fun TextArea(
   placeholder: String? = null,
   enabled: Boolean = true,
   readOnly: Boolean = false,
+  autoFocus: Boolean = false,
   onBlur: (() -> Unit)? = null,
   capitalization: KeyboardCapitalization = KeyboardCapitalization.Sentences,
   imeAction: ImeAction = ImeAction.Default,
@@ -58,6 +60,7 @@ fun TextArea(
 ) {
   val shape = RoundedCornerShape(12.dp)
   var isFocused by remember { mutableStateOf(false) }
+  val focusRequester = remember { FocusRequester() }
   val hasError = error != null
 
   val colorSpec = tween<Color>(220)
@@ -86,6 +89,12 @@ fun TextArea(
     colorSpec,
   )
 
+  if (autoFocus) {
+    LaunchedEffect(autoFocus) {
+      focusRequester.requestFocus()
+    }
+  }
+
   Column(modifier = modifier) {
     if (label != null) {
       Text(
@@ -105,6 +114,7 @@ fun TextArea(
       modifier = Modifier
         .fillMaxWidth()
         .heightIn(min = minHeight)
+        .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
         .onFocusChanged { state ->
           val wasFocused = isFocused
           isFocused = state.isFocused
@@ -167,6 +177,7 @@ fun TextArea(
   placeholder: String? = null,
   enabled: Boolean = true,
   readOnly: Boolean = false,
+  autoFocus: Boolean = false,
   capitalization: KeyboardCapitalization = KeyboardCapitalization.Sentences,
   imeAction: ImeAction = ImeAction.Default,
   onImeAction: (() -> Unit)? = null,
@@ -176,6 +187,7 @@ fun TextArea(
 ) {
   val form = field.form
   val isSkeleton = LocalSkeleton.current.enabled
+  val shouldAutoFocus = autoFocus || (form != null && form.isFirstField(field))
 
   val resolvedOnImeAction: (() -> Unit)? = when {
     onImeAction != null -> onImeAction
@@ -186,8 +198,8 @@ fun TextArea(
     else -> null
   }
 
-  if (form != null && form.isFirstField(field) && !isSkeleton) {
-    LaunchedEffect(Unit) {
+  if (shouldAutoFocus && !isSkeleton) {
+    LaunchedEffect(shouldAutoFocus) {
       field.focusRequester.requestFocus()
     }
   }
@@ -195,7 +207,7 @@ fun TextArea(
   TextArea(
     value = field.value,
     onValueChange = { field.setValue(it) },
-    modifier = if (form != null && !isSkeleton) {
+    modifier = if (!isSkeleton && (form != null || autoFocus)) {
       modifier.focusRequester(field.focusRequester)
     } else {
       modifier
@@ -206,6 +218,7 @@ fun TextArea(
     placeholder = placeholder,
     enabled = enabled,
     readOnly = readOnly,
+    autoFocus = false,
     onBlur = { field.onBlur() },
     capitalization = capitalization,
     imeAction = imeAction,

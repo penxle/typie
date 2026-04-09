@@ -17,50 +17,68 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import co.typie.ext.safeBottomPadding
+import co.typie.ext.InteractionScope
+import co.typie.ext.clickable
+import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
-import co.typie.graphql.FolderScreen_Query
+import co.typie.graphql.RefetchOnAppResumeEffect
 import co.typie.graphql.QueryState
+import co.typie.graphql.RefetchOnScreenEnterEffect
+import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import co.typie.route.Route
 import co.typie.screen.home.resolveEntityIconAppearance
 import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.ErrorDialog
-import co.typie.ui.component.EntityListCard
-import co.typie.ui.component.EntityListItem
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.formatFolderSummary
+import co.typie.ui.component.ResponsiveContainerDefaults
+import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
+import co.typie.ui.component.bottomsheet.showBottomSheetFromPopoverAction
+import co.typie.ui.component.entity_container.EntityContainerEditAction
+import co.typie.ui.component.entity_container.EntityContainerListContent
+import co.typie.ui.component.entity_container.EntityContainerTopBarTrailing
+import co.typie.ui.component.entity_container.EntityContainerTopBarTrailingKey
 import co.typie.ui.component.popover.Popover
+import co.typie.ui.component.popover.LocalPopoverPaneTransition
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
-import co.typie.ui.component.popover.LocalPopoverPaneTransition
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
-import co.typie.ui.component.ResponsiveContainerDefaults
+import co.typie.ui.component.reorder.rememberReorderableListState
+import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
-import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -69,11 +87,12 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 private val FolderTopBarVerticalOffset = (TopBarDefaults.Height - TopBarDefaults.ButtonSize) / 2
 private val FolderTopBarCollapsedRadius = PopoverDefaults.ExpandedRadius
-private val FolderTopBarTrailingKey = Any()
 private val FolderTopBarPopoverScreenPadding = PaddingValues(
   start = TopBarDefaults.HorizontalPadding,
   top = FolderTopBarVerticalOffset,
@@ -88,12 +107,29 @@ private val FolderPaneHeaderSourceHorizontalInset = 14.dp
 private val FolderPaneHeaderSourceIconSize = 18.dp
 private val FolderPaneHeaderSourceIconGap = 10.dp
 private val FolderPaneHeaderTextLeft = FolderPaneHeaderIconTargetLeft + FolderPaneHeaderIconTargetSize + FolderPaneHeaderTitleGap
+private val FolderPaneHeaderCloseButtonSize = 44.dp
+private val FolderPaneHeaderCloseButtonVisualSize = 24.dp
+private val FolderPaneHeaderCloseButtonIconSize = 16.dp
+private val FolderPaneHeaderCloseButtonEndInset = 6.dp
+private val FolderPaneHeaderCloseButtonGap = 8.dp
 
 private data class FolderTopBarAction(
   val icon: IconData,
   val label: String,
+  val trailingIcon: IconData? = null,
   val tint: Color? = null,
-  val onClick: () -> Unit = {},
+  val onClick: (closePopover: () -> Unit) -> Unit = { closePopover -> closePopover() },
+)
+
+private data class FolderTopBarActionSpec(
+  val icon: IconData,
+  val label: String,
+  val trailingIcon: IconData? = null,
+  val isDanger: Boolean = false,
+  val opensExternalUrl: Boolean = false,
+  val opensRenameSheet: Boolean = false,
+  val opensIconSheet: Boolean = false,
+  val opensShareSheet: Boolean = false,
 )
 
 private data class FolderVisibilityPresentation(
@@ -104,9 +140,17 @@ private data class FolderVisibilityPresentation(
 @Composable
 fun FolderScreen(entityId: String) {
   val nav = Nav.current
+  val haptic = LocalHapticFeedback.current
+  val uriHandler = LocalUriHandler.current
+  val bottomSheetHost = LocalBottomSheetHost.current
+  val presenterScope = rememberCoroutineScope()
+  val toast = koinInject<Toast>()
   val model = koinViewModel<FolderViewModel>(key = "folder:$entityId")
   val scrollState = rememberScrollState("folder-scroll:$entityId")
   val bottomBarState = LocalBottomBarState.current
+  var isReordering by remember { mutableStateOf(false) }
+  var isPersistingReorder by remember { mutableStateOf(false) }
+  val siteId = model.siteId
 
   LaunchedEffect(Unit) {
     bottomBarState.visible = true
@@ -114,7 +158,13 @@ fun FolderScreen(entityId: String) {
 
   LaunchedEffect(entityId) {
     model.entityId = entityId
+    isReordering = false
+    isPersistingReorder = false
   }
+
+  RefetchOnScreenEnterEffect(model::onScreenEntered)
+  RefetchOnAppResumeEffect(model::refetch)
+  RefetchOnSiteUpdateEffect(siteId = siteId, onRefetch = model::refetch)
 
   val entity = (model.query.state as? QueryState.Success)?.data?.entity
   val folder = entity?.node?.onFolder
@@ -127,17 +177,109 @@ fun FolderScreen(entityId: String) {
     add(entity?.site?.name ?: "내 스페이스")
     addAll(entity?.ancestors?.mapNotNull { it.node.onFolder?.name }.orEmpty())
   }
-  val items = entity?.children?.mapNotNull { it.toListItem() }.orEmpty()
-  val centerActions = listOf(
-    FolderTopBarAction(icon = Lucide.FolderSymlink, label = "다른 폴더로 옮기기"),
-    FolderTopBarAction(icon = Lucide.ExternalLink, label = "스페이스에서 열기"),
-    FolderTopBarAction(icon = Lucide.Blend, label = "공유하기"),
-    FolderTopBarAction(icon = Lucide.PenLine, label = "이름 바꾸기"),
-    FolderTopBarAction(icon = Lucide.Trash2, label = "삭제하기", tint = AppTheme.colors.danger),
-  )
+  val serverChildren = remember(entity?.children) {
+    normalizeFolderChildren(entity?.children.orEmpty())
+  }
+  val serverChildIds = remember(serverChildren) { serverChildren.map { it.id } }
+  val centerActions = folderTopBarCenterActions().map { action ->
+    FolderTopBarAction(
+      icon = action.icon,
+      label = action.label,
+      trailingIcon = action.trailingIcon,
+      tint = if (action.isDanger) AppTheme.colors.danger else null,
+      onClick = when {
+        action.opensRenameSheet -> { closePopover ->
+          val resolvedFolder = folder
+          if (resolvedFolder != null) {
+            showBottomSheetFromPopoverAction(
+              closePopover = closePopover,
+              presenterScope = presenterScope,
+              bottomSheetHost = bottomSheetHost,
+            ) {
+              FolderRenameSheet(
+                model = model,
+                folderId = resolvedFolder.id,
+                initialName = resolvedFolder.name,
+              )
+            }
+          } else {
+            closePopover()
+          }
+        }
+
+        action.opensIconSheet -> { closePopover ->
+          val resolvedEntity = entity
+          val resolvedFolder = folder
+          if (resolvedEntity != null && resolvedFolder != null) {
+            showBottomSheetFromPopoverAction(
+              closePopover = closePopover,
+              presenterScope = presenterScope,
+              bottomSheetHost = bottomSheetHost,
+            ) {
+              FolderIconPickerSheet(
+                model = model,
+                entityId = resolvedEntity.id,
+                initialIcon = resolvedEntity.icon,
+                initialColor = resolvedEntity.iconColor,
+              )
+            }
+          } else {
+            closePopover()
+          }
+        }
+
+        action.opensShareSheet -> { closePopover ->
+          val resolvedEntity = entity
+          val resolvedFolder = folder
+          if (resolvedEntity != null && resolvedFolder != null) {
+            // TODO: Track folder share sheet open.
+            showBottomSheetFromPopoverAction(
+              closePopover = closePopover,
+              presenterScope = presenterScope,
+              bottomSheetHost = bottomSheetHost,
+            ) {
+              FolderShareSheet(
+                model = model,
+                folderId = resolvedFolder.id,
+                folderUrl = resolvedEntity.url,
+                initialVisibility = resolvedEntity.visibility,
+                initialThumbnailUrl = resolvedFolder.thumbnail?.url,
+              )
+            }
+          } else {
+            closePopover()
+          }
+        }
+
+        action.opensExternalUrl -> { closePopover ->
+          closePopover()
+          entity?.url?.let(uriHandler::openUri)
+        }
+
+        else -> { closePopover ->
+          closePopover()
+          toast.show(ToastType.Notification, "준비 중인 기능이에요.")
+        }
+      },
+    )
+  }
   val editActions = listOf(
-    FolderTopBarAction(icon = Lucide.SquareCheck, label = "여러 항목 선택하기"),
-    FolderTopBarAction(icon = Lucide.ChevronsUpDown, label = "순서 변경하기"),
+    EntityContainerEditAction(
+      icon = Lucide.SquareCheck,
+      label = "여러 항목 선택하기",
+      onClick = { closePopover ->
+        closePopover()
+        toast.show(ToastType.Notification, "준비 중인 기능이에요.")
+      },
+    ),
+    EntityContainerEditAction(
+      icon = Lucide.ChevronsUpDown,
+      label = "순서 변경하기",
+      onClick = { closePopover ->
+        closePopover()
+        isReordering = true
+      },
+    ),
   )
 
   ProvideTopBar(
@@ -147,25 +289,41 @@ fun FolderScreen(entityId: String) {
         contentAlignment = Alignment.Center,
         modifier = Modifier.fillMaxWidth(),
       ) {
-        FolderTopBarCenterMenu(
-          title = folderTitle,
-          subtitle = folderSummary,
-          breadcrumbNames = breadcrumbNames,
-          visibilityName = entity?.visibility?.name,
-          availabilityName = entity?.availability?.name,
-          iconName = entity?.icon,
-          iconColor = entity?.iconColor,
-          actions = centerActions,
-          modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = ResponsiveContainerDefaults.MaxWidth),
-        )
+        if (isReordering) {
+          FolderTopBarCapsule(
+            title = folderTitle,
+            subtitle = folderSummary,
+            iconName = entity?.icon,
+            iconColor = entity?.iconColor,
+            modifier = Modifier
+              .fillMaxWidth()
+              .widthIn(max = ResponsiveContainerDefaults.MaxWidth),
+          )
+        } else {
+          FolderTopBarCenterMenu(
+            title = folderTitle,
+            subtitle = folderSummary,
+            breadcrumbNames = breadcrumbNames,
+            visibilityName = entity?.visibility?.name,
+            availabilityName = entity?.availability?.name,
+            iconName = entity?.icon,
+            iconColor = entity?.iconColor,
+            actions = centerActions,
+            modifier = Modifier
+              .fillMaxWidth()
+              .widthIn(max = ResponsiveContainerDefaults.MaxWidth),
+          )
+        }
       }
     },
-    trailingKey = FolderTopBarTrailingKey,
-    trailing = if (items.isEmpty()) null else {
+    trailingKey = EntityContainerTopBarTrailingKey,
+    trailing = if (serverChildren.isEmpty()) null else {
       {
-        FolderTopBarEditMenu(actions = editActions)
+        EntityContainerTopBarTrailing(
+          isReordering = isReordering,
+          actions = editActions,
+          onDoneClick = { isReordering = false },
+        )
       }
     },
   )
@@ -180,23 +338,69 @@ fun FolderScreen(entityId: String) {
     contentPadding = PaddingValues(0.dp),
     primaryScrollableState = scrollState,
     body = { contentPadding ->
-      Column(
+      val reorderState = rememberReorderableListState(
+        keys = serverChildIds,
+        verticalScrollableState = scrollState,
+      )
+      val displayChildren = remember(serverChildren, reorderState.displayedKeys) {
+        displayFolderChildren(serverChildren, reorderState.displayedKeys)
+      }
+
+      EntityContainerListContent(
+        items = displayChildren,
+        emptyMessage = "폴더가 비어 있어요",
+        isReordering = isReordering,
+        reorderState = reorderState,
+        isPersistingReorder = isPersistingReorder,
         modifier = Modifier
           .fillMaxSize()
           .verticalScroll(scrollState)
           .padding(contentPadding)
-          .safeBottomPadding(),
-      ) {
-        EntityListCard(
-          items = items,
-          emptyMessage = "폴더가 비어 있어요",
-          modifier = Modifier.padding(horizontal = 16.dp),
-          onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
-          onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
-        )
+          .safeBottomPadding()
+          .reorderableListContainer(reorderState),
+        onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
+        onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
+        onDragStarted = {
+          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+        },
+        onDragMoved = {
+          haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+        },
+        onDragStopped = onDragStopped@{ commit ->
+          haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+          if (commit == null || commit.orderedKeys == serverChildIds) {
+            return@onDragStopped
+          }
 
-        Spacer(Modifier.height(140.dp))
-      }
+          val parentEntityId = entity?.id ?: run {
+            reorderState.resetToServerKeys(serverChildIds)
+            return@onDragStopped
+          }
+          val reorderOrders = calculateFolderReorderOrdersFromOrderedKeys(
+            items = serverChildren,
+            orderedKeys = commit.orderedKeys,
+            movedKey = commit.movedKey,
+          ) ?: run {
+            reorderState.resetToServerKeys(serverChildIds)
+            return@onDragStopped
+          }
+
+          isPersistingReorder = true
+          presenterScope.launch {
+            val success = model.moveChildEntity(
+              entityId = commit.movedKey,
+              parentEntityId = parentEntityId,
+              lowerOrder = reorderOrders.lowerOrder,
+              upperOrder = reorderOrders.upperOrder,
+            )
+            isPersistingReorder = false
+
+            if (!success) {
+              reorderState.resetToServerKeys(serverChildIds)
+            }
+          }
+        },
+      )
     },
   )
 }
@@ -274,6 +478,7 @@ private fun PopoverScope.FolderTopBarCenterPane(
       availabilityName = availabilityName,
       iconName = iconName,
       iconColor = iconColor,
+      onClose = { close() },
     )
 
     Spacer(Modifier.height(6.dp))
@@ -345,6 +550,7 @@ private fun FolderTopBarPaneHeader(
   availabilityName: String?,
   iconName: String?,
   iconColor: String?,
+  onClose: () -> Unit,
 ) {
   val entityIcon = resolveEntityIconAppearance(
     iconName = iconName,
@@ -389,6 +595,13 @@ private fun FolderTopBarPaneHeader(
       }
 
       FolderTopBarTransitionTitle(title = title)
+
+      FolderTopBarCloseButton(
+        onClick = { onClose() },
+        modifier = Modifier
+          .align(Alignment.CenterEnd)
+          .padding(end = FolderPaneHeaderCloseButtonEndInset),
+      )
     }
 
     Spacer(Modifier.height(4.dp))
@@ -419,19 +632,24 @@ private fun FolderTopBarPaneHeader(
 private fun FolderTopBarBreadcrumbs(
   names: List<String>,
 ) {
-  FlowRow(
+  Row(
+    modifier = Modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.spacedBy(4.dp),
-    verticalArrangement = Arrangement.spacedBy(2.dp),
+    verticalAlignment = Alignment.CenterVertically,
   ) {
     names.forEachIndexed { index, name ->
       if (index == 0) {
         Text(
           text = name,
+          modifier = Modifier.weight(1f, fill = false),
           style = AppTheme.typography.caption.copy(fontSize = 14.sp),
           color = AppTheme.colors.textTertiary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
         )
       } else {
         Row(
+          modifier = Modifier.weight(1f, fill = false),
           horizontalArrangement = Arrangement.spacedBy(4.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -443,8 +661,11 @@ private fun FolderTopBarBreadcrumbs(
 
           Text(
             text = name,
+            modifier = Modifier.weight(1f, fill = false),
             style = AppTheme.typography.caption.copy(fontSize = 14.sp),
             color = AppTheme.colors.textTertiary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
           )
         }
       }
@@ -477,7 +698,12 @@ private fun FolderTopBarTransitionTitle(
     val sourceIconSizePx = with(density) { FolderPaneHeaderSourceIconSize.toPx() }
     val sourceIconGapPx = with(density) { FolderPaneHeaderSourceIconGap.toPx() }
     val targetTextLeftPx = with(density) { FolderPaneHeaderTextLeft.toPx() }
-    val targetTextWidthPx = max(0f, resolvedPaneWidthPx - targetTextLeftPx - with(density) { 16.dp.toPx() })
+    val trailingReservedWidthPx = with(density) {
+      FolderPaneHeaderCloseButtonEndInset.toPx() +
+        FolderPaneHeaderCloseButtonSize.toPx() +
+        FolderPaneHeaderCloseButtonGap.toPx()
+    }
+    val targetTextWidthPx = max(0f, resolvedPaneWidthPx - targetTextLeftPx - trailingReservedWidthPx)
     val sourceTextLeftPx = if (anchorContentRect == null) {
       targetTextLeftPx
     } else {
@@ -488,7 +714,9 @@ private fun FolderTopBarTransitionTitle(
     } else {
       max(
         0f,
-        anchorContentRect.width - (horizontalInsetPx + sourceIconSizePx + sourceIconGapPx) - horizontalInsetPx,
+        anchorContentRect.width -
+          (horizontalInsetPx + sourceIconSizePx + sourceIconGapPx) -
+          trailingReservedWidthPx,
       )
     }
     val textLeftPx = lerpFloat(sourceTextLeftPx, targetTextLeftPx, progress)
@@ -513,18 +741,33 @@ private fun FolderTopBarTransitionTitle(
 }
 
 @Composable
-private fun FolderTopBarEditMenu(
-  actions: List<FolderTopBarAction>,
+private fun FolderTopBarCloseButton(
+  onClick: suspend () -> Unit,
+  modifier: Modifier = Modifier,
 ) {
-  Popover(
-    placement = PopoverPlacement.BelowEnd,
-    anchor = { TopBarButton(icon = Lucide.LayoutList) },
-    pane = {
-      Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-        FolderTopBarActionList(actions = actions)
+  InteractionScope {
+    Box(
+      contentAlignment = Alignment.Center,
+      modifier = modifier
+        .size(FolderPaneHeaderCloseButtonSize)
+        .clickable(onClick)
+        .pressScale(0.96f),
+    ) {
+      Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+          .size(FolderPaneHeaderCloseButtonVisualSize)
+          .then(TopBarDefaults.controlShadowModifier(CircleShape))
+          .background(TopBarDefaults.controlBackgroundColor(), CircleShape),
+      ) {
+        Icon(
+          icon = Lucide.X,
+          modifier = Modifier.size(FolderPaneHeaderCloseButtonIconSize),
+          tint = AppTheme.colors.textPrimary,
+        )
       }
-    },
-  )
+    }
+  }
 }
 
 @Composable
@@ -543,8 +786,7 @@ private fun PopoverScope.FolderTopBarActionList(
           )
         },
         onSelected = {
-          close()
-          action.onClick()
+          action.onClick { close() }
         },
       )
     },
@@ -570,40 +812,58 @@ private fun FolderTopBarActionRow(
 
     Text(
       text = action.label,
+      modifier = Modifier.weight(1f),
       style = AppTheme.typography.action,
       color = action.tint ?: AppTheme.colors.textPrimary,
     )
+
+    if (action.trailingIcon != null) {
+      Icon(
+        icon = action.trailingIcon,
+        modifier = Modifier.size(14.dp),
+        tint = action.tint ?: AppTheme.colors.textTertiary,
+      )
+    }
   }
 }
 
-private fun FolderScreen_Query.Child.toListItem(): EntityListItem? {
-  val childFolder = node.onFolder
-  if (childFolder != null) {
-    return EntityListItem.Folder(
-      id = id,
-      iconName = icon,
-      iconColor = iconColor,
-      name = childFolder.name,
-      folderCount = childFolder.folderCount,
-      documentCount = childFolder.documentCount,
-    )
-  }
-
-  val document = node.onDocument
-  if (document != null) {
-    return EntityListItem.Document(
-      id = id,
-      iconName = icon,
-      iconColor = iconColor,
-      slug = slug,
-      title = document.title,
-      subtitle = document.subtitle,
-      excerpt = document.excerpt,
-      updatedAt = document.updatedAt,
-    )
-  }
-
-  return null
+private fun folderTopBarCenterActions(): List<FolderTopBarActionSpec> {
+  return listOf(
+    FolderTopBarActionSpec(
+      icon = Lucide.PenLine,
+      label = "이름 변경",
+      opensRenameSheet = true,
+    ),
+    FolderTopBarActionSpec(
+      icon = Lucide.Palette,
+      label = "아이콘 변경",
+      opensIconSheet = true,
+    ),
+    FolderTopBarActionSpec(
+      icon = Lucide.Globe,
+      label = "스페이스에서 열기",
+      trailingIcon = Lucide.ExternalLink,
+      opensExternalUrl = true,
+    ),
+    FolderTopBarActionSpec(
+      icon = Lucide.Blend,
+      label = "공유 및 게시",
+      opensShareSheet = true,
+    ),
+    FolderTopBarActionSpec(
+      icon = Lucide.ClipboardCopy,
+      label = "복사",
+    ),
+    FolderTopBarActionSpec(
+      icon = Lucide.Scissors,
+      label = "잘라내기",
+    ),
+    FolderTopBarActionSpec(
+      icon = Lucide.Trash2,
+      label = "삭제",
+      isDanger = true,
+    ),
+  )
 }
 
 private fun folderVisibilityPresentation(

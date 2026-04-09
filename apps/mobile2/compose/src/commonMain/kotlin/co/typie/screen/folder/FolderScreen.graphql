@@ -1,6 +1,7 @@
 query FolderScreen_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
     id
+    url
     icon
     iconColor
     visibility
@@ -30,6 +31,10 @@ query FolderScreen_Query($entityId: ID!) {
       ... on Folder {
         id
         name
+        thumbnail {
+          id
+          url
+        }
         folderCount
         documentCount
       }
@@ -37,6 +42,7 @@ query FolderScreen_Query($entityId: ID!) {
 
     children {
       id
+      order
       slug
       icon
       iconColor

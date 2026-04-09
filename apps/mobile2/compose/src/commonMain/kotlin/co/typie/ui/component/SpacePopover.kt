@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -46,6 +47,7 @@ import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.bottomsheet.showBottomSheetFromPopoverAction
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverDefaults
@@ -62,7 +64,6 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -118,18 +119,6 @@ class SpacePopoverViewModel(
     if (pendingCreatedSiteId == siteId) {
       pendingCreatedSiteId = null
     }
-  }
-}
-
-internal fun showBottomSheetFromPopoverAction(
-  closePopover: () -> Unit,
-  presenterScope: CoroutineScope,
-  bottomSheetHost: BottomSheetHostState,
-  content: @Composable BottomSheetScope<Unit>.() -> Unit,
-) {
-  closePopover()
-  presenterScope.launch(start = CoroutineStart.UNDISPATCHED) {
-    bottomSheetHost.show(content)
   }
 }
 
@@ -238,6 +227,7 @@ private fun PopoverScope.SpacePopoverPane(
   otherSites: List<SpacePopover_Query.Site>,
 ) {
   val nav = Nav.current
+  val uriHandler = LocalUriHandler.current
   val scope = rememberCoroutineScope()
   val siteService = koinInject<SiteService>()
   val bottomSheetHost = LocalBottomSheetHost.current
@@ -257,6 +247,13 @@ private fun PopoverScope.SpacePopoverPane(
           onSelected = {
             close()
             scope.launch { nav.navigate(Route.SpaceSettings) }
+          },
+        ),
+        PopoverListItem(
+          content = { SpacePopoverItem(icon = Lucide.ExternalLink, label = "스페이스 열기") },
+          onSelected = {
+            close()
+            uriHandler.openUri(currentSite.url)
           },
         ),
         PopoverListItem(
@@ -340,6 +337,7 @@ private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
       label = "스페이스 이름",
       labelPosition = LabelPosition.External,
       placeholder = "새 스페이스",
+      autoFocus = true,
     )
 
     Row(

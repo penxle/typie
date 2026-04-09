@@ -46,7 +46,6 @@ fun HomeSearchScreen() {
   }
 
   ProvideTopBar(
-    leadingKey = SearchTopBarKey,
     leading = { TopBarBackButton(onClick = { nav.pop() }) },
   )
 

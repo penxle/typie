@@ -12,34 +12,6 @@ data class EntityIconAppearance(
   val tint: Color,
 )
 
-fun resolveEntityIconAppearance(
-  iconName: String?,
-  iconColor: String?,
-  fallbackIcon: IconData,
-  fallbackTint: Color,
-  colors: AppColors,
-): EntityIconAppearance {
-  return EntityIconAppearance(
-    icon = entityIconMap[iconName?.trim()] ?: fallbackIcon,
-    tint = resolveEntityIconTint(iconColor, colors) ?: fallbackTint,
-  )
-}
-
-private fun resolveEntityIconTint(iconColor: String?, colors: AppColors): Color? {
-  val palette = if (colors == DarkColors) AppColor.dark else AppColor.light
-
-  return when (iconColor?.trim()) {
-    "gray" -> if (colors == DarkColors) palette.gray.s300 else palette.gray.s500
-    "red" -> if (colors == DarkColors) palette.red.s300 else palette.red.s500
-    "orange" -> if (colors == DarkColors) palette.amber.s300 else palette.amber.s600
-    "yellow" -> if (colors == DarkColors) palette.amber.s200 else palette.amber.s400
-    "green" -> if (colors == DarkColors) palette.green.s200 else palette.green.s500
-    "blue" -> if (colors == DarkColors) palette.blue.s200 else palette.blue.s500
-    "purple" -> if (colors == DarkColors) palette.brand.s200 else palette.brand.s500
-    else -> null
-  }
-}
-
 // Keep this in sync with the website picker so mobile2 renders the same entity icon names.
 private val entityIconMap = mapOf(
   "file" to Lucide.File,
@@ -172,3 +144,56 @@ private val entityIconMap = mapOf(
   "box" to Lucide.Box,
   "ear" to Lucide.Ear,
 )
+
+data class EntityIconOption(
+  val name: String,
+  val icon: IconData,
+)
+
+data class EntityIconColorOption(
+  val label: String,
+  val value: String,
+  val color: Color,
+)
+
+val entityIcons = entityIconMap.map { (name, icon) ->
+  EntityIconOption(name = name, icon = icon)
+}
+
+val entityIconColors = listOf(
+  EntityIconColorOption("그레이", "gray", AppColor.light.gray.s500),
+  EntityIconColorOption("레드", "red", AppColor.light.red.s500),
+  EntityIconColorOption("오렌지", "orange", AppColor.light.amber.s600),
+  EntityIconColorOption("옐로", "yellow", AppColor.light.amber.s400),
+  EntityIconColorOption("그린", "green", AppColor.light.green.s500),
+  EntityIconColorOption("블루", "blue", AppColor.light.blue.s500),
+  EntityIconColorOption("퍼플", "purple", AppColor.light.brand.s500),
+)
+
+fun resolveEntityIconAppearance(
+  iconName: String?,
+  iconColor: String?,
+  fallbackIcon: IconData,
+  fallbackTint: Color,
+  colors: AppColors,
+): EntityIconAppearance {
+  return EntityIconAppearance(
+    icon = entityIconMap[iconName?.trim()] ?: fallbackIcon,
+    tint = resolveEntityIconTint(iconColor, colors) ?: fallbackTint,
+  )
+}
+
+fun resolveEntityIconTint(iconColor: String?, colors: AppColors): Color? {
+  val palette = if (colors == DarkColors) AppColor.dark else AppColor.light
+
+  return when (iconColor?.trim()) {
+    "gray" -> if (colors == DarkColors) palette.gray.s300 else palette.gray.s500
+    "red" -> if (colors == DarkColors) palette.red.s300 else palette.red.s500
+    "orange" -> if (colors == DarkColors) palette.amber.s300 else palette.amber.s600
+    "yellow" -> if (colors == DarkColors) palette.amber.s200 else palette.amber.s400
+    "green" -> if (colors == DarkColors) palette.green.s200 else palette.green.s500
+    "blue" -> if (colors == DarkColors) palette.blue.s200 else palette.blue.s500
+    "purple" -> if (colors == DarkColors) palette.brand.s200 else palette.brand.s500
+    else -> null
+  }
+}

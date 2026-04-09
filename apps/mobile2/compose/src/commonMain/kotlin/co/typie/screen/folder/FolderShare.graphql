@@ -1,0 +1,23 @@
+mutation FolderShare_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
+  updateFoldersOption(input: $input) {
+    id
+
+    thumbnail {
+      id
+      url
+    }
+
+    entity {
+      id
+      visibility
+    }
+  }
+}
+
+mutation FolderShare_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+  persistBlobAsImage(input: $input) {
+    id
+    url
+    ...Img_image
+  }
+}

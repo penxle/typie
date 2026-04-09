@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -680,21 +681,34 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
 ) {
   val isEditing = editingItem != null
   val scope = rememberCoroutineScope()
+  val form = remember(editingItem?.textReplacementId) {
+    TextReplacementForm(
+      scope = scope,
+      editingItem = editingItem,
+    )
+  }
 
-  var match by remember(editingItem?.textReplacementId) { mutableStateOf(editingItem?.match.orEmpty()) }
-  var substitute by remember(editingItem?.textReplacementId) { mutableStateOf(editingItem?.substitute.orEmpty()) }
-  var note by remember(editingItem?.textReplacementId) { mutableStateOf(editingItem?.note.orEmpty()) }
-  var regex by remember(editingItem?.textReplacementId) { mutableStateOf(editingItem?.regex ?: false) }
   var errorText by remember(editingItem?.textReplacementId) { mutableStateOf<String?>(null) }
   var isSaving by remember { mutableStateOf(false) }
   var isDeleting by remember { mutableStateOf(false) }
   var showDeleteConfirm by remember(editingItem?.textReplacementId) { mutableStateOf(false) }
 
+  LaunchedEffect(
+    form.match.value,
+    form.substitute.value,
+    form.note.value,
+    form.regex.value,
+  ) {
+    if (errorText != null) {
+      errorText = null
+    }
+  }
+
   suspend fun submit() {
     val validationError = validateTextReplacementForm(
-      match = match,
-      substitute = substitute,
-      regex = regex,
+      match = form.match.value,
+      substitute = form.substitute.value,
+      regex = form.regex.value,
       regexValidator = model::validateRegex,
     )
 
@@ -708,10 +722,10 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
 
     val success = model.saveCustomRule(
       editingItem = editingItem,
-      match = match,
-      substitute = substitute,
-      regex = regex,
-      note = note,
+      match = form.match.value,
+      substitute = form.substitute.value,
+      regex = form.regex.value,
+      note = form.note.value,
       lastOrder = lastCustomOrder,
     )
 
@@ -746,46 +760,35 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
     Column(
       verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-      Column() {
+      Column {
         TextField(
-          value = match,
-          onValueChange = {
-            match = it
-            errorText = null
-          },
+          field = form.match,
           label = "찾을 텍스트",
           labelPosition = LabelPosition.Internal,
           placeholder = "찾을 텍스트를 입력해 주세요",
         )
 
         TextField(
-          value = substitute,
-          onValueChange = {
-            substitute = it
-            errorText = null
-          },
+          field = form.substitute,
           label = "삽입할 텍스트",
           labelPosition = LabelPosition.Internal,
           placeholder = "삽입할 텍스트를 입력해 주세요",
         )
 
         TextField(
-          value = note,
-          onValueChange = { note = it },
+          field = form.note,
           label = "설명 (선택)",
           labelPosition = LabelPosition.Internal,
           placeholder = "설명 (선택)",
         )
-        
+
         TextReplacementRegexRow(
-          checked = regex,
+          checked = form.regex.value,
           onClick = {
-            regex = !regex
-            errorText = null
+            form.regex.setValue(!form.regex.value)
           },
           onCheckedChange = { next ->
-            regex = next
-            errorText = null
+            form.regex.setValue(next)
           },
         )
       }

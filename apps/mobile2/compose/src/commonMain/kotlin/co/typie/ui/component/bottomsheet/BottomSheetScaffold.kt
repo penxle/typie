@@ -52,6 +52,7 @@ fun BottomSheetScaffold(
   val scrollState = rememberScrollState()
   val leadingInset = if (leadingAction != null) TopBarDefaults.SlotWidth + 12.dp else 0.dp
   val trailingInset = if (trailingAction != null) TopBarDefaults.SlotWidth + 12.dp else 0.dp
+  val titleInset = maxOf(leadingInset, trailingInset)
 
   Column(
     modifier = modifier
@@ -69,7 +70,7 @@ fun BottomSheetScaffold(
         modifier = Modifier
           .align(Alignment.Center)
           .fillMaxWidth()
-          .padding(start = leadingInset, end = trailingInset),
+          .padding(start = titleInset, end = titleInset),
         overflow = TextOverflow.Ellipsis,
         maxLines = 1,
         color = AppTheme.colors.textPrimary,

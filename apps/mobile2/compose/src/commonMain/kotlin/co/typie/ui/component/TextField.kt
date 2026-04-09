@@ -34,6 +34,7 @@ import androidx.compose.ui.autofill.contentType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -94,6 +95,7 @@ fun TextField(
   labelPosition: LabelPosition = LabelPosition.External,
   enabled: Boolean = true,
   readOnly: Boolean = false,
+  autoFocus: Boolean = false,
   isPassword: Boolean = false,
   contentType: ContentType? = null,
   onBlur: (() -> Unit)? = null,
@@ -105,6 +107,7 @@ fun TextField(
 ) {
   val shape = RoundedCornerShape(12.dp)
   var isFocused by remember { mutableStateOf(false) }
+  val focusRequester = remember { FocusRequester() }
 
   var textFieldValue by remember {
     mutableStateOf(TextFieldValue(value, TextRange(value.length)))
@@ -133,7 +136,7 @@ fun TextField(
 
   val borderColor by animateColorAsState(
     when {
-      hasError -> AppTheme.colors.dangerSubtle
+      hasError -> AppTheme.colors.danger
       isFocused -> AppTheme.colors.borderStrong
       else -> AppTheme.colors.borderSubtle
     },
@@ -161,6 +164,12 @@ fun TextField(
 
   val labelActive = isInternal && (isFocused || value.isNotEmpty())
   val fieldHeight = if (isInternal) 56.dp else 48.dp
+
+  if (autoFocus) {
+    LaunchedEffect(autoFocus) {
+      focusRequester.requestFocus()
+    }
+  }
 
   val labelProgress by animateFloatAsState(
     if (labelActive) 1f else 0f,
@@ -194,6 +203,7 @@ fun TextField(
             Modifier
           }
         )
+        .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
         .onFocusChanged { state ->
           val wasFocused = isFocused
           isFocused = state.isFocused
@@ -308,7 +318,7 @@ fun TextField(
                 Icon(
                   icon = Lucide.CircleAlert,
                   modifier = Modifier.size(18.dp),
-                  tint = AppTheme.colors.dangerSubtle,
+                  tint = AppTheme.colors.danger,
                   contentDescription = "오류",
                 )
               } else {
@@ -328,7 +338,7 @@ fun TextField(
             Icon(
               icon = Lucide.CircleAlert,
               modifier = Modifier.size(18.dp).align(Alignment.CenterEnd),
-              tint = AppTheme.colors.dangerSubtle,
+              tint = AppTheme.colors.danger,
               contentDescription = "오류",
             )
           } else if (!hasSuffix && success) {
@@ -349,7 +359,7 @@ fun TextField(
                 .align(Alignment.TopEnd)
                 .offset(y = labelTopPadding)
                 .size(18.dp),
-              tint = AppTheme.colors.dangerSubtle,
+              tint = AppTheme.colors.danger,
               contentDescription = "오류",
             )
           } else if (isInternal && hasSuffix && success) {
@@ -371,7 +381,7 @@ fun TextField(
     Spacer(Modifier.height(4.dp))
 
     val helpColor by animateColorAsState(
-      if (hasError) AppTheme.colors.dangerSubtle else AppTheme.colors.textTertiary,
+      if (hasError) AppTheme.colors.danger else AppTheme.colors.textTertiary,
       colorSpec,
     )
 
@@ -398,6 +408,7 @@ fun TextField(
   labelPosition: LabelPosition = LabelPosition.External,
   enabled: Boolean = true,
   readOnly: Boolean = false,
+  autoFocus: Boolean = false,
   isPassword: Boolean = false,
   contentType: ContentType? = null,
   keyboardType: KeyboardType = KeyboardType.Text,
@@ -408,6 +419,7 @@ fun TextField(
 ) {
   val form = field.form
   val isSkeleton = LocalSkeleton.current.enabled
+  val shouldAutoFocus = autoFocus || (form != null && form.isFirstField(field))
 
   val resolvedImeAction = imeAction ?: form?.imeActionFor(field)
 
@@ -420,8 +432,8 @@ fun TextField(
     else -> null
   }
 
-  if (form != null && form.isFirstField(field) && !isSkeleton) {
-    LaunchedEffect(Unit) {
+  if (shouldAutoFocus && !isSkeleton) {
+    LaunchedEffect(shouldAutoFocus) {
       field.focusRequester.requestFocus()
     }
   }
@@ -430,7 +442,7 @@ fun TextField(
     value = field.value,
     onValueChange = { field.setValue(it) },
     label = label,
-    modifier = if (form != null && !isSkeleton) {
+    modifier = if (!isSkeleton && (form != null || autoFocus)) {
       modifier.focusRequester(field.focusRequester)
     } else {
       modifier
@@ -443,6 +455,7 @@ fun TextField(
     labelPosition = labelPosition,
     enabled = enabled,
     readOnly = readOnly,
+    autoFocus = false,
     isPassword = isPassword,
     contentType = contentType,
     onBlur = { field.onBlur() },

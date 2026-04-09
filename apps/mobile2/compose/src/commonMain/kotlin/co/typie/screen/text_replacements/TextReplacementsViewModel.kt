@@ -1,6 +1,7 @@
 package co.typie.screen.text_replacements
 
 import co.touchlab.kermit.Logger
+import co.typie.form.FormState
 import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TextReplacementsScreen_CreateTextReplacement_Mutation
@@ -17,9 +18,22 @@ import co.typie.graphql.type.buildUser
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import org.koin.core.annotation.KoinViewModel
 
 private const val MUTATION_FAILURE_MESSAGE = "오류가 발생했어요. 잠시 후 다시 시도해주세요."
+
+class TextReplacementForm(
+  scope: CoroutineScope,
+  editingItem: NormalizedTextReplacement?,
+) : FormState(scope) {
+  val match = field(editingItem?.match.orEmpty())
+  val substitute = field(editingItem?.substitute.orEmpty())
+  val note = field(editingItem?.note.orEmpty())
+  val regex = field(editingItem?.regex ?: false) {
+    focusable = false
+  }
+}
 
 @KoinViewModel
 class TextReplacementsViewModel(

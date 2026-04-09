@@ -1,0 +1,14 @@
+mutation FolderActions_RenameFolder_Mutation($input: RenameFolderInput!) {
+  renameFolder(input: $input) {
+    id
+    name
+  }
+}
+
+mutation FolderActions_UpdateEntityIcon_Mutation($input: UpdateEntityIconInput!) {
+  updateEntityIcon(input: $input) {
+    id
+    icon
+    iconColor
+  }
+}

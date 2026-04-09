@@ -34,6 +34,9 @@ import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.separated
 import co.typie.ext.verticalScroll
+import co.typie.graphql.RefetchOnAppResumeEffect
+import co.typie.graphql.RefetchOnScreenEnterEffect
+import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.graphql.HomeScreen_Query
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
@@ -62,10 +65,15 @@ fun HomeScreen() {
   val nav = Nav.current
   val scrollState = rememberScrollState()
   val bottomBarState = LocalBottomBarState.current
+  val siteId = model.siteId
 
   LaunchedEffect(Unit) {
     bottomBarState.visible = true
   }
+
+  RefetchOnScreenEnterEffect(model::onScreenEntered)
+  RefetchOnAppResumeEffect(model::refetch)
+  RefetchOnSiteUpdateEffect(siteId = siteId, onRefetch = model::refetch)
 
   ProvideTopBar(
     leadingKey = SpacePopoverLeadingKey,
@@ -75,7 +83,7 @@ fun HomeScreen() {
   )
 
   if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
+    ErrorDialog { model.refetch() }
   }
 
   Screen(

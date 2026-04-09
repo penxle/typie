@@ -131,6 +131,7 @@ fun EntityListCard(
 fun SpaceFolderDocumentRow(
   item: EntityListItem.Document,
   modifier: Modifier = Modifier,
+  enabled: Boolean = true,
   onClick: suspend () -> Unit,
 ) {
   DocumentRowContent(
@@ -141,6 +142,7 @@ fun SpaceFolderDocumentRow(
     subtitle = item.subtitle,
     excerpt = item.excerpt,
     updatedAt = item.updatedAt,
+    enabled = enabled,
     onClick = onClick,
   )
 }
@@ -149,6 +151,7 @@ fun SpaceFolderDocumentRow(
 fun SpaceFolderFolderRow(
   item: EntityListItem.Folder,
   modifier: Modifier = Modifier,
+  enabled: Boolean = true,
   onClick: suspend () -> Unit,
 ) {
   FolderRowContent(
@@ -159,6 +162,7 @@ fun SpaceFolderFolderRow(
       folderCount = item.folderCount,
       documentCount = item.documentCount,
     ),
+    enabled = enabled,
     modifier = modifier,
     onClick = onClick,
   )
@@ -238,6 +242,7 @@ private fun DocumentRowContent(
   updatedAt: Instant?,
   modifier: Modifier = Modifier,
   emptyExcerptText: String? = "(내용 없음)",
+  enabled: Boolean = true,
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
@@ -265,6 +270,7 @@ private fun DocumentRowContent(
     modifier = modifier,
     icon = entityIcon.icon,
     iconTint = entityIcon.tint,
+    enabled = enabled,
     onClick = onClick,
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -308,6 +314,7 @@ private fun FolderRowContent(
   iconColor: String,
   metaText: String,
   modifier: Modifier = Modifier,
+  enabled: Boolean = true,
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
@@ -323,6 +330,7 @@ private fun FolderRowContent(
     modifier = modifier,
     icon = entityIcon.icon,
     iconTint = entityIcon.tint,
+    enabled = enabled,
     onClick = onClick,
     trailing = {
       Icon(
@@ -356,6 +364,7 @@ private fun EntityListRowFrame(
   icon: co.typie.ui.icon.IconData,
   iconTint: Color,
   modifier: Modifier = Modifier,
+  enabled: Boolean = true,
   trailing: (@Composable () -> Unit)? = null,
   onClick: suspend () -> Unit,
   content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
@@ -364,8 +373,8 @@ private fun EntityListRowFrame(
     Row(
       modifier = modifier
         .fillMaxWidth()
-        .clickable(onClick)
-        .pressScale()
+        .then(if (enabled) Modifier.clickable(onClick) else Modifier)
+        .then(if (enabled) Modifier.pressScale() else Modifier)
         .padding(horizontal = 16.dp, vertical = 12.dp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(12.dp),

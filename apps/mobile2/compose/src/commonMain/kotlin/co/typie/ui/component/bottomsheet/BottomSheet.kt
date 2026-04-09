@@ -43,6 +43,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import co.typie.ext.clickable
+import co.typie.ext.imePadding
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.component.ResponsiveContainer
 import co.typie.ui.theme.AppTheme
@@ -187,7 +188,11 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
 
     // Sheet surface
     val colors = AppTheme.colors
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(
+      modifier = Modifier
+        .fillMaxWidth()
+        .imePadding(),
+    ) {
       val maxSheetHeight = maxHeight * BottomSheetDefaults.MaxHeightFraction
 
       ResponsiveContainer(
