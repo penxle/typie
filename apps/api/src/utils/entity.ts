@@ -431,6 +431,8 @@ export const copyEntityRecursive = async (
       state: sourceEntity.state,
       visibility: sourceEntity.visibility,
       availability: sourceEntity.availability,
+      icon: sourceEntity.icon,
+      iconColor: sourceEntity.iconColor,
     })
     .returning()
     .then(firstOrThrow);

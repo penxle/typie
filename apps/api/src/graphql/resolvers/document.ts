@@ -908,6 +908,8 @@ builder.mutationFields((t) => ({
           parentEntityId: Entities.parentId,
           order: Entities.order,
           depth: Entities.depth,
+          icon: Entities.icon,
+          iconColor: Entities.iconColor,
         })
         .from(Entities)
         .innerJoin(Documents, eq(Entities.id, Documents.entityId))
@@ -980,6 +982,8 @@ builder.mutationFields((t) => ({
             type: EntityType.DOCUMENT,
             order: generateFractionalOrder({ lower: entity.order, upper: nextEntity?.order }),
             depth: entity.depth,
+            icon: entity.icon,
+            iconColor: entity.iconColor,
           })
           .returning({ id: Entities.id })
           .then(firstOrThrow);
