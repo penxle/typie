@@ -312,13 +312,15 @@ export type CompositionIntent = { type: "update"; text: string; replace_length: 
 
 export type CursorRect = PageRect;
 
-export type DeletionIntent = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
+export type DeletionIntent = { type: "selection" } | { type: "move"; movement: Movement };
 
 export type Direction = "forward" | "backward";
 
 export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_manifest_missing"; family: string; weight: number } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
+
+export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "move_cursor"; delta: number };
 
 export type FontData = { type: "base" } | { type: "chunk"; index: number };
 
@@ -336,7 +338,7 @@ export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
 export type LayoutMode = { type: "paginated"; page_width: number; page_height: number; page_margin_top: number; page_margin_bottom: number; page_margin_left: number; page_margin_right: number } | { type: "continuous"; max_width: number };
 
-export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "intent"; intent: Intent } | { type: "system"; event: SystemEvent };
+export type Message = { type: "key"; event: KeyEvent } | { type: "pointer"; event: PointerEvent } | { type: "intent"; intent: Intent } | { type: "system"; event: SystemEvent } | { type: "flat_ime"; ops: FlatImeOp[] };
 
 export type Modifier = { type: "bold" } | { type: "italic" } | { type: "underline" } | { type: "strikethrough" } | { type: "font_size"; value: number } | { type: "font_family"; value: string } | { type: "font_weight"; value: number } | { type: "text_color"; value: string } | { type: "background_color"; value: string } | { type: "letter_spacing"; value: number } | { type: "link"; href: string } | { type: "ruby"; text: string } | { type: "line_height"; value: number } | { type: "block_gap"; value: number } | { type: "paragraph_indent"; value: number };
 
@@ -352,7 +354,7 @@ export type NodeIntent = { type: "delete"; id: NodeId } | { type: "set_attrs"; i
 
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" };
 
-export type SelectionIntent = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
+export type SelectionIntent = { type: "all" } | { type: "set"; selection: Selection };
 
 export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "input_context" | "modifiers";
 

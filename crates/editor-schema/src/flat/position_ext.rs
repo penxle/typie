@@ -26,23 +26,12 @@ fn to_flat_walk(doc: &Doc, current: NodeId, target: NodeId, target_offset: usize
         return Some(match &entry.node {
             Node::Text(_) => target_offset,
             _ => {
-                // Container: accumulate flat sizes of children[0..target_offset]
                 let mut acc = 0usize;
-                let mut prev_block = false;
                 for (i, &child_id) in entry.children.iter().enumerate() {
                     if i == target_offset {
                         return Some(acc);
                     }
-                    let child = doc.get_entry(child_id)?;
-                    let is_block = matches!(
-                        classify(&child.node),
-                        FlatClass::Container | FlatClass::Atom
-                    );
-                    if is_block && prev_block {
-                        acc += 1;
-                    }
                     acc += subtree_flat_size(doc, child_id);
-                    prev_block = is_block;
                 }
                 acc
             }
@@ -51,34 +40,39 @@ fn to_flat_walk(doc: &Doc, current: NodeId, target: NodeId, target_offset: usize
 
     let entry = doc.get_entry(current)?;
     let mut acc = 0usize;
-    let mut prev_block = false;
 
     for &child_id in &entry.children {
         let child = doc.get_entry(child_id)?;
         let class = classify(&child.node);
-        let is_block = matches!(class, FlatClass::Container | FlatClass::Atom);
-        if is_block && prev_block {
-            acc += 1;
-        }
 
-        if child_id == target {
-            return match class {
-                FlatClass::Text => Some(acc + target_offset),
-                FlatClass::Container => {
-                    to_flat_walk(doc, child_id, target, target_offset).map(|inner| acc + inner)
+        match class {
+            FlatClass::Container => {
+                acc += 1;
+
+                if child_id == target {
+                    return to_flat_walk(doc, child_id, target, target_offset)
+                        .map(|inner| acc + inner);
                 }
-                _ => Some(acc),
-            };
-        }
+                if let Some(inner) = to_flat_walk(doc, child_id, target, target_offset) {
+                    return Some(acc + inner);
+                }
 
-        if let FlatClass::Container = class
-            && let Some(inner) = to_flat_walk(doc, child_id, target, target_offset)
-        {
-            return Some(acc + inner);
+                acc += subtree_flat_size(doc, child_id) - 2;
+                acc += 1;
+            }
+            FlatClass::Text => {
+                if child_id == target {
+                    return Some(acc + target_offset);
+                }
+                acc += subtree_flat_size(doc, child_id);
+            }
+            FlatClass::Break | FlatClass::Atom => {
+                if child_id == target {
+                    return Some(acc);
+                }
+                acc += 1;
+            }
         }
-
-        acc += subtree_flat_size(doc, child_id);
-        prev_block = is_block;
     }
 
     None
@@ -96,24 +90,11 @@ fn subtree_flat_size(doc: &Doc, node_id: NodeId) -> usize {
         },
         FlatClass::Break | FlatClass::Atom => 1,
         FlatClass::Container => {
-            let mut size = 0usize;
-            let mut prev_block = false;
-            for &child_id in &entry.children {
-                let child = match doc.get_entry(child_id) {
-                    Some(c) => c,
-                    None => continue,
-                };
-                let is_block = matches!(
-                    classify(&child.node),
-                    FlatClass::Container | FlatClass::Atom
-                );
-                if is_block && prev_block {
-                    size += 1;
-                }
-                size += subtree_flat_size(doc, child_id);
-                prev_block = is_block;
-            }
-            size
+            2 + entry
+                .children
+                .iter()
+                .map(|&child_id| subtree_flat_size(doc, child_id))
+                .sum::<usize>()
         }
     }
 }
@@ -126,48 +107,54 @@ fn from_flat_walk(
 ) -> Option<Position> {
     let entry = doc.get_entry(container)?;
     let mut acc = start_flat;
-    let mut prev_block = false;
 
     for (i, &child_id) in entry.children.iter().enumerate() {
         let child = doc.get_entry(child_id)?;
         let class = classify(&child.node);
-        let is_block = matches!(class, FlatClass::Container | FlatClass::Atom);
 
-        if is_block && prev_block {
-            // Block separator at position `acc` - upstream: position(container, i)
-            if target == acc {
-                return Some(Position::new(container, i));
-            }
-            acc += 1;
-        }
+        match class {
+            FlatClass::Container => {
+                let child_size = subtree_flat_size(doc, child_id);
+                let content_size = child_size - 2;
 
-        let child_size = subtree_flat_size(doc, child_id);
-
-        if target >= acc && target <= acc + child_size {
-            match class {
-                FlatClass::Text => {
-                    return Some(Position::new(child_id, target - acc));
+                if target == acc {
+                    return Some(Position::new(container, i));
                 }
-                FlatClass::Break | FlatClass::Atom => {
-                    // target == acc → before leaf (position(container, i))
-                    // target == acc + 1 → after leaf (position(container, i + 1))
-                    return Some(Position::new(
-                        container,
-                        if target == acc { i } else { i + 1 },
-                    ));
-                }
-                FlatClass::Container => {
+                acc += 1;
+
+                // Content range (inclusive): text end == close token position maps into content
+                if target >= acc && target <= acc + content_size {
                     return from_flat_walk(doc, child_id, acc, target);
                 }
+                acc += content_size;
+
+                // Close token for empty containers (content_size == 0 means no content range
+                // was entered above; this handles the container-end sentinel)
+                if target == acc {
+                    return Some(Position::new(child_id, child.children.len()));
+                }
+                acc += 1;
+            }
+            FlatClass::Text => {
+                let text_size = match &child.node {
+                    Node::Text(t) => t.text.char_count(),
+                    _ => 0,
+                };
+                if target >= acc && target <= acc + text_size {
+                    return Some(Position::new(child_id, target - acc));
+                }
+                acc += text_size;
+            }
+            FlatClass::Break | FlatClass::Atom => {
+                if target == acc {
+                    return Some(Position::new(container, i));
+                }
+                acc += 1;
             }
         }
-
-        acc += child_size;
-        prev_block = is_block;
     }
 
     if target == acc {
-        // End of container
         return Some(Position::new(container, entry.children.len()));
     }
 
@@ -183,14 +170,16 @@ mod tests {
     fn to_flat_text_node_offset_zero() {
         let (doc, t1, ..) = doc! { root { paragraph { t1: text("hello") } } };
         let resolved = Position::new(t1, 0).resolve(&doc).unwrap();
-        assert_eq!(resolved.to_flat(), 0);
+        // Open(p)=0, text starts at 1
+        assert_eq!(resolved.to_flat(), 1);
     }
 
     #[test]
     fn to_flat_text_node_middle_offset() {
         let (doc, t1, ..) = doc! { root { paragraph { t1: text("hello") } } };
         let resolved = Position::new(t1, 3).resolve(&doc).unwrap();
-        assert_eq!(resolved.to_flat(), 3);
+        // Open(p)=0, text[3] at 1+3=4
+        assert_eq!(resolved.to_flat(), 4);
     }
 
     #[test]
@@ -201,9 +190,11 @@ mod tests {
                 paragraph { t2: text("world") }
             }
         };
-        // "hello" = 0..5, "\n" = 5, "world" = 6..11
+        // P1: Open=0, "hello"=1..6, Close=6 (size=7)
+        // P2: Open=7, "world"=8..13, Close=13
+        // t2 offset 2 → 8+2 = 10
         let resolved = Position::new(t2, 2).resolve(&doc).unwrap();
-        assert_eq!(resolved.to_flat(), 8);
+        assert_eq!(resolved.to_flat(), 10);
     }
 
     #[test]
@@ -214,9 +205,10 @@ mod tests {
                 p2: paragraph { text("de") }
             }
         };
-        // position(p2, 0) = start of second paragraph = flat 4 (after "abc\n")
+        // P1 size=5 (Open+"abc"+Close), P2 starts at 5
+        // Position(p2, 0) = inside p2 before children = after Open(p2) = 5+1 = 6
         let resolved = Position::new(p2, 0).resolve(&doc).unwrap();
-        assert_eq!(resolved.to_flat(), 4);
+        assert_eq!(resolved.to_flat(), 6);
     }
 
     #[test]
@@ -224,31 +216,111 @@ mod tests {
         let (doc, p1, ..) = doc! {
             root { p1: paragraph { text("hello") } }
         };
-        // position(p1, 1) = after first child (the text node) = flat 5
+        // Position(p1, 1) = after first child (text node) = Open + "hello" = 1+5 = 6
         let resolved = Position::new(p1, 1).resolve(&doc).unwrap();
-        assert_eq!(resolved.to_flat(), 5);
+        assert_eq!(resolved.to_flat(), 6);
     }
 
     #[test]
-    fn from_flat_zero_is_doc_start() {
-        let (doc, t1, ..) = doc! { root { paragraph { t1: text("hello") } } };
+    fn to_flat_nested_empty_paragraph() {
+        let (doc, p) = doc! { root { blockquote { p: paragraph {} } } };
+        // Open(bq)=0, Open(p)=1 → Position(p, 0) = after Open(p) = 2
+        let resolved = Position::new(p, 0).resolve(&doc).unwrap();
+        assert_eq!(resolved.to_flat(), 2);
+    }
+
+    #[test]
+    fn to_flat_root_offset() {
+        let (doc, ..) = doc! {
+            root {
+                paragraph { text("a") }
+                paragraph { text("b") }
+            }
+        };
+        // Position(root, 0) = 0
+        let resolved = Position::new(NodeId::ROOT, 0).resolve(&doc).unwrap();
+        assert_eq!(resolved.to_flat(), 0);
+
+        // Position(root, 1) = after P1 (size=3) = 3
+        let resolved = Position::new(NodeId::ROOT, 1).resolve(&doc).unwrap();
+        assert_eq!(resolved.to_flat(), 3);
+
+        // Position(root, 2) = after P1+P2 = 3+3 = 6
+        let resolved = Position::new(NodeId::ROOT, 2).resolve(&doc).unwrap();
+        assert_eq!(resolved.to_flat(), 6);
+    }
+
+    #[test]
+    fn from_flat_at_open_token() {
+        let (doc, ..) = doc! { root { paragraph { text("hello") } } };
+        // flat=0 is Open(p) → Position(root, 0)
         let resolved = ResolvedPosition::from_flat(&doc, 0).unwrap();
-        assert_eq!(resolved.node_id(), t1);
+        assert_eq!(resolved.node_id(), NodeId::ROOT);
         assert_eq!(resolved.offset(), 0);
     }
 
     #[test]
-    fn from_flat_within_text() {
+    fn from_flat_inside_text() {
         let (doc, t1, ..) = doc! { root { paragraph { t1: text("hello") } } };
-        let resolved = ResolvedPosition::from_flat(&doc, 3).unwrap();
+        // flat=1 is start of text → Position(t1, 0)
+        let resolved = ResolvedPosition::from_flat(&doc, 1).unwrap();
+        assert_eq!(resolved.node_id(), t1);
+        assert_eq!(resolved.offset(), 0);
+
+        // flat=4 → Position(t1, 3)
+        let resolved = ResolvedPosition::from_flat(&doc, 4).unwrap();
         assert_eq!(resolved.node_id(), t1);
         assert_eq!(resolved.offset(), 3);
     }
 
     #[test]
+    fn from_flat_at_close_token() {
+        let (doc, t1, ..) = doc! { root { paragraph { t1: text("hello") } } };
+        // flat=6 is both text end and Close(p): text range [1..6] inclusive wins → Position(t1, 5)
+        let resolved = ResolvedPosition::from_flat(&doc, 6).unwrap();
+        assert_eq!(resolved.node_id(), t1);
+        assert_eq!(resolved.offset(), 5);
+    }
+
+    #[test]
+    fn from_flat_after_close_is_next_open() {
+        let (doc, ..) = doc! {
+            root {
+                paragraph { text("a") }
+                paragraph { text("b") }
+            }
+        };
+        // P1: O=0 a=1 C=2, P2: O=3 b=4 C=5
+        // flat=3 is Open(p2) → Position(root, 1)
+        let resolved = ResolvedPosition::from_flat(&doc, 3).unwrap();
+        assert_eq!(resolved.node_id(), NodeId::ROOT);
+        assert_eq!(resolved.offset(), 1);
+    }
+
+    #[test]
+    fn from_flat_nested_empty_paragraph() {
+        let (doc, p) = doc! { root { blockquote { p: paragraph {} } } };
+        // O(bq)=0, O(p)=1, C(p)=2, C(bq)=3
+        // flat=2 is Close(p) → Position(p, 0) (empty paragraph, children.len()=0)
+        let resolved = ResolvedPosition::from_flat(&doc, 2).unwrap();
+        assert_eq!(resolved.node_id(), p);
+        assert_eq!(resolved.offset(), 0);
+    }
+
+    #[test]
     fn from_flat_out_of_range_returns_none() {
         let (doc, ..) = doc! { root { paragraph { text("hi") } } };
+        // flat_size = 4, so flat=100 is invalid
         assert!(ResolvedPosition::from_flat(&doc, 100).is_none());
+    }
+
+    #[test]
+    fn from_flat_end_of_doc() {
+        let (doc, ..) = doc! { root { paragraph { text("hi") } } };
+        // flat_size = 4, flat=4 → Position(root, 1)
+        let resolved = ResolvedPosition::from_flat(&doc, 4).unwrap();
+        assert_eq!(resolved.node_id(), NodeId::ROOT);
+        assert_eq!(resolved.offset(), 1);
     }
 
     #[test]
@@ -264,6 +336,32 @@ mod tests {
     }
 
     #[test]
+    fn roundtrip_nested_container() {
+        let (doc, p) = doc! { root { blockquote { p: paragraph {} } } };
+        // Position(p, 0) → flat=2 → back to Position(p, 0)
+        let pos = Position::new(p, 0).resolve(&doc).unwrap();
+        let flat = pos.to_flat();
+        assert_eq!(flat, 2);
+        let back = ResolvedPosition::from_flat(&doc, flat).unwrap();
+        assert_eq!(back.node_id(), p);
+        assert_eq!(back.offset(), 0);
+    }
+
+    #[test]
+    fn roundtrip_deeply_nested() {
+        let (doc, t1) = doc! {
+            root { blockquote { callout { paragraph { t1: text("x") } } } }
+        };
+        // O(bq)=0, O(callout)=1, O(p)=2, "x"=3, C(p)=4, C(callout)=5, C(bq)=6
+        let pos = Position::new(t1, 0).resolve(&doc).unwrap();
+        let flat = pos.to_flat();
+        assert_eq!(flat, 3);
+        let back = ResolvedPosition::from_flat(&doc, flat).unwrap();
+        assert_eq!(back.node_id(), t1);
+        assert_eq!(back.offset(), 0);
+    }
+
+    #[test]
     fn from_flat_across_paragraphs_lands_in_second() {
         let (doc, t2) = doc! {
             root {
@@ -271,23 +369,24 @@ mod tests {
                 paragraph { t2: text("de") }
             }
         };
-        // flat: 'a'=0, 'b'=1, 'c'=2, '\n'=3, 'd'=4, 'e'=5
-        let resolved = ResolvedPosition::from_flat(&doc, 4).unwrap();
+        // P1: O=0 a=1 b=2 c=3 C=4, P2: O=5 d=6 e=7 C=8
+        // flat=6 → Position(t2, 0)
+        let resolved = ResolvedPosition::from_flat(&doc, 6).unwrap();
         assert_eq!(resolved.node_id(), t2);
         assert_eq!(resolved.offset(), 0);
     }
 
     #[test]
-    fn from_flat_at_block_separator_resolves_to_text_end() {
+    fn from_flat_consecutive_close_open() {
         let (doc, t1, ..) = doc! {
             root {
                 paragraph { t1: text("abc") }
                 paragraph { text("de") }
             }
         };
-        // flat=3 is the end of "abc" AND the separator position between paragraphs.
-        // Text node's inclusive range check catches this first, so we land at end of t1.
-        let resolved = ResolvedPosition::from_flat(&doc, 3).unwrap();
+        // P1: O=0 a=1 b=2 c=3 C=4
+        // flat=4: text range [1,4] inclusive, target=4 → Position(t1, 3)
+        let resolved = ResolvedPosition::from_flat(&doc, 4).unwrap();
         assert_eq!(resolved.node_id(), t1);
         assert_eq!(resolved.offset(), 3);
     }

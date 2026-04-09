@@ -1,11 +1,10 @@
-use editor_commands::CommandError;
+use editor_commands::{self as commands, CommandError, CommandResult};
 use editor_common::StrExt;
 use editor_model::Doc;
 use editor_schema::{DocFlatExt, FlatSegment, ResolvedPositionFlatExt};
-use editor_state::Composition;
+use editor_state::{Composition, ResolvedPosition, Selection};
 use editor_transaction::Transaction;
 
-use super::helpers::replace_flat_range;
 use crate::editor::Editor;
 use crate::error::EditorError;
 use crate::message::*;
@@ -28,7 +27,7 @@ pub fn handle_composition_intent(
                 if let Some(comp) = tr.composition().copied()
                     && composition_range_valid(&tr.doc(), comp.start, comp.end)
                 {
-                    replace_flat_range(tr, comp.start, comp.end, "")?;
+                    replace_text_range(tr, comp.start, comp.end, "")?;
                 }
                 tr.set_composition(None)?;
             }
@@ -37,7 +36,7 @@ pub fn handle_composition_intent(
                 replace_length,
             } => {
                 let (target_start, target_end) = resolve_target(tr, replace_length)?;
-                replace_flat_range(tr, target_start, target_end, &text)?;
+                replace_text_range(tr, target_start, target_end, &text)?;
                 let new_end = target_start + text.char_count();
                 tr.set_composition(Some(Composition {
                     start: target_start,
@@ -46,12 +45,27 @@ pub fn handle_composition_intent(
             }
             CompositionIntent::Commit { text } => {
                 let (target_start, target_end) = resolve_target(tr, None)?;
-                replace_flat_range(tr, target_start, target_end, &text)?;
+                replace_text_range(tr, target_start, target_end, &text)?;
                 tr.set_composition(None)?;
             }
         }
         Ok(())
     })
+}
+
+fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
+    let doc = tr.doc();
+    let start_pos = ResolvedPosition::from_flat(&doc, start)
+        .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
+    let end_pos = ResolvedPosition::from_flat(&doc, end)
+        .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?;
+
+    commands::chain!(
+        tr,
+        commands::set_selection(Selection::new((&start_pos).into(), (&end_pos).into())),
+        commands::when!(start != end, commands::delete_selection()),
+        commands::when!(!text.is_empty(), commands::insert_text(text)),
+    )
 }
 
 fn composition_range_valid(doc: &Doc, start: usize, end: usize) -> bool {
@@ -65,7 +79,13 @@ fn composition_range_valid(doc: &Doc, start: usize, end: usize) -> bool {
         if seg_start < start {
             continue;
         }
-        if matches!(seg, FlatSegment::Break { .. } | FlatSegment::Atom { .. }) {
+        if matches!(
+            seg,
+            FlatSegment::Break { .. }
+                | FlatSegment::Atom { .. }
+                | FlatSegment::Open { .. }
+                | FlatSegment::Close { .. }
+        ) {
             return false;
         }
     }
@@ -132,10 +152,10 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        // flat: "abc\ndef" → block boundary \n at index 3
-        assert!(composition_range_valid(&state.doc, 0, 3));
-        assert!(!composition_range_valid(&state.doc, 0, 4)); // crosses \n
-        assert!(composition_range_valid(&state.doc, 4, 7));
+        // O(p1)=0, abc=1..4, C(p1)=4, O(p2)=5, def=6..9, C(p2)=9
+        assert!(composition_range_valid(&state.doc, 1, 4));
+        assert!(!composition_range_valid(&state.doc, 1, 5)); // crosses C(p1)
+        assert!(composition_range_valid(&state.doc, 6, 9));
     }
 
     #[test]
@@ -144,8 +164,9 @@ mod tests {
             doc { root { paragraph { t1: text("ab") } } }
             selection: (t1, 0)
         };
-        assert!(composition_range_valid(&state.doc, 0, 2));
-        assert!(!composition_range_valid(&state.doc, 0, 3));
+        // O=0, ab=1..3, C=3; flat_size=4
+        assert!(composition_range_valid(&state.doc, 1, 3));
+        assert!(!composition_range_valid(&state.doc, 1, 4));
         assert!(!composition_range_valid(&state.doc, 2, 1)); // start > end
     }
 
@@ -155,10 +176,10 @@ mod tests {
             doc { root { paragraph { t1: text("hello") } } }
             selection: (t1, 0)
         };
-        // empty ranges (start == end) are valid anchors for composition
-        assert!(composition_range_valid(&state.doc, 0, 0));
-        assert!(composition_range_valid(&state.doc, 3, 3));
-        assert!(composition_range_valid(&state.doc, 5, 5));
+        // O=0, hello=1..6, C=6; empty ranges are valid anchors for composition
+        assert!(composition_range_valid(&state.doc, 1, 1));
+        assert!(composition_range_valid(&state.doc, 4, 4));
+        assert!(composition_range_valid(&state.doc, 6, 6));
     }
 
     #[test]
@@ -171,11 +192,35 @@ mod tests {
             }
             selection: (t1, 0)
         };
-        // flat: "a\u{fffc}b" — a=0, img(atom)=1, b=2
-        assert!(composition_range_valid(&state.doc, 0, 1)); // "a" only
-        assert!(!composition_range_valid(&state.doc, 0, 2)); // crosses image atom
-        assert!(!composition_range_valid(&state.doc, 1, 2)); // starts at image atom
-        assert!(composition_range_valid(&state.doc, 2, 3)); // "b" only
+        // O=0, a=1, img=2, b=3, C=4
+        assert!(composition_range_valid(&state.doc, 1, 2)); // "a" only
+        assert!(!composition_range_valid(&state.doc, 1, 3)); // crosses image atom
+        assert!(!composition_range_valid(&state.doc, 2, 3)); // starts at image atom
+        assert!(composition_range_valid(&state.doc, 3, 4)); // "b" only
+    }
+
+    #[test]
+    fn composition_range_valid_rejects_open_token() {
+        let (state, ..) = state! {
+            doc { root { paragraph { t1: text("hello") } } }
+            selection: (t1, 0)
+        };
+        // O=0, text=1..6, C=6
+        assert!(!composition_range_valid(&state.doc, 0, 2)); // includes Open
+        assert!(!composition_range_valid(&state.doc, 5, 7)); // includes Close
+        assert!(composition_range_valid(&state.doc, 1, 6)); // text only
+    }
+
+    #[test]
+    fn composition_range_valid_rejects_nested_tokens() {
+        let (state, ..) = state! {
+            doc { root { blockquote { paragraph { t1: text("hi") } } } }
+            selection: (t1, 0)
+        };
+        // O(bq)=0, O(p)=1, h=2, i=3, C(p)=4, C(bq)=5
+        assert!(composition_range_valid(&state.doc, 2, 4)); // "hi"
+        assert!(!composition_range_valid(&state.doc, 1, 4)); // includes Open(p)
+        assert!(!composition_range_valid(&state.doc, 2, 5)); // includes Close(p)
     }
 
     #[test]
@@ -187,12 +232,12 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
+                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
             },
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 1, end: 4 })
+            Some(Composition { start: 2, end: 5 })
         );
     }
 
@@ -210,7 +255,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 0, end: 4 },
+                intent: CompositionIntent::SetRegion { start: 1, end: 6 },
             },
         });
         assert_eq!(editor.state().composition, None);
@@ -225,21 +270,21 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 0, end: 5 },
+                intent: CompositionIntent::SetRegion { start: 1, end: 6 },
             },
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 5 })
+            Some(Composition { start: 1, end: 6 })
         );
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 6, end: 11 },
+                intent: CompositionIntent::SetRegion { start: 7, end: 12 },
             },
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 6, end: 11 })
+            Some(Composition { start: 7, end: 12 })
         );
     }
 
@@ -257,17 +302,17 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 0, end: 3 },
+                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
             },
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 3 })
+            Some(Composition { start: 1, end: 4 })
         );
         // Now apply invalid cross-block range → should clear prior composition
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 0, end: 5 },
+                intent: CompositionIntent::SetRegion { start: 1, end: 6 },
             },
         });
         assert_eq!(editor.state().composition, None);
@@ -284,10 +329,10 @@ mod tests {
             selection: (t1, 0)
         };
         let mut editor = Editor::new_test(state);
-        // Range 0..2 crosses the image atom
+        // Range 1..3 crosses the image atom
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 0, end: 2 },
+                intent: CompositionIntent::SetRegion { start: 1, end: 3 },
             },
         });
         assert_eq!(editor.state().composition, None);
@@ -302,7 +347,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 0, end: 3 },
+                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
             },
         });
         editor.apply(Message::Intent {
@@ -327,7 +372,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
+                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
             },
         });
         editor.apply(Message::Intent {
@@ -385,7 +430,7 @@ mod tests {
         assert_state_eq!(editor.state(), &expected);
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 2, end: 3 })
+            Some(Composition { start: 3, end: 4 })
         );
     }
 
@@ -411,7 +456,7 @@ mod tests {
         assert_state_eq!(editor.state(), &expected);
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 1, end: 3 })
+            Some(Composition { start: 2, end: 4 })
         );
     }
 
@@ -424,7 +469,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
+                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
             },
         });
         editor.apply(Message::Intent {
@@ -442,7 +487,7 @@ mod tests {
         assert_state_eq!(editor.state(), &expected);
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 1, end: 4 })
+            Some(Composition { start: 2, end: 5 })
         );
     }
 
@@ -464,7 +509,7 @@ mod tests {
             },
         });
         // resolve_target should detect stale composition, clear it,
-        // and insert "X" at the cursor (flat offset 0).
+        // and insert "X" at the cursor (flat offset 1).
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("Xhi") } } }
             selection: (t1, 1)
@@ -472,7 +517,7 @@ mod tests {
         assert_state_eq!(editor.state(), &expected);
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 1 })
+            Some(Composition { start: 1, end: 2 })
         );
     }
 
@@ -485,7 +530,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
+                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
             },
         });
         editor.apply(Message::Intent {
@@ -539,7 +584,7 @@ mod tests {
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 1 })
+            Some(Composition { start: 1, end: 2 })
         );
         // Replace with "안녕": 2 scalars, 2 flat offset units.
         editor.apply(Message::Intent {
@@ -552,7 +597,7 @@ mod tests {
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 2 })
+            Some(Composition { start: 1, end: 3 })
         );
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("안녕") } } }
@@ -570,7 +615,7 @@ mod tests {
         let mut editor = Editor::new_test(state);
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 1, end: 4 },
+                intent: CompositionIntent::SetRegion { start: 2, end: 5 },
             },
         });
         editor.apply(Message::Intent {
@@ -622,7 +667,7 @@ mod tests {
                 intent: CompositionIntent::Commit { text: "X".into() },
             },
         });
-        // resolve_target detects stale composition, clears it, inserts "X" at cursor (flat 1).
+        // resolve_target detects stale composition, clears it, inserts "X" at cursor (flat 2).
         let (expected, ..) = state! {
             doc { root { paragraph { t1: text("hXi") } } }
             selection: (t1, 2)
@@ -643,15 +688,15 @@ mod tests {
         };
         let mut editor = Editor::new_test(state);
 
-        // IME: SetComposingRegion(0, 2) covers "안녕" (cross-node)
+        // IME: SetComposingRegion(1, 3) covers "안녕" (cross-node)
         editor.apply(Message::Intent {
             intent: Intent::Composition {
-                intent: CompositionIntent::SetRegion { start: 0, end: 2 },
+                intent: CompositionIntent::SetRegion { start: 1, end: 3 },
             },
         });
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 2 })
+            Some(Composition { start: 1, end: 3 })
         );
 
         // IME: Update("안녕하", None) — replace composing region with new text
@@ -664,75 +709,12 @@ mod tests {
             },
         });
 
-        // After: composition should be { start: 0, end: 3 }
+        // After: composition should be { start: 1, end: 4 }
         assert_eq!(
             editor.state().composition,
-            Some(Composition { start: 0, end: 3 })
+            Some(Composition { start: 1, end: 4 })
         );
 
-        assert_eq!(editor.state().doc.flat_text(0..3), "안녕하");
-    }
-
-    /// iOS Korean IME uses select-delete-reinsert instead of SetComposingText.
-    /// Typing "안녕" after "!" produces:
-    ///   Commit("ㅇ")
-    ///   SetSelection(0,2) → Commit("") → Commit("!") → Commit("아")
-    ///   SetSelection(0,2) → Commit("") → Commit("!") → Commit("안")
-    ///   Commit("ㄴ")
-    ///   SetSelection(1,3) → Commit("") → Commit("안") → Commit("녀")
-    ///   SetSelection(1,3) → Commit("") → Commit("안") → Commit("녕")
-    #[test]
-    fn ios_korean_ime_select_delete_reinsert() {
-        let (state, ..) = state! {
-            doc { root { paragraph { t1: text("!") } } }
-            selection: (t1, 1)
-        };
-        let mut editor = Editor::new_test(state);
-
-        let apply_commit = |e: &mut Editor, text: &str| {
-            e.apply(Message::Intent {
-                intent: Intent::Composition {
-                    intent: CompositionIntent::Commit { text: text.into() },
-                },
-            });
-        };
-        let apply_set_selection = |e: &mut Editor, start: usize, end: usize| {
-            e.apply(Message::Intent {
-                intent: Intent::Selection {
-                    intent: SelectionIntent::SetFlat { start, end },
-                },
-            });
-        };
-
-        // ㅇ
-        apply_commit(&mut editor, "ㅇ");
-        // SetSelection(0,2) → Commit("") → Commit("!") → Commit("아")
-        apply_set_selection(&mut editor, 0, 2);
-        apply_commit(&mut editor, "");
-        apply_commit(&mut editor, "!");
-        apply_commit(&mut editor, "아");
-        // SetSelection(0,2) → Commit("") → Commit("!") → Commit("안")
-        apply_set_selection(&mut editor, 0, 2);
-        apply_commit(&mut editor, "");
-        apply_commit(&mut editor, "!");
-        apply_commit(&mut editor, "안");
-        // ㄴ
-        apply_commit(&mut editor, "ㄴ");
-        // SetSelection(1,3) → Commit("") → Commit("안") → Commit("녀")
-        apply_set_selection(&mut editor, 1, 3);
-        apply_commit(&mut editor, "");
-        apply_commit(&mut editor, "안");
-        apply_commit(&mut editor, "녀");
-        // SetSelection(1,3) → Commit("") → Commit("안") → Commit("녕")
-        apply_set_selection(&mut editor, 1, 3);
-        apply_commit(&mut editor, "");
-        apply_commit(&mut editor, "안");
-        apply_commit(&mut editor, "녕");
-
-        let (expected, ..) = state! {
-            doc { root { paragraph { t1: text("!안녕") } } }
-            selection: (t1, 3)
-        };
-        assert_state_eq!(editor.state(), &expected);
+        assert_eq!(editor.state().doc.flat_text(1..4), "안녕하");
     }
 }

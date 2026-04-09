@@ -82,8 +82,6 @@ pub enum InsertionIntent {
 pub enum DeletionIntent {
     Selection,
     Move { movement: Movement },
-    Surrounding { before: usize, after: usize },
-    SurroundingCodePoints { before: usize, after: usize },
 }
 
 #[ffi]
@@ -101,7 +99,6 @@ pub enum FormattingIntent {
 pub enum SelectionIntent {
     All,
     Set { selection: Selection },
-    SetFlat { start: usize, end: usize },
 }
 
 #[ffi]
@@ -232,11 +229,26 @@ pub enum SystemEvent {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+pub enum FlatImeOp {
+    SetSelection { start: usize, end: usize },
+    ReplaceSelection { text: String },
+    Compose { text: String },
+    DeleteSurrounding { before: usize, after: usize },
+    DeleteSurroundingUtf16 { before: usize, after: usize },
+    SetComposition { start: usize, end: usize },
+    ClearComposition,
+    MoveCursor { delta: i32 },
+}
+
+#[ffi]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
     Key { event: KeyEvent },
     Pointer { event: PointerEvent },
     Intent { intent: Intent },
     System { event: SystemEvent },
+    FlatIme { ops: Vec<FlatImeOp> },
 }
 
 #[ffi]

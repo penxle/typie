@@ -215,6 +215,7 @@ impl Editor {
                 Intent::Composition { intent } => handle::handle_composition_intent(self, intent)?,
             },
             Message::System { event } => handle::handle_system_event(self, event)?,
+            Message::FlatIme { ops } => handle::handle_flat_ime(self, ops)?,
         }
         Ok(())
     }
@@ -549,10 +550,12 @@ mod tests {
         };
         let editor = Editor::new_test(state);
         let ctx = editor.input_context(usize::MAX, usize::MAX).unwrap();
-        assert_eq!(ctx.text, "hello");
+        // flat: O(p)=0, "hello"=1..6, C(p)=6 → flat_size=7
+        // (t1,2) → flat 3; window covers full doc [0,7)
+        assert_eq!(ctx.text, "\u{2028}hello\u{2029}");
         assert_eq!(ctx.window_start, 0);
-        assert_eq!(ctx.selection.start, 2);
-        assert_eq!(ctx.selection.end, 2);
+        assert_eq!(ctx.selection.start, 3);
+        assert_eq!(ctx.selection.end, 3);
         assert!(ctx.composing.is_none());
     }
 
@@ -564,11 +567,12 @@ mod tests {
         };
         let editor = Editor::new_test(state);
         let ctx = editor.input_context(3, 3).unwrap();
-        // cursor at 6, before 3 chars → window_start = 3, after 3 → window_end = 9
-        assert_eq!(ctx.window_start, 3);
+        // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
+        // (t1,6) → flat 7; window [7-3, 7+3) = [4, 10) → "lo wor"
+        assert_eq!(ctx.window_start, 4);
         assert_eq!(ctx.text, "lo wor");
-        assert_eq!(ctx.selection.start, 6);
-        assert_eq!(ctx.selection.end, 6);
+        assert_eq!(ctx.selection.start, 7);
+        assert_eq!(ctx.selection.end, 7);
     }
 
     #[test]
@@ -579,8 +583,27 @@ mod tests {
         };
         let editor = Editor::new_test(state);
         let ctx = editor.input_context(usize::MAX, usize::MAX).unwrap();
-        assert_eq!(ctx.text, "hello world");
-        assert_eq!(ctx.selection.start, 2);
-        assert_eq!(ctx.selection.end, 8);
+        // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
+        // (t1,2)→flat 3, (t1,8)→flat 9; window covers full doc [0,13)
+        assert_eq!(ctx.text, "\u{2028}hello world\u{2029}");
+        assert_eq!(ctx.selection.start, 3);
+        assert_eq!(ctx.selection.end, 9);
+    }
+
+    #[test]
+    fn input_context_empty_blockquote_has_tokens() {
+        let (state, ..) = state! {
+            doc { root { blockquote { paragraph { t1: text("") } } paragraph {} } }
+            selection: (t1, 0)
+        };
+        let editor = Editor::new_test(state);
+        let ctx = editor.input_context(100, 100).unwrap();
+        assert!(
+            !ctx.text.is_empty(),
+            "IME buffer must not be empty for empty blockquote"
+        );
+
+        let cursor_in_window = ctx.selection.start - ctx.window_start;
+        assert!(cursor_in_window > 0, "cursor should be after Open tokens");
     }
 }

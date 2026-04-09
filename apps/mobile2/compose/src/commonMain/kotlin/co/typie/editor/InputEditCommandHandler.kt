@@ -10,114 +10,51 @@ import androidx.compose.ui.text.input.MoveCursorCommand
 import androidx.compose.ui.text.input.SetComposingRegionCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
-import co.typie.editor.ffi.CompositionIntent
-import co.typie.editor.ffi.DeletionIntent
-import co.typie.editor.ffi.Direction
-import co.typie.editor.ffi.Intent
+import co.typie.editor.ffi.FlatImeOp
 import co.typie.editor.ffi.Key
 import co.typie.editor.ffi.KeyEvent
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.Movement
-import co.typie.editor.ffi.NavigationIntent
-import co.typie.editor.ffi.SelectionIntent
 
 internal object InputEditCommandHandler {
   fun handle(editor: Editor, commands: List<EditCommand>) {
     editor.batch {
+      val ops = mutableListOf<FlatImeOp>()
+
       for (command in commands) {
-        dispatch(editor, command)
+        if (command is CommitTextCommand && command.text == "\n") {
+          if (ops.isNotEmpty()) {
+            editor.enqueue(Message.FlatIme(ops.toList()))
+            ops.clear()
+          }
+
+          editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
+          continue
+        }
+
+        val op = command.toFlatImeOp() ?: continue
+        ops.add(op)
+      }
+
+      if (ops.isNotEmpty()) {
+        editor.enqueue(Message.FlatIme(ops))
       }
     }
   }
 
-  private fun dispatch(editor: Editor, command: EditCommand) {
-    when (command) {
-      is CommitTextCommand -> {
-        if (command.text == "\n") {
-          editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
-        } else {
-          editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.Commit(command.text))))
-        }
-      }
+  private fun EditCommand.toFlatImeOp(): FlatImeOp? = when (this) {
+    is CommitTextCommand -> FlatImeOp.ReplaceSelection(text)
+    is SetComposingTextCommand -> FlatImeOp.Compose(text)
+    is SetSelectionCommand -> FlatImeOp.SetSelection(start, end)
+    is SetComposingRegionCommand -> FlatImeOp.SetComposition(start, end)
+    is FinishComposingTextCommand -> FlatImeOp.ClearComposition
+    is DeleteSurroundingTextCommand ->
+      FlatImeOp.DeleteSurroundingUtf16(lengthBeforeCursor, lengthAfterCursor)
 
-      is SetComposingTextCommand -> {
-        editor.enqueue(
-          Message.Intent(Intent.Composition(CompositionIntent.Update(command.text, null)))
-        )
-      }
+    is DeleteSurroundingTextInCodePointsCommand ->
+      FlatImeOp.DeleteSurrounding(lengthBeforeCursor, lengthAfterCursor)
 
-      is SetComposingRegionCommand -> {
-        editor.enqueue(
-          Message.Intent(
-            Intent.Composition(
-              CompositionIntent.SetRegion(command.start, command.end)
-            )
-          )
-        )
-      }
-
-      is FinishComposingTextCommand -> {
-        editor.enqueue(Message.Intent(Intent.Composition(CompositionIntent.CommitAsIs)))
-      }
-
-      is DeleteSurroundingTextCommand -> {
-        editor.enqueue(
-          Message.Intent(
-            Intent.Deletion(
-              DeletionIntent.Surrounding(command.lengthBeforeCursor, command.lengthAfterCursor)
-            )
-          )
-        )
-      }
-
-      is DeleteSurroundingTextInCodePointsCommand -> {
-        editor.enqueue(
-          Message.Intent(
-            Intent.Deletion(
-              DeletionIntent.SurroundingCodePoints(
-                command.lengthBeforeCursor,
-                command.lengthAfterCursor
-              )
-            )
-          )
-        )
-      }
-
-      is SetSelectionCommand -> {
-        editor.enqueue(
-          Message.Intent(
-            Intent.Selection(
-              SelectionIntent.SetFlat(command.start, command.end)
-            )
-          )
-        )
-      }
-
-      is BackspaceCommand -> {
-        editor.enqueue(Message.Key(KeyEvent(Key.Backspace)))
-      }
-
-      is MoveCursorCommand -> {
-        // TODO(future work): amount's magnitude is currently ignored.
-        // NavigationIntent.Move lacks a count field, so we emit a single
-        // grapheme step in the appropriate direction. In practice IMEs send
-        // ±1, so this is usually correct. Proper fix: add `count: usize` to
-        // NavigationIntent::Move in Rust and forward `abs(command.amount)`.
-        val direction = if (command.amount >= 0) Direction.Forward else Direction.Backward
-        editor.enqueue(
-          Message.Intent(
-            Intent.Navigation(
-              NavigationIntent.Move(Movement.Grapheme(direction), extend = false)
-            )
-          )
-        )
-      }
-
-      else -> {
-        // EditCommand is an open interface; Compose or CMP may introduce subtypes we don't handle.
-        // Dropping them is safe because the Skiko text input machinery is pull-based — it
-        // re-reads editor state via request.value on subsequent queries and reconciles its own model.
-      }
-    }
+    is BackspaceCommand -> FlatImeOp.DeleteSurrounding(1, 0)
+    is MoveCursorCommand -> FlatImeOp.MoveCursor(amount)
+    else -> null
   }
 }
