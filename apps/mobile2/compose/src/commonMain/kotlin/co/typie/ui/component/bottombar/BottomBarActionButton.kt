@@ -74,7 +74,7 @@ data class ActionMenuItem(
   val onClick: () -> Unit = {},
 )
 
-private const val ACTION_SIZE = 60
+private const val ACTION_SIZE = 52
 private const val ACTION_GAP = 8
 private const val ACTION_MENU_GAP = 10
 private const val ACTION_SELECTION_ARM_DELAY_MS = 150L
@@ -185,7 +185,7 @@ fun BottomBarActionButton(
           .align(Alignment.BottomEnd)
           .padding(
             end = shellHorizontalInset,
-            bottom = safeBottomPadding + 12.dp + ACTION_SIZE.dp + ACTION_MENU_GAP.dp,
+            bottom = safeBottomPadding + BottomBarDefaults.BottomPadding + ACTION_SIZE.dp + ACTION_MENU_GAP.dp,
           ),
         enter = fadeIn(animationSpec = tween(280)) + slideInVertically(
           animationSpec = tween(280, easing = EaseOutCubic),
@@ -241,7 +241,7 @@ fun BottomBarActionButton(
       Box(
         modifier = Modifier
           .align(Alignment.BottomEnd)
-          .padding(end = shellHorizontalInset, bottom = safeBottomPadding + 12.dp)
+          .padding(end = shellHorizontalInset, bottom = safeBottomPadding + BottomBarDefaults.BottomPadding)
           .size(ACTION_SIZE.dp)
           .onGloballyPositioned { coordinates ->
             buttonWindowTopLeft = coordinates.positionInWindow()
@@ -252,20 +252,15 @@ fun BottomBarActionButton(
           }
           .dropShadow(CircleShape) {
             color = colors.shadowAmbient
-            radius = 8f
+            radius = 3f
           }
           .dropShadow(CircleShape) {
             color = colors.shadow
             offset = Offset(0f, 4f)
-            radius = 12f
-          }
-          .dropShadow(CircleShape) {
-            color = colors.shadow
-            offset = Offset(0f, 12f)
-            radius = 32f
+            radius = 16f
           }
           .background(AppTheme.colors.surfaceRaised, CircleShape)
-          .border(1.dp, AppTheme.colors.borderDefault, CircleShape)
+          .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), CircleShape)
           .then(
             if (hasMenu) {
               Modifier.pointerInput(icon, menus) {

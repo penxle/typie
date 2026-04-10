@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -42,7 +43,6 @@ import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.NavDirection
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.theme.AppTheme
-import kotlin.math.abs
 import kotlinx.coroutines.launch
 
 private enum class AnimState { Idle, Push, Pop, Dragging }
@@ -121,6 +121,7 @@ fun NavigationStack(
           behindRoute = visibleRoute
           animState = AnimState.Push
           progress.snapTo(0f)
+          withFrameNanos {} // 새 화면의 첫 composition 완료 대기
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
           visibleRoute = navigator.current
           navigator.completeTransition()
@@ -158,9 +159,6 @@ fun NavigationStack(
     ) {
       val useFadeTransition = transitionStyle == RouteTransitionStyle.Fade
 
-      // 전환 progress에 연동: 0→1f, 0.5→0f, 1→1f
-      topBarState.blurFactor = if (animState == AnimState.Idle || useFadeTransition) 1f else abs(progress.value * 2f - 1f)
-
       when (animState) {
         AnimState.Idle -> topBarState.navDirection = NavDirection.Switch
         AnimState.Push -> topBarState.navDirection = if (useFadeTransition) NavDirection.Switch else NavDirection.Push
@@ -170,20 +168,8 @@ fun NavigationStack(
         }
       }
 
-      val p = progress.value
-
       // Behind layer (애니메이션 중 뒤에 깔리는 화면)
       if (behindRoute != null) {
-        val behindOffset = when (animState) {
-          // Push: 이전 화면이 왼쪽으로 밀림
-          AnimState.Push -> -containerWidth / 6f * p
-          // Pop/Dragging: 돌아갈 화면이 왼쪽에서 복귀
-          else -> -containerWidth / 6f * (1f - p)
-        }
-        val dimAlpha = when (animState) {
-          AnimState.Push -> 0.5f * p
-          else -> 0.5f * (1f - p)
-        }
         val behindTopBar = when (animState) {
           AnimState.Push -> exitTopBarState
           // popRequested = commit 확정 → TopBar를 목적지로 전환
@@ -201,14 +187,14 @@ fun NavigationStack(
         }
 
         if (useFadeTransition) {
-          val behindAlpha = when (animState) {
-            AnimState.Push -> 1f - p
-            AnimState.Pop -> p
-            AnimState.Dragging -> if (navigator.popRequested) p else 0f
-            AnimState.Idle -> 1f
-          }
-
-          Box(Modifier.fillMaxSize().graphicsLayer { alpha = behindAlpha }) {
+          Box(Modifier.fillMaxSize().graphicsLayer {
+            alpha = when (animState) {
+              AnimState.Push -> 1f - progress.value
+              AnimState.Pop -> progress.value
+              AnimState.Dragging -> if (navigator.popRequested) progress.value else 0f
+              AnimState.Idle -> 1f
+            }
+          }) {
             val behindProviders = buildList<ProvidedValue<*>> {
               add(LocalTopBarState provides behindTopBar)
               behindBottomBar?.let { add(LocalBottomBarState provides it) }
@@ -218,7 +204,14 @@ fun NavigationStack(
             }
           }
         } else {
-          Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }) {
+          Box(Modifier.fillMaxSize().graphicsLayer {
+            translationX = when (animState) {
+              // Push: 이전 화면이 왼쪽으로 밀림
+              AnimState.Push -> -containerWidth / 6f * progress.value
+              // Pop/Dragging: 돌아갈 화면이 왼쪽에서 복귀
+              else -> -containerWidth / 6f * (1f - progress.value)
+            }
+          }) {
             val behindProviders = buildList<ProvidedValue<*>> {
               add(LocalTopBarState provides behindTopBar)
               behindBottomBar?.let { add(LocalBottomBarState provides it) }
@@ -229,8 +222,19 @@ fun NavigationStack(
           }
           // Dim overlay — 전환 중 behind 화면 터치 차단
           Box(
-            Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }
-              .background(AppTheme.colors.shadow.copy(alpha = dimAlpha))
+            Modifier.fillMaxSize()
+              .graphicsLayer {
+                val p = progress.value
+                translationX = when (animState) {
+                  AnimState.Push -> -containerWidth / 6f * p
+                  else -> -containerWidth / 6f * (1f - p)
+                }
+                alpha = when (animState) {
+                  AnimState.Push -> p
+                  else -> 1f - p
+                }
+              }
+              .background(AppTheme.colors.shadow.copy(alpha = 0.5f))
               .pointerIgnore()
           )
         }
@@ -262,6 +266,7 @@ fun NavigationStack(
 
       Box(Modifier.fillMaxSize().graphicsLayer {
         if (animState != AnimState.Idle) {
+          val p = progress.value
           if (useFadeTransition) {
             alpha = when (animState) {
               AnimState.Push -> p

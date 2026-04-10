@@ -103,12 +103,12 @@ object Skeleton {
     val active = enabled || fadeAlpha > 0f
 
     Box(modifier) {
-      // 실제 콘텐츠 (항상 렌더링)
-      CompositionLocalProvider(LocalSkeleton provides SkeletonState.Disabled) {
-        content()
+      if (!enabled) {
+        CompositionLocalProvider(LocalSkeleton provides SkeletonState.Disabled) {
+          content()
+        }
       }
 
-      // Bone 오버레이 (fade out)
       if (active) {
         val infiniteTransition = rememberInfiniteTransition()
         val pulseAlpha by infiniteTransition.animateFloat(

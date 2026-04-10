@@ -15,7 +15,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import co.typie.ext.navigationBarsPadding
 import co.typie.ui.component.bottombar.BottomBar
+import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.topbar.TopBar
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -38,6 +40,10 @@ fun NavigationScaffold(
   val colors = AppTheme.colors
   val enabledFactor by animateFloatAsState(
     targetValue = if (topBarState.enabled) 1f else 0f,
+    animationSpec = tween(200),
+  )
+  val bottomEnabledFactor by animateFloatAsState(
+    targetValue = if (bottomBarState?.enabled == true) 1f else 0f,
     animationSpec = tween(200),
   )
 
@@ -63,6 +69,20 @@ fun NavigationScaffold(
     }
 
     if (bottomBarState != null) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .align(Alignment.BottomStart)
+          .hazeEffect(hazeState) {
+            backgroundColor = colors.surfaceDefault
+            blurRadius = BottomBarDefaults.BlurRadius * bottomEnabledFactor
+            progressive = BottomBarDefaults.hazeProgressive()
+          },
+      ) {
+        Spacer(Modifier.height(BottomBarDefaults.BlurFadeHeight))
+        Spacer(Modifier.height(BottomBarDefaults.BarAreaHeight).navigationBarsPadding())
+      }
+
       BottomBar(state = bottomBarState)
     }
 

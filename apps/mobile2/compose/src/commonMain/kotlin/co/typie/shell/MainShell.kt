@@ -49,6 +49,7 @@ import co.typie.route.toastBottomInset
 import co.typie.shell.marketing_consent.MarketingConsentGate
 import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarActionButton
+import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
@@ -142,7 +143,7 @@ private fun BottomBarPill(
       .fillMaxWidth()
       .navigationBarsPadding()
       .padding(horizontal = 24.dp)
-      .padding(bottom = 12.dp),
+      .padding(bottom = BottomBarDefaults.BottomPadding),
     contentAlignment = Alignment.Center,
   ) {
     Row(
@@ -158,23 +159,18 @@ private fun BottomBarPill(
         CompositionLocalProvider(LocalInteractionSource provides pillInteractionSource) {
           Row(
             Modifier.fillMaxWidth()
-              .height(60.dp)
+              .height(BottomBarDefaults.PillHeight)
               .dropShadow(CircleShape) {
                 color = colors.shadowAmbient
-                radius = 8f
+                radius = 3f
               }
               .dropShadow(CircleShape) {
                 color = colors.shadow
                 offset = Offset(0f, 4f)
-                radius = 12f
+                radius = 16f
               }
-              .dropShadow(CircleShape) {
-                color = colors.shadow
-                offset = Offset(0f, 12f)
-                radius = 32f
-              }
-              .border(1.dp, AppTheme.colors.borderDefault, CircleShape)
-              .background(AppTheme.colors.surfaceRaised, CircleShape),
+              .background(AppTheme.colors.surfaceRaised, CircleShape)
+              .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), CircleShape),
           ) {
             Tab.entries.forEach { tab ->
               val selected = tab == currentTab
@@ -189,7 +185,7 @@ private fun BottomBarPill(
                 modifier = Modifier
                   .weight(1f)
                   .fillMaxHeight()
-                  .padding(4.dp)
+                  .padding(3.dp)
                   .background(bgColor, CircleShape)
                   .clickable { onSelectTab(tab) },
                 contentAlignment = Alignment.Center,
