@@ -34,7 +34,14 @@ pub fn handle_insertion_op(editor: &mut Editor, op: InsertionOp) -> Result<(), E
                     commands::insert_hard_break(),
                 )?;
             }
-            InsertionOp::Break { kind: Break::Page } | InsertionOp::Node { .. } => {}
+            InsertionOp::Break { kind: Break::Page } => {}
+            InsertionOp::Fragment { fragment } => {
+                commands::chain!(
+                    tr,
+                    commands::optional!(commands::delete_selection()),
+                    commands::insert_fragment(fragment.clone()),
+                )?;
+            }
         }
         Ok(())
     })

@@ -13,7 +13,7 @@
   import TableIcon from '~icons/lucide/table';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { BlockquoteVariant, CalloutVariant, HorizontalRuleVariant, Message, Node } from '@typie/editor-ffi/browser';
+  import type { BlockquoteVariant, CalloutVariant, Fragment, HorizontalRuleVariant, Message } from '@typie/editor-ffi/browser';
 
   const ctx = getEditorContext();
 
@@ -22,9 +22,9 @@
     ctx.editor?.focus();
   };
 
-  const insertNodeMsg = (node: Node): Message => ({
+  const insertFragment = (fragment: Fragment): Message => ({
     type: 'insertion',
-    op: { type: 'node', node },
+    op: { type: 'fragment', fragment },
   });
 
   const horizontalRuleVariants: { label: string; value: HorizontalRuleVariant }[] = [
@@ -73,9 +73,9 @@
   })}
   role="toolbar"
 >
-  <ToolbarButton icon={ImageIcon} label="이미지" onclick={() => enqueue(insertNodeMsg({ type: 'image', id: undefined }))} />
-  <ToolbarButton icon={PaperclipIcon} label="파일" onclick={() => enqueue(insertNodeMsg({ type: 'file', id: undefined }))} />
-  <ToolbarButton icon={FileUpIcon} label="임베드" onclick={() => enqueue(insertNodeMsg({ type: 'embed', id: undefined }))} />
+  <ToolbarButton icon={ImageIcon} label="이미지" onclick={() => enqueue(insertFragment({ node: { type: 'image', id: undefined } }))} />
+  <ToolbarButton icon={PaperclipIcon} label="파일" onclick={() => enqueue(insertFragment({ node: { type: 'file', id: undefined } }))} />
+  <ToolbarButton icon={FileUpIcon} label="임베드" onclick={() => enqueue(insertFragment({ node: { type: 'embed', id: undefined } }))} />
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
@@ -100,7 +100,7 @@
     <ToolbarButton
       icon={ScissorsIcon}
       label="구분선 삽입"
-      onclick={() => enqueue(insertNodeMsg({ type: 'horizontal_rule', variant: selectedHrVariant }))}
+      onclick={() => enqueue(insertFragment({ node: { type: 'horizontal_rule', variant: selectedHrVariant } }))}
     />
   </div>
 
@@ -125,7 +125,7 @@
     <ToolbarButton
       icon={QuoteIcon}
       label="인용구 삽입"
-      onclick={() => enqueue(insertNodeMsg({ type: 'blockquote', variant: selectedBqVariant }))}
+      onclick={() => enqueue(insertFragment({ node: { type: 'blockquote', variant: selectedBqVariant } }))}
     />
   </div>
 
@@ -150,16 +150,20 @@
     <ToolbarButton
       icon={GalleryVerticalEndIcon}
       label="강조 삽입"
-      onclick={() => enqueue(insertNodeMsg({ type: 'callout', variant: selectedCalloutVariant }))}
+      onclick={() => enqueue(insertFragment({ node: { type: 'callout', variant: selectedCalloutVariant } }))}
     />
   </div>
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
-  <ToolbarButton icon={ChevronsDownUpIcon} label="접기" onclick={() => enqueue(insertNodeMsg({ type: 'fold' }))} />
-  <ToolbarButton icon={TableIcon} label="표" onclick={() => enqueue(insertNodeMsg({ type: 'table' }))} />
-  <ToolbarButton icon={ListIcon} label="순서 없는 목록" onclick={() => enqueue(insertNodeMsg({ type: 'bullet_list' }))} />
-  <ToolbarButton icon={ListOrderedIcon} label="순서 있는 목록" onclick={() => enqueue(insertNodeMsg({ type: 'ordered_list' }))} />
+  <ToolbarButton icon={ChevronsDownUpIcon} label="접기" onclick={() => enqueue(insertFragment({ node: { type: 'fold' } }))} />
+  <ToolbarButton icon={TableIcon} label="표" onclick={() => enqueue(insertFragment({ node: { type: 'table' } }))} />
+  <ToolbarButton icon={ListIcon} label="순서 없는 목록" onclick={() => enqueue(insertFragment({ node: { type: 'bullet_list' } }))} />
+  <ToolbarButton
+    icon={ListOrderedIcon}
+    label="순서 있는 목록"
+    onclick={() => enqueue(insertFragment({ node: { type: 'ordered_list' } }))}
+  />
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 

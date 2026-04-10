@@ -1,6 +1,6 @@
 pub use editor_common::{Axis, Direction, Movement};
 use editor_macros::ffi;
-use editor_model::{Modifier, ModifierType, Node, NodeId};
+use editor_model::{Fragment, Modifier, ModifierType, Node, NodeId};
 use editor_state::Selection;
 use serde::{Deserialize, Serialize};
 
@@ -73,7 +73,7 @@ pub enum Break {
 pub enum InsertionOp {
     Text { text: String },
     Break { kind: Break },
-    Node { node: Node },
+    Fragment { fragment: Fragment },
 }
 
 #[ffi]

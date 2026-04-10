@@ -199,6 +199,12 @@ export interface FontName {
     value: string;
 }
 
+export interface Fragment {
+    node: Node;
+    modifiers?: Modifier[];
+    children?: Fragment[];
+}
+
 export interface HardBreakNode {}
 
 export interface HorizontalRuleNode {
@@ -327,7 +333,7 @@ export type HistoryOp = { type: "undo" } | { type: "redo" };
 
 export type HorizontalRuleVariant = "line" | "dashed_line" | "circle_line" | "diamond_line" | "circle" | "diamond" | "three_circles" | "three_diamonds" | "zigzag";
 
-export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "node"; node: Node };
+export type InsertionOp = { type: "text"; text: string } | { type: "break"; kind: Break } | { type: "fragment"; fragment: Fragment };
 
 export type Key = "enter" | "backspace" | "delete" | "tab" | "escape";
 
