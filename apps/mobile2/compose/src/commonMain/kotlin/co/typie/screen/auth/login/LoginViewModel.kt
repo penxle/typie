@@ -50,6 +50,7 @@ class LoginSingleSignOnViewModel : ViewModel() {
 }
 
 sealed interface LoginWithEmailError {
+  data object ValidationFailed : LoginWithEmailError
   data object InvalidCredentials : LoginWithEmailError
   data object PasswordNotSet : LoginWithEmailError
   data class Unknown(val code: String) : LoginWithEmailError
@@ -76,7 +77,7 @@ class LoginWithEmailViewModel : ViewModel() {
     private set
 
   suspend fun submit(): Result<Unit, LoginWithEmailError> {
-    if (!state.form.validate()) return Result.Ok(Unit)
+    if (!state.form.validate()) return Result.Err(LoginWithEmailError.ValidationFailed)
 
     return loading({ isSubmitting = it }) {
       try {

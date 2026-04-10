@@ -238,11 +238,14 @@ private fun LoginEmailContent(
         .onOk { onSuccess() }
         .onErr { error ->
           val message = when (error) {
+            LoginWithEmailError.ValidationFailed -> null
             LoginWithEmailError.InvalidCredentials -> "이메일 또는 비밀번호가 올바르지 않아요."
             LoginWithEmailError.PasswordNotSet -> "비밀번호가 설정되지 않았어요."
             is LoginWithEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
           }
-          toast.show(ToastType.Error, message)
+          if (message != null) {
+            toast.show(ToastType.Error, message)
+          }
         }
     }
   }
