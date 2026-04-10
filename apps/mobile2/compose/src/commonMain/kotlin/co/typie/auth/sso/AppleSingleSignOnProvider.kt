@@ -1,5 +1,8 @@
 package co.typie.auth.sso
 
+import co.typie.platform.ActivityContext
+
 expect class AppleSingleSignOnProvider() : SingleSignOnAdapter {
-  override suspend fun authenticate(ctx: Any?): SingleSignOnCredential
+  context(_: ActivityContext)
+  override suspend fun authenticate(): SingleSignOnCredential
 }

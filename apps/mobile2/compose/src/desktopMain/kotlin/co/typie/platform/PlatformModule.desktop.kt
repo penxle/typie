@@ -13,12 +13,14 @@ import kotlinx.coroutines.runBlocking
 
 actual object PlatformModule {
   actual val platform: Platform = Platform.Desktop
-  actual val ksafePrefs: KSafe = KSafe(fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
+  actual val ksafePrefs: KSafe =
+    KSafe(fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
   actual val ksafeVault: KSafe = KSafe(fileName = "vault")
   actual val clipboard: Clipboard = DesktopClipboard()
   actual val deviceInfo: DeviceInfo = DesktopDeviceInfo()
   actual val fileSystem: FileSystem = DesktopFileSystem()
-  actual val legacyMigrationPlatformSource: LegacyMigrationPlatformSource = DesktopLegacyMigrationPlatformSource()
+  actual val legacyMigrationPlatformSource: LegacyMigrationPlatformSource =
+    DesktopLegacyMigrationPlatformSource()
   actual val purchaseService: PurchaseService = DesktopPurchaseService()
   actual val share: Share = DesktopShare()
   actual val editorHost: EditorHost = run {

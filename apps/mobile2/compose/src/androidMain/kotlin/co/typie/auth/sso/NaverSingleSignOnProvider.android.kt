@@ -1,7 +1,7 @@
 package co.typie.auth.sso
 
-import android.app.Activity
 import co.typie.graphql.type.SingleSignOnProvider
+import co.typie.platform.ActivityContext
 import com.navercorp.nid.NidOAuth
 import com.navercorp.nid.oauth.util.NidOAuthCallback
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -10,9 +10,8 @@ import kotlin.coroutines.resumeWithException
 
 actual class NaverSingleSignOnProvider : SingleSignOnAdapter {
 
-  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
-    val context = ctx as Activity
-
+  context(activity: ActivityContext)
+  actual override suspend fun authenticate(): SingleSignOnCredential {
     NidOAuth.logout(object : NidOAuthCallback {
       override fun onSuccess() {
       }
@@ -22,7 +21,7 @@ actual class NaverSingleSignOnProvider : SingleSignOnAdapter {
     })
 
     val accessToken = suspendCancellableCoroutine { continuation ->
-      NidOAuth.requestLogin(context, object : NidOAuthCallback {
+      NidOAuth.requestLogin(activity, object : NidOAuthCallback {
         override fun onSuccess() {
           val accessToken = NidOAuth.getAccessToken()
           if (accessToken != null) {

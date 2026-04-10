@@ -22,26 +22,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import co.typie.auth.sso.activityContext
-import co.typie.platform.Platform
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
-import co.typie.overlay.Loader
 import co.typie.overlay.LocalLoader
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
+import co.typie.platform.activityContext
 import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
 import co.typie.result.onOk
@@ -56,9 +56,7 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.platform.PlatformModule
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -151,14 +149,16 @@ private fun LoginSSOContent(
   val loader = LocalLoader.current
   val platform = PlatformModule.platform
   val scope = rememberCoroutineScope()
-  val ctx = activityContext()
+  val activity = activityContext()
 
   fun loginWith(provider: SingleSignOnProvider) {
     scope.launch {
       loader.runWith {
-        model.loginWith(provider, ctx)
-          .withDefaultExceptionHandler(toast)
-          .onOk { onSuccess() }
+        context(activity) {
+          model.loginWith(provider)
+            .withDefaultExceptionHandler(toast)
+            .onOk { onSuccess() }
+        }
       }
     }
   }

@@ -1,7 +1,10 @@
 package co.typie.auth.sso
 
+import co.typie.platform.ActivityContext
+
 actual class AppleSingleSignOnProvider : SingleSignOnAdapter {
-  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
+  context(_: ActivityContext)
+  actual override suspend fun authenticate(): SingleSignOnCredential {
     throw UnsupportedOperationException("Apple SSO is not supported on Android")
   }
 }

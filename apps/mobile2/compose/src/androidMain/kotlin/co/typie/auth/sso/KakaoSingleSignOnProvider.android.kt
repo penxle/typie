@@ -1,7 +1,7 @@
 package co.typie.auth.sso
 
-import android.app.Activity
 import co.typie.graphql.type.SingleSignOnProvider
+import co.typie.platform.ActivityContext
 import com.kakao.sdk.auth.model.Prompt
 import com.kakao.sdk.user.UserApiClient
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -10,11 +10,11 @@ import kotlin.coroutines.resumeWithException
 
 actual class KakaoSingleSignOnProvider : SingleSignOnAdapter {
 
-  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
-    val context = ctx as Activity
+  context(activity: ActivityContext)
+  actual override suspend fun authenticate(): SingleSignOnCredential {
     val accessToken = suspendCancellableCoroutine { continuation ->
       UserApiClient.instance.loginWithKakaoAccount(
-        context = context,
+        context = activity,
         prompts = listOf(Prompt.SELECT_ACCOUNT),
       ) { token, error ->
         if (error != null) {

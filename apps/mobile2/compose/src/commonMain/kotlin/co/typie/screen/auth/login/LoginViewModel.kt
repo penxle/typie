@@ -11,6 +11,7 @@ import co.typie.auth.sso.KakaoSingleSignOnProvider
 import co.typie.auth.sso.NaverSingleSignOnProvider
 import co.typie.form.FormState
 import co.typie.form.email
+import co.typie.graphql.Apollo
 import co.typie.graphql.LoginScreen_AuthorizeSingleSignOn_Mutation
 import co.typie.graphql.LoginWithEmailScreen_LoginWithEmail_Mutation
 import co.typie.graphql.TypieError
@@ -18,8 +19,8 @@ import co.typie.graphql.executeMutation
 import co.typie.graphql.type.AuthorizeSingleSignOnInput
 import co.typie.graphql.type.LoginWithEmailInput
 import co.typie.graphql.type.SingleSignOnProvider
+import co.typie.platform.ActivityContext
 import co.typie.result.Result
-import co.typie.graphql.Apollo
 import co.typie.result.loading
 import co.typie.result.result
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 class LoginSingleSignOnViewModel : ViewModel() {
-  suspend fun loginWith(provider: SingleSignOnProvider, ctx: Any?): Result<Unit, Nothing> = result {
+  context(_: ActivityContext)
+  suspend fun loginWith(provider: SingleSignOnProvider): Result<Unit, Nothing> = result {
     val ssoProvider = when (provider) {
       SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
       SingleSignOnProvider.KAKAO -> KakaoSingleSignOnProvider()
@@ -36,7 +38,7 @@ class LoginSingleSignOnViewModel : ViewModel() {
       else -> throw IllegalArgumentException("Unknown provider: $provider")
     }
 
-    val credential = ssoProvider.authenticate(ctx)
+    val credential = ssoProvider.authenticate()
 
     Apollo.executeMutation(
       LoginScreen_AuthorizeSingleSignOn_Mutation(

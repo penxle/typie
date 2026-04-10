@@ -1,5 +1,8 @@
 package co.typie.auth.sso
 
+import co.typie.platform.ActivityContext
+
 interface SingleSignOnAdapter {
-  suspend fun authenticate(ctx: Any? = null): SingleSignOnCredential
+  context(_: ActivityContext)
+  suspend fun authenticate(): SingleSignOnCredential
 }
