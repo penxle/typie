@@ -4,9 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import co.typie.screen.subscription.FULL_ACCESS_GOOGLE_PLAY_PRODUCT_ID
-import co.typie.screen.subscription.FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID
-import co.typie.screen.subscription.FULL_ACCESS_YEARLY_STORE_PRODUCT_ID
+import co.typie.service.FULL_ACCESS_GOOGLE_PLAY_PRODUCT_ID
+import co.typie.service.FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID
+import co.typie.service.FULL_ACCESS_YEARLY_STORE_PRODUCT_ID
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClient.BillingResponseCode

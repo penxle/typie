@@ -1,37 +1,36 @@
 package co.typie.route
 
 import androidx.compose.runtime.Composable
-import co.typie.screen.detail.DetailScreen
-import co.typie.screen.ai_settings.AiSettingsScreen
-import co.typie.screen.delete_user.DeleteUserScreen
-import co.typie.screen.editor.EditorScreen
-import co.typie.screen.editor_settings.EditorSettingsScreen
-import co.typie.screen.font_settings.FontSettingsScreen
-import co.typie.screen.folder.FolderScreen
-import co.typie.screen.home.HomeSearchScreen
-import co.typie.screen.home.HomeScreen
-import co.typie.screen.login.LoginScreen
-import co.typie.screen.more.MoreScreen
-import co.typie.screen.notes.NotesScreen
-import co.typie.screen.oss_licenses.OssLicensesScreen
-import co.typie.screen.profile_settings.ProfileSettingsScreen
-import co.typie.screen.preset_settings.PresetSettingsScreen
-import co.typie.screen.security_settings.SecuritySettingsScreen
-import co.typie.screen.settings.SettingsScreen
-import co.typie.screen.social_accounts.SocialAccountsScreen
-import co.typie.screen.space.SpaceScreen
-import co.typie.screen.stats.StatsScreen
-import co.typie.screen.subscription.CancelPlanScreen
-import co.typie.screen.subscription.CurrentPlanScreen
-import co.typie.screen.subscription.EnrollPlanScreen
-import co.typie.screen.subscription.ReferralScreen
-import co.typie.screen.space_settings.SpaceSettingsScreen
-import co.typie.screen.trash.TrashScreen
-import co.typie.screen.update_email.UpdateEmailScreen
-import co.typie.screen.update_password.UpdatePasswordScreen
-import co.typie.screen.update_profile.UpdateProfileScreen
-import co.typie.screen.widget_settings.WidgetSettingsScreen
-import co.typie.screen.text_replacements.TextReplacementsScreen
+import co.typie.screen.settings.ai_settings.AiSettingsScreen
+import co.typie.screen.settings.delete_user.DeleteUserScreen
+import co.typie.screen.editor.editor.EditorScreen
+import co.typie.screen.settings.editor_settings.EditorSettingsScreen
+import co.typie.screen.settings.font_settings.FontSettingsScreen
+import co.typie.screen.space.folder.FolderScreen
+import co.typie.screen.home.home.HomeScreen
+import co.typie.screen.home.home_search.HomeSearchScreen
+import co.typie.screen.auth.login.LoginScreen
+import co.typie.screen.more.more.MoreScreen
+import co.typie.screen.space.notes.NotesScreen
+import co.typie.screen.settings.oss_licenses.OssLicensesScreen
+import co.typie.screen.settings.profile_settings.ProfileSettingsScreen
+import co.typie.screen.settings.preset_settings.PresetSettingsScreen
+import co.typie.screen.settings.security_settings.SecuritySettingsScreen
+import co.typie.screen.settings.settings.SettingsScreen
+import co.typie.screen.settings.social_accounts.SocialAccountsScreen
+import co.typie.screen.space.space.SpaceScreen
+import co.typie.screen.more.stats.StatsScreen
+import co.typie.screen.subscription.cancel_plan.CancelPlanScreen
+import co.typie.screen.subscription.current_plan.CurrentPlanScreen
+import co.typie.screen.subscription.enroll_plan.EnrollPlanScreen
+import co.typie.screen.subscription.referral.ReferralScreen
+import co.typie.screen.space.space_settings.SpaceSettingsScreen
+import co.typie.screen.space.trash.TrashScreen
+import co.typie.screen.settings.update_email.UpdateEmailScreen
+import co.typie.screen.settings.update_password.UpdatePasswordScreen
+import co.typie.screen.settings.update_profile.UpdateProfileScreen
+import co.typie.screen.settings.widget_settings.WidgetSettingsScreen
+import co.typie.screen.settings.text_replacements.TextReplacementsScreen
 
 @Composable
 fun MainRoutes(route: Route) {
@@ -63,7 +62,6 @@ fun MainRoutes(route: Route) {
     is Route.UpdatePassword -> UpdatePasswordScreen()
     is Route.SpaceSettings -> SpaceSettingsScreen()
     is Route.Trash -> TrashScreen(entityId = route.entityId)
-    is Route.Detail -> DetailScreen(id = route.id)
     is Route.Folder -> FolderScreen(entityId = route.entityId)
     is Route.Editor -> EditorScreen(slug = route.slug)
     else -> {}

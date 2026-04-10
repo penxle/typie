@@ -28,8 +28,8 @@ class NavigatorTest {
   @Test
   fun navigate() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Detail("1"))
-    assertEquals(Route.Detail("1"), nav.current)
+    navigateAndComplete(nav, Route.Folder("1"))
+    assertEquals(Route.Folder("1"), nav.current)
     assertEquals(Route.Home, nav.previous)
     assertTrue(nav.canPop)
     assertEquals(2, nav.stack.size)
@@ -38,7 +38,7 @@ class NavigatorTest {
   @Test
   fun pop() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Detail("1"))
+    navigateAndComplete(nav, Route.Folder("1"))
     popAndComplete(nav)
     assertEquals(Route.Home, nav.current)
     assertFalse(nav.canPop)
@@ -55,8 +55,8 @@ class NavigatorTest {
   fun popTo() = runTest {
     val nav = Navigator(Route.Home)
     navigateAndComplete(nav, Route.Space)
-    navigateAndComplete(nav, Route.Detail("1"))
-    navigateAndComplete(nav, Route.Detail("2"))
+    navigateAndComplete(nav, Route.Folder("1"))
+    navigateAndComplete(nav, Route.Folder("2"))
     nav.popTo(Route.Space)
     assertEquals(Route.Space, nav.current)
     assertEquals(2, nav.stack.size)
@@ -65,9 +65,9 @@ class NavigatorTest {
   @Test
   fun popToNotInStack() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Detail("1"))
+    navigateAndComplete(nav, Route.Folder("1"))
     nav.popTo(Route.Notes)
-    assertEquals(Route.Detail("1"), nav.current)
+    assertEquals(Route.Folder("1"), nav.current)
     assertEquals(2, nav.stack.size)
   }
 
@@ -75,7 +75,7 @@ class NavigatorTest {
   fun popToRoot() = runTest {
     val nav = Navigator(Route.Home)
     navigateAndComplete(nav, Route.Space)
-    navigateAndComplete(nav, Route.Detail("1"))
+    navigateAndComplete(nav, Route.Folder("1"))
     nav.popToRoot()
     assertEquals(Route.Home, nav.current)
     assertEquals(1, nav.stack.size)
@@ -102,25 +102,25 @@ class NavigatorTest {
   @Test
   fun popDismissesModalFirst() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Detail("1"))
+    navigateAndComplete(nav, Route.Folder("1"))
     nav.showModal {}
     popAndComplete(nav)
     assertEquals(0, nav.modals.size)
-    assertEquals(Route.Detail("1"), nav.current)
+    assertEquals(Route.Folder("1"), nav.current)
     assertEquals(2, nav.stack.size)
   }
 
   @Test
   fun lastOperationOnNavigate() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Detail("1"))
+    navigateAndComplete(nav, Route.Folder("1"))
     assertEquals(NavOperation.Push, nav.lastOperation)
   }
 
   @Test
   fun lastOperationOnPop() = runTest {
     val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Detail("1"))
+    navigateAndComplete(nav, Route.Folder("1"))
     popAndComplete(nav)
     assertEquals(NavOperation.Pop, nav.lastOperation)
   }

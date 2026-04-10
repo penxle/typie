@@ -1,7 +1,6 @@
 package co.typie.dev
 
 import co.typie.bootstrap.BootstrapDevScenario
-import co.typie.screen.subscription.SubscriptionDevScenario
 
 enum class DevToolsAccent {
   Muted,

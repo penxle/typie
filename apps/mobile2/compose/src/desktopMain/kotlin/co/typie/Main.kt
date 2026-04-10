@@ -23,7 +23,7 @@ import co.typie.dev.NetworkSimulator
 import co.typie.dev.createDevToolsWindow
 import co.typie.di.initKoin
 import co.typie.bootstrap.BootstrapDevSandbox
-import co.typie.screen.subscription.SubscriptionDevSandbox
+import co.typie.dev.SubscriptionDevSandbox
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.NativeLibrary

@@ -29,10 +29,11 @@ import co.typie.overlay.Toast
 import co.typie.overlay.ToastOverlay
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
-import co.typie.screen.app_state.MaintenanceScreen
-import co.typie.screen.app_state.OfflineScreen
-import co.typie.screen.splash.SplashScreen
-import co.typie.screen.app_state.UpdateRequiredScreen
+import co.typie.route.Route
+import co.typie.screen.system.maintenance.MaintenanceScreen
+import co.typie.screen.system.offline.OfflineScreen
+import co.typie.screen.system.splash.SplashScreen
+import co.typie.screen.system.update_required.UpdateRequiredScreen
 import co.typie.startup.AppStartupService
 import co.typie.ui.component.bottomsheet.BottomSheetHost
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
@@ -93,21 +94,25 @@ fun RootShell() {
             is RootShellDestination.Splash -> SplashScreen()
             is RootShellDestination.Main -> MainShell { route -> MainRoutes(route) }
             is RootShellDestination.Auth -> AuthShell { route -> AuthRoutes(route) }
-            is RootShellDestination.Offline -> OfflineScreen {
-              authService.retryAsync()
+            is RootShellDestination.System -> when (val route = destination.route) {
+              is Route.Offline -> OfflineScreen(
+                onRetry = { authService.retryAsync() },
+              )
+
+              is Route.Maintenance -> MaintenanceScreen(
+                title = route.title,
+                message = route.message,
+                until = route.until,
+              )
+
+              is Route.UpdateRequired -> UpdateRequiredScreen(
+                storeUrl = route.storeUrl,
+                currentVersion = route.currentVersion,
+                requiredVersion = route.requiredVersion,
+              )
+
+              else -> {}
             }
-
-            is RootShellDestination.Maintenance -> MaintenanceScreen(
-              title = destination.title,
-              message = destination.message,
-              until = destination.until,
-            )
-
-            is RootShellDestination.UpdateRequired -> UpdateRequiredScreen(
-              storeUrl = destination.storeUrl,
-              currentVersion = destination.currentVersion,
-              requiredVersion = destination.requiredVersion,
-            )
           }
         }
       }

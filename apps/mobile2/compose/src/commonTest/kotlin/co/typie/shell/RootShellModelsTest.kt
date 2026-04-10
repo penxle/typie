@@ -5,6 +5,7 @@ import co.typie.bootstrap.BootstrapState
 import co.typie.migration.LegacyMigrationRunResult
 import co.typie.migration.LegacyMigrationSourceState
 import co.typie.migration.LegacyMigrationStepResult
+import co.typie.route.Route
 import co.typie.startup.AppStartupState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -29,10 +30,12 @@ class RootShellModelsTest {
   @Test
   fun `resolveRootShellDestination prioritizes bootstrap blockers before auth destinations`() {
     assertEquals(
-      RootShellDestination.Maintenance(
-        title = "점검 중",
-        message = "잠시 후 다시 시도해주세요.",
-        until = null,
+      RootShellDestination.System(
+        Route.Maintenance(
+          title = "점검 중",
+          message = "잠시 후 다시 시도해주세요.",
+          until = null,
+        ),
       ),
       resolveRootShellDestination(
         startupState = AppStartupState.Ready(readyMigrationResult()),
@@ -45,7 +48,7 @@ class RootShellModelsTest {
       ),
     )
     assertEquals(
-      RootShellDestination.Offline,
+      RootShellDestination.System(Route.Offline),
       resolveRootShellDestination(
         startupState = AppStartupState.Ready(readyMigrationResult()),
         authState = AuthState.Offline,

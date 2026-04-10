@@ -32,7 +32,7 @@ import co.typie.ext.separated
 import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
-import co.typie.screen.home.resolveEntityIconAppearance
+import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Instant
