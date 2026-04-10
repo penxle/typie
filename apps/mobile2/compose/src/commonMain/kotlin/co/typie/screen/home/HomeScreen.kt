@@ -185,8 +185,11 @@ private fun SearchBar(
 
     Text(
       placeholder,
+      modifier = Modifier.weight(1f),
       style = AppTheme.typography.body,
       color = AppTheme.colors.textMuted,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
     )
   }
 }
