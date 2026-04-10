@@ -18,19 +18,23 @@ actual fun rememberFilePicker(
   return remember(selectionMode) {
     { mimeType: String ->
       val title = if (mimeType.startsWith("image/")) "이미지 선택" else "파일 선택"
-      val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD).apply {
-        if (mimeType.startsWith("image/")) {
-          setFilenameFilter { _, name ->
-            val lower = name.lowercase()
-            lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
-              lower.endsWith(".webp") || lower.endsWith(".heic")
+      val dialog =
+        FileDialog(null as Frame?, title, FileDialog.LOAD).apply {
+          if (mimeType.startsWith("image/")) {
+            setFilenameFilter { _, name ->
+              val lower = name.lowercase()
+              lower.endsWith(".png") ||
+                lower.endsWith(".jpg") ||
+                lower.endsWith(".jpeg") ||
+                lower.endsWith(".webp") ||
+                lower.endsWith(".heic")
+            }
           }
+          isMultipleMode = selectionMode == FilePickerSelectionMode.Multiple
+          isVisible = true
         }
-        isMultipleMode = selectionMode == FilePickerSelectionMode.Multiple
-        isVisible = true
-      }
-      val files = dialog.files
-        .map { file ->
+      val files =
+        dialog.files.map { file ->
           PlatformFile(
             bytes = file.readBytes(),
             filename = file.name,

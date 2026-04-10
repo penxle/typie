@@ -17,16 +17,15 @@ actual fun rememberFilePicker(
 ): (mimeType: String) -> Unit {
   val context = LocalContext.current
   val currentOnResult = rememberUpdatedState(onResult)
-  val singleLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.GetContent(),
-  ) { uri ->
-    currentOnResult.value(uri?.let { context.readPlatformFile(it) }?.let(::listOf) ?: emptyList())
-  }
-  val multipleLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.GetMultipleContents(),
-  ) { uris ->
-    currentOnResult.value(uris.mapNotNull(context::readPlatformFile))
-  }
+  val singleLauncher =
+    rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
+      currentOnResult.value(uri?.let { context.readPlatformFile(it) }?.let(::listOf) ?: emptyList())
+    }
+  val multipleLauncher =
+    rememberLauncherForActivityResult(contract = ActivityResultContracts.GetMultipleContents()) {
+      uris ->
+      currentOnResult.value(uris.mapNotNull(context::readPlatformFile))
+    }
 
   return remember(singleLauncher, multipleLauncher, selectionMode) {
     { mimeType: String ->
@@ -38,20 +37,14 @@ actual fun rememberFilePicker(
   }
 }
 
-private fun Context.readPlatformFile(
-  uri: Uri,
-): PlatformFile? {
+private fun Context.readPlatformFile(uri: Uri): PlatformFile? {
   val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
   val mimeType = contentResolver.getType(uri)
-  val filename = contentResolver.query(
-    uri,
-    arrayOf(OpenableColumns.DISPLAY_NAME),
-    null,
-    null,
-    null,
-  )?.use { cursor ->
-    if (cursor.moveToFirst()) cursor.getString(0) else null
-  }
+  val filename =
+    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+      cursor ->
+      if (cursor.moveToFirst()) cursor.getString(0) else null
+    }
 
   return PlatformFile(
     bytes = bytes,

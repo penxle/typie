@@ -11,7 +11,7 @@ internal fun createLegacyMigrationTestPrefs(): Prefs {
     KSafe(
       fileName = "legacy_migration_prefs_${Random.nextInt(1_000_000)}",
       memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT,
-    ),
+    )
   )
 }
 
@@ -20,6 +20,6 @@ internal fun createLegacyMigrationTestVault(): Vault {
     KSafe(
       fileName = "legacy_migration_vault_${Random.nextInt(1_000_000)}",
       memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT,
-    ),
+    )
   )
 }

@@ -10,11 +10,12 @@ class PopoverListTest {
 
   @Test
   fun hitTest_returnsIndex_whenInsideBounds() {
-    val bounds = mapOf(
-      0 to Rect(0f, 0f, 100f, 44f),
-      1 to Rect(0f, 44f, 100f, 88f),
-      2 to Rect(0f, 88f, 100f, 132f),
-    )
+    val bounds =
+      mapOf(
+        0 to Rect(0f, 0f, 100f, 44f),
+        1 to Rect(0f, 44f, 100f, 88f),
+        2 to Rect(0f, 88f, 100f, 132f),
+      )
     assertEquals(0, hitTestItems(Offset(50f, 22f), bounds))
     assertEquals(1, hitTestItems(Offset(50f, 66f), bounds))
     assertEquals(2, hitTestItems(Offset(50f, 110f), bounds))
@@ -22,10 +23,7 @@ class PopoverListTest {
 
   @Test
   fun hitTest_returnsNull_whenOutsideAllBounds() {
-    val bounds = mapOf(
-      0 to Rect(0f, 0f, 100f, 44f),
-      1 to Rect(0f, 44f, 100f, 88f),
-    )
+    val bounds = mapOf(0 to Rect(0f, 0f, 100f, 44f), 1 to Rect(0f, 44f, 100f, 88f))
     assertNull(hitTestItems(Offset(50f, 200f), bounds))
     assertNull(hitTestItems(Offset(150f, 22f), bounds))
   }

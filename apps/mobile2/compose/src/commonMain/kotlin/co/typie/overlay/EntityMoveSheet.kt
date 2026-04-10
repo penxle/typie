@@ -35,7 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.ui.component.CardDefaults
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.entity_transfer.EntityTransferSource
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -50,6 +50,7 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
+import co.typie.ui.component.CardDefaults
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.EntityListFolderRow
@@ -60,7 +61,6 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 private const val MOVE_DEPTH_LIMIT_MESSAGE = "폴더의 최대 깊이를 초과했어요"
 
@@ -73,10 +73,7 @@ private data class MoveBreadcrumbItem(
   val isCurrent: Boolean,
 )
 
-private data class MoveDestinationFolder(
-  val item: EntityListItem.Folder,
-  val depth: Int,
-)
+private data class MoveDestinationFolder(val item: EntityListItem.Folder, val depth: Int)
 
 private data class MoveDestinationContent(
   val destinationEntityId: String?,
@@ -89,28 +86,25 @@ private data class MoveDestinationContent(
 )
 
 @Composable
-fun BottomSheetScope<Unit>.EntityMoveSheet(
-  source: EntityTransferSource,
-  onMoved: () -> Unit = {},
-) {
+fun BottomSheetScope<Unit>.EntityMoveSheet(source: EntityTransferSource, onMoved: () -> Unit = {}) {
   val toast = LocalToast.current
   val model = viewModel(key = "entity-move:${source.id}") { EntityMoveSheetViewModel() }
   var isMoving by remember(source.id) { mutableStateOf(false) }
   var displayedContent by remember(source.id) { mutableStateOf<MoveDestinationContent?>(null) }
-  var navigationDirection by remember(source.id) { mutableStateOf(MoveDestinationNavigationDirection.None) }
+  var navigationDirection by
+    remember(source.id) { mutableStateOf(MoveDestinationNavigationDirection.None) }
 
-  LaunchedEffect(source.id) {
-    model.showRoot()
-  }
+  LaunchedEffect(source.id) { model.showRoot() }
 
-  val queryState = if (model.destinationEntityId == null) model.rootQuery.state else model.entityQuery.state
-  val destinationContent = when {
-    model.destinationEntityId == null ->
-      (model.rootQuery.state as? QueryState.Success)?.data?.site?.toDestinationContent()
+  val queryState =
+    if (model.destinationEntityId == null) model.rootQuery.state else model.entityQuery.state
+  val destinationContent =
+    when {
+      model.destinationEntityId == null ->
+        (model.rootQuery.state as? QueryState.Success)?.data?.site?.toDestinationContent()
 
-    else ->
-      (model.entityQuery.state as? QueryState.Success)?.data?.entity?.toDestinationContent()
-  }
+      else -> (model.entityQuery.state as? QueryState.Success)?.data?.entity?.toDestinationContent()
+    }
   LaunchedEffect(destinationContent) {
     if (destinationContent != null) {
       displayedContent = destinationContent
@@ -119,7 +113,8 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
 
   val isLoadingDestination = queryState is QueryState.Loading
   val canSubmit = destinationContent != null && queryState is QueryState.Success && !isMoving
-  val isMoveAllowed = destinationContent?.let { source.canTransferIntoDestinationDepth(it.destinationDepth) } == true
+  val isMoveAllowed =
+    destinationContent?.let { source.canTransferIntoDestinationDepth(it.destinationDepth) } == true
 
   suspend fun submit() {
     val resolvedDestination = destinationContent ?: return
@@ -131,12 +126,13 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
     }
 
     isMoving = true
-    model.moveEntity(
-      source = source,
-      parentEntityId = resolvedDestination.destinationEntityId,
-      lowerOrder = resolvedDestination.lastChildOrder,
-      upperOrder = null,
-    )
+    model
+      .moveEntity(
+        source = source,
+        parentEntityId = resolvedDestination.destinationEntityId,
+        lowerOrder = resolvedDestination.lastChildOrder,
+        upperOrder = null,
+      )
       .withDefaultExceptionHandler(toast)
       .onOk {
         onMoved()
@@ -149,11 +145,12 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
     val currentContent = displayedContent ?: destinationContent ?: return
     if (isLoadingDestination || isMoving) return
 
-    navigationDirection = resolveMoveDestinationNavigationDirection(
-      currentDestinationId = currentContent.destinationEntityId,
-      nextDestinationId = nextDestinationId,
-      childDestinationIds = currentContent.folders.mapTo(mutableSetOf()) { it.item.id },
-    )
+    navigationDirection =
+      resolveMoveDestinationNavigationDirection(
+        currentDestinationId = currentContent.destinationEntityId,
+        nextDestinationId = nextDestinationId,
+        childDestinationIds = currentContent.folders.mapTo(mutableSetOf()) { it.item.id },
+      )
     model.showDestination(nextDestinationId)
   }
 
@@ -163,10 +160,7 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
     fillAvailableHeight = true,
     scrollContent = false,
     footer = {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(
           text = "취소",
           modifier = Modifier.weight(1f),
@@ -213,24 +207,18 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
             onNavigate = ::navigateTo,
           )
         } else {
-          MoveSheetStatus(
-            message = "폴더를 불러오는 중이에요",
-          )
+          MoveSheetStatus(message = "폴더를 불러오는 중이에요")
         }
       }
 
       is QueryState.Error -> {
-        MoveSheetError(
-          onRetry = { model.refetch() },
-        )
+        MoveSheetError(onRetry = { model.refetch() })
       }
 
       is QueryState.Success -> {
         if (content != null) {
           MoveDestinationAnimatedBody(
-            modifier = Modifier
-              .fillMaxWidth()
-              .weight(1f),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             source = source,
             content = content,
             navigationDirection = navigationDirection,
@@ -238,9 +226,7 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
             onNavigate = ::navigateTo,
           )
         } else {
-          MoveSheetStatus(
-            message = "폴더를 불러오는 중이에요",
-          )
+          MoveSheetStatus(message = "폴더를 불러오는 중이에요")
         }
       }
     }
@@ -267,8 +253,7 @@ private fun MoveDestinationAnimatedBody(
         MoveDestinationNavigationDirection.Backward ->
           slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
 
-        MoveDestinationNavigationDirection.None ->
-          fadeIn() togetherWith fadeOut()
+        MoveDestinationNavigationDirection.None -> fadeIn() togetherWith fadeOut()
       }
     },
   ) { currentContent ->
@@ -288,32 +273,18 @@ private fun MoveDestinationBody(
   navigationEnabled: Boolean,
   onNavigate: (String?) -> Unit,
 ) {
-  CardSurface(
-    modifier = Modifier.fillMaxSize(),
-    color = AppTheme.colors.surfaceSunken,
-  ) {
+  CardSurface(modifier = Modifier.fillMaxSize(), color = AppTheme.colors.surfaceSunken) {
     val scrollState = rememberScrollState()
-    val showTopFade by remember(scrollState) {
-      derivedStateOf { scrollState.value > 0 }
-    }
-    val showBottomFade by remember(scrollState) {
-      derivedStateOf { scrollState.value < scrollState.maxValue }
-    }
-    val topFadeAlpha by animateFloatAsState(
-      targetValue = if (showTopFade) 1f else 0f,
-      animationSpec = tween(250),
-    )
-    val bottomFadeAlpha by animateFloatAsState(
-      targetValue = if (showBottomFade) 1f else 0f,
-      animationSpec = tween(250),
-    )
+    val showTopFade by remember(scrollState) { derivedStateOf { scrollState.value > 0 } }
+    val showBottomFade by
+      remember(scrollState) { derivedStateOf { scrollState.value < scrollState.maxValue } }
+    val topFadeAlpha by
+      animateFloatAsState(targetValue = if (showTopFade) 1f else 0f, animationSpec = tween(250))
+    val bottomFadeAlpha by
+      animateFloatAsState(targetValue = if (showBottomFade) 1f else 0f, animationSpec = tween(250))
 
     Box(modifier = Modifier.fillMaxSize()) {
-      Column(
-        modifier = Modifier
-          .fillMaxSize()
-          .verticalScroll(scrollState),
-      ) {
+      Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
         var hasRow = false
 
         if (content.canNavigateUp) {
@@ -331,9 +302,10 @@ private fun MoveDestinationBody(
 
           EntityListFolderRow(
             item = folder.item,
-            enabled = navigationEnabled &&
-              folder.item.id != source.id &&
-              source.canTransferIntoDestinationDepth(folder.depth),
+            enabled =
+              navigationEnabled &&
+                folder.item.id != source.id &&
+                source.canTransferIntoDestinationDepth(folder.depth),
             onClick = { onNavigate(folder.item.id) },
           )
           hasRow = true
@@ -344,54 +316,49 @@ private fun MoveDestinationBody(
             CardDivider(color = AppTheme.colors.borderDefault)
           }
 
-          MoveSheetStatus(
-            message = "하위 폴더가 없어요",
-          )
+          MoveSheetStatus(message = "하위 폴더가 없어요")
         }
       }
 
-      Box(
-        modifier = Modifier.matchParentSize(),
-      ) {
+      Box(modifier = Modifier.matchParentSize()) {
         Box(
-          modifier = Modifier
-            .align(Alignment.TopCenter)
-            .fillMaxWidth()
-            .height(MoveListFadeHeight),
+          modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(MoveListFadeHeight)
         ) {
           Box(
-            modifier = Modifier
-              .matchParentSize()
-              .graphicsLayer { alpha = topFadeAlpha }
-              .background(
-                brush = Brush.verticalGradient(
-                  colorStops = arrayOf(
-                    0.3f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
-                    1f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
-                  ),
-                ),
-              ),
+            modifier =
+              Modifier.matchParentSize()
+                .graphicsLayer { alpha = topFadeAlpha }
+                .background(
+                  brush =
+                    Brush.verticalGradient(
+                      colorStops =
+                        arrayOf(
+                          0.3f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
+                          1f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
+                        )
+                    )
+                )
           )
         }
 
         Box(
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .height(MoveListFadeHeight),
+          modifier =
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(MoveListFadeHeight)
         ) {
           Box(
-            modifier = Modifier
-              .matchParentSize()
-              .graphicsLayer { alpha = bottomFadeAlpha }
-              .background(
-                brush = Brush.verticalGradient(
-                  colorStops = arrayOf(
-                    0f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
-                    0.7f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
-                  ),
-                ),
-              ),
+            modifier =
+              Modifier.matchParentSize()
+                .graphicsLayer { alpha = bottomFadeAlpha }
+                .background(
+                  brush =
+                    Brush.verticalGradient(
+                      colorStops =
+                        arrayOf(
+                          0f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
+                          0.7f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
+                        )
+                    )
+                )
           )
         }
       }
@@ -407,20 +374,13 @@ private fun MoveBreadcrumbs(
   onNavigate: (String?) -> Unit,
 ) {
   val scrollState = rememberScrollState()
-  val showLeftFade by remember(scrollState) {
-    derivedStateOf { scrollState.value > 0 }
-  }
-  val showRightFade by remember(scrollState) {
-    derivedStateOf { scrollState.value < scrollState.maxValue }
-  }
-  val leftFadeAlpha by animateFloatAsState(
-    targetValue = if (showLeftFade) 1f else 0f,
-    animationSpec = tween(250),
-  )
-  val rightFadeAlpha by animateFloatAsState(
-    targetValue = if (showRightFade) 1f else 0f,
-    animationSpec = tween(250),
-  )
+  val showLeftFade by remember(scrollState) { derivedStateOf { scrollState.value > 0 } }
+  val showRightFade by
+    remember(scrollState) { derivedStateOf { scrollState.value < scrollState.maxValue } }
+  val leftFadeAlpha by
+    animateFloatAsState(targetValue = if (showLeftFade) 1f else 0f, animationSpec = tween(250))
+  val rightFadeAlpha by
+    animateFloatAsState(targetValue = if (showRightFade) 1f else 0f, animationSpec = tween(250))
 
   LaunchedEffect(items, scrollState.maxValue) {
     if (scrollState.maxValue > 0 && scrollState.value != scrollState.maxValue) {
@@ -428,9 +388,7 @@ private fun MoveBreadcrumbs(
     }
   }
 
-  Box(
-    modifier = Modifier.fillMaxWidth(),
-  ) {
+  Box(modifier = Modifier.fillMaxWidth()) {
     Row(
       modifier = Modifier.horizontalScroll(scrollState),
       horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -445,55 +403,47 @@ private fun MoveBreadcrumbs(
           )
         }
 
-        MoveBreadcrumbChip(
-          item = item,
-          enabled = enabled,
-          onClick = { onNavigate(item.entityId) },
-        )
+        MoveBreadcrumbChip(item = item, enabled = enabled, onClick = { onNavigate(item.entityId) })
       }
     }
 
-    Box(
-      modifier = Modifier.matchParentSize(),
-    ) {
+    Box(modifier = Modifier.matchParentSize()) {
       Box(
-        modifier = Modifier
-          .align(Alignment.CenterStart)
-          .fillMaxHeight()
-          .width(BreadcrumbFadeWidth),
+        modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(BreadcrumbFadeWidth)
       ) {
         Box(
-          modifier = Modifier
-            .matchParentSize()
-            .graphicsLayer { alpha = leftFadeAlpha }
-            .background(
-              brush = Brush.horizontalGradient(
-                colorStops = arrayOf(
-                  0.3f to backgroundColor.copy(alpha = 0.92f),
-                  1f to backgroundColor.copy(alpha = 0f),
-                ),
-              ),
-            ),
+          modifier =
+            Modifier.matchParentSize()
+              .graphicsLayer { alpha = leftFadeAlpha }
+              .background(
+                brush =
+                  Brush.horizontalGradient(
+                    colorStops =
+                      arrayOf(
+                        0.3f to backgroundColor.copy(alpha = 0.92f),
+                        1f to backgroundColor.copy(alpha = 0f),
+                      )
+                  )
+              )
         )
       }
       Box(
-        modifier = Modifier
-          .align(Alignment.CenterEnd)
-          .fillMaxHeight()
-          .width(BreadcrumbFadeWidth),
+        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(BreadcrumbFadeWidth)
       ) {
         Box(
-          modifier = Modifier
-            .matchParentSize()
-            .graphicsLayer { alpha = rightFadeAlpha }
-            .background(
-              brush = Brush.horizontalGradient(
-                colorStops = arrayOf(
-                  0f to backgroundColor.copy(alpha = 0f),
-                  0.7f to backgroundColor.copy(alpha = 0.92f),
-                ),
-              ),
-            ),
+          modifier =
+            Modifier.matchParentSize()
+              .graphicsLayer { alpha = rightFadeAlpha }
+              .background(
+                brush =
+                  Brush.horizontalGradient(
+                    colorStops =
+                      arrayOf(
+                        0f to backgroundColor.copy(alpha = 0f),
+                        0.7f to backgroundColor.copy(alpha = 0.92f),
+                      )
+                  )
+              )
         )
       }
     }
@@ -522,9 +472,7 @@ private fun MoveBreadcrumbChip(
   InteractionScope {
     Text(
       text = item.label,
-      modifier = Modifier
-        .clickable(onClick = onClick)
-        .pressScale(0.96f),
+      modifier = Modifier.clickable(onClick = onClick).pressScale(0.96f),
       style = AppTheme.typography.action,
       color = color,
       maxLines = 1,
@@ -534,18 +482,15 @@ private fun MoveBreadcrumbChip(
 }
 
 @Composable
-private fun MoveNavigateUpRow(
-  enabled: Boolean,
-  onClick: suspend () -> Unit,
-) {
+private fun MoveNavigateUpRow(enabled: Boolean, onClick: suspend () -> Unit) {
   InteractionScope {
     Box(
-      modifier = Modifier
-        .fillMaxWidth()
-        .alpha(if (enabled) 1f else 0.48f)
-        .then(if (enabled) Modifier.clickable(onClick) else Modifier)
-        .then(if (enabled) Modifier.pressScale() else Modifier)
-        .padding(CardDefaults.RowPadding),
+      modifier =
+        Modifier.fillMaxWidth()
+          .alpha(if (enabled) 1f else 0.48f)
+          .then(if (enabled) Modifier.clickable(onClick) else Modifier)
+          .then(if (enabled) Modifier.pressScale() else Modifier)
+          .padding(CardDefaults.RowPadding)
     ) {
       Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -568,9 +513,7 @@ private fun MoveNavigateUpRow(
 
       Icon(
         icon = Lucide.ChevronRight,
-        modifier = Modifier
-          .align(Alignment.CenterEnd)
-          .size(18.dp),
+        modifier = Modifier.align(Alignment.CenterEnd).size(18.dp),
         tint = AppTheme.colors.textTertiary,
       )
     }
@@ -578,37 +521,17 @@ private fun MoveNavigateUpRow(
 }
 
 @Composable
-private fun MoveSheetStatus(
-  message: String,
-) {
-  Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .height(120.dp),
-    contentAlignment = Alignment.Center,
-  ) {
-    Text(
-      text = message,
-      style = AppTheme.typography.action,
-      color = AppTheme.colors.textTertiary,
-    )
+private fun MoveSheetStatus(message: String) {
+  Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+    Text(text = message, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
   }
 }
 
 @Composable
-private fun MoveSheetError(
-  onRetry: suspend () -> Unit,
-) {
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
+private fun MoveSheetError(onRetry: suspend () -> Unit) {
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     MoveSheetStatus(message = "폴더를 불러오지 못했어요")
-    Button(
-      text = "다시 시도",
-      variant = ButtonVariant.Secondary,
-      onClick = onRetry,
-    )
+    Button(text = "다시 시도", variant = ButtonVariant.Secondary, onClick = onRetry)
   }
 }
 
@@ -616,13 +539,7 @@ private fun EntityMoveSheet_Root_Query.Site.toDestinationContent(): MoveDestinat
   return MoveDestinationContent(
     destinationEntityId = null,
     destinationDepth = -1,
-    breadcrumbs = listOf(
-      MoveBreadcrumbItem(
-        entityId = null,
-        label = name,
-        isCurrent = true,
-      ),
-    ),
+    breadcrumbs = listOf(MoveBreadcrumbItem(entityId = null, label = name, isCurrent = true)),
     canNavigateUp = false,
     parentDestinationId = null,
     folders = entities.mapNotNull { it.toMoveDestinationFolder() },
@@ -636,32 +553,15 @@ private fun EntityMoveSheet_Folder_Query.Entity.toDestinationContent(): MoveDest
   return MoveDestinationContent(
     destinationEntityId = id,
     destinationDepth = depth,
-    breadcrumbs = buildList {
-      add(
-        MoveBreadcrumbItem(
-          entityId = null,
-          label = site.name,
-          isCurrent = false,
-        ),
-      )
-      ancestors.forEach { ancestor ->
-        val name = ancestor.node.onFolder?.name ?: return@forEach
-        add(
-          MoveBreadcrumbItem(
-            entityId = ancestor.id,
-            label = name,
-            isCurrent = false,
-          ),
-        )
-      }
-      add(
-        MoveBreadcrumbItem(
-          entityId = id,
-          label = currentName,
-          isCurrent = true,
-        ),
-      )
-    },
+    breadcrumbs =
+      buildList {
+        add(MoveBreadcrumbItem(entityId = null, label = site.name, isCurrent = false))
+        ancestors.forEach { ancestor ->
+          val name = ancestor.node.onFolder?.name ?: return@forEach
+          add(MoveBreadcrumbItem(entityId = ancestor.id, label = name, isCurrent = false))
+        }
+        add(MoveBreadcrumbItem(entityId = id, label = currentName, isCurrent = true))
+      },
     canNavigateUp = true,
     parentDestinationId = ancestors.lastOrNull()?.id,
     folders = children.mapNotNull { it.toMoveDestinationFolder() },
@@ -672,15 +572,16 @@ private fun EntityMoveSheet_Folder_Query.Entity.toDestinationContent(): MoveDest
 private fun EntityMoveSheet_Root_Query.Entity.toMoveDestinationFolder(): MoveDestinationFolder? {
   val folder = node.onFolder ?: return null
   return MoveDestinationFolder(
-    item = EntityListItem.Folder(
-      id = id,
-      folderId = folder.id,
-      iconName = icon,
-      iconColor = iconColor,
-      name = folder.name,
-      folderCount = folder.folderCount,
-      documentCount = folder.documentCount,
-    ),
+    item =
+      EntityListItem.Folder(
+        id = id,
+        folderId = folder.id,
+        iconName = icon,
+        iconColor = iconColor,
+        name = folder.name,
+        folderCount = folder.folderCount,
+        documentCount = folder.documentCount,
+      ),
     depth = depth,
   )
 }
@@ -688,15 +589,16 @@ private fun EntityMoveSheet_Root_Query.Entity.toMoveDestinationFolder(): MoveDes
 private fun EntityMoveSheet_Folder_Query.Child.toMoveDestinationFolder(): MoveDestinationFolder? {
   val folder = node.onFolder ?: return null
   return MoveDestinationFolder(
-    item = EntityListItem.Folder(
-      id = id,
-      folderId = folder.id,
-      iconName = icon,
-      iconColor = iconColor,
-      name = folder.name,
-      folderCount = folder.folderCount,
-      documentCount = folder.documentCount,
-    ),
+    item =
+      EntityListItem.Folder(
+        id = id,
+        folderId = folder.id,
+        iconName = icon,
+        iconColor = iconColor,
+        name = folder.name,
+        folderCount = folder.folderCount,
+        documentCount = folder.documentCount,
+      ),
     depth = depth,
   )
 }

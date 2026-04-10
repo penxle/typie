@@ -18,11 +18,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImagePainter
-import coil3.compose.rememberAsyncImagePainter
 import co.typie.Konfig
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.utils.toHexRgbString
+import coil3.compose.AsyncImagePainter
+import coil3.compose.rememberAsyncImagePainter
 import io.ktor.http.URLBuilder
 import io.ktor.http.appendPathSegments
 
@@ -36,11 +36,12 @@ fun FontSpecimen(
   fallbackTexts: List<String> = emptyList(),
   contentAlignment: Alignment = Alignment.CenterStart,
 ) {
-  val fallbackStyle = if (weight != null) {
-    style.copy(fontWeight = FontWeight(weight.coerceIn(1, 1000)))
-  } else {
-    style
-  }
+  val fallbackStyle =
+    if (weight != null) {
+      style.copy(fontWeight = FontWeight(weight.coerceIn(1, 1000)))
+    } else {
+      style
+    }
 
   val fallback: @Composable () -> Unit = {
     Text(
@@ -53,46 +54,36 @@ fun FontSpecimen(
   }
 
   if (fontId == null) {
-    Box(
-      modifier = modifier,
-      contentAlignment = contentAlignment,
-    ) {
-      fallback()
-    }
+    Box(modifier = modifier, contentAlignment = contentAlignment) { fallback() }
     return
   }
 
   val specimenHeight = with(LocalDensity.current) { style.fontSize.toDp() } + 4.dp
-  val resolvedColor = if (style.color == Color.Unspecified) AppTheme.colors.textPrimary else style.color
-  val specimenUrl = remember(fontId, text, fallbackTexts, resolvedColor) {
-    fontSpecimenUrl(
-      fontId = fontId,
-      text = text,
-      fallbackTexts = fallbackTexts,
-      colorHex = resolvedColor.toHexRgbString(),
-    )
-  }
+  val resolvedColor =
+    if (style.color == Color.Unspecified) AppTheme.colors.textPrimary else style.color
+  val specimenUrl =
+    remember(fontId, text, fallbackTexts, resolvedColor) {
+      fontSpecimenUrl(
+        fontId = fontId,
+        text = text,
+        fallbackTexts = fallbackTexts,
+        colorHex = resolvedColor.toHexRgbString(),
+      )
+    }
   val painter = rememberAsyncImagePainter(model = specimenUrl)
   val painterState by painter.state.collectAsState()
 
-  Box(
-    modifier = modifier.heightIn(min = specimenHeight),
-    contentAlignment = contentAlignment,
-  ) {
+  Box(modifier = modifier.heightIn(min = specimenHeight), contentAlignment = contentAlignment) {
     if (painterState is AsyncImagePainter.State.Success) {
       Image(
         painter = painter,
         contentDescription = null,
         contentScale = ContentScale.Fit,
-        modifier = Modifier
-          .height(specimenHeight)
-          .wrapContentWidth(Alignment.Start),
+        modifier = Modifier.height(specimenHeight).wrapContentWidth(Alignment.Start),
       )
     } else {
       Box(
-        modifier = Modifier
-          .height(specimenHeight)
-          .wrapContentWidth(Alignment.Start),
+        modifier = Modifier.height(specimenHeight).wrapContentWidth(Alignment.Start),
         contentAlignment = Alignment.CenterStart,
       ) {
         fallback()
@@ -101,14 +92,8 @@ fun FontSpecimen(
   }
 }
 
-internal fun familySpecimenFallbacks(
-  displayName: String,
-  familyName: String,
-): List<String> {
-  return chooseDistinctFallbackTexts(
-    primaryText = displayName,
-    candidates = listOf(familyName),
-  )
+internal fun familySpecimenFallbacks(displayName: String, familyName: String): List<String> {
+  return chooseDistinctFallbackTexts(primaryText = displayName, candidates = listOf(familyName))
 }
 
 internal fun weightSpecimenFallbacks(
@@ -148,17 +133,15 @@ internal fun fontSpecimenUrl(
   fallbackTexts: List<String> = emptyList(),
   colorHex: String? = null,
 ): String {
-  return URLBuilder(Konfig.API_URL).apply {
-    appendPathSegments("font", fontId, "specimen")
-    parameters.append("text", text)
-    chooseDistinctFallbackTexts(
-      primaryText = text,
-      candidates = fallbackTexts,
-    ).forEach { fallbackText ->
-      parameters.append("fallbacks", fallbackText)
+  return URLBuilder(Konfig.API_URL)
+    .apply {
+      appendPathSegments("font", fontId, "specimen")
+      parameters.append("text", text)
+      chooseDistinctFallbackTexts(primaryText = text, candidates = fallbackTexts).forEach {
+        fallbackText ->
+        parameters.append("fallbacks", fallbackText)
+      }
+      colorHex?.takeIf { it.isNotBlank() }?.let { parameters.append("color", it) }
     }
-    colorHex?.takeIf { it.isNotBlank() }?.let {
-      parameters.append("color", it)
-    }
-  }.buildString()
+    .buildString()
 }

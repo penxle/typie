@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.form.FormState
 import co.typie.form.email
+import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
 import co.typie.graphql.UpdateEmailScreen_Query
@@ -18,21 +19,21 @@ import co.typie.graphql.text
 import co.typie.graphql.type.SendEmailUpdateEmailInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
-import co.typie.graphql.Apollo
 import co.typie.result.loading
-import co.typie.result.result
 import kotlinx.coroutines.CoroutineScope
 
 sealed interface UpdateEmailError {
   data object EmailAlreadyExists : UpdateEmailError
+
   data class Unknown(val code: String) : UpdateEmailError
 }
 
 class UpdateEmailForm(scope: CoroutineScope) : FormState(scope) {
-  val email = field("") {
-    required("이메일 주소를 입력해주세요.")
-    email("유효한 이메일 주소를 입력해주세요.")
-  }
+  val email =
+    field("") {
+      required("이메일 주소를 입력해주세요.")
+      email("유효한 이메일 주소를 입력해주세요.")
+    }
 }
 
 class UpdateEmailScreenState(scope: CoroutineScope) {
@@ -44,10 +45,10 @@ class UpdateEmailViewModel : ViewModel() {
   var isSubmitting by mutableStateOf(false)
     private set
 
-  val query = Apollo.watchQuery(
-    scope = viewModelScope,
-    placeholderData = placeholderData(),
-  ) { UpdateEmailScreen_Query() }
+  val query =
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
+      UpdateEmailScreen_Query()
+    }
 
   suspend fun submit(): Result<Unit, UpdateEmailError> {
     if (!state.form.validate()) return Result.Ok(Unit)
@@ -56,10 +57,8 @@ class UpdateEmailViewModel : ViewModel() {
       try {
         Apollo.executeMutation(
           UpdateEmailScreen_SendEmailUpdateEmail_Mutation(
-            input = SendEmailUpdateEmailInput(
-              email = state.form.email.value.trim(),
-            ),
-          ),
+            input = SendEmailUpdateEmailInput(email = state.form.email.value.trim())
+          )
         )
       } catch (e: TypieError) {
         when (e.code) {
@@ -74,8 +73,5 @@ class UpdateEmailViewModel : ViewModel() {
   }
 }
 
-private fun placeholderData() = UpdateEmailScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    email = text(12..20)
-  }
-}
+private fun placeholderData() =
+  UpdateEmailScreen_Query.Data(PlaceholderResolver) { me = buildUser { email = text(12..20) } }

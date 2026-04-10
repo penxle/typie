@@ -1,16 +1,16 @@
 package co.typie.ui.state
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 
 class AsyncActionTest {
   @Test
@@ -18,9 +18,7 @@ class AsyncActionTest {
     val action = AsyncAction(this)
     val gate = CompletableDeferred<Unit>()
 
-    action.launch {
-      gate.await()
-    }
+    action.launch { gate.await() }
 
     runCurrent()
 
@@ -44,9 +42,7 @@ class AsyncActionTest {
     }
     runCurrent()
 
-    action.launch {
-      runs += 1
-    }
+    action.launch { runs += 1 }
     runCurrent()
 
     assertEquals(1, runs)
@@ -63,11 +59,7 @@ class AsyncActionTest {
     val action = AsyncAction(this)
     var failure: Exception? = null
 
-    action.launch(
-      onFailure = { failure = it },
-    ) {
-      error("failed")
-    }
+    action.launch(onFailure = { failure = it }) { error("failed") }
 
     advanceUntilIdle()
 
@@ -80,11 +72,7 @@ class AsyncActionTest {
     val action = AsyncAction(this)
     var failure: Exception? = null
 
-    action.launch(
-      onFailure = { failure = it },
-    ) {
-      throw CancellationException("cancelled")
-    }
+    action.launch(onFailure = { failure = it }) { throw CancellationException("cancelled") }
 
     advanceUntilIdle()
 

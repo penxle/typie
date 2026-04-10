@@ -1,11 +1,11 @@
 package co.typie.ui.component.sheet
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -39,13 +38,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.pressScale
-import co.typie.ext.verticalScroll
 import co.typie.ext.ime
+import co.typie.ext.pressScale
 import co.typie.ext.safeDrawing
+import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -74,47 +72,46 @@ fun SheetLayout(
   val scrollState = rememberScrollState()
   val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
   val safeBottom = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
-  val resolvedInset = resolveSheetBottomInset(
-    policy = bodyInsetPolicy,
-    imeBottom = imeBottom,
-    safeBottom = safeBottom,
-  )
+  val resolvedInset =
+    resolveSheetBottomInset(
+      policy = bodyInsetPolicy,
+      imeBottom = imeBottom,
+      safeBottom = safeBottom,
+    )
 
   Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
-      .padding(bottom = resolvedInset.containerBottom),
+    modifier =
+      modifier
+        .fillMaxWidth()
+        .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
+        .padding(bottom = resolvedInset.containerBottom),
     verticalArrangement = Arrangement.spacedBy(verticalSpacing),
   ) {
     if (header != null) {
       Column(
-        modifier = Modifier
-          .sheetDragRegion()
-          .fillMaxWidth()
-          .padding(padding.header),
+        modifier = Modifier.sheetDragRegion().fillMaxWidth().padding(padding.header),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = header,
       )
     }
 
     Box(
-      modifier = Modifier
-        .fillMaxWidth()
-        .weight(1f, fill = fillHeight)
-        .then(if (bodyScroll) Modifier.verticalScroll(scrollState) else Modifier)
-        .padding(padding.body),
+      modifier =
+        Modifier.fillMaxWidth()
+          .weight(1f, fill = fillHeight)
+          .then(if (bodyScroll) Modifier.verticalScroll(scrollState) else Modifier)
+          .padding(padding.body)
     ) {
       Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .then(
-            if (fillHeight && !bodyScroll) {
-              Modifier.fillMaxHeight()
-            } else {
-              Modifier
-            },
-          ),
+        modifier =
+          Modifier.fillMaxWidth()
+            .then(
+              if (fillHeight && !bodyScroll) {
+                Modifier.fillMaxHeight()
+              } else {
+                Modifier
+              }
+            ),
         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
       ) {
         body()
@@ -126,9 +123,7 @@ fun SheetLayout(
 
     if (footer != null) {
       Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(padding.footer),
+        modifier = Modifier.fillMaxWidth().padding(padding.footer),
         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
         content = footer,
       )
@@ -137,36 +132,18 @@ fun SheetLayout(
 }
 
 @Composable
-fun SheetHeader(
-  modifier: Modifier = Modifier,
-  content: @Composable ColumnScope.() -> Unit,
-) {
-  Column(
-    modifier = modifier.fillMaxWidth(),
-    content = content,
-  )
+fun SheetHeader(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+  Column(modifier = modifier.fillMaxWidth(), content = content)
 }
 
 @Composable
-fun SheetBody(
-  modifier: Modifier = Modifier,
-  content: @Composable ColumnScope.() -> Unit,
-) {
-  Column(
-    modifier = modifier.fillMaxWidth(),
-    content = content,
-  )
+fun SheetBody(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+  Column(modifier = modifier.fillMaxWidth(), content = content)
 }
 
 @Composable
-fun SheetFooter(
-  modifier: Modifier = Modifier,
-  content: @Composable ColumnScope.() -> Unit,
-) {
-  Column(
-    modifier = modifier.fillMaxWidth(),
-    content = content,
-  )
+fun SheetFooter(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+  Column(modifier = modifier.fillMaxWidth(), content = content)
 }
 
 @Composable
@@ -175,11 +152,7 @@ fun TitleHeader(
   modifier: Modifier = Modifier,
   titleStyle: TextStyle = AppTheme.typography.title.copy(textAlign = TextAlign.Center),
 ) {
-  ActionHeader(
-    title = title,
-    modifier = modifier,
-    titleStyle = titleStyle,
-  )
+  ActionHeader(title = title, modifier = modifier, titleStyle = titleStyle)
 }
 
 @Composable
@@ -194,18 +167,14 @@ fun ActionHeader(
   val trailingInset = if (trailing != null) TopBarDefaults.SlotWidth + 12.dp else 0.dp
   val titleInset = maxOf(leadingInset, trailingInset)
 
-  Box(
-    modifier = modifier
-      .fillMaxWidth()
-      .height(TopBarDefaults.SlotWidth),
-  ) {
+  Box(modifier = modifier.fillMaxWidth().height(TopBarDefaults.SlotWidth)) {
     Text(
       text = title,
       style = titleStyle,
-      modifier = Modifier
-        .align(Alignment.Center)
-        .fillMaxWidth()
-        .padding(start = titleInset, end = titleInset),
+      modifier =
+        Modifier.align(Alignment.Center)
+          .fillMaxWidth()
+          .padding(start = titleInset, end = titleInset),
       overflow = TextOverflow.Ellipsis,
       maxLines = 1,
       color = AppTheme.colors.textPrimary,
@@ -252,14 +221,15 @@ fun HeaderActionButton(
 
   InteractionScope {
     Box(
-      modifier = modifier
-        .size(TopBarDefaults.ButtonSize)
-        .alpha(alpha)
-        .then(shadowModifier)
-        .background(resolvedBackground, TopBarDefaults.ButtonShape)
-        .border(1.dp, resolvedBorderColor, TopBarDefaults.ButtonShape)
-        .clickable(enabled = enabled && !loading, onClick = onClick)
-        .pressScale(0.94f),
+      modifier =
+        modifier
+          .size(TopBarDefaults.ButtonSize)
+          .alpha(alpha)
+          .then(shadowModifier)
+          .background(resolvedBackground, TopBarDefaults.ButtonShape)
+          .border(1.dp, resolvedBorderColor, TopBarDefaults.ButtonShape)
+          .clickable(enabled = enabled && !loading, onClick = onClick)
+          .pressScale(0.94f),
       contentAlignment = Alignment.Center,
     ) {
       if (loading) {
@@ -289,37 +259,32 @@ fun HeaderTextAction(
 
   InteractionScope {
     Box(
-      modifier = modifier
-        .defaultMinSize(minWidth = TopBarDefaults.SlotWidth, minHeight = TopBarDefaults.SlotWidth)
-        .alpha(alpha)
-        .clickable(enabled = enabled && !loading, onClick = onClick)
-        .pressScale(0.96f),
+      modifier =
+        modifier
+          .defaultMinSize(minWidth = TopBarDefaults.SlotWidth, minHeight = TopBarDefaults.SlotWidth)
+          .alpha(alpha)
+          .clickable(enabled = enabled && !loading, onClick = onClick)
+          .pressScale(0.96f),
       contentAlignment = Alignment.Center,
     ) {
       if (loading) {
         HeaderActionSpinner(color = color)
       } else {
-        Text(
-          text = text,
-          style = textStyle,
-          color = color,
-        )
+        Text(text = text, style = textStyle, color = color)
       }
     }
   }
 }
 
 @Composable
-private fun HeaderActionSpinner(
-  color: Color,
-  modifier: Modifier = Modifier,
-) {
+private fun HeaderActionSpinner(color: Color, modifier: Modifier = Modifier) {
   val transition = rememberInfiniteTransition()
-  val rotation by transition.animateFloat(
-    initialValue = 0f,
-    targetValue = 360f,
-    animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
-  )
+  val rotation by
+    transition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
+    )
 
   Canvas(modifier.size(16.dp).then(modifier)) {
     drawArc(
@@ -327,10 +292,11 @@ private fun HeaderActionSpinner(
       startAngle = rotation,
       sweepAngle = 220f,
       useCenter = false,
-      style = androidx.compose.ui.graphics.drawscope.Stroke(
-        width = 1.5.dp.toPx(),
-        cap = androidx.compose.ui.graphics.StrokeCap.Round,
-      ),
+      style =
+        androidx.compose.ui.graphics.drawscope.Stroke(
+          width = 1.5.dp.toPx(),
+          cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        ),
     )
   }
 }
@@ -350,20 +316,13 @@ fun EntityHeader(
   iconTint: Color = AppTheme.colors.textPrimary,
   supportingContent: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-  Column(
-    modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(4.dp),
-  ) {
+  Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
     Row(
       modifier = Modifier.fillMaxWidth(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(SheetEntityHeaderTitleGap),
     ) {
-      Icon(
-        icon = icon,
-        modifier = Modifier.size(SheetEntityHeaderIconSize),
-        tint = iconTint,
-      )
+      Icon(icon = icon, modifier = Modifier.size(SheetEntityHeaderIconSize), tint = iconTint)
 
       Text(
         text = title,
@@ -411,11 +370,7 @@ fun EntityBreadcrumb(
           horizontalArrangement = Arrangement.spacedBy(4.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          Icon(
-            icon = Lucide.ChevronRight,
-            modifier = Modifier.size(14.dp),
-            tint = color,
-          )
+          Icon(icon = Lucide.ChevronRight, modifier = Modifier.size(14.dp), tint = color)
 
           Text(
             text = segment,
@@ -437,12 +392,7 @@ fun EntitySupportingText(
   color: Color = AppTheme.colors.textMuted,
   textStyle: TextStyle = SheetEntityMetadataTextStyle,
 ) {
-  Text(
-    text = text,
-    modifier = modifier,
-    style = textStyle,
-    color = color,
-  )
+  Text(text = text, modifier = modifier, style = textStyle, color = color)
 }
 
 @Composable

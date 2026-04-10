@@ -23,9 +23,7 @@ object AppStartupService {
   val state: StateFlow<AppStartupState> = _state
 
   fun startAsync() {
-    scope.launch {
-      start()
-    }
+    scope.launch { start() }
   }
 
   suspend fun start() {
@@ -42,15 +40,16 @@ object AppStartupService {
     Logger.i { "App startup: migration gate entered." }
     _state.value = AppStartupState.Migrating
 
-    val migrationResult = try {
-      LegacyMigrationCoordinator.runIfNeeded()
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "App startup: migration failed, continuing startup." }
-      _state.value = AppStartupState.FailedButContinuing
-      null
-    }
+    val migrationResult =
+      try {
+        LegacyMigrationCoordinator.runIfNeeded()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        Logger.e(e) { "App startup: migration failed, continuing startup." }
+        _state.value = AppStartupState.FailedButContinuing
+        null
+      }
 
     Logger.i { "App startup: starting auth and bootstrap services." }
     AuthService.start()

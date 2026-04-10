@@ -17,9 +17,7 @@ class BottomSheetHostStateTest {
   @Test
   fun showAddsEntry() = runTest {
     val state = BottomSheetHostState()
-    val job = launch {
-      state.show<Unit> { /* composable content */ }
-    }
+    val job = launch { state.show<Unit> { /* composable content */ } }
     testScheduler.advanceUntilIdle()
     assertEquals(1, state.entries.size)
     job.cancel()
@@ -33,8 +31,7 @@ class BottomSheetHostStateTest {
       assertEquals("hello", result)
     }
     testScheduler.advanceUntilIdle()
-    @Suppress("UNCHECKED_CAST")
-    (state.entries.first() as BottomSheetEntry<String>).resume("hello")
+    @Suppress("UNCHECKED_CAST") (state.entries.first() as BottomSheetEntry<String>).resume("hello")
     testScheduler.advanceUntilIdle()
     job.join()
   }
@@ -42,12 +39,9 @@ class BottomSheetHostStateTest {
   @Test
   fun dismissRemovesEntry() = runTest {
     val state = BottomSheetHostState()
-    val job = launch {
-      state.show<Unit> { /* composable content */ }
-    }
+    val job = launch { state.show<Unit> { /* composable content */ } }
     testScheduler.advanceUntilIdle()
-    @Suppress("UNCHECKED_CAST")
-    (state.entries.first() as BottomSheetEntry<Unit>).resume(Unit)
+    @Suppress("UNCHECKED_CAST") (state.entries.first() as BottomSheetEntry<Unit>).resume(Unit)
     testScheduler.advanceUntilIdle()
     assertTrue(state.entries.isEmpty())
     job.join()

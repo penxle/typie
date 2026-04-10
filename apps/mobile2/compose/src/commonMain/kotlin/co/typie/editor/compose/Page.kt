@@ -31,9 +31,7 @@ internal fun Page(
         editor.attachSurface(page, handle, width.toInt(), height.toInt(), scaleFactor)
         editor.renderSurface(page)
       },
-      onDetach = {
-        editor.detachSurface(page)
-      },
+      onDetach = { editor.detachSurface(page) },
       onResize = {
         editor.resizeSurface(page, width.toInt(), height.toInt(), scaleFactor)
         editor.renderSurface(page)
@@ -42,9 +40,7 @@ internal fun Page(
   }
 
   DisposableEffect(editor, page) {
-    val off = editor.on<EditorEvent.RenderInvalidated> { ed, _ ->
-      ed.renderSurface(page)
-    }
+    val off = editor.on<EditorEvent.RenderInvalidated> { ed, _ -> ed.renderSurface(page) }
 
     onDispose { off() }
   }

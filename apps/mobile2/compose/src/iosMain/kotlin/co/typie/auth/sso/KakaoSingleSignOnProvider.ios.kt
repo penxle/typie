@@ -4,10 +4,10 @@ package co.typie.auth.sso
 
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.platform.ActivityContext
-import kotlinx.coroutines.suspendCancellableCoroutine
-import swiftPMImport.co.typie.compose.KakaoSingleSignOnBridge
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import swiftPMImport.co.typie.compose.KakaoSingleSignOnBridge
 
 actual class KakaoSingleSignOnProvider : SingleSignOnAdapter {
   context(_: ActivityContext)

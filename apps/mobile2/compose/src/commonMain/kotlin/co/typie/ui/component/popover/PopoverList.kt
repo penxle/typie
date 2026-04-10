@@ -36,20 +36,11 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-data class PopoverListItem(
-  val content: @Composable () -> Unit,
-  val onSelected: () -> Unit,
-)
+data class PopoverListItem(val content: @Composable () -> Unit, val onSelected: () -> Unit)
 
 @Composable
-fun PopoverScope.PopoverList(
-  items: List<PopoverListItem>,
-) {
-  PopoverList(
-    items = items,
-    pointerState = pointerState,
-    inputEnabled = acceptsInput,
-  )
+fun PopoverScope.PopoverList(items: List<PopoverListItem>) {
+  PopoverList(items = items, pointerState = pointerState, inputEnabled = acceptsInput)
 }
 
 @Composable
@@ -94,11 +85,7 @@ fun PopoverList(
     )
   }
 
-  DisposableEffect(edgeAutoScrollState) {
-    onDispose {
-      edgeAutoScrollState?.stop()
-    }
-  }
+  DisposableEffect(edgeAutoScrollState) { onDispose { edgeAutoScrollState?.stop() } }
 
   LaunchedEffect(activeIndex) {
     val index = activeIndex
@@ -136,11 +123,13 @@ fun PopoverList(
       return@LaunchedEffect
     }
 
-    val state = currentPointerState ?: run {
-      edgeAutoScrollState?.stop()
-      activeIndex = null
-      return@LaunchedEffect
-    }
+    val state =
+      currentPointerState
+        ?: run {
+          edgeAutoScrollState?.stop()
+          activeIndex = null
+          return@LaunchedEffect
+        }
 
     if (!state.isSelectionArmed) {
       edgeAutoScrollState?.stop()
@@ -164,19 +153,19 @@ fun PopoverList(
   }
 
   Box(
-    modifier = Modifier
-      .onGloballyPositioned { coordinates ->
+    modifier =
+      Modifier.onGloballyPositioned { coordinates ->
         listWindowOffset = coordinates.positionInWindow()
-      },
+      }
   ) {
     // Selection indicator
     if (indicatorVisible) {
       Box(
-        modifier = Modifier
-          .offset { IntOffset(indicatorX.value.toInt(), indicatorY.value.toInt()) }
-          .width(indicatorW.value.toDp(density))
-          .height(indicatorH.value.toDp(density))
-          .background(AppTheme.colors.surfaceTinted, SquircleShape(itemRadius)),
+        modifier =
+          Modifier.offset { IntOffset(indicatorX.value.toInt(), indicatorY.value.toInt()) }
+            .width(indicatorW.value.toDp(density))
+            .height(indicatorH.value.toDp(density))
+            .background(AppTheme.colors.surfaceTinted, SquircleShape(itemRadius))
       )
     }
 
@@ -184,98 +173,95 @@ fun PopoverList(
     Column(modifier = Modifier.fillMaxWidth()) {
       items.forEachIndexed { index, item ->
         Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .onGloballyPositioned { coordinates ->
-              val pos = coordinates.positionInWindow()
-              val size = coordinates.size
-              itemBounds[index] = Rect(
-                pos.x, pos.y,
-                pos.x + size.width, pos.y + size.height,
-              )
-            }
-            .pointerInput(index, inputEnabled) {
-              awaitPointerEventScope {
-                while (true) {
-                  val event = awaitPointerEvent()
-                  if (!inputEnabled) {
-                    event.changes.forEach { it.consume() }
-                    continue
-                  }
+          modifier =
+            Modifier.fillMaxWidth()
+              .onGloballyPositioned { coordinates ->
+                val pos = coordinates.positionInWindow()
+                val size = coordinates.size
+                itemBounds[index] = Rect(pos.x, pos.y, pos.x + size.width, pos.y + size.height)
+              }
+              .pointerInput(index, inputEnabled) {
+                awaitPointerEventScope {
+                  while (true) {
+                    val event = awaitPointerEvent()
+                    if (!inputEnabled) {
+                      event.changes.forEach { it.consume() }
+                      continue
+                    }
 
-                  when (event.type) {
-                    PointerEventType.Press -> {
-                      val press = event.changes.firstOrNull() ?: continue
-                      val pointerId = press.id
-                      val originWindowPos =
-                        press.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
-                      val touchSlop = viewConfiguration.touchSlop
-                      var currentWindowPos =
-                        originWindowPos
-                      var isSelectionArmed = false
-                      var isPanScroll = false
-                      isLocalTracking = true
-                      activeIndex = null
+                    when (event.type) {
+                      PointerEventType.Press -> {
+                        val press = event.changes.firstOrNull() ?: continue
+                        val pointerId = press.id
+                        val originWindowPos =
+                          press.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
+                        val touchSlop = viewConfiguration.touchSlop
+                        var currentWindowPos = originWindowPos
+                        var isSelectionArmed = false
+                        var isPanScroll = false
+                        isLocalTracking = true
+                        activeIndex = null
 
-                      val armJob = gestureScope.launch {
-                        delay(armDelayMs)
-                        if (isPanScroll) {
-                          return@launch
-                        }
-                        isSelectionArmed = true
-                        updateActiveIndex(currentWindowPos)
-                        updateEdgeAutoScroll(currentWindowPos)
-                      }
-
-                      while (true) {
-                        val moveEvent = awaitPointerEvent()
-                        val change = moveEvent.changes.find { it.id == pointerId } ?: break
-
-                        currentWindowPos =
-                          change.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
-                        if (!isSelectionArmed && !isPanScroll) {
-                          val distance = (currentWindowPos - originWindowPos).getDistance()
-                          if (distance > touchSlop) {
-                            isPanScroll = true
-                            armJob.cancel()
-                            edgeAutoScrollState?.stop()
-                            activeIndex = null
+                        val armJob = gestureScope.launch {
+                          delay(armDelayMs)
+                          if (isPanScroll) {
+                            return@launch
                           }
-                        }
-                        if (isSelectionArmed) {
-                          change.consume()
+                          isSelectionArmed = true
                           updateActiveIndex(currentWindowPos)
                           updateEdgeAutoScroll(currentWindowPos)
                         }
 
-                        if (!change.pressed) {
-                          armJob.cancel()
-                          edgeAutoScrollState?.stop()
-                          val selectedIndex = when {
-                            isPanScroll -> null
-                            isSelectionArmed -> hitTestItems(currentWindowPos, itemBounds)
-                            else -> hitTestItems(currentWindowPos, itemBounds)
+                        while (true) {
+                          val moveEvent = awaitPointerEvent()
+                          val change = moveEvent.changes.find { it.id == pointerId } ?: break
+
+                          currentWindowPos =
+                            change.position + (itemBounds[index]?.topLeft ?: Offset.Zero)
+                          if (!isSelectionArmed && !isPanScroll) {
+                            val distance = (currentWindowPos - originWindowPos).getDistance()
+                            if (distance > touchSlop) {
+                              isPanScroll = true
+                              armJob.cancel()
+                              edgeAutoScrollState?.stop()
+                              activeIndex = null
+                            }
                           }
-                          activeIndex = null
-                          isLocalTracking = false
-                          if (selectedIndex != null) {
-                            items[selectedIndex].onSelected()
+                          if (isSelectionArmed) {
+                            change.consume()
+                            updateActiveIndex(currentWindowPos)
+                            updateEdgeAutoScroll(currentWindowPos)
                           }
-                          break
+
+                          if (!change.pressed) {
+                            armJob.cancel()
+                            edgeAutoScrollState?.stop()
+                            val selectedIndex =
+                              when {
+                                isPanScroll -> null
+                                isSelectionArmed -> hitTestItems(currentWindowPos, itemBounds)
+                                else -> hitTestItems(currentWindowPos, itemBounds)
+                              }
+                            activeIndex = null
+                            isLocalTracking = false
+                            if (selectedIndex != null) {
+                              items[selectedIndex].onSelected()
+                            }
+                            break
+                          }
                         }
+
+                        armJob.cancel()
+                        edgeAutoScrollState?.stop()
+                        activeIndex = null
+                        isLocalTracking = false
                       }
 
-                      armJob.cancel()
-                      edgeAutoScrollState?.stop()
-                      activeIndex = null
-                      isLocalTracking = false
+                      else -> {}
                     }
-
-                    else -> {}
                   }
                 }
               }
-            },
         ) {
           item.content()
         }

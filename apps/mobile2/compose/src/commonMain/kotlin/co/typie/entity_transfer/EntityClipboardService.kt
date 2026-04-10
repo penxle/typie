@@ -10,13 +10,15 @@ import co.typie.graphql.TypieError
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.CopyEntitiesInput
 import co.typie.graphql.type.MoveEntitiesInput
-import co.typie.result.Result
 import co.typie.result.Task
 import co.typie.result.task
 import co.typie.service.SiteRefreshCoordinator
 import kotlinx.coroutines.CancellationException
 
-enum class EntityClipboardMode { Copy, Cut }
+enum class EntityClipboardMode {
+  Copy,
+  Cut,
+}
 
 data class EntityClipboardState(
   val mode: EntityClipboardMode,
@@ -51,9 +53,13 @@ data class EntityClipboardMoveRequest(
 
 sealed interface PasteError {
   data object SiteMismatch : PasteError
+
   data object CircularReference : PasteError
+
   data object SourceNotFound : PasteError
+
   data object CharacterCountLimitExceeded : PasteError
+
   data object BlobSizeLimitExceeded : PasteError
 }
 
@@ -67,28 +73,30 @@ object ApolloEntityClipboardMutationExecutor : EntityClipboardMutationExecutor {
   override suspend fun copyEntities(request: EntityClipboardCopyRequest) {
     Apollo.executeMutation(
       EntityClipboard_CopyEntities_Mutation(
-        input = CopyEntitiesInput.Builder()
-          .entityIds(request.entityIds)
-          .targetSiteId(request.targetSiteId)
-          .parentEntityId(request.parentEntityId)
-          .lowerOrder(request.lowerOrder)
-          .upperOrder(request.upperOrder)
-          .build(),
-      ),
+        input =
+          CopyEntitiesInput.Builder()
+            .entityIds(request.entityIds)
+            .targetSiteId(request.targetSiteId)
+            .parentEntityId(request.parentEntityId)
+            .lowerOrder(request.lowerOrder)
+            .upperOrder(request.upperOrder)
+            .build()
+      )
     )
   }
 
   override suspend fun moveEntities(request: EntityClipboardMoveRequest) {
     Apollo.executeMutation(
       EntityClipboard_MoveEntities_Mutation(
-        input = MoveEntitiesInput.Builder()
-          .entityIds(request.entityIds)
-          .parentEntityId(request.parentEntityId)
-          .lowerOrder(request.lowerOrder)
-          .upperOrder(request.upperOrder)
-          .targetSiteId(request.targetSiteId)
-          .build(),
-      ),
+        input =
+          MoveEntitiesInput.Builder()
+            .entityIds(request.entityIds)
+            .parentEntityId(request.parentEntityId)
+            .lowerOrder(request.lowerOrder)
+            .upperOrder(request.upperOrder)
+            .targetSiteId(request.targetSiteId)
+            .build()
+      )
     )
   }
 }
@@ -100,26 +108,12 @@ object EntityClipboardService {
   val currentState: EntityClipboardState?
     get() = state
 
-  fun setCopy(
-    sourceSiteId: String,
-    items: List<EntityTransferSource>,
-  ) {
-    setState(
-      mode = EntityClipboardMode.Copy,
-      sourceSiteId = sourceSiteId,
-      items = items,
-    )
+  fun setCopy(sourceSiteId: String, items: List<EntityTransferSource>) {
+    setState(mode = EntityClipboardMode.Copy, sourceSiteId = sourceSiteId, items = items)
   }
 
-  fun setCut(
-    sourceSiteId: String,
-    items: List<EntityTransferSource>,
-  ) {
-    setState(
-      mode = EntityClipboardMode.Cut,
-      sourceSiteId = sourceSiteId,
-      items = items,
-    )
+  fun setCut(sourceSiteId: String, items: List<EntityTransferSource>) {
+    setState(mode = EntityClipboardMode.Cut, sourceSiteId = sourceSiteId, items = items)
   }
 
   fun clear() {
@@ -149,25 +143,27 @@ object EntityClipboardService {
 
     try {
       when (clipboard.mode) {
-        EntityClipboardMode.Copy -> ApolloEntityClipboardMutationExecutor.copyEntities(
-          EntityClipboardCopyRequest(
-            entityIds = itemIds,
-            targetSiteId = target.siteId,
-            parentEntityId = target.destinationEntityId,
-            lowerOrder = target.lowerOrder,
-            upperOrder = target.upperOrder,
-          ),
-        )
+        EntityClipboardMode.Copy ->
+          ApolloEntityClipboardMutationExecutor.copyEntities(
+            EntityClipboardCopyRequest(
+              entityIds = itemIds,
+              targetSiteId = target.siteId,
+              parentEntityId = target.destinationEntityId,
+              lowerOrder = target.lowerOrder,
+              upperOrder = target.upperOrder,
+            )
+          )
 
-        EntityClipboardMode.Cut -> ApolloEntityClipboardMutationExecutor.moveEntities(
-          EntityClipboardMoveRequest(
-            entityIds = itemIds,
-            parentEntityId = target.destinationEntityId,
-            lowerOrder = target.lowerOrder,
-            upperOrder = target.upperOrder,
-            targetSiteId = target.siteId.takeIf { it != clipboard.sourceSiteId },
-          ),
-        )
+        EntityClipboardMode.Cut ->
+          ApolloEntityClipboardMutationExecutor.moveEntities(
+            EntityClipboardMoveRequest(
+              entityIds = itemIds,
+              parentEntityId = target.destinationEntityId,
+              lowerOrder = target.lowerOrder,
+              upperOrder = target.upperOrder,
+              targetSiteId = target.siteId.takeIf { it != clipboard.sourceSiteId },
+            )
+          )
       }
     } catch (e: CancellationException) {
       throw e
@@ -194,15 +190,12 @@ object EntityClipboardService {
     sourceSiteId: String,
     items: List<EntityTransferSource>,
   ) {
-    state = if (sourceSiteId.isBlank() || items.isEmpty()) {
-      null
-    } else {
-      EntityClipboardState(
-        mode = mode,
-        sourceSiteId = sourceSiteId,
-        items = items,
-      )
-    }
+    state =
+      if (sourceSiteId.isBlank() || items.isEmpty()) {
+        null
+      } else {
+        EntityClipboardState(mode = mode, sourceSiteId = sourceSiteId, items = items)
+      }
   }
 }
 

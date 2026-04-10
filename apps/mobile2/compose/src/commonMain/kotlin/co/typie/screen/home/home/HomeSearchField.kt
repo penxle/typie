@@ -4,8 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseInOutExpo
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
@@ -53,30 +53,35 @@ fun HomeSearchFieldFrame(
   content: @Composable RowScope.() -> Unit,
 ) {
   val colorSpec = tween<Color>(220)
-  val containerColor by animateColorAsState(
-    when {
-      !enabled -> AppTheme.colors.surfaceBase
-      else -> AppTheme.colors.surfaceDefault
-    },
-    colorSpec,
-  )
-  val borderColor by animateColorAsState(
-    if (focused) AppTheme.colors.borderStrong else AppTheme.colors.borderSubtle,
-    colorSpec,
-  )
-  val borderWidth by animateDpAsState(
-    if (focused) HomeSearchFieldDefaults.FocusedBorderWidth else HomeSearchFieldDefaults.UnfocusedBorderWidth,
-    tween(durationMillis = 220, easing = EaseInOutExpo),
-  )
+  val containerColor by
+    animateColorAsState(
+      when {
+        !enabled -> AppTheme.colors.surfaceBase
+        else -> AppTheme.colors.surfaceDefault
+      },
+      colorSpec,
+    )
+  val borderColor by
+    animateColorAsState(
+      if (focused) AppTheme.colors.borderStrong else AppTheme.colors.borderSubtle,
+      colorSpec,
+    )
+  val borderWidth by
+    animateDpAsState(
+      if (focused) HomeSearchFieldDefaults.FocusedBorderWidth
+      else HomeSearchFieldDefaults.UnfocusedBorderWidth,
+      tween(durationMillis = 220, easing = EaseInOutExpo),
+    )
 
   Row(
     verticalAlignment = Alignment.CenterVertically,
-    modifier = modifier
-      .height(HomeSearchFieldDefaults.Height)
-      .border(borderWidth, borderColor, HomeSearchFieldDefaults.Shape)
-      .background(containerColor, HomeSearchFieldDefaults.Shape)
-      .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-      .padding(horizontal = HomeSearchFieldDefaults.HorizontalPadding),
+    modifier =
+      modifier
+        .height(HomeSearchFieldDefaults.Height)
+        .border(borderWidth, borderColor, HomeSearchFieldDefaults.Shape)
+        .background(containerColor, HomeSearchFieldDefaults.Shape)
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .padding(horizontal = HomeSearchFieldDefaults.HorizontalPadding),
   ) {
     content()
   }

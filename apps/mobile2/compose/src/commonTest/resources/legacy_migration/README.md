@@ -1,8 +1,10 @@
 # Legacy Migration Fixtures
 
-These fixtures are generated from the legacy Flutter app code paths and are used by `apps/mobile2` migration tests.
+These fixtures are generated from the legacy Flutter app code paths and are used by `apps/mobile2`
+migration tests.
 
-Regenerate them from [generate_fixtures.dart](/Users/dol/dev/typie/apps/mobile/tool/legacy_migration/generate_fixtures.dart):
+Regenerate them
+from [generate_fixtures.dart](/Users/dol/dev/typie/apps/mobile/tool/legacy_migration/generate_fixtures.dart):
 
 ```bash
 cd /Users/dol/dev/typie/apps/mobile

@@ -13,15 +13,8 @@ fun ConfirmModal(
   onConfirm: suspend () -> Unit,
   onDismiss: suspend () -> Unit,
 ) {
-  BaseModal(
-    title = title,
-    message = message,
-    onDismissRequest = onDismiss,
-  ) {
-    BaseModalActionButton(
-      text = cancelText,
-      onClick = onDismiss,
-    )
+  BaseModal(title = title, message = message, onDismissRequest = onDismiss) {
+    BaseModalActionButton(text = cancelText, onClick = onDismiss)
     BaseModalActionDivider()
     BaseModalActionButton(
       text = confirmText,

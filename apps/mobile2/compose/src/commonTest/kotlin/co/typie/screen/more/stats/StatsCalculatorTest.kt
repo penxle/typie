@@ -1,25 +1,27 @@
 package co.typie.screen.more.stats
 
-import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.datetime.LocalDate
 
 class StatsCalculatorTest {
 
   @Test
   fun calculateStreakData_countsCurrentLongestAndMonthlyDays() {
-    val changes = listOf(
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 17), additions = 40, deletions = 0),
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 19), additions = 80, deletions = -5),
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 20), additions = 120, deletions = -8),
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 21), additions = 160, deletions = -13),
-    )
+    val changes =
+      listOf(
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 17), additions = 40, deletions = 0),
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 19), additions = 80, deletions = -5),
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 20), additions = 120, deletions = -8),
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 21), additions = 160, deletions = -13),
+      )
 
-    val result = calculateStreakData(
-      characterCountChanges = changes,
-      totalCharacterCount = 1_000,
-      today = LocalDate(2026, 3, 21),
-    )
+    val result =
+      calculateStreakData(
+        characterCountChanges = changes,
+        totalCharacterCount = 1_000,
+        today = LocalDate(2026, 3, 21),
+      )
 
     assertEquals(
       StreakData(
@@ -35,16 +37,18 @@ class StatsCalculatorTest {
 
   @Test
   fun calculateStreakData_startsFromYesterdayWhenTodayHasNoActivity() {
-    val changes = listOf(
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 19), additions = 70, deletions = 0),
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 20), additions = 95, deletions = 0),
-    )
+    val changes =
+      listOf(
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 19), additions = 70, deletions = 0),
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 20), additions = 95, deletions = 0),
+      )
 
-    val result = calculateStreakData(
-      characterCountChanges = changes,
-      totalCharacterCount = 500,
-      today = LocalDate(2026, 3, 21),
-    )
+    val result =
+      calculateStreakData(
+        characterCountChanges = changes,
+        totalCharacterCount = 500,
+        today = LocalDate(2026, 3, 21),
+      )
 
     assertEquals(2, result.currentStreak)
     assertEquals(2, result.longestStreak)
@@ -55,12 +59,13 @@ class StatsCalculatorTest {
 
   @Test
   fun calculateWeekdayPattern_groupsBySundayFirstAndRoundsAverage() {
-    val changes = listOf(
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 22), additions = 120, deletions = 0),
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 23), additions = 80, deletions = 0),
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 23), additions = 20, deletions = 0),
-      StatsCharacterCountChange(date = LocalDate(2026, 3, 24), additions = 0, deletions = -10),
-    )
+    val changes =
+      listOf(
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 22), additions = 120, deletions = 0),
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 23), additions = 80, deletions = 0),
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 23), additions = 20, deletions = 0),
+        StatsCharacterCountChange(date = LocalDate(2026, 3, 24), additions = 0, deletions = -10),
+      )
 
     val result = calculateWeekdayPattern(changes)
 
@@ -80,14 +85,20 @@ class StatsCalculatorTest {
 
   @Test
   fun generateActivityChartDays_fillsMissingDatesAndNormalizesDeletions() {
-    val result = generateActivityChartDays(
-      characterCountChanges = listOf(
-        StatsCharacterCountChange(date = LocalDate(2026, 3, 20), additions = 60, deletions = -20),
-        StatsCharacterCountChange(date = LocalDate(2026, 3, 22), additions = 40, deletions = 0),
-      ),
-      endDate = LocalDate(2026, 3, 22),
-      dayCount = 3,
-    )
+    val result =
+      generateActivityChartDays(
+        characterCountChanges =
+          listOf(
+            StatsCharacterCountChange(
+              date = LocalDate(2026, 3, 20),
+              additions = 60,
+              deletions = -20,
+            ),
+            StatsCharacterCountChange(date = LocalDate(2026, 3, 22), additions = 40, deletions = 0),
+          ),
+        endDate = LocalDate(2026, 3, 22),
+        dayCount = 3,
+      )
 
     assertEquals(
       listOf(

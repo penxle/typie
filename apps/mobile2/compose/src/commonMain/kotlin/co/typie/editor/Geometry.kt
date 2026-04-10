@@ -19,8 +19,7 @@ fun globalToLocal(x: Float, y: Float, offsets: Map<Int, Offset>, sizes: List<Siz
   while (lo < hi) {
     val mid = (lo + hi) ushr 1
     val midOffset = offsets[mid] ?: return null
-    if (midOffset.y + sizes[mid].height <= y) lo = mid + 1
-    else hi = mid
+    if (midOffset.y + sizes[mid].height <= y) lo = mid + 1 else hi = mid
   }
 
   val loOffset = offsets[lo] ?: return null

@@ -75,10 +75,11 @@ fun ToastOverlay() {
 
   val density = LocalDensity.current
   val safeDrawingBottom = WindowInsets.safeDrawing.getBottom(density).toDp(density)
-  val animatedBottomInset by animateDpAsState(
-    toast.bottomInset,
-    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)
-  )
+  val animatedBottomInset by
+    animateDpAsState(
+      toast.bottomInset,
+      spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+    )
   val bottomOffset = safeDrawingBottom + 12.dp + animatedBottomInset
 
   var visibleState by remember { mutableStateOf<ToastState?>(null) }
@@ -110,12 +111,16 @@ private fun AnimatedToast(
   onDismiss: () -> Unit,
 ) {
   AppTheme.colors
-  val toastSurface = if (when (AppTheme.themeMode) {
-      ThemeMode.System -> isSystemInDarkTheme()
-      ThemeMode.Light -> false
-      ThemeMode.Dark -> true
-    }
-  ) AppColor.dark.gray.s500 else AppColor.light.gray.s600
+  val toastSurface =
+    if (
+      when (AppTheme.themeMode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+      }
+    )
+      AppColor.dark.gray.s500
+    else AppColor.light.gray.s600
   val toastText = AppColor.white
   val density = LocalDensity.current
   val alpha = remember { Animatable(0f) }
@@ -152,16 +157,21 @@ private fun AnimatedToast(
   }
 
   Box(
-    modifier = Modifier.fillMaxSize().alpha(alpha.value).graphicsLayer {
-      translationY = slideOffset.value * 4.dp.toPx(density)
-    },
+    modifier =
+      Modifier.fillMaxSize().alpha(alpha.value).graphicsLayer {
+        translationY = slideOffset.value * 4.dp.toPx(density)
+      },
     contentAlignment = Alignment.BottomCenter,
   ) {
     Box(
-      modifier = Modifier.offset(y = -bottomOffset).padding(horizontal = 16.dp).fillMaxWidth()
-        .clip(RoundedCornerShape(16.dp)).hazeEffect(LocalHazeState.current)
-        .background(toastSurface.copy(alpha = .6f))
-        .padding(horizontal = 24.dp, vertical = 16.dp),
+      modifier =
+        Modifier.offset(y = -bottomOffset)
+          .padding(horizontal = 16.dp)
+          .fillMaxWidth()
+          .clip(RoundedCornerShape(16.dp))
+          .hazeEffect(LocalHazeState.current)
+          .background(toastSurface.copy(alpha = .6f))
+          .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Crossfade(targetState = state.type, animationSpec = tween(200)) { type ->
@@ -169,27 +179,31 @@ private fun AnimatedToast(
             ToastType.Loading -> ToastSpinner()
             else -> {
               Box(
-                modifier = Modifier.size(20.dp).background(
-                  when (type) {
-                    ToastType.Success -> AppTheme.colors.success
-                    ToastType.Error -> AppTheme.colors.danger
-                    else -> AppTheme.colors.brand
-                  },
-                  CircleShape,
-                ),
+                modifier =
+                  Modifier.size(20.dp)
+                    .background(
+                      when (type) {
+                        ToastType.Success -> AppTheme.colors.success
+                        ToastType.Error -> AppTheme.colors.danger
+                        else -> AppTheme.colors.brand
+                      },
+                      CircleShape,
+                    ),
                 contentAlignment = Alignment.Center,
               ) {
                 Icon(
-                  icon = when (type) {
-                    ToastType.Success -> Lucide.Check
-                    ToastType.Error -> Typie.ExclamationSvg
-                    else -> Lucide.Bell
-                  },
-                  strokeWidth = when (type) {
-                    ToastType.Success -> 4f
-                    ToastType.Error -> 1.75f
-                    else -> 2.5f
-                  },
+                  icon =
+                    when (type) {
+                      ToastType.Success -> Lucide.Check
+                      ToastType.Error -> Typie.ExclamationSvg
+                      else -> Lucide.Bell
+                    },
+                  strokeWidth =
+                    when (type) {
+                      ToastType.Success -> 4f
+                      ToastType.Error -> 1.75f
+                      else -> 2.5f
+                    },
                   tint = toastText,
                   modifier = Modifier.size(12.dp),
                 )
@@ -206,11 +220,7 @@ private fun AnimatedToast(
               SizeTransform(clip = false)
           },
         ) { message ->
-          Text(
-            text = message,
-            style = AppTheme.typography.caption,
-            color = toastText,
-          )
+          Text(text = message, style = AppTheme.typography.caption, color = toastText)
         }
       }
     }
@@ -221,14 +231,16 @@ private fun AnimatedToast(
 private fun ToastSpinner() {
   val color = AppColor.white
   val transition = rememberInfiniteTransition()
-  val rotation by transition.animateFloat(
-    initialValue = 0f,
-    targetValue = 360f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(1000, easing = LinearEasing),
-      repeatMode = RepeatMode.Restart,
-    ),
-  )
+  val rotation by
+    transition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec =
+        infiniteRepeatable(
+          animation = tween(1000, easing = LinearEasing),
+          repeatMode = RepeatMode.Restart,
+        ),
+    )
   Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
     Canvas(Modifier.size(14.dp)) {
       drawArc(

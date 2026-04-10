@@ -26,17 +26,17 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
+import co.typie.graphql.Apollo
 import co.typie.graphql.MarketingConsentGate_Query
 import co.typie.graphql.MarketingConsentGate_UpdateMarketingConsent_Mutation
 import co.typie.graphql.QueryState
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdateMarketingConsentInput
-import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.Result
 import co.typie.result.onOk
@@ -47,7 +47,6 @@ import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -59,10 +58,12 @@ fun MarketingConsentGate() {
   var handledInSession by remember { mutableStateOf(false) }
   var pendingConsent by remember { mutableStateOf<Boolean?>(null) }
 
-  val shouldShow = !handledInSession && shouldShowMarketingConsentPrompt(
-    marketingConsentAskedAt = data.me.marketingConsentAskedAt,
-    totalCharacterCount = data.me.usage.totalCharacterCount,
-  )
+  val shouldShow =
+    !handledInSession &&
+      shouldShowMarketingConsentPrompt(
+        marketingConsentAskedAt = data.me.marketingConsentAskedAt,
+        totalCharacterCount = data.me.usage.totalCharacterCount,
+      )
 
   if (!shouldShow) return
 
@@ -70,12 +71,10 @@ fun MarketingConsentGate() {
     pendingConsent = pendingConsent,
     onConsent = { consent ->
       pendingConsent = consent
-      model.updateMarketingConsent(consent)
-        .withDefaultExceptionHandler(toast)
-        .onOk {
-          toast.show(ToastType.Success, marketingConsentToastMessage(consent))
-          handledInSession = true
-        }
+      model.updateMarketingConsent(consent).withDefaultExceptionHandler(toast).onOk {
+        toast.show(ToastType.Success, marketingConsentToastMessage(consent))
+        handledInSession = true
+      }
       pendingConsent = null
     },
   )
@@ -97,44 +96,35 @@ class MarketingConsentGateViewModel : ViewModel() {
     return result {
       Apollo.executeMutation(
         MarketingConsentGate_UpdateMarketingConsent_Mutation(
-          input = UpdateMarketingConsentInput(marketingConsent = marketingConsent),
-        ),
+          input = UpdateMarketingConsentInput(marketingConsent = marketingConsent)
+        )
       )
     }
   }
 }
 
 @Composable
-private fun MarketingConsentModal(
-  pendingConsent: Boolean?,
-  onConsent: suspend (Boolean) -> Unit,
-) {
+private fun MarketingConsentModal(pendingConsent: Boolean?, onConsent: suspend (Boolean) -> Unit) {
   val isSubmitting = pendingConsent != null
 
   Dialog(
     onDismissRequest = {},
-    properties = DialogProperties(
-      dismissOnBackPress = false,
-      dismissOnClickOutside = false,
-    ),
+    properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
   ) {
     Column(
-      modifier = Modifier
-        .width(320.dp)
-        .clip(RoundedCornerShape(24.dp))
-        .background(AppTheme.colors.surfaceRaised)
-        .border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(24.dp))
-        .padding(24.dp),
+      modifier =
+        Modifier.width(320.dp)
+          .clip(RoundedCornerShape(24.dp))
+          .background(AppTheme.colors.surfaceRaised)
+          .border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(24.dp))
+          .padding(24.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       MarketingConsentIconCluster()
 
       Spacer(Modifier.height(18.dp))
 
-      Text(
-        text = "타이피 소식 받아보기",
-        style = AppTheme.typography.title,
-      )
+      Text(text = "타이피 소식 받아보기", style = AppTheme.typography.title)
 
       Spacer(Modifier.height(8.dp))
 
@@ -178,27 +168,18 @@ private fun MarketingConsentModal(
 private fun MarketingConsentIconCluster() {
   val icons = listOf(Lucide.Mail, Lucide.Bell, Lucide.Sparkles, Lucide.Zap, Lucide.Gift)
 
-  Box(
-    modifier = Modifier
-      .width(120.dp)
-      .height(32.dp),
-    contentAlignment = Alignment.CenterStart,
-  ) {
+  Box(modifier = Modifier.width(120.dp).height(32.dp), contentAlignment = Alignment.CenterStart) {
     icons.forEachIndexed { index, icon ->
       Box(
-        modifier = Modifier
-          .offset(x = (index * 22).dp)
-          .size(32.dp)
-          .clip(CircleShape)
-          .background(AppTheme.colors.surfaceTinted)
-          .border(2.dp, AppTheme.colors.surfaceRaised, CircleShape),
+        modifier =
+          Modifier.offset(x = (index * 22).dp)
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(AppTheme.colors.surfaceTinted)
+            .border(2.dp, AppTheme.colors.surfaceRaised, CircleShape),
         contentAlignment = Alignment.Center,
       ) {
-        Icon(
-          icon = icon,
-          modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.textPrimary,
-        )
+        Icon(icon = icon, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textPrimary)
       }
     }
   }

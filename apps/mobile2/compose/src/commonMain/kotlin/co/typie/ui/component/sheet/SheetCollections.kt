@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,17 +32,9 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 
 @Composable
-fun SheetActionList(
-  modifier: Modifier = Modifier,
-  content: @Composable ColumnScope.() -> Unit,
-) {
-  CardSurface(
-    modifier = modifier.fillMaxWidth(),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      content = content,
-    )
+fun SheetActionList(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+  CardSurface(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth(), content = content)
   }
 }
 
@@ -65,9 +55,7 @@ fun SheetActionRow(
 }
 
 @Composable
-fun SheetActionDivider(
-  modifier: Modifier = Modifier,
-) {
+fun SheetActionDivider(modifier: Modifier = Modifier) {
   CardDivider(modifier = modifier)
 }
 
@@ -77,12 +65,8 @@ fun <T> SheetOptionList(
   modifier: Modifier = Modifier,
   itemContent: @Composable (T) -> Unit,
 ) {
-  CardSurface(
-    modifier = modifier.fillMaxWidth(),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
+  CardSurface(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
       items.forEachIndexed { index, item ->
         if (index > 0) {
           CardDivider()
@@ -103,11 +87,7 @@ fun SheetOptionRow(
   contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
   trailing: @Composable RowScope.() -> Unit = {
     if (selected) {
-      Icon(
-        icon = Lucide.Check,
-        modifier = Modifier.size(16.dp),
-        tint = AppTheme.colors.brand,
-      )
+      Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = AppTheme.colors.brand)
     } else {
       Spacer(Modifier.size(16.dp))
     }
@@ -140,10 +120,7 @@ fun SheetOptionRow(
 }
 
 private val SheetEntityMetadataTextStyle: TextStyle
-  @Composable get() = AppTheme.typography.caption.copy(
-    fontSize = 14.sp,
-    lineHeight = 20.sp,
-  )
+  @Composable get() = AppTheme.typography.caption.copy(fontSize = 14.sp, lineHeight = 20.sp)
 
 @Composable
 fun SheetMenu(
@@ -152,10 +129,7 @@ fun SheetMenu(
   showHeaderDivider: Boolean = true,
   content: @Composable ColumnScope.() -> Unit,
 ) {
-  Column(
-    modifier = modifier
-      .fillMaxWidth(),
-  ) {
+  Column(modifier = modifier.fillMaxWidth()) {
     if (header != null) {
       Column(
         modifier = Modifier.fillMaxWidth(),
@@ -169,10 +143,7 @@ fun SheetMenu(
       }
     }
 
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      content = content,
-    )
+    Column(modifier = Modifier.fillMaxWidth(), content = content)
   }
 }
 
@@ -182,11 +153,7 @@ fun SheetMenuDivider(
   inset: Dp = 0.dp,
   color: Color = AppTheme.colors.borderDefault,
 ) {
-  CardDivider(
-    modifier = modifier,
-    inset = inset,
-    color = color,
-  )
+  CardDivider(modifier = modifier, inset = inset, color = color)
 }
 
 @Composable
@@ -201,19 +168,16 @@ fun SheetMenuActionRow(
 ) {
   InteractionScope {
     Row(
-      modifier = modifier
-        .fillMaxWidth()
-        .clickable(onClick = onClick)
-        .heightIn(min = 44.dp)
-        .padding(contentPadding)
-        .pressScale(),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .clickable(onClick = onClick)
+          .heightIn(min = 44.dp)
+          .padding(contentPadding)
+          .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Icon(
-        icon = icon,
-        modifier = Modifier.size(18.dp),
-        tint = tint ?: AppTheme.colors.textPrimary,
-      )
+      Icon(icon = icon, modifier = Modifier.size(18.dp), tint = tint ?: AppTheme.colors.textPrimary)
 
       Spacer(Modifier.size(12.dp))
 
@@ -259,12 +223,7 @@ fun SheetEntityBreadcrumb(
   textStyle: TextStyle = SheetEntityMetadataTextStyle,
   color: Color = AppTheme.colors.textTertiary,
 ) {
-  EntityBreadcrumb(
-    segments = segments,
-    modifier = modifier,
-    textStyle = textStyle,
-    color = color,
-  )
+  EntityBreadcrumb(segments = segments, modifier = modifier, textStyle = textStyle, color = color)
 }
 
 @Composable
@@ -274,10 +233,5 @@ fun SheetEntitySupportingText(
   color: Color = AppTheme.colors.textMuted,
   textStyle: TextStyle = SheetEntityMetadataTextStyle,
 ) {
-  EntitySupportingText(
-    text = text,
-    modifier = modifier,
-    color = color,
-    textStyle = textStyle,
-  )
+  EntitySupportingText(text = text, modifier = modifier, color = color, textStyle = textStyle)
 }

@@ -33,8 +33,8 @@ crdt
 creds
 cxzv
 dearmor
-dedup
 decryptor
+dedup
 disablepictureinpicture
 dmarc
 dotenv
@@ -43,9 +43,9 @@ ebgp
 edgi
 epub
 eulyoo
+ffffl
 ffigen
 ffprobe
-ffffl
 fira
 fntf
 fnts
@@ -78,6 +78,7 @@ konfig
 konva
 kotlinx
 ksafe
+ktfmt
 ktor
 kubeconfig
 kubelet
@@ -113,9 +114,9 @@ nsis
 nsurl
 nsutf
 nums
+oaep
 objc
 observablehq
-oaep
 okhttp
 okio
 oklch
@@ -129,13 +130,13 @@ onstatuschange
 oplog
 oslllo
 penxle
-pwith
 pgbouncer
 plpgsql
 pooler
 prefs
 premul
 ptrs
+pwith
 rabbitmq
 remeda
 repaste

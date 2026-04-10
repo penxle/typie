@@ -45,17 +45,18 @@ fun rememberEdgeAutoScrollState(
   val maxScrollSpeedPx = with(density) { maxScrollSpeed.toPx() }
 
   return remember(scope, edgeThresholdPx, minScrollSpeedPx, maxScrollSpeedPx, frameDurationMs) {
-    EdgeAutoScrollState(
-      scope = scope,
-      edgeThresholdPx = edgeThresholdPx,
-      minScrollSpeedPx = minScrollSpeedPx,
-      maxScrollSpeedPx = maxScrollSpeedPx,
-      frameDurationMs = frameDurationMs,
-    )
-  }.also { state ->
-    state.verticalScrollableState = verticalScrollableState
-    state.horizontalScrollableState = horizontalScrollableState
-  }
+      EdgeAutoScrollState(
+        scope = scope,
+        edgeThresholdPx = edgeThresholdPx,
+        minScrollSpeedPx = minScrollSpeedPx,
+        maxScrollSpeedPx = maxScrollSpeedPx,
+        frameDurationMs = frameDurationMs,
+      )
+    }
+    .also { state ->
+      state.verticalScrollableState = verticalScrollableState
+      state.horizontalScrollableState = horizontalScrollableState
+    }
 }
 
 fun Modifier.edgeAutoScroll(
@@ -68,27 +69,22 @@ fun Modifier.edgeAutoScroll(
   val viewportTopInsetPx = with(density) { viewportTopInset.toPx() }
   val viewportBottomInsetPx = with(density) { viewportBottomInset.toPx() }
 
-  SideEffect {
-    state.setEnabled(enabled)
-  }
+  SideEffect { state.setEnabled(enabled) }
 
-  DisposableEffect(state) {
-    onDispose {
-      state.detach()
-    }
-  }
+  DisposableEffect(state) { onDispose { state.detach() } }
 
   onGloballyPositioned { coordinates ->
     val position = coordinates.positionInWindow()
     val size = coordinates.size
     state.updateViewportRect(
       insetViewportRect(
-        viewportRect = Rect(
-          left = position.x,
-          top = position.y,
-          right = position.x + size.width,
-          bottom = position.y + size.height,
-        ),
+        viewportRect =
+          Rect(
+            left = position.x,
+            top = position.y,
+            right = position.x + size.width,
+            bottom = position.y + size.height,
+          ),
         topInsetPx = viewportTopInsetPx,
         bottomInsetPx = viewportBottomInsetPx,
       )
@@ -112,7 +108,8 @@ internal fun insetViewportRect(
 }
 
 @Stable
-class EdgeAutoScrollState internal constructor(
+class EdgeAutoScrollState
+internal constructor(
   private val scope: CoroutineScope,
   private val edgeThresholdPx: Float,
   private val minScrollSpeedPx: Float,
@@ -132,10 +129,7 @@ class EdgeAutoScrollState internal constructor(
   private var horizontalEdgeDistance = 0f
   private var onAutoScroll: (() -> Unit)? = null
 
-  fun update(
-    pointerPosition: Offset,
-    onAutoScroll: (() -> Unit)? = null,
-  ) {
+  fun update(pointerPosition: Offset, onAutoScroll: (() -> Unit)? = null) {
     this.pointerPosition = pointerPosition
     this.onAutoScroll = onAutoScroll
     reevaluate()
@@ -221,21 +215,31 @@ class EdgeAutoScrollState internal constructor(
         var didScroll = false
 
         val verticalScrollableState = verticalScrollableState
-        if (verticalDirection != 0f && verticalScrollableState != null && canScroll(verticalScrollableState, verticalDirection)) {
-          didScroll = scrollAxis(
-            scrollableState = verticalScrollableState,
-            direction = verticalDirection,
-            edgeDistance = verticalEdgeDistance,
-          ) || didScroll
+        if (
+          verticalDirection != 0f &&
+            verticalScrollableState != null &&
+            canScroll(verticalScrollableState, verticalDirection)
+        ) {
+          didScroll =
+            scrollAxis(
+              scrollableState = verticalScrollableState,
+              direction = verticalDirection,
+              edgeDistance = verticalEdgeDistance,
+            ) || didScroll
         }
 
         val horizontalScrollableState = horizontalScrollableState
-        if (horizontalDirection != 0f && horizontalScrollableState != null && canScroll(horizontalScrollableState, horizontalDirection)) {
-          didScroll = scrollAxis(
-            scrollableState = horizontalScrollableState,
-            direction = horizontalDirection,
-            edgeDistance = horizontalEdgeDistance,
-          ) || didScroll
+        if (
+          horizontalDirection != 0f &&
+            horizontalScrollableState != null &&
+            canScroll(horizontalScrollableState, horizontalDirection)
+        ) {
+          didScroll =
+            scrollAxis(
+              scrollableState = horizontalScrollableState,
+              direction = horizontalDirection,
+              edgeDistance = horizontalEdgeDistance,
+            ) || didScroll
         }
 
         if (didScroll) {
@@ -267,10 +271,7 @@ class EdgeAutoScrollState internal constructor(
     return consumed != 0f
   }
 
-  private fun canScroll(
-    scrollableState: ScrollableState,
-    direction: Float,
-  ): Boolean {
+  private fun canScroll(scrollableState: ScrollableState, direction: Float): Boolean {
     return if (direction < 0f) {
       scrollableState.canScrollBackward
     } else {

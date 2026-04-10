@@ -4,13 +4,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
 
-val LocalBottomSheetHost = staticCompositionLocalOf<BottomSheetHostState> {
-  error("No BottomSheetHostState provided")
-}
+val LocalBottomSheetHost =
+  staticCompositionLocalOf<BottomSheetHostState> { error("No BottomSheetHostState provided") }
 
 class BottomSheetEntry<T>(
   val content: @Composable BottomSheetScope<T>.() -> Unit,
@@ -27,11 +26,10 @@ class BottomSheetEntry<T>(
 
 class BottomSheetHostState {
   private val _entries = mutableStateListOf<BottomSheetEntry<*>>()
-  val entries: List<BottomSheetEntry<*>> get() = _entries
+  val entries: List<BottomSheetEntry<*>>
+    get() = _entries
 
-  suspend fun <T> show(
-    content: @Composable BottomSheetScope<T>.() -> Unit,
-  ): T {
+  suspend fun <T> show(content: @Composable BottomSheetScope<T>.() -> Unit): T {
     var entryRef: BottomSheetEntry<T>? = null
     try {
       return suspendCancellableCoroutine { continuation ->

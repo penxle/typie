@@ -5,47 +5,43 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
 object SheetDetentResolver {
-  fun resolve(
-    policy: SheetSizePolicy,
-    context: SheetDetentContext,
-  ): List<ResolvedSheetDetent> =
+  fun resolve(policy: SheetSizePolicy, context: SheetDetentContext): List<ResolvedSheetDetent> =
     when (policy) {
-      is SheetSizePolicy.Intrinsic -> listOf(
-        ResolvedSheetDetent(
-          id = SheetDetentId.Intrinsic,
-          height = minOf(context.contentHeight, context.viewportHeight - policy.topGap)
-            .coerceIn(0.dp, context.viewportHeight),
-        ),
-      )
+      is SheetSizePolicy.Intrinsic ->
+        listOf(
+          ResolvedSheetDetent(
+            id = SheetDetentId.Intrinsic,
+            height =
+              minOf(context.contentHeight, context.viewportHeight - policy.topGap)
+                .coerceIn(0.dp, context.viewportHeight),
+          )
+        )
       is SheetSizePolicy.Fixed -> listOf(resolveDetent(SheetDetent.Fixed(policy.height), context))
       is SheetSizePolicy.Max -> listOf(resolveDetent(SheetDetent.TopGap(policy.topGap), context))
-      is SheetSizePolicy.Detents -> (listOf(policy.initial) + policy.available)
-        .map { resolveDetent(it, context) }
-        .distinctBy { it.id }
-        .sortedBy { it.height.value }
+      is SheetSizePolicy.Detents ->
+        (listOf(policy.initial) + policy.available)
+          .map { resolveDetent(it, context) }
+          .distinctBy { it.id }
+          .sortedBy { it.height.value }
     }
 
-  fun resolveDetent(
-    detent: SheetDetent,
-    context: SheetDetentContext,
-  ): ResolvedSheetDetent {
-    val height = when (detent) {
-      SheetDetent.Intrinsic -> context.contentHeight
-      is SheetDetent.Fixed -> detent.height
-      is SheetDetent.Fraction -> context.viewportHeight * detent.value
-      is SheetDetent.TopGap -> context.viewportHeight - detent.gap
-      is SheetDetent.Content -> {
-        val maxHeight = detent.maxTopGap?.let { context.viewportHeight - it } ?: context.viewportHeight
-        minOf(context.contentHeight, maxHeight)
-      }
+  fun resolveDetent(detent: SheetDetent, context: SheetDetentContext): ResolvedSheetDetent {
+    val height =
+      when (detent) {
+        SheetDetent.Intrinsic -> context.contentHeight
+        is SheetDetent.Fixed -> detent.height
+        is SheetDetent.Fraction -> context.viewportHeight * detent.value
+        is SheetDetent.TopGap -> context.viewportHeight - detent.gap
+        is SheetDetent.Content -> {
+          val maxHeight =
+            detent.maxTopGap?.let { context.viewportHeight - it } ?: context.viewportHeight
+          minOf(context.contentHeight, maxHeight)
+        }
 
-      is SheetDetent.Custom -> detent.resolver(context)
-    }.coerceIn(0.dp, context.viewportHeight)
+        is SheetDetent.Custom -> detent.resolver(context)
+      }.coerceIn(0.dp, context.viewportHeight)
 
-    return ResolvedSheetDetent(
-      id = detent.id,
-      height = height,
-    )
+    return ResolvedSheetDetent(id = detent.id, height = height)
   }
 }
 
@@ -60,9 +56,8 @@ internal fun resolveSheetSettledDetent(
     return null
   }
 
-  val nearest = detents.minByOrNull { detent ->
-    abs((detent.height - sheetHeight).value)
-  } ?: return null
+  val nearest =
+    detents.minByOrNull { detent -> abs((detent.height - sheetHeight).value) } ?: return null
   val current = detents.firstOrNull { it.id == currentDetentId } ?: return nearest
   val minDetent = detents.minByOrNull { it.height.value } ?: current
   val largerDetents = detents.filter { it.height > current.height }
@@ -70,35 +65,27 @@ internal fun resolveSheetSettledDetent(
 
   if (
     policy.allowsDragExpansion() &&
-    largerDetents.isNotEmpty() &&
-    (
-      velocity <= -SheetDefaults.DetentSnapVelocityThreshold ||
-      sheetHeight >= current.height + minOf(
-        SheetDefaults.DetentSnapThreshold,
-        largerDetents.first().height - current.height,
-      )
-    )
+      largerDetents.isNotEmpty() &&
+      (velocity <= -SheetDefaults.DetentSnapVelocityThreshold ||
+        sheetHeight >=
+          current.height +
+            minOf(SheetDefaults.DetentSnapThreshold, largerDetents.first().height - current.height))
   ) {
-    return largerDetents.minByOrNull { detent ->
-      abs((detent.height - sheetHeight).value)
-    } ?: current
+    return largerDetents.minByOrNull { detent -> abs((detent.height - sheetHeight).value) }
+      ?: current
   }
 
   if (
     policy.allowsDragCollapse() &&
-    !policy.skipsDragCollapseToSmallerDetents(currentDetent = current, minDetent = minDetent) &&
-    smallerDetents.isNotEmpty() &&
-    (
-      velocity >= SheetDefaults.DetentSnapVelocityThreshold ||
-      sheetHeight <= current.height - minOf(
-        SheetDefaults.DetentSnapThreshold,
-        current.height - smallerDetents.last().height,
-      )
-    )
+      !policy.skipsDragCollapseToSmallerDetents(currentDetent = current, minDetent = minDetent) &&
+      smallerDetents.isNotEmpty() &&
+      (velocity >= SheetDefaults.DetentSnapVelocityThreshold ||
+        sheetHeight <=
+          current.height -
+            minOf(SheetDefaults.DetentSnapThreshold, current.height - smallerDetents.last().height))
   ) {
-    return smallerDetents.minByOrNull { detent ->
-      abs((detent.height - sheetHeight).value)
-    } ?: current
+    return smallerDetents.minByOrNull { detent -> abs((detent.height - sheetHeight).value) }
+      ?: current
   }
 
   return current
@@ -121,14 +108,16 @@ internal fun shouldDismissDraggedSheet(
 ): Boolean {
   val minDetent = detents.minByOrNull { it.height.value } ?: return false
   val currentDetent = detents.firstOrNull { it.id == currentDetentId } ?: minDetent
-  val dismissAnchor = when (policy) {
-    is SheetSizePolicy.Detents -> when (policy.dragDismissBehavior) {
-      SheetDragDismissBehavior.FromMinDetent -> minDetent
-      SheetDragDismissBehavior.FromCurrentDetent -> currentDetent
-    }
+  val dismissAnchor =
+    when (policy) {
+      is SheetSizePolicy.Detents ->
+        when (policy.dragDismissBehavior) {
+          SheetDragDismissBehavior.FromMinDetent -> minDetent
+          SheetDragDismissBehavior.FromCurrentDetent -> currentDetent
+        }
 
-    else -> minDetent
-  }
+      else -> minDetent
+    }
   val dismissThreshold = dismissAnchor.height * (1f - SheetDefaults.DismissThresholdFraction)
 
   return sheetHeight < dismissThreshold ||

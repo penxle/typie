@@ -18,11 +18,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import co.typie.bootstrap.BootstrapDevSandbox
 import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
-import co.typie.dev.createDevToolsWindow
-import co.typie.bootstrap.BootstrapDevSandbox
 import co.typie.dev.SubscriptionDevSandbox
+import co.typie.dev.createDevToolsWindow
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
@@ -42,27 +42,24 @@ private const val DEVICE_PIXEL_SCALE = 3
 
 @Structure.FieldOrder("width", "height")
 open class CGSize : Structure(), Structure.ByValue {
-  @JvmField
-  var width: Double = 0.0
+  @JvmField var width: Double = 0.0
 
-  @JvmField
-  var height: Double = 0.0
+  @JvmField var height: Double = 0.0
 }
 
 private interface CoreGraphics : Library {
   fun CGMainDisplayID(): Int
+
   fun CGDisplayScreenSize(display: Int): CGSize
 }
 
-private val coreGraphics: CoreGraphics? = runCatching {
-  Native.load("CoreGraphics", CoreGraphics::class.java)
-}.getOrNull()
+private val coreGraphics: CoreGraphics? =
+  runCatching { Native.load("CoreGraphics", CoreGraphics::class.java) }.getOrNull()
 
 private fun physicalSizeScale(): Double {
   val deviceWidthInch = DEVICE_POINT_WIDTH.toDouble() * DEVICE_PIXEL_SCALE / DEVICE_PPI
-  val monitorWidthMm = coreGraphics?.let {
-    it.CGDisplayScreenSize(it.CGMainDisplayID()).width
-  } ?: return 0.80
+  val monitorWidthMm =
+    coreGraphics?.let { it.CGDisplayScreenSize(it.CGMainDisplayID()).width } ?: return 0.80
   val monitorLogicalPpi = Toolkit.getDefaultToolkit().screenSize.width / (monitorWidthMm / 25.4)
   return deviceWidthInch * monitorLogicalPpi / DEVICE_POINT_WIDTH
 }
@@ -78,10 +75,11 @@ private fun disableWindowFullScreen() {
     fun msg(receiver: Pointer, selName: String, vararg args: Any) =
       msgSend.invoke(Pointer::class.java, arrayOf(receiver, sel(selName), *args)) as? Pointer
 
-    val nsApp = msg(
-      objcGetClass.invoke(Pointer::class.java, arrayOf("NSApplication")) as? Pointer ?: return,
-      "sharedApplication",
-    ) ?: return
+    val nsApp =
+      msg(
+        objcGetClass.invoke(Pointer::class.java, arrayOf("NSApplication")) as? Pointer ?: return,
+        "sharedApplication",
+      ) ?: return
 
     val windows = msg(nsApp, "windows") ?: return
     val nsWindow = msg(windows, "firstObject") ?: return
@@ -104,9 +102,17 @@ fun main() {
     dir = dir.parentFile
   }
 
-  val hostTarget = ProcessBuilder("rustc", "--print", "host-tuple").start()
-    .inputStream.bufferedReader().readText().trim()
-  System.setProperty("jna.library.path", java.io.File(dir, "target/$hostTarget/release-uniffi").absolutePath)
+  val hostTarget =
+    ProcessBuilder("rustc", "--print", "host-tuple")
+      .start()
+      .inputStream
+      .bufferedReader()
+      .readText()
+      .trim()
+  System.setProperty(
+    "jna.library.path",
+    java.io.File(dir, "target/$hostTarget/release-uniffi").absolutePath,
+  )
 
   val networkSimulator = NetworkSimulator
 
@@ -118,10 +124,8 @@ fun main() {
   val physicalScale = physicalSizeScale()
   val preferPhysical = physicalScale >= 0.7
   val pointAccurateSize = DpSize(DEVICE_POINT_WIDTH.dp, DEVICE_POINT_HEIGHT.dp)
-  val physicalSize = DpSize(
-    (DEVICE_POINT_WIDTH * physicalScale).dp,
-    (DEVICE_POINT_HEIGHT * physicalScale).dp,
-  )
+  val physicalSize =
+    DpSize((DEVICE_POINT_WIDTH * physicalScale).dp, (DEVICE_POINT_HEIGHT * physicalScale).dp)
 
   val prefs = Preferences.userRoot().node("co/typie")
   val savedWindowX = prefs.getInt("windowX", -1)
@@ -130,9 +134,9 @@ fun main() {
   // Restore saved network preset
   val savedPreset = prefs.get("networkPreset", null)
   if (savedPreset != null) {
-    runCatching { NetworkPreset.valueOf(savedPreset) }.getOrNull()?.let {
-      networkSimulator.select(it)
-    }
+    runCatching { NetworkPreset.valueOf(savedPreset) }
+      .getOrNull()
+      ?.let { networkSimulator.select(it) }
   }
 
   application {
@@ -152,11 +156,15 @@ fun main() {
         if (event.isMetaPressed && event.type == KeyEventType.KeyDown) {
           when (event.key) {
             Key.One -> {
-              windowState.size = physicalSize; usePhysicalScale = true; true
+              windowState.size = physicalSize
+              usePhysicalScale = true
+              true
             }
 
             Key.Two -> {
-              windowState.size = pointAccurateSize; usePhysicalScale = false; true
+              windowState.size = pointAccurateSize
+              usePhysicalScale = false
+              true
             }
 
             else -> false
@@ -171,8 +179,9 @@ fun main() {
           disableWindowFullScreen()
           if (savedWindowX >= 0 && savedWindowY >= 0) {
             val screens = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices
-            val visible =
-              screens.any { it.defaultConfiguration.bounds.contains(savedWindowX, savedWindowY) }
+            val visible = screens.any {
+              it.defaultConfiguration.bounds.contains(savedWindowX, savedWindowY)
+            }
             if (visible) {
               window.setLocation(savedWindowX, savedWindowY)
             }
@@ -182,16 +191,12 @@ fun main() {
 
       val currentDensity = LocalDensity.current
       val scale = if (usePhysicalScale) physicalScale.toFloat() else 1f
-      val adjustedDensity = remember(currentDensity, scale) {
-        Density(
-          density = currentDensity.density * scale,
-          fontScale = currentDensity.fontScale,
-        )
-      }
+      val adjustedDensity =
+        remember(currentDensity, scale) {
+          Density(density = currentDensity.density * scale, fontScale = currentDensity.fontScale)
+        }
 
-      CompositionLocalProvider(LocalDensity provides adjustedDensity) {
-        App()
-      }
+      CompositionLocalProvider(LocalDensity provides adjustedDensity) { App() }
     }
 
     LaunchedEffect(Unit) {

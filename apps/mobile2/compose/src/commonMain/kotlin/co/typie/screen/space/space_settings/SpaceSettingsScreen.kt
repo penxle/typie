@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -28,31 +27,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.imePadding
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
-import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.rememberFilePicker
 import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.hasSubscriptionOrNull
 import co.typie.screen.subscription.planUpgradeRoute
 import co.typie.screen.subscription.showPlanUpgradeSheet
+import co.typie.service.CurrentSubscriptionStore
+import co.typie.service.hasSubscriptionOrNull
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
@@ -82,7 +78,6 @@ import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.completedOrNull
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -92,12 +87,8 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
-import androidx.lifecycle.viewmodel.compose.viewModel
 
-private data class SpaceDateDisplayOption(
-  val value: SiteDateDisplay,
-  val label: String,
-)
+private data class SpaceDateDisplayOption(val value: SiteDateDisplay, val label: String)
 
 private fun spaceDateDisplayOptions(): List<SpaceDateDisplayOption> {
   return listOf(
@@ -111,10 +102,8 @@ private fun spaceDateDisplayLabel(value: SiteDateDisplay): String {
   return spaceDateDisplayOptions().firstOrNull { it.value == value }?.label ?: "미표시"
 }
 
-private val SpaceDateDisplaySheetPadding = SheetPadding(
-  header = PaddingValues(horizontal = 16.dp),
-  body = PaddingValues(horizontal = 16.dp),
-)
+private val SpaceDateDisplaySheetPadding =
+  SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(horizontal = 16.dp))
 
 @Composable
 fun SpaceSettingsScreen() {
@@ -131,14 +120,16 @@ fun SpaceSettingsScreen() {
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker
     scope.launch {
-      model.uploadLogo(file).collect(
-        onPending = { toast.show(ToastType.Loading, "로고 업로드 중...", Duration.ZERO) },
-        onSettled = { result ->
-          result
-            .withDefaultExceptionHandler(toast)
-            .onOk { toast.show(ToastType.Success, "로고가 업로드되었어요.") }
-        },
-      )
+      model
+        .uploadLogo(file)
+        .collect(
+          onPending = { toast.show(ToastType.Loading, "로고 업로드 중...", Duration.ZERO) },
+          onSettled = { result ->
+            result.withDefaultExceptionHandler(toast).onOk {
+              toast.show(ToastType.Success, "로고가 업로드되었어요.")
+            }
+          },
+        )
     }
   }
 
@@ -160,20 +151,20 @@ fun SpaceSettingsScreen() {
     bottomBar = {
       Button(
         text = "저장",
-        modifier = Modifier
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
         loading = model.isSubmitting,
         loadingText = "저장 중...",
         onClick = {
           scope.launch {
-            model.submit()
+            model
+              .submit()
               .withDefaultExceptionHandler(toast)
               .onOk { nav.pop() }
               .onErr { error ->
                 when (error) {
                   SubmitError.SlugAlreadyExists -> toast.show(ToastType.Error, "이미 사용 중인 URL이에요.")
-                  SubmitError.SubscriptionUnknown -> toast.show(ToastType.Error, "이용권 상태를 확인하는 중이에요. 잠시 후 다시 시도해주세요.")
+                  SubmitError.SubscriptionUnknown ->
+                    toast.show(ToastType.Error, "이용권 상태를 확인하는 중이에요. 잠시 후 다시 시도해주세요.")
                 }
               }
           }
@@ -183,20 +174,13 @@ fun SpaceSettingsScreen() {
   ) {
     val data = model.query.data
     val hasSubscription = currentSubscriptionState.hasSubscriptionOrNull()
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       SectionTitle("일반")
 
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.fillMaxWidth()) {
           Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(top = 24.dp, bottom = 20.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
           ) {
@@ -216,9 +200,7 @@ fun SpaceSettingsScreen() {
           CardDivider()
 
           Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             TextField(
@@ -229,38 +211,38 @@ fun SpaceSettingsScreen() {
             )
 
             Box(
-              modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                  if (hasSubscription == false) {
-                    Modifier.clickable {
-                      planUpgradeRoute(
-                        bottomSheetHost.showPlanUpgradeSheet(
-                          message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.",
-                        ),
-                      )?.let { route ->
-                        nav.navigate(route)
+              modifier =
+                Modifier.fillMaxWidth()
+                  .then(
+                    if (hasSubscription == false) {
+                      Modifier.clickable {
+                        planUpgradeRoute(
+                            bottomSheetHost.showPlanUpgradeSheet(
+                              message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                            )
+                          )
+                          ?.let { route -> nav.navigate(route) }
                       }
-                    }
-                  } else {
-                    Modifier
-                  }
-                ),
-            ) {
-                  TextField(
-                    field = model.state.form.slug,
-                    label = "주소",
-                    help = if (hasSubscription == false) {
-                      "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                     } else {
-                      null
-                },
-                    helpTextStyle = AppTheme.typography.caption,
-                    labelPosition = LabelPosition.Internal,
-                    placeholder = "스페이스 주소",
-                    enabled = hasSubscription == true,
-                    readOnly = hasSubscription != true,
-                    suffix = {
+                      Modifier
+                    }
+                  )
+            ) {
+              TextField(
+                field = model.state.form.slug,
+                label = "주소",
+                help =
+                  if (hasSubscription == false) {
+                    "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                  } else {
+                    null
+                  },
+                helpTextStyle = AppTheme.typography.caption,
+                labelPosition = LabelPosition.Internal,
+                placeholder = "스페이스 주소",
+                enabled = hasSubscription == true,
+                readOnly = hasSubscription != true,
+                suffix = {
                   Text(
                     ".${model.usersiteHost}",
                     style = AppTheme.typography.body,
@@ -279,9 +261,7 @@ fun SpaceSettingsScreen() {
       ) {
         SectionTitle("디자인")
 
-        CardSurface(
-          modifier = Modifier.fillMaxWidth(),
-        ) {
+        CardSurface(modifier = Modifier.fillMaxWidth()) {
           CardRow(
             onClick = {
               sheetHost.show(
@@ -292,7 +272,7 @@ fun SpaceSettingsScreen() {
                   }
                 },
               )
-            },
+            }
           ) {
             SpaceSettingsRowContent(
               label = "글 목록에 표시할 날짜",
@@ -348,39 +328,30 @@ private fun RowScope.SpaceSettingsRowContent(
   )
 }
 
-private fun spaceDateDisplaySheet(
-  selected: SiteDateDisplay,
-) : SheetPresentation<SiteDateDisplay> = sheetPresentation {
-  SheetLayout(
-    padding = SpaceDateDisplaySheetPadding,
-    verticalSpacing = 8.dp,
-    header = {
-      ActionHeader(title = "글 목록에 표시할 날짜")
-    },
-  ) {
-    SheetOptionList(items = spaceDateDisplayOptions()) { item ->
-      SheetOptionRow(
-        selected = item.value == selected,
-        onClick = { complete(item.value) },
-      ) {
-        Text(
-          text = item.label,
-          style = AppTheme.typography.action,
-          modifier = Modifier.fillMaxWidth(),
-          color = AppTheme.colors.textPrimary,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
+private fun spaceDateDisplaySheet(selected: SiteDateDisplay): SheetPresentation<SiteDateDisplay> =
+  sheetPresentation {
+    SheetLayout(
+      padding = SpaceDateDisplaySheetPadding,
+      verticalSpacing = 8.dp,
+      header = { ActionHeader(title = "글 목록에 표시할 날짜") },
+    ) {
+      SheetOptionList(items = spaceDateDisplayOptions()) { item ->
+        SheetOptionRow(selected = item.value == selected, onClick = { complete(item.value) }) {
+          Text(
+            text = item.label,
+            style = AppTheme.typography.action,
+            modifier = Modifier.fillMaxWidth(),
+            color = AppTheme.colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
       }
     }
   }
-}
 
 @Composable
-private fun MoreMenu(
-  model: SpaceSettingsViewModel,
-  showLastSiteAlert: () -> Unit,
-) {
+private fun MoreMenu(model: SpaceSettingsViewModel, showLastSiteAlert: () -> Unit) {
   val nav = Nav.current
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -392,57 +363,56 @@ private fun MoreMenu(
     pane = {
       Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
         PopoverList(
-          items = listOf(
-            PopoverListItem(
-              content = {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-                ) {
-                  Icon(
-                    icon = Lucide.Trash2,
-                    modifier = Modifier.size(18.dp),
-                    tint = AppTheme.colors.danger,
-                  )
-                  Spacer(Modifier.width(12.dp))
-                  Text(
-                    "스페이스 삭제",
-                    style = AppTheme.typography.action,
-                    color = AppTheme.colors.danger,
-                  )
-                }
-              },
-              onSelected = {
-                close()
-                val data = model.query.data
-                val isLastSite = data.me.sites.size <= 1
-                if (isLastSite) {
-                  showLastSiteAlert()
-                } else {
-                  scope.launch {
-                    val totalCount = data.site.documentCount + data.site.folderCount
-                    bottomSheetHost.show {
-                      DeleteSiteConfirmSheet(
-                        totalCount = totalCount,
-                        isDeleting = model.isDeletingSite,
-                        onDelete = {
-                          scope.launch {
-                            model.deleteSite()
-                              .withDefaultExceptionHandler(toast)
-                              .onOk {
+          items =
+            listOf(
+              PopoverListItem(
+                content = {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
+                  ) {
+                    Icon(
+                      icon = Lucide.Trash2,
+                      modifier = Modifier.size(18.dp),
+                      tint = AppTheme.colors.danger,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                      "스페이스 삭제",
+                      style = AppTheme.typography.action,
+                      color = AppTheme.colors.danger,
+                    )
+                  }
+                },
+                onSelected = {
+                  close()
+                  val data = model.query.data
+                  val isLastSite = data.me.sites.size <= 1
+                  if (isLastSite) {
+                    showLastSiteAlert()
+                  } else {
+                    scope.launch {
+                      val totalCount = data.site.documentCount + data.site.folderCount
+                      bottomSheetHost.show {
+                        DeleteSiteConfirmSheet(
+                          totalCount = totalCount,
+                          isDeleting = model.isDeletingSite,
+                          onDelete = {
+                            scope.launch {
+                              model.deleteSite().withDefaultExceptionHandler(toast).onOk {
                                 toast.show(ToastType.Success, "스페이스가 삭제되었어요.")
                                 dismiss()
                                 nav.pop()
                               }
-                          }
-                        },
-                      )
+                            }
+                          },
+                        )
+                      }
                     }
                   }
-                }
-              },
-            ),
-          ),
+                },
+              )
+            )
         )
       }
     },
@@ -450,24 +420,16 @@ private fun MoreMenu(
 }
 
 @Composable
-private fun SpaceLogo(
-  image: Img_image,
-  previewUrl: String?,
-  onClick: () -> Unit,
-) {
+private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit) {
   val logoShape = RoundedCornerShape(14.dp)
 
   InteractionScope {
-    Box(
-      modifier = Modifier
-        .clickable(onClick)
-        .pressScale(),
-    ) {
+    Box(modifier = Modifier.clickable(onClick).pressScale()) {
       Box(
-        modifier = Modifier
-          .size(104.dp)
-          .background(AppTheme.colors.surfaceDefault, logoShape)
-          .border(1.dp, AppTheme.colors.borderDefault, logoShape),
+        modifier =
+          Modifier.size(104.dp)
+            .background(AppTheme.colors.surfaceDefault, logoShape)
+            .border(1.dp, AppTheme.colors.borderDefault, logoShape),
         contentAlignment = Alignment.Center,
       ) {
         if (previewUrl != null) {
@@ -478,13 +440,13 @@ private fun SpaceLogo(
       }
 
       Box(
-        modifier = Modifier
-          .align(Alignment.BottomEnd)
-          .offset(x = 6.dp, y = 6.dp)
-          .size(36.dp)
-          .clip(CircleShape)
-          .background(AppTheme.colors.surfaceRaised)
-          .border(1.dp, AppTheme.colors.borderDefault, CircleShape),
+        modifier =
+          Modifier.align(Alignment.BottomEnd)
+            .offset(x = 6.dp, y = 6.dp)
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(AppTheme.colors.surfaceRaised)
+            .border(1.dp, AppTheme.colors.borderDefault, CircleShape),
         contentAlignment = Alignment.Center,
       ) {
         Icon(
@@ -538,9 +500,7 @@ fun BottomSheetScope<Unit>.DeleteSiteConfirmSheet(
       enabled = isConfirmed && !isDeleting,
       loading = isDeleting,
       loadingText = "삭제 중...",
-      onClick = {
-        if (isConfirmed) onDelete()
-      },
+      onClick = { if (isConfirmed) onDelete() },
     )
   }
 }

@@ -44,8 +44,7 @@ private data class FallbackFont(
   @SerialName("hash") val hash: String,
 )
 
-@Serializable
-private data class HashResponse(@SerialName("hash") val hash: String)
+@Serializable private data class HashResponse(@SerialName("hash") val hash: String)
 
 object FontLoader {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -66,10 +65,11 @@ object FontLoader {
     if (initialized) return
     initialized = true
 
-    val phantomFonts = listOf(
-      "Noto (Phantom)" to "files/editor/Noto-Phantom.bin",
-      "Noto Emoji (Phantom)" to "files/editor/Noto-Phantom-Emoji.bin",
-    )
+    val phantomFonts =
+      listOf(
+        "Noto (Phantom)" to "files/editor/Noto-Phantom.bin",
+        "Noto Emoji (Phantom)" to "files/editor/Noto-Phantom-Emoji.bin",
+      )
 
     for ((familyName, path) in phantomFonts) {
       val data = Res.readBytes(path)
@@ -81,9 +81,10 @@ object FontLoader {
     val fallbackManifestData = Res.readBytes("files/editor/fallbacks.bin")
     PlatformModule.editorHost.loadFallbackFontManifests(fallbackManifestData)
 
-    val fallbackFamilies = Json.decodeFromString<List<FallbackFamily>>(
-      Res.readBytes("files/editor/fallbacks.json").decodeToString()
-    )
+    val fallbackFamilies =
+      Json.decodeFromString<List<FallbackFamily>>(
+        Res.readBytes("files/editor/fallbacks.json").decodeToString()
+      )
 
     for (family in fallbackFamilies) {
       for (font in family.fonts) {
@@ -95,18 +96,13 @@ object FontLoader {
   }
 
   val fontManifestMissingHandler: EditorEventListener<EditorEvent.FontManifestMissing> =
-    { editor, event -> loadManifest(editor, event.family, event.weight) }
-
-  val fontDataMissingHandler: EditorEventListener<EditorEvent.FontDataMissing> =
     { editor, event ->
-      loadData(
-        editor,
-        event.family,
-        event.weight,
-        event.required,
-        event.prefetch
-      )
+      loadManifest(editor, event.family, event.weight)
     }
+
+  val fontDataMissingHandler: EditorEventListener<EditorEvent.FontDataMissing> = { editor, event ->
+    loadData(editor, event.family, event.weight, event.required, event.prefetch)
+  }
 
   private fun loadManifest(editor: Editor, family: String, weight: Int) {
     val fontPath = primaryFontPaths[family] ?: return
@@ -114,8 +110,9 @@ object FontLoader {
     editor.scope.launch {
       loadOnce("manifest:$family:$weight") {
         coroutineScope {
-          val manifestDeferred =
-            async { Http.get("$CDN_BASE/$fontPath/manifest.bin").bodyAsBytes() }
+          val manifestDeferred = async {
+            Http.get("$CDN_BASE/$fontPath/manifest.bin").bodyAsBytes()
+          }
           val hashDeferred = async {
             val data = Http.get("$CDN_BASE/$fontPath/hash.json").bodyAsBytes()
             Json.decodeFromString<HashResponse>(data.decodeToString()).hash
@@ -182,7 +179,6 @@ object FontLoader {
     }
   }
 
-
   private suspend fun loadOnce(key: String, block: suspend () -> Unit) {
     if (key in loaded) return
 
@@ -207,7 +203,9 @@ object FontLoader {
   }
 
   private suspend fun getOrFetch(url: String): ByteArray {
-    PlatformModule.diskCache.get(url)?.let { return it }
+    PlatformModule.diskCache.get(url)?.let {
+      return it
+    }
     val data = Http.get(url).bodyAsBytes()
     PlatformModule.diskCache.put(url, data)
     return data
@@ -233,13 +231,14 @@ object FontLoader {
 
     private suspend fun flush() {
       while (true) {
-        val item = mutex.withLock {
-          if (inflight >= PRELOAD_CONCURRENCY || pending.isEmpty()) return
-          val item = pending.removeFirst()
-          if (item.key in FontLoader.loaded) return@withLock null
-          inflight++
-          item
-        } ?: continue
+        val item =
+          mutex.withLock {
+            if (inflight >= PRELOAD_CONCURRENCY || pending.isEmpty()) return
+            val item = pending.removeFirst()
+            if (item.key in FontLoader.loaded) return@withLock null
+            inflight++
+            item
+          } ?: continue
 
         FontLoader.scope.launch {
           try {

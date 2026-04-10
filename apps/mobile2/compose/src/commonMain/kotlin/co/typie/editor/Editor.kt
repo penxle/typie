@@ -18,16 +18,14 @@ import co.typie.editor.ffi.Size
 import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
+import co.typie.platform.PlatformModule
+import kotlin.reflect.KClass
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import co.typie.platform.PlatformModule
-import kotlin.reflect.KClass
 
-class Editor private constructor(
-  private val inner: co.typie.editor.ffi.Editor,
-  val scope: CoroutineScope,
-) {
+class Editor
+private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: CoroutineScope) {
   var cursor by mutableStateOf<CursorRect?>(null)
     private set
 
@@ -53,8 +51,7 @@ class Editor private constructor(
     mutableMapOf<KClass<out EditorEvent>, MutableSet<(Editor, EditorEvent) -> Unit>>()
 
   inline fun <reified T : EditorEvent> on(noinline listener: EditorEventListener<T>): () -> Unit {
-    @Suppress("UNCHECKED_CAST")
-    val wrapped = listener as (Editor, EditorEvent) -> Unit
+    @Suppress("UNCHECKED_CAST") val wrapped = listener as (Editor, EditorEvent) -> Unit
     val set = listeners.getOrPut(T::class) { mutableSetOf() }
     set.add(wrapped)
     return { set.remove(wrapped) }
@@ -87,19 +84,18 @@ class Editor private constructor(
     }
   }
 
-  private val stateChangedHandler: EditorEventListener<EditorEvent.StateChanged> =
-    { _, event ->
-      for (field in event.fields) {
-        when (field) {
-          StateField.Doc -> {}
-          StateField.Cursor -> cursor = inner.cursor()
-          StateField.Selection -> selection = inner.selection()
-          StateField.PageSizes -> pageSizes = inner.pageSizes()
-          StateField.Ime -> ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE)
-          StateField.Modifiers -> {}
-        }
+  private val stateChangedHandler: EditorEventListener<EditorEvent.StateChanged> = { _, event ->
+    for (field in event.fields) {
+      when (field) {
+        StateField.Doc -> {}
+        StateField.Cursor -> cursor = inner.cursor()
+        StateField.Selection -> selection = inner.selection()
+        StateField.PageSizes -> pageSizes = inner.pageSizes()
+        StateField.Ime -> ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE)
+        StateField.Modifiers -> {}
       }
     }
+  }
 
   fun focus() = focusRequester.requestFocus()
 
@@ -107,11 +103,9 @@ class Editor private constructor(
     focusManager?.clearFocus()
   }
 
-  fun localToGlobal(page: Int, x: Float, y: Float): Offset? =
-    localToGlobal(page, x, y, pageOffsets)
+  fun localToGlobal(page: Int, x: Float, y: Float): Offset? = localToGlobal(page, x, y, pageOffsets)
 
-  fun globalToLocal(x: Float, y: Float): PagePoint? =
-    globalToLocal(x, y, pageOffsets, pageSizes)
+  fun globalToLocal(x: Float, y: Float): PagePoint? = globalToLocal(x, y, pageOffsets, pageSizes)
 
   fun attachSurface(page: Int, handle: Long, width: Int, height: Int, scaleFactor: Double) =
     inner.attachSurface(page, handle, width, height, scaleFactor)

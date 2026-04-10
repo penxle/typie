@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,13 +20,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.ext.navigationBarsPadding
-import co.typie.ext.verticalScroll
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.generated.resources.Res
+import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
 import co.typie.graphql.SocialAccountsScreen_Query
 import co.typie.graphql.type.SingleSignOnProvider
-import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
@@ -41,7 +39,6 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 internal fun socialAccountProviderName(provider: SingleSignOnProvider): String {
   return when (provider) {
@@ -59,9 +56,7 @@ fun SocialAccountsScreen() {
   val scrollState = rememberScrollState()
   val singleSignOns = model.query.data?.me?.singleSignOns.orEmpty()
 
-  ProvideTopBar(
-    center = { Text("연결된 SNS 계정", style = AppTheme.typography.title) },
-  )
+  ProvideTopBar(center = { Text("연결된 SNS 계정", style = AppTheme.typography.title) })
 
   if (model.query.state is QueryState.Error) {
     ErrorDialog { model.query.refetch() }
@@ -73,42 +68,34 @@ fun SocialAccountsScreen() {
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-      Spacer(Modifier.height(4.dp))
+    Spacer(Modifier.height(4.dp))
 
-      SectionTitle("연결된 계정")
+    SectionTitle("연결된 계정")
 
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        if (singleSignOns.isEmpty()) {
-          EmptySocialAccountsState()
-        } else {
-          Column {
-            singleSignOns.forEachIndexed { index, singleSignOn ->
-              SocialAccountRow(
-                provider = singleSignOn.provider,
-                email = singleSignOn.email,
-              )
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
+      if (singleSignOns.isEmpty()) {
+        EmptySocialAccountsState()
+      } else {
+        Column {
+          singleSignOns.forEachIndexed { index, singleSignOn ->
+            SocialAccountRow(provider = singleSignOn.provider, email = singleSignOn.email)
 
-              if (index < singleSignOns.lastIndex) {
-                CardDivider()
-              }
+            if (index < singleSignOns.lastIndex) {
+              CardDivider()
             }
           }
         }
       }
+    }
 
-      Spacer(Modifier.height(72.dp))
+    Spacer(Modifier.height(72.dp))
   }
 }
 
 @Composable
 private fun EmptySocialAccountsState() {
   Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .height(220.dp)
-      .padding(horizontal = 16.dp),
+    modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 16.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center,
   ) {
@@ -118,40 +105,22 @@ private fun EmptySocialAccountsState() {
       tint = AppTheme.colors.textTertiary,
     )
     Spacer(Modifier.height(12.dp))
-    Text(
-      "연결된 SNS 계정이 없어요",
-      style = AppTheme.typography.label,
-      color = AppTheme.colors.textTertiary,
-    )
+    Text("연결된 SNS 계정이 없어요", style = AppTheme.typography.label, color = AppTheme.colors.textTertiary)
   }
 }
 
 @Composable
-private fun SocialAccountRow(
-  provider: SingleSignOnProvider,
-  email: String,
-) {
+private fun SocialAccountRow(provider: SingleSignOnProvider, email: String) {
   Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp, vertical = 16.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(12.dp),
   ) {
     ProviderIcon(provider = provider)
 
-    Column(
-      verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-      Text(
-        socialAccountProviderName(provider),
-        style = AppTheme.typography.action,
-      )
-      Text(
-        email,
-        style = AppTheme.typography.body,
-        color = AppTheme.colors.textTertiary,
-      )
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      Text(socialAccountProviderName(provider), style = AppTheme.typography.action)
+      Text(email, style = AppTheme.typography.body, color = AppTheme.colors.textTertiary)
     }
   }
 }
@@ -160,16 +129,11 @@ private fun SocialAccountRow(
 private fun ProviderIcon(provider: SingleSignOnProvider) {
   when (provider) {
     SingleSignOnProvider.GOOGLE -> {
-      Img(
-        url = Res.getUri("files/brands/google.svg"),
-        modifier = Modifier.size(28.dp),
-      )
+      Img(url = Res.getUri("files/brands/google.svg"), modifier = Modifier.size(28.dp))
     }
 
     SingleSignOnProvider.NAVER -> {
-      ProviderIconBadge(
-        background = Color(0xFF03C75A),
-      ) {
+      ProviderIconBadge(background = Color(0xFF03C75A)) {
         Img(
           url = Res.getUri("files/brands/naver.svg"),
           modifier = Modifier.size(16.dp),
@@ -179,9 +143,7 @@ private fun ProviderIcon(provider: SingleSignOnProvider) {
     }
 
     SingleSignOnProvider.KAKAO -> {
-      ProviderIconBadge(
-        background = Color(0xFFFEE500),
-      ) {
+      ProviderIconBadge(background = Color(0xFFFEE500)) {
         Img(
           url = Res.getUri("files/brands/kakao.svg"),
           modifier = Modifier.size(20.dp),
@@ -191,9 +153,7 @@ private fun ProviderIcon(provider: SingleSignOnProvider) {
     }
 
     SingleSignOnProvider.APPLE -> {
-      ProviderIconBadge(
-        background = Color(0xFF000000),
-      ) {
+      ProviderIconBadge(background = Color(0xFF000000)) {
         Img(
           url = Res.getUri("files/brands/apple.svg"),
           modifier = Modifier.size(16.dp),
@@ -224,10 +184,12 @@ private fun ProviderIconBadge(
   content: @Composable BoxScope.() -> Unit,
 ) {
   Box(
-    modifier = Modifier
-      .size(28.dp)
-      .then(if (border != null) Modifier.border(1.dp, border, RoundedCornerShape(6.dp)) else Modifier)
-      .background(background, RoundedCornerShape(6.dp)),
+    modifier =
+      Modifier.size(28.dp)
+        .then(
+          if (border != null) Modifier.border(1.dp, border, RoundedCornerShape(6.dp)) else Modifier
+        )
+        .background(background, RoundedCornerShape(6.dp)),
     contentAlignment = Alignment.Center,
     content = content,
   )

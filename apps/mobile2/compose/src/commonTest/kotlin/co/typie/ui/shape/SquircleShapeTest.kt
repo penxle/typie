@@ -15,33 +15,36 @@ class SquircleShapeTest {
   @Test
   fun createsGenericOutline() {
     val shape = SquircleShape(12.dp)
-    val outline = shape.createOutline(
-      size = Size(100f, 50f),
-      layoutDirection = LayoutDirection.Ltr,
-      density = density,
-    )
+    val outline =
+      shape.createOutline(
+        size = Size(100f, 50f),
+        layoutDirection = LayoutDirection.Ltr,
+        density = density,
+      )
     assertIs<Outline.Generic>(outline)
   }
 
   @Test
   fun pillShapeWithLargeRadius() {
     val shape = SquircleShape(999.dp)
-    val outline = shape.createOutline(
-      size = Size(200f, 44f),
-      layoutDirection = LayoutDirection.Ltr,
-      density = density,
-    )
+    val outline =
+      shape.createOutline(
+        size = Size(200f, 44f),
+        layoutDirection = LayoutDirection.Ltr,
+        density = density,
+      )
     assertIs<Outline.Generic>(outline)
   }
 
   @Test
   fun zeroRadiusCreatesOutline() {
     val shape = SquircleShape(0.dp)
-    val outline = shape.createOutline(
-      size = Size(100f, 50f),
-      layoutDirection = LayoutDirection.Ltr,
-      density = density,
-    )
+    val outline =
+      shape.createOutline(
+        size = Size(100f, 50f),
+        layoutDirection = LayoutDirection.Ltr,
+        density = density,
+      )
     assertIs<Outline.Generic>(outline)
   }
 }

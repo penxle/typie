@@ -7,14 +7,11 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,16 +33,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.LookaheadScope
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import co.typie.ext.clickable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
+import co.typie.ext.clickable
 import co.typie.ext.plus
 import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
@@ -53,7 +51,7 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.type.TextReplacementState
 import co.typie.icons.Lucide
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.result.onErr
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -69,9 +67,9 @@ import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableDragHandle
@@ -87,8 +85,6 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import co.typie.overlay.LocalToast
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
 
@@ -105,7 +101,8 @@ fun TextReplacementsScreen() {
   val presetItems = model.normalizedPresetItems.sortedBy { it.order.orEmpty() }
   val smartQuoteItems = model.normalizedSmartQuoteItems
   val serverCustomItems = model.normalizedCustomItems.sortedBy { it.order.orEmpty() }
-  val serverCustomItemIds = remember(serverCustomItems) { normalizedCustomItemIds(serverCustomItems) }
+  val serverCustomItemIds =
+    remember(serverCustomItems) { normalizedCustomItemIds(serverCustomItems) }
 
   suspend fun openForm(editingItem: NormalizedTextReplacement? = null) {
     try {
@@ -116,19 +113,13 @@ fun TextReplacementsScreen() {
           lastCustomOrder = serverCustomItems.lastOrNull()?.order,
         )
       }
-    } catch (_: CancellationException) {
-    }
+    } catch (_: CancellationException) {}
   }
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
     center = { Text("텍스트 대치", style = AppTheme.typography.title) },
-    trailing = {
-      TopBarButton(
-        icon = Lucide.Plus,
-        onClick = { openForm() },
-      )
-    },
+    trailing = { TopBarButton(icon = Lucide.Plus, onClick = { openForm() }) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
@@ -141,31 +132,36 @@ fun TextReplacementsScreen() {
     background = AppTheme.colors.surfaceBase,
     primaryScrollableState = scrollState,
     body = { contentPadding ->
-      val reorderState = rememberReorderableListState(
-        keys = serverCustomItemIds,
-        verticalScrollableState = scrollState,
-      )
-      val displayCustomItems = remember(serverCustomItems, reorderState.displayedKeys) {
-        displayCustomItems(serverCustomItems, reorderState.displayedKeys)
-      }
+      val reorderState =
+        rememberReorderableListState(
+          keys = serverCustomItemIds,
+          verticalScrollableState = scrollState,
+        )
+      val displayCustomItems =
+        remember(serverCustomItems, reorderState.displayedKeys) {
+          displayCustomItems(serverCustomItems, reorderState.displayedKeys)
+        }
 
       Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .reorderableListContainer(
-            state = reorderState,
-            viewportTopInset = maxOf(
-              0.dp,
-              contentPadding.calculateTopPadding() - TopBarDefaults.BlurFadeHeight - TopBarDefaults.ContentTopSpacing,
-            ),
-          ),
+        modifier =
+          Modifier.fillMaxSize()
+            .reorderableListContainer(
+              state = reorderState,
+              viewportTopInset =
+                maxOf(
+                  0.dp,
+                  contentPadding.calculateTopPadding() -
+                    TopBarDefaults.BlurFadeHeight -
+                    TopBarDefaults.ContentTopSpacing,
+                ),
+            )
       ) {
         Column(
-          modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(contentPadding)
-            .safeBottomPadding(),
+          modifier =
+            Modifier.fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(contentPadding)
+              .safeBottomPadding(),
           verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
           Text(
@@ -186,17 +182,18 @@ fun TextReplacementsScreen() {
                 title = "곧은따옴표를 둥근따옴표로",
                 checked = model.isSmartQuoteEnabled,
                 onClick = {
-                  model.toggleSmartQuotes(
-                    items = model.normalizedItems,
-                    enabled = !model.isSmartQuoteEnabled,
-                  ).withDefaultExceptionHandler(toast)
+                  model
+                    .toggleSmartQuotes(
+                      items = model.normalizedItems,
+                      enabled = !model.isSmartQuoteEnabled,
+                    )
+                    .withDefaultExceptionHandler(toast)
                 },
                 onCheckedChange = { next ->
                   scope.launch {
-                    model.toggleSmartQuotes(
-                      items = model.normalizedItems,
-                      enabled = next,
-                    ).withDefaultExceptionHandler(toast)
+                    model
+                      .toggleSmartQuotes(items = model.normalizedItems, enabled = next)
+                      .withDefaultExceptionHandler(toast)
                   }
                 },
               )
@@ -216,21 +213,14 @@ fun TextReplacementsScreen() {
                 checked = item.state == TextReplacementState.ACTIVE,
                 onClick = { model.togglePreset(item).withDefaultExceptionHandler(toast) },
                 onCheckedChange = {
-                  scope.launch {
-                    model.togglePreset(item).withDefaultExceptionHandler(toast)
-                  }
+                  scope.launch { model.togglePreset(item).withDefaultExceptionHandler(toast) }
                 },
               )
             }
           }
 
-          Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            SectionTitle(
-              text = "사용자 대치",
-              modifier = Modifier.padding(top = 4.dp),
-            )
+          Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionTitle(text = "사용자 대치", modifier = Modifier.padding(top = 4.dp))
             Text(
               text = "위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.",
               style = AppTheme.typography.caption,
@@ -238,17 +228,12 @@ fun TextReplacementsScreen() {
             )
 
             if (serverCustomItems.isEmpty()) {
-              CardSurface(modifier = Modifier.fillMaxWidth()) {
-                TextReplacementEmptyState()
-              }
+              CardSurface(modifier = Modifier.fillMaxWidth()) { TextReplacementEmptyState() }
             } else {
               LookaheadScope {
                 val boundsTransform = remember {
                   androidx.compose.animation.BoundsTransform { _, _ ->
-                    spring(
-                      dampingRatio = 0.9f,
-                      stiffness = Spring.StiffnessMedium,
-                    )
+                    spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
                   }
                 }
 
@@ -258,61 +243,64 @@ fun TextReplacementsScreen() {
                       val isDragging = reorderState.isDragging(item.textReplacementId)
 
                       TextReplacementCustomRow(
-                        modifier = Modifier
-                          .then(
-                            if (isDragging) {
-                              Modifier
-                            } else {
-                              Modifier.animateBounds(
-                                lookaheadScope = this@LookaheadScope,
-                                boundsTransform = boundsTransform,
-                              )
-                            },
-                          )
-                          .reorderableItem(
+                        modifier =
+                          Modifier.then(
+                              if (isDragging) {
+                                Modifier
+                              } else {
+                                Modifier.animateBounds(
+                                  lookaheadScope = this@LookaheadScope,
+                                  boundsTransform = boundsTransform,
+                                )
+                              }
+                            )
+                            .reorderableItem(state = reorderState, key = item.textReplacementId),
+                        dragHandleModifier =
+                          Modifier.reorderableDragHandle(
                             state = reorderState,
                             key = item.textReplacementId,
-                          ),
-                        dragHandleModifier = Modifier.reorderableDragHandle(
-                          state = reorderState,
-                          key = item.textReplacementId,
-                          enabled = !isPersistingCustomReorder,
-                          onDragStarted = {
-                            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                          },
-                          onDragMoved = {
-                            haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                          },
-                          onDragStopped = { commit ->
-                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                            if (commit == null || commit.orderedKeys == serverCustomItemIds) {
-                              return@reorderableDragHandle
-                            }
-
-                            val reorderOrders = calculateCustomReorderOrdersFromOrderedKeys(
-                              items = serverCustomItems,
-                              orderedKeys = commit.orderedKeys,
-                              movedKey = commit.movedKey,
-                            ) ?: run {
-                              reorderState.resetToServerKeys(serverCustomItemIds)
-                              return@reorderableDragHandle
-                            }
-
-                            isPersistingCustomReorder = true
-                            scope.launch {
-                              model.moveCustom(
-                                textReplacementId = commit.movedKey,
-                                lowerOrder = reorderOrders.lowerOrder,
-                                upperOrder = reorderOrders.upperOrder,
+                            enabled = !isPersistingCustomReorder,
+                            onDragStarted = {
+                              haptic.performHapticFeedback(
+                                HapticFeedbackType.GestureThresholdActivate
                               )
-                                .withDefaultExceptionHandler(toast)
-                                .onException {
-                                  reorderState.resetToServerKeys(serverCustomItemIds)
-                                }
-                              isPersistingCustomReorder = false
-                            }
-                          },
-                        ),
+                            },
+                            onDragMoved = {
+                              haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                            },
+                            onDragStopped = { commit ->
+                              haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                              if (commit == null || commit.orderedKeys == serverCustomItemIds) {
+                                return@reorderableDragHandle
+                              }
+
+                              val reorderOrders =
+                                calculateCustomReorderOrdersFromOrderedKeys(
+                                  items = serverCustomItems,
+                                  orderedKeys = commit.orderedKeys,
+                                  movedKey = commit.movedKey,
+                                )
+                                  ?: run {
+                                    reorderState.resetToServerKeys(serverCustomItemIds)
+                                    return@reorderableDragHandle
+                                  }
+
+                              isPersistingCustomReorder = true
+                              scope.launch {
+                                model
+                                  .moveCustom(
+                                    textReplacementId = commit.movedKey,
+                                    lowerOrder = reorderOrders.lowerOrder,
+                                    upperOrder = reorderOrders.upperOrder,
+                                  )
+                                  .withDefaultExceptionHandler(toast)
+                                  .onException {
+                                    reorderState.resetToServerKeys(serverCustomItemIds)
+                                  }
+                                isPersistingCustomReorder = false
+                              }
+                            },
+                          ),
                         index = index,
                         item = item,
                         isDragging = isDragging,
@@ -323,9 +311,7 @@ fun TextReplacementsScreen() {
                             model.toggleCustom(item).withDefaultExceptionHandler(toast)
                           }
                         },
-                        onEditClick = {
-                          openForm(item)
-                        },
+                        onEditClick = { openForm(item) },
                       )
                     }
                   }
@@ -347,14 +333,8 @@ private fun TextReplacementSection(
   description: String? = null,
   content: @Composable ColumnScope.() -> Unit,
 ) {
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    SectionTitle(
-      text = title,
-      modifier = Modifier.padding(top = 4.dp),
-    )
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionTitle(text = title, modifier = Modifier.padding(top = 4.dp))
 
     if (description != null) {
       Text(
@@ -365,10 +345,7 @@ private fun TextReplacementSection(
     }
 
     CardSurface(modifier = Modifier.fillMaxWidth()) {
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        content = content,
-      )
+      Column(modifier = Modifier.fillMaxWidth(), content = content)
     }
   }
 }
@@ -390,10 +367,7 @@ private fun TextReplacementToggleRow(
       )
     }
 
-    SettingSwitch(
-      checked = checked,
-      onCheckedChange = onCheckedChange,
-    )
+    SettingSwitch(checked = checked, onCheckedChange = onCheckedChange)
   }
 }
 
@@ -405,15 +379,9 @@ private fun TextReplacementPresetRow(
   onCheckedChange: (Boolean) -> Unit,
 ) {
   CardRow(onClick = onClick) {
-    TextReplacementRuleLabel(
-      item = item,
-      modifier = Modifier.weight(1f),
-    )
+    TextReplacementRuleLabel(item = item, modifier = Modifier.weight(1f))
 
-    SettingSwitch(
-      checked = checked,
-      onCheckedChange = onCheckedChange,
-    )
+    SettingSwitch(checked = checked, onCheckedChange = onCheckedChange)
   }
 }
 
@@ -429,63 +397,67 @@ private fun TextReplacementCustomRow(
   onToggleChange: (Boolean) -> Unit,
   onEditClick: suspend () -> Unit,
 ) {
-  val topStartRadius by animateDpAsState(
-    targetValue = if (isFirst) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val topEndRadius by animateDpAsState(
-    targetValue = if (isFirst) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val bottomStartRadius by animateDpAsState(
-    targetValue = if (isLast) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val bottomEndRadius by animateDpAsState(
-    targetValue = if (isLast) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val shape = RoundedCornerShape(
-    topStart = topStartRadius,
-    topEnd = topEndRadius,
-    bottomStart = bottomStartRadius,
-    bottomEnd = bottomEndRadius,
-  )
+  val topStartRadius by
+    animateDpAsState(
+      targetValue = if (isFirst) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val topEndRadius by
+    animateDpAsState(
+      targetValue = if (isFirst) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val bottomStartRadius by
+    animateDpAsState(
+      targetValue = if (isLast) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val bottomEndRadius by
+    animateDpAsState(
+      targetValue = if (isLast) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val shape =
+    RoundedCornerShape(
+      topStart = topStartRadius,
+      topEnd = topEndRadius,
+      bottomStart = bottomStartRadius,
+      bottomEnd = bottomEndRadius,
+    )
   val density = LocalDensity.current
-  val animatedScale by animateFloatAsState(
-    targetValue = if (isDragging) 1.008f else 1f,
-    animationSpec = if (isDragging) {
-      tween(durationMillis = 120)
-    } else {
-      spring(
-        dampingRatio = 0.72f,
-        stiffness = Spring.StiffnessMediumLow,
-      )
-    },
-  )
-  val animatedElevation by animateDpAsState(
-    targetValue = if (isDragging) 3.dp else 0.dp,
-    animationSpec = if (isDragging) {
-      tween(durationMillis = 120)
-    } else {
-      spring(
-        dampingRatio = 0.72f,
-        stiffness = Spring.StiffnessMediumLow,
-      )
-    },
-  )
+  val animatedScale by
+    animateFloatAsState(
+      targetValue = if (isDragging) 1.008f else 1f,
+      animationSpec =
+        if (isDragging) {
+          tween(durationMillis = 120)
+        } else {
+          spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+        },
+    )
+  val animatedElevation by
+    animateDpAsState(
+      targetValue = if (isDragging) 3.dp else 0.dp,
+      animationSpec =
+        if (isDragging) {
+          tween(durationMillis = 120)
+        } else {
+          spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+        },
+    )
 
   CardSurface(
-    modifier = modifier
-      .fillMaxWidth()
-      .graphicsLayer {
-        scaleX = animatedScale
-        scaleY = animatedScale
-        shadowElevation = with(density) { animatedElevation.toPx() }
-        this.shape = shape
-        clip = false
-      }
-      .zIndex(if (isDragging) 1f else 0f),
+    modifier =
+      modifier
+        .fillMaxWidth()
+        .graphicsLayer {
+          scaleX = animatedScale
+          scaleY = animatedScale
+          shadowElevation = with(density) { animatedElevation.toPx() }
+          this.shape = shape
+          clip = false
+        }
+        .zIndex(if (isDragging) 1f else 0f),
     shape = shape,
     color = if (isDragging) AppTheme.colors.surfaceRaised else AppTheme.colors.surfaceDefault,
   ) {
@@ -494,13 +466,10 @@ private fun TextReplacementCustomRow(
         CardDivider(inset = 20.dp)
       }
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
+      Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(
-          modifier = dragHandleModifier
-            .size(width = CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP.dp, height = 56.dp),
+          modifier =
+            dragHandleModifier.size(width = CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP.dp, height = 56.dp),
           contentAlignment = Alignment.Center,
         ) {
           Icon(
@@ -512,20 +481,17 @@ private fun TextReplacementCustomRow(
 
         InteractionScope {
           Row(
-            modifier = Modifier
-              .weight(1f)
-              .clickable(onEditClick)
-              .padding(top = 16.dp, end = 12.dp, bottom = 16.dp)
-              .pressScale(0.98f),
+            modifier =
+              Modifier.weight(1f)
+                .clickable(onEditClick)
+                .padding(top = 16.dp, end = 12.dp, bottom = 16.dp)
+                .pressScale(0.98f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             TextReplacementOrderBadge(order = index + 1)
 
-            TextReplacementRuleLabel(
-              item = item,
-              modifier = Modifier.weight(1f),
-            )
+            TextReplacementRuleLabel(item = item, modifier = Modifier.weight(1f))
           }
         }
 
@@ -543,9 +509,7 @@ private fun TextReplacementCustomRow(
 @Composable
 private fun TextReplacementEmptyState() {
   Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 20.dp, vertical = 24.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
     contentAlignment = Alignment.Center,
   ) {
     Text(
@@ -568,10 +532,10 @@ private fun TextReplacementRegexBadge() {
 @Composable
 private fun TextReplacementOrderBadge(order: Int) {
   Box(
-    modifier = Modifier
-      .clip(RoundedCornerShape(4.dp))
-      .background(AppTheme.colors.surfaceTinted)
-      .padding(horizontal = 6.dp, vertical = 2.dp),
+    modifier =
+      Modifier.clip(RoundedCornerShape(4.dp))
+        .background(AppTheme.colors.surfaceTinted)
+        .padding(horizontal = 6.dp, vertical = 2.dp),
     contentAlignment = Alignment.Center,
   ) {
     Text(
@@ -593,70 +557,72 @@ private fun TextReplacementRuleLabel(
   SubcomposeLayout(modifier = modifier) { constraints ->
     val spacing = 6.dp.roundToPx()
 
-    val trailingPlaceables = subcompose("trailing") {
-      if (item.regex) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-          TextReplacementRegexBadge()
+    val trailingPlaceables =
+      subcompose("trailing") {
+          if (item.regex) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              TextReplacementRegexBadge()
+            }
+          }
         }
-      }
-    }.map { measurable ->
-      measurable.measure(
-        constraints.copy(minWidth = 0, minHeight = 0),
-      )
-    }
+        .map { measurable -> measurable.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
 
     val trailingWidth = trailingPlaceables.sumOf { it.width }
-    val trailingSpacing = if (trailingPlaceables.size > 1) spacing * (trailingPlaceables.size - 1) else 0
+    val trailingSpacing =
+      if (trailingPlaceables.size > 1) spacing * (trailingPlaceables.size - 1) else 0
     val trailingClusterWidth = trailingWidth + trailingSpacing
     val gapToTrailing = if (trailingPlaceables.isNotEmpty()) spacing else 0
-    val contentMaxWidth = (constraints.maxWidth - trailingClusterWidth - gapToTrailing).coerceAtLeast(0)
+    val contentMaxWidth =
+      (constraints.maxWidth - trailingClusterWidth - gapToTrailing).coerceAtLeast(0)
 
-    val contentPlaceable = subcompose("content") {
-      if (note != null) {
-        Text(
-          text = note,
-          style = AppTheme.typography.label,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      } else {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-          TextReplacementRuleToken(
-            text = item.match,
-            modifier = Modifier.weight(1f, fill = false),
-          )
-          Icon(
-            icon = Lucide.ChevronRight,
-            modifier = Modifier.size(14.dp),
-            tint = AppTheme.colors.textTertiary,
-          )
-          TextReplacementRuleToken(
-            text = item.substitute,
-            modifier = Modifier.weight(1f, fill = false),
-          )
+    val contentPlaceable =
+      subcompose("content") {
+          if (note != null) {
+            Text(
+              text = note,
+              style = AppTheme.typography.label,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          } else {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              TextReplacementRuleToken(
+                text = item.match,
+                modifier = Modifier.weight(1f, fill = false),
+              )
+              Icon(
+                icon = Lucide.ChevronRight,
+                modifier = Modifier.size(14.dp),
+                tint = AppTheme.colors.textTertiary,
+              )
+              TextReplacementRuleToken(
+                text = item.substitute,
+                modifier = Modifier.weight(1f, fill = false),
+              )
+            }
+          }
         }
-      }
-    }.single().measure(
-      constraints.copy(
-        minWidth = 0,
-        minHeight = 0,
-        maxWidth = contentMaxWidth,
-      ),
-    )
+        .single()
+        .measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = contentMaxWidth))
 
-    val width = (contentPlaceable.width + gapToTrailing + trailingClusterWidth)
-      .coerceIn(constraints.minWidth, constraints.maxWidth)
-    val height = maxOf(
-      contentPlaceable.height,
-      trailingPlaceables.maxOfOrNull { it.height } ?: 0,
-      constraints.minHeight,
-    ).coerceAtMost(constraints.maxHeight)
+    val width =
+      (contentPlaceable.width + gapToTrailing + trailingClusterWidth).coerceIn(
+        constraints.minWidth,
+        constraints.maxWidth,
+      )
+    val height =
+      maxOf(
+          contentPlaceable.height,
+          trailingPlaceables.maxOfOrNull { it.height } ?: 0,
+          constraints.minHeight,
+        )
+        .coerceAtMost(constraints.maxHeight)
 
     layout(width, height) {
       val contentY = (height - contentPlaceable.height) / 2
@@ -673,15 +639,13 @@ private fun TextReplacementRuleLabel(
 }
 
 @Composable
-private fun TextReplacementRuleToken(
-  text: String,
-  modifier: Modifier = Modifier,
-) {
+private fun TextReplacementRuleToken(text: String, modifier: Modifier = Modifier) {
   Box(
-    modifier = modifier
-      .clip(RoundedCornerShape(4.dp))
-      .background(AppTheme.colors.surfaceTinted)
-      .padding(horizontal = 6.dp, vertical = 2.dp),
+    modifier =
+      modifier
+        .clip(RoundedCornerShape(4.dp))
+        .background(AppTheme.colors.surfaceTinted)
+        .padding(horizontal = 6.dp, vertical = 2.dp)
   ) {
     Text(
       text = text,
@@ -701,36 +665,30 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
   val isEditing = editingItem != null
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val form = remember(editingItem?.textReplacementId) {
-    TextReplacementForm(
-      scope = scope,
-      editingItem = editingItem,
-    )
-  }
+  val form =
+    remember(editingItem?.textReplacementId) {
+      TextReplacementForm(scope = scope, editingItem = editingItem)
+    }
 
   var errorText by remember(editingItem?.textReplacementId) { mutableStateOf<String?>(null) }
   var isSaving by remember { mutableStateOf(false) }
   var isDeleting by remember { mutableStateOf(false) }
   var showDeleteConfirm by remember(editingItem?.textReplacementId) { mutableStateOf(false) }
 
-  LaunchedEffect(
-    form.match.value,
-    form.substitute.value,
-    form.note.value,
-    form.regex.value,
-  ) {
+  LaunchedEffect(form.match.value, form.substitute.value, form.note.value, form.regex.value) {
     if (errorText != null) {
       errorText = null
     }
   }
 
   suspend fun submit() {
-    val validationError = validateTextReplacementForm(
-      match = form.match.value,
-      substitute = form.substitute.value,
-      regex = form.regex.value,
-      regexValidator = model::validateRegex,
-    )
+    val validationError =
+      validateTextReplacementForm(
+        match = form.match.value,
+        substitute = form.substitute.value,
+        regex = form.regex.value,
+        regexValidator = model::validateRegex,
+      )
 
     if (validationError != null) {
       errorText = validationError.message
@@ -740,14 +698,15 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
     errorText = null
     isSaving = true
 
-    model.saveCustomRule(
-      editingItem = editingItem,
-      match = form.match.value,
-      substitute = form.substitute.value,
-      regex = form.regex.value,
-      note = form.note.value,
-      lastOrder = lastCustomOrder,
-    )
+    model
+      .saveCustomRule(
+        editingItem = editingItem,
+        match = form.match.value,
+        substitute = form.substitute.value,
+        regex = form.regex.value,
+        note = form.note.value,
+        lastOrder = lastCustomOrder,
+      )
       .withDefaultExceptionHandler(toast)
       .onOk { dismiss(Unit) }
       .onErr { error ->
@@ -782,9 +741,7 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
       )
     },
   ) {
-    Column(
-      verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
       Column {
         TextField(
           field = form.match,
@@ -809,12 +766,8 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
 
         TextReplacementRegexRow(
           checked = form.regex.value,
-          onClick = {
-            form.regex.setValue(!form.regex.value)
-          },
-          onCheckedChange = { next ->
-            form.regex.setValue(next)
-          },
+          onClick = { form.regex.setValue(!form.regex.value) },
+          onCheckedChange = { next -> form.regex.setValue(next) },
         )
       }
 
@@ -832,9 +785,7 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
           text = if (isDeleting) "삭제 중..." else "이 규칙 삭제하기",
           enabled = !isSaving && !isDeleting,
           color = AppTheme.colors.danger,
-          onClick = {
-            showDeleteConfirm = true
-          },
+          onClick = { showDeleteConfirm = true },
         )
       }
     }
@@ -850,9 +801,9 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
         showDeleteConfirm = false
         scope.launch {
           isDeleting = true
-          model.deleteCustom(requireNotNull(editingItem))
-            .withDefaultExceptionHandler(toast)
-            .onOk { dismiss(Unit) }
+          model.deleteCustom(requireNotNull(editingItem)).withDefaultExceptionHandler(toast).onOk {
+            dismiss(Unit)
+          }
           isDeleting = false
         }
       },
@@ -873,19 +824,16 @@ private fun TextReplacementFormTextAction(
 
   InteractionScope {
     Box(
-      modifier = modifier
-        .fillMaxWidth()
-        .clickable(enabled = enabled, onClick = onClick)
-        .pressScale(0.97f)
-        .padding(horizontal = 4.dp, vertical = 8.dp)
-        .alpha(alpha),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .clickable(enabled = enabled, onClick = onClick)
+          .pressScale(0.97f)
+          .padding(horizontal = 4.dp, vertical = 8.dp)
+          .alpha(alpha),
       contentAlignment = Alignment.Center,
     ) {
-      Text(
-        text = text,
-        style = AppTheme.typography.action,
-        color = color,
-      )
+      Text(text = text, style = AppTheme.typography.action, color = color)
     }
   }
 }
@@ -899,12 +847,13 @@ private fun TextReplacementRegexRow(
 ) {
   InteractionScope {
     Row(
-      modifier = modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(12.dp))
-        .clickable(onClick)
-        .pressScale()
-        .padding(horizontal = 16.dp, vertical = 4.dp),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .clip(RoundedCornerShape(12.dp))
+          .clickable(onClick)
+          .pressScale()
+          .padding(horizontal = 16.dp, vertical = 4.dp),
       horizontalArrangement = Arrangement.spacedBy(12.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -914,14 +863,8 @@ private fun TextReplacementRegexRow(
         tint = AppTheme.colors.textTertiary,
       )
 
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-      ) {
-        Text(
-          text = "정규식",
-          style = AppTheme.typography.label,
-        )
+      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(text = "정규식", style = AppTheme.typography.label)
         Text(
           text = "찾을 텍스트를 정규식 패턴으로 해석합니다.",
           style = AppTheme.typography.caption,
@@ -929,10 +872,7 @@ private fun TextReplacementRegexRow(
         )
       }
 
-      SettingSwitch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-      )
+      SettingSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
   }
 }

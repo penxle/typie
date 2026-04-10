@@ -15,7 +15,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
-class WatchQuery<D : Query.Data, out R> private constructor(
+class WatchQuery<D : Query.Data, out R>
+private constructor(
   private val scope: CoroutineScope,
   private val apolloClient: ApolloClient,
   private val query: () -> Query<D>,
@@ -60,9 +61,9 @@ class WatchQuery<D : Query.Data, out R> private constructor(
   init {
     scope.launch {
       snapshotFlow {
-        val shouldSkip = skip()
-        shouldSkip to if (shouldSkip) null else query()
-      }
+          val shouldSkip = skip()
+          shouldSkip to if (shouldSkip) null else query()
+        }
         .distinctUntilChanged()
         .collect { (shouldSkip, query) ->
           if (shouldSkip) {
@@ -123,7 +124,14 @@ fun <D : Query.Data> ApolloClient.watchQuery(
   resetOnChange: Boolean = true,
   query: () -> Query<D>,
 ): WatchQuery<D, D?> =
-  WatchQuery(scope, this, query, onInitialData = onInitialData, skip = skip, resetOnChange = resetOnChange)
+  WatchQuery(
+    scope,
+    this,
+    query,
+    onInitialData = onInitialData,
+    skip = skip,
+    resetOnChange = resetOnChange,
+  )
 
 fun <D : Query.Data> ApolloClient.watchQuery(
   scope: CoroutineScope,

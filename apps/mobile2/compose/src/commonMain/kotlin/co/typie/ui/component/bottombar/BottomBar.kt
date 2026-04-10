@@ -15,19 +15,15 @@ import co.typie.ext.pointerIgnore
 import co.typie.ext.toPx
 
 @Composable
-fun BottomBar(
-  state: BottomBarState,
-  modifier: Modifier = Modifier,
-) {
+fun BottomBar(state: BottomBarState, modifier: Modifier = Modifier) {
   val density = LocalDensity.current
-  val alpha by animateFloatAsState(
-    targetValue = if (state.enabled) 1f else 0f,
-    animationSpec = tween(200),
-  )
-  val translationY by animateFloatAsState(
-    targetValue = if (state.enabled) 0f else 120.dp.toPx(density),
-    animationSpec = tween(300, easing = EaseOutCubic),
-  )
+  val alpha by
+    animateFloatAsState(targetValue = if (state.enabled) 1f else 0f, animationSpec = tween(200))
+  val translationY by
+    animateFloatAsState(
+      targetValue = if (state.enabled) 0f else 120.dp.toPx(density),
+      animationSpec = tween(300, easing = EaseOutCubic),
+    )
 
   if (alpha == 0f) return
 
@@ -38,7 +34,7 @@ fun BottomBar(
         this.alpha = alpha
         this.translationY = translationY
       }
-      .then(if (state.enabled) Modifier else Modifier.pointerIgnore()),
+      .then(if (state.enabled) Modifier else Modifier.pointerIgnore())
   ) {
     val isCustom = state.customKey != BottomBarState.NullKey
     if (isCustom) {

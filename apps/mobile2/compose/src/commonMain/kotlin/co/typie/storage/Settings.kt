@@ -28,17 +28,13 @@ internal fun <T> ReadWriteProperty<Any?, T>.withComposeState(): ReadWritePropert
 }
 
 object Prefs {
-  inline operator fun <reified T> invoke(
-    key: String,
-    defaultValue: T,
-  ): ReadWriteProperty<Any?, T> =
-    PlatformModule.ksafePrefs.invoke(defaultValue, key, mode = KSafeWriteMode.Plain).withComposeState()
+  inline operator fun <reified T> invoke(key: String, defaultValue: T): ReadWriteProperty<Any?, T> =
+    PlatformModule.ksafePrefs
+      .invoke(defaultValue, key, mode = KSafeWriteMode.Plain)
+      .withComposeState()
 }
 
 object Vault {
-  inline operator fun <reified T> invoke(
-    key: String,
-    defaultValue: T,
-  ): ReadWriteProperty<Any?, T> =
+  inline operator fun <reified T> invoke(key: String, defaultValue: T): ReadWriteProperty<Any?, T> =
     PlatformModule.ksafeVault.invoke(defaultValue, key).withComposeState()
 }

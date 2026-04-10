@@ -5,7 +5,11 @@ import co.typie.editor.ffi.EditorHost
 import co.typie.migration.LegacyMigrationPlatformSource
 import eu.anifantakis.lib.ksafe.KSafe
 
-enum class Platform { Android, iOS, Desktop }
+enum class Platform {
+  Android,
+  iOS,
+  Desktop,
+}
 
 expect object PlatformModule {
   val platform: Platform

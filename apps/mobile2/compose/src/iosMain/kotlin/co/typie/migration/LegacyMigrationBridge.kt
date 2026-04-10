@@ -20,10 +20,7 @@ internal class LegacyMigrationBridge {
     return bridge.calculateLegacyHiveKeyCrcWithBase64EncodedKey(base64EncodedKey)?.longLongValue
   }
 
-  fun decryptLegacyHivePayload(
-    payload: ByteArray,
-    base64EncodedKey: String,
-  ): ByteArray? {
+  fun decryptLegacyHivePayload(payload: ByteArray, base64EncodedKey: String): ByteArray? {
     return bridge
       .decryptLegacyHivePayloadWithPayload(
         payload = payload.toNSData(),
@@ -38,12 +35,7 @@ internal fun ByteArray.toNSData(): NSData {
     return NSData.create(bytes = null, length = 0u)
   }
 
-  return usePinned { pinned ->
-    NSData.create(
-      bytes = pinned.addressOf(0),
-      length = size.toULong(),
-    )
-  }
+  return usePinned { pinned -> NSData.create(bytes = pinned.addressOf(0), length = size.toULong()) }
 }
 
 internal fun NSData.toByteArray(): ByteArray {
@@ -52,8 +44,6 @@ internal fun NSData.toByteArray(): ByteArray {
   }
 
   val byteArray = ByteArray(length.toInt())
-  byteArray.usePinned { pinned ->
-    memcpy(pinned.addressOf(0), bytes, length)
-  }
+  byteArray.usePinned { pinned -> memcpy(pinned.addressOf(0), bytes, length) }
   return byteArray
 }

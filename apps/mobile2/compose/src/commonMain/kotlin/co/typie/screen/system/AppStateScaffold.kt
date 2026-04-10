@@ -53,109 +53,88 @@ internal fun AppStateScaffold(
     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp),
     responsiveMaxWidth = 480.dp,
     body = { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(contentPadding)
-        .safeBottomPadding(),
-    ) {
-      Column(
-        modifier = Modifier
-          .weight(1f)
-          .fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-      ) {
-        Img(
-          url = Res.getUri("files/logos/full.svg"),
-          modifier = Modifier.height(32.dp),
-          contentScale = ContentScale.FillHeight,
-          color = AppTheme.colors.textPrimary,
-        )
-
-        Spacer(Modifier.height(28.dp))
-
-        Box(
-          modifier = Modifier
-            .size(56.dp)
-            .background(AppTheme.colors.surfaceSunken, CircleShape),
-          contentAlignment = Alignment.Center,
+      Column(modifier = Modifier.fillMaxSize().padding(contentPadding).safeBottomPadding()) {
+        Column(
+          modifier = Modifier.weight(1f).fillMaxWidth(),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.Center,
         ) {
-          Icon(
-            icon = icon,
-            modifier = Modifier.size(24.dp),
-            tint = AppTheme.colors.textTertiary,
+          Img(
+            url = Res.getUri("files/logos/full.svg"),
+            modifier = Modifier.height(32.dp),
+            contentScale = ContentScale.FillHeight,
+            color = AppTheme.colors.textPrimary,
           )
+
+          Spacer(Modifier.height(28.dp))
+
+          Box(
+            modifier = Modifier.size(56.dp).background(AppTheme.colors.surfaceSunken, CircleShape),
+            contentAlignment = Alignment.Center,
+          ) {
+            Icon(icon = icon, modifier = Modifier.size(24.dp), tint = AppTheme.colors.textTertiary)
+          }
+
+          Spacer(Modifier.height(20.dp))
+
+          Text(
+            text = title,
+            style = AppTheme.typography.heading.copy(textAlign = TextAlign.Center),
+            modifier = Modifier.fillMaxWidth(),
+          )
+
+          Spacer(Modifier.height(8.dp))
+
+          Text(
+            text = message,
+            style = AppTheme.typography.body.copy(textAlign = TextAlign.Center),
+            color = AppTheme.colors.textSecondary,
+            modifier = Modifier.fillMaxWidth(),
+          )
+
+          if (detail != null) {
+            Spacer(Modifier.height(16.dp))
+            detail()
+          }
         }
 
-        Spacer(Modifier.height(20.dp))
-
-        Text(
-          text = title,
-          style = AppTheme.typography.heading.copy(textAlign = TextAlign.Center),
+        Column(
           modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-          text = message,
-          style = AppTheme.typography.body.copy(textAlign = TextAlign.Center),
-          color = AppTheme.colors.textSecondary,
-          modifier = Modifier.fillMaxWidth(),
-        )
-
-        if (detail != null) {
-          Spacer(Modifier.height(16.dp))
-          detail()
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          if (secondaryAction != null) {
+            AppStateButton(secondaryAction)
+          }
+          if (primaryAction != null) {
+            AppStateButton(primaryAction)
+          }
         }
-      }
 
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        if (secondaryAction != null) {
-          AppStateButton(secondaryAction)
-        }
-        if (primaryAction != null) {
-          AppStateButton(primaryAction)
-        }
-      }
-
-      Spacer(Modifier.height(24.dp))
-    }
-  })
-}
-
-@Composable
-internal fun AppStateButton(
-  action: AppStateAction,
-) {
-  Button(
-    text = action.label,
-    variant = action.variant,
-    onClick = action.onClick,
-    leading = action.leadingIcon?.let { icon ->
-      { tint ->
-        Icon(
-          icon = icon,
-          modifier = Modifier.size(16.dp),
-          tint = tint,
-        )
+        Spacer(Modifier.height(24.dp))
       }
     },
   )
 }
 
 @Composable
-internal fun AppStateBadge(
-  text: String,
-) {
+internal fun AppStateButton(action: AppStateAction) {
+  Button(
+    text = action.label,
+    variant = action.variant,
+    onClick = action.onClick,
+    leading =
+      action.leadingIcon?.let { icon ->
+        { tint -> Icon(icon = icon, modifier = Modifier.size(16.dp), tint = tint) }
+      },
+  )
+}
+
+@Composable
+internal fun AppStateBadge(text: String) {
   Box(
-    modifier = Modifier
-      .background(AppTheme.colors.surfaceSunken, RoundedCornerShape(999.dp))
-      .padding(horizontal = 12.dp, vertical = 8.dp),
+    modifier =
+      Modifier.background(AppTheme.colors.surfaceSunken, RoundedCornerShape(999.dp))
+        .padding(horizontal = 12.dp, vertical = 8.dp)
   ) {
     Text(
       text = text,
@@ -166,23 +145,13 @@ internal fun AppStateBadge(
 }
 
 @Composable
-internal fun AppStateVersionRow(
-  label: String,
-  value: String,
-) {
+internal fun AppStateVersionRow(label: String, value: String) {
   Row(
     modifier = Modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Text(
-      text = label,
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
-    )
-    Text(
-      text = value,
-      style = AppTheme.typography.caption,
-    )
+    Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+    Text(text = value, style = AppTheme.typography.caption)
   }
 }

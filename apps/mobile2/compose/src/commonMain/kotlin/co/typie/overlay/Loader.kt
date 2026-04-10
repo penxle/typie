@@ -1,13 +1,11 @@
 package co.typie.overlay
 
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import androidx.compose.runtime.staticCompositionLocalOf
 
-val LocalLoader = staticCompositionLocalOf<Loader> {
-  error("No Loader provided")
-}
+val LocalLoader = staticCompositionLocalOf<Loader> { error("No Loader provided") }
 
 class Loader {
   private val _loading = MutableStateFlow(false)

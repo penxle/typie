@@ -3,6 +3,7 @@ package co.typie.screen.settings.text_replacements
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.form.FormState
+import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TextReplacementsScreen_CreateTextReplacement_Mutation
 import co.typie.graphql.TextReplacementsScreen_DeleteTextReplacement_Mutation
@@ -17,22 +18,17 @@ import co.typie.graphql.type.DeleteTextReplacementInput
 import co.typie.graphql.type.MoveTextReplacementInput
 import co.typie.graphql.type.TextReplacementState
 import co.typie.graphql.type.UpdateTextReplacementInput
-import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
 import kotlinx.coroutines.CoroutineScope
 
-class TextReplacementForm(
-  scope: CoroutineScope,
-  editingItem: NormalizedTextReplacement?,
-) : FormState(scope) {
+class TextReplacementForm(scope: CoroutineScope, editingItem: NormalizedTextReplacement?) :
+  FormState(scope) {
   val match = field(editingItem?.match.orEmpty())
   val substitute = field(editingItem?.substitute.orEmpty())
   val note = field(editingItem?.note.orEmpty())
-  val regex = field(editingItem?.regex ?: false) {
-    focusable = false
-  }
+  val regex = field(editingItem?.regex ?: false) { focusable = false }
 }
 
 sealed interface SaveRuleError {
@@ -40,7 +36,8 @@ sealed interface SaveRuleError {
 }
 
 class TextReplacementsViewModel : ViewModel() {
-  val query = Apollo.watchQuery(scope = viewModelScope, placeholderData()) { TextReplacementsScreen_Query() }
+  val query =
+    Apollo.watchQuery(scope = viewModelScope, placeholderData()) { TextReplacementsScreen_Query() }
 
   val normalizedItems: List<NormalizedTextReplacement>
     get() = normalizeTextReplacements(query.data.me.textReplacements)
@@ -59,11 +56,14 @@ class TextReplacementsViewModel : ViewModel() {
 
   fun validateRegex(pattern: String): Boolean {
     return true
-//    return editorEngine.validateRegex(pattern)
+    //    return editorEngine.validateRegex(pattern)
   }
 
   suspend fun togglePreset(item: NormalizedTextReplacement): Result<Unit, Nothing> {
-    return toggleTextReplacementState(item = item, enabled = item.state != TextReplacementState.ACTIVE)
+    return toggleTextReplacementState(
+      item = item,
+      enabled = item.state != TextReplacementState.ACTIVE,
+    )
   }
 
   suspend fun toggleSmartQuotes(
@@ -74,10 +74,7 @@ class TextReplacementsViewModel : ViewModel() {
     if (smartQuoteItems.all { it.state == desiredState(enabled) }) return@result
 
     smartQuoteItems.forEach { item ->
-      updateTextReplacementState(
-        textReplacementId = item.textReplacementId,
-        enabled = enabled,
-      )
+      updateTextReplacementState(textReplacementId = item.textReplacementId, enabled = enabled)
     }
     query.refetch()
   }
@@ -90,12 +87,13 @@ class TextReplacementsViewModel : ViewModel() {
     note: String?,
     lastOrder: String?,
   ): Result<Unit, SaveRuleError> = result {
-    val validationError = validateTextReplacementForm(
-      match = match,
-      substitute = substitute,
-      regex = regex,
-      regexValidator = ::validateRegex,
-    )
+    val validationError =
+      validateTextReplacementForm(
+        match = match,
+        substitute = substitute,
+        regex = regex,
+        regexValidator = ::validateRegex,
+      )
     if (validationError != null) {
       raise(SaveRuleError.ValidationFailed(validationError.message))
     }
@@ -103,33 +101,33 @@ class TextReplacementsViewModel : ViewModel() {
     val normalizedNote = note?.takeIf { it.isNotBlank() }
 
     if (editingItem == null) {
-      val builder = CreateTextReplacementInput.Builder()
-        .match(match)
-        .substitute(substitute)
-        .regex(regex)
-        .note(normalizedNote)
+      val builder =
+        CreateTextReplacementInput.Builder()
+          .match(match)
+          .substitute(substitute)
+          .regex(regex)
+          .note(normalizedNote)
 
       if (lastOrder != null) {
         builder.lowerOrder(lastOrder)
       }
 
       Apollo.executeMutation(
-        TextReplacementsScreen_CreateTextReplacement_Mutation(
-          input = builder.build(),
-        ),
+        TextReplacementsScreen_CreateTextReplacement_Mutation(input = builder.build())
       )
     } else {
       Apollo.executeMutation(
         TextReplacementsScreen_UpdateTextReplacement_Mutation(
-          input = UpdateTextReplacementInput.Builder()
-            .textReplacementId(editingItem.textReplacementId)
-            .match(match)
-            .substitute(substitute)
-            .regex(regex)
-            .note(normalizedNote)
-            .state(editingItem.state)
-            .build(),
-        ),
+          input =
+            UpdateTextReplacementInput.Builder()
+              .textReplacementId(editingItem.textReplacementId)
+              .match(match)
+              .substitute(substitute)
+              .regex(regex)
+              .note(normalizedNote)
+              .state(editingItem.state)
+              .build()
+        )
       )
     }
 
@@ -137,16 +135,18 @@ class TextReplacementsViewModel : ViewModel() {
   }
 
   suspend fun toggleCustom(item: NormalizedTextReplacement): Result<Unit, Nothing> {
-    return toggleTextReplacementState(item = item, enabled = item.state != TextReplacementState.ACTIVE)
+    return toggleTextReplacementState(
+      item = item,
+      enabled = item.state != TextReplacementState.ACTIVE,
+    )
   }
 
   suspend fun deleteCustom(item: NormalizedTextReplacement): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       TextReplacementsScreen_DeleteTextReplacement_Mutation(
-        input = DeleteTextReplacementInput.Builder()
-          .textReplacementId(item.textReplacementId)
-          .build(),
-      ),
+        input =
+          DeleteTextReplacementInput.Builder().textReplacementId(item.textReplacementId).build()
+      )
     )
     query.refetch()
   }
@@ -158,18 +158,19 @@ class TextReplacementsViewModel : ViewModel() {
   ): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       TextReplacementsScreen_MoveTextReplacement_Mutation(
-        input = MoveTextReplacementInput.Builder()
-          .textReplacementId(textReplacementId)
-          .apply {
-            if (lowerOrder != null) {
-              lowerOrder(lowerOrder)
+        input =
+          MoveTextReplacementInput.Builder()
+            .textReplacementId(textReplacementId)
+            .apply {
+              if (lowerOrder != null) {
+                lowerOrder(lowerOrder)
+              }
+              if (upperOrder != null) {
+                upperOrder(upperOrder)
+              }
             }
-            if (upperOrder != null) {
-              upperOrder(upperOrder)
-            }
-          }
-          .build(),
-      ),
+            .build()
+      )
     )
     query.refetch()
   }
@@ -180,24 +181,19 @@ class TextReplacementsViewModel : ViewModel() {
   ): Result<Unit, Nothing> = result {
     if (item.state == desiredState(enabled)) return@result
 
-    updateTextReplacementState(
-      textReplacementId = item.textReplacementId,
-      enabled = enabled,
-    )
+    updateTextReplacementState(textReplacementId = item.textReplacementId, enabled = enabled)
     query.refetch()
   }
 
-  private suspend fun updateTextReplacementState(
-    textReplacementId: String,
-    enabled: Boolean,
-  ) {
+  private suspend fun updateTextReplacementState(textReplacementId: String, enabled: Boolean) {
     Apollo.executeMutation(
       TextReplacementsScreen_UpdateTextReplacement_Mutation(
-        input = UpdateTextReplacementInput.Builder()
-          .textReplacementId(textReplacementId)
-          .state(desiredState(enabled))
-          .build(),
-      ),
+        input =
+          UpdateTextReplacementInput.Builder()
+            .textReplacementId(textReplacementId)
+            .state(desiredState(enabled))
+            .build()
+      )
     )
   }
 
@@ -206,8 +202,7 @@ class TextReplacementsViewModel : ViewModel() {
   }
 }
 
-private fun placeholderData() = TextReplacementsScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    textReplacements = emptyList()
+private fun placeholderData() =
+  TextReplacementsScreen_Query.Data(PlaceholderResolver) {
+    me = buildUser { textReplacements = emptyList() }
   }
-}

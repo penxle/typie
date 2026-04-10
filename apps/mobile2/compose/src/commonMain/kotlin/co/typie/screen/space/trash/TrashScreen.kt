@@ -69,18 +69,16 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlin.time.Instant
 
 private val MenuSheetHorizontalPadding = 24.dp
 private val MenuSheetActionContentPadding =
   PaddingValues(horizontal = MenuSheetHorizontalPadding, vertical = 8.dp)
 private val MenuSheetRowPadding = PaddingValues(vertical = 12.dp)
 
-internal enum class TrashItemType(
-  val label: String,
-) {
+internal enum class TrashItemType(val label: String) {
   Folder("폴더"),
   Document("문서"),
 }
@@ -98,10 +96,12 @@ internal data class TrashItem(
   val ancestorFolderNames: List<String>,
 ) {
   val breadcrumbSegments: List<String>
-    get() = buildList {
-      add(siteName)
-      addAll(ancestorFolderNames)
-    }.filter { it.isNotBlank() }
+    get() =
+      buildList {
+          add(siteName)
+          addAll(ancestorFolderNames)
+        }
+        .filter { it.isNotBlank() }
 
   val breadcrumb: String
     get() = breadcrumbSegments.joinToString(" › ")
@@ -158,116 +158,120 @@ fun TrashScreen(entityId: String? = null) {
 
   fun showItemActionsSheet(item: TrashItem) {
     sheetHost.show(
-      sheet = trashActionsSheet(
-        item = item,
-        actions = listOf(
-          TrashActionItem(
-            label = "복원",
-            icon = Lucide.Undo2,
-            onClick = {
-              model.recoverEntity(item)
-                .withDefaultExceptionHandler(toast)
-                .onOk { message ->
-                  toast.show(ToastType.Success, message)
-                  model.refetch()
-                }
-            },
-          ),
-          TrashActionItem(
-            label = "영구 삭제",
-            icon = Lucide.Trash2,
-            tint = dangerColor,
-            onClick = {
-              purgeRequest = TrashPurgeRequest(
-                title = "${item.type.label} 영구 삭제",
-                message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
-                confirmText = "삭제",
-                entityIds = listOf(item.id),
-                successMessage = "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
-              )
-            },
-          ),
-        ),
-        onAction = { action ->
-          sheetHost.launch { action.onClick() }
-        },
-      ),
+      sheet =
+        trashActionsSheet(
+          item = item,
+          actions =
+            listOf(
+              TrashActionItem(
+                label = "복원",
+                icon = Lucide.Undo2,
+                onClick = {
+                  model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
+                    toast.show(ToastType.Success, message)
+                    model.refetch()
+                  }
+                },
+              ),
+              TrashActionItem(
+                label = "영구 삭제",
+                icon = Lucide.Trash2,
+                tint = dangerColor,
+                onClick = {
+                  purgeRequest =
+                    TrashPurgeRequest(
+                      title = "${item.type.label} 영구 삭제",
+                      message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
+                      confirmText = "삭제",
+                      entityIds = listOf(item.id),
+                      successMessage = "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
+                    )
+                },
+              ),
+            ),
+          onAction = { action -> sheetHost.launch { action.onClick() } },
+        )
     )
   }
 
   LaunchedEffect(queryState, entityId) {
-    val data = (queryState as? QueryState.Success<*>)?.data as? TrashScreen_WithEntityId_Query.Data
-      ?: return@LaunchedEffect
+    val data =
+      (queryState as? QueryState.Success<*>)?.data as? TrashScreen_WithEntityId_Query.Data
+        ?: return@LaunchedEffect
     if (entityId != null && data.entity.state != EntityState.DELETED) {
       nav.pop()
     }
   }
 
-  val topBarActions = if (queryState is QueryState.Success) {
-    buildList {
-      val currentItem = content.currentItem
-      if (currentItem != null) {
-        add(
-          TrashActionItem(
-            label = "복원",
-            icon = Lucide.Undo2,
-            onClick = {
-              model.recoverEntity(currentItem)
-                .withDefaultExceptionHandler(toast)
-                .onOk { message ->
+  val topBarActions =
+    if (queryState is QueryState.Success) {
+      buildList {
+        val currentItem = content.currentItem
+        if (currentItem != null) {
+          add(
+            TrashActionItem(
+              label = "복원",
+              icon = Lucide.Undo2,
+              onClick = {
+                model.recoverEntity(currentItem).withDefaultExceptionHandler(toast).onOk { message
+                  ->
                   toast.show(ToastType.Success, message)
                   nav.pop()
                 }
-            },
-          ),
-        )
+              },
+            )
+          )
+          add(
+            TrashActionItem(
+              label = "영구 삭제",
+              icon = Lucide.Trash2,
+              tint = AppTheme.colors.danger,
+              onClick = {
+                purgeRequest =
+                  TrashPurgeRequest(
+                    title = "${currentItem.type.label} 영구 삭제",
+                    message = "영구 삭제한 ${currentItem.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
+                    confirmText = "삭제",
+                    entityIds = listOf(currentItem.id),
+                    successMessage =
+                      "\"${currentItem.title}\" ${currentItem.type.label}가 영구 삭제되었어요.",
+                    shouldPop = true,
+                  )
+              },
+            )
+          )
+        }
+
         add(
           TrashActionItem(
-            label = "영구 삭제",
-            icon = Lucide.Trash2,
+            label = content.clearActionLabel,
+            icon = Lucide.BrushCleaning,
             tint = AppTheme.colors.danger,
             onClick = {
-              purgeRequest = TrashPurgeRequest(
-                title = "${currentItem.type.label} 영구 삭제",
-                message = "영구 삭제한 ${currentItem.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
-                confirmText = "삭제",
-                entityIds = listOf(currentItem.id),
-                successMessage = "\"${currentItem.title}\" ${currentItem.type.label}가 영구 삭제되었어요.",
-                shouldPop = true,
-              )
+              if (content.items.isEmpty()) {
+                toast.show(ToastType.Notification, content.emptyMessage)
+              } else {
+                purgeRequest =
+                  TrashPurgeRequest(
+                    title = content.clearActionLabel,
+                    message =
+                      if (content.isRootTrash) {
+                        "휴지통에 있는 ${content.items.size}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요."
+                      } else {
+                        "이 폴더에 있는 ${content.items.size}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요."
+                      },
+                    confirmText = "비우기",
+                    entityIds = content.items.map { it.id },
+                    successMessage = if (content.isRootTrash) "휴지통을 비웠어요." else "폴더를 비웠어요.",
+                  )
+              }
             },
-          ),
+          )
         )
       }
-
-      add(
-        TrashActionItem(
-          label = content.clearActionLabel,
-          icon = Lucide.BrushCleaning,
-          tint = AppTheme.colors.danger,
-          onClick = {
-            if (content.items.isEmpty()) {
-              toast.show(ToastType.Notification, content.emptyMessage)
-            } else {
-              purgeRequest = TrashPurgeRequest(
-                title = content.clearActionLabel,
-                message = if (content.isRootTrash) {
-                  "휴지통에 있는 ${content.items.size}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요."
-                } else {
-                  "이 폴더에 있는 ${content.items.size}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요."
-                },
-                confirmText = "비우기",
-                entityIds = content.items.map { it.id },
-                successMessage = if (content.isRootTrash) "휴지통을 비웠어요." else "폴더를 비웠어요.",
-              )
-            }
-          },
-        ),
-      )
+    } else {
+      emptyList()
     }
-  } else {
-    emptyList()
-  }
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -308,9 +312,7 @@ fun TrashScreen(entityId: String? = null) {
     if (content.items.isEmpty()) {
       CardSurface(modifier = Modifier.fillMaxWidth()) {
         Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 36.dp, horizontal = 20.dp),
+          modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp, horizontal = 20.dp),
           contentAlignment = Alignment.Center,
         ) {
           Text(
@@ -371,16 +373,14 @@ fun TrashScreen(entityId: String? = null) {
         if (request != null) {
           purgeRequest = null
           screenScope.launch {
-            model.purgeEntities(request.entityIds)
-              .withDefaultExceptionHandler(toast)
-              .onOk {
-                toast.show(ToastType.Success, request.successMessage)
-                if (request.shouldPop) {
-                  nav.pop()
-                } else {
-                  model.refetch()
-                }
+            model.purgeEntities(request.entityIds).withDefaultExceptionHandler(toast).onOk {
+              toast.show(ToastType.Success, request.successMessage)
+              if (request.shouldPop) {
+                nav.pop()
+              } else {
+                model.refetch()
               }
+            }
           }
         }
       },
@@ -394,11 +394,7 @@ private fun trashActionsSheet(
   actions: List<TrashActionItem>,
   onAction: (TrashActionItem) -> Unit,
 ): SheetPresentation<Unit> = sheetPresentation {
-  TrashActionsSheetContent(
-    item = item,
-    actions = actions,
-    onAction = onAction,
-  )
+  TrashActionsSheetContent(item = item, actions = actions, onAction = onAction)
 }
 
 @Composable
@@ -407,13 +403,16 @@ private fun SheetScope<Unit>.TrashActionsSheetContent(
   actions: List<TrashActionItem>,
   onAction: (TrashActionItem) -> Unit,
 ) {
-  val entityIcon = resolveEntityIconAppearance(
-    iconName = item.iconName,
-    iconColor = item.iconColor,
-    fallbackIcon = if (item.type == TrashItemType.Folder) Lucide.Folder else Lucide.File,
-    fallbackTint = if (item.type == TrashItemType.Folder) AppTheme.colors.brand else AppTheme.colors.textSecondary,
-    colors = AppTheme.colors,
-  )
+  val entityIcon =
+    resolveEntityIconAppearance(
+      iconName = item.iconName,
+      iconColor = item.iconColor,
+      fallbackIcon = if (item.type == TrashItemType.Folder) Lucide.Folder else Lucide.File,
+      fallbackTint =
+        if (item.type == TrashItemType.Folder) AppTheme.colors.brand
+        else AppTheme.colors.textSecondary,
+      colors = AppTheme.colors,
+    )
 
   SheetLayout(
     bodyScroll = false,
@@ -438,11 +437,7 @@ private fun SheetScope<Unit>.TrashActionsSheetContent(
       }
     },
   ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(MenuSheetActionContentPadding),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(MenuSheetActionContentPadding)) {
       actions.forEach { action ->
         SheetMenuActionRow(
           icon = action.icon,
@@ -471,37 +466,31 @@ private fun TrashTopBarMenu(actions: List<TrashActionItem>, actionScope: Corouti
 @Composable
 private fun PopoverScope.TrashTopBarMenuPane(
   actions: List<TrashActionItem>,
-  actionScope: CoroutineScope
+  actionScope: CoroutineScope,
 ) {
   Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
     PopoverList(
-      items = actions.map { action ->
-        PopoverListItem(
-          content = {
-            TrashActionLabel(
-              action = action,
-              modifier = Modifier
-                .height(42.dp)
-                .padding(horizontal = 16.dp),
-            )
-          },
-          onSelected = {
-            close()
-            actionScope.launch {
-              action.onClick()
-            }
-          },
-        )
-      },
+      items =
+        actions.map { action ->
+          PopoverListItem(
+            content = {
+              TrashActionLabel(
+                action = action,
+                modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
+              )
+            },
+            onSelected = {
+              close()
+              actionScope.launch { action.onClick() }
+            },
+          )
+        }
     )
   }
 }
 
 @Composable
-private fun TrashActionLabel(
-  action: TrashActionItem,
-  modifier: Modifier = Modifier,
-) {
+private fun TrashActionLabel(action: TrashActionItem, modifier: Modifier = Modifier) {
   Row(
     modifier = modifier,
     verticalAlignment = Alignment.CenterVertically,
@@ -520,19 +509,18 @@ private fun TrashActionLabel(
   }
 }
 
-private fun trashContent(
-  queryState: QueryState<*>,
-): TrashContent {
+private fun trashContent(queryState: QueryState<*>): TrashContent {
   return when (queryState) {
     is QueryState.Success<*> -> {
       when (val data = queryState.data) {
-        is TrashScreen_WithSiteId_Query.Data -> TrashContent(
-          title = "휴지통",
-          subtitle = "${data.site.name} 스페이스의 삭제된 항목이에요",
-          currentItem = null,
-          items = data.site.deletedEntities.map { it.toTrashItem(siteName = data.site.name) },
-          isRootTrash = true,
-        )
+        is TrashScreen_WithSiteId_Query.Data ->
+          TrashContent(
+            title = "휴지통",
+            subtitle = "${data.site.name} 스페이스의 삭제된 항목이에요",
+            currentItem = null,
+            items = data.site.deletedEntities.map { it.toTrashItem(siteName = data.site.name) },
+            isRootTrash = true,
+          )
 
         is TrashScreen_WithEntityId_Query.Data -> {
           val currentItem = data.entity.toTrashItem()
@@ -540,138 +528,152 @@ private fun trashContent(
             title = currentItem.title,
             subtitle = "이 폴더에서 삭제된 항목이에요",
             currentItem = currentItem,
-            items = data.entity.deletedChildren.map { it.toTrashItem(siteName = data.entity.site.name) },
+            items =
+              data.entity.deletedChildren.map { it.toTrashItem(siteName = data.entity.site.name) },
             isRootTrash = false,
           )
         }
 
-        else -> TrashContent(
-          title = "휴지통",
-          subtitle = "",
-          currentItem = null,
-          items = emptyList(),
-          isRootTrash = true,
-        )
+        else ->
+          TrashContent(
+            title = "휴지통",
+            subtitle = "",
+            currentItem = null,
+            items = emptyList(),
+            isRootTrash = true,
+          )
       }
     }
 
-    else -> TrashContent(
-      title = "휴지통",
-      subtitle = "",
-      currentItem = null,
-      items = emptyList(),
-      isRootTrash = true,
-    )
+    else ->
+      TrashContent(
+        title = "휴지통",
+        subtitle = "",
+        currentItem = null,
+        items = emptyList(),
+        isRootTrash = true,
+      )
   }
 }
 
 private fun TrashScreen_WithEntityId_Query.Entity.toTrashItem(): TrashItem {
   return when {
-    node.onFolder != null -> TrashItem(
-      id = id,
-      title = node.onFolder.name,
-      type = TrashItemType.Folder,
-      iconName = icon,
-      iconColor = iconColor,
-      siteName = site.name,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    node.onFolder != null ->
+      TrashItem(
+        id = id,
+        title = node.onFolder.name,
+        type = TrashItemType.Folder,
+        iconName = icon,
+        iconColor = iconColor,
+        siteName = site.name,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
 
-    node.onDocument != null -> TrashItem(
-      id = id,
-      title = node.onDocument.title,
-      type = TrashItemType.Document,
-      iconName = icon,
-      iconColor = iconColor,
-      subtitle = node.onDocument.subtitle,
-      excerpt = node.onDocument.excerpt,
-      updatedAt = node.onDocument.updatedAt,
-      siteName = site.name,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    node.onDocument != null ->
+      TrashItem(
+        id = id,
+        title = node.onDocument.title,
+        type = TrashItemType.Document,
+        iconName = icon,
+        iconColor = iconColor,
+        subtitle = node.onDocument.subtitle,
+        excerpt = node.onDocument.excerpt,
+        updatedAt = node.onDocument.updatedAt,
+        siteName = site.name,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
 
-    else -> TrashItem(
-      id = id,
-      title = "삭제된 항목",
-      type = TrashItemType.Document,
-      iconName = "",
-      iconColor = "",
-      siteName = site.name,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    else ->
+      TrashItem(
+        id = id,
+        title = "삭제된 항목",
+        type = TrashItemType.Document,
+        iconName = "",
+        iconColor = "",
+        siteName = site.name,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
   }
 }
 
 private fun TrashScreen_WithSiteId_Query.DeletedEntity.toTrashItem(siteName: String): TrashItem {
   return when {
-    node.onFolder != null -> TrashItem(
-      id = id,
-      title = node.onFolder.name,
-      type = TrashItemType.Folder,
-      iconName = icon,
-      iconColor = iconColor,
-      siteName = siteName,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    node.onFolder != null ->
+      TrashItem(
+        id = id,
+        title = node.onFolder.name,
+        type = TrashItemType.Folder,
+        iconName = icon,
+        iconColor = iconColor,
+        siteName = siteName,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
 
-    node.onDocument != null -> TrashItem(
-      id = id,
-      title = node.onDocument.title,
-      type = TrashItemType.Document,
-      iconName = icon,
-      iconColor = iconColor,
-      subtitle = node.onDocument.subtitle,
-      excerpt = node.onDocument.excerpt,
-      updatedAt = node.onDocument.updatedAt,
-      siteName = siteName,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    node.onDocument != null ->
+      TrashItem(
+        id = id,
+        title = node.onDocument.title,
+        type = TrashItemType.Document,
+        iconName = icon,
+        iconColor = iconColor,
+        subtitle = node.onDocument.subtitle,
+        excerpt = node.onDocument.excerpt,
+        updatedAt = node.onDocument.updatedAt,
+        siteName = siteName,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
 
-    else -> TrashItem(
-      id = id,
-      title = "삭제된 항목",
-      type = TrashItemType.Document,
-      iconName = "",
-      iconColor = "",
-      siteName = siteName,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    else ->
+      TrashItem(
+        id = id,
+        title = "삭제된 항목",
+        type = TrashItemType.Document,
+        iconName = "",
+        iconColor = "",
+        siteName = siteName,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
   }
 }
 
-private fun TrashScreen_WithEntityId_Query.DeletedChildren.toTrashItem(siteName: String): TrashItem {
+private fun TrashScreen_WithEntityId_Query.DeletedChildren.toTrashItem(
+  siteName: String
+): TrashItem {
   return when {
-    node.onFolder != null -> TrashItem(
-      id = id,
-      title = node.onFolder.name,
-      type = TrashItemType.Folder,
-      iconName = icon,
-      iconColor = iconColor,
-      siteName = siteName,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    node.onFolder != null ->
+      TrashItem(
+        id = id,
+        title = node.onFolder.name,
+        type = TrashItemType.Folder,
+        iconName = icon,
+        iconColor = iconColor,
+        siteName = siteName,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
 
-    node.onDocument != null -> TrashItem(
-      id = id,
-      title = node.onDocument.title,
-      type = TrashItemType.Document,
-      iconName = icon,
-      iconColor = iconColor,
-      subtitle = node.onDocument.subtitle,
-      excerpt = node.onDocument.excerpt,
-      updatedAt = node.onDocument.updatedAt,
-      siteName = siteName,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    node.onDocument != null ->
+      TrashItem(
+        id = id,
+        title = node.onDocument.title,
+        type = TrashItemType.Document,
+        iconName = icon,
+        iconColor = iconColor,
+        subtitle = node.onDocument.subtitle,
+        excerpt = node.onDocument.excerpt,
+        updatedAt = node.onDocument.updatedAt,
+        siteName = siteName,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
 
-    else -> TrashItem(
-      id = id,
-      title = "삭제된 항목",
-      type = TrashItemType.Document,
-      iconName = "",
-      iconColor = "",
-      siteName = siteName,
-      ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-    )
+    else ->
+      TrashItem(
+        id = id,
+        title = "삭제된 항목",
+        type = TrashItemType.Document,
+        iconName = "",
+        iconColor = "",
+        siteName = siteName,
+        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
+      )
   }
 }

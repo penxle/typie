@@ -49,10 +49,11 @@ class ResultDslTest {
   @Test
   fun unwrapShortCircuitsOnErr() {
     val inner: Result<Int, String> = Result.Err("fail")
-    val r = result<Int, String> {
-      val v = inner.unwrap()
-      v + 5 // should not reach
-    }
+    val r =
+      result<Int, String> {
+        val v = inner.unwrap()
+        v + 5 // should not reach
+      }
     assertIs<Result.Err<String>>(r)
     assertEquals("fail", r.error)
   }

@@ -4,10 +4,10 @@ package co.typie.auth.sso
 
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.platform.ActivityContext
-import kotlinx.coroutines.suspendCancellableCoroutine
-import swiftPMImport.co.typie.compose.AppleSingleSignOnBridge
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import swiftPMImport.co.typie.compose.AppleSingleSignOnBridge
 
 actual class AppleSingleSignOnProvider : SingleSignOnAdapter {
   context(_: ActivityContext)

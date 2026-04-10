@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.form.FormState
+import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
 import co.typie.graphql.UpdatePasswordScreen_Query
@@ -16,9 +17,7 @@ import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdatePasswordInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
-import co.typie.graphql.Apollo
 import co.typie.result.loading
-import co.typie.result.result
 import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CoroutineScope
 
@@ -27,10 +26,7 @@ enum class PasswordField {
   ConfirmPassword,
 }
 
-data class PasswordValidationError(
-  val field: PasswordField,
-  val message: String,
-)
+data class PasswordValidationError(val field: PasswordField, val message: String)
 
 internal fun validatePasswordSubmission(
   hasPassword: Boolean,
@@ -57,12 +53,8 @@ internal fun validatePasswordSubmission(
 
 class UpdatePasswordForm(scope: CoroutineScope) : FormState(scope) {
   val currentPassword = field("")
-  val newPassword = field("") {
-    required("새 비밀번호를 입력해주세요.")
-  }
-  val confirmPassword = field("") {
-    required("비밀번호 확인을 입력해주세요.")
-  }
+  val newPassword = field("") { required("새 비밀번호를 입력해주세요.") }
+  val confirmPassword = field("") { required("비밀번호 확인을 입력해주세요.") }
 
   fun updateHasPassword(hasPassword: Boolean) {
     currentPassword.focusable = hasPassword
@@ -75,6 +67,7 @@ class UpdatePasswordScreenState(scope: CoroutineScope) {
 
 sealed interface UpdatePasswordError {
   data object InvalidPassword : UpdatePasswordError
+
   data object CurrentPasswordRequired : UpdatePasswordError
 }
 
@@ -87,10 +80,10 @@ class UpdatePasswordViewModel : ViewModel() {
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
-      onInitialData = { data ->
-        state.form.updateHasPassword(data.me.hasPassword)
-      },
-    ) { UpdatePasswordScreen_Query() }
+      onInitialData = { data -> state.form.updateHasPassword(data.me.hasPassword) },
+    ) {
+      UpdatePasswordScreen_Query()
+    }
 
   suspend fun submit(): Result<Unit, UpdatePasswordError> {
     val hasPassword = query.data.me.hasPassword
@@ -98,12 +91,13 @@ class UpdatePasswordViewModel : ViewModel() {
 
     if (!state.form.validate()) return Result.Ok(Unit)
 
-    val validationError = validatePasswordSubmission(
-      hasPassword = hasPassword,
-      currentPassword = state.form.currentPassword.value,
-      newPassword = state.form.newPassword.value,
-      confirmPassword = state.form.confirmPassword.value,
-    )
+    val validationError =
+      validatePasswordSubmission(
+        hasPassword = hasPassword,
+        currentPassword = state.form.currentPassword.value,
+        newPassword = state.form.newPassword.value,
+        confirmPassword = state.form.confirmPassword.value,
+      )
     if (validationError != null) {
       applyValidationError(validationError)
       return Result.Ok(Unit)
@@ -113,15 +107,17 @@ class UpdatePasswordViewModel : ViewModel() {
       try {
         Apollo.executeMutation(
           UpdatePasswordScreen_UpdatePassword_Mutation(
-            input = UpdatePasswordInput(
-              currentPassword = if (hasPassword) {
-                Optional.present(state.form.currentPassword.value)
-              } else {
-                Optional.Absent
-              },
-              newPassword = state.form.newPassword.value,
-            ),
-          ),
+            input =
+              UpdatePasswordInput(
+                currentPassword =
+                  if (hasPassword) {
+                    Optional.present(state.form.currentPassword.value)
+                  } else {
+                    Optional.Absent
+                  },
+                newPassword = state.form.newPassword.value,
+              )
+          )
         )
       } catch (e: TypieError) {
         val serverError = applyServerError(e)
@@ -148,27 +144,27 @@ class UpdatePasswordViewModel : ViewModel() {
   }
 
   private fun applyServerError(error: TypieError): UpdatePasswordError? {
-    val (validationError, typedError) = when (error.code) {
-      "invalid_password" -> PasswordValidationError(
-        field = PasswordField.CurrentPassword,
-        message = "비밀번호가 일치하지 않습니다.",
-      ) to UpdatePasswordError.InvalidPassword
+    val (validationError, typedError) =
+      when (error.code) {
+        "invalid_password" ->
+          PasswordValidationError(
+            field = PasswordField.CurrentPassword,
+            message = "비밀번호가 일치하지 않습니다.",
+          ) to UpdatePasswordError.InvalidPassword
 
-      "current_password_required" -> PasswordValidationError(
-        field = PasswordField.CurrentPassword,
-        message = "현재 비밀번호를 입력해주세요.",
-      ) to UpdatePasswordError.CurrentPasswordRequired
+        "current_password_required" ->
+          PasswordValidationError(
+            field = PasswordField.CurrentPassword,
+            message = "현재 비밀번호를 입력해주세요.",
+          ) to UpdatePasswordError.CurrentPasswordRequired
 
-      else -> return null
-    }
+        else -> return null
+      }
 
     applyValidationError(validationError)
     return typedError
   }
 }
 
-private fun placeholderData() = UpdatePasswordScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    hasPassword = true
-  }
-}
+private fun placeholderData() =
+  UpdatePasswordScreen_Query.Data(PlaceholderResolver) { me = buildUser { hasPassword = true } }

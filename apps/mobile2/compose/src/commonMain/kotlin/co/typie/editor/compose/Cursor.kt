@@ -16,10 +16,7 @@ import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun Cursor(
-  offset: Offset,
-  size: Size,
-) {
+internal fun Cursor(offset: Offset, size: Size) {
   val alpha = remember { Animatable(1f) }
 
   LaunchedEffect(offset) {
@@ -33,12 +30,8 @@ internal fun Cursor(
   }
 
   Box(
-    Modifier
-      .offset(x = Dp(offset.x), y = Dp(offset.y))
-      .size(
-        width = Dp(size.width.coerceAtLeast(1f)),
-        height = Dp(size.height),
-      )
+    Modifier.offset(x = Dp(offset.x), y = Dp(offset.y))
+      .size(width = Dp(size.width.coerceAtLeast(1f)), height = Dp(size.height))
       .background(Color.Black.copy(alpha = alpha.value))
   )
 }

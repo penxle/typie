@@ -18,20 +18,20 @@ interface SheetController<R> {
   val isTopOfStack: Boolean
 
   fun animateTo(detentId: SheetDetentId)
+
   fun expand()
+
   fun collapse()
+
   fun dismiss(reason: SheetDismissReason = SheetDismissReason.Programmatic)
+
   fun complete(result: R)
 }
 
 internal sealed interface SheetResolutionRequest<out R> {
-  data class Dismissed(
-    val reason: SheetDismissReason,
-  ) : SheetResolutionRequest<Nothing>
+  data class Dismissed(val reason: SheetDismissReason) : SheetResolutionRequest<Nothing>
 
-  data class Completed<R>(
-    val value: R,
-  ) : SheetResolutionRequest<R>
+  data class Completed<R>(val value: R) : SheetResolutionRequest<R>
 }
 
 class SheetControllerState<R>(
@@ -39,7 +39,8 @@ class SheetControllerState<R>(
   private val dismissPolicy: SheetDismissPolicy,
 ) : SheetController<R> {
   private val _resolvedDetents = mutableStateListOf<ResolvedSheetDetent>()
-  override val resolvedDetents: List<ResolvedSheetDetent> get() = _resolvedDetents
+  override val resolvedDetents: List<ResolvedSheetDetent>
+    get() = _resolvedDetents
 
   override var currentDetentId: SheetDetentId? by mutableStateOf(null)
     private set
@@ -50,7 +51,8 @@ class SheetControllerState<R>(
   override var visibleFraction: Float by mutableFloatStateOf(0f)
     private set
 
-  override val isVisible: Boolean get() = visibleFraction > 0f
+  override val isVisible: Boolean
+    get() = visibleFraction > 0f
 
   override var stackDepth: Int by mutableIntStateOf(0)
     private set

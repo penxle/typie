@@ -61,15 +61,11 @@ private fun needsImplicitRouteKey(
 ): Boolean {
   if (!enabled) return false
   return (pill != null && pillKey == null) ||
-    (action!= null && actionKey == null) ||
+    (action != null && actionKey == null) ||
     (custom != null && customKey == null)
 }
 
-private fun resolveBottomBarEntryKey(
-  explicitKey: Any?,
-  routeKey: Any?,
-  fallbackKey: Any,
-): Any {
+private fun resolveBottomBarEntryKey(explicitKey: Any?, routeKey: Any?, fallbackKey: Any): Any {
   return explicitKey ?: routeKey ?: fallbackKey
 }
 
@@ -88,23 +84,23 @@ fun ProvideBottomBar(
 
   state.enabled = enabled
   if (enabled) {
-    val routeKey = if (needsImplicitRouteKey(enabled, pill, pillKey, action, actionKey, custom, customKey)) {
-      LocalRoute.current
-    } else {
-      null
-    }
+    val routeKey =
+      if (needsImplicitRouteKey(enabled, pill, pillKey, action, actionKey, custom, customKey)) {
+        LocalRoute.current
+      } else {
+        null
+      }
 
     state.setPill(
-      if (pill != null) resolveBottomBarEntryKey(pillKey, routeKey, fallbackEntryKey) else BottomBarState.NullKey,
+      if (pill != null) resolveBottomBarEntryKey(pillKey, routeKey, fallbackEntryKey)
+      else BottomBarState.NullKey,
       pill,
     )
     state.setAction(
-      if (action!= null) resolveBottomBarEntryKey(actionKey, routeKey, fallbackEntryKey) else BottomBarState.NullKey,
+      if (action != null) resolveBottomBarEntryKey(actionKey, routeKey, fallbackEntryKey)
+      else BottomBarState.NullKey,
       action,
     )
-    state.setCustom(
-      resolveBottomBarEntryKey(customKey, routeKey, fallbackEntryKey),
-      custom,
-    )
+    state.setCustom(resolveBottomBarEntryKey(customKey, routeKey, fallbackEntryKey), custom)
   }
 }

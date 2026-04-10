@@ -3,7 +3,6 @@ package co.typie.screen.settings.security_settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -12,8 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.ext.navigationBarsPadding
-import co.typie.ext.verticalScroll
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
@@ -30,7 +28,6 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 private fun securityPasswordItemLabel(hasPassword: Boolean): String {
   return if (hasPassword) "비밀번호 변경" else "비밀번호 설정"
@@ -59,54 +56,34 @@ fun SecuritySettingsScreen() {
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-      Text(
-        "보안",
-        style = AppTheme.typography.display,
-        modifier = Modifier.padding(top = 4.dp),
-      )
+    Text("보안", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        Column {
-          CardRow(
-            onClick = { nav.navigate(Route.UpdatePassword) },
-          ) {
-            SecurityRowContent(
-              label = securityPasswordItemLabel(hasPassword),
-            )
-          }
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
+      Column {
+        CardRow(onClick = { nav.navigate(Route.UpdatePassword) }) {
+          SecurityRowContent(label = securityPasswordItemLabel(hasPassword))
+        }
 
-          CardDivider()
+        CardDivider()
 
-          CardRow(
-            onClick = { nav.navigate(Route.SocialAccounts) },
-          ) {
-            SecurityRowContent(
-              label = "연결된 SNS 계정",
-            )
-          }
+        CardRow(onClick = { nav.navigate(Route.SocialAccounts) }) {
+          SecurityRowContent(label = "연결된 SNS 계정")
+        }
 
-          CardDivider()
+        CardDivider()
 
-          CardRow(
-            onClick = { nav.navigate(Route.DeleteUser) },
-          ) {
-            SecurityRowContent(
-              label = "회원 탈퇴",
-            )
-          }
+        CardRow(onClick = { nav.navigate(Route.DeleteUser) }) {
+          SecurityRowContent(label = "회원 탈퇴")
         }
       }
+    }
 
-      Spacer(Modifier.height(72.dp))
+    Spacer(Modifier.height(72.dp))
   }
 }
 
 @Composable
-private fun SecurityRowContent(
-  label: String,
-) {
+private fun SecurityRowContent(label: String) {
   androidx.compose.foundation.layout.Row(
     modifier = Modifier.fillMaxWidth(),
     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,

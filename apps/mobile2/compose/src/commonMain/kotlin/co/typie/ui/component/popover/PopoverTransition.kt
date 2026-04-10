@@ -14,12 +14,7 @@ import androidx.compose.ui.unit.IntOffset
 import co.typie.ext.toPx
 import kotlin.math.roundToInt
 
-data class PopoverTransitionFrame(
-  val left: Dp,
-  val top: Dp,
-  val width: Dp,
-  val height: Dp,
-)
+data class PopoverTransitionFrame(val left: Dp, val top: Dp, val width: Dp, val height: Dp)
 
 @Composable
 fun rememberPopoverTransitionProgress(): Float {
@@ -41,16 +36,18 @@ fun PopoverTransitionElement(
   val anchorContentRect = transition?.anchorContentRect
 
   val panePaddingPx = panePadding.toPx(density)
-  val collapsedLeftPx = if (anchorContentRect == null) {
-    expandedFrame.left.toPx(density)
-  } else {
-    anchorContentRect.left + collapsedFrame.left.toPx(density) - panePaddingPx
-  }
-  val collapsedTopPx = if (anchorContentRect == null) {
-    expandedFrame.top.toPx(density)
-  } else {
-    anchorContentRect.top + collapsedFrame.top.toPx(density) - panePaddingPx
-  }
+  val collapsedLeftPx =
+    if (anchorContentRect == null) {
+      expandedFrame.left.toPx(density)
+    } else {
+      anchorContentRect.left + collapsedFrame.left.toPx(density) - panePaddingPx
+    }
+  val collapsedTopPx =
+    if (anchorContentRect == null) {
+      expandedFrame.top.toPx(density)
+    } else {
+      anchorContentRect.top + collapsedFrame.top.toPx(density) - panePaddingPx
+    }
   val expandedLeftPx = expandedFrame.left.toPx(density)
   val expandedTopPx = expandedFrame.top.toPx(density)
   val collapsedWidthPx = collapsedFrame.width.toPx(density)
@@ -65,25 +62,14 @@ fun PopoverTransitionElement(
 
   Box(
     contentAlignment = Alignment.CenterStart,
-    modifier = modifier
-      .offset {
-        IntOffset(
-          x = left.roundToInt(),
-          y = top.roundToInt(),
-        )
-      }
-      .size(
-        width = with(density) { width.toDp() },
-        height = with(density) { height.toDp() },
-      ),
+    modifier =
+      modifier
+        .offset { IntOffset(x = left.roundToInt(), y = top.roundToInt()) }
+        .size(width = with(density) { width.toDp() }, height = with(density) { height.toDp() }),
   ) {
     if (collapsedContent != null) {
-      Box(modifier = Modifier.alpha(1f - progress)) {
-        collapsedContent()
-      }
-      Box(modifier = Modifier.alpha(progress)) {
-        expandedContent()
-      }
+      Box(modifier = Modifier.alpha(1f - progress)) { collapsedContent() }
+      Box(modifier = Modifier.alpha(progress)) { expandedContent() }
     } else {
       expandedContent()
     }

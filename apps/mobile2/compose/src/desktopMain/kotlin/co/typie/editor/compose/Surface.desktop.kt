@@ -16,8 +16,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import com.sun.jna.Pointer
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
-import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Image as SkImage
+import org.jetbrains.skia.ImageInfo
 
 @Composable
 internal actual fun Surface(
@@ -30,17 +30,18 @@ internal actual fun Surface(
   var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
   Canvas(
-    modifier = modifier.onSizeChanged { size ->
-      if (bufferHandle == 0L && size.width > 0 && size.height > 0) {
-        bufferHandle = DesktopSurfaceBridge.allocatePixelBuffer(size.width, size.height)
-        if (bufferHandle != 0L) {
-          onAttach(bufferHandle)
+    modifier =
+      modifier.onSizeChanged { size ->
+        if (bufferHandle == 0L && size.width > 0 && size.height > 0) {
+          bufferHandle = DesktopSurfaceBridge.allocatePixelBuffer(size.width, size.height)
+          if (bufferHandle != 0L) {
+            onAttach(bufferHandle)
+            onResize()
+          }
+        } else if (bufferHandle != 0L) {
           onResize()
         }
-      } else if (bufferHandle != 0L) {
-        onResize()
       }
-    },
   ) {
     bitmap?.let { drawImage(it) }
   }
@@ -50,7 +51,7 @@ internal actual fun Surface(
     if (handle == 0L) return@LaunchedEffect
 
     while (true) {
-      withFrameNanos { }
+      withFrameNanos {}
       if (!DesktopSurfaceBridge.checkAndClearDirty(handle)) continue
 
       val w = DesktopSurfaceBridge.getPixelWidth(handle)

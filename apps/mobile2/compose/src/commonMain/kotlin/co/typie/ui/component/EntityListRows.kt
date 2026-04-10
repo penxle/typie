@@ -32,8 +32,8 @@ import co.typie.ext.separated
 import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
-import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.icon.Icon
+import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Instant
 
@@ -73,21 +73,13 @@ sealed interface EntityListItem {
   ) : EntityListItem
 }
 
-fun formatSpaceSummary(
-  folderCount: Int,
-  documentCount: Int,
-): String = formatEntitySummary(folderCount, documentCount, emptyText = "비어 있는 스페이스")
+fun formatSpaceSummary(folderCount: Int, documentCount: Int): String =
+  formatEntitySummary(folderCount, documentCount, emptyText = "비어 있는 스페이스")
 
-fun formatFolderSummary(
-  folderCount: Int,
-  documentCount: Int,
-): String = formatEntitySummary(folderCount, documentCount, emptyText = "빈 폴더")
+fun formatFolderSummary(folderCount: Int, documentCount: Int): String =
+  formatEntitySummary(folderCount, documentCount, emptyText = "빈 폴더")
 
-fun formatFolderMetadataSummary(
-  folderCount: Int,
-  documentCount: Int,
-  characterCount: Int,
-): String {
+fun formatFolderMetadataSummary(folderCount: Int, documentCount: Int, characterCount: Int): String {
   val parts = buildList {
     if (folderCount > 0) add("폴더 ${folderCount.comma}개")
     if (documentCount > 0) add("문서 ${documentCount.comma}개")
@@ -104,10 +96,7 @@ fun EntityListItem.Folder.breadcrumbNames(): List<String> {
   }
 }
 
-fun formatFolderRowSummary(
-  folderCount: Int,
-  documentCount: Int,
-): String {
+fun formatFolderRowSummary(folderCount: Int, documentCount: Int): String {
   if (folderCount == 0 && documentCount == 0) {
     return "빈 폴더"
   }
@@ -131,17 +120,14 @@ fun EntityListCard(
 ) {
   if (items.isEmpty()) {
     Box(
-      modifier = modifier
-        .fillMaxWidth()
-        .height(110.dp)
-        .background(AppTheme.colors.surfaceDefault, RoundedCornerShape(12.dp)),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .height(110.dp)
+          .background(AppTheme.colors.surfaceDefault, RoundedCornerShape(12.dp)),
       contentAlignment = Alignment.Center,
     ) {
-      Text(
-        emptyMessage,
-        style = AppTheme.typography.action,
-        color = AppTheme.colors.textTertiary,
-      )
+      Text(emptyMessage, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
     }
     return
   }
@@ -150,28 +136,27 @@ fun EntityListCard(
     Column(Modifier.fillMaxWidth()) {
       items.separated(separator = { CardDivider() }) { item ->
         when (item) {
-          is EntityListItem.Document -> EntityListDocumentRow(
-            item = item,
-            opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
-            onClick = { onDocumentClick(item.slug) },
-          )
+          is EntityListItem.Document ->
+            EntityListDocumentRow(
+              item = item,
+              opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
+              onClick = { onDocumentClick(item.slug) },
+            )
 
-          is EntityListItem.Folder -> EntityListFolderRow(
-            item = item,
-            opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
-            onLongPress = onFolderLongPress?.let { handler -> { handler(item) } },
-            onClick = { onFolderClick(item.id) },
-          )
+          is EntityListItem.Folder ->
+            EntityListFolderRow(
+              item = item,
+              opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
+              onLongPress = onFolderLongPress?.let { handler -> { handler(item) } },
+              onClick = { onFolderClick(item.id) },
+            )
         }
       }
     }
   }
 }
 
-internal data class EntityListRowBehavior(
-  val alpha: Float,
-  val isInteractive: Boolean,
-)
+internal data class EntityListRowBehavior(val alpha: Float, val isInteractive: Boolean)
 
 internal fun entityListRowBehavior(
   enabled: Boolean,
@@ -222,10 +207,8 @@ fun EntityListFolderRow(
     title = AnnotatedString(item.name),
     iconName = item.iconName,
     iconColor = item.iconColor,
-    metaText = formatFolderRowSummary(
-      folderCount = item.folderCount,
-      documentCount = item.documentCount,
-    ),
+    metaText =
+      formatFolderRowSummary(folderCount = item.folderCount, documentCount = item.documentCount),
     enabled = enabled,
     interactive = interactive,
     opacity = opacity,
@@ -249,10 +232,7 @@ fun SearchFolderRow(
     title = title,
     iconName = iconName,
     iconColor = iconColor,
-    metaText = formatFolderRowSummary(
-      folderCount = folderCount,
-      documentCount = documentCount,
-    ),
+    metaText = formatFolderRowSummary(folderCount = folderCount, documentCount = documentCount),
     modifier = modifier,
     onClick = onClick,
   )
@@ -320,13 +300,14 @@ private fun DocumentRowContent(
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
-  val entityIcon = resolveEntityIconAppearance(
-    iconName = iconName,
-    iconColor = iconColor,
-    fallbackIcon = Lucide.File,
-    fallbackTint = metaColor,
-    colors = AppTheme.colors,
-  )
+  val entityIcon =
+    resolveEntityIconAppearance(
+      iconName = iconName,
+      iconColor = iconColor,
+      fallbackIcon = Lucide.File,
+      fallbackTint = metaColor,
+      colors = AppTheme.colors,
+    )
   val resolvedSubtitle = subtitle?.takeIf { it.isNotBlank() }
   val titleText = buildAnnotatedString {
     append(title)
@@ -362,11 +343,7 @@ private fun DocumentRowContent(
       if (updatedAt != null) {
         Spacer(Modifier.width(8.dp))
 
-        Text(
-          updatedAt.timeAgo(),
-          style = AppTheme.typography.caption,
-          color = metaColor,
-        )
+        Text(updatedAt.timeAgo(), style = AppTheme.typography.caption, color = metaColor)
       }
     }
 
@@ -398,13 +375,14 @@ private fun FolderRowContent(
   onClick: suspend () -> Unit,
 ) {
   val metaColor = AppTheme.colors.textMuted
-  val entityIcon = resolveEntityIconAppearance(
-    iconName = iconName,
-    iconColor = iconColor,
-    fallbackIcon = Lucide.Folder,
-    fallbackTint = AppTheme.colors.brand,
-    colors = AppTheme.colors,
-  )
+  val entityIcon =
+    resolveEntityIconAppearance(
+      iconName = iconName,
+      iconColor = iconColor,
+      fallbackIcon = Lucide.Folder,
+      fallbackTint = AppTheme.colors.brand,
+      colors = AppTheme.colors,
+    )
 
   EntityListRowFrame(
     modifier = modifier,
@@ -455,36 +433,30 @@ private fun EntityListRowFrame(
   onClick: suspend () -> Unit,
   content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
-  val behavior = entityListRowBehavior(
-    enabled = enabled,
-    interactive = interactive,
-    opacity = opacity,
-  )
+  val behavior =
+    entityListRowBehavior(enabled = enabled, interactive = interactive, opacity = opacity)
 
   InteractionScope {
     Row(
-      modifier = modifier
-        .fillMaxWidth()
-        .alpha(behavior.alpha)
-        .then(
-          if (!behavior.isInteractive) {
-            Modifier
-          } else if (onLongPress != null) {
-            Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress)
-          } else {
-            Modifier.clickable(onClick)
-          }
-        )
-        .then(if (behavior.isInteractive) Modifier.pressScale() else Modifier)
-        .padding(horizontal = 16.dp, vertical = 12.dp),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .alpha(behavior.alpha)
+          .then(
+            if (!behavior.isInteractive) {
+              Modifier
+            } else if (onLongPress != null) {
+              Modifier.combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            } else {
+              Modifier.clickable(onClick)
+            }
+          )
+          .then(if (behavior.isInteractive) Modifier.pressScale() else Modifier)
+          .padding(horizontal = 16.dp, vertical = 12.dp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Icon(
-        icon = icon,
-        modifier = Modifier.size(18.dp),
-        tint = iconTint,
-      )
+      Icon(icon = icon, modifier = Modifier.size(18.dp), tint = iconTint)
 
       Column(modifier = Modifier.weight(1f), content = content)
 
@@ -495,11 +467,7 @@ private fun EntityListRowFrame(
   }
 }
 
-private fun formatEntitySummary(
-  folderCount: Int,
-  documentCount: Int,
-  emptyText: String,
-): String {
+private fun formatEntitySummary(folderCount: Int, documentCount: Int, emptyText: String): String {
   val parts = buildList {
     if (folderCount > 0) add("폴더 ${folderCount.comma}개")
     if (documentCount > 0) add("문서 ${documentCount.comma}개")

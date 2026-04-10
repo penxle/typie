@@ -17,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,7 +24,6 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import co.typie.ui.theme.AppTheme
 
 data class PersistentSheetSpec(
@@ -34,7 +32,8 @@ data class PersistentSheetSpec(
   val haptics: SheetHapticPolicy = SheetHapticPolicy(onPresent = false),
 )
 
-class PersistentSheetState internal constructor(
+class PersistentSheetState
+internal constructor(
   internal val controller: SheetControllerState<Unit>,
   internal val spec: PersistentSheetSpec,
 ) {
@@ -52,14 +51,12 @@ class PersistentSheetState internal constructor(
 
 @Composable
 fun rememberPersistentSheetState(
-  spec: PersistentSheetSpec = PersistentSheetSpec(),
+  spec: PersistentSheetSpec = PersistentSheetSpec()
 ): PersistentSheetState {
   return remember(spec) {
     PersistentSheetState(
-      controller = SheetControllerState(
-        mode = SheetMode.Persistent,
-        dismissPolicy = SheetDismissPolicy(),
-      ),
+      controller =
+        SheetControllerState(mode = SheetMode.Persistent, dismissPolicy = SheetDismissPolicy()),
       spec = spec,
     )
   }
@@ -77,36 +74,32 @@ fun PersistentSheet(
   var measuredSheetHeightPx by remember { mutableFloatStateOf(0f) }
   var sheetHeightPx by remember { mutableFloatStateOf(0f) }
   val colors = AppTheme.colors
-  val sheetScope = remember(state) {
-    object : SheetScope<Unit> {
-      override val controller: SheetController<Unit> = state.controller
+  val sheetScope =
+    remember(state) {
+      object : SheetScope<Unit> {
+        override val controller: SheetController<Unit> = state.controller
 
-      override fun complete(result: Unit) = Unit
+        override fun complete(result: Unit) = Unit
 
-      override fun dismiss(reason: SheetDismissReason) = Unit
+        override fun dismiss(reason: SheetDismissReason) = Unit
+      }
     }
-  }
 
-  BoxWithConstraints(
-    modifier = modifier.fillMaxWidth(),
-  ) {
-    val resolvedDetents = remember(
-      state.spec.sizePolicy,
-      maxHeight,
-      measuredSheetHeightPx,
-    ) {
-      resolveDetentsForSheetMeasurement(
-        policy = state.spec.sizePolicy,
-        viewportHeight = maxHeight,
-        measuredSheetHeightPx = measuredSheetHeightPx,
-        density = density,
-      )
-    }
-    val requiresContentMeasurement = remember(state.spec.sizePolicy) {
-      state.spec.sizePolicy.requiresContentMeasurement()
-    }
+  BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+    val resolvedDetents =
+      remember(state.spec.sizePolicy, maxHeight, measuredSheetHeightPx) {
+        resolveDetentsForSheetMeasurement(
+          policy = state.spec.sizePolicy,
+          viewportHeight = maxHeight,
+          measuredSheetHeightPx = measuredSheetHeightPx,
+          density = density,
+        )
+      }
+    val requiresContentMeasurement =
+      remember(state.spec.sizePolicy) { state.spec.sizePolicy.requiresContentMeasurement() }
     val initialDetentId = state.spec.sizePolicy.initialDetentId()
-    val initialDetent = resolvedDetents.firstOrNull { it.id == initialDetentId } ?: resolvedDetents.firstOrNull()
+    val initialDetent =
+      resolvedDetents.firstOrNull { it.id == initialDetentId } ?: resolvedDetents.firstOrNull()
 
     LaunchedEffect(resolvedDetents) {
       if (resolvedDetents.isEmpty()) return@LaunchedEffect
@@ -116,17 +109,19 @@ fun PersistentSheet(
         stackDepth = 0,
         isTopOfStack = true,
       )
-      val targetHeightPx = initialDetent?.let { with(density) { it.height.toPx() } } ?: return@LaunchedEffect
+      val targetHeightPx =
+        initialDetent?.let { with(density) { it.height.toPx() } } ?: return@LaunchedEffect
       if (sheetHeightPx == 0f) {
         sheetHeightPx = targetHeightPx
       } else {
         val animatable = Animatable(sheetHeightPx)
         animatable.animateTo(
           targetHeightPx,
-          animationSpec = tween(
-            durationMillis = SheetDefaults.HeightAnimationDuration,
-            easing = SheetDefaults.EnterEasing,
-          ),
+          animationSpec =
+            tween(
+              durationMillis = SheetDefaults.HeightAnimationDuration,
+              easing = SheetDefaults.EnterEasing,
+            ),
         ) {
           sheetHeightPx = value
         }
@@ -136,66 +131,63 @@ fun PersistentSheet(
     }
 
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .heightIn(max = maxHeight)
-        .then(
-          if (sheetHeightPx > 0f) Modifier.height(with(density) { sheetHeightPx.toDp() }) else Modifier,
-        )
-        .onSizeChanged { size ->
-          if (requiresContentMeasurement) {
-            val nextHeight = size.height.toFloat()
-            if (nextHeight > measuredSheetHeightPx) {
-              measuredSheetHeightPx = nextHeight
+      modifier =
+        Modifier.fillMaxWidth()
+          .heightIn(max = maxHeight)
+          .then(
+            if (sheetHeightPx > 0f) Modifier.height(with(density) { sheetHeightPx.toDp() })
+            else Modifier
+          )
+          .onSizeChanged { size ->
+            if (requiresContentMeasurement) {
+              val nextHeight = size.height.toFloat()
+              if (nextHeight > measuredSheetHeightPx) {
+                measuredSheetHeightPx = nextHeight
+              }
             }
           }
-        }
-        .dropShadow(
-          RoundedCornerShape(
-            topStart = state.spec.chrome.topCornerRadius,
-            topEnd = state.spec.chrome.topCornerRadius,
-          ),
-        ) {
-          color = colors.shadowAmbient
-          radius = 8f
-        }
-        .dropShadow(
-          RoundedCornerShape(
-            topStart = state.spec.chrome.topCornerRadius,
-            topEnd = state.spec.chrome.topCornerRadius,
-          ),
-        ) {
-          color = colors.shadow
-          offset = Offset(0f, -4f)
-          radius = 12f
-        }
-        .clip(
-          RoundedCornerShape(
-            topStart = state.spec.chrome.topCornerRadius,
-            topEnd = state.spec.chrome.topCornerRadius,
-          ),
-        )
-        .background(colors.surfaceRaised),
+          .dropShadow(
+            RoundedCornerShape(
+              topStart = state.spec.chrome.topCornerRadius,
+              topEnd = state.spec.chrome.topCornerRadius,
+            )
+          ) {
+            color = colors.shadowAmbient
+            radius = 8f
+          }
+          .dropShadow(
+            RoundedCornerShape(
+              topStart = state.spec.chrome.topCornerRadius,
+              topEnd = state.spec.chrome.topCornerRadius,
+            )
+          ) {
+            color = colors.shadow
+            offset = Offset(0f, -4f)
+            radius = 12f
+          }
+          .clip(
+            RoundedCornerShape(
+              topStart = state.spec.chrome.topCornerRadius,
+              topEnd = state.spec.chrome.topCornerRadius,
+            )
+          )
+          .background(colors.surfaceRaised)
     ) {
       when (val handle = state.spec.chrome.handle) {
         SheetHandleStyle.Hidden -> Unit
         is SheetHandleStyle.Visible -> {
           Spacer(modifier = Modifier.height(handle.topPadding))
           androidx.compose.foundation.layout.Box(
-            modifier = Modifier
-              .size(width = handle.width, height = handle.height)
-              .clip(RoundedCornerShape(handle.height / 2))
-              .background(colors.borderSubtle),
+            modifier =
+              Modifier.size(width = handle.width, height = handle.height)
+                .clip(RoundedCornerShape(handle.height / 2))
+                .background(colors.borderSubtle)
           )
           Spacer(modifier = Modifier.height(handle.bottomPadding))
         }
       }
 
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        content(sheetScope)
-      }
+      Column(modifier = Modifier.fillMaxWidth()) { content(sheetScope) }
     }
   }
 }

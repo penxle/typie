@@ -9,20 +9,31 @@ import androidx.lifecycle.ViewModelStore
 import co.typie.route.Route
 import kotlinx.coroutines.CompletableDeferred
 
-enum class NavOperation { None, Push, Pop }
+enum class NavOperation {
+  None,
+  Push,
+  Pop,
+}
 
 class Navigator(startRoute: Route) {
   private val _stack = mutableStateListOf(startRoute)
-  val stack: List<Route> get() = _stack
+  val stack: List<Route>
+    get() = _stack
 
   private val _modals = mutableStateListOf<@Composable () -> Unit>()
-  val modals: List<@Composable () -> Unit> get() = _modals
+  val modals: List<@Composable () -> Unit>
+    get() = _modals
 
   private val viewModelStores = mutableMapOf<Route, ViewModelStore>()
 
-  val current: Route get() = _stack.last()
-  val previous: Route? get() = if (_stack.size > 1) _stack[_stack.lastIndex - 1] else null
-  val canPop: Boolean get() = _stack.size > 1 || _modals.isNotEmpty()
+  val current: Route
+    get() = _stack.last()
+
+  val previous: Route?
+    get() = if (_stack.size > 1) _stack[_stack.lastIndex - 1] else null
+
+  val canPop: Boolean
+    get() = _stack.size > 1 || _modals.isNotEmpty()
 
   var lastOperation: NavOperation = NavOperation.None
     private set
@@ -32,7 +43,8 @@ class Navigator(startRoute: Route) {
 
   private var transitionCompletion: CompletableDeferred<Unit>? = null
 
-  val isTransitioning: Boolean get() = transitionCompletion?.isActive == true
+  val isTransitioning: Boolean
+    get() = transitionCompletion?.isActive == true
 
   fun viewModelStoreFor(route: Route): ViewModelStore {
     return viewModelStores.getOrPut(route) { ViewModelStore() }

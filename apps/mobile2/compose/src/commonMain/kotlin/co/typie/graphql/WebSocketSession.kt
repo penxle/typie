@@ -18,8 +18,9 @@ private const val CreateWsSessionMutation =
   """{"query":"mutation CreateWsSession_Mutation { createWsSession }"}"""
 
 internal fun parseCreateWsSessionResponse(body: String): String {
-  val data = Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
-    ?: throw IllegalStateException("Invalid createWsSession response")
+  val data =
+    Json.parseToJsonElement(body).jsonObject["data"]?.jsonObject
+      ?: throw IllegalStateException("Invalid createWsSession response")
 
   return data["createWsSession"]?.jsonPrimitive?.contentOrNull
     ?: throw IllegalStateException("Missing websocket session token")
@@ -29,8 +30,10 @@ object WebSocketSessionService {
   suspend fun createConnectionPayload(): Map<String, Any?> = mapOf("session" to createSession())
 
   suspend fun createSession(): String {
-    val accessToken = AuthService.tokens?.accessToken ?: AuthService.refreshTokens()
-      ?: error("Missing access token for websocket session")
+    val accessToken =
+      AuthService.tokens?.accessToken
+        ?: AuthService.refreshTokens()
+        ?: error("Missing access token for websocket session")
 
     return try {
       requestSession(accessToken)
@@ -46,11 +49,12 @@ object WebSocketSessionService {
   }
 
   private suspend fun requestSession(accessToken: String): String {
-    val response = Http.post("${Konfig.API_URL}/graphql") {
-      header("Authorization", "Bearer $accessToken")
-      contentType(ContentType.Application.Json)
-      setBody(CreateWsSessionMutation)
-    }
+    val response =
+      Http.post("${Konfig.API_URL}/graphql") {
+        header("Authorization", "Bearer $accessToken")
+        contentType(ContentType.Application.Json)
+        setBody(CreateWsSessionMutation)
+      }
 
     return parseCreateWsSessionResponse(response.body())
   }

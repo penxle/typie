@@ -74,10 +74,11 @@ class ToastTest {
   @Test
   fun withLoadingSuccess() = runTest {
     val toast = Toast()
-    val result = toast.withLoading("로딩 중...") {
-      success("완료")
-      42
-    }
+    val result =
+      toast.withLoading("로딩 중...") {
+        success("완료")
+        42
+      }
     assertEquals(42, result)
     val state = toast.state.value!!
     assertEquals(ToastType.Success, state.type)
@@ -96,11 +97,7 @@ class ToastTest {
   @Test
   fun withLoadingFailure() = runTest {
     val toast = Toast()
-    assertFailsWith<CancellationException> {
-      toast.withLoading("로딩 중...") {
-        failure("실패했습니다")
-      }
-    }
+    assertFailsWith<CancellationException> { toast.withLoading("로딩 중...") { failure("실패했습니다") } }
     val state = toast.state.value!!
     assertEquals(ToastType.Error, state.type)
     assertEquals("실패했습니다", state.message)
@@ -110,9 +107,7 @@ class ToastTest {
   fun withLoadingUnhandledException() = runTest {
     val toast = Toast()
     assertFailsWith<IllegalStateException> {
-      toast.withLoading("로딩 중...") {
-        throw IllegalStateException("unexpected")
-      }
+      toast.withLoading("로딩 중...") { throw IllegalStateException("unexpected") }
     }
     val state = toast.state.value!!
     assertEquals(ToastType.Error, state.type)

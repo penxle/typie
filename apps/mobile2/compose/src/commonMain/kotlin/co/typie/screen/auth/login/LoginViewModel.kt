@@ -30,13 +30,14 @@ import kotlinx.serialization.json.JsonPrimitive
 class LoginSingleSignOnViewModel : ViewModel() {
   context(_: ActivityContext)
   suspend fun loginWith(provider: SingleSignOnProvider): Result<Unit, Nothing> = result {
-    val ssoProvider = when (provider) {
-      SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
-      SingleSignOnProvider.KAKAO -> KakaoSingleSignOnProvider()
-      SingleSignOnProvider.NAVER -> NaverSingleSignOnProvider()
-      SingleSignOnProvider.APPLE -> AppleSingleSignOnProvider()
-      else -> throw IllegalArgumentException("Unknown provider: $provider")
-    }
+    val ssoProvider =
+      when (provider) {
+        SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
+        SingleSignOnProvider.KAKAO -> KakaoSingleSignOnProvider()
+        SingleSignOnProvider.NAVER -> NaverSingleSignOnProvider()
+        SingleSignOnProvider.APPLE -> AppleSingleSignOnProvider()
+        else -> throw IllegalArgumentException("Unknown provider: $provider")
+      }
 
     val credential = ssoProvider.authenticate()
 
@@ -53,20 +54,22 @@ class LoginSingleSignOnViewModel : ViewModel() {
 
 sealed interface LoginWithEmailError {
   data object ValidationFailed : LoginWithEmailError
+
   data object InvalidCredentials : LoginWithEmailError
+
   data object PasswordNotSet : LoginWithEmailError
+
   data class Unknown(val code: String) : LoginWithEmailError
 }
 
 class LoginWithEmailForm(scope: CoroutineScope) : FormState(scope) {
-  val email = field("") {
-    required("이메일을 입력해주세요.")
-    email("올바른 이메일 형식을 입력해주세요.")
-  }
+  val email =
+    field("") {
+      required("이메일을 입력해주세요.")
+      email("올바른 이메일 형식을 입력해주세요.")
+    }
 
-  val password = field("") {
-    required("비밀번호를 입력해주세요.")
-  }
+  val password = field("") { required("비밀번호를 입력해주세요.") }
 }
 
 class LoginWithEmailState(scope: CoroutineScope) {
@@ -87,9 +90,9 @@ class LoginWithEmailViewModel : ViewModel() {
           LoginWithEmailScreen_LoginWithEmail_Mutation(
             LoginWithEmailInput(
               email = state.form.email.value,
-              password = state.form.password.value
-            ),
-          ),
+              password = state.form.password.value,
+            )
+          )
         )
       } catch (e: TypieError) {
         when (e.code) {

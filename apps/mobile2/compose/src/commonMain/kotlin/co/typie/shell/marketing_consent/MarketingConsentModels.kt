@@ -8,5 +8,6 @@ internal fun shouldShowMarketingConsentPrompt(
   marketingConsentAskedAt: Instant?,
   totalCharacterCount: Int,
 ): Boolean {
-  return marketingConsentAskedAt == null && totalCharacterCount >= MARKETING_CONSENT_CHARACTER_THRESHOLD
+  return marketingConsentAskedAt == null &&
+    totalCharacterCount >= MARKETING_CONSENT_CHARACTER_THRESHOLD
 }

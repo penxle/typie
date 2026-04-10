@@ -15,14 +15,14 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     val splashScreen = installSplashScreen()
     AppStartupService.startAsync()
-    splashScreen.setKeepOnScreenCondition { AppStartupService.state.value !is AppStartupState.Ready }
+    splashScreen.setKeepOnScreenCondition {
+      AppStartupService.state.value !is AppStartupState.Ready
+    }
 
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
 
-    setContent {
-      App()
-    }
+    setContent { App() }
   }
 
   override fun onResume() {

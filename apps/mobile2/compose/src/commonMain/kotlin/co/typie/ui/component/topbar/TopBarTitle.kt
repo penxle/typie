@@ -39,14 +39,15 @@ fun TopBarTitle(
 
   Row(
     verticalAlignment = Alignment.CenterVertically,
-    modifier = modifier
-      .fillMaxWidth()
-      .height(TopBarDefaults.TitleHeight)
-      .then(shadowMod)
-      .clip(shape)
-      .background(bg, shape)
-      .border(1.dp, borderColor, shape)
-      .padding(horizontal = TopBarDefaults.TitleHorizontalPadding),
+    modifier =
+      modifier
+        .fillMaxWidth()
+        .height(TopBarDefaults.TitleHeight)
+        .then(shadowMod)
+        .clip(shape)
+        .background(bg, shape)
+        .border(1.dp, borderColor, shape)
+        .padding(horizontal = TopBarDefaults.TitleHorizontalPadding),
   ) {
     if (icon != null) {
       Icon(
@@ -57,10 +58,7 @@ fun TopBarTitle(
       Spacer(Modifier.width(TopBarDefaults.TitleIconGap))
     }
 
-    Column(
-      verticalArrangement = Arrangement.Center,
-      modifier = Modifier.weight(1f),
-    ) {
+    Column(verticalArrangement = Arrangement.Center, modifier = Modifier.weight(1f)) {
       Text(
         text = title,
         maxLines = 1,

@@ -1,12 +1,12 @@
 package co.typie.form
 
 import androidx.compose.ui.text.input.ImeAction
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
 
 class FieldConfig<V> {
   internal val taggedRules = mutableListOf<Pair<ValidateOn?, Rule<V>>>()
@@ -80,22 +80,20 @@ open class FormState(
   private val registeredFields = mutableListOf<FieldState<*>>()
   private val debounceJobs = mutableMapOf<FieldState<*>, Job>()
 
-  protected fun <V> field(
-    initialValue: V,
-    config: FieldConfig<V>.() -> Unit = {},
-  ): FieldState<V> {
+  protected fun <V> field(initialValue: V, config: FieldConfig<V>.() -> Unit = {}): FieldState<V> {
     val fieldConfig = FieldConfig<V>().apply(config)
     val fieldDefault = fieldConfig.validateOn ?: defaultValidateOn
-    val rulesByTiming = fieldConfig.taggedRules
-      .groupBy(
+    val rulesByTiming =
+      fieldConfig.taggedRules.groupBy(
         keySelector = { (timing, _) -> timing ?: fieldDefault },
         valueTransform = { (_, rule) -> rule },
       )
-    val fieldState = FieldState(
-      initialValue = initialValue,
-      rulesByTiming = rulesByTiming,
-      deferredRules = fieldConfig.deferredRules,
-    )
+    val fieldState =
+      FieldState(
+        initialValue = initialValue,
+        rulesByTiming = rulesByTiming,
+        deferredRules = fieldConfig.deferredRules,
+      )
     fieldState.onValueChanged = { onFieldValueChanged(fieldState) }
     fieldState.onBlurCallback = {
       if (ValidateOn.Blur in fieldState.rulesByTiming) {
@@ -119,9 +117,7 @@ open class FormState(
     get() = registeredFields.all { it.errors.isEmpty() }
 
   val errors: Map<FieldState<*>, List<String>>
-    get() = registeredFields
-      .filter { it.errors.isNotEmpty() }
-      .associateWith { it.errors }
+    get() = registeredFields.filter { it.errors.isNotEmpty() }.associateWith { it.errors }
 
   suspend fun validateAll(): Boolean {
     var allValid = true
@@ -163,11 +159,9 @@ open class FormState(
   private val focusChain: List<FieldState<*>>
     get() = registeredFields.filter { it.focusable }
 
-  fun isFirstField(field: FieldState<*>): Boolean =
-    focusChain.firstOrNull() == field
+  fun isFirstField(field: FieldState<*>): Boolean = focusChain.firstOrNull() == field
 
-  fun isLastField(field: FieldState<*>): Boolean =
-    focusChain.lastOrNull() == field
+  fun isLastField(field: FieldState<*>): Boolean = focusChain.lastOrNull() == field
 
   fun focusNext(field: FieldState<*>) {
     val chain = focusChain

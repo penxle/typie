@@ -45,11 +45,12 @@ object Img {
 
     BoxWithConstraints(modifier = modifier) {
       val maxDim = maxOf(constraints.maxWidth, constraints.maxHeight)
-      val fetchSize = if (maxDim > 0 && maxDim != Constraints.Infinity) {
-        2.0.pow(ceil(log2(maxDim.toDouble() * density.density))).toInt()
-      } else {
-        0
-      }
+      val fetchSize =
+        if (maxDim > 0 && maxDim != Constraints.Infinity) {
+          2.0.pow(ceil(log2(maxDim.toDouble() * density.density))).toInt()
+        } else {
+          0
+        }
 
       val model = if (fetchSize > 0) "${image.url}?s=$fetchSize&q=75" else image.url
 
@@ -71,7 +72,6 @@ object Img {
       }
     }
   }
-
 
   @Composable
   operator fun invoke(
@@ -120,10 +120,10 @@ private fun PlaceholderAsyncImage(
   val painter = rememberAsyncImagePainter(model = model)
   val painterState by painter.state.collectAsState()
 
-  if (painterState is AsyncImagePainter.State.Loading || painterState is AsyncImagePainter.State.Empty) {
-    Box(modifier = modifier) {
-      placeholder()
-    }
+  if (
+    painterState is AsyncImagePainter.State.Loading || painterState is AsyncImagePainter.State.Empty
+  ) {
+    Box(modifier = modifier) { placeholder() }
   } else {
     Image(
       painter = painter,

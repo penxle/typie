@@ -6,5 +6,4 @@ import androidx.compose.runtime.Composable
 
 actual typealias ActivityContext = Activity
 
-@Composable
-actual fun activityContext(): ActivityContext = LocalActivity.current!!
+@Composable actual fun activityContext(): ActivityContext = LocalActivity.current!!

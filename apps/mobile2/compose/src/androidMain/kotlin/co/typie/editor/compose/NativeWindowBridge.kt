@@ -6,5 +6,6 @@ internal object NativeWindowBridge {
   }
 
   external fun fromSurface(surface: android.view.Surface): Long
+
   external fun release(handle: Long)
 }

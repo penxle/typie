@@ -13,9 +13,7 @@ class FolderActionTest {
         listOf("다른 폴더로 옮기기", "복사", "잘라내기"),
         listOf("삭제"),
       ),
-      folderPrimaryActionSections().map { section ->
-        section.items.map { item -> item.label }
-      },
+      folderPrimaryActionSections().map { section -> section.items.map { item -> item.label } },
     )
   }
 }

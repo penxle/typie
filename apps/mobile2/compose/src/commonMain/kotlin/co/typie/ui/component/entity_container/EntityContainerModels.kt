@@ -2,16 +2,9 @@ package co.typie.ui.component.entity_container
 
 import co.typie.ui.component.EntityListItem
 
-data class OrderedEntityItem(
-  val id: String,
-  val order: String,
-  val item: EntityListItem,
-)
+data class OrderedEntityItem(val id: String, val order: String, val item: EntityListItem)
 
-data class EntityReorderOrders(
-  val lowerOrder: String?,
-  val upperOrder: String?,
-)
+data class EntityReorderOrders(val lowerOrder: String?, val upperOrder: String?)
 
 fun displayOrderedEntityItems(
   items: List<OrderedEntityItem>,
@@ -39,9 +32,7 @@ fun calculateEntityReorderOrdersFromOrderedKeys(
     return null
   }
 
-  val movedIndex = orderedItems.indexOfFirst { item ->
-    item.id == movedKey
-  }
+  val movedIndex = orderedItems.indexOfFirst { item -> item.id == movedKey }
   if (movedIndex == -1) {
     return null
   }

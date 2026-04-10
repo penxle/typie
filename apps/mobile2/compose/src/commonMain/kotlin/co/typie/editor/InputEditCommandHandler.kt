@@ -42,20 +42,21 @@ internal object InputEditCommandHandler {
     }
   }
 
-  private fun EditCommand.toFlatImeOp(): FlatImeOp? = when (this) {
-    is CommitTextCommand -> FlatImeOp.ReplaceSelection(text)
-    is SetComposingTextCommand -> FlatImeOp.Compose(text)
-    is SetSelectionCommand -> FlatImeOp.SetSelection(start, end)
-    is SetComposingRegionCommand -> FlatImeOp.SetComposition(start, end)
-    is FinishComposingTextCommand -> FlatImeOp.ClearComposition
-    is DeleteSurroundingTextCommand ->
-      FlatImeOp.DeleteSurroundingUtf16(lengthBeforeCursor, lengthAfterCursor)
+  private fun EditCommand.toFlatImeOp(): FlatImeOp? =
+    when (this) {
+      is CommitTextCommand -> FlatImeOp.ReplaceSelection(text)
+      is SetComposingTextCommand -> FlatImeOp.Compose(text)
+      is SetSelectionCommand -> FlatImeOp.SetSelection(start, end)
+      is SetComposingRegionCommand -> FlatImeOp.SetComposition(start, end)
+      is FinishComposingTextCommand -> FlatImeOp.ClearComposition
+      is DeleteSurroundingTextCommand ->
+        FlatImeOp.DeleteSurroundingUtf16(lengthBeforeCursor, lengthAfterCursor)
 
-    is DeleteSurroundingTextInCodePointsCommand ->
-      FlatImeOp.DeleteSurrounding(lengthBeforeCursor, lengthAfterCursor)
+      is DeleteSurroundingTextInCodePointsCommand ->
+        FlatImeOp.DeleteSurrounding(lengthBeforeCursor, lengthAfterCursor)
 
-    is BackspaceCommand -> FlatImeOp.DeleteSurrounding(1, 0)
-    is MoveCursorCommand -> FlatImeOp.MoveCursor(amount)
-    else -> null
-  }
+      is BackspaceCommand -> FlatImeOp.DeleteSurrounding(1, 0)
+      is MoveCursorCommand -> FlatImeOp.MoveCursor(amount)
+      else -> null
+    }
 }

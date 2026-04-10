@@ -1,7 +1,7 @@
 package co.typie.ui.component
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import co.typie.ext.imeOrNavigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ime
+import co.typie.ext.imeOrNavigationBarsPadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
 import co.typie.ext.safeDrawing
@@ -35,8 +35,8 @@ import co.typie.ext.statusBars
 import co.typie.ext.verticalScroll
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.TopBarDefaults
-import co.typie.ui.state.rememberScrollState
 import co.typie.ui.skeleton.Skeleton
+import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -53,18 +53,21 @@ private fun BaseScreen(
   val topBarState = LocalTopBarState.current
   val hasTopBar = topBarState != null && topBarState.enabled && topBarState.visible
   val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-  val adjustedContentPadding = if (hasTopBar) {
-    contentPadding + PaddingValues(top = statusBarTop + TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing)
-  } else {
-    contentPadding
-  }
+  val adjustedContentPadding =
+    if (hasTopBar) {
+      contentPadding +
+        PaddingValues(
+          top =
+            statusBarTop +
+              TopBarDefaults.Height +
+              TopBarDefaults.BlurFadeHeight +
+              TopBarDefaults.ContentTopSpacing
+        )
+    } else {
+      contentPadding
+    }
 
-  Box(
-    Modifier
-      .fillMaxSize()
-      .background(background)
-      .then(modifier),
-  ) {
+  Box(Modifier.fillMaxSize().background(background).then(modifier)) {
     val contentModifier = Modifier.fillMaxSize()
 
     val contentContainer: @Composable (@Composable () -> Unit) -> Unit = { innerContent ->
@@ -76,17 +79,11 @@ private fun BaseScreen(
           content = innerContent,
         )
       } else {
-        Box(contentModifier) {
-          innerContent()
-        }
+        Box(contentModifier) { innerContent() }
       }
     }
 
-    contentContainer {
-      Skeleton(enabled = loading) {
-        content(adjustedContentPadding)
-      }
-    }
+    contentContainer { Skeleton(enabled = loading) { content(adjustedContentPadding) } }
   }
 }
 
@@ -108,11 +105,12 @@ fun Screen(
   body: (@Composable (contentPadding: PaddingValues) -> Unit)? = null,
   content: @Composable ColumnScope.() -> Unit = {},
 ) {
-  val resolvedScrollState = if (body == null) {
-    scrollState ?: rememberScrollState()
-  } else {
-    scrollState
-  }
+  val resolvedScrollState =
+    if (body == null) {
+      scrollState ?: rememberScrollState()
+    } else {
+      scrollState
+    }
   val resolvedPrimaryScrollableState = primaryScrollableState ?: resolvedScrollState
 
   BaseScreen(
@@ -126,29 +124,31 @@ fun Screen(
   ) { adjustedContentPadding ->
     var bottomBarHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    val bottomBarPadding = PaddingValues(
-      bottom = with(density) { bottomBarHeight.toDp() },
-    )
+    val bottomBarPadding = PaddingValues(bottom = with(density) { bottomBarHeight.toDp() })
     val resolvedContentPadding = adjustedContentPadding + extraPadding + bottomBarPadding
-    val bottomInset = when {
-      imeAware -> maxOf(
-        WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
-        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
-      )
-      bottomBar == null -> WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
-      else -> 0.dp
-    }
+    val bottomInset =
+      when {
+        imeAware ->
+          maxOf(
+            WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
+            WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
+          )
+        bottomBar == null -> WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+        else -> 0.dp
+      }
 
     Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .then(if (imeAware && body != null) Modifier.imeOrNavigationBarsPadding() else Modifier),
+      modifier =
+        Modifier.fillMaxSize()
+          .then(if (imeAware && body != null) Modifier.imeOrNavigationBarsPadding() else Modifier)
     ) {
       if (body != null) {
         body(resolvedContentPadding)
       } else {
         ScrollableScreenColumn(
-          scrollState = resolvedScrollState ?: error("Screen requires a scroll state when body is not provided"),
+          scrollState =
+            resolvedScrollState
+              ?: error("Screen requires a scroll state when body is not provided"),
           contentPadding = resolvedContentPadding + PaddingValues(bottom = bottomInset),
           verticalArrangement = verticalArrangement,
           horizontalAlignment = horizontalAlignment,
@@ -159,17 +159,17 @@ fun Screen(
 
       if (bottomBar != null) {
         Box(
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .then(
-              when {
-                imeAware && body == null -> Modifier.imeOrNavigationBarsPadding()
-                !imeAware -> Modifier.navigationBarsPadding()
-                else -> Modifier
-              }
-            )
-            .onSizeChanged { bottomBarHeight = it.height },
+          modifier =
+            Modifier.align(Alignment.BottomCenter)
+              .fillMaxWidth()
+              .then(
+                when {
+                  imeAware && body == null -> Modifier.imeOrNavigationBarsPadding()
+                  !imeAware -> Modifier.navigationBarsPadding()
+                  else -> Modifier
+                }
+              )
+              .onSizeChanged { bottomBarHeight = it.height }
         ) {
           bottomBar()
         }
@@ -188,11 +188,8 @@ fun ScrollableScreenColumn(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .verticalScroll(scrollState)
-      .padding(contentPadding)
-      .then(modifier),
+    modifier =
+      Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding).then(modifier),
     verticalArrangement = verticalArrangement,
     horizontalAlignment = horizontalAlignment,
   ) {

@@ -3,8 +3,8 @@ package co.typie.shell
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import co.touchlab.kermit.Logger
-import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
 import co.typie.graphql.Apollo
+import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
 import co.typie.service.SiteRefreshCoordinator
 import co.typie.service.SiteService
 import com.apollographql.apollo.annotations.ApolloExperimental
@@ -23,13 +23,13 @@ internal fun SiteUpdateStreamEffect() {
       .retryOnError(true)
       .toFlow()
       .collect { response ->
-        response.exception?.let { error ->
-          Logger.e(error) { "siteUpdateStream failed" }
-        }
+        response.exception?.let { error -> Logger.e(error) { "siteUpdateStream failed" } }
 
-        response.errors?.takeIf { it.isNotEmpty() }?.let { errors ->
-          Logger.e { "siteUpdateStream graphql errors=${errors.joinToString { it.message }}" }
-        }
+        response.errors
+          ?.takeIf { it.isNotEmpty() }
+          ?.let { errors ->
+            Logger.e { "siteUpdateStream graphql errors=${errors.joinToString { it.message }}" }
+          }
 
         if (response.data?.siteUpdateStream != null) {
           SiteRefreshCoordinator.notifySiteChanged(siteId)

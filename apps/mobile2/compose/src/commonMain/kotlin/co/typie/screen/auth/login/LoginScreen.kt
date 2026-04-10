@@ -63,51 +63,46 @@ import kotlinx.coroutines.launch
 fun LoginScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
 
-  ProvideTopBar(
-    enabled = false
-  )
+  ProvideTopBar(enabled = false)
 
-  Screen(body = { contentPadding ->
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(contentPadding)
-        .safeBottomPadding(),
-    ) {
-      Column(
-        modifier = Modifier.weight(1f).fillMaxWidth(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-      ) {
-        Img(
-          url = Res.getUri("files/logos/full.svg"),
-          modifier = Modifier.height(32.dp),
-          contentScale = ContentScale.FillHeight,
-          color = AppTheme.colors.textPrimary,
-        )
-        Spacer(Modifier.height(24.dp))
-        Text("작성, 정리, 공유까지.", style = AppTheme.typography.label)
-        Spacer(Modifier.height(4.dp))
-        Text("글쓰기의 모든 과정을", style = AppTheme.typography.label)
-        Spacer(Modifier.height(4.dp))
-        Text("타이피 하나로 해결해요.", style = AppTheme.typography.label)
-      }
+  Screen(
+    body = { contentPadding ->
+      Column(modifier = Modifier.fillMaxSize().padding(contentPadding).safeBottomPadding()) {
+        Column(
+          modifier = Modifier.weight(1f).fillMaxWidth(),
+          verticalArrangement = Arrangement.Center,
+          horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+          Img(
+            url = Res.getUri("files/logos/full.svg"),
+            modifier = Modifier.height(32.dp),
+            contentScale = ContentScale.FillHeight,
+            color = AppTheme.colors.textPrimary,
+          )
+          Spacer(Modifier.height(24.dp))
+          Text("작성, 정리, 공유까지.", style = AppTheme.typography.label)
+          Spacer(Modifier.height(4.dp))
+          Text("글쓰기의 모든 과정을", style = AppTheme.typography.label)
+          Spacer(Modifier.height(4.dp))
+          Text("타이피 하나로 해결해요.", style = AppTheme.typography.label)
+        }
 
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-      ) {
-        Button(
-          text = "시작하기",
-          onClick = { bottomSheetHost.show { LoginBottomSheet() } },
-        )
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+          horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+          Button(text = "시작하기", onClick = { bottomSheetHost.show { LoginBottomSheet() } })
+        }
       }
     }
-  })
+  )
 }
 
-private enum class LoginStep { SingleSignOn, Email }
+private enum class LoginStep {
+  SingleSignOn,
+  Email,
+}
 
 @Composable
 fun BottomSheetScope<Unit>.LoginBottomSheet() {
@@ -125,25 +120,18 @@ fun BottomSheetScope<Unit>.LoginBottomSheet() {
       },
     ) { currentStep ->
       when (currentStep) {
-        LoginStep.SingleSignOn -> LoginSSOContent(
-          onEmailClick = { step = LoginStep.Email },
-          onSuccess = { dismiss() },
-        )
+        LoginStep.SingleSignOn ->
+          LoginSSOContent(onEmailClick = { step = LoginStep.Email }, onSuccess = { dismiss() })
 
-        LoginStep.Email -> LoginEmailContent(
-          onBack = { step = LoginStep.SingleSignOn },
-          onSuccess = { dismiss() },
-        )
+        LoginStep.Email ->
+          LoginEmailContent(onBack = { step = LoginStep.SingleSignOn }, onSuccess = { dismiss() })
       }
     }
   }
 }
 
 @Composable
-private fun LoginSSOContent(
-  onEmailClick: () -> Unit,
-  onSuccess: () -> Unit,
-) {
+private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
   val model = viewModel { LoginSingleSignOnViewModel() }
   val toast = LocalToast.current
   val loader = LocalLoader.current
@@ -155,22 +143,14 @@ private fun LoginSSOContent(
     scope.launch {
       loader.runWith {
         context(activity) {
-          model.loginWith(provider)
-            .withDefaultExceptionHandler(toast)
-            .onOk { onSuccess() }
+          model.loginWith(provider).withDefaultExceptionHandler(toast).onOk { onSuccess() }
         }
       }
     }
   }
 
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalAlignment = Alignment.CenterHorizontally,
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+  Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
       SingleSignOnButton(
         text = "구글로 시작하기",
         svgPath = "files/brands/google.svg",
@@ -214,18 +194,13 @@ private fun LoginSSOContent(
       "이메일로 가입하셨나요?",
       style = AppTheme.typography.caption,
       color = AppTheme.colors.textSecondary,
-      modifier = Modifier
-        .padding(vertical = 16.dp)
-        .clickable { onEmailClick() },
+      modifier = Modifier.padding(vertical = 16.dp).clickable { onEmailClick() },
     )
   }
 }
 
 @Composable
-private fun LoginEmailContent(
-  onBack: () -> Unit,
-  onSuccess: () -> Unit,
-) {
+private fun LoginEmailContent(onBack: () -> Unit, onSuccess: () -> Unit) {
   val model = viewModel { LoginWithEmailViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -233,16 +208,18 @@ private fun LoginEmailContent(
 
   fun submit() {
     scope.launch {
-      model.submit()
+      model
+        .submit()
         .withDefaultExceptionHandler(toast)
         .onOk { onSuccess() }
         .onErr { error ->
-          val message = when (error) {
-            LoginWithEmailError.ValidationFailed -> null
-            LoginWithEmailError.InvalidCredentials -> "이메일 또는 비밀번호가 올바르지 않아요."
-            LoginWithEmailError.PasswordNotSet -> "비밀번호가 설정되지 않았어요."
-            is LoginWithEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
-          }
+          val message =
+            when (error) {
+              LoginWithEmailError.ValidationFailed -> null
+              LoginWithEmailError.InvalidCredentials -> "이메일 또는 비밀번호가 올바르지 않아요."
+              LoginWithEmailError.PasswordNotSet -> "비밀번호가 설정되지 않았어요."
+              is LoginWithEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
+            }
           if (message != null) {
             toast.show(ToastType.Error, message)
           }
@@ -250,9 +227,7 @@ private fun LoginEmailContent(
     }
   }
 
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-  ) {
+  Column(modifier = Modifier.fillMaxWidth()) {
     TextField(
       field = form.email,
       label = "이메일",
@@ -285,10 +260,10 @@ private fun LoginEmailContent(
       "다른 방법으로 로그인",
       style = AppTheme.typography.caption,
       color = AppTheme.colors.textSecondary,
-      modifier = Modifier
-        .align(Alignment.CenterHorizontally)
-        .padding(vertical = 16.dp)
-        .clickable { onBack() },
+      modifier =
+        Modifier.align(Alignment.CenterHorizontally).padding(vertical = 16.dp).clickable {
+          onBack()
+        },
     )
   }
 }
@@ -307,19 +282,16 @@ private fun SingleSignOnButton(
 
   InteractionScope {
     Box(
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(48.dp)
-        .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
-        .background(backgroundColor, shape)
-        .clickable(onClick = onClick),
+      modifier =
+        Modifier.fillMaxWidth()
+          .height(48.dp)
+          .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
+          .background(backgroundColor, shape)
+          .clickable(onClick = onClick)
     ) {
       Img(
         url = Res.getUri(svgPath),
-        modifier = Modifier
-          .align(Alignment.CenterStart)
-          .padding(start = 24.dp)
-          .size(20.dp),
+        modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp).size(20.dp),
         color = iconTint,
       )
 

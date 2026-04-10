@@ -26,12 +26,8 @@ fun <T> BottomSheetOptionList(
   modifier: Modifier = Modifier,
   itemContent: @Composable (T) -> Unit,
 ) {
-  CardSurface(
-    modifier = modifier.fillMaxWidth(),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
+  CardSurface(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
       items.forEachIndexed { index, item ->
         if (index > 0) {
           CardDivider()
@@ -52,11 +48,7 @@ fun BottomSheetOptionRow(
   contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
   trailing: @Composable RowScope.() -> Unit = {
     if (selected) {
-      Icon(
-        icon = Lucide.Check,
-        modifier = Modifier.size(16.dp),
-        tint = AppTheme.colors.brand,
-      )
+      Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = AppTheme.colors.brand)
     } else {
       Spacer(Modifier.size(16.dp))
     }

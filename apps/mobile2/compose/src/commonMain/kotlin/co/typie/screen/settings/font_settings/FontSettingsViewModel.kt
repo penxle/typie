@@ -51,12 +51,17 @@ class FontSettingsViewModel : ViewModel() {
   private val blobService = BlobService
   internal val state = FontSettingsScreenState()
 
-  val query = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { FontSettingsScreen_Query() }
+  val query =
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
+      FontSettingsScreen_Query()
+    }
 
   internal val userFontFamilies: List<FontSettingsFamily>
     get() = uploadedFontFamilies(query.data.me.documentFontFamilies.map { it.toModel() })
 
-  internal fun uploadFonts(files: List<PlatformFile>): Task<FontUploadProgress, FontUploadSummary?, Nothing> = task {
+  internal fun uploadFonts(
+    files: List<PlatformFile>
+  ): Task<FontUploadProgress, FontUploadSummary?, Nothing> = task {
     if (state.isUploading) return@task null
     if (files.isEmpty()) return@task null
 
@@ -71,48 +76,44 @@ class FontSettingsViewModel : ViewModel() {
         emit(FontUploadProgress(current = index + 1, total = files.size))
 
         if (!isSupportedTtfFontFile(file.filename, file.mimeType)) {
-          failures += FontUploadFailure(
-            name = file.filename,
-            error = FontUploadError.UnsupportedFormat,
-          )
+          failures +=
+            FontUploadFailure(name = file.filename, error = FontUploadError.UnsupportedFormat)
           return@forEachIndexed
         }
 
         try {
-          val path = blobService.uploadBytes(
-            bytes = file.bytes,
-            filename = file.filename,
-            mimeType = file.mimeType ?: "font/ttf",
-          )
+          val path =
+            blobService.uploadBytes(
+              bytes = file.bytes,
+              filename = file.filename,
+              mimeType = file.mimeType ?: "font/ttf",
+            )
 
-          val result = Apollo.executeMutation(
-            FontSettingsScreen_PersistBlobAsFont_Mutation(
-              input = PersistBlobAsFontInput(path = path),
-            ),
-          )
+          val result =
+            Apollo.executeMutation(
+              FontSettingsScreen_PersistBlobAsFont_Mutation(
+                input = PersistBlobAsFontInput(path = path)
+              )
+            )
 
-          successes += FontUploadSuccess(
-            familyId = result.persistBlobAsFont.family.id,
-            familyDisplayName = result.persistBlobAsFont.family.displayName,
-            weight = result.persistBlobAsFont.weight,
-            subfamilyDisplayName = result.persistBlobAsFont.subfamilyDisplayName,
-          )
+          successes +=
+            FontUploadSuccess(
+              familyId = result.persistBlobAsFont.family.id,
+              familyDisplayName = result.persistBlobAsFont.family.displayName,
+              weight = result.persistBlobAsFont.weight,
+              subfamilyDisplayName = result.persistBlobAsFont.subfamilyDisplayName,
+            )
         } catch (e: TypieError) {
-          val error = when (e.code) {
-            "invalid_font_style" -> FontUploadError.InvalidFontStyle
-            else -> FontUploadError.UploadFailed
-          }
-          failures += FontUploadFailure(
-            name = file.filename,
-            error = error,
-          )
+          val error =
+            when (e.code) {
+              "invalid_font_style" -> FontUploadError.InvalidFontStyle
+              else -> FontUploadError.UploadFailed
+            }
+          failures += FontUploadFailure(name = file.filename, error = error)
         } catch (e: CancellationException) {
           throw e
         } catch (e: Exception) {
-          failures += FontUploadFailure(
-            name = file.filename,
-            error = FontUploadError.UploadFailed,
-          )
+          failures += FontUploadFailure(name = file.filename, error = FontUploadError.UploadFailed)
         }
       }
 
@@ -122,20 +123,14 @@ class FontSettingsViewModel : ViewModel() {
         } catch (e: CancellationException) {
           throw e
         } catch (_: Exception) {
-          failures += FontUploadFailure(
-            name = "",
-            error = FontUploadError.RefreshFailed,
-          )
+          failures += FontUploadFailure(name = "", error = FontUploadError.RefreshFailed)
         }
       }
     } finally {
       state.isUploading = false
     }
 
-    summarizeFontUploadResults(
-      successes = successes,
-      failures = failures,
-    )
+    summarizeFontUploadResults(successes = successes, failures = failures)
   }
 
   internal fun dismissUploadSummary() {
@@ -146,26 +141,26 @@ class FontSettingsViewModel : ViewModel() {
     if (state.deletingFamilyId != null || state.deletingFontId != null) return Result.Ok(Unit)
     state.deletingFamilyId = family.id
     return result<Unit, Nothing> {
-      Apollo.executeMutation(
-        FontSettingsScreen_ArchiveFontFamily_Mutation(
-          input = ArchiveFontFamilyInput(fontFamilyId = family.id),
-        ),
-      )
-      query.refetch()
-    }.also { state.deletingFamilyId = null }
+        Apollo.executeMutation(
+          FontSettingsScreen_ArchiveFontFamily_Mutation(
+            input = ArchiveFontFamilyInput(fontFamilyId = family.id)
+          )
+        )
+        query.refetch()
+      }
+      .also { state.deletingFamilyId = null }
   }
 
   internal suspend fun deleteFont(font: FontSettingsFont): Result<Unit, Nothing> {
     if (state.deletingFamilyId != null || state.deletingFontId != null) return Result.Ok(Unit)
     state.deletingFontId = font.id
     return result<Unit, Nothing> {
-      Apollo.executeMutation(
-        FontSettingsScreen_ArchiveFont_Mutation(
-          input = ArchiveFontInput(fontId = font.id),
-        ),
-      )
-      query.refetch()
-    }.also { state.deletingFontId = null }
+        Apollo.executeMutation(
+          FontSettingsScreen_ArchiveFont_Mutation(input = ArchiveFontInput(fontId = font.id))
+        )
+        query.refetch()
+      }
+      .also { state.deletingFontId = null }
   }
 }
 
@@ -189,9 +184,10 @@ private fun FontSettingsScreen_Query.Font.toModel(): FontSettingsFont {
   )
 }
 
-private fun placeholderData() = FontSettingsScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    subscription = null
-    documentFontFamilies = emptyList()
+private fun placeholderData() =
+  FontSettingsScreen_Query.Data(PlaceholderResolver) {
+    me = buildUser {
+      subscription = null
+      documentFontFamilies = emptyList()
+    }
   }
-}

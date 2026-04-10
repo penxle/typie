@@ -45,10 +45,7 @@ interface PurchaseService {
 
   suspend fun queryProducts(): Map<PurchasePlanInterval, PurchaseProduct>
 
-  suspend fun purchase(
-    product: PurchaseProduct,
-    accountId: String,
-  ): Boolean
+  suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean
 
   suspend fun openSubscriptionManagement(): Boolean
 }

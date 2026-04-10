@@ -4,27 +4,31 @@
 import com.android.build.api.withAndroid
 import com.apollographql.apollo.annotations.ApolloExperimental
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.util.Properties
 
-val doppler: String = listOf("/opt/homebrew/bin/doppler", "/usr/local/bin/doppler")
-  .firstOrNull { file(it).exists() } ?: "doppler"
+val doppler: String =
+  listOf("/opt/homebrew/bin/doppler", "/usr/local/bin/doppler").firstOrNull { file(it).exists() }
+    ?: "doppler"
 
 val dopplerSecrets: Map<String, String> by lazy {
-  val output = providers.exec {
-    commandLine(doppler, "secrets", "download", "-c", "dev", "--no-file", "--format", "json")
-  }.standardOutput.asText.get()
+  val output =
+    providers
+      .exec {
+        commandLine(doppler, "secrets", "download", "-c", "dev", "--no-file", "--format", "json")
+      }
+      .standardOutput
+      .asText
+      .get()
   @Suppress("UNCHECKED_CAST")
   groovy.json.JsonSlurper().parseText(output) as Map<String, String>
 }
 
-fun env(key: String): String =
-  System.getenv(key) ?: dopplerSecrets[key] ?: error("$key is not set")
+fun env(key: String): String = System.getenv(key) ?: dopplerSecrets[key] ?: error("$key is not set")
 
-val aboutLibrariesComposeResourceFile = layout.projectDirectory.file(
-  "src/commonMain/composeResources/files/aboutlibraries.json",
-)
+val aboutLibrariesComposeResourceFile =
+  layout.projectDirectory.file("src/commonMain/composeResources/files/aboutlibraries.json")
 
 plugins {
   alias(libs.plugins.kotlin.multiplatform)
@@ -58,21 +62,14 @@ kotlin {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     minSdk = libs.versions.android.minSdk.get().toInt()
 
-    compilerOptions {
-      jvmTarget.set(JvmTarget.JVM_11)
-    }
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
 
-    androidResources {
-      enable = true
-    }
+    androidResources { enable = true }
   }
 
   jvm("desktop")
 
-  listOf(
-    iosArm64(),
-    iosSimulatorArm64()
-  ).forEach { target ->
+  listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
     target.binaries.framework {
       baseName = "Compose"
       isStatic = true
@@ -91,9 +88,7 @@ kotlin {
   }
 
   sourceSets {
-    commonMain {
-      kotlin.srcDir(layout.buildDirectory.dir("generated/editor-bindgen/commonMain"))
-    }
+    commonMain { kotlin.srcDir(layout.buildDirectory.dir("generated/editor-bindgen/commonMain")) }
 
     val jnaMain by getting {
       kotlin.srcDir(rootProject.layout.projectDirectory.dir("generated/uniffi/kotlin"))
@@ -116,9 +111,7 @@ kotlin {
     iosMain {
       kotlin.srcDir(layout.buildDirectory.dir("generated/editor-bindgen/iosMain"))
 
-      dependencies {
-        implementation(libs.ktor.client.darwin)
-      }
+      dependencies { implementation(libs.ktor.client.darwin) }
     }
 
     val desktopMain by getting {
@@ -179,22 +172,16 @@ buildkonfig {
   }
 }
 
-aboutLibraries {
-  export {
-    outputFile = aboutLibrariesComposeResourceFile.asFile
-  }
-}
+aboutLibraries { export { outputFile = aboutLibrariesComposeResourceFile.asFile } }
 
-tasks.named("copyNonXmlValueResourcesForCommonMain") {
-  dependsOn("exportLibraryDefinitions")
-}
+tasks.named("copyNonXmlValueResourcesForCommonMain") { dependsOn("exportLibraryDefinitions") }
 
-val versionProps = Properties().apply {
-  load(rootProject.file("version.properties").reader())
-}
+val versionProps = Properties().apply { load(rootProject.file("version.properties").reader()) }
 
-rootProject.file("ios/Configuration/Config.local.xcconfig").writeText(
-  """
+rootProject
+  .file("ios/Configuration/Config.local.xcconfig")
+  .writeText(
+    """
   |MARKETING_VERSION=${versionProps["versionName"]}
   |GOOGLE_IOS_CLIENT_ID=${env("GOOGLE_IOS_CLIENT_ID")}
   |GOOGLE_DOT_REVERSED_IOS_CLIENT_ID=${env("GOOGLE_DOT_REVERSED_IOS_CLIENT_ID")}
@@ -202,8 +189,9 @@ rootProject.file("ios/Configuration/Config.local.xcconfig").writeText(
   |KAKAO_NATIVE_APP_KEY=${env("KAKAO_NATIVE_APP_KEY")}
   |NAVER_CLIENT_ID=${env("NAVER_CLIENT_ID")}
   |NAVER_CLIENT_SECRET=${env("NAVER_CLIENT_SECRET")}
-  """.trimMargin()
-)
+  """
+      .trimMargin()
+  )
 
 apollo {
   service("typie") {
@@ -212,14 +200,14 @@ apollo {
     srcDir("src/commonMain/kotlin")
     schemaFiles.from(
       "src/commonMain/graphql/schema.graphqls",
-      "src/commonMain/graphql/apollo.graphqls"
+      "src/commonMain/graphql/apollo.graphqls",
     )
 
     mapScalar("DateTime", "kotlin.time.Instant", "co.typie.graphql.adapter.InstantAdapter")
     mapScalar(
       "JSON",
       "kotlinx.serialization.json.JsonElement",
-      "co.typie.graphql.adapter.JsonElementAdapter"
+      "co.typie.graphql.adapter.JsonElementAdapter",
     )
 
     addTypename = "always"
@@ -227,25 +215,17 @@ apollo {
     generateInputBuilders = true
     generateFragmentImplementations = true
 
-    plugin("com.apollographql.cache:normalized-cache-apollo-compiler-plugin:${libs.versions.apollo.normalized.cache.get()}")
+    plugin(
+      "com.apollographql.cache:normalized-cache-apollo-compiler-plugin:${libs.versions.apollo.normalized.cache.get()}"
+    )
     pluginArgument("com.apollographql.cache.packageName", packageName.get())
 
-    dataBuildersOutputDirConnection {
-      connectToKotlinSourceSet("commonMain")
-    }
+    dataBuildersOutputDirConnection { connectToKotlinSourceSet("commonMain") }
   }
 }
 
-compose.resources {
-  packageOfResClass = "co.typie.generated.resources"
-}
+compose.resources { packageOfResClass = "co.typie.generated.resources" }
 
-compose.desktop {
-  application {
-    mainClass = "co.typie.MainKt"
-  }
-}
+compose.desktop { application { mainClass = "co.typie.MainKt" } }
 
-dependencies {
-  androidRuntimeClasspath(libs.compose.uiTooling)
-}
+dependencies { androidRuntimeClasspath(libs.compose.uiTooling) }

@@ -5,6 +5,7 @@ package co.typie
 import androidx.compose.runtime.Composable
 import co.typie.dev.SystemChrome
 import co.typie.ext.ScrollGestureLockScope
+import co.typie.graphql.Http
 import co.typie.shell.RootShell
 import co.typie.ui.component.popover.PopoverOutsideTapHost
 import co.typie.ui.theme.AppTheme
@@ -14,7 +15,6 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import com.hashsequence.coilresvg.ResvgDecoder
-import co.typie.graphql.Http
 
 @Composable
 fun App() {
@@ -28,13 +28,5 @@ fun App() {
       .build()
   }
 
-  AppTheme {
-    SystemChrome {
-      ScrollGestureLockScope {
-        PopoverOutsideTapHost {
-          RootShell()
-        }
-      }
-    }
-  }
+  AppTheme { SystemChrome { ScrollGestureLockScope { PopoverOutsideTapHost { RootShell() } } } }
 }

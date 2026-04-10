@@ -33,9 +33,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
 @Composable
-fun ErrorDialog(
-  onRetry: () -> Unit,
-) {
+fun ErrorDialog(onRetry: () -> Unit) {
   val nav = Nav.current
   var dismissed by remember { mutableStateOf(false) }
 
@@ -44,28 +42,21 @@ fun ErrorDialog(
 
   if (dismissed) return
 
-  val alpha by animateFloatAsState(
-    targetValue = if (visible) 1f else 0f,
-    animationSpec = tween(200),
-  )
-  val scale by animateFloatAsState(
-    targetValue = if (visible) 1f else 0.9f,
-    animationSpec = tween(200),
-  )
+  val alpha by
+    animateFloatAsState(targetValue = if (visible) 1f else 0f, animationSpec = tween(200))
+  val scale by
+    animateFloatAsState(targetValue = if (visible) 1f else 0.9f, animationSpec = tween(200))
 
   Dialog(
     onDismissRequest = {},
-    properties = DialogProperties(
-      dismissOnBackPress = false,
-      dismissOnClickOutside = false,
-    ),
+    properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
   ) {
     Column(
-      modifier = Modifier
-        .graphicsLayer(alpha = alpha, scaleX = scale, scaleY = scale)
-        .width(280.dp)
-        .clip(RoundedCornerShape(16.dp))
-        .background(AppTheme.colors.surfaceRaised),
+      modifier =
+        Modifier.graphicsLayer(alpha = alpha, scaleX = scale, scaleY = scale)
+          .width(280.dp)
+          .clip(RoundedCornerShape(16.dp))
+          .background(AppTheme.colors.surfaceRaised),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       // Content area
@@ -75,15 +66,13 @@ fun ErrorDialog(
       ) {
         // Error icon
         Box(
-          modifier = Modifier
-            .size(48.dp)
-            .background(AppTheme.colors.dangerSubtle, CircleShape),
+          modifier = Modifier.size(48.dp).background(AppTheme.colors.dangerSubtle, CircleShape),
           contentAlignment = Alignment.Center,
         ) {
           Icon(
             Typie.ExclamationSvg,
             modifier = Modifier.size(20.dp),
-            tint = AppTheme.colors.textOnDangerSubtle
+            tint = AppTheme.colors.textOnDangerSubtle,
           )
         }
         Spacer(Modifier.height(16.dp))
@@ -97,32 +86,24 @@ fun ErrorDialog(
       }
 
       // Separator
-      Box(
-        Modifier
-          .fillMaxWidth()
-          .height(1.dp)
-          .background(AppTheme.colors.borderSubtle)
-      )
+      Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderSubtle))
 
       // Button
       Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .clickable {
-            if (nav.canPop) {
-              dismissed = true
-              nav.pop()
-            } else {
-              onRetry()
+        modifier =
+          Modifier.fillMaxWidth()
+            .clickable {
+              if (nav.canPop) {
+                dismissed = true
+                nav.pop()
+              } else {
+                onRetry()
+              }
             }
-          }
-          .padding(vertical = 14.dp),
+            .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center,
       ) {
-        Text(
-          if (nav.canPop) "뒤로 가기" else "다시 시도",
-          style = AppTheme.typography.action,
-        )
+        Text(if (nav.canPop) "뒤로 가기" else "다시 시도", style = AppTheme.typography.action)
       }
     }
   }

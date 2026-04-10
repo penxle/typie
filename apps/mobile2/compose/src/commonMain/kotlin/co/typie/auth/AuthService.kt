@@ -10,9 +10,9 @@ import co.typie.startup.AuthStartupHandle
 import co.typie.storage.Vault
 import com.apollographql.cache.normalized.apolloStore
 import io.ktor.client.call.body
-import io.ktor.client.plugins.ResponseException
 import io.ktor.client.network.sockets.ConnectTimeoutException
 import io.ktor.client.network.sockets.SocketTimeoutException
+import io.ktor.client.plugins.ResponseException
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -32,26 +32,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.io.IOException
 
-internal data class AuthenticatedUserContext(
-  val userId: String,
-  val siteIds: List<String>,
-)
+internal data class AuthenticatedUserContext(val userId: String, val siteIds: List<String>)
 
 internal fun parseAuthenticatedUserContextResponse(body: String): AuthenticatedUserContext {
   val json = Json.parseToJsonElement(body).jsonObject
   val data = json["data"]?.jsonObject ?: error("Invalid access token")
-  val me = data["me"]?.takeUnless { it.toString() == "null" }?.jsonObject ?: error("Invalid access token")
+  val me =
+    data["me"]?.takeUnless { it.toString() == "null" }?.jsonObject ?: error("Invalid access token")
 
   val userId = me["id"]?.jsonPrimitive?.content ?: error("Invalid user id")
-  val siteIds = me["sites"]?.jsonArray?.map { site ->
-    site.jsonObject["id"]?.jsonPrimitive?.content ?: error("Invalid site id")
-  }.orEmpty()
+  val siteIds =
+    me["sites"]
+      ?.jsonArray
+      ?.map { site -> site.jsonObject["id"]?.jsonPrimitive?.content ?: error("Invalid site id") }
+      .orEmpty()
 
   return AuthenticatedUserContext(userId = userId, siteIds = siteIds)
 }
@@ -73,14 +73,16 @@ internal fun classifyAuthFailure(error: Throwable): AuthFailureDisposition {
     }
   }
 
-  if (causes.any { cause ->
+  if (
+    causes.any { cause ->
       cause is IOException ||
         cause is ConnectTimeoutException ||
         cause is SocketTimeoutException ||
         cause is UnresolvedAddressException ||
         cause is SimulatedNetworkFailureException ||
         cause.message == "Simulated network failure"
-    }) {
+    }
+  ) {
     return AuthFailureDisposition.Offline
   }
 
@@ -99,21 +101,15 @@ object AuthService : AuthStartupHandle {
   val state: StateFlow<AuthState> = _state
 
   fun loginAsync(sessionToken: String) {
-    scope.launch {
-      login(sessionToken)
-    }
+    scope.launch { login(sessionToken) }
   }
 
   fun startAsync() {
-    scope.launch {
-      start()
-    }
+    scope.launch { start() }
   }
 
   fun retryAsync() {
-    scope.launch {
-      retry()
-    }
+    scope.launch { retry() }
   }
 
   override suspend fun start() {
@@ -210,10 +206,7 @@ object AuthService : AuthStartupHandle {
     }
   }
 
-  private suspend fun handleRefreshFailure(
-    error: Exception,
-    sessionToken: String?,
-  ) {
+  private suspend fun handleRefreshFailure(error: Exception, sessionToken: String?) {
     Logger.e(error) { "Failed to refresh tokens" }
 
     if (sessionToken == null) {
@@ -233,7 +226,9 @@ object AuthService : AuthStartupHandle {
     tokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
     ensureValidSiteId(authenticatedUserContext)
     _state.value = AuthState.Authenticated
-    Logger.i { "Auth startup: authenticated user=${authenticatedUserContext.userId} sites=${authenticatedUserContext.siteIds.size}." }
+    Logger.i {
+      "Auth startup: authenticated user=${authenticatedUserContext.userId} sites=${authenticatedUserContext.siteIds.size}."
+    }
   }
 
   private fun ensureValidSiteId(authenticatedUserContext: AuthenticatedUserContext) {
@@ -244,16 +239,17 @@ object AuthService : AuthStartupHandle {
   }
 
   private suspend fun exchangeToken(sessionToken: String): String {
-    val authorizeResponse = Http.get("${Konfig.AUTH_URL}/authorize") {
-      parameter("response_type", "code")
-      parameter("redirect_uri", "typie:///authorize")
-      parameter("client_id", Konfig.OIDC_CLIENT_ID)
-      parameter("prompt", "none")
-      header("Cookie", "typie-st=$sessionToken")
-    }
+    val authorizeResponse =
+      Http.get("${Konfig.AUTH_URL}/authorize") {
+        parameter("response_type", "code")
+        parameter("redirect_uri", "typie:///authorize")
+        parameter("client_id", Konfig.OIDC_CLIENT_ID)
+        parameter("prompt", "none")
+        header("Cookie", "typie-st=$sessionToken")
+      }
 
-    val location = authorizeResponse.headers["Location"]
-      ?: error("No Location header in authorize response")
+    val location =
+      authorizeResponse.headers["Location"] ?: error("No Location header in authorize response")
 
     val locationUri = io.ktor.http.Url(location)
     val authorizeError = locationUri.parameters["error"]
@@ -261,19 +257,20 @@ object AuthService : AuthStartupHandle {
       error("Authorize error: $authorizeError")
     }
 
-    val code = locationUri.parameters["code"]
-      ?: error("No code in authorize response")
+    val code = locationUri.parameters["code"] ?: error("No code in authorize response")
 
-    val tokenResponse = Http.submitForm(
-      url = "${Konfig.AUTH_URL}/token",
-      formParameters = parameters {
-        append("code", code)
-        append("grant_type", "authorization_code")
-        append("redirect_uri", "typie:///authorize")
-        append("client_id", Konfig.OIDC_CLIENT_ID)
-        append("client_secret", Konfig.OIDC_CLIENT_SECRET)
-      },
-    )
+    val tokenResponse =
+      Http.submitForm(
+        url = "${Konfig.AUTH_URL}/token",
+        formParameters =
+          parameters {
+            append("code", code)
+            append("grant_type", "authorization_code")
+            append("redirect_uri", "typie:///authorize")
+            append("client_id", Konfig.OIDC_CLIENT_ID)
+            append("client_secret", Konfig.OIDC_CLIENT_SECRET)
+          },
+      )
 
     val body = tokenResponse.body<String>()
     val json = Json.parseToJsonElement(body).jsonObject
@@ -282,11 +279,12 @@ object AuthService : AuthStartupHandle {
   }
 
   private suspend fun fetchAuthenticatedUserContext(accessToken: String): AuthenticatedUserContext {
-    val response = Http.post("${Konfig.API_URL}/graphql") {
-      header("Authorization", "Bearer $accessToken")
-      contentType(ContentType.Application.Json)
-      setBody("""{"query":"{ me { id sites { id } } }"}""")
-    }
+    val response =
+      Http.post("${Konfig.API_URL}/graphql") {
+        header("Authorization", "Bearer $accessToken")
+        contentType(ContentType.Application.Json)
+        setBody("""{"query":"{ me { id sites { id } } }"}""")
+      }
 
     val body = response.body<String>()
     return parseAuthenticatedUserContextResponse(body)

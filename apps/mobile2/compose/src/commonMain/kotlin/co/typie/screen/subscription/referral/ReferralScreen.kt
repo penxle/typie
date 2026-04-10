@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,15 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.ext.navigationBarsPadding
-import co.typie.ext.verticalScroll
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
-import co.typie.platform.Clipboard
-import co.typie.platform.Share
+import co.typie.platform.PlatformModule
 import co.typie.result.fold
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardSurface
@@ -54,8 +50,6 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
-import co.typie.platform.PlatformModule
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -74,8 +68,10 @@ fun ReferralScreen() {
     isInviteLoading = true
 
     return try {
-      val message = model.issueReferralInviteMessage()
-        .fold(onOk = { it }, onErr = { null }, onException = { null })
+      val message =
+        model
+          .issueReferralInviteMessage()
+          .fold(onOk = { it }, onErr = { null }, onException = { null })
       inviteMessage = message
 
       if (message == null && showErrorToast) {
@@ -92,9 +88,7 @@ fun ReferralScreen() {
     return inviteMessage ?: prefetchInviteMessage(showErrorToast = true)
   }
 
-  LaunchedEffect(Unit) {
-    prefetchInviteMessage()
-  }
+  LaunchedEffect(Unit) { prefetchInviteMessage() }
 
   suspend fun copyLink() {
     val message = requireInviteMessage() ?: return
@@ -119,12 +113,7 @@ fun ReferralScreen() {
   ProvideTopBar(
     leading = { TopBarBackButton() },
     center = { Text("초대", style = AppTheme.typography.title) },
-    trailing = {
-      ReferralActionsMenu(
-        onCopyLink = ::copyLink,
-        onShareLink = ::shareLink,
-      )
-    },
+    trailing = { ReferralActionsMenu(onCopyLink = ::copyLink, onShareLink = ::shareLink) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
@@ -140,9 +129,7 @@ fun ReferralScreen() {
     bottomBar = {
       Button(
         text = "초대 링크 복사",
-        modifier = Modifier
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
         loading = isInviteLoading,
         loadingText = "불러오는 중...",
         enabled = !isInviteLoading,
@@ -154,101 +141,78 @@ fun ReferralScreen() {
     val referrals = data.me.referrals
     val referralCount = referrals.size
     val compensatedCount = referrals.count { it.compensated }
-      Text(
-        "초대",
-        style = AppTheme.typography.display,
-          modifier = Modifier.padding(top = 4.dp),
+    Text("초대", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+      ) {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          Text("친구 초대", style = AppTheme.typography.title)
+          Text(
+            "친구는 즉시 1달 무료 혜택을 받고, 첫 결제가 완료되면 나도 1달 무료 혜택을 받아요.",
+            style = AppTheme.typography.body,
+            color = AppTheme.colors.textTertiary,
+          )
+        }
+
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          ReferralBenefitSummaryRow(icon = Lucide.Ticket, label = "친구 혜택", value = "즉시 1달 무료")
+          ReferralBenefitSummaryRow(icon = Lucide.Coins, label = "내 혜택", value = "첫 결제 후 1달 무료")
+        }
+      }
+    }
+
+    SectionTitle("초대 현황", modifier = Modifier.padding(top = 8.dp))
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+      ReferralMetricCard(
+        icon = Lucide.Users,
+        label = "초대한 친구",
+        value = "${referralCount}명",
+        modifier = Modifier.weight(1f),
+      )
+      ReferralMetricCard(
+        icon = Lucide.Gift,
+        label = "받은 혜택",
+        value = formatReferralBenefitText(compensatedCount),
+        modifier = Modifier.weight(1f),
+      )
+    }
+
+    SectionTitle("초대 혜택 안내", modifier = Modifier.padding(top = 8.dp))
+
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        ReferralBulletPoint(
+          "초대 링크를 통해 웹에서 가입하고, 웹에서 플랜을 가입해야 초대 혜택을 받을 수 있어요. 앱에서 가입하면 혜택을 받을 수 없어요."
         )
+        ReferralBulletPoint(
+          "친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 크레딧을 지급받아요. 지급받은 크레딧으로 바로 FULL ACCESS 플랜을 체험해볼 수 있어요."
+        )
+        ReferralBulletPoint(
+          "친구가 크레딧을 통한 체험을 끝내고 첫 결제를 완료하면 나도 FULL ACCESS 플랜 1개월에 상응하는 크레딧을 지급받아요. 이 크레딧은 다음 FULL ACCESS 플랜 갱신시 자동으로 이용돼요."
+        )
+        ReferralBulletPoint("초대 횟수에는 제한이 없어요.")
+      }
+    }
 
-        CardSurface(
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-          ) {
-            Column(
-              modifier = Modifier.fillMaxWidth(),
-              verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-              Text(
-                "친구 초대",
-                style = AppTheme.typography.title,
-              )
-              Text(
-                "친구는 즉시 1달 무료 혜택을 받고, 첫 결제가 완료되면 나도 1달 무료 혜택을 받아요.",
-                style = AppTheme.typography.body,
-                color = AppTheme.colors.textTertiary,
-              )
-            }
-
-            Column(
-              modifier = Modifier.fillMaxWidth(),
-              verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-              ReferralBenefitSummaryRow(
-                icon = Lucide.Ticket,
-                label = "친구 혜택",
-                value = "즉시 1달 무료",
-              )
-              ReferralBenefitSummaryRow(
-                icon = Lucide.Coins,
-                label = "내 혜택",
-                value = "첫 결제 후 1달 무료",
-              )
-            }
-          }
-        }
-
-        SectionTitle("초대 현황", modifier = Modifier.padding(top = 8.dp))
-
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          ReferralMetricCard(
-            icon = Lucide.Users,
-            label = "초대한 친구",
-            value = "${referralCount}명",
-            modifier = Modifier.weight(1f),
-          )
-          ReferralMetricCard(
-            icon = Lucide.Gift,
-            label = "받은 혜택",
-            value = formatReferralBenefitText(compensatedCount),
-            modifier = Modifier.weight(1f),
-          )
-        }
-
-        SectionTitle("초대 혜택 안내", modifier = Modifier.padding(top = 8.dp))
-
-        CardSurface(
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-          ) {
-            ReferralBulletPoint("초대 링크를 통해 웹에서 가입하고, 웹에서 플랜을 가입해야 초대 혜택을 받을 수 있어요. 앱에서 가입하면 혜택을 받을 수 없어요.")
-            ReferralBulletPoint("친구가 초대 링크로 가입하면 친구는 즉시 FULL ACCESS 플랜 1개월에 해당하는 크레딧을 지급받아요. 지급받은 크레딧으로 바로 FULL ACCESS 플랜을 체험해볼 수 있어요.")
-            ReferralBulletPoint("친구가 크레딧을 통한 체험을 끝내고 첫 결제를 완료하면 나도 FULL ACCESS 플랜 1개월에 상응하는 크레딧을 지급받아요. 이 크레딧은 다음 FULL ACCESS 플랜 갱신시 자동으로 이용돼요.")
-            ReferralBulletPoint("초대 횟수에는 제한이 없어요.")
-          }
-        }
-
-        Spacer(Modifier.height(72.dp))
+    Spacer(Modifier.height(72.dp))
   }
 }
 
 @Composable
-private fun ReferralActionsMenu(
-  onCopyLink: suspend () -> Unit,
-  onShareLink: suspend () -> Unit,
-) {
+private fun ReferralActionsMenu(onCopyLink: suspend () -> Unit, onShareLink: suspend () -> Unit) {
   val scope = rememberCoroutineScope()
 
   Popover(
@@ -257,32 +221,23 @@ private fun ReferralActionsMenu(
     pane = {
       Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
         PopoverList(
-          items = listOf(
-            PopoverListItem(
-              content = {
-                ReferralActionItem(
-                  icon = Lucide.Copy,
-                  label = "초대 링크 복사",
-                )
-              },
-              onSelected = {
-                close()
-                scope.launch { onCopyLink() }
-              },
-            ),
-            PopoverListItem(
-              content = {
-                ReferralActionItem(
-                  icon = Lucide.Share2,
-                  label = "공유하기",
-                )
-              },
-              onSelected = {
-                close()
-                scope.launch { onShareLink() }
-              },
-            ),
-          ),
+          items =
+            listOf(
+              PopoverListItem(
+                content = { ReferralActionItem(icon = Lucide.Copy, label = "초대 링크 복사") },
+                onSelected = {
+                  close()
+                  scope.launch { onCopyLink() }
+                },
+              ),
+              PopoverListItem(
+                content = { ReferralActionItem(icon = Lucide.Share2, label = "공유하기") },
+                onSelected = {
+                  close()
+                  scope.launch { onShareLink() }
+                },
+              ),
+            )
         )
       }
     },
@@ -298,27 +253,14 @@ private fun formatReferralBenefitText(compensatedCount: Int): String {
 }
 
 @Composable
-private fun ReferralActionItem(
-  icon: IconData,
-  label: String,
-) {
+private fun ReferralActionItem(icon: IconData, label: String) {
   Row(
     verticalAlignment = Alignment.CenterVertically,
-    modifier = Modifier
-      .height(42.dp)
-      .padding(horizontal = 16.dp),
+    modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
   ) {
-    Icon(
-      icon = icon,
-      modifier = Modifier.size(18.dp),
-      tint = AppTheme.colors.textSecondary,
-    )
+    Icon(icon = icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textSecondary)
     Spacer(Modifier.size(12.dp))
-    Text(
-      label,
-      style = AppTheme.typography.action,
-      color = AppTheme.colors.textPrimary,
-    )
+    Text(label, style = AppTheme.typography.action, color = AppTheme.colors.textPrimary)
   }
 }
 
@@ -329,14 +271,9 @@ private fun ReferralMetricCard(
   value: String,
   modifier: Modifier = Modifier,
 ) {
-  CardSurface(
-    modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(10.dp),
-  ) {
+  CardSurface(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp),
+      modifier = Modifier.fillMaxWidth().padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
       ReferralIconBadge(
@@ -345,14 +282,8 @@ private fun ReferralMetricCard(
         tint = AppTheme.colors.textSecondary,
       )
 
-      Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        Text(
-          label,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
         Text(
           value,
           style = AppTheme.typography.heading,
@@ -365,11 +296,7 @@ private fun ReferralMetricCard(
 }
 
 @Composable
-private fun ReferralBenefitSummaryRow(
-  icon: IconData,
-  label: String,
-  value: String,
-) {
+private fun ReferralBenefitSummaryRow(icon: IconData, label: String, value: String) {
   Row(
     modifier = Modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -385,10 +312,7 @@ private fun ReferralBenefitSummaryRow(
       contentPadding = 8.dp,
     )
 
-    Column(
-      modifier = Modifier.weight(1f),
-      verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
+    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       Text(
         label,
         style = AppTheme.typography.caption,
@@ -419,37 +343,25 @@ private fun ReferralIconBadge(
   contentPadding: androidx.compose.ui.unit.Dp = 8.dp,
 ) {
   Box(
-    modifier = modifier
-      .size(size)
-      .background(
-        color = backgroundColor,
-        shape = RoundedCornerShape(cornerRadius),
-      )
-      .padding(contentPadding),
+    modifier =
+      modifier
+        .size(size)
+        .background(color = backgroundColor, shape = RoundedCornerShape(cornerRadius))
+        .padding(contentPadding),
     contentAlignment = Alignment.Center,
   ) {
-    Icon(
-      icon = icon,
-      modifier = Modifier.size(iconSize),
-      tint = tint,
-    )
+    Icon(icon = icon, modifier = Modifier.size(iconSize), tint = tint)
   }
 }
 
 @Composable
 private fun ReferralBulletPoint(text: String) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = Alignment.Top,
-  ) {
+  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
     Box(
-      modifier = Modifier
-        .padding(top = 9.dp)
-        .size(4.dp)
-        .background(
-          color = AppTheme.colors.textTertiary,
-          shape = CircleShape,
-        ),
+      modifier =
+        Modifier.padding(top = 9.dp)
+          .size(4.dp)
+          .background(color = AppTheme.colors.textTertiary, shape = CircleShape)
     )
     Spacer(Modifier.size(8.dp))
     Text(

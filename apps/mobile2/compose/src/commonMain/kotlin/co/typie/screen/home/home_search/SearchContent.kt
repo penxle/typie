@@ -46,11 +46,7 @@ fun SearchContent(
   onFolderClick: suspend (entityId: String, queryText: String) -> Unit,
 ) {
   Column(modifier = modifier.fillMaxWidth()) {
-    Spacer(
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(headerHeight),
-    )
+    Spacer(modifier = Modifier.fillMaxWidth().height(headerHeight))
 
     if (searchViewModel.activeQuery.isBlank()) {
       RecentSearchesList(
@@ -89,20 +85,12 @@ fun SearchContent(
 }
 
 @Composable
-private fun SearchStateMessage(
-  text: String,
-) {
+private fun SearchStateMessage(text: String) {
   Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(top = 64.dp),
+    modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
     contentAlignment = Alignment.Center,
   ) {
-    Text(
-      text,
-      style = AppTheme.typography.action,
-      color = AppTheme.colors.textTertiary,
-    )
+    Text(text, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
   }
 }
 
@@ -117,12 +105,17 @@ private fun RecentSearchesList(
       "최근 검색",
       style = AppTheme.typography.caption.copy(fontWeight = FontWeight.W700),
       color = AppTheme.colors.textTertiary,
-      modifier = Modifier.padding(horizontal = SearchScreenHorizontalPadding).padding(top = 20.dp, bottom = 12.dp),
+      modifier =
+        Modifier.padding(horizontal = SearchScreenHorizontalPadding)
+          .padding(top = 20.dp, bottom = 12.dp),
     )
 
     if (recentSearches.isEmpty()) {
       Box(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = SearchScreenHorizontalPadding).padding(top = 32.dp),
+        modifier =
+          Modifier.fillMaxWidth()
+            .padding(horizontal = SearchScreenHorizontalPadding)
+            .padding(top = 32.dp),
         contentAlignment = Alignment.Center,
       ) {
         Text(
@@ -136,11 +129,11 @@ private fun RecentSearchesList(
         InteractionScope {
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-              .fillMaxWidth()
-              .clickable { onSelect(search) }
-              .pressScale()
-              .padding(horizontal = SearchScreenHorizontalPadding, vertical = 14.dp),
+            modifier =
+              Modifier.fillMaxWidth()
+                .clickable { onSelect(search) }
+                .pressScale()
+                .padding(horizontal = SearchScreenHorizontalPadding, vertical = 14.dp),
           ) {
             Icon(
               icon = Lucide.Clock,
@@ -148,11 +141,7 @@ private fun RecentSearchesList(
               tint = AppTheme.colors.textTertiary,
             )
             Spacer(Modifier.width(12.dp))
-            Text(
-              search,
-              style = AppTheme.typography.action,
-              modifier = Modifier.weight(1f),
-            )
+            Text(search, style = AppTheme.typography.action, modifier = Modifier.weight(1f))
             Icon(
               icon = Lucide.X,
               modifier = Modifier.size(16.dp).clickable { onRemove(search) },
@@ -173,18 +162,15 @@ private fun SearchResultsList(
   onFolderClick: suspend (entityId: String, queryText: String) -> Unit,
 ) {
   val highlightColor = AppTheme.colors.brand
-  val hits = data.search.hits.filter { hit ->
-    hit.onSearchHitDocument != null || hit.onSearchHitFolder != null
-  }
+  val hits =
+    data.search.hits.filter { hit ->
+      hit.onSearchHitDocument != null || hit.onSearchHitFolder != null
+    }
 
   Column(
-    modifier = Modifier
-      .padding(horizontal = SearchScreenHorizontalPadding)
-      .padding(top = 16.dp),
+    modifier = Modifier.padding(horizontal = SearchScreenHorizontalPadding).padding(top = 16.dp)
   ) {
-    CardSurface(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
       Column(Modifier.fillMaxWidth()) {
         hits.forEachIndexed { index, hit ->
           val onDocument = hit.onSearchHitDocument
@@ -201,7 +187,8 @@ private fun SearchResultsList(
                 fallbackSubtitle = onDocument.document.subtitle,
                 folderName = onDocument.document.entity.parent?.node?.onFolder?.name,
                 folderIconName = onDocument.document.entity.parent?.node?.onFolder?.entity?.icon,
-                folderIconColor = onDocument.document.entity.parent?.node?.onFolder?.entity?.iconColor,
+                folderIconColor =
+                  onDocument.document.entity.parent?.node?.onFolder?.entity?.iconColor,
                 excerpt = onDocument.document.excerpt,
                 updatedAt = onDocument.document.updatedAt,
                 highlightedText = onDocument.text,
@@ -252,44 +239,43 @@ private fun SearchDocumentResultRow(
 ) {
   InteractionScope {
     val metaColor = AppTheme.colors.textMuted
-    val entityIcon = resolveEntityIconAppearance(
-      iconName = entityIconName,
-      iconColor = entityIconColor,
-      fallbackIcon = Lucide.File,
-      fallbackTint = metaColor,
-      colors = AppTheme.colors,
-    )
-    val folderIcon = resolveEntityIconAppearance(
-      iconName = folderIconName,
-      iconColor = folderIconColor,
-      fallbackIcon = Lucide.Folder,
-      fallbackTint = metaColor,
-      colors = AppTheme.colors,
-    )
-    val titleText = buildSearchDocumentTitleText(
-      highlightedTitle = highlightedTitle,
-      highlightedSubtitle = highlightedSubtitle,
-      fallbackTitle = fallbackTitle,
-      fallbackSubtitle = fallbackSubtitle,
-      highlightColor = highlightColor,
-      subtitleColor = metaColor,
-    )
+    val entityIcon =
+      resolveEntityIconAppearance(
+        iconName = entityIconName,
+        iconColor = entityIconColor,
+        fallbackIcon = Lucide.File,
+        fallbackTint = metaColor,
+        colors = AppTheme.colors,
+      )
+    val folderIcon =
+      resolveEntityIconAppearance(
+        iconName = folderIconName,
+        iconColor = folderIconColor,
+        fallbackIcon = Lucide.Folder,
+        fallbackTint = metaColor,
+        colors = AppTheme.colors,
+      )
+    val titleText =
+      buildSearchDocumentTitleText(
+        highlightedTitle = highlightedTitle,
+        highlightedSubtitle = highlightedSubtitle,
+        fallbackTitle = fallbackTitle,
+        fallbackSubtitle = fallbackSubtitle,
+        highlightColor = highlightColor,
+        subtitleColor = metaColor,
+      )
     val detailText = highlightedText?.takeIf { it.isNotEmpty() }
 
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clickable(onClick)
-        .pressScale()
-        .padding(horizontal = 16.dp, vertical = 12.dp),
+      modifier =
+        Modifier.fillMaxWidth()
+          .clickable(onClick)
+          .pressScale()
+          .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
       if (folderName != null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            icon = folderIcon.icon,
-            modifier = Modifier.size(12.dp),
-            tint = folderIcon.tint,
-          )
+          Icon(icon = folderIcon.icon, modifier = Modifier.size(12.dp), tint = folderIcon.tint)
 
           Spacer(Modifier.width(4.dp))
 
@@ -306,11 +292,7 @@ private fun SearchDocumentResultRow(
       }
 
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          icon = entityIcon.icon,
-          modifier = Modifier.size(18.dp),
-          tint = entityIcon.tint,
-        )
+        Icon(icon = entityIcon.icon, modifier = Modifier.size(18.dp), tint = entityIcon.tint)
 
         Spacer(Modifier.width(12.dp))
 
@@ -326,11 +308,7 @@ private fun SearchDocumentResultRow(
 
             Spacer(Modifier.width(8.dp))
 
-            Text(
-              updatedAt.timeAgo(),
-              style = AppTheme.typography.caption,
-              color = metaColor,
-            )
+            Text(updatedAt.timeAgo(), style = AppTheme.typography.caption, color = metaColor)
           }
 
           if (detailText != null) {
@@ -371,7 +349,8 @@ private fun SearchFolderResultRow(
   highlightColor: Color,
   onClick: suspend () -> Unit,
 ) {
-  val titleText = highlightedName?.let { parseEmHighlight(it, highlightColor) } ?: AnnotatedString(fallbackName)
+  val titleText =
+    highlightedName?.let { parseEmHighlight(it, highlightColor) } ?: AnnotatedString(fallbackName)
 
   SearchFolderRow(
     title = titleText,
@@ -433,10 +412,7 @@ private fun parseEmHighlight(
   }
 }
 
-private fun AnnotatedString.Builder.appendWithColor(
-  text: String,
-  color: Color?,
-) {
+private fun AnnotatedString.Builder.appendWithColor(text: String, color: Color?) {
   if (text.isEmpty()) return
 
   if (color == null) {

@@ -8,18 +8,16 @@ import co.typie.service.FULL_ACCESS_YEARLY_PLAN_ID
 import co.typie.service.SubscriptionAvailability
 import co.typie.service.SubscriptionSnapshot
 import co.typie.service.SubscriptionState
+import kotlin.time.Clock
+import kotlin.time.Instant
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlin.time.Clock
-import kotlin.time.Instant
 
-enum class SubscriptionDevScenario(
-  val label: String,
-) {
+enum class SubscriptionDevScenario(val label: String) {
   RemoteData("실제 구독 상태 사용"),
   NoSubscription("없음"),
   TrialExpired("무료 체험 종료"),
@@ -61,7 +59,7 @@ object SubscriptionDevSandbox {
       when (interval) {
         PurchasePlanInterval.Monthly -> SubscriptionDevScenario.Monthly
         PurchasePlanInterval.Yearly -> SubscriptionDevScenario.Yearly
-      },
+      }
     )
   }
 
@@ -87,77 +85,80 @@ fun subscriptionDevSubscription(
     SubscriptionDevScenario.RemoteData -> null
     SubscriptionDevScenario.NoSubscription -> null
     SubscriptionDevScenario.TrialExpired -> null
-    SubscriptionDevScenario.Trial -> SubscriptionSnapshot(
-      id = "subscription-trial",
-      state = SubscriptionState.Active,
-      startsAt = startsAt,
-      expiresAt = relativeDate(today, 14).atStartOfDayIn(timeZone),
-      planId = "trial-plan",
-      planName = "타이피 FULL ACCESS (체험)",
-      fee = 0,
-      availability = SubscriptionAvailability.Trial,
-    )
+    SubscriptionDevScenario.Trial ->
+      SubscriptionSnapshot(
+        id = "subscription-trial",
+        state = SubscriptionState.Active,
+        startsAt = startsAt,
+        expiresAt = relativeDate(today, 14).atStartOfDayIn(timeZone),
+        planId = "trial-plan",
+        planName = "타이피 FULL ACCESS (체험)",
+        fee = 0,
+        availability = SubscriptionAvailability.Trial,
+      )
 
-    SubscriptionDevScenario.Monthly -> SubscriptionSnapshot(
-      id = "subscription-monthly",
-      state = SubscriptionState.Active,
-      startsAt = startsAt,
-      expiresAt = monthlyExpiresAt,
-      planId = FULL_ACCESS_MONTHLY_PLAN_ID,
-      planName = "타이피 FULL ACCESS",
-      fee = 12_900,
-      availability = SubscriptionAvailability.InAppPurchase,
-    )
+    SubscriptionDevScenario.Monthly ->
+      SubscriptionSnapshot(
+        id = "subscription-monthly",
+        state = SubscriptionState.Active,
+        startsAt = startsAt,
+        expiresAt = monthlyExpiresAt,
+        planId = FULL_ACCESS_MONTHLY_PLAN_ID,
+        planName = "타이피 FULL ACCESS",
+        fee = 12_900,
+        availability = SubscriptionAvailability.InAppPurchase,
+      )
 
-    SubscriptionDevScenario.Yearly -> SubscriptionSnapshot(
-      id = "subscription-yearly",
-      state = SubscriptionState.Active,
-      startsAt = startsAt,
-      expiresAt = relativeDate(today, 365).atStartOfDayIn(timeZone),
-      planId = FULL_ACCESS_YEARLY_PLAN_ID,
-      planName = "타이피 FULL ACCESS",
-      fee = 129_000,
-      availability = SubscriptionAvailability.InAppPurchase,
-    )
+    SubscriptionDevScenario.Yearly ->
+      SubscriptionSnapshot(
+        id = "subscription-yearly",
+        state = SubscriptionState.Active,
+        startsAt = startsAt,
+        expiresAt = relativeDate(today, 365).atStartOfDayIn(timeZone),
+        planId = FULL_ACCESS_YEARLY_PLAN_ID,
+        planName = "타이피 FULL ACCESS",
+        fee = 129_000,
+        availability = SubscriptionAvailability.InAppPurchase,
+      )
 
-    SubscriptionDevScenario.CancelScheduled -> SubscriptionSnapshot(
-      id = "subscription-cancel-scheduled",
-      state = SubscriptionState.Canceled,
-      startsAt = startsAt,
-      expiresAt = monthlyExpiresAt,
-      planId = FULL_ACCESS_MONTHLY_PLAN_ID,
-      planName = "타이피 FULL ACCESS",
-      fee = 12_900,
-      availability = SubscriptionAvailability.InAppPurchase,
-    )
+    SubscriptionDevScenario.CancelScheduled ->
+      SubscriptionSnapshot(
+        id = "subscription-cancel-scheduled",
+        state = SubscriptionState.Canceled,
+        startsAt = startsAt,
+        expiresAt = monthlyExpiresAt,
+        planId = FULL_ACCESS_MONTHLY_PLAN_ID,
+        planName = "타이피 FULL ACCESS",
+        fee = 12_900,
+        availability = SubscriptionAvailability.InAppPurchase,
+      )
 
-    SubscriptionDevScenario.BillingKey -> SubscriptionSnapshot(
-      id = "subscription-billing-key",
-      state = SubscriptionState.Active,
-      startsAt = startsAt,
-      expiresAt = monthlyExpiresAt,
-      planId = "billing-key-plan",
-      planName = "타이피 FULL ACCESS",
-      fee = 12_900,
-      availability = SubscriptionAvailability.BillingKey,
-    )
+    SubscriptionDevScenario.BillingKey ->
+      SubscriptionSnapshot(
+        id = "subscription-billing-key",
+        state = SubscriptionState.Active,
+        startsAt = startsAt,
+        expiresAt = monthlyExpiresAt,
+        planId = "billing-key-plan",
+        planName = "타이피 FULL ACCESS",
+        fee = 12_900,
+        availability = SubscriptionAvailability.BillingKey,
+      )
 
-    SubscriptionDevScenario.Manual -> SubscriptionSnapshot(
-      id = "subscription-manual",
-      state = SubscriptionState.Active,
-      startsAt = startsAt,
-      expiresAt = monthlyExpiresAt,
-      planId = "manual-plan",
-      planName = "타이피 FULL ACCESS",
-      fee = 12_900,
-      availability = SubscriptionAvailability.Manual,
-    )
+    SubscriptionDevScenario.Manual ->
+      SubscriptionSnapshot(
+        id = "subscription-manual",
+        state = SubscriptionState.Active,
+        startsAt = startsAt,
+        expiresAt = monthlyExpiresAt,
+        planId = "manual-plan",
+        planName = "타이피 FULL ACCESS",
+        fee = 12_900,
+        availability = SubscriptionAvailability.Manual,
+      )
   }
 }
 
-private fun relativeDate(
-  date: LocalDate,
-  days: Int,
-): LocalDate {
+private fun relativeDate(date: LocalDate, days: Int): LocalDate {
   return LocalDate.fromEpochDays(date.toEpochDays() + days)
 }

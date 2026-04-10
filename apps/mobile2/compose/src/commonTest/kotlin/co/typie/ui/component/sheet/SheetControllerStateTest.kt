@@ -8,10 +8,8 @@ class SheetControllerStateTest {
 
   @Test
   fun expandAndCollapseFollowResolvedDetents() {
-    val controller = SheetControllerState<Unit>(
-      dismissPolicy = SheetDismissPolicy(),
-      mode = SheetMode.Modal,
-    )
+    val controller =
+      SheetControllerState<Unit>(dismissPolicy = SheetDismissPolicy(), mode = SheetMode.Modal)
 
     controller.updateResolvedDetents(
       listOf(

@@ -4,9 +4,9 @@ import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.platform.ActivityContext
 import com.kakao.sdk.auth.model.Prompt
 import com.kakao.sdk.user.UserApiClient
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 actual class KakaoSingleSignOnProvider : SingleSignOnAdapter {
 

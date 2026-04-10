@@ -40,64 +40,68 @@ fun SettingSwitch(
   val colors = AppTheme.colors
   val haptic = LocalHapticFeedback.current
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
-  val trackColor = animateColorAsState(
-    targetValue = if (checked) colors.brand.copy(alpha = 0.92f) else colors.surfaceTinted,
-    animationSpec = tween(durationMillis = 180),
-    label = "setting-switch-track",
-  )
-  val borderColor = animateColorAsState(
-    targetValue = if (checked) colors.brand.copy(alpha = 0.24f) else colors.borderDefault,
-    animationSpec = tween(durationMillis = 180),
-    label = "setting-switch-border",
-  )
-  val thumbOffset = animateDpAsState(
-    targetValue = if (checked) 18.dp else 0.dp,
-    animationSpec = tween(durationMillis = 180),
-    label = "setting-switch-thumb",
-  )
+  val trackColor =
+    animateColorAsState(
+      targetValue = if (checked) colors.brand.copy(alpha = 0.92f) else colors.surfaceTinted,
+      animationSpec = tween(durationMillis = 180),
+      label = "setting-switch-track",
+    )
+  val borderColor =
+    animateColorAsState(
+      targetValue = if (checked) colors.brand.copy(alpha = 0.24f) else colors.borderDefault,
+      animationSpec = tween(durationMillis = 180),
+      label = "setting-switch-border",
+    )
+  val thumbOffset =
+    animateDpAsState(
+      targetValue = if (checked) 18.dp else 0.dp,
+      animationSpec = tween(durationMillis = 180),
+      label = "setting-switch-thumb",
+    )
 
   InteractionScope {
     Box(
-      modifier = modifier
-        .size(width = 46.dp, height = 28.dp)
-        .alpha(if (enabled) 1f else 0.5f)
-        .clip(RoundedCornerShape(16.dp))
-        .then(
-          if (enabled) {
-            Modifier.foundationClickable(
-              interactionSource = interactionSource,
-              indication = null,
-            ) {
-              val next = checked.not()
-              haptic.performHapticFeedback(
-                if (next) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff,
-              )
-              onCheckedChange(next)
+      modifier =
+        modifier
+          .size(width = 46.dp, height = 28.dp)
+          .alpha(if (enabled) 1f else 0.5f)
+          .clip(RoundedCornerShape(16.dp))
+          .then(
+            if (enabled) {
+              Modifier.foundationClickable(
+                interactionSource = interactionSource,
+                indication = null,
+              ) {
+                val next = checked.not()
+                haptic.performHapticFeedback(
+                  if (next) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
+                )
+                onCheckedChange(next)
+              }
+            } else {
+              Modifier
             }
-          } else {
-            Modifier
-          },
-        )
-        .pressScale(0.97f)
-        .background(trackColor.value, RoundedCornerShape(16.dp))
-        .border(1.dp, borderColor.value, RoundedCornerShape(16.dp))
-        .padding(PaddingValues(3.dp)),
+          )
+          .pressScale(0.97f)
+          .background(trackColor.value, RoundedCornerShape(16.dp))
+          .border(1.dp, borderColor.value, RoundedCornerShape(16.dp))
+          .padding(PaddingValues(3.dp)),
       contentAlignment = Alignment.CenterStart,
     ) {
       Box(
-        modifier = Modifier
-          .offset(x = thumbOffset.value)
-          .size(22.dp)
-          .dropShadow(CircleShape) {
-            color = colors.shadowAmbient
-            radius = 4f
-          }
-          .dropShadow(CircleShape) {
-            color = colors.shadow
-            offset = Offset(0f, 2f)
-            radius = 8f
-          }
-          .background(colors.surfaceRaised, CircleShape),
+        modifier =
+          Modifier.offset(x = thumbOffset.value)
+            .size(22.dp)
+            .dropShadow(CircleShape) {
+              color = colors.shadowAmbient
+              radius = 4f
+            }
+            .dropShadow(CircleShape) {
+              color = colors.shadow
+              offset = Offset(0f, 2f)
+              radius = 8f
+            }
+            .background(colors.surfaceRaised, CircleShape)
       )
     }
   }

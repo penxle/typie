@@ -44,7 +44,7 @@ class EntityClipboardServiceTest {
           parentEntityId = null,
           lowerOrder = null,
           upperOrder = null,
-        ),
+        )
       ),
       executor.copyRequests,
     )
@@ -59,12 +59,13 @@ class EntityClipboardServiceTest {
     val toast = Toast()
     val coordinator = SiteRefreshCoordinator()
     val service = EntityClipboardService(executor, toast, coordinator)
-    val target = folderTarget(
-      siteId = "site-a",
-      destinationEntityId = "folder-b",
-      destinationDepth = 2,
-      lowerOrder = "after-last",
-    )
+    val target =
+      folderTarget(
+        siteId = "site-a",
+        destinationEntityId = "folder-b",
+        destinationDepth = 2,
+        lowerOrder = "after-last",
+      )
 
     service.setCut(
       sourceSiteId = "site-a",
@@ -82,7 +83,7 @@ class EntityClipboardServiceTest {
           lowerOrder = "after-last",
           upperOrder = null,
           targetSiteId = null,
-        ),
+        )
       ),
       executor.moveRequests,
     )
@@ -96,16 +97,8 @@ class EntityClipboardServiceTest {
     val coordinator = SiteRefreshCoordinator()
     val service = EntityClipboardService(executor, toast, coordinator)
     val refreshes = mutableListOf<String>()
-    val sourceJob = launch {
-      coordinator.refreshes("site-a").collect {
-        refreshes += "site-a"
-      }
-    }
-    val targetJob = launch {
-      coordinator.refreshes("site-b").collect {
-        refreshes += "site-b"
-      }
-    }
+    val sourceJob = launch { coordinator.refreshes("site-a").collect { refreshes += "site-a" } }
+    val targetJob = launch { coordinator.refreshes("site-b").collect { refreshes += "site-b" } }
     runCurrent()
 
     service.setCut(
@@ -128,23 +121,20 @@ class EntityClipboardServiceTest {
   fun `cannot paste folder into itself or its descendants`() = runTest {
     val executor = FakeEntityClipboardMutationExecutor()
     val service = EntityClipboardService(executor, Toast(), SiteRefreshCoordinator())
-    val source = EntityTransferSource.Folder(
-      id = "folder-a",
-      title = "폴더",
-      depth = 3,
-      maxDescendantFoldersDepth = 4,
-    )
+    val source =
+      EntityTransferSource.Folder(
+        id = "folder-a",
+        title = "폴더",
+        depth = 3,
+        maxDescendantFoldersDepth = 4,
+      )
 
     service.setCut(sourceSiteId = "site-a", items = listOf(source))
 
     assertFalse(
       service.canPaste(
-        folderTarget(
-          siteId = "site-a",
-          destinationEntityId = "folder-a",
-          destinationDepth = 3,
-        ),
-      ),
+        folderTarget(siteId = "site-a", destinationEntityId = "folder-a", destinationDepth = 3)
+      )
     )
     assertFalse(
       service.canPaste(
@@ -153,16 +143,17 @@ class EntityClipboardServiceTest {
           destinationEntityId = "folder-child",
           destinationDepth = 4,
           ancestorFolderIds = setOf("folder-a"),
-        ),
-      ),
+        )
+      )
     )
   }
 
   @Test
   fun `paste failure maps latest web error message`() = runTest {
-    val executor = FakeEntityClipboardMutationExecutor(
-      copyError = TypieError(code = "circular_reference", message = "cycle"),
-    )
+    val executor =
+      FakeEntityClipboardMutationExecutor(
+        copyError = TypieError(code = "circular_reference", message = "cycle")
+      )
     val toast = Toast()
     val service = EntityClipboardService(executor, toast, SiteRefreshCoordinator())
 
@@ -176,10 +167,7 @@ class EntityClipboardServiceTest {
     assertEquals("자기 자신 또는 하위 항목 안에는 붙여넣을 수 없어요.", toast.state.value?.message)
   }
 
-  private fun rootTarget(
-    siteId: String,
-    lowerOrder: String? = null,
-  ): EntityPasteTarget {
+  private fun rootTarget(siteId: String, lowerOrder: String? = null): EntityPasteTarget {
     return EntityPasteTarget(
       siteId = siteId,
       destinationEntityId = null,
@@ -215,16 +203,12 @@ private class FakeEntityClipboardMutationExecutor(
   val copyRequests = mutableListOf<EntityClipboardCopyRequest>()
   val moveRequests = mutableListOf<EntityClipboardMoveRequest>()
 
-  override suspend fun copyEntities(
-    request: EntityClipboardCopyRequest,
-  ) {
+  override suspend fun copyEntities(request: EntityClipboardCopyRequest) {
     copyRequests += request
     copyError?.let { throw it }
   }
 
-  override suspend fun moveEntities(
-    request: EntityClipboardMoveRequest,
-  ) {
+  override suspend fun moveEntities(request: EntityClipboardMoveRequest) {
     moveRequests += request
     moveError?.let { throw it }
   }

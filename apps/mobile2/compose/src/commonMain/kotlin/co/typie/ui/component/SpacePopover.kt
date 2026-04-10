@@ -1,8 +1,8 @@
 package co.typie.ui.component
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,19 +31,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.auth.AuthService
+import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
 import co.typie.graphql.SpacePopover_CreateSite_Mutation
 import co.typie.graphql.SpacePopover_Query
 import co.typie.graphql.executeMutation
 import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.CreateSiteInput
-import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.Result
 import co.typie.result.onOk
@@ -51,17 +51,16 @@ import co.typie.result.result
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.service.SiteService
-import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.bottomsheet.showBottomSheetFromPopoverAction
 import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
+import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
@@ -72,18 +71,18 @@ import co.typie.ui.shape.SquircleShape
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 val SpacePopoverLeadingKey = Any()
 private val SpacePopoverVerticalOffset = (TopBarDefaults.Height - TopBarDefaults.ButtonSize) / 2
-private val SpacePopoverScreenPadding = PaddingValues(
-  start = TopBarDefaults.HorizontalPadding,
-  top = SpacePopoverVerticalOffset,
-  end = TopBarDefaults.HorizontalPadding,
-  bottom = SpacePopoverVerticalOffset + 100.dp,
-)
+private val SpacePopoverScreenPadding =
+  PaddingValues(
+    start = TopBarDefaults.HorizontalPadding,
+    top = SpacePopoverVerticalOffset,
+    end = TopBarDefaults.HorizontalPadding,
+    bottom = SpacePopoverVerticalOffset + 100.dp,
+  )
 
 class SpacePopoverViewModel : ViewModel() {
 
@@ -99,15 +98,17 @@ class SpacePopoverViewModel : ViewModel() {
 
     isCreatingSite = true
     return result<Unit, Nothing> {
-      val data = Apollo.executeMutation(
-        SpacePopover_CreateSite_Mutation(
-          input = CreateSiteInput(name = name.trim().ifBlank { "새 스페이스" }),
-        ),
-      )
+        val data =
+          Apollo.executeMutation(
+            SpacePopover_CreateSite_Mutation(
+              input = CreateSiteInput(name = name.trim().ifBlank { "새 스페이스" })
+            )
+          )
 
-      pendingCreatedSiteId = data.createSite.id
-      query.refetch()
-    }.also { isCreatingSite = false }
+        pendingCreatedSiteId = data.createSite.id
+        query.refetch()
+      }
+      .also { isCreatingSite = false }
   }
 
   fun consumePendingCreatedSiteSelection(siteId: String) {
@@ -134,20 +135,22 @@ fun SpacePopover() {
     when (val state = model.query.state) {
       is QueryState.Success -> {
         val availableSiteIds = state.data.me.sites.map { it.id }
-        val selection = resolveSpacePopoverSelection(
-          selectedSiteId = SiteService.siteId,
-          availableSiteIds = availableSiteIds,
-        )
+        val selection =
+          resolveSpacePopoverSelection(
+            selectedSiteId = SiteService.siteId,
+            availableSiteIds = availableSiteIds,
+          )
 
         if (selection == null) {
           SpacePopoverSkeleton()
           return@Skeleton
         }
 
-        val pendingCreatedSiteId = resolvePendingCreatedSiteSelection(
-          pendingCreatedSiteId = model.pendingCreatedSiteId,
-          availableSiteIds = availableSiteIds,
-        )
+        val pendingCreatedSiteId =
+          resolvePendingCreatedSiteSelection(
+            pendingCreatedSiteId = model.pendingCreatedSiteId,
+            availableSiteIds = availableSiteIds,
+          )
 
         if (pendingCreatedSiteId != null) {
           LaunchedEffect(pendingCreatedSiteId) {
@@ -155,9 +158,7 @@ fun SpacePopover() {
             model.consumePendingCreatedSiteSelection(pendingCreatedSiteId)
           }
         } else if (selection.currentSiteId != SiteService.siteId) {
-          LaunchedEffect(selection.currentSiteId) {
-            SiteService.siteId = selection.currentSiteId
-          }
+          LaunchedEffect(selection.currentSiteId) { SiteService.siteId = selection.currentSiteId }
         }
 
         val currentSite = state.data.me.sites.first { it.id == selection.currentSiteId }
@@ -184,10 +185,12 @@ fun SpacePopoverSkeleton() {
 
   Box(
     contentAlignment = Alignment.Center,
-    modifier = Modifier.size(TopBarDefaults.ButtonSize)
-      .then(TopBarDefaults.controlShadowModifier(outerShape)).clip(outerShape)
-      .background(TopBarDefaults.controlBackgroundColor(), outerShape)
-      .border(1.dp, TopBarDefaults.controlBorderColor(), outerShape),
+    modifier =
+      Modifier.size(TopBarDefaults.ButtonSize)
+        .then(TopBarDefaults.controlShadowModifier(outerShape))
+        .clip(outerShape)
+        .background(TopBarDefaults.controlBackgroundColor(), outerShape)
+        .border(1.dp, TopBarDefaults.controlBorderColor(), outerShape),
   ) {
     SkeletonBone(modifier = Modifier.size(26.dp), shape = logoShape)
   }
@@ -200,15 +203,14 @@ private fun SpacePopoverAnchor(site: SpacePopover_Query.Site) {
 
   Box(
     contentAlignment = Alignment.Center,
-    modifier = Modifier.size(TopBarDefaults.ButtonSize)
-      .then(TopBarDefaults.controlShadowModifier(outerShape)).clip(outerShape)
-      .background(TopBarDefaults.controlBackgroundColor(), outerShape)
-      .border(1.dp, TopBarDefaults.controlBorderColor(), outerShape),
+    modifier =
+      Modifier.size(TopBarDefaults.ButtonSize)
+        .then(TopBarDefaults.controlShadowModifier(outerShape))
+        .clip(outerShape)
+        .background(TopBarDefaults.controlBackgroundColor(), outerShape)
+        .border(1.dp, TopBarDefaults.controlBorderColor(), outerShape),
   ) {
-    Img(
-      image = site.logo.img_image,
-      modifier = Modifier.size(26.dp).clip(logoShape),
-    )
+    Img(image = site.logo.img_image, modifier = Modifier.size(26.dp).clip(logoShape))
   }
 }
 
@@ -225,44 +227,45 @@ private fun PopoverScope.SpacePopoverPane(
   val bottomSheetHost = LocalBottomSheetHost.current
   val panePadding = PopoverDefaults.PanePadding
 
-  Column(
-    modifier = Modifier.padding(panePadding),
-  ) {
+  Column(modifier = Modifier.padding(panePadding)) {
     SpacePopoverHeader(currentSite)
 
     Spacer(Modifier.height(4.dp))
 
     PopoverList(
-      items = listOf(
-        PopoverListItem(
-          content = { SpacePopoverItem(icon = Lucide.Settings, label = "스페이스 설정") },
-          onSelected = {
-            close()
-            scope.launch { nav.navigate(Route.SpaceSettings) }
-          },
-        ),
-        PopoverListItem(
-          content = { SpacePopoverItem(icon = Lucide.ExternalLink, label = "스페이스 열기") },
-          onSelected = {
-            close()
-            uriHandler.openUri(currentSite.url)
-          },
-        ),
-        PopoverListItem(
-          content = { SpacePopoverItem(icon = Lucide.Trash2, label = "휴지통") },
-          onSelected = {
-            close()
-            scope.launch { nav.navigate(Route.Trash()) }
-          },
-        ),
-      ),
+      items =
+        listOf(
+          PopoverListItem(
+            content = { SpacePopoverItem(icon = Lucide.Settings, label = "스페이스 설정") },
+            onSelected = {
+              close()
+              scope.launch { nav.navigate(Route.SpaceSettings) }
+            },
+          ),
+          PopoverListItem(
+            content = { SpacePopoverItem(icon = Lucide.ExternalLink, label = "스페이스 열기") },
+            onSelected = {
+              close()
+              uriHandler.openUri(currentSite.url)
+            },
+          ),
+          PopoverListItem(
+            content = { SpacePopoverItem(icon = Lucide.Trash2, label = "휴지통") },
+            onSelected = {
+              close()
+              scope.launch { nav.navigate(Route.Trash()) }
+            },
+          ),
+        )
     )
 
     Spacer(Modifier.height(12.dp))
 
     Box(
-      Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 8.dp)
-        .background(AppTheme.colors.borderSubtle),
+      Modifier.fillMaxWidth()
+        .height(1.dp)
+        .padding(horizontal = 8.dp)
+        .background(AppTheme.colors.borderSubtle)
     )
 
     Spacer(Modifier.height(12.dp))
@@ -277,47 +280,44 @@ private fun PopoverScope.SpacePopoverPane(
     Spacer(Modifier.height(8.dp))
 
     PopoverList(
-      items = buildList {
-        for (site in otherSites) {
+      items =
+        buildList {
+          for (site in otherSites) {
+            add(
+              PopoverListItem(
+                content = { SpacePopoverSiteItem(site) },
+                onSelected = {
+                  SiteService.siteId = site.id
+                  close()
+                },
+              )
+            )
+          }
           add(
             PopoverListItem(
-              content = { SpacePopoverSiteItem(site) },
+              content = { SpacePopoverItem(icon = Lucide.Plus, label = "새 스페이스 생성") },
               onSelected = {
-                SiteService.siteId = site.id
-                close()
+                showBottomSheetFromPopoverAction(
+                  closePopover = { close() },
+                  presenterScope = presenterScope,
+                  bottomSheetHost = bottomSheetHost,
+                ) {
+                  CreateSpaceBottomSheet(model = model)
+                }
               },
-            ),
+            )
           )
         }
-        add(
-          PopoverListItem(
-            content = { SpacePopoverItem(icon = Lucide.Plus, label = "새 스페이스 생성") },
-            onSelected = {
-              showBottomSheetFromPopoverAction(
-                closePopover = { close() },
-                presenterScope = presenterScope,
-                bottomSheetHost = bottomSheetHost,
-              ) {
-                CreateSpaceBottomSheet(model = model)
-              }
-            },
-          ),
-        )
-      },
     )
   }
 }
 
 @Composable
-private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
-  model: SpacePopoverViewModel,
-) {
+private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(model: SpacePopoverViewModel) {
   var name by remember { mutableStateOf("") }
   val toast = LocalToast.current
 
-  BottomSheetScaffold(
-    title = "새 스페이스 생성",
-  ) {
+  BottomSheetScaffold(title = "새 스페이스 생성") {
     Text(
       text = "스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",
       style = AppTheme.typography.body,
@@ -333,10 +333,7 @@ private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
       autoFocus = true,
     )
 
-    Row(
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-      modifier = Modifier.fillMaxWidth(),
-    ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
       Button(
         text = "취소",
         variant = ButtonVariant.Secondary,
@@ -350,12 +347,10 @@ private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
         loading = model.isCreatingSite,
         enabled = !model.isCreatingSite,
         onClick = {
-          model.createSite(name)
-            .withDefaultExceptionHandler(toast)
-            .onOk {
-              toast.show(ToastType.Success, "새 스페이스가 생성되었어요.")
-              dismiss()
-            }
+          model.createSite(name).withDefaultExceptionHandler(toast).onOk {
+            toast.show(ToastType.Success, "새 스페이스가 생성되었어요.")
+            dismiss()
+          }
         },
         modifier = Modifier.weight(1f),
       )
@@ -365,16 +360,10 @@ private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
 
 @Composable
 private fun SpacePopoverHeader(site: SpacePopover_Query.Site) {
-  Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .height(TopBarDefaults.ButtonSize),
-  ) {
+  Box(modifier = Modifier.fillMaxWidth().height(TopBarDefaults.ButtonSize)) {
     Box(
       contentAlignment = Alignment.CenterStart,
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(start = 46.dp, end = 16.dp),
+      modifier = Modifier.fillMaxSize().padding(start = 46.dp, end = 16.dp),
     ) {
       Text(
         site.name,
@@ -385,18 +374,20 @@ private fun SpacePopoverHeader(site: SpacePopover_Query.Site) {
     }
 
     PopoverTransitionElement(
-      collapsedFrame = PopoverTransitionFrame(
-        left = 9.dp,
-        top = (TopBarDefaults.ButtonSize - 26.dp) / 2,
-        width = 26.dp,
-        height = 26.dp,
-      ),
-      expandedFrame = PopoverTransitionFrame(
-        left = 8.dp,
-        top = (TopBarDefaults.ButtonSize - 26.dp) / 2,
-        width = 26.dp,
-        height = 26.dp,
-      ),
+      collapsedFrame =
+        PopoverTransitionFrame(
+          left = 9.dp,
+          top = (TopBarDefaults.ButtonSize - 26.dp) / 2,
+          width = 26.dp,
+          height = 26.dp,
+        ),
+      expandedFrame =
+        PopoverTransitionFrame(
+          left = 8.dp,
+          top = (TopBarDefaults.ButtonSize - 26.dp) / 2,
+          width = 26.dp,
+          height = 26.dp,
+        ),
     ) {
       SpacePopoverLogo(logo = site.logo.img_image, size = 26.dp)
     }
@@ -407,10 +398,7 @@ private fun SpacePopoverHeader(site: SpacePopover_Query.Site) {
 private fun SpacePopoverLogo(logo: Img_image, size: Dp) {
   val logoShape = RoundedCornerShape(6.dp)
 
-  Img(
-    image = logo,
-    modifier = Modifier.size(size).clip(logoShape),
-  )
+  Img(image = logo, modifier = Modifier.size(size).clip(logoShape))
 }
 
 @Composable
@@ -436,17 +424,8 @@ private fun SpacePopoverItem(icon: IconData, label: String) {
     verticalAlignment = Alignment.CenterVertically,
     modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
   ) {
-    Icon(
-      icon = icon,
-      modifier = Modifier.size(18.dp),
-      tint = AppTheme.colors.textPrimary,
-    )
+    Icon(icon = icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textPrimary)
     Spacer(Modifier.width(12.dp))
-    Text(
-      label,
-      style = AppTheme.typography.action,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    Text(label, style = AppTheme.typography.action, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }

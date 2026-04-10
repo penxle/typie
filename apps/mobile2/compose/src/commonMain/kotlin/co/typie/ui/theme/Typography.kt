@@ -19,22 +19,25 @@ import co.typie.generated.resources.suit_thin
 import org.jetbrains.compose.resources.Font
 
 val SuitFontFamily: FontFamily
-  @Composable get() = FontFamily(
-    Font(Res.font.suit_thin, FontWeight.Thin),
-    Font(Res.font.suit_extralight, FontWeight.ExtraLight),
-    Font(Res.font.suit_light, FontWeight.Light),
-    Font(Res.font.suit_regular, FontWeight.Normal),
-    Font(Res.font.suit_medium, FontWeight.Medium),
-    Font(Res.font.suit_semibold, FontWeight.SemiBold),
-    Font(Res.font.suit_bold, FontWeight.Bold),
-    Font(Res.font.suit_extrabold, FontWeight.ExtraBold),
-    Font(Res.font.suit_heavy, FontWeight.Black),
-  )
+  @Composable
+  get() =
+    FontFamily(
+      Font(Res.font.suit_thin, FontWeight.Thin),
+      Font(Res.font.suit_extralight, FontWeight.ExtraLight),
+      Font(Res.font.suit_light, FontWeight.Light),
+      Font(Res.font.suit_regular, FontWeight.Normal),
+      Font(Res.font.suit_medium, FontWeight.Medium),
+      Font(Res.font.suit_semibold, FontWeight.SemiBold),
+      Font(Res.font.suit_bold, FontWeight.Bold),
+      Font(Res.font.suit_extrabold, FontWeight.ExtraBold),
+      Font(Res.font.suit_heavy, FontWeight.Black),
+    )
 
 object AppTypography {
   /** 화면 최상단 대제목 (홈, 더 보기 등) */
   val display: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,
@@ -46,7 +49,8 @@ object AppTypography {
 
   /** 섹션/다이얼로그 제목 */
   val heading: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,
@@ -58,7 +62,8 @@ object AppTypography {
 
   /** 카드 제목, TopBar 타이틀, 리스트 주요 텍스트 */
   val title: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,
@@ -70,7 +75,8 @@ object AppTypography {
 
   /** 메뉴 항목, 카드 row 레이블, 폼 필드 */
   val label: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,
@@ -82,7 +88,8 @@ object AppTypography {
 
   /** 본문, 기본 텍스트 */
   val body: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,
@@ -94,7 +101,8 @@ object AppTypography {
 
   /** 버튼, 링크, 탭, 폼 액션 */
   val action: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,
@@ -106,7 +114,8 @@ object AppTypography {
 
   /** 헬퍼 텍스트, 플레이스홀더, 타임스탬프. 서브타이틀 */
   val caption: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,
@@ -118,7 +127,8 @@ object AppTypography {
 
   /** 배지 카운트, 인라인 태그, 법적 고지문 */
   val micro: TextStyle
-    @Composable get() {
+    @Composable
+    get() {
       val fontFamily = rememberSuitFontFamily()
       return TextStyle(
         fontFamily = fontFamily,

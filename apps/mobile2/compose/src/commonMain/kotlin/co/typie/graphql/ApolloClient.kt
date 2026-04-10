@@ -18,25 +18,27 @@ import com.apollographql.cache.normalized.normalizedCache
 import com.apollographql.ktor.http.KtorHttpEngine
 
 @OptIn(ApolloExperimental::class)
-val Apollo: ApolloClient = ApolloClient.Builder()
-  .serverUrl("${Konfig.API_URL}/graphql")
-  .httpEngine(KtorHttpEngine(Http))
-  .fetchPolicy(FetchPolicy.CacheAndNetwork)
-  .retryOnError { request -> request.operation is Subscription<*> }
-  .subscriptionNetworkTransport(
-    WebSocketNetworkTransport.Builder()
-      .serverUrl("${Konfig.WS_URL}/graphql")
-      .webSocketEngine(WebSocketEngine())
-      .wsProtocol(
-        GraphQLWsProtocol(
-          connectionPayload = { WebSocketSessionService.createConnectionPayload() },
+val Apollo: ApolloClient =
+  ApolloClient.Builder()
+    .serverUrl("${Konfig.API_URL}/graphql")
+    .httpEngine(KtorHttpEngine(Http))
+    .fetchPolicy(FetchPolicy.CacheAndNetwork)
+    .retryOnError { request -> request.operation is Subscription<*> }
+    .subscriptionNetworkTransport(
+      WebSocketNetworkTransport.Builder()
+        .serverUrl("${Konfig.WS_URL}/graphql")
+        .webSocketEngine(WebSocketEngine())
+        .wsProtocol(
+          GraphQLWsProtocol(
+            connectionPayload = { WebSocketSessionService.createConnectionPayload() }
+          )
         )
-      ).build()
-  )
-  .normalizedCache(
-    MemoryCacheFactory(maxSizeBytes = 10 * 1024 * 1024),
-    cacheKeyGenerator = IdCacheKeyGenerator(keyScope = CacheKey.Scope.SERVICE),
-    cacheResolver = IdCacheResolver(keyScope = CacheKey.Scope.SERVICE),
-  )
-  .addHttpInterceptor(AuthInterceptor)
-  .build()
+        .build()
+    )
+    .normalizedCache(
+      MemoryCacheFactory(maxSizeBytes = 10 * 1024 * 1024),
+      cacheKeyGenerator = IdCacheKeyGenerator(keyScope = CacheKey.Scope.SERVICE),
+      cacheResolver = IdCacheResolver(keyScope = CacheKey.Scope.SERVICE),
+    )
+    .addHttpInterceptor(AuthInterceptor)
+    .build()

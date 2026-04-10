@@ -12,7 +12,7 @@ class MarketingConsentModelsTest {
       shouldShowMarketingConsentPrompt(
         marketingConsentAskedAt = null,
         totalCharacterCount = MARKETING_CONSENT_CHARACTER_THRESHOLD,
-      ),
+      )
     )
   }
 
@@ -22,7 +22,7 @@ class MarketingConsentModelsTest {
       shouldShowMarketingConsentPrompt(
         marketingConsentAskedAt = null,
         totalCharacterCount = MARKETING_CONSENT_CHARACTER_THRESHOLD - 1,
-      ),
+      )
     )
   }
 
@@ -32,7 +32,7 @@ class MarketingConsentModelsTest {
       shouldShowMarketingConsentPrompt(
         marketingConsentAskedAt = Instant.parse("2026-03-27T00:00:00Z"),
         totalCharacterCount = MARKETING_CONSENT_CHARACTER_THRESHOLD + 1,
-      ),
+      )
     )
   }
 }

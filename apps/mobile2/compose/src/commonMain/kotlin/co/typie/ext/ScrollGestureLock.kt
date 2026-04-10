@@ -11,7 +11,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 
 private val DefaultScrollGestureLockState = ScrollGestureLockState()
 
-internal val LocalScrollGestureLockState = staticCompositionLocalOf { DefaultScrollGestureLockState }
+internal val LocalScrollGestureLockState = staticCompositionLocalOf {
+  DefaultScrollGestureLockState
+}
 
 @Stable
 class ScrollGestureLockState {
@@ -32,9 +34,7 @@ class ScrollGestureLockState {
   }
 }
 
-class ScrollGestureLockHandle internal constructor(
-  private val state: ScrollGestureLockState,
-) {
+class ScrollGestureLockHandle internal constructor(private val state: ScrollGestureLockState) {
   private var released = false
 
   fun release() {
@@ -50,7 +50,5 @@ class ScrollGestureLockHandle internal constructor(
 @Composable
 internal fun ScrollGestureLockScope(content: @Composable () -> Unit) {
   val lockState = remember { ScrollGestureLockState() }
-  CompositionLocalProvider(LocalScrollGestureLockState provides lockState) {
-    content()
-  }
+  CompositionLocalProvider(LocalScrollGestureLockState provides lockState) { content() }
 }

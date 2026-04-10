@@ -38,10 +38,7 @@ data class SelectFieldItem<T>(
   val description: String? = null,
 )
 
-private data class SelectFieldDisplayItem(
-  val label: String,
-  val icon: IconData? = null,
-)
+private data class SelectFieldDisplayItem(val label: String, val icon: IconData? = null)
 
 @Composable
 fun <T> SelectField(
@@ -53,22 +50,15 @@ fun <T> SelectField(
   placement: PopoverPlacement = PopoverPlacement.BelowEnd,
   onSelected: (T) -> Unit = {},
 ) {
-  val resolvedDisplayItem = remember(field.value, values, items) {
-    resolveSelectFieldDisplayItem(
-      currentValue = field.value,
-      values = values,
-      items = items,
-    )
-  }
-
-  val anchor = @Composable {
-    Box(modifier = modifier) {
-      SelectFieldAnchor(
-        item = resolvedDisplayItem,
-        enabled = enabled,
-      )
+  val resolvedDisplayItem =
+    remember(field.value, values, items) {
+      resolveSelectFieldDisplayItem(currentValue = field.value, values = values, items = items)
     }
-  }
+
+  val anchor =
+    @Composable {
+      Box(modifier = modifier) { SelectFieldAnchor(item = resolvedDisplayItem, enabled = enabled) }
+    }
 
   if (!enabled) {
     anchor()
@@ -82,25 +72,21 @@ fun <T> SelectField(
     collapsedCornerRadius = 8.dp,
     anchor = anchor,
     pane = {
-      Column(
-        modifier = Modifier.padding(PopoverDefaults.PanePadding),
-      ) {
+      Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
         PopoverList(
-          items = items.map { item ->
-            PopoverListItem(
-              content = {
-                SelectFieldPopoverItem(
-                  item = item,
-                  selected = item.value == field.value,
-                )
-              },
-              onSelected = {
-                field.setValue(item.value)
-                close()
-                onSelected(item.value)
-              },
-            )
-          },
+          items =
+            items.map { item ->
+              PopoverListItem(
+                content = {
+                  SelectFieldPopoverItem(item = item, selected = item.value == field.value)
+                },
+                onSelected = {
+                  field.setValue(item.value)
+                  close()
+                  onSelected(item.value)
+                },
+              )
+            }
         )
       }
     },
@@ -118,9 +104,10 @@ private fun <T> resolveSelectFieldDisplayItem(
   if (distinctValues.size > 1) {
     return SelectFieldDisplayItem(
       icon = Lucide.Minus,
-      label = distinctValues.joinToString(", ") { value ->
-        items.firstOrNull { it.value == value }?.label ?: ""
-      },
+      label =
+        distinctValues.joinToString(", ") { value ->
+          items.firstOrNull { it.value == value }?.label ?: ""
+        },
     )
   }
 
@@ -132,33 +119,22 @@ private fun <T> resolveSelectFieldDisplayItem(
 }
 
 @Composable
-private fun SelectFieldAnchor(
-  item: SelectFieldDisplayItem,
-  enabled: Boolean,
-) {
+private fun SelectFieldAnchor(item: SelectFieldDisplayItem, enabled: Boolean) {
   Row(
-    modifier = Modifier
-      .heightIn(min = 38.dp)
-      .alpha(if (enabled) 1f else 0.5f)
-      .background(AppTheme.colors.surfaceDefault, RoundedCornerShape(8.dp))
-      .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
-      .padding(horizontal = 12.dp, vertical = 8.dp),
+    modifier =
+      Modifier.heightIn(min = 38.dp)
+        .alpha(if (enabled) 1f else 0.5f)
+        .background(AppTheme.colors.surfaceDefault, RoundedCornerShape(8.dp))
+        .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
+        .padding(horizontal = 12.dp, vertical = 8.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     if (item.icon != null) {
-      Icon(
-        icon = item.icon,
-        modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.textSecondary,
-      )
+      Icon(icon = item.icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textSecondary)
     }
 
-    Text(
-      text = item.label,
-      style = AppTheme.typography.body,
-      color = AppTheme.colors.textSecondary,
-    )
+    Text(text = item.label, style = AppTheme.typography.body, color = AppTheme.colors.textSecondary)
 
     Icon(
       icon = Lucide.ChevronDown,
@@ -169,51 +145,29 @@ private fun SelectFieldAnchor(
 }
 
 @Composable
-private fun <T> SelectFieldPopoverItem(
-  item: SelectFieldItem<T>,
-  selected: Boolean,
-) {
+private fun <T> SelectFieldPopoverItem(item: SelectFieldItem<T>, selected: Boolean) {
   val labelColor = if (selected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
-  val descriptionColor = if (selected) AppTheme.colors.textSecondary else AppTheme.colors.textTertiary
+  val descriptionColor =
+    if (selected) AppTheme.colors.textSecondary else AppTheme.colors.textTertiary
 
   Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 14.dp, vertical = 12.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
     verticalAlignment = if (item.description == null) Alignment.CenterVertically else Alignment.Top,
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     if (item.icon != null) {
-      Icon(
-        icon = item.icon,
-        modifier = Modifier.size(18.dp),
-        tint = labelColor,
-      )
+      Icon(icon = item.icon, modifier = Modifier.size(18.dp), tint = labelColor)
     }
 
-    Column(
-      modifier = Modifier.weight(1f),
-      verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-      Text(
-        text = item.label,
-        style = AppTheme.typography.body,
-        color = labelColor,
-      )
+    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      Text(text = item.label, style = AppTheme.typography.body, color = labelColor)
 
       if (item.description != null) {
-        Text(
-          text = item.description,
-          style = AppTheme.typography.caption,
-          color = descriptionColor,
-        )
+        Text(text = item.description, style = AppTheme.typography.caption, color = descriptionColor)
       }
     }
 
-    Box(
-      modifier = Modifier.size(16.dp),
-      contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
       if (selected) {
         Icon(
           icon = Lucide.Check,

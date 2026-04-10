@@ -13,11 +13,7 @@ import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
 @Composable
-fun EntityPreview(
-  url: String,
-  modifier: Modifier = Modifier,
-  placeholderColor: Color? = null,
-) {
+fun EntityPreview(url: String, modifier: Modifier = Modifier, placeholderColor: Color? = null) {
   val density = LocalDensity.current
   val theme = AppTheme.themeMode.name.lowercase()
 
@@ -26,9 +22,7 @@ fun EntityPreview(
 
     Img(
       url = "${url}&w=$width&theme=$theme",
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(constraints.maxWidth.toDp(density) * 4 / 3),
+      modifier = Modifier.fillMaxWidth().height(constraints.maxWidth.toDp(density) * 4 / 3),
       placeholderColor = placeholderColor,
     )
   }

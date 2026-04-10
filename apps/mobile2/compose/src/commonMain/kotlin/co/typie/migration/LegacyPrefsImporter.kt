@@ -7,34 +7,38 @@ import co.typie.ui.theme.ThemeMode
 
 object LegacyPrefsImporter {
   private var siteId: String by Prefs("site_id", "")
-  private var devMode: Boolean by Prefs(
-    DeveloperPreferencesService.DEV_MODE_KEY,
-    DeveloperPreferencesService.DEFAULT_DEV_MODE,
-  )
-  private var typewriterEnabled: Boolean by Prefs(
-    EditorPreferencesService.TYPEWRITER_ENABLED_KEY,
-    EditorPreferencesService.DEFAULT_TYPEWRITER_ENABLED,
-  )
-  private var typewriterPosition: Double by Prefs(
-    EditorPreferencesService.TYPEWRITER_POSITION_KEY,
-    EditorPreferencesService.DEFAULT_TYPEWRITER_POSITION,
-  )
-  private var lineHighlightEnabled: Boolean by Prefs(
-    EditorPreferencesService.LINE_HIGHLIGHT_ENABLED_KEY,
-    EditorPreferencesService.DEFAULT_LINE_HIGHLIGHT_ENABLED,
-  )
-  private var autoSurroundEnabled: Boolean by Prefs(
-    EditorPreferencesService.AUTO_SURROUND_ENABLED_KEY,
-    EditorPreferencesService.DEFAULT_AUTO_SURROUND_ENABLED,
-  )
-  private var characterCountFloatingEnabled: Boolean by Prefs(
-    EditorPreferencesService.CHARACTER_COUNT_FLOATING_ENABLED_KEY,
-    EditorPreferencesService.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED,
-  )
-  private var widgetAutoFadeEnabled: Boolean by Prefs(
-    EditorPreferencesService.WIDGET_AUTO_FADE_ENABLED_KEY,
-    EditorPreferencesService.DEFAULT_WIDGET_AUTO_FADE_ENABLED,
-  )
+  private var devMode: Boolean by
+    Prefs(DeveloperPreferencesService.DEV_MODE_KEY, DeveloperPreferencesService.DEFAULT_DEV_MODE)
+  private var typewriterEnabled: Boolean by
+    Prefs(
+      EditorPreferencesService.TYPEWRITER_ENABLED_KEY,
+      EditorPreferencesService.DEFAULT_TYPEWRITER_ENABLED,
+    )
+  private var typewriterPosition: Double by
+    Prefs(
+      EditorPreferencesService.TYPEWRITER_POSITION_KEY,
+      EditorPreferencesService.DEFAULT_TYPEWRITER_POSITION,
+    )
+  private var lineHighlightEnabled: Boolean by
+    Prefs(
+      EditorPreferencesService.LINE_HIGHLIGHT_ENABLED_KEY,
+      EditorPreferencesService.DEFAULT_LINE_HIGHLIGHT_ENABLED,
+    )
+  private var autoSurroundEnabled: Boolean by
+    Prefs(
+      EditorPreferencesService.AUTO_SURROUND_ENABLED_KEY,
+      EditorPreferencesService.DEFAULT_AUTO_SURROUND_ENABLED,
+    )
+  private var characterCountFloatingEnabled: Boolean by
+    Prefs(
+      EditorPreferencesService.CHARACTER_COUNT_FLOATING_ENABLED_KEY,
+      EditorPreferencesService.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED,
+    )
+  private var widgetAutoFadeEnabled: Boolean by
+    Prefs(
+      EditorPreferencesService.WIDGET_AUTO_FADE_ENABLED_KEY,
+      EditorPreferencesService.DEFAULT_WIDGET_AUTO_FADE_ENABLED,
+    )
   private var themeMode: ThemeMode by Prefs("theme_mode", ThemeMode.System)
 
   fun import(source: LegacyPrefsImportSource): LegacyPrefsImportReport {
@@ -133,10 +137,11 @@ object LegacyPrefsImporter {
       }
     }
 
-    val report = LegacyPrefsImportReport(
-      importedKeys = importedKeys.sorted(),
-      skippedKeys = skippedKeys.sorted(),
-    )
+    val report =
+      LegacyPrefsImportReport(
+        importedKeys = importedKeys.sorted(),
+        skippedKeys = skippedKeys.sorted(),
+      )
     LegacyMigrationStateStore.recordPrefsImport(report)
     return report
   }

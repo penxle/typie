@@ -1,8 +1,8 @@
 package co.typie.ui.component.reorder
 
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -12,8 +12,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.composed
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,9 +43,8 @@ private data class ActiveReorderDrag<K : Any>(
 )
 
 @Stable
-class ReorderableListState<K : Any> internal constructor(
-  internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScrollState,
-) {
+class ReorderableListState<K : Any>
+internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScrollState) {
   private val itemBounds = mutableStateMapOf<K, Rect>()
 
   private var pendingCommittedKeys by mutableStateOf<List<K>?>(null)
@@ -117,13 +116,14 @@ class ReorderableListState<K : Any> internal constructor(
     val startIndex = displayedKeys.indexOf(key)
     if (startIndex == -1) return false
 
-    activeDrag = ActiveReorderDrag(
-      key = key,
-      startIndex = startIndex,
-      startOrderedKeys = displayedKeys,
-      pointerOffsetWithinItemY = pointerWindowPosition.y - bounds.top,
-      currentPointerWindowPosition = pointerWindowPosition,
-    )
+    activeDrag =
+      ActiveReorderDrag(
+        key = key,
+        startIndex = startIndex,
+        startOrderedKeys = displayedKeys,
+        pointerOffsetWithinItemY = pointerWindowPosition.y - bounds.top,
+        currentPointerWindowPosition = pointerWindowPosition,
+      )
     return true
   }
 
@@ -131,18 +131,20 @@ class ReorderableListState<K : Any> internal constructor(
     val activeDrag = activeDrag ?: return false
     this.activeDrag = activeDrag.copy(currentPointerWindowPosition = pointerWindowPosition)
     val draggedItemHeight = itemBounds[activeDrag.key]?.height
-    val comparisonWindowY = calculateDragComparisonWindowY(
-      pointerWindowY = pointerWindowPosition.y,
-      pointerOffsetWithinItemY = activeDrag.pointerOffsetWithinItemY,
-      itemHeight = draggedItemHeight,
-    )
+    val comparisonWindowY =
+      calculateDragComparisonWindowY(
+        pointerWindowY = pointerWindowPosition.y,
+        pointerOffsetWithinItemY = activeDrag.pointerOffsetWithinItemY,
+        itemHeight = draggedItemHeight,
+      )
 
-    val reorderedKeys = calculateReorderedKeys(
-      orderedKeys = displayedKeys,
-      draggedKey = activeDrag.key,
-      comparisonWindowY = comparisonWindowY,
-      itemBounds = itemBounds,
-    ) ?: return false
+    val reorderedKeys =
+      calculateReorderedKeys(
+        orderedKeys = displayedKeys,
+        draggedKey = activeDrag.key,
+        comparisonWindowY = comparisonWindowY,
+        itemBounds = itemBounds,
+      ) ?: return false
 
     if (reorderedKeys == displayedKeys) {
       return false
@@ -183,7 +185,9 @@ class ReorderableListState<K : Any> internal constructor(
     if (activeDrag.key != key) return 0f
 
     val bounds = itemBounds[key] ?: return 0f
-    return activeDrag.currentPointerWindowPosition.y - activeDrag.pointerOffsetWithinItemY - bounds.top
+    return activeDrag.currentPointerWindowPosition.y -
+      activeDrag.pointerOffsetWithinItemY -
+      bounds.top
   }
 }
 
@@ -193,17 +197,17 @@ fun <K : Any> rememberReorderableListState(
   verticalScrollableState: ScrollableState? = null,
   horizontalScrollableState: ScrollableState? = null,
 ): ReorderableListState<K> {
-  val edgeAutoScrollState = rememberEdgeAutoScrollState(
-    verticalScrollableState = verticalScrollableState,
-    horizontalScrollableState = horizontalScrollableState,
-  )
-  val state = remember(edgeAutoScrollState) {
-    ReorderableListState<K>(edgeAutoScrollState = edgeAutoScrollState)
-  }
+  val edgeAutoScrollState =
+    rememberEdgeAutoScrollState(
+      verticalScrollableState = verticalScrollableState,
+      horizontalScrollableState = horizontalScrollableState,
+    )
+  val state =
+    remember(edgeAutoScrollState) {
+      ReorderableListState<K>(edgeAutoScrollState = edgeAutoScrollState)
+    }
 
-  SideEffect {
-    state.syncKeys(keys)
-  }
+  SideEffect { state.syncKeys(keys) }
 
   return state
 }
@@ -221,24 +225,16 @@ fun Modifier.reorderableListContainer(
   )
 }
 
-fun <K : Any> Modifier.reorderableItem(
-  state: ReorderableListState<K>,
-  key: K,
-): Modifier = composed {
-  DisposableEffect(state, key) {
-    onDispose {
-      state.registerItemBounds(key, bounds = null)
-    }
-  }
+fun <K : Any> Modifier.reorderableItem(state: ReorderableListState<K>, key: K): Modifier =
+  composed {
+    DisposableEffect(state, key) { onDispose { state.registerItemBounds(key, bounds = null) } }
 
-  onGloballyPositioned { coordinates ->
-    state.registerItemBounds(key, coordinates.boundsInWindow())
+    onGloballyPositioned { coordinates ->
+        state.registerItemBounds(key, coordinates.boundsInWindow())
+      }
+      .zIndex(if (state.isDragging(key)) 2f else 0f)
+      .graphicsLayer { translationY = state.draggedItemTranslationY(key) }
   }
-    .zIndex(if (state.isDragging(key)) 2f else 0f)
-    .graphicsLayer {
-      translationY = state.draggedItemTranslationY(key)
-    }
-}
 
 fun <K : Any> Modifier.reorderableDragHandle(
   state: ReorderableListState<K>,
@@ -250,16 +246,15 @@ fun <K : Any> Modifier.reorderableDragHandle(
 ): Modifier = composed {
   var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-  onGloballyPositioned { coordinates ->
-    handleCoordinates = coordinates
-  }
+  onGloballyPositioned { coordinates -> handleCoordinates = coordinates }
     .pointerInput(state, key, enabled) {
       if (!enabled) return@pointerInput
 
       awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         val pointerId = down.id
-        val originWindowPosition = handleCoordinates?.localToWindow(down.position) ?: return@awaitEachGesture
+        val originWindowPosition =
+          handleCoordinates?.localToWindow(down.position) ?: return@awaitEachGesture
         var currentWindowPosition = originWindowPosition
         val startedDrag = state.beginDrag(key, originWindowPosition)
 
@@ -271,7 +266,8 @@ fun <K : Any> Modifier.reorderableDragHandle(
         while (true) {
           val event = awaitPointerEvent()
           val change = event.changes.find { it.id == pointerId } ?: break
-          currentWindowPosition = handleCoordinates?.localToWindow(change.position) ?: currentWindowPosition
+          currentWindowPosition =
+            handleCoordinates?.localToWindow(change.position) ?: currentWindowPosition
 
           if (startedDrag) {
             change.consume()
@@ -320,19 +316,15 @@ internal fun <K : Any> calculateReorderedKeys(
     if (!bounds.isValidReorderTargetBounds) {
       return@mapIndexedNotNull null
     }
-    IndexedItemBounds(
-      index = index,
-      bounds = bounds,
-    )
+    IndexedItemBounds(index = index, bounds = bounds)
   }
   if (visibleTargetsInLogicalOrder.isEmpty()) return null
 
   // animateBounds can temporarily leave a key's visual position behind its new logical order.
-  // Reorder thresholds should follow the visible slots top-to-bottom, not the lagging key positions,
+  // Reorder thresholds should follow the visible slots top-to-bottom, not the lagging key
+  // positions,
   // otherwise the list can flip-flop while rows are animating.
-  val visibleSlotBounds = visibleTargetsInLogicalOrder
-    .map { it.bounds }
-    .sortedBy { it.top }
+  val visibleSlotBounds = visibleTargetsInLogicalOrder.map { it.bounds }.sortedBy { it.top }
 
   val visibleTargets = visibleTargetsInLogicalOrder.mapIndexed { visibleIndex, target ->
     target.copy(bounds = visibleSlotBounds[visibleIndex])
@@ -341,23 +333,22 @@ internal fun <K : Any> calculateReorderedKeys(
   val firstVisible = visibleTargets.first()
   val lastVisible = visibleTargets.last()
 
-  val insertionIndex = when {
-    comparisonWindowY < firstVisible.bounds.top -> firstVisible.index
-    comparisonWindowY > lastVisible.bounds.bottom -> lastVisible.index + 1
-    else -> {
-      visibleTargets.firstOrNull { comparisonWindowY < it.bounds.centerY }?.index ?: orderedWithoutDragged.size
+  val insertionIndex =
+    when {
+      comparisonWindowY < firstVisible.bounds.top -> firstVisible.index
+      comparisonWindowY > lastVisible.bounds.bottom -> lastVisible.index + 1
+      else -> {
+        visibleTargets.firstOrNull { comparisonWindowY < it.bounds.centerY }?.index
+          ?: orderedWithoutDragged.size
+      }
     }
-  }
 
   val reordered = orderedWithoutDragged.toMutableList()
   reordered.add(insertionIndex.coerceIn(0, reordered.size), draggedKey)
   return reordered
 }
 
-private data class IndexedItemBounds(
-  val index: Int,
-  val bounds: Rect,
-)
+private data class IndexedItemBounds(val index: Int, val bounds: Rect)
 
 internal fun calculateDragComparisonWindowY(
   pointerWindowY: Float,

@@ -7,13 +7,15 @@ import co.typie.startup.AppStartupState
 
 internal sealed interface RootShellDestination {
   data object Splash : RootShellDestination
+
   data object Auth : RootShellDestination
+
   data object Main : RootShellDestination
+
   data class System(val route: Route) : RootShellDestination
 }
-internal data class RootShellTargetState(
-  val destination: RootShellDestination,
-)
+
+internal data class RootShellTargetState(val destination: RootShellDestination)
 
 internal fun resolveRootShellDestination(
   startupState: AppStartupState,
@@ -29,27 +31,30 @@ internal fun resolveRootShellDestination(
   }
 
   return when (bootstrapState) {
-    is BootstrapState.Maintenance -> RootShellDestination.System(
-      Route.Maintenance(
-        title = bootstrapState.title,
-        message = bootstrapState.message,
-        until = bootstrapState.until,
-      ),
-    )
+    is BootstrapState.Maintenance ->
+      RootShellDestination.System(
+        Route.Maintenance(
+          title = bootstrapState.title,
+          message = bootstrapState.message,
+          until = bootstrapState.until,
+        )
+      )
 
-    is BootstrapState.UpdateRequired -> RootShellDestination.System(
-      Route.UpdateRequired(
-        storeUrl = bootstrapState.storeUrl,
-        currentVersion = bootstrapState.currentVersion,
-        requiredVersion = bootstrapState.requiredVersion,
-      ),
-    )
+    is BootstrapState.UpdateRequired ->
+      RootShellDestination.System(
+        Route.UpdateRequired(
+          storeUrl = bootstrapState.storeUrl,
+          currentVersion = bootstrapState.currentVersion,
+          requiredVersion = bootstrapState.requiredVersion,
+        )
+      )
 
-    else -> when (authState) {
-      is AuthState.Authenticated -> RootShellDestination.Main
-      is AuthState.Offline -> RootShellDestination.System(Route.Offline)
-      else -> RootShellDestination.Auth
-    }
+    else ->
+      when (authState) {
+        is AuthState.Authenticated -> RootShellDestination.Main
+        is AuthState.Offline -> RootShellDestination.System(Route.Offline)
+        else -> RootShellDestination.Auth
+      }
   }
 }
 
@@ -60,7 +65,5 @@ internal fun rootShellTargetState(
 ): RootShellTargetState {
   val destination = resolveRootShellDestination(startupState, authState, bootstrapState)
 
-  return RootShellTargetState(
-    destination = destination,
-  )
+  return RootShellTargetState(destination = destination)
 }

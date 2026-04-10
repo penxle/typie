@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,14 +33,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
-import co.typie.ext.verticalScroll
 import co.typie.form.FormState
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.overlay.LocalToast
+import co.typie.overlay.Toast
+import co.typie.result.Result
+import co.typie.result.isOk
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
@@ -54,7 +58,6 @@ import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.familySpecimenFallbacks
-import co.typie.ui.component.weightSpecimenFallbacks
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.LocalSheetHost
@@ -69,19 +72,13 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
+import co.typie.ui.component.weightSpecimenFallbacks
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
-import co.typie.overlay.Toast
-import co.typie.result.Result
-import co.typie.result.isOk
-import co.typie.result.onOk
-import co.typie.result.withDefaultExceptionHandler
-import kotlinx.coroutines.CancellationException
-import co.typie.overlay.LocalToast
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 
 private enum class PresetEditorField {
   FontFamily,
@@ -99,10 +96,8 @@ private enum class PresetEditorField {
   BlockGap,
 }
 
-private class FontSizeSheetForm(
-  scope: kotlinx.coroutines.CoroutineScope,
-  initialFontSize: Int,
-) : FormState(scope) {
+private class FontSizeSheetForm(scope: kotlinx.coroutines.CoroutineScope, initialFontSize: Int) :
+  FormState(scope) {
   val fontSize = field(formatPresetPointValue(initialFontSize))
 }
 
@@ -124,10 +119,8 @@ private class PageMarginSheetForm(
   val rightMm = field(pxToMm(initialLayout.pageMarginRight).toString())
 }
 
-private val PresetSheetPadding = SheetPadding(
-  header = PaddingValues(horizontal = 16.dp),
-  body = PaddingValues(horizontal = 16.dp),
-)
+private val PresetSheetPadding =
+  SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(horizontal = 16.dp))
 
 @Composable
 fun PresetSettingsScreen() {
@@ -141,98 +134,86 @@ fun PresetSettingsScreen() {
     val template = model.currentTemplate
     try {
       when (field) {
-        PresetEditorField.FontFamily -> sheetHost.await(
-          fontFamilySheet(
-            model = model,
-            template = template,
-          ),
-        )
-        PresetEditorField.FontWeight -> sheetHost.await(
-          fontWeightSheet(
-            model = model,
-            template = template,
-          ),
-        )
-        PresetEditorField.FontSize -> sheetHost.await(
-          fontSizeSheet(
-            model = model,
-            template = template,
-          ),
-        )
-        PresetEditorField.LetterSpacing -> sheetHost.await(
-          presetOptionSheet(
-            title = "자간",
-            initialValue = model.currentTemplate.letterSpacing,
-            options = LETTER_SPACING_OPTIONS,
-            onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withLetterSpacing(next)) },
-          ),
-        )
-        PresetEditorField.LineHeight -> sheetHost.await(
-          presetOptionSheet(
-            title = "행간",
-            initialValue = model.currentTemplate.lineHeight,
-            options = LINE_HEIGHT_OPTIONS,
-            onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withLineHeight(next)) },
-          ),
-        )
-        PresetEditorField.TextColor -> sheetHost.await(
-          presetColorSheet(
-            title = "글자 색",
-            initialValue = model.currentTemplate.textColor,
-            options = TEXT_COLOR_OPTIONS,
-            background = false,
-            onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withTextColor(next)) },
-          ),
-        )
-        PresetEditorField.BackgroundColor -> sheetHost.await(
-          presetColorSheet(
-            title = "배경 색",
-            initialValue = model.currentTemplate.backgroundColor,
-            options = BACKGROUND_COLOR_OPTIONS,
-            background = true,
-            onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withBackgroundColor(next)) },
-          ),
-        )
-        PresetEditorField.LayoutMode -> sheetHost.await(
-          layoutModeSheet(
-            model = model,
-            template = template,
-          ),
-        )
-        PresetEditorField.MaxWidth -> sheetHost.await(
-          maxWidthSheet(
-            model = model,
-            template = template,
-          ),
-        )
-        PresetEditorField.PageSize -> sheetHost.await(
-          pageSizeSheet(
-            model = model,
-            template = template,
-          ),
-        )
-        PresetEditorField.PageMargin -> sheetHost.await(
-          pageMarginSheet(
-            model = model,
-            template = template,
-          ),
-        )
-        PresetEditorField.ParagraphIndent -> sheetHost.await(
-          presetOptionSheet(
-            title = "첫 줄 들여쓰기",
-            initialValue = model.currentTemplate.paragraphIndent,
-            options = PARAGRAPH_INDENT_OPTIONS,
-            onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withParagraphIndent(next)) },
-          ),
-        )
-        PresetEditorField.BlockGap -> sheetHost.await(
-          presetOptionSheet(
-            title = "문단 간격",
-            initialValue = model.currentTemplate.blockGap,
-            options = BLOCK_GAP_OPTIONS,
-            onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withBlockGap(next)) },
-          ),
-        )
+        PresetEditorField.FontFamily ->
+          sheetHost.await(fontFamilySheet(model = model, template = template))
+        PresetEditorField.FontWeight ->
+          sheetHost.await(fontWeightSheet(model = model, template = template))
+        PresetEditorField.FontSize ->
+          sheetHost.await(fontSizeSheet(model = model, template = template))
+        PresetEditorField.LetterSpacing ->
+          sheetHost.await(
+            presetOptionSheet(
+              title = "자간",
+              initialValue = model.currentTemplate.letterSpacing,
+              options = LETTER_SPACING_OPTIONS,
+              onSaveValue = { next ->
+                model.saveTemplate(model.currentTemplate.withLetterSpacing(next))
+              },
+            )
+          )
+        PresetEditorField.LineHeight ->
+          sheetHost.await(
+            presetOptionSheet(
+              title = "행간",
+              initialValue = model.currentTemplate.lineHeight,
+              options = LINE_HEIGHT_OPTIONS,
+              onSaveValue = { next ->
+                model.saveTemplate(model.currentTemplate.withLineHeight(next))
+              },
+            )
+          )
+        PresetEditorField.TextColor ->
+          sheetHost.await(
+            presetColorSheet(
+              title = "글자 색",
+              initialValue = model.currentTemplate.textColor,
+              options = TEXT_COLOR_OPTIONS,
+              background = false,
+              onSaveValue = { next ->
+                model.saveTemplate(model.currentTemplate.withTextColor(next))
+              },
+            )
+          )
+        PresetEditorField.BackgroundColor ->
+          sheetHost.await(
+            presetColorSheet(
+              title = "배경 색",
+              initialValue = model.currentTemplate.backgroundColor,
+              options = BACKGROUND_COLOR_OPTIONS,
+              background = true,
+              onSaveValue = { next ->
+                model.saveTemplate(model.currentTemplate.withBackgroundColor(next))
+              },
+            )
+          )
+        PresetEditorField.LayoutMode ->
+          sheetHost.await(layoutModeSheet(model = model, template = template))
+        PresetEditorField.MaxWidth ->
+          sheetHost.await(maxWidthSheet(model = model, template = template))
+        PresetEditorField.PageSize ->
+          sheetHost.await(pageSizeSheet(model = model, template = template))
+        PresetEditorField.PageMargin ->
+          sheetHost.await(pageMarginSheet(model = model, template = template))
+        PresetEditorField.ParagraphIndent ->
+          sheetHost.await(
+            presetOptionSheet(
+              title = "첫 줄 들여쓰기",
+              initialValue = model.currentTemplate.paragraphIndent,
+              options = PARAGRAPH_INDENT_OPTIONS,
+              onSaveValue = { next ->
+                model.saveTemplate(model.currentTemplate.withParagraphIndent(next))
+              },
+            )
+          )
+        PresetEditorField.BlockGap ->
+          sheetHost.await(
+            presetOptionSheet(
+              title = "문단 간격",
+              initialValue = model.currentTemplate.blockGap,
+              options = BLOCK_GAP_OPTIONS,
+              onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withBlockGap(next)) },
+            )
+          )
       }
     } catch (_: CancellationException) {
       return
@@ -267,114 +248,115 @@ fun PresetSettingsScreen() {
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-      Text(
-        text = "프리셋",
-        style = AppTheme.typography.display,
-        modifier = Modifier.padding(top = 4.dp),
+    Text(text = "프리셋", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+
+    Text(
+      text = "새 문서를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.",
+      style = AppTheme.typography.caption,
+      color = AppTheme.colors.textTertiary,
+    )
+
+    PresetSettingsSection(title = "기본 스타일") {
+      PresetSettingsRow(
+        label = "폰트 패밀리",
+        value = fontFamilySummaryLabel(template, model.normalizedFontFamilyOptions),
+        onClick = { openEditor(PresetEditorField.FontFamily) },
       )
-
-      Text(
-        text = "새 문서를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.",
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
+      CardDivider()
+      PresetSettingsRow(
+        label = "폰트 굵기",
+        value = fontWeightSummaryLabel(template, model.selectedFontWeightAvailability),
+        onClick = { openEditor(PresetEditorField.FontWeight) },
       )
-
-      PresetSettingsSection(title = "기본 스타일") {
-        PresetSettingsRow(
-          label = "폰트 패밀리",
-          value = fontFamilySummaryLabel(template, model.normalizedFontFamilyOptions),
-          onClick = { openEditor(PresetEditorField.FontFamily) },
-        )
-        CardDivider()
-        PresetSettingsRow(
-          label = "폰트 굵기",
-          value = fontWeightSummaryLabel(template, model.selectedFontWeightAvailability),
-          onClick = { openEditor(PresetEditorField.FontWeight) },
-        )
-        CardDivider()
-        PresetSettingsRow(
-          label = "폰트 크기",
-          value = fontSizeSummaryLabel(template.fontSize),
-          onClick = { openEditor(PresetEditorField.FontSize) },
-        )
-        CardDivider()
-        PresetSettingsRow(
-          label = "자간",
-          value = presetOptionLabel(LETTER_SPACING_OPTIONS, template.letterSpacing),
-          onClick = { openEditor(PresetEditorField.LetterSpacing) },
-        )
-        CardDivider()
-        PresetSettingsRow(
-          label = "행간",
-          value = presetOptionLabel(LINE_HEIGHT_OPTIONS, template.lineHeight),
-          onClick = { openEditor(PresetEditorField.LineHeight) },
-        )
-        CardDivider()
-        PresetSettingsRow(
-          label = "글자 색",
-          value = presetOptionLabel(TEXT_COLOR_OPTIONS, template.textColor, template.textColor),
-          onClick = { openEditor(PresetEditorField.TextColor) },
-        )
-        CardDivider()
-        PresetSettingsRow(
-          label = "배경 색",
-          value = presetOptionLabel(BACKGROUND_COLOR_OPTIONS, template.backgroundColor, template.backgroundColor),
-          onClick = { openEditor(PresetEditorField.BackgroundColor) },
-        )
-      }
-
-      PresetSettingsSection(title = "레이아웃") {
-        PresetSettingsRow(
-          label = "레이아웃 모드",
-          value = layoutModeSummaryLabel(template.layout),
-          onClick = { openEditor(PresetEditorField.LayoutMode) },
-        )
-
-        when (val layout = template.layout) {
-          is PresetLayout.Continuous -> {
-            CardDivider()
-            PresetSettingsRow(
-              label = "본문 폭",
-              value = presetOptionLabel(MAX_WIDTH_OPTIONS, layout.maxWidth, "${layout.maxWidth}px"),
-              onClick = { openEditor(PresetEditorField.MaxWidth) },
-            )
-          }
-
-          is PresetLayout.Paginated -> {
-            CardDivider()
-            PresetSettingsRow(
-              label = "페이지 크기",
-              value = pageLayoutSummaryLabel(layout),
-              onClick = { openEditor(PresetEditorField.PageSize) },
-            )
-            CardDivider()
-            PresetSettingsRow(
-              label = "여백",
-              value = pageMarginSummaryLabel(layout),
-              onClick = { openEditor(PresetEditorField.PageMargin) },
-            )
-          }
-
-          is PresetLayout.Unknown -> Unit
-        }
-      }
-
-      PresetSettingsSection(title = "세부 레이아웃") {
-        PresetSettingsRow(
-          label = "첫 줄 들여쓰기",
-          value = presetOptionLabel(PARAGRAPH_INDENT_OPTIONS, template.paragraphIndent),
-          onClick = { openEditor(PresetEditorField.ParagraphIndent) },
-        )
-        CardDivider()
-        PresetSettingsRow(
-          label = "문단 간격",
-          value = presetOptionLabel(BLOCK_GAP_OPTIONS, template.blockGap),
-          onClick = { openEditor(PresetEditorField.BlockGap) },
-        )
-      }
-
-      Spacer(Modifier.height(72.dp))
+      CardDivider()
+      PresetSettingsRow(
+        label = "폰트 크기",
+        value = fontSizeSummaryLabel(template.fontSize),
+        onClick = { openEditor(PresetEditorField.FontSize) },
+      )
+      CardDivider()
+      PresetSettingsRow(
+        label = "자간",
+        value = presetOptionLabel(LETTER_SPACING_OPTIONS, template.letterSpacing),
+        onClick = { openEditor(PresetEditorField.LetterSpacing) },
+      )
+      CardDivider()
+      PresetSettingsRow(
+        label = "행간",
+        value = presetOptionLabel(LINE_HEIGHT_OPTIONS, template.lineHeight),
+        onClick = { openEditor(PresetEditorField.LineHeight) },
+      )
+      CardDivider()
+      PresetSettingsRow(
+        label = "글자 색",
+        value = presetOptionLabel(TEXT_COLOR_OPTIONS, template.textColor, template.textColor),
+        onClick = { openEditor(PresetEditorField.TextColor) },
+      )
+      CardDivider()
+      PresetSettingsRow(
+        label = "배경 색",
+        value =
+          presetOptionLabel(
+            BACKGROUND_COLOR_OPTIONS,
+            template.backgroundColor,
+            template.backgroundColor,
+          ),
+        onClick = { openEditor(PresetEditorField.BackgroundColor) },
+      )
     }
+
+    PresetSettingsSection(title = "레이아웃") {
+      PresetSettingsRow(
+        label = "레이아웃 모드",
+        value = layoutModeSummaryLabel(template.layout),
+        onClick = { openEditor(PresetEditorField.LayoutMode) },
+      )
+
+      when (val layout = template.layout) {
+        is PresetLayout.Continuous -> {
+          CardDivider()
+          PresetSettingsRow(
+            label = "본문 폭",
+            value = presetOptionLabel(MAX_WIDTH_OPTIONS, layout.maxWidth, "${layout.maxWidth}px"),
+            onClick = { openEditor(PresetEditorField.MaxWidth) },
+          )
+        }
+
+        is PresetLayout.Paginated -> {
+          CardDivider()
+          PresetSettingsRow(
+            label = "페이지 크기",
+            value = pageLayoutSummaryLabel(layout),
+            onClick = { openEditor(PresetEditorField.PageSize) },
+          )
+          CardDivider()
+          PresetSettingsRow(
+            label = "여백",
+            value = pageMarginSummaryLabel(layout),
+            onClick = { openEditor(PresetEditorField.PageMargin) },
+          )
+        }
+
+        is PresetLayout.Unknown -> Unit
+      }
+    }
+
+    PresetSettingsSection(title = "세부 레이아웃") {
+      PresetSettingsRow(
+        label = "첫 줄 들여쓰기",
+        value = presetOptionLabel(PARAGRAPH_INDENT_OPTIONS, template.paragraphIndent),
+        onClick = { openEditor(PresetEditorField.ParagraphIndent) },
+      )
+      CardDivider()
+      PresetSettingsRow(
+        label = "문단 간격",
+        value = presetOptionLabel(BLOCK_GAP_OPTIONS, template.blockGap),
+        onClick = { openEditor(PresetEditorField.BlockGap) },
+      )
+    }
+
+    Spacer(Modifier.height(72.dp))
+  }
 
   if (showResetConfirm) {
     ConfirmModal(
@@ -383,9 +365,7 @@ fun PresetSettingsScreen() {
       confirmText = "초기화",
       confirmIsDestructive = true,
       onConfirm = {
-        model.resetTemplate()
-          .withDefaultExceptionHandler(toast)
-          .onOk { showResetConfirm = false }
+        model.resetTemplate().withDefaultExceptionHandler(toast).onOk { showResetConfirm = false }
       },
       onDismiss = { showResetConfirm = false },
     )
@@ -393,44 +373,23 @@ fun PresetSettingsScreen() {
 }
 
 @Composable
-private fun PresetSettingsSection(
-  title: String,
-  content: @Composable () -> Unit,
-) {
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    SectionTitle(
-      text = title,
-      modifier = Modifier.padding(top = 4.dp),
-    )
+private fun PresetSettingsSection(title: String, content: @Composable () -> Unit) {
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionTitle(text = title, modifier = Modifier.padding(top = 4.dp))
 
-    CardSurface(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Column(content = { content() })
-    }
+    CardSurface(modifier = Modifier.fillMaxWidth()) { Column(content = { content() }) }
   }
 }
 
 @Composable
-private fun PresetSettingsRow(
-  label: String,
-  value: String,
-  onClick: suspend () -> Unit,
-) {
+private fun PresetSettingsRow(label: String, value: String, onClick: suspend () -> Unit) {
   CardRow(onClick = onClick) {
     Row(
       modifier = Modifier.fillMaxWidth(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Text(
-        text = label,
-        style = AppTheme.typography.label,
-        modifier = Modifier.weight(1f),
-      )
+      Text(text = label, style = AppTheme.typography.label, modifier = Modifier.weight(1f))
 
       Text(
         text = value,
@@ -453,7 +412,8 @@ private fun fontFamilySummaryLabel(
   template: PresetTemplate,
   fontFamilyOptions: List<PresetOption<String>>,
 ): String {
-  return fontFamilyOptions.firstOrNull { it.value == template.fontFamily }?.label ?: template.fontFamily
+  return fontFamilyOptions.firstOrNull { it.value == template.fontFamily }?.label
+    ?: template.fontFamily
 }
 
 private fun fontWeightSummaryLabel(
@@ -472,15 +432,14 @@ private fun fontFamilySheet(
   var isSaving by remember { mutableStateOf(false) }
   var selectedFamilyName by remember { mutableStateOf(template.fontFamily) }
 
-  val families = remember(model.activeDocumentFontFamilies) {
-    model.activeDocumentFontFamilies.sortedBy { it.displayName.lowercase() }
-  }
+  val families =
+    remember(model.activeDocumentFontFamilies) {
+      model.activeDocumentFontFamilies.sortedBy { it.displayName.lowercase() }
+    }
 
   PresetInstantSheetLayout(title = "폰트 패밀리") {
     if (families.isEmpty()) {
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
         Text(
           text = "선택할 수 있는 폰트가 없어요.",
           style = AppTheme.typography.caption,
@@ -505,10 +464,11 @@ private fun fontFamilySheet(
             fontId = specimen?.id,
             weight = specimen?.weight,
             style = AppTheme.typography.body,
-            fallbackTexts = familySpecimenFallbacks(
-              displayName = family.displayName,
-              familyName = family.familyName,
-            ),
+            fallbackTexts =
+              familySpecimenFallbacks(
+                displayName = family.displayName,
+                familyName = family.familyName,
+              ),
           )
         }
       }
@@ -530,7 +490,9 @@ private fun fontFamilySheet(
       model.saveTemplate(
         template
           .withFontFamily(selectedFamily.familyName)
-          .withFontWeight(closestWeight(template.fontWeight, selectedFamily.fonts.map { it.weight })),
+          .withFontWeight(
+            closestWeight(template.fontWeight, selectedFamily.fonts.map { it.weight })
+          )
       )
     }
   }
@@ -550,15 +512,13 @@ private fun fontWeightSheet(
         template.fontWeight
       } else {
         closestWeight(template.fontWeight, fonts.map { it.weight })
-      },
+      }
     )
   }
 
   PresetInstantSheetLayout(title = "폰트 굵기") {
     if (fonts.isEmpty()) {
-      CardSurface(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
         Text(
           text = "선택할 수 있는 폰트 굵기가 없어요.",
           style = AppTheme.typography.caption,
@@ -584,11 +544,12 @@ private fun fontWeightSheet(
             fontId = font.id,
             weight = font.weight,
             style = AppTheme.typography.body,
-            fallbackTexts = weightSpecimenFallbacks(
-              label = fontLabel,
-              subfamilyDisplayName = font.subfamilyDisplayName,
-              weight = font.weight,
-            ),
+            fallbackTexts =
+              weightSpecimenFallbacks(
+                label = fontLabel,
+                subfamilyDisplayName = font.subfamilyDisplayName,
+                weight = font.weight,
+              ),
           )
         }
       }
@@ -617,16 +578,12 @@ private fun fontSizeSheet(
 ): SheetPresentation<Unit> = sheetPresentation {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val form = remember(scope, template.fontSize) {
-    FontSizeSheetForm(scope, template.fontSize)
-  }
+  val form = remember(scope, template.fontSize) { FontSizeSheetForm(scope, template.fontSize) }
   var isSaving by remember { mutableStateOf(false) }
   var errorText by remember { mutableStateOf<String?>(null) }
   val draftValue = parsePointInput(form.fontSize.value)?.coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)
 
-  LaunchedEffect(form.fontSize.value) {
-    errorText = null
-  }
+  LaunchedEffect(form.fontSize.value) { errorText = null }
 
   PresetSheetLayout(
     title = "폰트 크기",
@@ -638,7 +595,8 @@ private fun fontSizeSheet(
       }
 
       isSaving = true
-      model.saveTemplate(template.withFontSize(draftValue))
+      model
+        .saveTemplate(template.withFontSize(draftValue))
         .withDefaultExceptionHandler(toast)
         .onOk { complete(Unit) }
       isSaving = false
@@ -678,11 +636,7 @@ private fun fontSizeSheet(
     }
 
     errorText?.let { message ->
-      Text(
-        text = message,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.danger,
-      )
+      Text(text = message, style = AppTheme.typography.caption, color = AppTheme.colors.danger)
     }
   }
 }
@@ -691,23 +645,26 @@ private fun layoutModeSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ): SheetPresentation<Unit> {
-  val initialMode = when (template.layout) {
-    is PresetLayout.Paginated -> "paginated"
-    else -> "continuous"
-  }
+  val initialMode =
+    when (template.layout) {
+      is PresetLayout.Paginated -> "paginated"
+      else -> "continuous"
+    }
 
   return presetOptionSheet(
     title = "레이아웃 모드",
     initialValue = initialMode,
-    options = listOf(
-      PresetOption(label = "스크롤", value = "continuous"),
-      PresetOption(label = "페이지", value = "paginated"),
-    ),
+    options =
+      listOf(
+        PresetOption(label = "스크롤", value = "continuous"),
+        PresetOption(label = "페이지", value = "paginated"),
+      ),
     onSaveValue = { nextMode ->
-      val nextLayout = when (nextMode) {
-        "paginated" -> template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
-        else -> template.layout as? PresetLayout.Continuous ?: PresetLayout.Continuous()
-      }
+      val nextLayout =
+        when (nextMode) {
+          "paginated" -> template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
+          else -> template.layout as? PresetLayout.Continuous ?: PresetLayout.Continuous()
+        }
       model.saveTemplate(template.withLayout(nextLayout))
     },
   )
@@ -723,9 +680,7 @@ private fun maxWidthSheet(
     title = "본문 폭",
     initialValue = layout.maxWidth,
     options = MAX_WIDTH_OPTIONS,
-    onSaveValue = { next ->
-      model.saveTemplate(template.withLayout(layout.withMaxWidth(next)))
-    },
+    onSaveValue = { next -> model.saveTemplate(template.withLayout(layout.withMaxWidth(next))) },
   )
 }
 
@@ -736,9 +691,7 @@ private fun pageSizeSheet(
   val toast = LocalToast.current
   val initialLayout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
-  val form = remember(scope, initialLayout) {
-    PageSizeSheetForm(scope, initialLayout)
-  }
+  val form = remember(scope, initialLayout) { PageSizeSheetForm(scope, initialLayout) }
   var isSaving by remember { mutableStateOf(false) }
   var draftLayout by remember { mutableStateOf(initialLayout) }
   var errorText by remember { mutableStateOf<String?>(null) }
@@ -749,11 +702,10 @@ private fun pageSizeSheet(
     val parsedWidth = parseMillimeterInput(form.widthMm.value, min = 100) ?: return@LaunchedEffect
     val parsedHeight = parseMillimeterInput(form.heightMm.value, min = 100) ?: return@LaunchedEffect
 
-    draftLayout = clampPaginatedLayout(
-      draftLayout
-        .withPageWidth(mmToPx(parsedWidth))
-        .withPageHeight(mmToPx(parsedHeight)),
-    )
+    draftLayout =
+      clampPaginatedLayout(
+        draftLayout.withPageWidth(mmToPx(parsedWidth)).withPageHeight(mmToPx(parsedHeight))
+      )
   }
 
   PresetSheetLayout(
@@ -768,23 +720,19 @@ private fun pageSizeSheet(
         return@PresetSheetLayout
       }
 
-      val nextLayout = clampPaginatedLayout(
-        draftLayout
-          .withPageWidth(mmToPx(parsedWidth))
-          .withPageHeight(mmToPx(parsedHeight)),
-      )
+      val nextLayout =
+        clampPaginatedLayout(
+          draftLayout.withPageWidth(mmToPx(parsedWidth)).withPageHeight(mmToPx(parsedHeight))
+        )
 
       isSaving = true
-      model.saveTemplate(template.withLayout(nextLayout))
-        .withDefaultExceptionHandler(toast)
-        .onOk { complete(Unit) }
+      model.saveTemplate(template.withLayout(nextLayout)).withDefaultExceptionHandler(toast).onOk {
+        complete(Unit)
+      }
       isSaving = false
     },
   ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       Text(
         text = "가로 / 세로 (mm)",
         modifier = Modifier.padding(horizontal = 16.dp),
@@ -806,11 +754,7 @@ private fun pageSizeSheet(
           modifier = Modifier.weight(1f),
         )
 
-        Text(
-          text = "×",
-          style = AppTheme.typography.title,
-          color = AppTheme.colors.textTertiary,
-        )
+        Text(text = "×", style = AppTheme.typography.title, color = AppTheme.colors.textTertiary)
 
         TextField(
           field = form.heightMm,
@@ -848,37 +792,27 @@ private fun pageSizeSheet(
       }
 
       errorText?.let { message ->
-        Text(
-          text = message,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.danger,
-        )
+        Text(text = message, style = AppTheme.typography.caption, color = AppTheme.colors.danger)
       }
     }
   }
 }
 
 @Composable
-private fun PresetQuickSelectButton(
-  label: String,
-  selected: Boolean,
-  onClick: suspend () -> Unit,
-) {
+private fun PresetQuickSelectButton(label: String, selected: Boolean, onClick: suspend () -> Unit) {
   InteractionScope {
     Box(
-      modifier = Modifier
-        .clickable(onClick)
-        .pressScale()
-        .padding(vertical = 2.dp),
+      modifier = Modifier.clickable(onClick).pressScale().padding(vertical = 2.dp),
       contentAlignment = Alignment.Center,
     ) {
       Text(
         text = label,
-        style = if (selected) {
-          AppTheme.typography.action.copy(fontWeight = FontWeight.W700)
-        } else {
-          AppTheme.typography.action
-        },
+        style =
+          if (selected) {
+            AppTheme.typography.action.copy(fontWeight = FontWeight.W700)
+          } else {
+            AppTheme.typography.action
+          },
         color = AppTheme.colors.brand,
       )
     }
@@ -892,9 +826,7 @@ private fun pageMarginSheet(
   val toast = LocalToast.current
   val layout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
-  val form = remember(scope, layout) {
-    PageMarginSheetForm(scope, layout)
-  }
+  val form = remember(scope, layout) { PageMarginSheetForm(scope, layout) }
   var isSaving by remember { mutableStateOf(false) }
   var errorText by remember { mutableStateOf<String?>(null) }
 
@@ -924,15 +856,13 @@ private fun pageMarginSheet(
       nextLayout = clampPaginatedLayout(nextLayout)
 
       isSaving = true
-      model.saveTemplate(template.withLayout(nextLayout))
-        .withDefaultExceptionHandler(toast)
-        .onOk { complete(Unit) }
+      model.saveTemplate(template.withLayout(nextLayout)).withDefaultExceptionHandler(toast).onOk {
+        complete(Unit)
+      }
       isSaving = false
     },
   ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
       Text(
         text = "${pxToMm(layout.pageWidth)} × ${pxToMm(layout.pageHeight)}mm 페이지",
         modifier = Modifier.padding(horizontal = 16.dp),
@@ -974,11 +904,7 @@ private fun pageMarginSheet(
         keyboardType = KeyboardType.Number,
       )
       errorText?.let { message ->
-        Text(
-          text = message,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.danger,
-        )
+        Text(text = message, style = AppTheme.typography.caption, color = AppTheme.colors.danger)
       }
     }
   }
@@ -1114,10 +1040,7 @@ private fun <R> SheetScope<R>.PresetSheetLayout(
       )
     },
   ) {
-    Column(
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-      content = content,
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
   }
 }
 
@@ -1129,14 +1052,9 @@ private fun <R> SheetScope<R>.PresetInstantSheetLayout(
   SheetLayout(
     padding = PresetSheetPadding,
     verticalSpacing = 8.dp,
-    header = {
-      ActionHeader(title = title)
-    },
+    header = { ActionHeader(title = title) },
   ) {
-    Column(
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-      content = content,
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
   }
 }
 
@@ -1146,22 +1064,19 @@ private enum class PresetColorSwatchShape {
 }
 
 @Composable
-private fun PresetColorSwatch(
-  color: Color?,
-  isNone: Boolean,
-  shape: PresetColorSwatchShape,
-) {
-  val resolvedShape = when (shape) {
-    PresetColorSwatchShape.Circle -> CircleShape
-    PresetColorSwatchShape.Square -> RoundedCornerShape(4.dp)
-  }
+private fun PresetColorSwatch(color: Color?, isNone: Boolean, shape: PresetColorSwatchShape) {
+  val resolvedShape =
+    when (shape) {
+      PresetColorSwatchShape.Circle -> CircleShape
+      PresetColorSwatchShape.Square -> RoundedCornerShape(4.dp)
+    }
   val slashColor = AppTheme.colors.textMuted
 
   Box(
-    modifier = Modifier
-      .size(16.dp)
-      .border(1.dp, AppTheme.colors.borderDefault, resolvedShape)
-      .background(color ?: Color.Transparent, resolvedShape),
+    modifier =
+      Modifier.size(16.dp)
+        .border(1.dp, AppTheme.colors.borderDefault, resolvedShape)
+        .background(color ?: Color.Transparent, resolvedShape),
     contentAlignment = Alignment.Center,
   ) {
     if (isNone) {
@@ -1189,18 +1104,12 @@ private fun rememberImmediateSave(
   }
 }
 
-private fun representativeFontEntry(
-  family: PresetFontFamily,
-  targetWeight: Int,
-): PresetFontEntry? {
+private fun representativeFontEntry(family: PresetFontFamily, targetWeight: Int): PresetFontEntry? {
   val closest = closestWeight(targetWeight, family.fonts.map { it.weight })
   return family.fonts.firstOrNull { it.weight == closest } ?: family.fonts.firstOrNull()
 }
 
-private fun fontWeightLabel(
-  weight: Int,
-  subfamilyDisplayName: String?,
-): String {
+private fun fontWeightLabel(weight: Int, subfamilyDisplayName: String?): String {
   return FONT_WEIGHT_OPTIONS.firstOrNull { it.value == weight }?.label
     ?: subfamilyDisplayName?.takeIf { it.isNotBlank() }?.let { "$it ($weight)" }
     ?: weight.toString()
@@ -1212,10 +1121,7 @@ private fun parsePointInput(value: String): Int? {
   return (numeric * 100).roundToInt()
 }
 
-private fun parseMillimeterInput(
-  value: String,
-  min: Int,
-): Int? {
+private fun parseMillimeterInput(value: String, min: Int): Int? {
   val numeric = value.trim().replace(',', '.').toDoubleOrNull() ?: return null
   if (numeric < min) return null
   return numeric.roundToInt()
@@ -1223,17 +1129,26 @@ private fun parseMillimeterInput(
 
 private fun clampPaginatedLayout(layout: PresetLayout.Paginated): PresetLayout.Paginated {
   var draft = layout
-  draft = draft.withPageMarginTop(draft.pageMarginTop.coerceIn(0, getMaxMargin(PageMarginSide.Top, draft)))
-  draft = draft.withPageMarginBottom(draft.pageMarginBottom.coerceIn(0, getMaxMargin(PageMarginSide.Bottom, draft)))
-  draft = draft.withPageMarginLeft(draft.pageMarginLeft.coerceIn(0, getMaxMargin(PageMarginSide.Left, draft)))
-  draft = draft.withPageMarginRight(draft.pageMarginRight.coerceIn(0, getMaxMargin(PageMarginSide.Right, draft)))
+  draft =
+    draft.withPageMarginTop(
+      draft.pageMarginTop.coerceIn(0, getMaxMargin(PageMarginSide.Top, draft))
+    )
+  draft =
+    draft.withPageMarginBottom(
+      draft.pageMarginBottom.coerceIn(0, getMaxMargin(PageMarginSide.Bottom, draft))
+    )
+  draft =
+    draft.withPageMarginLeft(
+      draft.pageMarginLeft.coerceIn(0, getMaxMargin(PageMarginSide.Left, draft))
+    )
+  draft =
+    draft.withPageMarginRight(
+      draft.pageMarginRight.coerceIn(0, getMaxMargin(PageMarginSide.Right, draft))
+    )
   return draft
 }
 
-private fun presetColor(
-  value: String,
-  background: Boolean,
-): Color? {
+private fun presetColor(value: String, background: Boolean): Color? {
   return when (value) {
     "none" -> if (background) null else Color.Transparent
     "black" -> Color(0xFF111827)

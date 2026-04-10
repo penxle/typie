@@ -2,9 +2,9 @@
 
 package co.typie.datetime
 
-import kotlinx.datetime.TimeZone
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import kotlinx.datetime.TimeZone
 
 expect fun Instant.format(
   pattern: String,

@@ -4,5 +4,4 @@ import androidx.compose.runtime.Composable
 
 expect class ActivityContext
 
-@Composable
-expect fun activityContext(): ActivityContext
+@Composable expect fun activityContext(): ActivityContext

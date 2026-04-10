@@ -1,24 +1,27 @@
 package co.typie.overlay
 
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import androidx.compose.runtime.staticCompositionLocalOf
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
-val LocalToast = staticCompositionLocalOf<Toast> {
-  error("No Toast provided")
+val LocalToast = staticCompositionLocalOf<Toast> { error("No Toast provided") }
+
+enum class ToastType {
+  Success,
+  Error,
+  Notification,
+  Loading,
 }
-
-enum class ToastType { Success, Error, Notification, Loading }
 
 data class ToastState(
   val id: Long,
@@ -33,11 +36,7 @@ class Toast {
   val state: StateFlow<ToastState?> = _state.asStateFlow()
   var bottomInset: Dp by mutableStateOf(0.dp)
 
-  fun show(
-    type: ToastType,
-    message: String,
-    duration: Duration = 2.seconds,
-  ) {
+  fun show(type: ToastType, message: String, duration: Duration = 2.seconds) {
     _state.value = ToastState(nextId++, type, message, adaptiveDuration(duration, message))
   }
 
@@ -73,7 +72,8 @@ class Toast {
       throw e
     } catch (e: Throwable) {
       if (_state.value?.id == id) {
-        _state.value = ToastState(id, ToastType.Error, errorMessage, adaptiveDuration(2.seconds, errorMessage))
+        _state.value =
+          ToastState(id, ToastType.Error, errorMessage, adaptiveDuration(2.seconds, errorMessage))
       }
       throw e
     }

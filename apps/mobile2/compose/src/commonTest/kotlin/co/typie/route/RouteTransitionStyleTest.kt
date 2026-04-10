@@ -12,6 +12,9 @@ class RouteTransitionStyleTest {
 
   @Test
   fun `non search routes keep slide transition`() {
-    assertEquals(RouteTransitionStyle.Slide, Route.HomeSearch.transitionStyleTo(Route.Editor("doc-1")))
+    assertEquals(
+      RouteTransitionStyle.Slide,
+      Route.HomeSearch.transitionStyleTo(Route.Editor("doc-1")),
+    )
   }
 }

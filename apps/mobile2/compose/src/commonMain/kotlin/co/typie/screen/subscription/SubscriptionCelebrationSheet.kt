@@ -20,10 +20,7 @@ import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.theme.AppTheme
 
 @Composable
-fun BottomSheetScope<Unit>.SubscriptionCelebrationSheet(
-  title: String,
-  message: String,
-) {
+fun BottomSheetScope<Unit>.SubscriptionCelebrationSheet(title: String, message: String) {
   BottomSheetScaffold(title = title) {
     SubscriptionBadgeRow()
 
@@ -40,30 +37,20 @@ fun BottomSheetScope<Unit>.SubscriptionCelebrationSheet(
     }
 
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(8.dp))
-        .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
-        .padding(16.dp),
+      modifier =
+        Modifier.fillMaxWidth()
+          .clip(RoundedCornerShape(8.dp))
+          .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
+          .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Text(
-        text = "타이피 FULL ACCESS",
-        style = AppTheme.typography.title,
-      )
+      Text(text = "타이피 FULL ACCESS", style = AppTheme.typography.title)
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderStrong)
 
-      SubscriptionFeatureList(
-        features = fullPlanFeatures,
-        iconSize = 16.dp,
-        rowSpacing = 8.dp,
-      )
+      SubscriptionFeatureList(features = fullPlanFeatures, iconSize = 16.dp, rowSpacing = 8.dp)
     }
 
-    Button(
-      text = "시작하기",
-      onClick = { dismiss() },
-    )
+    Button(text = "시작하기", onClick = { dismiss() })
   }
 }

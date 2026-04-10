@@ -13,11 +13,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import kotlin.time.Instant
 
 @Composable
-fun MaintenanceScreen(
-  title: String,
-  message: String,
-  until: Instant?,
-) {
+fun MaintenanceScreen(title: String, message: String, until: Instant?) {
   val uriHandler = LocalUriHandler.current
 
   ProvideTopBar(enabled = false)
@@ -31,11 +27,12 @@ fun MaintenanceScreen(
         AppStateBadge("예상 종료: ${until.format("M월 d일 HH시 mm분")}")
       }
     },
-    primaryAction = AppStateAction(
-      label = "고객센터",
-      variant = ButtonVariant.Secondary,
-      leadingIcon = Lucide.Headphones,
-      onClick = { uriHandler.openUri(SUPPORT_URL) },
-    ),
+    primaryAction =
+      AppStateAction(
+        label = "고객센터",
+        variant = ButtonVariant.Secondary,
+        leadingIcon = Lucide.Headphones,
+        onClick = { uriHandler.openUri(SUPPORT_URL) },
+      ),
   )
 }

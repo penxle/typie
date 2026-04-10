@@ -17,10 +17,7 @@ data class NormalizedTextReplacement(
   val note: String?,
 )
 
-data class ReorderOrders(
-  val lowerOrder: String?,
-  val upperOrder: String?,
-)
+data class ReorderOrders(val lowerOrder: String?, val upperOrder: String?)
 
 sealed interface TextReplacementFormError {
   val message: String
@@ -47,17 +44,18 @@ const val SMART_QUOTE_CLOSE_SINGLE_ID = "TXR0SQUOTECLOSE"
 const val SMART_QUOTE_OPEN_DOUBLE_ID = "TXR0DQUOTEOPEN"
 const val SMART_QUOTE_CLOSE_DOUBLE_ID = "TXR0DQUOTECLOSE"
 
-private val SMART_QUOTE_ID_ORDER = listOf(
-  SMART_QUOTE_OPEN_SINGLE_ID,
-  SMART_QUOTE_CLOSE_SINGLE_ID,
-  SMART_QUOTE_OPEN_DOUBLE_ID,
-  SMART_QUOTE_CLOSE_DOUBLE_ID,
-)
+private val SMART_QUOTE_ID_ORDER =
+  listOf(
+    SMART_QUOTE_OPEN_SINGLE_ID,
+    SMART_QUOTE_CLOSE_SINGLE_ID,
+    SMART_QUOTE_OPEN_DOUBLE_ID,
+    SMART_QUOTE_CLOSE_DOUBLE_ID,
+  )
 
 private val SMART_QUOTE_ID_SET = SMART_QUOTE_ID_ORDER.toSet()
 
 fun normalizeTextReplacement(
-  textReplacement: TextReplacementsScreen_Query.TextReplacement,
+  textReplacement: TextReplacementsScreen_Query.TextReplacement
 ): NormalizedTextReplacement? {
   val direct = textReplacement.onTextReplacement
   if (direct != null) {
@@ -73,12 +71,13 @@ fun normalizeTextReplacement(
 }
 
 fun normalizeTextReplacements(
-  textReplacements: List<TextReplacementsScreen_Query.TextReplacement>,
+  textReplacements: List<TextReplacementsScreen_Query.TextReplacement>
 ): List<NormalizedTextReplacement> {
   return textReplacements.mapNotNull(::normalizeTextReplacement)
 }
 
-fun TextReplacementsScreen_Query.OnTextReplacement.toNormalizedTextReplacement(): NormalizedTextReplacement {
+fun TextReplacementsScreen_Query.OnTextReplacement.toNormalizedTextReplacement():
+  NormalizedTextReplacement {
   return NormalizedTextReplacement(
     textReplacementId = id,
     preferenceId = null,
@@ -92,7 +91,8 @@ fun TextReplacementsScreen_Query.OnTextReplacement.toNormalizedTextReplacement()
   )
 }
 
-fun TextReplacementsScreen_Query.OnTextReplacementPreference.toNormalizedTextReplacement(): NormalizedTextReplacement {
+fun TextReplacementsScreen_Query.OnTextReplacementPreference.toNormalizedTextReplacement():
+  NormalizedTextReplacement {
   return NormalizedTextReplacement(
     textReplacementId = textReplacement.id,
     preferenceId = id,
@@ -107,9 +107,7 @@ fun TextReplacementsScreen_Query.OnTextReplacementPreference.toNormalizedTextRep
 }
 
 fun presetItems(items: List<NormalizedTextReplacement>): List<NormalizedTextReplacement> {
-  return items.filter { item ->
-    item.preset && !item.isSmartQuote
-  }
+  return items.filter { item -> item.preset && !item.isSmartQuote }
 }
 
 fun smartQuoteItems(items: List<NormalizedTextReplacement>): List<NormalizedTextReplacement> {
@@ -123,7 +121,8 @@ fun customItems(items: List<NormalizedTextReplacement>): List<NormalizedTextRepl
 
 fun isSmartQuoteEnabled(items: List<NormalizedTextReplacement>): Boolean {
   val smartQuoteItems = smartQuoteItems(items)
-  return smartQuoteItems.size == SMART_QUOTE_ID_ORDER.size && smartQuoteItems.all { it.state == TextReplacementState.ACTIVE }
+  return smartQuoteItems.size == SMART_QUOTE_ID_ORDER.size &&
+    smartQuoteItems.all { it.state == TextReplacementState.ACTIVE }
 }
 
 fun validateTextReplacementForm(
@@ -153,9 +152,7 @@ fun validateTextReplacementForm(
   return null
 }
 
-fun normalizedCustomItemIds(
-  items: List<NormalizedTextReplacement>,
-): List<String> {
+fun normalizedCustomItemIds(items: List<NormalizedTextReplacement>): List<String> {
   return customItems(items).map { it.textReplacementId }
 }
 
@@ -170,9 +167,7 @@ fun calculateCustomReorderOrdersFromOrderedKeys(
     return null
   }
 
-  val movedIndex = orderedCustomItems.indexOfFirst { item ->
-    item.textReplacementId == movedKey
-  }
+  val movedIndex = orderedCustomItems.indexOfFirst { item -> item.textReplacementId == movedKey }
   if (movedIndex == -1) {
     return null
   }

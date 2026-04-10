@@ -70,18 +70,19 @@ internal data class PresetTemplate(
     fun fromJson(value: JsonElement): PresetTemplate {
       val objectValue = value as? JsonObject ?: return PresetTemplate()
 
-      val knownKeys = setOf(
-        "fontFamily",
-        "fontSize",
-        "fontWeight",
-        "textColor",
-        "backgroundColor",
-        "letterSpacing",
-        "lineHeight",
-        "layout",
-        "paragraphIndent",
-        "blockGap",
-      )
+      val knownKeys =
+        setOf(
+          "fontFamily",
+          "fontSize",
+          "fontWeight",
+          "textColor",
+          "backgroundColor",
+          "letterSpacing",
+          "lineHeight",
+          "layout",
+          "paragraphIndent",
+          "blockGap",
+        )
 
       return PresetTemplate(
         fontFamily = objectValue["fontFamily"].stringOrDefault(DEFAULT_FONT_FAMILY),
@@ -209,22 +210,38 @@ internal sealed interface PresetLayout {
     override fun toJsonElement(): JsonElement {
       return buildJsonObject {
         put("type", JsonPrimitive("paginated"))
-        if (presentKeys.contains("pageWidth") || pageWidth != createPaginatedLayout("a4").pageWidth) {
+        if (
+          presentKeys.contains("pageWidth") || pageWidth != createPaginatedLayout("a4").pageWidth
+        ) {
           put("pageWidth", JsonPrimitive(pageWidth))
         }
-        if (presentKeys.contains("pageHeight") || pageHeight != createPaginatedLayout("a4").pageHeight) {
+        if (
+          presentKeys.contains("pageHeight") || pageHeight != createPaginatedLayout("a4").pageHeight
+        ) {
           put("pageHeight", JsonPrimitive(pageHeight))
         }
-        if (presentKeys.contains("pageMarginTop") || pageMarginTop != createPaginatedLayout("a4").pageMarginTop) {
+        if (
+          presentKeys.contains("pageMarginTop") ||
+            pageMarginTop != createPaginatedLayout("a4").pageMarginTop
+        ) {
           put("pageMarginTop", JsonPrimitive(pageMarginTop))
         }
-        if (presentKeys.contains("pageMarginBottom") || pageMarginBottom != createPaginatedLayout("a4").pageMarginBottom) {
+        if (
+          presentKeys.contains("pageMarginBottom") ||
+            pageMarginBottom != createPaginatedLayout("a4").pageMarginBottom
+        ) {
           put("pageMarginBottom", JsonPrimitive(pageMarginBottom))
         }
-        if (presentKeys.contains("pageMarginLeft") || pageMarginLeft != createPaginatedLayout("a4").pageMarginLeft) {
+        if (
+          presentKeys.contains("pageMarginLeft") ||
+            pageMarginLeft != createPaginatedLayout("a4").pageMarginLeft
+        ) {
           put("pageMarginLeft", JsonPrimitive(pageMarginLeft))
         }
-        if (presentKeys.contains("pageMarginRight") || pageMarginRight != createPaginatedLayout("a4").pageMarginRight) {
+        if (
+          presentKeys.contains("pageMarginRight") ||
+            pageMarginRight != createPaginatedLayout("a4").pageMarginRight
+        ) {
           put("pageMarginRight", JsonPrimitive(pageMarginRight))
         }
         extra.forEach { (key, value) -> put(key, value) }
@@ -232,9 +249,7 @@ internal sealed interface PresetLayout {
     }
   }
 
-  data class Unknown(
-    val raw: JsonElement,
-  ) : PresetLayout {
+  data class Unknown(val raw: JsonElement) : PresetLayout {
     override fun toJsonElement(): JsonElement = raw
   }
 
@@ -253,23 +268,27 @@ internal sealed interface PresetLayout {
           )
         }
         "paginated" -> {
-          val knownKeys = setOf(
-            "type",
-            "pageWidth",
-            "pageHeight",
-            "pageMarginTop",
-            "pageMarginBottom",
-            "pageMarginLeft",
-            "pageMarginRight",
-          )
+          val knownKeys =
+            setOf(
+              "type",
+              "pageWidth",
+              "pageHeight",
+              "pageMarginTop",
+              "pageMarginBottom",
+              "pageMarginLeft",
+              "pageMarginRight",
+            )
           val defaultLayout = createPaginatedLayout("a4")
           PresetLayout.Paginated(
             pageWidth = objectValue["pageWidth"].intOrDefault(defaultLayout.pageWidth),
             pageHeight = objectValue["pageHeight"].intOrDefault(defaultLayout.pageHeight),
             pageMarginTop = objectValue["pageMarginTop"].intOrDefault(defaultLayout.pageMarginTop),
-            pageMarginBottom = objectValue["pageMarginBottom"].intOrDefault(defaultLayout.pageMarginBottom),
-            pageMarginLeft = objectValue["pageMarginLeft"].intOrDefault(defaultLayout.pageMarginLeft),
-            pageMarginRight = objectValue["pageMarginRight"].intOrDefault(defaultLayout.pageMarginRight),
+            pageMarginBottom =
+              objectValue["pageMarginBottom"].intOrDefault(defaultLayout.pageMarginBottom),
+            pageMarginLeft =
+              objectValue["pageMarginLeft"].intOrDefault(defaultLayout.pageMarginLeft),
+            pageMarginRight =
+              objectValue["pageMarginRight"].intOrDefault(defaultLayout.pageMarginRight),
             extra = objectValue.filterKeys { key -> key !in knownKeys },
             presentKeys = objectValue.keys.intersect(knownKeys),
           )
@@ -296,72 +315,83 @@ internal fun PresetLayout.Paginated.withPageMarginTop(pageMarginTop: Int): Prese
   return copy(pageMarginTop = pageMarginTop, presentKeys = presentKeys + "pageMarginTop")
 }
 
-internal fun PresetLayout.Paginated.withPageMarginBottom(pageMarginBottom: Int): PresetLayout.Paginated {
+internal fun PresetLayout.Paginated.withPageMarginBottom(
+  pageMarginBottom: Int
+): PresetLayout.Paginated {
   return copy(pageMarginBottom = pageMarginBottom, presentKeys = presentKeys + "pageMarginBottom")
 }
 
-internal fun PresetLayout.Paginated.withPageMarginLeft(pageMarginLeft: Int): PresetLayout.Paginated {
+internal fun PresetLayout.Paginated.withPageMarginLeft(
+  pageMarginLeft: Int
+): PresetLayout.Paginated {
   return copy(pageMarginLeft = pageMarginLeft, presentKeys = presentKeys + "pageMarginLeft")
 }
 
-internal fun PresetLayout.Paginated.withPageMarginRight(pageMarginRight: Int): PresetLayout.Paginated {
+internal fun PresetLayout.Paginated.withPageMarginRight(
+  pageMarginRight: Int
+): PresetLayout.Paginated {
   return copy(pageMarginRight = pageMarginRight, presentKeys = presentKeys + "pageMarginRight")
 }
 
 internal fun activePresetFontFamiliesFromFontSettingsQuery(
-  families: List<FontSettingsScreen_Query.DocumentFontFamily>,
+  families: List<FontSettingsScreen_Query.DocumentFontFamily>
 ): List<PresetFontFamily> {
   return families
     .filter { it.state == FontFamilyState.ACTIVE }
     .map { family ->
-      family.toPresetFontFamily().copy(
-        fonts = family.fonts
-          .filter { it.state == FontState.ACTIVE }
-          .sortedBy { it.weight }
-          .associateBy { it.weight }
-          .values
-          .map { it.toPresetFontEntry() },
-      )
+      family
+        .toPresetFontFamily()
+        .copy(
+          fonts =
+            family.fonts
+              .filter { it.state == FontState.ACTIVE }
+              .sortedBy { it.weight }
+              .associateBy { it.weight }
+              .values
+              .map { it.toPresetFontEntry() }
+        )
     }
     .filter { it.fonts.isNotEmpty() }
 }
 
 internal fun activePresetFontFamiliesFromPresetQuery(
-  families: List<PresetSettingsScreen_Query.DocumentFontFamily>,
+  families: List<PresetSettingsScreen_Query.DocumentFontFamily>
 ): List<PresetFontFamily> {
   return families
     .filter { it.state == FontFamilyState.ACTIVE }
     .map { family ->
-      family.toPresetFontFamily().copy(
-        fonts = family.fonts
-          .filter { it.state == FontState.ACTIVE }
-          .sortedBy { it.weight }
-          .associateBy { it.weight }
-          .values
-          .map { it.toPresetFontEntry() },
-      )
+      family
+        .toPresetFontFamily()
+        .copy(
+          fonts =
+            family.fonts
+              .filter { it.state == FontState.ACTIVE }
+              .sortedBy { it.weight }
+              .associateBy { it.weight }
+              .values
+              .map { it.toPresetFontEntry() }
+        )
     }
     .filter { it.fonts.isNotEmpty() }
 }
 
 internal fun normalizedPresetFontFamilyOptions(
-  families: List<PresetFontFamily>,
+  families: List<PresetFontFamily>
 ): List<PresetOption<String>> {
   return families
-    .sortedWith(compareBy<PresetFontFamily> { it.displayName.lowercase() }.thenBy { it.familyName.lowercase() })
-    .map { family ->
-      PresetOption(
-        label = family.displayName,
-        value = family.familyName,
-      )
-    }
+    .sortedWith(
+      compareBy<PresetFontFamily> { it.displayName.lowercase() }
+        .thenBy { it.familyName.lowercase() }
+    )
+    .map { family -> PresetOption(label = family.displayName, value = family.familyName) }
 }
 
 internal fun selectedFontWeightAvailabilityOptions(
   template: PresetTemplate,
   families: List<PresetFontFamily>,
 ): List<PresetOption<Int>> {
-  val selectedFamily = families.firstOrNull { it.familyName == template.fontFamily } ?: return emptyList()
+  val selectedFamily =
+    families.firstOrNull { it.familyName == template.fontFamily } ?: return emptyList()
 
   return selectedFamily.fonts
     .distinctBy { it.weight }
@@ -414,25 +444,16 @@ internal fun PresetSettingsScreen_Query.Font.toPresetFontEntry(): PresetFontEntr
   )
 }
 
-private fun fontWeightLabel(
-  weight: Int,
-  subfamilyDisplayName: String?,
-): String {
+private fun fontWeightLabel(weight: Int, subfamilyDisplayName: String?): String {
   return FONT_WEIGHT_OPTIONS.firstOrNull { it.value == weight }?.label
     ?: subfamilyDisplayName?.takeIf { it.isNotBlank() }?.let { "$it ($weight)" }
     ?: weight.toString()
 }
 
-internal fun closestWeight(
-  targetWeight: Int,
-  weights: Iterable<Int>,
-): Int {
+internal fun closestWeight(targetWeight: Int, weights: Iterable<Int>): Int {
   return weights
     .distinct()
-    .minWithOrNull(
-      compareBy<Int> { kotlin.math.abs(targetWeight - it) }
-        .thenByDescending { it },
-    )
+    .minWithOrNull(compareBy<Int> { kotlin.math.abs(targetWeight - it) }.thenByDescending { it })
     ?: targetWeight
 }
 
@@ -461,11 +482,9 @@ internal fun pageLayoutPresetOrCustom(layout: PresetLayout.Paginated): String {
 }
 
 internal fun pageLayoutSummaryLabel(layout: PresetLayout.Paginated): String {
-  return PAGE_LAYOUT_OPTIONS
-    .firstOrNull { it.layout.matchesPageSize(layout) }
+  return PAGE_LAYOUT_OPTIONS.firstOrNull { it.layout.matchesPageSize(layout) }
     ?.label
-    ?.substringBefore(" (")
-    ?: "${pxToMm(layout.pageWidth)} × ${pxToMm(layout.pageHeight)}mm"
+    ?.substringBefore(" (") ?: "${pxToMm(layout.pageWidth)} × ${pxToMm(layout.pageHeight)}mm"
 }
 
 internal fun pageMarginSummaryLabel(layout: PresetLayout.Paginated): String {
@@ -477,8 +496,7 @@ internal fun presetSettingSupportsSecondaryInput(field: PresetSettingField): Boo
 }
 
 private fun PresetLayout.Paginated.matchesPageSize(other: PresetLayout.Paginated): Boolean {
-  return pageWidth == other.pageWidth &&
-    pageHeight == other.pageHeight
+  return pageWidth == other.pageWidth && pageHeight == other.pageHeight
 }
 
 private fun PresetLayout.Paginated.matches(other: PresetLayout.Paginated): Boolean {

@@ -4,8 +4,8 @@ import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.SubscriptionDevScenario
 import co.typie.dev.subscriptionDevCanStartTrial
 import co.typie.dev.subscriptionDevSubscription
-import co.typie.platform.Platform
 import co.typie.graphql.QueryState
+import co.typie.platform.Platform
 import co.typie.platform.PurchasePlanInterval
 import co.typie.service.FULL_ACCESS_MONTHLY_PLAN_ID
 import co.typie.service.FULL_ACCESS_YEARLY_PLAN_ID
@@ -18,10 +18,6 @@ import co.typie.service.isCurrentFullPlan
 import co.typie.service.shouldAutoCloseCurrentPlan
 import co.typie.service.shouldShowPurchaseCelebration
 import co.typie.service.subscriptionSummaryOrNull
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
-import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -29,6 +25,10 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.toLocalDateTime
 
 class SubscriptionModelsTest {
   @Test
@@ -77,7 +77,8 @@ class SubscriptionModelsTest {
     val trial = subscriptionDevSubscription(SubscriptionDevScenario.Trial, now = now)
     val monthly = subscriptionDevSubscription(SubscriptionDevScenario.Monthly, now = now)
     val yearly = subscriptionDevSubscription(SubscriptionDevScenario.Yearly, now = now)
-    val cancelScheduled = subscriptionDevSubscription(SubscriptionDevScenario.CancelScheduled, now = now)
+    val cancelScheduled =
+      subscriptionDevSubscription(SubscriptionDevScenario.CancelScheduled, now = now)
 
     assertEquals(todayStartsAt, trial?.startsAt)
     assertEquals(relativeDate(today, 14).atStartOfDayIn(timeZone), trial?.expiresAt)
@@ -167,13 +168,8 @@ class SubscriptionModelsTest {
   fun `shouldAutoCloseCurrentPlan returns true when success is missing expiration`() {
     assertTrue(
       shouldAutoCloseCurrentPlan(
-        QueryState.Success(
-          SubscriptionSnapshot(
-            id = "subscription-id",
-            expiresAt = null,
-          ),
-        ),
-      ),
+        QueryState.Success(SubscriptionSnapshot(id = "subscription-id", expiresAt = null))
+      )
     )
   }
 
@@ -185,9 +181,9 @@ class SubscriptionModelsTest {
           SubscriptionSnapshot(
             id = "subscription-id",
             expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
-          ),
-        ),
-      ),
+          )
+        )
+      )
     )
   }
 
@@ -201,61 +197,46 @@ class SubscriptionModelsTest {
 
   @Test
   fun `enrollPlanSectionLabels omits current subscription label when subscription exists`() {
-    assertEquals(
-      listOf("FULL ACCESS"),
-      enrollPlanSectionLabels(hasSubscription = true),
-    )
+    assertEquals(listOf("FULL ACCESS"), enrollPlanSectionLabels(hasSubscription = true))
   }
 
   @Test
   fun `currentPlanDetailLines returns trial expiration copy`() {
-    val lines = currentPlanDetailLines(
-      availability = SubscriptionAvailability.Trial,
-      fee = 0,
-      state = SubscriptionState.Active,
-      expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
-    )
+    val lines =
+      currentPlanDetailLines(
+        availability = SubscriptionAvailability.Trial,
+        fee = 0,
+        state = SubscriptionState.Active,
+        expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
+      )
 
-    assertEquals(
-      listOf("무료 체험이 2026년 04월 12일에 종료돼요."),
-      lines,
-    )
+    assertEquals(listOf("무료 체험이 2026년 04월 12일에 종료돼요."), lines)
   }
 
   @Test
   fun `currentPlanDetailLines returns active paid renewal copy`() {
-    val lines = currentPlanDetailLines(
-      availability = SubscriptionAvailability.InAppPurchase,
-      fee = 12900,
-      state = SubscriptionState.Active,
-      expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
-    )
+    val lines =
+      currentPlanDetailLines(
+        availability = SubscriptionAvailability.InAppPurchase,
+        fee = 12900,
+        state = SubscriptionState.Active,
+        expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
+      )
 
-    assertEquals(
-      listOf(
-        "이용권 가격: 12,900원",
-        "다음 결제일: 2026년 04월 12일",
-      ),
-      lines,
-    )
+    assertEquals(listOf("이용권 가격: 12,900원", "다음 결제일: 2026년 04월 12일"), lines)
   }
 
   @Test
   fun `currentPlanDetailLines returns canceling paid copy`() {
-    val lines = currentPlanDetailLines(
-      availability = SubscriptionAvailability.InAppPurchase,
-      fee = 12900,
-      state = SubscriptionState.Canceled,
-      expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
-    )
+    val lines =
+      currentPlanDetailLines(
+        availability = SubscriptionAvailability.InAppPurchase,
+        fee = 12900,
+        state = SubscriptionState.Canceled,
+        expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
+      )
 
-    assertEquals(
-      listOf(
-        "이용권 가격: 12,900원",
-        "해지 예정일: 2026년 04월 12일",
-      ),
-      lines,
-    )
+    assertEquals(listOf("이용권 가격: 12,900원", "해지 예정일: 2026년 04월 12일"), lines)
   }
 
   @Test
@@ -270,10 +251,7 @@ class SubscriptionModelsTest {
   fun `currentPlanFooter returns website note for billing key plans`() {
     val footer = currentPlanFooter(SubscriptionAvailability.BillingKey)
 
-    assertEquals(
-      CurrentPlanFooter.Note("웹사이트에서 가입한 이용권이에요.\n정보 변경이 필요할 경우 웹사이트에서 진행해주세요."),
-      footer,
-    )
+    assertEquals(CurrentPlanFooter.Note("웹사이트에서 가입한 이용권이에요.\n정보 변경이 필요할 경우 웹사이트에서 진행해주세요."), footer)
   }
 
   @Test
@@ -295,15 +273,13 @@ class SubscriptionModelsTest {
 
   @Test
   fun `cancelPlanBodyText includes formatted expiration date and plan name`() {
-    val text = cancelPlanBodyText(
-      planName = "타이피 FULL ACCESS",
-      expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
-    )
+    val text =
+      cancelPlanBodyText(
+        planName = "타이피 FULL ACCESS",
+        expiresAt = Instant.parse("2026-04-12T00:00:00Z"),
+      )
 
-    assertEquals(
-      "지금 해지하더라도 2026년 04월 12일까지는 계속해서 타이피 FULL ACCESS 혜택을 이용할 수 있어요.",
-      text,
-    )
+    assertEquals("지금 해지하더라도 2026년 04월 12일까지는 계속해서 타이피 FULL ACCESS 혜택을 이용할 수 있어요.", text)
   }
 
   @Test
@@ -326,37 +302,24 @@ class SubscriptionModelsTest {
 
     assertEquals(false, state.hasSubscriptionOrNull())
     assertEquals(
-      SubscriptionSummary(
-        hasSubscription = false,
-        subscriptionName = "타이피 BASIC ACCESS",
-      ),
+      SubscriptionSummary(hasSubscription = false, subscriptionName = "타이피 BASIC ACCESS"),
       state.subscriptionSummaryOrNull(),
     )
   }
 
   @Test
   fun `subscription state helpers derive full access summary from active subscription`() {
-    val state = QueryState.Success(
-      SubscriptionSnapshot(
-        id = "subscription",
-        planName = "타이피 FULL ACCESS",
-      ),
-    )
+    val state =
+      QueryState.Success(SubscriptionSnapshot(id = "subscription", planName = "타이피 FULL ACCESS"))
 
     assertEquals(true, state.hasSubscriptionOrNull())
     assertEquals(
-      SubscriptionSummary(
-        hasSubscription = true,
-        subscriptionName = "타이피 FULL ACCESS",
-      ),
+      SubscriptionSummary(hasSubscription = true, subscriptionName = "타이피 FULL ACCESS"),
       state.subscriptionSummaryOrNull(),
     )
   }
 }
 
-private fun relativeDate(
-  date: LocalDate,
-  days: Int,
-): LocalDate {
+private fun relativeDate(date: LocalDate, days: Int): LocalDate {
   return LocalDate.fromEpochDays(date.toEpochDays() + days)
 }

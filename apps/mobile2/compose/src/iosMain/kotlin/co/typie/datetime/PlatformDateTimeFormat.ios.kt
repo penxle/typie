@@ -1,5 +1,6 @@
 package co.typie.datetime
 
+import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
@@ -11,7 +12,6 @@ import platform.Foundation.NSDateFormatterShortStyle
 import platform.Foundation.NSDateFormatterStyle
 import platform.Foundation.NSTimeZone
 import platform.Foundation.timeZoneWithName
-import kotlin.time.Instant
 
 private const val UNIX_TO_APPLE_EPOCH_OFFSET = 978307200.0
 
@@ -21,29 +21,32 @@ private fun Instant.toNSDate(): NSDate {
 }
 
 actual fun Instant.format(pattern: String, timeZone: TimeZone): String {
-  val formatter = NSDateFormatter().apply {
-    dateFormat = pattern
-    this.timeZone = NSTimeZone.timeZoneWithName(timeZone.id)!!
-  }
+  val formatter =
+    NSDateFormatter().apply {
+      dateFormat = pattern
+      this.timeZone = NSTimeZone.timeZoneWithName(timeZone.id)!!
+    }
   return formatter.stringFromDate(toNSDate())
 }
 
 actual fun Instant.formatLocale(
   dateStyle: DateTimeStyle,
   timeStyle: DateTimeStyle?,
-  timeZone: TimeZone
+  timeZone: TimeZone,
 ): String {
-  val formatter = NSDateFormatter().apply {
-    this.dateStyle = dateStyle.toNSDateFormatterStyle()
-    this.timeStyle = timeStyle?.toNSDateFormatterStyle() ?: NSDateFormatterNoStyle
-    this.timeZone = NSTimeZone.timeZoneWithName(timeZone.id)!!
-  }
+  val formatter =
+    NSDateFormatter().apply {
+      this.dateStyle = dateStyle.toNSDateFormatterStyle()
+      this.timeStyle = timeStyle?.toNSDateFormatterStyle() ?: NSDateFormatterNoStyle
+      this.timeZone = NSTimeZone.timeZoneWithName(timeZone.id)!!
+    }
   return formatter.stringFromDate(toNSDate())
 }
 
-private fun DateTimeStyle.toNSDateFormatterStyle(): NSDateFormatterStyle = when (this) {
-  DateTimeStyle.SHORT -> NSDateFormatterShortStyle
-  DateTimeStyle.MEDIUM -> NSDateFormatterMediumStyle
-  DateTimeStyle.LONG -> NSDateFormatterLongStyle
-  DateTimeStyle.FULL -> NSDateFormatterFullStyle
-}
+private fun DateTimeStyle.toNSDateFormatterStyle(): NSDateFormatterStyle =
+  when (this) {
+    DateTimeStyle.SHORT -> NSDateFormatterShortStyle
+    DateTimeStyle.MEDIUM -> NSDateFormatterMediumStyle
+    DateTimeStyle.LONG -> NSDateFormatterLongStyle
+    DateTimeStyle.FULL -> NSDateFormatterFullStyle
+  }

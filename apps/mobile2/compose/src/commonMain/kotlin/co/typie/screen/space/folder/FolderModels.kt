@@ -8,12 +8,7 @@ fun normalizeFolderChildren(
   siteName: String,
   children: List<FolderScreen_Query.Child>,
 ): List<OrderedEntityItem> {
-  return children.mapNotNull { child ->
-    normalizeFolderChild(
-      siteName = siteName,
-      child = child,
-    )
-  }
+  return children.mapNotNull { child -> normalizeFolderChild(siteName = siteName, child = child) }
 }
 
 private fun normalizeFolderChild(
@@ -25,24 +20,25 @@ private fun normalizeFolderChild(
     return OrderedEntityItem(
       id = child.id,
       order = child.order,
-      item = EntityListItem.Folder(
-        id = child.id,
-        folderId = childFolder.id,
-        iconName = child.icon,
-        iconColor = child.iconColor,
-        name = childFolder.name,
-        folderCount = childFolder.folderCount,
-        documentCount = childFolder.documentCount,
-        siteName = siteName,
-        ancestorFolderNames = child.ancestors.mapNotNull { it.node.onFolder?.name },
-        depth = child.depth,
-        url = child.url,
-        visibility = child.visibility,
-        availability = child.availability,
-        characterCount = childFolder.characterCount,
-        maxDescendantFoldersDepth = childFolder.maxDescendantFoldersDepth,
-        thumbnailUrl = childFolder.thumbnail?.url,
-      ),
+      item =
+        EntityListItem.Folder(
+          id = child.id,
+          folderId = childFolder.id,
+          iconName = child.icon,
+          iconColor = child.iconColor,
+          name = childFolder.name,
+          folderCount = childFolder.folderCount,
+          documentCount = childFolder.documentCount,
+          siteName = siteName,
+          ancestorFolderNames = child.ancestors.mapNotNull { it.node.onFolder?.name },
+          depth = child.depth,
+          url = child.url,
+          visibility = child.visibility,
+          availability = child.availability,
+          characterCount = childFolder.characterCount,
+          maxDescendantFoldersDepth = childFolder.maxDescendantFoldersDepth,
+          thumbnailUrl = childFolder.thumbnail?.url,
+        ),
     )
   }
 
@@ -51,16 +47,17 @@ private fun normalizeFolderChild(
     return OrderedEntityItem(
       id = child.id,
       order = child.order,
-      item = EntityListItem.Document(
-        id = child.id,
-        iconName = child.icon,
-        iconColor = child.iconColor,
-        slug = child.slug,
-        title = document.title,
-        subtitle = document.subtitle,
-        excerpt = document.excerpt,
-        updatedAt = document.updatedAt,
-      ),
+      item =
+        EntityListItem.Document(
+          id = child.id,
+          iconName = child.icon,
+          iconColor = child.iconColor,
+          slug = child.slug,
+          title = document.title,
+          subtitle = document.subtitle,
+          excerpt = document.excerpt,
+          updatedAt = document.updatedAt,
+        ),
     )
   }
 

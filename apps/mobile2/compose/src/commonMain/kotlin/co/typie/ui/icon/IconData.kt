@@ -4,7 +4,10 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 
-enum class PathStyle { Fill, Stroke }
+enum class PathStyle {
+  Fill,
+  Stroke,
+}
 
 class IconPath(
   val data: String,

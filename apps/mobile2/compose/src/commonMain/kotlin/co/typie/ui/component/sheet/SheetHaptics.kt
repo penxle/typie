@@ -21,11 +21,12 @@ fun rememberSheetHaptics(): SheetHaptics {
   return remember(haptic) {
     object : SheetHaptics {
       override fun perform(event: SheetHapticEvent) {
-        val type = when (event) {
-          SheetHapticEvent.Present -> HapticFeedbackType.GestureThresholdActivate
-          SheetHapticEvent.DetentSnap -> HapticFeedbackType.SegmentTick
-          SheetHapticEvent.Dismiss -> HapticFeedbackType.GestureEnd
-        }
+        val type =
+          when (event) {
+            SheetHapticEvent.Present -> HapticFeedbackType.GestureThresholdActivate
+            SheetHapticEvent.DetentSnap -> HapticFeedbackType.SegmentTick
+            SheetHapticEvent.Dismiss -> HapticFeedbackType.GestureEnd
+          }
         haptic.performHapticFeedback(type)
       }
     }

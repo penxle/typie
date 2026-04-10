@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.blob.BlobService
+import co.typie.graphql.Apollo
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
 import co.typie.graphql.FolderActions_DeleteEntities_Mutation
 import co.typie.graphql.FolderActions_RenameFolder_Mutation
@@ -21,17 +22,13 @@ import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.RenameFolderInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.graphql.type.UpdateFoldersOptionInput
-import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.result
 import co.typie.service.SiteService
 
-data class FolderThumbnailResult(
-  val id: String,
-  val url: String,
-)
+data class FolderThumbnailResult(val id: String, val url: String)
 
 class FolderViewModel : ViewModel() {
   private val blobService = BlobService
@@ -41,12 +38,10 @@ class FolderViewModel : ViewModel() {
   val siteId: String
     get() = SiteService.siteId
 
-  val query = Apollo.watchQuery(
-    scope = viewModelScope,
-    skip = { entityId.isBlank() },
-  ) {
-    FolderScreen_Query(entityId = entityId)
-  }
+  val query =
+    Apollo.watchQuery(scope = viewModelScope, skip = { entityId.isBlank() }) {
+      FolderScreen_Query(entityId = entityId)
+    }
 
   fun refetch() {
     if (entityId.isNotBlank()) {
@@ -68,10 +63,8 @@ class FolderViewModel : ViewModel() {
   ): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
-        input = folderOptionsInput(folderId) {
-          visibility(visibility)
-        },
-      ),
+        input = folderOptionsInput(folderId) { visibility(visibility) }
+      )
     )
     refetch()
   }
@@ -80,24 +73,23 @@ class FolderViewModel : ViewModel() {
     folderId: String,
     file: PlatformFile,
   ): Result<FolderThumbnailResult, Nothing> = result {
-    val path = blobService.uploadBytes(
-      bytes = file.bytes,
-      filename = file.filename,
-      mimeType = file.mimeType,
-    )
+    val path =
+      blobService.uploadBytes(
+        bytes = file.bytes,
+        filename = file.filename,
+        mimeType = file.mimeType,
+      )
 
-    val image = Apollo.executeMutation(
-      FolderShare_PersistBlobAsImage_Mutation(
-        input = PersistBlobAsImageInput(path = path),
-      ),
-    ).persistBlobAsImage
+    val image =
+      Apollo.executeMutation(
+          FolderShare_PersistBlobAsImage_Mutation(input = PersistBlobAsImageInput(path = path))
+        )
+        .persistBlobAsImage
 
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
-        input = folderOptionsInput(folderId) {
-          thumbnailId(image.id)
-        },
-      ),
+        input = folderOptionsInput(folderId) { thumbnailId(image.id) }
+      )
     )
 
     refetch()
@@ -105,15 +97,11 @@ class FolderViewModel : ViewModel() {
     FolderThumbnailResult(id = image.id, url = image.url)
   }
 
-  suspend fun removeFolderThumbnail(
-    folderId: String,
-  ): Result<Unit, Nothing> = result {
+  suspend fun removeFolderThumbnail(folderId: String): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
-        input = folderOptionsInput(folderId) {
-          thumbnailId(null)
-        },
-      ),
+        input = folderOptionsInput(folderId) { thumbnailId(null) }
+      )
     )
     refetch()
   }
@@ -124,11 +112,12 @@ class FolderViewModel : ViewModel() {
   ): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
-        input = folderOptionsInput(folderId) {
-          visibility(visibility)
-          recursive(true)
-        },
-      ),
+        input =
+          folderOptionsInput(folderId) {
+            visibility(visibility)
+            recursive(true)
+          }
+      )
     )
     refetch()
   }
@@ -143,8 +132,8 @@ class FolderViewModel : ViewModel() {
     if (trimmedName.isEmpty() || trimmedName == normalizedCurrentName) return@result
     Apollo.executeMutation(
       FolderActions_RenameFolder_Mutation(
-        input = RenameFolderInput(folderId = folderId, name = trimmedName),
-      ),
+        input = RenameFolderInput(folderId = folderId, name = trimmedName)
+      )
     )
     refetch()
   }
@@ -156,23 +145,22 @@ class FolderViewModel : ViewModel() {
   ): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       FolderActions_UpdateEntityIcon_Mutation(
-        input = UpdateEntityIconInput(
-          entityId = entityId,
-          icon = icon.trim(),
-          iconColor = iconColor.trim(),
-        ),
-      ),
+        input =
+          UpdateEntityIconInput(
+            entityId = entityId,
+            icon = icon.trim(),
+            iconColor = iconColor.trim(),
+          )
+      )
     )
     refetch()
   }
 
-  suspend fun deleteFolderEntity(
-    entityId: String,
-  ): Result<Unit, Nothing> = result {
+  suspend fun deleteFolderEntity(entityId: String): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       FolderActions_DeleteEntities_Mutation(
-        input = DeleteEntitiesInput(entityIds = listOf(entityId)),
-      ),
+        input = DeleteEntitiesInput(entityIds = listOf(entityId))
+      )
     )
   }
 
@@ -184,15 +172,16 @@ class FolderViewModel : ViewModel() {
   ): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       EntityContainer_MoveEntity_Mutation(
-        input = MoveEntityInput.Builder()
-          .entityId(entityId)
-          .parentEntityId(parentEntityId)
-          .apply {
-            if (lowerOrder != null) lowerOrder(lowerOrder)
-            if (upperOrder != null) upperOrder(upperOrder)
-          }
-          .build(),
-      ),
+        input =
+          MoveEntityInput.Builder()
+            .entityId(entityId)
+            .parentEntityId(parentEntityId)
+            .apply {
+              if (lowerOrder != null) lowerOrder(lowerOrder)
+              if (upperOrder != null) upperOrder(upperOrder)
+            }
+            .build()
+      )
     )
     refetch()
   }
@@ -201,8 +190,5 @@ class FolderViewModel : ViewModel() {
     folderId: String,
     block: UpdateFoldersOptionInput.Builder.() -> Unit,
   ): UpdateFoldersOptionInput =
-    UpdateFoldersOptionInput.Builder()
-      .folderIds(listOf(folderId))
-      .apply(block)
-      .build()
+    UpdateFoldersOptionInput.Builder().folderIds(listOf(folderId)).apply(block).build()
 }

@@ -13,7 +13,9 @@ fun <V> required(message: String = "필수 항목입니다"): Rule<V> = Rule { v
 }
 
 fun email(message: String = "올바른 이메일 형식을 입력해주세요"): Rule<String> = Rule {
-  if (it.isNotBlank() && !it.matches(Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"))) message else null
+  if (it.isNotBlank() && !it.matches(Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")))
+    message
+  else null
 }
 
 fun minLength(min: Int, message: String = "${min}자 이상 입력해주세요"): Rule<String> = Rule {

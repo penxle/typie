@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,9 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
-import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.route.Route
@@ -77,29 +74,20 @@ fun CurrentPlanScreen() {
     val subscription = (currentSubscriptionState as? QueryState.Success)?.data ?: return@Screen
     val availability = subscription.availability
     val footer = availability?.let(::currentPlanFooter)
-    val detailLines = currentPlanDetailLines(
-      availability = availability ?: SubscriptionAvailability.Manual,
-      fee = subscription.fee ?: 0,
-      state = subscription.state ?: SubscriptionState.Active,
-      expiresAt = subscription.expiresAt ?: return@Screen,
-    )
+    val detailLines =
+      currentPlanDetailLines(
+        availability = availability ?: SubscriptionAvailability.Manual,
+        fee = subscription.fee ?: 0,
+        state = subscription.state ?: SubscriptionState.Active,
+        expiresAt = subscription.expiresAt ?: return@Screen,
+      )
 
-    Text(
-      "이용권 정보",
-      style = AppTheme.typography.display,
-      modifier = Modifier.padding(top = 4.dp),
-    )
+    Text("이용권 정보", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
-    CardSurface(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-      ) {
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
+      Column(modifier = Modifier.fillMaxWidth()) {
         Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(18.dp),
+          modifier = Modifier.fillMaxWidth().padding(18.dp),
           verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
           Column(
@@ -160,9 +148,7 @@ private fun CurrentPlanFooterSection(
   when (footer) {
     is CurrentPlanFooter.Actions -> {
       Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         CurrentPlanFooterAction(
@@ -172,9 +158,8 @@ private fun CurrentPlanFooterSection(
         )
 
         Box(
-          modifier = Modifier
-            .size(width = 1.dp, height = 20.dp)
-            .background(AppTheme.colors.borderSubtle),
+          modifier =
+            Modifier.size(width = 1.dp, height = 20.dp).background(AppTheme.colors.borderSubtle)
         )
 
         CurrentPlanFooterAction(
@@ -195,11 +180,7 @@ private fun CurrentPlanFooterSection(
     }
 
     is CurrentPlanFooter.Upgrade -> {
-      Button(
-        text = footer.label,
-        onClick = onUpgradeClick,
-        modifier = Modifier.padding(16.dp),
-      )
+      Button(text = footer.label, onClick = onUpgradeClick, modifier = Modifier.padding(16.dp))
     }
   }
 }
@@ -212,17 +193,10 @@ private fun CurrentPlanFooterAction(
 ) {
   InteractionScope {
     Box(
-      modifier = modifier
-        .clickable(onClick)
-        .padding(vertical = 12.dp)
-        .pressScale(),
+      modifier = modifier.clickable(onClick).padding(vertical = 12.dp).pressScale(),
       contentAlignment = Alignment.Center,
     ) {
-      Text(
-        text = label,
-        style = AppTheme.typography.action,
-        color = AppTheme.colors.textSecondary,
-      )
+      Text(text = label, style = AppTheme.typography.action, color = AppTheme.colors.textSecondary)
     }
   }
 }

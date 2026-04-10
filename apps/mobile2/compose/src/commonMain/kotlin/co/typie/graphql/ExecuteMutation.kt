@@ -3,9 +3,7 @@ package co.typie.graphql
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Mutation
 
-suspend fun <D : Mutation.Data> ApolloClient.executeMutation(
-  mutation: Mutation<D>,
-): D {
+suspend fun <D : Mutation.Data> ApolloClient.executeMutation(mutation: Mutation<D>): D {
   val response = mutation(mutation).execute()
   val gqlError = response.errors?.firstOrNull()
 

@@ -13,9 +13,7 @@ class SheetOverlayPresenterStateTest {
   fun presentAddsEntriesAndTracksTopOfStack() = runTest {
     val presenter = SheetOverlayPresenterState()
 
-    val jobA = launch {
-      presenter.present<Unit>(spec = SheetOverlaySpec()) {}
-    }
+    val jobA = launch { presenter.present<Unit>(spec = SheetOverlaySpec()) {} }
     val jobB = launch {
       presenter.present<Unit>(spec = SheetOverlaySpec(mode = SheetMode.NonModalOverlay)) {}
     }
@@ -41,8 +39,7 @@ class SheetOverlayPresenterStateTest {
 
     testScheduler.advanceUntilIdle()
 
-    @Suppress("UNCHECKED_CAST")
-    val entry = presenter.entries.single() as SheetOverlayEntry<Unit>
+    @Suppress("UNCHECKED_CAST") val entry = presenter.entries.single() as SheetOverlayEntry<Unit>
     entry.controller.dismiss(SheetDismissReason.OutsideTap)
     entry.resolve(requireNotNull(entry.controller.resolutionRequest))
 
@@ -79,9 +76,7 @@ class SheetOverlayPresenterStateTest {
 
     val job = launch {
       presenter.present<Unit>(
-        spec = SheetOverlaySpec(
-          dismissPolicy = SheetDismissPolicy(programmatic = false),
-        ),
+        spec = SheetOverlaySpec(dismissPolicy = SheetDismissPolicy(programmatic = false))
       ) {}
     }
 

@@ -20,7 +20,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 
-internal val LocalPopoverOutsideTapHostState = staticCompositionLocalOf<PopoverOutsideTapHostState?> { null }
+internal val LocalPopoverOutsideTapHostState =
+  staticCompositionLocalOf<PopoverOutsideTapHostState?> { null }
 
 private data class PopoverOutsideTapRegistration(
   val token: Any,
@@ -33,10 +34,7 @@ class PopoverOutsideTapHostState {
   private var registration by mutableStateOf<PopoverOutsideTapRegistration?>(null)
 
   fun register(): PopoverOutsideTapHostHandle {
-    return PopoverOutsideTapHostHandle(
-      state = this,
-      token = Any(),
-    )
+    return PopoverOutsideTapHostHandle(state = this, token = Any())
   }
 
   internal fun currentRegistration(): Pair<Rect, () -> Unit>? {
@@ -45,16 +43,9 @@ class PopoverOutsideTapHostState {
     return paneBounds to active.onDismiss
   }
 
-  internal fun update(
-    token: Any,
-    paneBounds: Rect?,
-    onDismiss: () -> Unit,
-  ) {
-    registration = PopoverOutsideTapRegistration(
-      token = token,
-      paneBounds = paneBounds,
-      onDismiss = onDismiss,
-    )
+  internal fun update(token: Any, paneBounds: Rect?, onDismiss: () -> Unit) {
+    registration =
+      PopoverOutsideTapRegistration(token = token, paneBounds = paneBounds, onDismiss = onDismiss)
   }
 
   internal fun clear(token: Any) {
@@ -65,19 +56,10 @@ class PopoverOutsideTapHostState {
 }
 
 @Stable
-class PopoverOutsideTapHostHandle internal constructor(
-  private val state: PopoverOutsideTapHostState,
-  private val token: Any,
-) {
-  fun update(
-    paneBounds: Rect?,
-    onDismiss: () -> Unit,
-  ) {
-    state.update(
-      token = token,
-      paneBounds = paneBounds,
-      onDismiss = onDismiss,
-    )
+class PopoverOutsideTapHostHandle
+internal constructor(private val state: PopoverOutsideTapHostState, private val token: Any) {
+  fun update(paneBounds: Rect?, onDismiss: () -> Unit) {
+    state.update(token = token, paneBounds = paneBounds, onDismiss = onDismiss)
   }
 
   fun clear() {
@@ -91,37 +73,30 @@ internal fun PopoverOutsideTapHost(content: @Composable () -> Unit) {
   var rootWindowOffset by remember { mutableStateOf(Offset.Zero) }
 
   Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .onGloballyPositioned { coordinates ->
-        rootWindowOffset = coordinates.positionInWindow()
-      }
-      .pointerInput(state, rootWindowOffset) {
-        awaitEachGesture {
-          val down = awaitFirstDown(
-            requireUnconsumed = false,
-            pass = PointerEventPass.Initial,
-          )
-          val (paneBounds, onDismiss) = state.currentRegistration() ?: return@awaitEachGesture
-          val downPositionInWindow = down.position + rootWindowOffset
-          if (paneBounds.contains(downPositionInWindow)) {
-            return@awaitEachGesture
-          }
+    modifier =
+      Modifier.fillMaxSize()
+        .onGloballyPositioned { coordinates -> rootWindowOffset = coordinates.positionInWindow() }
+        .pointerInput(state, rootWindowOffset) {
+          awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val (paneBounds, onDismiss) = state.currentRegistration() ?: return@awaitEachGesture
+            val downPositionInWindow = down.position + rootWindowOffset
+            if (paneBounds.contains(downPositionInWindow)) {
+              return@awaitEachGesture
+            }
 
-          down.consume()
-          onDismiss()
+            down.consume()
+            onDismiss()
 
-          var pressed = true
-          while (pressed) {
-            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-            val change = event.changes.find { it.id == down.id } ?: break
-            pressed = change.pressed
+            var pressed = true
+            while (pressed) {
+              val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+              val change = event.changes.find { it.id == down.id } ?: break
+              pressed = change.pressed
+            }
           }
         }
-      },
   ) {
-    CompositionLocalProvider(LocalPopoverOutsideTapHostState provides state) {
-      content()
-    }
+    CompositionLocalProvider(LocalPopoverOutsideTapHostState provides state) { content() }
   }
 }

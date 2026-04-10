@@ -10,41 +10,39 @@ import kotlin.test.assertTrue
 class FontSettingsModelsTest {
   @Test
   fun `uploadedFontFamilies keeps only active user families with active deduplicated fonts`() {
-    val families = listOf(
-      FontSettingsFamily(
-        id = "family-default",
-        familyName = "Pretendard",
-        displayName = "프리텐다드",
-        source = "DEFAULT",
-        state = "ACTIVE",
-        fonts = listOf(
-          FontSettingsFont(id = "default-400", weight = 400),
+    val families =
+      listOf(
+        FontSettingsFamily(
+          id = "family-default",
+          familyName = "Pretendard",
+          displayName = "프리텐다드",
+          source = "DEFAULT",
+          state = "ACTIVE",
+          fonts = listOf(FontSettingsFont(id = "default-400", weight = 400)),
         ),
-      ),
-      FontSettingsFamily(
-        id = "family-user",
-        familyName = "UserSans",
-        displayName = "유저 산스",
-        source = "USER",
-        state = "ACTIVE",
-        fonts = listOf(
-          FontSettingsFont(id = "archived-300", weight = 300, state = "ARCHIVED"),
-          FontSettingsFont(id = "regular-old", weight = 400),
-          FontSettingsFont(id = "regular-new", weight = 400),
-          FontSettingsFont(id = "bold", weight = 700),
+        FontSettingsFamily(
+          id = "family-user",
+          familyName = "UserSans",
+          displayName = "유저 산스",
+          source = "USER",
+          state = "ACTIVE",
+          fonts =
+            listOf(
+              FontSettingsFont(id = "archived-300", weight = 300, state = "ARCHIVED"),
+              FontSettingsFont(id = "regular-old", weight = 400),
+              FontSettingsFont(id = "regular-new", weight = 400),
+              FontSettingsFont(id = "bold", weight = 700),
+            ),
         ),
-      ),
-      FontSettingsFamily(
-        id = "family-archived",
-        familyName = "UserSerif",
-        displayName = "유저 세리프",
-        source = "USER",
-        state = "ARCHIVED",
-        fonts = listOf(
-          FontSettingsFont(id = "archived", weight = 400),
+        FontSettingsFamily(
+          id = "family-archived",
+          familyName = "UserSerif",
+          displayName = "유저 세리프",
+          source = "USER",
+          state = "ARCHIVED",
+          fonts = listOf(FontSettingsFont(id = "archived", weight = 400)),
         ),
-      ),
-    )
+      )
 
     val result = uploadedFontFamilies(families)
 
@@ -54,13 +52,14 @@ class FontSettingsModelsTest {
 
   @Test
   fun `representativeFont prefers weight closest to 400 and breaks ties toward heavier`() {
-    val result = representativeFont(
-      listOf(
-        FontSettingsFont(id = "light", weight = 300),
-        FontSettingsFont(id = "medium", weight = 500),
-        FontSettingsFont(id = "bold", weight = 700),
-      ),
-    )
+    val result =
+      representativeFont(
+        listOf(
+          FontSettingsFont(id = "light", weight = 300),
+          FontSettingsFont(id = "medium", weight = 500),
+          FontSettingsFont(id = "bold", weight = 700),
+        )
+      )
 
     assertEquals("medium", result?.id)
   }
@@ -73,7 +72,10 @@ class FontSettingsModelsTest {
   @Test
   fun `fontWeightLabel uses shared weight labels before subfamily fallback`() {
     assertEquals("보통", fontWeightLabel(weight = 400, subfamilyDisplayName = "Regular"))
-    assertEquals("Semi Condensed (450)", fontWeightLabel(weight = 450, subfamilyDisplayName = "Semi Condensed"))
+    assertEquals(
+      "Semi Condensed (450)",
+      fontWeightLabel(weight = 450, subfamilyDisplayName = "Semi Condensed"),
+    )
     assertEquals("950", fontWeightLabel(weight = 950, subfamilyDisplayName = null))
   }
 
@@ -93,29 +95,31 @@ class FontSettingsModelsTest {
 
   @Test
   fun `summarizeFontUploadResults groups successful uploads by family`() {
-    val summary = summarizeFontUploadResults(
-      successes = listOf(
-        FontUploadSuccess(
-          familyId = "family-1",
-          familyDisplayName = "프리텐다드",
-          weight = 400,
-          subfamilyDisplayName = "Regular",
-        ),
-        FontUploadSuccess(
-          familyId = "family-1",
-          familyDisplayName = "프리텐다드",
-          weight = 700,
-          subfamilyDisplayName = "Bold",
-        ),
-        FontUploadSuccess(
-          familyId = "family-2",
-          familyDisplayName = "코펍월드돋움",
-          weight = 450,
-          subfamilyDisplayName = "Semi Condensed",
-        ),
-      ),
-      failures = emptyList(),
-    )
+    val summary =
+      summarizeFontUploadResults(
+        successes =
+          listOf(
+            FontUploadSuccess(
+              familyId = "family-1",
+              familyDisplayName = "프리텐다드",
+              weight = 400,
+              subfamilyDisplayName = "Regular",
+            ),
+            FontUploadSuccess(
+              familyId = "family-1",
+              familyDisplayName = "프리텐다드",
+              weight = 700,
+              subfamilyDisplayName = "Bold",
+            ),
+            FontUploadSuccess(
+              familyId = "family-2",
+              familyDisplayName = "코펍월드돋움",
+              weight = 450,
+              subfamilyDisplayName = "Semi Condensed",
+            ),
+          ),
+        failures = emptyList(),
+      )
 
     assertNotNull(summary)
     assertEquals(FontUploadSummaryStatus.Success, summary.status)
@@ -125,22 +129,20 @@ class FontSettingsModelsTest {
 
   @Test
   fun `summarizeFontUploadResults includes both success and failure for partial uploads`() {
-    val summary = summarizeFontUploadResults(
-      successes = listOf(
-        FontUploadSuccess(
-          familyId = "family-1",
-          familyDisplayName = "프리텐다드",
-          weight = 400,
-          subfamilyDisplayName = "Regular",
-        ),
-      ),
-      failures = listOf(
-        FontUploadFailure(
-          name = "Italic.ttf",
-          error = FontUploadError.InvalidFontStyle,
-        ),
-      ),
-    )
+    val summary =
+      summarizeFontUploadResults(
+        successes =
+          listOf(
+            FontUploadSuccess(
+              familyId = "family-1",
+              familyDisplayName = "프리텐다드",
+              weight = 400,
+              subfamilyDisplayName = "Regular",
+            )
+          ),
+        failures =
+          listOf(FontUploadFailure(name = "Italic.ttf", error = FontUploadError.InvalidFontStyle)),
+      )
 
     assertNotNull(summary)
     assertEquals(FontUploadSummaryStatus.PartialSuccess, summary.status)
@@ -152,19 +154,15 @@ class FontSettingsModelsTest {
 
   @Test
   fun `summarizeFontUploadResults returns failure summary when all uploads fail`() {
-    val summary = summarizeFontUploadResults(
-      successes = emptyList(),
-      failures = listOf(
-        FontUploadFailure(
-          name = "Broken.otf",
-          error = FontUploadError.UnsupportedFormat,
-        ),
-        FontUploadFailure(
-          name = "Italic.ttf",
-          error = FontUploadError.InvalidFontStyle,
-        ),
-      ),
-    )
+    val summary =
+      summarizeFontUploadResults(
+        successes = emptyList(),
+        failures =
+          listOf(
+            FontUploadFailure(name = "Broken.otf", error = FontUploadError.UnsupportedFormat),
+            FontUploadFailure(name = "Italic.ttf", error = FontUploadError.InvalidFontStyle),
+          ),
+      )
 
     assertNotNull(summary)
     assertEquals(FontUploadSummaryStatus.Failure, summary.status)
@@ -176,11 +174,6 @@ class FontSettingsModelsTest {
 
   @Test
   fun `summarizeFontUploadResults returns null when there is nothing to report`() {
-    assertNull(
-      summarizeFontUploadResults(
-        successes = emptyList(),
-        failures = emptyList(),
-      ),
-    )
+    assertNull(summarizeFontUploadResults(successes = emptyList(), failures = emptyList()))
   }
 }

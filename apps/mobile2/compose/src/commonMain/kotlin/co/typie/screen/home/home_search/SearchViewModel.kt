@@ -5,12 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.graphql.Apollo
 import co.typie.graphql.HomeScreen_Search_Query
 import co.typie.graphql.HomeSearch_Header_Query
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildSite
-import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.service.SiteService
 import co.typie.storage.Prefs
@@ -24,19 +24,26 @@ class SearchViewModel : ViewModel() {
 
   var query by mutableStateOf("")
     private set
+
   var recentSearches by mutableStateOf<List<String>>(emptyList())
     private set
 
   var activeQuery by mutableStateOf("")
     private set
 
-  val siteQuery = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderSiteData()) { HomeSearch_Header_Query(siteId = SiteService.siteId) }
+  val siteQuery =
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderSiteData()) {
+      HomeSearch_Header_Query(siteId = SiteService.siteId)
+    }
 
-  val searchResults = Apollo.watchQuery(
-    scope = viewModelScope,
-    skip = { activeQuery.isBlank() },
-    resetOnChange = false,
-  ) { HomeScreen_Search_Query(siteId = SiteService.siteId, query = activeQuery) }
+  val searchResults =
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      skip = { activeQuery.isBlank() },
+      resetOnChange = false,
+    ) {
+      HomeScreen_Search_Query(siteId = SiteService.siteId, query = activeQuery)
+    }
 
   private var storedRecentSearches: List<String> by Prefs("recent_searches", emptyList())
   private var debounceJob: Job? = null
@@ -68,11 +75,12 @@ class SearchViewModel : ViewModel() {
   fun saveRecentSearch(queryText: String) {
     val trimmed = queryText.trim()
     if (trimmed.isBlank()) return
-    val updated = recentSearches.toMutableList().apply {
-      remove(trimmed)
-      add(0, trimmed)
-      if (size > 10) removeLast()
-    }
+    val updated =
+      recentSearches.toMutableList().apply {
+        remove(trimmed)
+        add(0, trimmed)
+        if (size > 10) removeLast()
+      }
     recentSearches = updated
     storedRecentSearches = updated
   }
@@ -88,8 +96,5 @@ class SearchViewModel : ViewModel() {
   }
 }
 
-private fun placeholderSiteData() = HomeSearch_Header_Query.Data(PlaceholderResolver) {
-  site = buildSite {
-    name = ""
-  }
-}
+private fun placeholderSiteData() =
+  HomeSearch_Header_Query.Data(PlaceholderResolver) { site = buildSite { name = "" } }

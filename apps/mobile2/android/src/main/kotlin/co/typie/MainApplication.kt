@@ -12,11 +12,6 @@ class MainApplication : Application() {
     PlatformModule.context = this
 
     KakaoSdk.init(this, Konfig.KAKAO_NATIVE_APP_KEY)
-    NidOAuth.initialize(
-      this,
-      Konfig.NAVER_CLIENT_ID,
-      Konfig.NAVER_CLIENT_SECRET,
-      "타이피",
-    )
+    NidOAuth.initialize(this, Konfig.NAVER_CLIENT_ID, Konfig.NAVER_CLIENT_SECRET, "타이피")
   }
 }

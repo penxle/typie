@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import co.typie.form.FieldState
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.theme.AppTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
 fun TextArea(
@@ -64,44 +64,42 @@ fun TextArea(
   val hasError = error != null
 
   val colorSpec = tween<Color>(220)
-  val containerColor by animateColorAsState(
-    when {
-      !enabled -> AppTheme.colors.surfaceBase
-      isFocused -> AppTheme.colors.surfaceDefault
-      else -> AppTheme.colors.surfaceSunken
-    },
-    colorSpec,
-  )
-  val borderColor by animateColorAsState(
-    when {
-      hasError -> AppTheme.colors.dangerSubtle
-      isFocused -> AppTheme.colors.borderStrong
-      else -> AppTheme.colors.borderSubtle
-    },
-    colorSpec,
-  )
-  val borderWidth by animateDpAsState(
-    if (isFocused || hasError) 1.5.dp else 1.dp,
-    tween(durationMillis = 220, easing = EaseInOutExpo),
-  )
-  val helpColor by animateColorAsState(
-    if (hasError) AppTheme.colors.dangerSubtle else AppTheme.colors.textMuted,
-    colorSpec,
-  )
+  val containerColor by
+    animateColorAsState(
+      when {
+        !enabled -> AppTheme.colors.surfaceBase
+        isFocused -> AppTheme.colors.surfaceDefault
+        else -> AppTheme.colors.surfaceSunken
+      },
+      colorSpec,
+    )
+  val borderColor by
+    animateColorAsState(
+      when {
+        hasError -> AppTheme.colors.dangerSubtle
+        isFocused -> AppTheme.colors.borderStrong
+        else -> AppTheme.colors.borderSubtle
+      },
+      colorSpec,
+    )
+  val borderWidth by
+    animateDpAsState(
+      if (isFocused || hasError) 1.5.dp else 1.dp,
+      tween(durationMillis = 220, easing = EaseInOutExpo),
+    )
+  val helpColor by
+    animateColorAsState(
+      if (hasError) AppTheme.colors.dangerSubtle else AppTheme.colors.textMuted,
+      colorSpec,
+    )
 
   if (autoFocus) {
-    LaunchedEffect(autoFocus) {
-      focusRequester.requestFocus()
-    }
+    LaunchedEffect(autoFocus) { focusRequester.requestFocus() }
   }
 
   Column(modifier = modifier) {
     if (label != null) {
-      Text(
-        text = label,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textSecondary,
-      )
+      Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
 
       Spacer(Modifier.height(8.dp))
     }
@@ -111,36 +109,32 @@ fun TextArea(
       onValueChange = onValueChange,
       enabled = enabled,
       readOnly = readOnly,
-      modifier = Modifier
-        .fillMaxWidth()
-        .heightIn(min = minHeight)
-        .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
-        .onFocusChanged { state ->
-          val wasFocused = isFocused
-          isFocused = state.isFocused
-          if (wasFocused && !state.isFocused) onBlur?.invoke()
-        },
-      textStyle = AppTheme.typography.body.copy(
-        color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted,
-      ),
+      modifier =
+        Modifier.fillMaxWidth()
+          .heightIn(min = minHeight)
+          .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
+          .onFocusChanged { state ->
+            val wasFocused = isFocused
+            isFocused = state.isFocused
+            if (wasFocused && !state.isFocused) onBlur?.invoke()
+          },
+      textStyle =
+        AppTheme.typography.body.copy(
+          color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted
+        ),
       cursorBrush = SolidColor(AppTheme.colors.textPrimary),
-      keyboardOptions = KeyboardOptions(
-        capitalization = capitalization,
-        imeAction = imeAction,
-      ),
-      keyboardActions = KeyboardActions(
-        onNext = { onImeAction?.invoke() },
-        onDone = { onImeAction?.invoke() },
-      ),
+      keyboardOptions = KeyboardOptions(capitalization = capitalization, imeAction = imeAction),
+      keyboardActions =
+        KeyboardActions(onNext = { onImeAction?.invoke() }, onDone = { onImeAction?.invoke() }),
       minLines = minLines,
       maxLines = maxLines,
       decorationBox = { innerTextField ->
         Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .border(borderWidth, borderColor, shape)
-            .background(containerColor, shape)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+          modifier =
+            Modifier.fillMaxWidth()
+              .border(borderWidth, borderColor, shape)
+              .background(containerColor, shape)
+              .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
           if (value.isEmpty() && placeholder != null) {
             Text(
@@ -161,9 +155,7 @@ fun TextArea(
       text = error ?: help ?: "",
       style = AppTheme.typography.micro,
       color = helpColor,
-      modifier = Modifier
-        .defaultMinSize(minHeight = 16.dp)
-        .padding(start = 8.dp),
+      modifier = Modifier.defaultMinSize(minHeight = 16.dp).padding(start = 8.dp),
     )
   }
 }
@@ -189,29 +181,29 @@ fun TextArea(
   val isSkeleton = LocalSkeleton.current.enabled
   val shouldAutoFocus = autoFocus || (form != null && form.isFirstField(field))
 
-  val resolvedOnImeAction: (() -> Unit)? = when {
-    onImeAction != null -> onImeAction
-    form != null && imeAction != ImeAction.Default -> {
-      { form.focusNext(field) }
-    }
+  val resolvedOnImeAction: (() -> Unit)? =
+    when {
+      onImeAction != null -> onImeAction
+      form != null && imeAction != ImeAction.Default -> {
+        { form.focusNext(field) }
+      }
 
-    else -> null
-  }
+      else -> null
+    }
 
   if (shouldAutoFocus && !isSkeleton) {
-    LaunchedEffect(shouldAutoFocus) {
-      field.focusRequester.requestFocus()
-    }
+    LaunchedEffect(shouldAutoFocus) { field.focusRequester.requestFocus() }
   }
 
   TextArea(
     value = field.value,
     onValueChange = { field.setValue(it) },
-    modifier = if (!isSkeleton && (form != null || autoFocus)) {
-      modifier.focusRequester(field.focusRequester)
-    } else {
-      modifier
-    },
+    modifier =
+      if (!isSkeleton && (form != null || autoFocus)) {
+        modifier.focusRequester(field.focusRequester)
+      } else {
+        modifier
+      },
     label = label,
     help = help,
     error = field.errors.firstOrNull(),

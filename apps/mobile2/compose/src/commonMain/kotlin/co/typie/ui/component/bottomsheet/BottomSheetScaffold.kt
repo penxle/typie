@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,7 +33,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.imeOrNavigationBarsPadding
@@ -62,23 +62,20 @@ fun BottomSheetScaffold(
   val titleInset = maxOf(leadingInset, trailingInset)
 
   Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .then(if (fillAvailableHeight) Modifier.fillMaxHeight() else Modifier)
-      .padding(horizontal = 16.dp),
-  ) {
-    Box(
-      modifier = Modifier
+    modifier =
+      modifier
         .fillMaxWidth()
-        .height(TopBarDefaults.SlotWidth),
-    ) {
+        .then(if (fillAvailableHeight) Modifier.fillMaxHeight() else Modifier)
+        .padding(horizontal = 16.dp)
+  ) {
+    Box(modifier = Modifier.fillMaxWidth().height(TopBarDefaults.SlotWidth)) {
       Text(
         text = title,
         style = AppTheme.typography.title.copy(textAlign = TextAlign.Center),
-        modifier = Modifier
-          .align(Alignment.Center)
-          .fillMaxWidth()
-          .padding(start = titleInset, end = titleInset),
+        modifier =
+          Modifier.align(Alignment.Center)
+            .fillMaxWidth()
+            .padding(start = titleInset, end = titleInset),
         overflow = TextOverflow.Ellipsis,
         maxLines = 1,
         color = AppTheme.colors.textPrimary,
@@ -106,32 +103,30 @@ fun BottomSheetScaffold(
     }
 
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(top = 8.dp)
-        .then(
-          if (applyContentImeOrNavigationBarsPadding) {
-            Modifier.imeOrNavigationBarsPadding()
-          } else {
-            Modifier
-          }
-        )
-        .then(
-          if (contentBackgroundColor != null) {
-            Modifier
-              .background(contentBackgroundColor, RoundedCornerShape(24.dp))
-              .padding(12.dp)
-          } else {
-            Modifier
-          },
-        ),
+      modifier =
+        Modifier.fillMaxWidth()
+          .padding(top = 8.dp)
+          .then(
+            if (applyContentImeOrNavigationBarsPadding) {
+              Modifier.imeOrNavigationBarsPadding()
+            } else {
+              Modifier
+            }
+          )
+          .then(
+            if (contentBackgroundColor != null) {
+              Modifier.background(contentBackgroundColor, RoundedCornerShape(24.dp)).padding(12.dp)
+            } else {
+              Modifier
+            }
+          ),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .weight(1f, fill = fillAvailableHeight)
-          .then(if (scrollContent) Modifier.verticalScroll(scrollState) else Modifier),
+        modifier =
+          Modifier.fillMaxWidth()
+            .weight(1f, fill = fillAvailableHeight)
+            .then(if (scrollContent) Modifier.verticalScroll(scrollState) else Modifier)
       ) {
         Column(
           modifier = Modifier.fillMaxWidth(),
@@ -170,14 +165,15 @@ fun BottomSheetHeaderActionButton(
 
   InteractionScope {
     Box(
-      modifier = modifier
-        .size(TopBarDefaults.ButtonSize)
-        .alpha(alpha)
-        .then(shadowModifier)
-        .background(resolvedBackground, TopBarDefaults.ButtonShape)
-        .border(1.dp, resolvedBorderColor, TopBarDefaults.ButtonShape)
-        .clickable(enabled = enabled && !loading, onClick = onClick)
-        .pressScale(0.94f),
+      modifier =
+        modifier
+          .size(TopBarDefaults.ButtonSize)
+          .alpha(alpha)
+          .then(shadowModifier)
+          .background(resolvedBackground, TopBarDefaults.ButtonShape)
+          .border(1.dp, resolvedBorderColor, TopBarDefaults.ButtonShape)
+          .clickable(enabled = enabled && !loading, onClick = onClick)
+          .pressScale(0.94f),
       contentAlignment = Alignment.Center,
     ) {
       if (loading) {
@@ -207,37 +203,32 @@ fun BottomSheetHeaderTextAction(
 
   InteractionScope {
     Box(
-      modifier = modifier
-        .defaultMinSize(minWidth = TopBarDefaults.SlotWidth, minHeight = TopBarDefaults.SlotWidth)
-        .alpha(alpha)
-        .clickable(enabled = enabled && !loading, onClick = onClick)
-        .pressScale(0.96f),
+      modifier =
+        modifier
+          .defaultMinSize(minWidth = TopBarDefaults.SlotWidth, minHeight = TopBarDefaults.SlotWidth)
+          .alpha(alpha)
+          .clickable(enabled = enabled && !loading, onClick = onClick)
+          .pressScale(0.96f),
       contentAlignment = Alignment.Center,
     ) {
       if (loading) {
         BottomSheetHeaderActionSpinner(color = color)
       } else {
-        Text(
-          text = text,
-          style = textStyle,
-          color = color,
-        )
+        Text(text = text, style = textStyle, color = color)
       }
     }
   }
 }
 
 @Composable
-private fun BottomSheetHeaderActionSpinner(
-  color: Color,
-  modifier: Modifier = Modifier,
-) {
+private fun BottomSheetHeaderActionSpinner(color: Color, modifier: Modifier = Modifier) {
   val transition = rememberInfiniteTransition()
-  val rotation by transition.animateFloat(
-    initialValue = 0f,
-    targetValue = 360f,
-    animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
-  )
+  val rotation by
+    transition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
+    )
 
   Canvas(modifier.size(16.dp).then(modifier)) {
     drawArc(
@@ -245,10 +236,11 @@ private fun BottomSheetHeaderActionSpinner(
       startAngle = rotation,
       sweepAngle = 220f,
       useCenter = false,
-      style = androidx.compose.ui.graphics.drawscope.Stroke(
-        width = 1.5.dp.toPx(),
-        cap = androidx.compose.ui.graphics.StrokeCap.Round,
-      ),
+      style =
+        androidx.compose.ui.graphics.drawscope.Stroke(
+          width = 1.5.dp.toPx(),
+          cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        ),
     )
   }
 }

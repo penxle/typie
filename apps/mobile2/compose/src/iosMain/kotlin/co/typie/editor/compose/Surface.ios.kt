@@ -1,7 +1,7 @@
 @file:OptIn(
   ExperimentalForeignApi::class,
   ExperimentalComposeUiApi::class,
-  ExperimentalContracts::class
+  ExperimentalContracts::class,
 )
 
 package co.typie.editor.compose
@@ -12,6 +12,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
+import kotlin.contracts.ExperimentalContracts
+import kotlin.math.roundToInt
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.cValue
 import kotlinx.cinterop.useContents
@@ -23,12 +25,9 @@ import platform.UIKit.UIColor
 import platform.UIKit.UIScreen
 import platform.UIKit.UIView
 import swiftPMImport.co.typie.compose.MetalSurfaceBridge
-import kotlin.contracts.ExperimentalContracts
-import kotlin.math.roundToInt
 
-private class MetalSurfaceView(
-  private val metalLayer: CAMetalLayer,
-) : UIView(frame = cValue<CGRect> { }) {
+private class MetalSurfaceView(private val metalLayer: CAMetalLayer) :
+  UIView(frame = cValue<CGRect> {}) {
   var onLayoutChanged: (() -> Unit)? = null
   private var lastWidth = 0.0
   private var lastHeight = 0.0
@@ -53,10 +52,8 @@ private class MetalSurfaceView(
     CATransaction.setDisableActions(true)
     metalLayer.frame = bounds
     val scale = metalLayer.contentsScale
-    metalLayer.drawableSize = CGSizeMake(
-      (w * scale).roundToInt().toDouble(),
-      (h * scale).roundToInt().toDouble(),
-    )
+    metalLayer.drawableSize =
+      CGSizeMake((w * scale).roundToInt().toDouble(), (h * scale).roundToInt().toDouble())
     if (w > 0.0 && h > 0.0 && (w != lastWidth || h != lastHeight)) {
       lastWidth = w
       lastHeight = h
@@ -83,15 +80,8 @@ internal actual fun Surface(
       }
     },
     modifier = modifier,
-    update = { view ->
-      view.onLayoutChanged = onResize
-    },
-    onRelease = {
-      onDetach()
-    },
-    properties = UIKitInteropProperties(
-      interactionMode = null,
-      placedAsOverlay = true,
-    ),
+    update = { view -> view.onLayoutChanged = onResize },
+    onRelease = { onDetach() },
+    properties = UIKitInteropProperties(interactionMode = null, placedAsOverlay = true),
   )
 }

@@ -1,23 +1,17 @@
 package co.typie.screen.settings.update_password
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.unit.dp
-import co.typie.ext.imePadding
-import co.typie.ext.navigationBarsPadding
-import co.typie.ext.verticalScroll
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
@@ -31,8 +25,6 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
-import co.typie.overlay.LocalToast
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun UpdatePasswordScreen() {
@@ -47,18 +39,14 @@ fun UpdatePasswordScreen() {
 
   fun submit() {
     scope.launch {
-      model.submit()
-        .withDefaultExceptionHandler(toast)
-        .onOk {
-          toast.show(ToastType.Success, "비밀번호가 변경되었어요.")
-          nav.pop()
-        }
+      model.submit().withDefaultExceptionHandler(toast).onOk {
+        toast.show(ToastType.Success, "비밀번호가 변경되었어요.")
+        nav.pop()
+      }
     }
   }
 
-  ProvideTopBar(
-    center = { Text("비밀번호 변경", style = AppTheme.typography.title) },
-  )
+  ProvideTopBar(center = { Text("비밀번호 변경", style = AppTheme.typography.title) })
 
   if (model.query.state is QueryState.Error) {
     ErrorDialog { model.query.refetch() }
@@ -71,45 +59,43 @@ fun UpdatePasswordScreen() {
     bottomBar = {
       Button(
         text = buttonText,
-        modifier = Modifier
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
         loading = model.isSubmitting,
         loadingText = loadingText,
         onClick = { submit() },
       )
     },
   ) {
-        if (hasPassword) {
-          TextField(
-            field = model.state.form.currentPassword,
-            label = "현재 비밀번호",
-            labelPosition = LabelPosition.Internal,
-            placeholder = "현재 비밀번호를 입력하세요",
-            isPassword = true,
-            contentType = ContentType.Password,
-          )
-        }
+    if (hasPassword) {
+      TextField(
+        field = model.state.form.currentPassword,
+        label = "현재 비밀번호",
+        labelPosition = LabelPosition.Internal,
+        placeholder = "현재 비밀번호를 입력하세요",
+        isPassword = true,
+        contentType = ContentType.Password,
+      )
+    }
 
-        TextField(
-          field = model.state.form.newPassword,
-          label = "새 비밀번호",
-          labelPosition = LabelPosition.Internal,
-          placeholder = "********",
-          isPassword = true,
-          contentType = ContentType.NewPassword,
-        )
+    TextField(
+      field = model.state.form.newPassword,
+      label = "새 비밀번호",
+      labelPosition = LabelPosition.Internal,
+      placeholder = "********",
+      isPassword = true,
+      contentType = ContentType.NewPassword,
+    )
 
-        TextField(
-          field = model.state.form.confirmPassword,
-          label = "새 비밀번호 확인",
-          labelPosition = LabelPosition.Internal,
-          placeholder = "********",
-          isPassword = true,
-          contentType = ContentType.NewPassword,
-          onImeAction = { submit() },
-        )
+    TextField(
+      field = model.state.form.confirmPassword,
+      label = "새 비밀번호 확인",
+      labelPosition = LabelPosition.Internal,
+      placeholder = "********",
+      isPassword = true,
+      contentType = ContentType.NewPassword,
+      onImeAction = { submit() },
+    )
 
-        Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(24.dp))
   }
 }

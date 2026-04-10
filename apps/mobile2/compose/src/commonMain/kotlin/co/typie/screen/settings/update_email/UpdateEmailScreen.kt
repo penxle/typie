@@ -1,25 +1,18 @@
 package co.typie.screen.settings.update_email
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import co.typie.ext.imePadding
-import co.typie.ext.navigationBarsPadding
-import co.typie.ext.verticalScroll
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
@@ -36,8 +29,6 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
-import co.typie.overlay.LocalToast
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun UpdateEmailScreen() {
@@ -65,22 +56,22 @@ fun UpdateEmailScreen() {
 
   fun submit() {
     scope.launch {
-      model.submit()
+      model
+        .submit()
         .withDefaultExceptionHandler(toast)
         .onOk { showSuccessModal() }
         .onErr { error ->
-          val message = when (error) {
-            UpdateEmailError.EmailAlreadyExists -> "이미 사용중인 이메일이에요."
-            is UpdateEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
-          }
+          val message =
+            when (error) {
+              UpdateEmailError.EmailAlreadyExists -> "이미 사용중인 이메일이에요."
+              is UpdateEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
+            }
           toast.show(ToastType.Error, message)
         }
     }
   }
 
-  ProvideTopBar(
-    center = { Text("이메일 변경", style = AppTheme.typography.title) },
-  )
+  ProvideTopBar(center = { Text("이메일 변경", style = AppTheme.typography.title) })
 
   if (model.query.state is QueryState.Error) {
     ErrorDialog { model.query.refetch() }
@@ -93,36 +84,27 @@ fun UpdateEmailScreen() {
     bottomBar = {
       Button(
         text = "변경",
-        modifier = Modifier
-          .padding(horizontal = 16.dp)
-          .padding(bottom = 16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
         loading = model.isSubmitting,
         loadingText = "변경 중...",
         onClick = { submit() },
       )
     },
   ) {
-        Text(
-          "현재 이메일 주소",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
+    Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
 
-        Text(
-          model.query.data.me.email,
-          style = AppTheme.typography.action,
-        )
+    Text(model.query.data.me.email, style = AppTheme.typography.action)
 
-        Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(8.dp))
 
-        TextField(
-          field = model.state.form.email,
-          label = "변경할 이메일 주소",
-          labelPosition = LabelPosition.Internal,
-          placeholder = "me@example.com",
-          contentType = ContentType.EmailAddress,
-          keyboardType = KeyboardType.Email,
-          onImeAction = { submit() },
-        )
+    TextField(
+      field = model.state.form.email,
+      label = "변경할 이메일 주소",
+      labelPosition = LabelPosition.Internal,
+      placeholder = "me@example.com",
+      contentType = ContentType.EmailAddress,
+      keyboardType = KeyboardType.Email,
+      onImeAction = { submit() },
+    )
   }
 }

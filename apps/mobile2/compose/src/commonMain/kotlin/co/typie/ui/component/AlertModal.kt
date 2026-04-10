@@ -12,14 +12,7 @@ fun AlertModal(
 ) {
   val dismissAction = onDismiss ?: onConfirm
 
-  BaseModal(
-    title = title,
-    message = message,
-    onDismissRequest = dismissAction,
-  ) {
-    BaseModalActionButton(
-      text = confirmText,
-      onClick = onConfirm,
-    )
+  BaseModal(title = title, message = message, onDismissRequest = dismissAction) {
+    BaseModalActionButton(text = confirmText, onClick = onConfirm)
   }
 }

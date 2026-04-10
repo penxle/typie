@@ -7,14 +7,13 @@ import kotlin.test.assertEquals
 class SheetControllerTest {
   @Test
   fun updateResolvedDetentsPreservesDetentsWhenGivenCurrentSnapshot() {
-    val controller = SheetControllerState<Unit>(
-      mode = SheetMode.Modal,
-      dismissPolicy = SheetDismissPolicy(),
-    )
-    val detents = listOf(
-      ResolvedSheetDetent(SheetDetentId.Fixed(360.dp), 360.dp),
-      ResolvedSheetDetent(SheetDetentId.TopGap(128.dp), 672.dp),
-    )
+    val controller =
+      SheetControllerState<Unit>(mode = SheetMode.Modal, dismissPolicy = SheetDismissPolicy())
+    val detents =
+      listOf(
+        ResolvedSheetDetent(SheetDetentId.Fixed(360.dp), 360.dp),
+        ResolvedSheetDetent(SheetDetentId.TopGap(128.dp), 672.dp),
+      )
 
     controller.updateResolvedDetents(
       detents = detents,

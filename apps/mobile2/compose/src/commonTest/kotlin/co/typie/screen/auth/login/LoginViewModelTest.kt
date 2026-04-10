@@ -6,23 +6,22 @@ import com.apollographql.apollo.api.ApolloRequest
 import com.apollographql.apollo.api.ApolloResponse
 import com.apollographql.apollo.api.Operation
 import com.apollographql.apollo.network.NetworkTransport
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LoginViewModelTest {
   @Test
   fun `invalid email submission returns error without hitting network`() = runTest {
     val networkTransport = CountingNetworkTransport()
-    val model = LoginWithEmailViewModel(
-      apolloClient = ApolloClient.Builder()
-        .networkTransport(networkTransport)
-        .build(),
-    )
+    val model =
+      LoginWithEmailViewModel(
+        apolloClient = ApolloClient.Builder().networkTransport(networkTransport).build()
+      )
 
     model.state.form.email.setValue("invalid-email")
     model.state.form.password.setValue("password123")

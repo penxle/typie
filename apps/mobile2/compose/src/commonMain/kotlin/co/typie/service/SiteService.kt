@@ -14,14 +14,13 @@ internal fun resolveStoredSiteId(
   val storedSiteId = siteIdsByUserId[userId]
   val preferredSiteId = storedSiteId ?: legacySiteId.takeIf { it.isNotEmpty() }
 
-  return preferredSiteId?.takeIf { it in availableSiteIds }
-    ?: availableSiteIds.firstOrNull()
-    ?: ""
+  return preferredSiteId?.takeIf { it in availableSiteIds } ?: availableSiteIds.firstOrNull() ?: ""
 }
 
 object SiteService {
   private var currentUserId: String by Prefs("current_user_id", "")
-  private var siteIdsByUserId: Map<String, String> by Prefs("site_ids_by_user_id", emptyMap<String, String>())
+  private var siteIdsByUserId: Map<String, String> by
+    Prefs("site_ids_by_user_id", emptyMap<String, String>())
   private var legacySiteId: String by Prefs("site_id", "")
   private var currentSiteId by mutableStateOf(loadCurrentSiteId())
 
@@ -38,12 +37,13 @@ object SiteService {
   fun bindUser(userId: String, availableSiteIds: List<String>) {
     currentUserId = userId
 
-    val resolvedSiteId = resolveStoredSiteId(
-      userId = userId,
-      availableSiteIds = availableSiteIds,
-      siteIdsByUserId = siteIdsByUserId,
-      legacySiteId = legacySiteId,
-    )
+    val resolvedSiteId =
+      resolveStoredSiteId(
+        userId = userId,
+        availableSiteIds = availableSiteIds,
+        siteIdsByUserId = siteIdsByUserId,
+        legacySiteId = legacySiteId,
+      )
 
     if (resolvedSiteId.isNotEmpty()) {
       siteIdsByUserId = siteIdsByUserId + (userId to resolvedSiteId)

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.graphql.Apollo
 import co.typie.graphql.EnrollPlanScreen_SubscribePlanWithTrial_Mutation
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.PlanUpgradeSheet_Query
@@ -12,7 +13,6 @@ import co.typie.graphql.TypieError
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
-import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
@@ -27,11 +27,14 @@ sealed interface PlanUpgradeTrialError {
 class PlanUpgradeSheetViewModel : ViewModel() {
   private val subscriptionService = SubscriptionService
   private val currentSubscriptionStore = CurrentSubscriptionStore
-  val query = Apollo.watchQuery(
-    scope = viewModelScope,
-    placeholderData = placeholderData(),
-    skip = { subscriptionService.usesSandbox },
-  ) { PlanUpgradeSheet_Query() }
+  val query =
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderData(),
+      skip = { subscriptionService.usesSandbox },
+    ) {
+      PlanUpgradeSheet_Query()
+    }
 
   var isStartingTrial by mutableStateOf(false)
     private set
@@ -54,9 +57,5 @@ class PlanUpgradeSheetViewModel : ViewModel() {
   }
 }
 
-private fun placeholderData() = PlanUpgradeSheet_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    canStartTrial = false
-  }
-}
-
+private fun placeholderData() =
+  PlanUpgradeSheet_Query.Data(PlaceholderResolver) { me = buildUser { canStartTrial = false } }

@@ -24,7 +24,7 @@ class TextFieldKeyHandlingTest {
         key = Key.Tab,
         type = KeyEventType.KeyDown,
         isShiftPressed = false,
-      )
+      ),
     )
   }
 
@@ -41,7 +41,7 @@ class TextFieldKeyHandlingTest {
         key = Key.Tab,
         type = KeyEventType.KeyDown,
         isShiftPressed = true,
-      )
+      ),
     )
   }
 
@@ -58,7 +58,7 @@ class TextFieldKeyHandlingTest {
         key = Key.Enter,
         type = KeyEventType.KeyDown,
         isShiftPressed = false,
-      )
+      ),
     )
   }
 
@@ -66,11 +66,7 @@ class TextFieldKeyHandlingTest {
   fun shift_tab_key_down_triggers_previous_tab_action() {
     assertEquals(
       TextFieldTabAction.Previous,
-      resolveTextFieldTabAction(
-        key = Key.Tab,
-        type = KeyEventType.KeyDown,
-        isShiftPressed = true,
-      )
+      resolveTextFieldTabAction(key = Key.Tab, type = KeyEventType.KeyDown, isShiftPressed = true),
     )
   }
 
@@ -78,11 +74,7 @@ class TextFieldKeyHandlingTest {
   fun tab_key_down_triggers_next_tab_action() {
     assertEquals(
       TextFieldTabAction.Next,
-      resolveTextFieldTabAction(
-        key = Key.Tab,
-        type = KeyEventType.KeyDown,
-        isShiftPressed = false,
-      )
+      resolveTextFieldTabAction(key = Key.Tab, type = KeyEventType.KeyDown, isShiftPressed = false),
     )
   }
 
@@ -94,7 +86,7 @@ class TextFieldKeyHandlingTest {
         key = Key.Enter,
         type = KeyEventType.KeyDown,
         isShiftPressed = false,
-      )
+      ),
     )
   }
 
@@ -144,22 +136,22 @@ class TextFieldKeyHandlingTest {
 
   @Test
   fun tab_character_value_change_triggers_tab_action_when_available() {
-    val currentValue = TextFieldValue(
-      text = "user@example.com",
-      selection = TextRange("user@example.com".length),
-    )
-    val newValue = TextFieldValue(
-      text = "user@example.com\t",
-      selection = TextRange("user@example.com\t".length),
-    )
+    val currentValue =
+      TextFieldValue(text = "user@example.com", selection = TextRange("user@example.com".length))
+    val newValue =
+      TextFieldValue(
+        text = "user@example.com\t",
+        selection = TextRange("user@example.com\t".length),
+      )
 
-    val result = resolveTextFieldValueChange(
-      currentValue = currentValue,
-      newValue = newValue,
-      tabNavigationEnabled = true,
-      hasTabAction = true,
-      suppressTabValueChange = false,
-    )
+    val result =
+      resolveTextFieldValueChange(
+        currentValue = currentValue,
+        newValue = newValue,
+        tabNavigationEnabled = true,
+        hasTabAction = true,
+        suppressTabValueChange = false,
+      )
 
     assertTrue(result.triggerTabAction)
     assertTrue(result.consumeValueChange)
@@ -169,22 +161,22 @@ class TextFieldKeyHandlingTest {
 
   @Test
   fun tab_character_value_change_is_consumed_without_next_action_when_navigation_is_enabled() {
-    val currentValue = TextFieldValue(
-      text = "user@example.com",
-      selection = TextRange("user@example.com".length),
-    )
-    val newValue = TextFieldValue(
-      text = "user@example.com\t",
-      selection = TextRange("user@example.com\t".length),
-    )
+    val currentValue =
+      TextFieldValue(text = "user@example.com", selection = TextRange("user@example.com".length))
+    val newValue =
+      TextFieldValue(
+        text = "user@example.com\t",
+        selection = TextRange("user@example.com\t".length),
+      )
 
-    val result = resolveTextFieldValueChange(
-      currentValue = currentValue,
-      newValue = newValue,
-      tabNavigationEnabled = true,
-      hasTabAction = false,
-      suppressTabValueChange = false,
-    )
+    val result =
+      resolveTextFieldValueChange(
+        currentValue = currentValue,
+        newValue = newValue,
+        tabNavigationEnabled = true,
+        hasTabAction = false,
+        suppressTabValueChange = false,
+      )
 
     assertFalse(result.triggerTabAction)
     assertTrue(result.consumeValueChange)
@@ -194,22 +186,22 @@ class TextFieldKeyHandlingTest {
 
   @Test
   fun suppressed_tab_value_change_is_ignored_without_triggering_navigation() {
-    val currentValue = TextFieldValue(
-      text = "user@example.com",
-      selection = TextRange("user@example.com".length),
-    )
-    val newValue = TextFieldValue(
-      text = "user@example.com\t",
-      selection = TextRange("user@example.com\t".length),
-    )
+    val currentValue =
+      TextFieldValue(text = "user@example.com", selection = TextRange("user@example.com".length))
+    val newValue =
+      TextFieldValue(
+        text = "user@example.com\t",
+        selection = TextRange("user@example.com\t".length),
+      )
 
-    val result = resolveTextFieldValueChange(
-      currentValue = currentValue,
-      newValue = newValue,
-      tabNavigationEnabled = true,
-      hasTabAction = true,
-      suppressTabValueChange = true,
-    )
+    val result =
+      resolveTextFieldValueChange(
+        currentValue = currentValue,
+        newValue = newValue,
+        tabNavigationEnabled = true,
+        hasTabAction = true,
+        suppressTabValueChange = true,
+      )
 
     assertFalse(result.triggerTabAction)
     assertTrue(result.consumeValueChange)
@@ -219,22 +211,17 @@ class TextFieldKeyHandlingTest {
 
   @Test
   fun regular_value_change_clears_tab_suppression() {
-    val currentValue = TextFieldValue(
-      text = "user",
-      selection = TextRange("user".length),
-    )
-    val newValue = TextFieldValue(
-      text = "users",
-      selection = TextRange("users".length),
-    )
+    val currentValue = TextFieldValue(text = "user", selection = TextRange("user".length))
+    val newValue = TextFieldValue(text = "users", selection = TextRange("users".length))
 
-    val result = resolveTextFieldValueChange(
-      currentValue = currentValue,
-      newValue = newValue,
-      tabNavigationEnabled = true,
-      hasTabAction = true,
-      suppressTabValueChange = true,
-    )
+    val result =
+      resolveTextFieldValueChange(
+        currentValue = currentValue,
+        newValue = newValue,
+        tabNavigationEnabled = true,
+        hasTabAction = true,
+        suppressTabValueChange = true,
+      )
 
     assertFalse(result.triggerTabAction)
     assertFalse(result.consumeValueChange)

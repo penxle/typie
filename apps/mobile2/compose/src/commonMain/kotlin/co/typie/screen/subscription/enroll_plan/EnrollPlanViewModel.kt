@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.graphql.Apollo
 import co.typie.graphql.EnrollPlanScreen_Query
 import co.typie.graphql.EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation
 import co.typie.graphql.EnrollPlanScreen_SubscribePlanWithTrial_Mutation
@@ -21,7 +22,6 @@ import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
 import co.typie.platform.PurchaseStore
 import co.typie.result.Result
-import co.typie.graphql.Apollo
 import co.typie.result.loading
 import co.typie.result.result
 import co.typie.service.CurrentSubscriptionStore
@@ -37,6 +37,7 @@ sealed interface EnrollPlanError {
 
 sealed interface PurchaseError {
   data class ServerError(val code: String?) : PurchaseError
+
   data object Unknown : PurchaseError
 }
 
@@ -46,11 +47,14 @@ class EnrollPlanViewModel : ViewModel() {
   var isStartingTrial by mutableStateOf(false)
     private set
 
-  val query = Apollo.watchQuery(
-    scope = viewModelScope,
-    placeholderData = placeholderData(),
-    skip = { subscriptionService.usesSandbox },
-  ) { EnrollPlanScreen_Query() }
+  val query =
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderData(),
+      skip = { subscriptionService.usesSandbox },
+    ) {
+      EnrollPlanScreen_Query()
+    }
 
   var products by mutableStateOf<Map<PurchasePlanInterval, PurchaseProduct>>(emptyMap())
     private set
@@ -65,35 +69,30 @@ class EnrollPlanViewModel : ViewModel() {
     private set
 
   init {
-    viewModelScope.launch {
-      loadProducts()
-    }
+    viewModelScope.launch { loadProducts() }
 
     viewModelScope.launch {
-      subscriptionService.purchaseEvents.collect { event ->
-        handlePurchaseEvent(event)
-      }
+      subscriptionService.purchaseEvents.collect { event -> handlePurchaseEvent(event) }
     }
   }
 
-  suspend fun startTrial(): Result<Unit, EnrollPlanError> = loading({ isStartingTrial = it }) {
-    try {
-      celebration = subscriptionService.startTrial {
-        Apollo.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
-        currentSubscriptionStore.refresh()
-        query.refetch()
+  suspend fun startTrial(): Result<Unit, EnrollPlanError> =
+    loading({ isStartingTrial = it }) {
+      try {
+        celebration = subscriptionService.startTrial {
+          Apollo.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+          currentSubscriptionStore.refresh()
+          query.refetch()
+        }
+        // TODO: Mixpanel start_trial
+      } catch (e: TypieError) {
+        raise(EnrollPlanError.ServerError)
       }
-      // TODO: Mixpanel start_trial
-    } catch (e: TypieError) {
-      raise(EnrollPlanError.ServerError)
     }
-  }
 
   suspend fun purchase(product: PurchaseProduct): Result<Unit, Nothing> = result {
-    val purchaseResult = subscriptionService.purchase(
-      product = product,
-      accountId = query.data.me.uuid,
-    )
+    val purchaseResult =
+      subscriptionService.purchase(product = product, accountId = query.data.me.uuid)
 
     celebration = purchaseResult.celebration
 
@@ -126,14 +125,16 @@ class EnrollPlanViewModel : ViewModel() {
     val verificationData = event.verificationData()
 
     try {
-      val response = Apollo.executeMutation(
-        EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation(
-          input = SubscribeOrChangePlanWithInAppPurchaseInput(
-            data = verificationData,
-            store = event.store.toGraphqlStore(),
-          ),
-        ),
-      )
+      val response =
+        Apollo.executeMutation(
+          EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation(
+            input =
+              SubscribeOrChangePlanWithInAppPurchaseInput(
+                data = verificationData,
+                store = event.store.toGraphqlStore(),
+              )
+          )
+        )
 
       query.refetch()
       currentSubscriptionStore.refresh()
@@ -171,11 +172,11 @@ private fun PurchaseStore.toGraphqlStore(): InAppPurchaseStore {
   }
 }
 
-private fun placeholderData() = EnrollPlanScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    uuid = ""
-    canStartTrial = false
-    subscription = null
+private fun placeholderData() =
+  EnrollPlanScreen_Query.Data(PlaceholderResolver) {
+    me = buildUser {
+      uuid = ""
+      canStartTrial = false
+      subscription = null
+    }
   }
-}
-

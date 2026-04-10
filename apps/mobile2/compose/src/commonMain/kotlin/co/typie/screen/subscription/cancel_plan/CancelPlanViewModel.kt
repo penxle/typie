@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.QueryState
 import co.typie.result.Result
+import co.typie.result.loading
+import co.typie.result.result
 import co.typie.service.CancelPlanFlowState
 import co.typie.service.CurrentSubscriptionStore
 import co.typie.service.SubscriptionManagementResult
@@ -15,8 +17,6 @@ import co.typie.service.consumeCancelPlanCloseRequest
 import co.typie.service.consumeCancelPlanErrorMessage
 import co.typie.service.reduceCancelPlanFlowOnManagementResult
 import co.typie.service.reduceCancelPlanFlowOnSubscriptionState
-import co.typie.result.loading
-import co.typie.result.result
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -43,26 +43,20 @@ class CancelPlanViewModel : ViewModel() {
           reduceCancelPlanFlowOnSubscriptionState(
             current = flowState,
             subscriptionState = subscriptionState,
-          ),
+          )
         )
       }
     }
   }
 
-  fun onOpenSubscriptionManagementResult(
-    result: SubscriptionManagementResult,
-  ) {
-    updateFlowState(
-      reduceCancelPlanFlowOnManagementResult(
-        current = flowState,
-        result = result,
-      ),
-    )
+  fun onOpenSubscriptionManagementResult(result: SubscriptionManagementResult) {
+    updateFlowState(reduceCancelPlanFlowOnManagementResult(current = flowState, result = result))
   }
 
-  suspend fun openSubscriptionManagement(): Result<Unit, Nothing> = loading({ isOpeningSubscriptionManagement = it }) {
-    onOpenSubscriptionManagementResult(subscriptionService.openSubscriptionManagement())
-  }
+  suspend fun openSubscriptionManagement(): Result<Unit, Nothing> =
+    loading({ isOpeningSubscriptionManagement = it }) {
+      onOpenSubscriptionManagementResult(subscriptionService.openSubscriptionManagement())
+    }
 
   fun onResumed() {
     if (flowState.awaitingStoreResult) {

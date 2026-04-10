@@ -9,15 +9,10 @@ import co.typie.ui.component.bottombar.BottomBarActionButton
 fun SpaceBottomBarActionButton() {
   BottomBarActionButton(
     icon = Lucide.SquarePlus,
-    menus = listOf(
-      ActionMenuItem(
-        icon = Lucide.FolderPlus,
-        label = "여기에 폴더 만들기",
+    menus =
+      listOf(
+        ActionMenuItem(icon = Lucide.FolderPlus, label = "여기에 폴더 만들기"),
+        ActionMenuItem(icon = Lucide.SquarePen, label = "여기에 문서 만들기"),
       ),
-      ActionMenuItem(
-        icon = Lucide.SquarePen,
-        label = "여기에 문서 만들기",
-      ),
-    ),
   )
 }

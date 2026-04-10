@@ -16,10 +16,7 @@ internal data class FontSettingsFamily(
   val fonts: List<FontSettingsFont>,
 )
 
-internal data class FontUploadProgress(
-  val current: Int,
-  val total: Int,
-)
+internal data class FontUploadProgress(val current: Int, val total: Int)
 
 internal data class FontUploadSuccess(
   val familyId: String,
@@ -35,10 +32,7 @@ internal enum class FontUploadError {
   RefreshFailed,
 }
 
-internal data class FontUploadFailure(
-  val name: String,
-  val error: FontUploadError,
-)
+internal data class FontUploadFailure(val name: String, val error: FontUploadError)
 
 internal enum class FontUploadSummaryStatus {
   Success,
@@ -57,39 +51,37 @@ internal enum class FontUploadAction {
   ShowPlanUpgradeSheet,
 }
 
-internal val FONT_WEIGHT_LABELS = mapOf(
-  100 to "가장 가늘게",
-  200 to "아주 가늘게",
-  300 to "가늘게",
-  400 to "보통",
-  500 to "중간",
-  600 to "약간 굵게",
-  700 to "굵게",
-  800 to "아주 굵게",
-  900 to "가장 굵게",
-)
+internal val FONT_WEIGHT_LABELS =
+  mapOf(
+    100 to "가장 가늘게",
+    200 to "아주 가늘게",
+    300 to "가늘게",
+    400 to "보통",
+    500 to "중간",
+    600 to "약간 굵게",
+    700 to "굵게",
+    800 to "아주 굵게",
+    900 to "가장 굵게",
+  )
 
-internal fun uploadedFontFamilies(
-  families: List<FontSettingsFamily>,
-): List<FontSettingsFamily> {
+internal fun uploadedFontFamilies(families: List<FontSettingsFamily>): List<FontSettingsFamily> {
   return families
     .filter { it.source == "USER" && it.state == "ACTIVE" }
     .map { family ->
       family.copy(
-        fonts = family.fonts
-          .filter { it.state == "ACTIVE" }
-          .sortedBy { it.weight }
-          .associateBy { it.weight }
-          .values
-          .toList(),
+        fonts =
+          family.fonts
+            .filter { it.state == "ACTIVE" }
+            .sortedBy { it.weight }
+            .associateBy { it.weight }
+            .values
+            .toList()
       )
     }
     .filter { it.fonts.isNotEmpty() }
 }
 
-internal fun representativeFont(
-  fonts: List<FontSettingsFont>,
-): FontSettingsFont? {
+internal fun representativeFont(fonts: List<FontSettingsFont>): FontSettingsFont? {
   if (fonts.isEmpty()) return null
 
   return fonts.reduce { previous, current ->
@@ -104,19 +96,13 @@ internal fun representativeFont(
   }
 }
 
-internal fun fontWeightLabel(
-  weight: Int,
-  subfamilyDisplayName: String?,
-): String {
+internal fun fontWeightLabel(weight: Int, subfamilyDisplayName: String?): String {
   return FONT_WEIGHT_LABELS[weight]
     ?: subfamilyDisplayName?.takeIf { it.isNotBlank() }?.let { "$it ($weight)" }
     ?: weight.toString()
 }
 
-internal fun isSupportedTtfFontFile(
-  filename: String,
-  mimeType: String?,
-): Boolean {
+internal fun isSupportedTtfFontFile(filename: String, mimeType: String?): Boolean {
   val normalizedMimeType = mimeType?.substringBefore(';')?.lowercase()
   return filename.endsWith(".ttf", ignoreCase = true) ||
     normalizedMimeType == "font/ttf" ||
@@ -124,9 +110,7 @@ internal fun isSupportedTtfFontFile(
     normalizedMimeType == "application/x-truetype-font"
 }
 
-internal fun fontUploadAction(
-  hasSubscription: Boolean,
-): FontUploadAction {
+internal fun fontUploadAction(hasSubscription: Boolean): FontUploadAction {
   return if (hasSubscription) FontUploadAction.PickFont else FontUploadAction.ShowPlanUpgradeSheet
 }
 
@@ -136,15 +120,12 @@ internal fun summarizeFontUploadResults(
 ): FontUploadSummary? {
   if (successes.isEmpty() && failures.isEmpty()) return null
 
-  val status = when {
-    successes.isEmpty() -> FontUploadSummaryStatus.Failure
-    failures.isEmpty() -> FontUploadSummaryStatus.Success
-    else -> FontUploadSummaryStatus.PartialSuccess
-  }
+  val status =
+    when {
+      successes.isEmpty() -> FontUploadSummaryStatus.Failure
+      failures.isEmpty() -> FontUploadSummaryStatus.Success
+      else -> FontUploadSummaryStatus.PartialSuccess
+    }
 
-  return FontUploadSummary(
-    status = status,
-    successes = successes,
-    failures = failures,
-  )
+  return FontUploadSummary(status = status, successes = successes, failures = failures)
 }

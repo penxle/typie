@@ -7,11 +7,7 @@ import co.typie.service.SubscriptionSnapshot
 import co.typie.service.SubscriptionState
 
 fun MoreScreen_Query.Subscription.toSubscriptionSnapshot(): SubscriptionSnapshot {
-  return SubscriptionSnapshot(
-    id = id,
-    planId = plan.id,
-    planName = plan.name,
-  )
+  return SubscriptionSnapshot(id = id, planId = plan.id, planName = plan.name)
 }
 
 fun SettingsScreen_Query.Subscription.toSubscriptionSnapshot(): SubscriptionSnapshot {

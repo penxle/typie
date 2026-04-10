@@ -41,20 +41,19 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 
 enum class ButtonVariant {
-  Primary, Secondary, Danger
+  Primary,
+  Secondary,
+  Danger,
 }
 
-@Immutable
-private data class ButtonColors(
-  val background: Color,
-  val text: Color,
-)
+@Immutable private data class ButtonColors(val background: Color, val text: Color)
 
-private fun AppColors.buttonColors(variant: ButtonVariant): ButtonColors = when (variant) {
-  ButtonVariant.Primary -> ButtonColors(background = brand, text = textOnBrand)
-  ButtonVariant.Secondary -> ButtonColors(background = surfaceSunken, text = textPrimary)
-  ButtonVariant.Danger -> ButtonColors(background = danger, text = textOnDanger)
-}
+private fun AppColors.buttonColors(variant: ButtonVariant): ButtonColors =
+  when (variant) {
+    ButtonVariant.Primary -> ButtonColors(background = brand, text = textOnBrand)
+    ButtonVariant.Secondary -> ButtonColors(background = surfaceSunken, text = textPrimary)
+    ButtonVariant.Danger -> ButtonColors(background = danger, text = textOnDanger)
+  }
 
 @Composable
 fun Button(
@@ -87,21 +86,19 @@ fun Button(
   ) {
     InteractionScope {
       Box(
-        modifier = modifier
-          .fillMaxWidth()
-          .height(48.dp)
-          .alpha(alpha)
-          .background(colors.background, RoundedCornerShape(16.dp))
-          .clickable(enabled = interactive, onClick = onClick),
+        modifier =
+          modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .alpha(alpha)
+            .background(colors.background, RoundedCornerShape(16.dp))
+            .clickable(enabled = interactive, onClick = onClick),
         contentAlignment = Alignment.Center,
       ) {
         val spinnerAlpha by animateFloatAsState(if (debouncedLoading) 1f else 0f, tween(150))
         val spinnerWidth = if (debouncedLoading) 16.dp else 0.dp
 
-        Row(
-          modifier = Modifier.pressScale(0.95f),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(modifier = Modifier.pressScale(0.95f), verticalAlignment = Alignment.CenterVertically) {
           Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {
             if (debouncedLoading) {
               ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
@@ -113,10 +110,7 @@ fun Button(
           }
 
           if (leading != null) {
-            Box(
-              modifier = Modifier.size(16.dp),
-              contentAlignment = Alignment.Center,
-            ) {
+            Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
               leading(colors.text)
             }
 
@@ -128,11 +122,7 @@ fun Button(
             targetState = displayText,
             transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
           ) { label ->
-            Text(
-              text = label,
-              style = AppTheme.typography.action,
-              color = colors.text,
-            )
+            Text(text = label, style = AppTheme.typography.action, color = colors.text)
           }
         }
       }
@@ -143,21 +133,23 @@ fun Button(
 @Composable
 private fun ButtonSpinner(color: Color, modifier: Modifier = Modifier) {
   val transition = rememberInfiniteTransition()
-  val rotation by transition.animateFloat(
-    initialValue = 0f,
-    targetValue = 360f,
-    animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
-  )
+  val rotation by
+    transition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
+    )
   Canvas(modifier.size(16.dp)) {
     drawArc(
       color = color,
       startAngle = rotation,
       sweepAngle = 220f,
       useCenter = false,
-      style = androidx.compose.ui.graphics.drawscope.Stroke(
-        width = 1.5.dp.toPx(),
-        cap = androidx.compose.ui.graphics.StrokeCap.Round,
-      ),
+      style =
+        androidx.compose.ui.graphics.drawscope.Stroke(
+          width = 1.5.dp.toPx(),
+          cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        ),
     )
   }
 }

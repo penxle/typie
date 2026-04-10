@@ -15,28 +15,29 @@ internal actual fun Surface(
   onDetach: () -> Unit,
   onResize: () -> Unit,
 ) {
-  val callback = remember(onAttach, onDetach, onResize) {
-    var currentHandle = 0L
+  val callback =
+    remember(onAttach, onDetach, onResize) {
+      var currentHandle = 0L
 
-    object : SurfaceHolder.Callback {
-      override fun surfaceCreated(holder: SurfaceHolder) {
-        currentHandle = NativeWindowBridge.fromSurface(holder.surface)
-        onAttach(currentHandle)
-      }
+      object : SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) {
+          currentHandle = NativeWindowBridge.fromSurface(holder.surface)
+          onAttach(currentHandle)
+        }
 
-      override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        onResize()
-      }
+        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+          onResize()
+        }
 
-      override fun surfaceDestroyed(holder: SurfaceHolder) {
-        onDetach()
-        if (currentHandle != 0L) {
-          NativeWindowBridge.release(currentHandle)
-          currentHandle = 0L
+        override fun surfaceDestroyed(holder: SurfaceHolder) {
+          onDetach()
+          if (currentHandle != 0L) {
+            NativeWindowBridge.release(currentHandle)
+            currentHandle = 0L
+          }
         }
       }
     }
-  }
 
   AndroidView(
     factory = { context ->
@@ -47,8 +48,6 @@ internal actual fun Surface(
       }
     },
     modifier = modifier,
-    onRelease = { view ->
-      view.holder.removeCallback(callback)
-    },
+    onRelease = { view -> view.holder.removeCallback(callback) },
   )
 }

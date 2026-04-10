@@ -15,7 +15,11 @@ class RootShellModelsTest {
   fun `rootShellTargetState resolves authenticated destinations without session token state`() {
     assertEquals(
       RootShellTargetState(RootShellDestination.Main),
-      rootShellTargetState(AppStartupState.Ready(readyMigrationResult()), AuthState.Authenticated, BootstrapState.Ready),
+      rootShellTargetState(
+        AppStartupState.Ready(readyMigrationResult()),
+        AuthState.Authenticated,
+        BootstrapState.Ready,
+      ),
     )
   }
 
@@ -23,7 +27,11 @@ class RootShellModelsTest {
   fun `rootShellTargetState ignores stale session context outside authenticated state`() {
     assertEquals(
       RootShellTargetState(RootShellDestination.Auth),
-      rootShellTargetState(AppStartupState.Ready(readyMigrationResult()), AuthState.Unauthenticated, BootstrapState.Ready),
+      rootShellTargetState(
+        AppStartupState.Ready(readyMigrationResult()),
+        AuthState.Unauthenticated,
+        BootstrapState.Ready,
+      ),
     )
   }
 
@@ -31,20 +39,13 @@ class RootShellModelsTest {
   fun `resolveRootShellDestination prioritizes bootstrap blockers before auth destinations`() {
     assertEquals(
       RootShellDestination.System(
-        Route.Maintenance(
-          title = "점검 중",
-          message = "잠시 후 다시 시도해주세요.",
-          until = null,
-        ),
+        Route.Maintenance(title = "점검 중", message = "잠시 후 다시 시도해주세요.", until = null)
       ),
       resolveRootShellDestination(
         startupState = AppStartupState.Ready(readyMigrationResult()),
         authState = AuthState.Authenticated,
-        bootstrapState = BootstrapState.Maintenance(
-          title = "점검 중",
-          message = "잠시 후 다시 시도해주세요.",
-          until = null,
-        ),
+        bootstrapState =
+          BootstrapState.Maintenance(title = "점검 중", message = "잠시 후 다시 시도해주세요.", until = null),
       ),
     )
     assertEquals(

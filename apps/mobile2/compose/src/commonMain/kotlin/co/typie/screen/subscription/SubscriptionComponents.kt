@@ -32,74 +32,42 @@ fun SubscriptionFeatureList(
     modifier = modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(rowSpacing),
   ) {
-    features.forEach { feature ->
-      SubscriptionFeatureItem(
-        feature = feature,
-        iconSize = iconSize,
-      )
-    }
+    features.forEach { feature -> SubscriptionFeatureItem(feature = feature, iconSize = iconSize) }
   }
 }
 
 @Composable
 fun SubscriptionBadgeRow() {
-  val icons = listOf(
-    Lucide.Crown,
-    Lucide.Tag,
-    Lucide.Star,
-    Lucide.Key,
-    Lucide.Gift,
-  )
+  val icons = listOf(Lucide.Crown, Lucide.Tag, Lucide.Star, Lucide.Key, Lucide.Gift)
 
-  Box(
-    modifier = Modifier.fillMaxWidth(),
-    contentAlignment = Alignment.Center,
-  ) {
+  Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
     Row(
       horizontalArrangement = Arrangement.spacedBy((-10).dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      icons.forEach { icon ->
-        CelebrationBadge(icon = icon)
-      }
+      icons.forEach { icon -> CelebrationBadge(icon = icon) }
     }
   }
 }
 
 @Composable
-private fun CelebrationBadge(
-  icon: IconData,
-) {
+private fun CelebrationBadge(icon: IconData) {
   val borderColor = AppTheme.colors.surfaceDefault
   val backgroundColor = AppTheme.colors.textPrimary
   val iconTint = AppTheme.colors.surfaceDefault
 
   Box(
-    modifier = Modifier
-      .size(32.dp)
-      .clip(CircleShape)
-      .border(2.dp, borderColor, CircleShape),
+    modifier = Modifier.size(32.dp).clip(CircleShape).border(2.dp, borderColor, CircleShape),
     contentAlignment = Alignment.Center,
   ) {
-    Canvas(
-      modifier = Modifier.matchParentSize(),
-    ) {
-      drawCircle(color = backgroundColor)
-    }
+    Canvas(modifier = Modifier.matchParentSize()) { drawCircle(color = backgroundColor) }
 
-    Icon(
-      icon = icon,
-      modifier = Modifier.size(16.dp),
-      tint = iconTint,
-    )
+    Icon(icon = icon, modifier = Modifier.size(16.dp), tint = iconTint)
   }
 }
 
 @Composable
-private fun SubscriptionFeatureItem(
-  feature: SubscriptionFeature,
-  iconSize: Dp,
-) {
+private fun SubscriptionFeatureItem(feature: SubscriptionFeature, iconSize: Dp) {
   Row(
     modifier = Modifier.fillMaxWidth(),
     verticalAlignment = Alignment.CenterVertically,
@@ -111,9 +79,6 @@ private fun SubscriptionFeatureItem(
       tint = AppTheme.colors.textSecondary,
     )
 
-    Text(
-      text = feature.label,
-      style = AppTheme.typography.body,
-    )
+    Text(text = feature.label, style = AppTheme.typography.body)
   }
 }

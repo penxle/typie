@@ -15,15 +15,15 @@ internal fun Flow<String>.coalescedSiteRefreshes(
   siteId: String,
   debounceMs: Long = DEFAULT_SITE_REFRESH_DEBOUNCE_MS,
 ): Flow<Unit> {
-  return filter { it == siteId }
-    .coalescedRefreshSignals(delayMillis = debounceMs)
+  return filter { it == siteId }.coalescedRefreshSignals(delayMillis = debounceMs)
 }
 
 object SiteRefreshCoordinator {
-  private val signals = MutableSharedFlow<String>(
-    extraBufferCapacity = 64,
-    onBufferOverflow = BufferOverflow.DROP_OLDEST,
-  )
+  private val signals =
+    MutableSharedFlow<String>(
+      extraBufferCapacity = 64,
+      onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
   fun notifySiteChanged(siteId: String) {
     if (siteId.isBlank()) {
@@ -42,9 +42,7 @@ object SiteRefreshCoordinator {
   }
 }
 
-private fun Flow<String>.coalescedRefreshSignals(
-  delayMillis: Long,
-): Flow<Unit> {
+private fun Flow<String>.coalescedRefreshSignals(delayMillis: Long): Flow<Unit> {
   return channelFlow {
     this@coalescedRefreshSignals.collectLatest {
       delay(delayMillis)

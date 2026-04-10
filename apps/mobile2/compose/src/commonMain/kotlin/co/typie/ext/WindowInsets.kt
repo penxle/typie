@@ -28,34 +28,28 @@ expect val WindowInsets.Companion.ime: WindowInsets
   @Composable get
 
 @Composable
-fun Modifier.statusBarsPadding(): Modifier =
-  windowInsetsPadding(WindowInsets.statusBars)
+fun Modifier.statusBarsPadding(): Modifier = windowInsetsPadding(WindowInsets.statusBars)
 
 @Composable
-fun Modifier.navigationBarsPadding(): Modifier =
-  windowInsetsPadding(WindowInsets.navigationBars)
+fun Modifier.navigationBarsPadding(): Modifier = windowInsetsPadding(WindowInsets.navigationBars)
 
 @Composable
-fun Modifier.safeDrawingPadding(): Modifier =
-  windowInsetsPadding(WindowInsets.safeDrawing)
+fun Modifier.safeDrawingPadding(): Modifier = windowInsetsPadding(WindowInsets.safeDrawing)
 
 @Composable
-fun Modifier.safeBottomPadding(
-  extraBottom: Dp = 0.dp,
-): Modifier =
+fun Modifier.safeBottomPadding(extraBottom: Dp = 0.dp): Modifier =
   padding(bottom = extraBottom)
     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
 
 @Composable
 fun Modifier.imePadding(): Modifier {
   val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-  val animatedBottom by animateDpAsState(
-    targetValue = imeBottom,
-    animationSpec = spring(
-      dampingRatio = Spring.DampingRatioNoBouncy,
-      stiffness = Spring.StiffnessHigh,
-    ),
-  )
+  val animatedBottom by
+    animateDpAsState(
+      targetValue = imeBottom,
+      animationSpec =
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
+    )
   return padding(bottom = animatedBottom)
 }
 
@@ -63,12 +57,11 @@ fun Modifier.imePadding(): Modifier {
 fun Modifier.imeOrNavigationBarsPadding(): Modifier {
   val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val animatedBottom by animateDpAsState(
-    targetValue = maxOf(imeBottom, navBottom),
-    animationSpec = spring(
-      dampingRatio = Spring.DampingRatioNoBouncy,
-      stiffness = Spring.StiffnessHigh,
-    ),
-  )
+  val animatedBottom by
+    animateDpAsState(
+      targetValue = maxOf(imeBottom, navBottom),
+      animationSpec =
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
+    )
   return padding(bottom = animatedBottom)
 }

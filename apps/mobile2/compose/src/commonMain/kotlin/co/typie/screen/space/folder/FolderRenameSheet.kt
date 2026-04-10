@@ -13,7 +13,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import co.typie.form.FormState
 import co.typie.form.ValidateOn
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.TextField
@@ -24,17 +24,9 @@ import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import co.typie.overlay.LocalToast
 
-private class FolderRenameForm(
-  scope: CoroutineScope,
-  initialName: String,
-) : FormState(scope) {
-  val name = field(initialName) {
-    validateOn(ValidateOn.Change) {
-      required("폴더 이름을 입력해주세요.")
-    }
-  }
+private class FolderRenameForm(scope: CoroutineScope, initialName: String) : FormState(scope) {
+  val name = field(initialName) { validateOn(ValidateOn.Change) { required("폴더 이름을 입력해주세요.") } }
 }
 
 @Composable
@@ -46,9 +38,7 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
 ) {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val form = remember(folderId, initialName) {
-    FolderRenameForm(scope, initialName)
-  }
+  val form = remember(folderId, initialName) { FolderRenameForm(scope, initialName) }
   val normalizedInitialName = initialName.trim()
   val trimmedName = form.name.value.trim()
   val canSubmit = trimmedName.isNotEmpty() && trimmedName != normalizedInitialName
@@ -73,11 +63,8 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
     }
 
     isSubmitting = true
-    model.renameFolder(
-      folderId = folderId,
-      currentName = normalizedInitialName,
-      name = nextName,
-    )
+    model
+      .renameFolder(folderId = folderId, currentName = normalizedInitialName, name = nextName)
       .withDefaultExceptionHandler(toast)
       .onOk {
         form.name.commit()
@@ -108,9 +95,7 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
       )
     },
   ) {
-    Column(
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
       TextField(
         field = form.name,
         label = "폴더 이름",

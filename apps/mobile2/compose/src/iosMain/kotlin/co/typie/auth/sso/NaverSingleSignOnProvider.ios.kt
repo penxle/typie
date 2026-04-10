@@ -4,10 +4,10 @@ package co.typie.auth.sso
 
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.platform.ActivityContext
-import kotlinx.coroutines.suspendCancellableCoroutine
-import swiftPMImport.co.typie.compose.NaverSingleSignOnBridge
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import swiftPMImport.co.typie.compose.NaverSingleSignOnBridge
 
 actual class NaverSingleSignOnProvider : SingleSignOnAdapter {
   context(_: ActivityContext)

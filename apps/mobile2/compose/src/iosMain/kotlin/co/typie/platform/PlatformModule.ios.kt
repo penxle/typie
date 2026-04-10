@@ -23,20 +23,23 @@ import platform.posix.memcpy
 
 actual object PlatformModule {
   actual val platform: Platform = Platform.iOS
-  actual val ksafePrefs: KSafe = KSafe(fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
+  actual val ksafePrefs: KSafe =
+    KSafe(fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
   actual val ksafeVault: KSafe = KSafe(fileName = "vault")
   actual val clipboard: Clipboard = IOSClipboard()
   actual val deviceInfo: DeviceInfo = IOSDeviceInfo()
   actual val fileSystem: FileSystem = IOSFileSystem()
-  actual val legacyMigrationPlatformSource: LegacyMigrationPlatformSource = IOSLegacyMigrationPlatformSource()
+  actual val legacyMigrationPlatformSource: LegacyMigrationPlatformSource =
+    IOSLegacyMigrationPlatformSource()
   actual val purchaseService: PurchaseService = IOSPurchaseService()
   actual val share: Share = IOSShare()
   actual val editorHost: EditorHost = run {
     val path = NSBundle.mainBundle.pathForResource("icu", "zst")!!
     val nsData = NSData.create(contentsOfFile = path)!!
-    val icuData = ByteArray(nsData.length.toInt()).apply {
-      usePinned { memcpy(it.addressOf(0), nsData.bytes, nsData.length) }
-    }
+    val icuData =
+      ByteArray(nsData.length.toInt()).apply {
+        usePinned { memcpy(it.addressOf(0), nsData.bytes, nsData.length) }
+      }
     runBlocking { IosEditorHost.create(BackendKind.Gpu, icuData) }
   }
   actual val diskCache: DiskCache = diskCache()

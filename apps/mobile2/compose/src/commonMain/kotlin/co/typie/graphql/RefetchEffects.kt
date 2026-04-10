@@ -11,15 +11,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
-import co.typie.route.Route
 import co.typie.service.SiteRefreshCoordinator
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
-fun RefetchOnScreenEnterEffect(
-  onScreenEntered: () -> Unit,
-) {
+fun RefetchOnScreenEnterEffect(onScreenEntered: () -> Unit) {
   val nav = Nav.current
   val route = LocalRoute.current
   val latestOnScreenEntered by rememberUpdatedState(onScreenEntered)
@@ -36,9 +33,7 @@ fun RefetchOnScreenEnterEffect(
 }
 
 @Composable
-fun RefetchOnAppResumeEffect(
-  onResume: () -> Unit,
-) {
+fun RefetchOnAppResumeEffect(onResume: () -> Unit) {
   val lifecycleOwner = LocalLifecycleOwner.current
   val nav = Nav.current
   val route = LocalRoute.current
@@ -52,17 +47,12 @@ fun RefetchOnAppResumeEffect(
     }
 
     lifecycleOwner.lifecycle.addObserver(observer)
-    onDispose {
-      lifecycleOwner.lifecycle.removeObserver(observer)
-    }
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
   }
 }
 
 @Composable
-fun RefetchOnSiteUpdateEffect(
-  siteId: String,
-  onRefetch: () -> Unit,
-) {
+fun RefetchOnSiteUpdateEffect(siteId: String, onRefetch: () -> Unit) {
   val nav = Nav.current
   val route = LocalRoute.current
   val siteRefreshCoordinator = SiteRefreshCoordinator

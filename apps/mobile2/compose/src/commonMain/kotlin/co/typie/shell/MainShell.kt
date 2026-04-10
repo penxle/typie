@@ -58,9 +58,7 @@ import co.typie.ui.theme.AppTheme
 @Composable
 fun MainShell(content: @Composable (Route) -> Unit) {
   var currentTab by remember { mutableStateOf(Tab.entries.first()) }
-  val navigators = remember {
-    Tab.entries.associateWith { Navigator(it.route) }
-  }
+  val navigators = remember { Tab.entries.associateWith { Navigator(it.route) } }
   val activeNavigator = navigators[currentTab]!!
   val bottomBarState = remember { BottomBarState() }
 
@@ -71,17 +69,10 @@ fun MainShell(content: @Composable (Route) -> Unit) {
     toast.bottomInset = activeNavigator.current.toastBottomInset
   }
 
-  DisposableEffect(Unit) {
-    onDispose {
-      navigators.values.forEach { it.clear() }
-    }
-  }
+  DisposableEffect(Unit) { onDispose { navigators.values.forEach { it.clear() } } }
 
   CompositionLocalProvider(
-    LocalTabState provides TabState(
-      currentTab = currentTab,
-      onSelectTab = { currentTab = it },
-    ),
+    LocalTabState provides TabState(currentTab = currentTab, onSelectTab = { currentTab = it })
   ) {
     NavigationScaffold(
       navigator = activeNavigator,
@@ -112,10 +103,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 fun MainBottomBarPill() {
   val tabState = LocalTabState.current
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-    BottomBarPill(
-      currentTab = tabState.currentTab,
-      onSelectTab = tabState.onSelectTab,
-    )
+    BottomBarPill(currentTab = tabState.currentTab, onSelectTab = tabState.onSelectTab)
   }
 }
 
@@ -154,7 +142,7 @@ private fun BottomBarPill(
         Modifier.weight(1f).touchShield().graphicsLayer {
           scaleX = pillScale.value
           scaleY = pillScale.value
-        },
+        }
       ) {
         CompositionLocalProvider(LocalInteractionSource provides pillInteractionSource) {
           Row(
@@ -170,33 +158,35 @@ private fun BottomBarPill(
                 radius = 16f
               }
               .background(AppTheme.colors.surfaceRaised, CircleShape)
-              .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), CircleShape),
+              .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), CircleShape)
           ) {
             Tab.entries.forEach { tab ->
               val selected = tab == currentTab
-              val bgColor by animateColorAsState(
-                targetValue = if (selected) AppTheme.colors.surfaceTinted else AppTheme.colors.surfaceBase.copy(
-                  alpha = 0f
-                ),
-                animationSpec = tween(200),
-              )
+              val bgColor by
+                animateColorAsState(
+                  targetValue =
+                    if (selected) AppTheme.colors.surfaceTinted
+                    else AppTheme.colors.surfaceBase.copy(alpha = 0f),
+                  animationSpec = tween(200),
+                )
 
               Box(
-                modifier = Modifier
-                  .weight(1f)
-                  .fillMaxHeight()
-                  .padding(3.dp)
-                  .background(bgColor, CircleShape)
-                  .clickable { onSelectTab(tab) },
+                modifier =
+                  Modifier.weight(1f)
+                    .fillMaxHeight()
+                    .padding(3.dp)
+                    .background(bgColor, CircleShape)
+                    .clickable { onSelectTab(tab) },
                 contentAlignment = Alignment.Center,
               ) {
                 Icon(
-                  icon = when (tab) {
-                    Tab.Home -> Lucide.House
-                    Tab.Space -> Lucide.FolderOpen
-                    Tab.Notes -> Lucide.StickyNote
-                    Tab.More -> Lucide.Ellipsis
-                  },
+                  icon =
+                    when (tab) {
+                      Tab.Home -> Lucide.House
+                      Tab.Space -> Lucide.FolderOpen
+                      Tab.Notes -> Lucide.StickyNote
+                      Tab.More -> Lucide.Ellipsis
+                    },
                   tint = AppTheme.colors.textSecondary,
                 )
               }

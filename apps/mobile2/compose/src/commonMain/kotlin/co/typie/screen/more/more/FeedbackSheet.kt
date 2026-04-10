@@ -2,14 +2,11 @@ package co.typie.screen.more.more
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -25,14 +22,14 @@ import co.touchlab.kermit.Logger
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.graphql.Apollo
 import co.typie.graphql.MoreScreen_SubmitFeedback_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.SubmitFeedbackInput
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
-import co.typie.platform.DeviceInfo
+import co.typie.platform.PlatformModule
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Text
@@ -42,36 +39,30 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
-import co.typie.graphql.Apollo
-import co.typie.platform.PlatformModule
 import co.typie.ui.theme.AppTheme
 import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CancellationException
 
-private data class FeedbackTopic(
-  val value: String,
-  val label: String,
-)
+private data class FeedbackTopic(val value: String, val label: String)
 
-private data class FeedbackMood(
-  val value: String,
-  val icon: IconData,
-)
+private data class FeedbackMood(val value: String, val icon: IconData)
 
-private val feedbackTopics = listOf(
-  FeedbackTopic(value = "editor", label = "글쓰기/편집"),
-  FeedbackTopic(value = "share", label = "발행/공유"),
-  FeedbackTopic(value = "design", label = "테마/디자인"),
-  FeedbackTopic(value = "billing", label = "구독/결제"),
-  FeedbackTopic(value = "other", label = "기타"),
-)
+private val feedbackTopics =
+  listOf(
+    FeedbackTopic(value = "editor", label = "글쓰기/편집"),
+    FeedbackTopic(value = "share", label = "발행/공유"),
+    FeedbackTopic(value = "design", label = "테마/디자인"),
+    FeedbackTopic(value = "billing", label = "구독/결제"),
+    FeedbackTopic(value = "other", label = "기타"),
+  )
 
-private val feedbackMoods = listOf(
-  FeedbackMood(value = "angry", icon = Lucide.Angry),
-  FeedbackMood(value = "annoyed", icon = Lucide.Annoyed),
-  FeedbackMood(value = "good", icon = Lucide.Smile),
-  FeedbackMood(value = "great", icon = Lucide.Laugh),
-)
+private val feedbackMoods =
+  listOf(
+    FeedbackMood(value = "angry", icon = Lucide.Angry),
+    FeedbackMood(value = "annoyed", icon = Lucide.Annoyed),
+    FeedbackMood(value = "good", icon = Lucide.Smile),
+    FeedbackMood(value = "great", icon = Lucide.Laugh),
+  )
 
 private data class FeedbackMetadata(
   val platform: String? = null,
@@ -108,25 +99,22 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
     isSubmitting = true
 
     try {
-      val deviceSnapshot = runCatching {
-        deviceInfo.snapshot()
-      }.getOrElse {
-        null
-      }
+      val deviceSnapshot = runCatching { deviceInfo.snapshot() }.getOrElse { null }
       val metadata = buildFeedbackMetadata(deviceSnapshot)
 
       Apollo.executeMutation(
         MoreScreen_SubmitFeedback_Mutation(
-          input = SubmitFeedbackInput(
-            topic = topic.toOptionalInput(),
-            content = trimmedContent,
-            mood = mood.toOptionalInput(),
-            platform = metadata.platform.toOptionalInput(),
-            osVersion = metadata.osVersion.toOptionalInput(),
-            appVersion = metadata.appVersion.toOptionalInput(),
-            deviceName = metadata.deviceName.toOptionalInput(),
-          ),
-        ),
+          input =
+            SubmitFeedbackInput(
+              topic = topic.toOptionalInput(),
+              content = trimmedContent,
+              mood = mood.toOptionalInput(),
+              platform = metadata.platform.toOptionalInput(),
+              osVersion = metadata.osVersion.toOptionalInput(),
+              appVersion = metadata.appVersion.toOptionalInput(),
+              deviceName = metadata.deviceName.toOptionalInput(),
+            )
+        )
       )
 
       toast.show(ToastType.Success, "피드백을 보냈어요. 감사해요!")
@@ -171,9 +159,7 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
         FeedbackMoodButton(
           icon = item.icon,
           selected = mood == item.value,
-          onClick = {
-            mood = if (mood == item.value) null else item.value
-          },
+          onClick = { mood = if (mood == item.value) null else item.value },
         )
       }
     }
@@ -181,11 +167,12 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
     Button(
       text = "보내기",
       loadingText = "보내는 중...",
-      variant = if (topic != null && content.trim().isNotEmpty()) {
-        ButtonVariant.Primary
-      } else {
-        ButtonVariant.Secondary
-      },
+      variant =
+        if (topic != null && content.trim().isNotEmpty()) {
+          ButtonVariant.Primary
+        } else {
+          ButtonVariant.Secondary
+        },
       loading = isSubmitting,
       enabled = !isSubmitting,
       onClick = { submit() },
@@ -208,26 +195,22 @@ private fun buildFeedbackMetadata(info: co.typie.platform.DeviceInfoSnapshot?): 
 }
 
 @Composable
-private fun FeedbackTopicChip(
-  label: String,
-  selected: Boolean,
-  onClick: suspend () -> Unit,
-) {
+private fun FeedbackTopicChip(label: String, selected: Boolean, onClick: suspend () -> Unit) {
   InteractionScope {
     Box(
-      modifier = Modifier
-        .border(
-          width = 1.dp,
-          color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
-          shape = CircleShape,
-        )
-        .background(
-          color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceBase,
-          shape = CircleShape,
-        )
-        .clickable(onClick)
-        .padding(horizontal = 12.dp, vertical = 9.dp)
-        .pressScale(),
+      modifier =
+        Modifier.border(
+            width = 1.dp,
+            color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
+            shape = CircleShape,
+          )
+          .background(
+            color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceBase,
+            shape = CircleShape,
+          )
+          .clickable(onClick)
+          .padding(horizontal = 12.dp, vertical = 9.dp)
+          .pressScale(),
       contentAlignment = Alignment.Center,
     ) {
       Text(
@@ -240,26 +223,22 @@ private fun FeedbackTopicChip(
 }
 
 @Composable
-private fun FeedbackMoodButton(
-  icon: IconData,
-  selected: Boolean,
-  onClick: suspend () -> Unit,
-) {
+private fun FeedbackMoodButton(icon: IconData, selected: Boolean, onClick: suspend () -> Unit) {
   InteractionScope {
     Box(
-      modifier = Modifier
-        .size(34.dp)
-        .border(
-          width = 1.dp,
-          color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
-          shape = CircleShape,
-        )
-        .background(
-          color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceDefault,
-          shape = CircleShape,
-        )
-        .clickable(onClick)
-        .pressScale(),
+      modifier =
+        Modifier.size(34.dp)
+          .border(
+            width = 1.dp,
+            color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
+            shape = CircleShape,
+          )
+          .background(
+            color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceDefault,
+            shape = CircleShape,
+          )
+          .clickable(onClick)
+          .pressScale(),
       contentAlignment = Alignment.Center,
     ) {
       Icon(

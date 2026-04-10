@@ -40,30 +40,28 @@ fun NavigationScaffold(
 ) {
   val hazeState = remember { HazeState() }
   val colors = AppTheme.colors
-  val enabledFactor by animateFloatAsState(
-    targetValue = if (topBarState.enabled) 1f else 0f,
-    animationSpec = tween(200),
-  )
-  val bottomEnabledFactor by animateFloatAsState(
-    targetValue = if (bottomBarState?.enabled == true) 1f else 0f,
-    animationSpec = tween(200),
-  )
+  val enabledFactor by
+    animateFloatAsState(
+      targetValue = if (topBarState.enabled) 1f else 0f,
+      animationSpec = tween(200),
+    )
+  val bottomEnabledFactor by
+    animateFloatAsState(
+      targetValue = if (bottomBarState?.enabled == true) 1f else 0f,
+      animationSpec = tween(200),
+    )
 
   Box(modifier.fillMaxSize()) {
-    Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
-      content()
-    }
+    Box(Modifier.fillMaxSize().hazeSource(hazeState)) { content() }
 
     CompositionLocalProvider(Nav provides navigator) {
       Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .align(Alignment.TopStart)
-          .hazeEffect(hazeState) {
+        modifier =
+          Modifier.fillMaxWidth().align(Alignment.TopStart).hazeEffect(hazeState) {
             backgroundColor = colors.surfaceDefault
             blurRadius = TopBarDefaults.BlurRadius * topBarState.blurFactor * enabledFactor
             progressive = TopBarDefaults.hazeProgressive()
-          },
+          }
       ) {
         TopBar(state = topBarState)
         Spacer(Modifier.height(TopBarDefaults.BlurFadeHeight))
@@ -73,23 +71,19 @@ fun NavigationScaffold(
     if (bottomBarState != null) {
       val fadeAlpha = BottomBarDefaults.FadeOpacity * bottomEnabledFactor
       val fadeColor = colors.surfaceDefault.copy(alpha = fadeAlpha)
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .align(Alignment.BottomStart),
-      ) {
+      Column(modifier = Modifier.fillMaxWidth().align(Alignment.BottomStart)) {
         Spacer(
-          Modifier
-            .fillMaxWidth()
+          Modifier.fillMaxWidth()
             .height(BottomBarDefaults.FadeHeight)
-            .background(Brush.verticalGradient(colors = listOf(fadeColor.copy(alpha = 0f), fadeColor))),
+            .background(
+              Brush.verticalGradient(colors = listOf(fadeColor.copy(alpha = 0f), fadeColor))
+            )
         )
         Spacer(
-          Modifier
-            .fillMaxWidth()
+          Modifier.fillMaxWidth()
             .background(fadeColor)
             .navigationBarsPadding()
-            .height(BottomBarDefaults.BarAreaHeight),
+            .height(BottomBarDefaults.BarAreaHeight)
         )
       }
 

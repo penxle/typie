@@ -10,7 +10,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import co.typie.navigation.LocalRoute
 
-enum class NavDirection { Push, Pop, Switch }
+enum class NavDirection {
+  Push,
+  Pop,
+  Switch,
+}
 
 @Stable
 class TopBarState {
@@ -24,11 +28,7 @@ class TopBarState {
   private val customOwners = mutableMapOf<Any, Any>()
   var customKey: Any by mutableStateOf(NullKey)
 
-  fun setCustom(
-    key: Any,
-    content: (@Composable () -> Unit)?,
-    owner: Any? = null,
-  ) {
+  fun setCustom(key: Any, content: (@Composable () -> Unit)?, owner: Any? = null) {
     setEntry(customEntries, customOwners, key, content, owner)
     customKey = if (content != null) key else NullKey
   }
@@ -44,29 +44,17 @@ class TopBarState {
   /** 0f = blur 없음, 1f = full blur. NavigationStack이 전환 progress에 연동하여 업데이트. */
   var blurFactor: Float by mutableStateOf(1f)
 
-  fun setLeading(
-    key: Any,
-    content: (@Composable () -> Unit)?,
-    owner: Any? = null,
-  ) {
+  fun setLeading(key: Any, content: (@Composable () -> Unit)?, owner: Any? = null) {
     setEntry(leadingEntries, leadingOwners, key, content, owner)
     leadingKey = key
   }
 
-  fun setCenter(
-    key: Any,
-    content: (@Composable () -> Unit)?,
-    owner: Any? = null,
-  ) {
+  fun setCenter(key: Any, content: (@Composable () -> Unit)?, owner: Any? = null) {
     setEntry(centerEntries, centerOwners, key, content, owner)
     centerKey = key
   }
 
-  fun setTrailing(
-    key: Any,
-    content: (@Composable () -> Unit)?,
-    owner: Any? = null,
-  ) {
+  fun setTrailing(key: Any, content: (@Composable () -> Unit)?, owner: Any? = null) {
     setEntry(trailingEntries, trailingOwners, key, content, owner)
     trailingKey = key
   }
@@ -171,11 +159,7 @@ internal fun needsImplicitRouteKey(
     (custom != null && customKey == null)
 }
 
-internal fun resolveTopBarEntryKey(
-  explicitKey: Any?,
-  routeKey: Any?,
-  fallbackKey: Any,
-): Any {
+internal fun resolveTopBarEntryKey(explicitKey: Any?, routeKey: Any?, fallbackKey: Any): Any {
   return explicitKey ?: routeKey ?: fallbackKey
 }
 
@@ -199,14 +183,21 @@ fun ProvideTopBar(
 
   state.enabled = enabled
   if (enabled) {
-    val routeKey = if (needsImplicitRouteKey(enabled, center, centerKey, trailing, trailingKey, custom, customKey)) {
-      owner
-    } else {
-      null
-    }
+    val routeKey =
+      if (
+        needsImplicitRouteKey(enabled, center, centerKey, trailing, trailingKey, custom, customKey)
+      ) {
+        owner
+      } else {
+        null
+      }
     val resolvedLeadingKey = if (leading != null) leadingKey else TopBarState.NullKey
-    val resolvedCenterKey = if (center != null) resolveTopBarEntryKey(centerKey, routeKey, fallbackEntryKey) else TopBarState.NullKey
-    val resolvedTrailingKey = if (trailing != null) resolveTopBarEntryKey(trailingKey, routeKey, fallbackEntryKey) else TopBarState.NullKey
+    val resolvedCenterKey =
+      if (center != null) resolveTopBarEntryKey(centerKey, routeKey, fallbackEntryKey)
+      else TopBarState.NullKey
+    val resolvedTrailingKey =
+      if (trailing != null) resolveTopBarEntryKey(trailingKey, routeKey, fallbackEntryKey)
+      else TopBarState.NullKey
     val resolvedCustomKey = resolveTopBarEntryKey(customKey, routeKey, fallbackEntryKey)
 
     state.setLeading(resolvedLeadingKey, leading, owner)

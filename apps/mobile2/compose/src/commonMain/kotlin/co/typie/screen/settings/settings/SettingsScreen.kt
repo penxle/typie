@@ -65,10 +65,7 @@ data class SettingsItem(
   val externalUrl: String? = null,
 )
 
-data class SettingsSection(
-  val title: String,
-  val items: List<SettingsItem>,
-)
+data class SettingsSection(val title: String, val items: List<SettingsItem>)
 
 enum class SettingsItemAction {
   Theme,
@@ -78,11 +75,7 @@ enum class SettingsItemAction {
   VersionInfo,
 }
 
-data class SettingsThemeOption(
-  val mode: ThemeMode,
-  val label: String,
-  val icon: IconData,
-)
+data class SettingsThemeOption(val mode: ThemeMode, val label: String, val icon: IconData)
 
 data class SettingsThemeSelectionItem(
   val mode: ThemeMode,
@@ -100,10 +93,8 @@ data class SettingsVersionTapResult(
 private const val SETTINGS_DEVELOPER_MODE_REQUIRED_TAP_COUNT = 7
 private const val SETTINGS_DEVELOPER_MODE_HINT_START_TAP_COUNT = 4
 
-private val SettingsThemeSheetPadding = SheetPadding(
-  header = PaddingValues(horizontal = 16.dp),
-  body = PaddingValues(horizontal = 16.dp),
-)
+private val SettingsThemeSheetPadding =
+  SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(horizontal = 16.dp))
 
 internal fun settingsRouteFor(item: SettingsItem): Route? {
   return item.route
@@ -125,7 +116,9 @@ internal fun settingsThemeModeLabel(mode: ThemeMode): String {
   return settingsThemeOptions().first { it.mode == mode }.label
 }
 
-internal fun settingsThemeSelectionItems(selectedMode: ThemeMode): List<SettingsThemeSelectionItem> {
+internal fun settingsThemeSelectionItems(
+  selectedMode: ThemeMode
+): List<SettingsThemeSelectionItem> {
   return settingsThemeOptions().map { option ->
     SettingsThemeSelectionItem(
       mode = option.mode,
@@ -136,10 +129,7 @@ internal fun settingsThemeSelectionItems(selectedMode: ThemeMode): List<Settings
   }
 }
 
-internal suspend fun confirmSettingsLogout(
-  onDismiss: () -> Unit,
-  onLogout: suspend () -> Unit,
-) {
+internal suspend fun confirmSettingsLogout(onDismiss: () -> Unit, onLogout: suspend () -> Unit) {
   onLogout()
   onDismiss()
 }
@@ -174,10 +164,7 @@ internal fun settingsVersionTapResult(
     )
   }
 
-  return SettingsVersionTapResult(
-    nextTapCount = nextTapCount,
-    enableDeveloperMode = false,
-  )
+  return SettingsVersionTapResult(nextTapCount = nextTapCount, enableDeveloperMode = false)
 }
 
 internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSection> {
@@ -185,83 +172,77 @@ internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSec
     add(
       SettingsSection(
         title = "계정",
-        items = listOf(
-          SettingsItem("프로필", route = Route.ProfileSettings),
-          SettingsItem("보안", route = Route.SecuritySettings),
-        ),
-      ),
+        items =
+          listOf(
+            SettingsItem("프로필", route = Route.ProfileSettings),
+            SettingsItem("보안", route = Route.SecuritySettings),
+          ),
+      )
     )
     add(
       SettingsSection(
         title = "스페이스",
-        items = listOf(
-          // TODO: 스페이스 설정 진입 트래킹
-          SettingsItem("현재 스페이스 설정", route = Route.SpaceSettings),
-        ),
-      ),
+        items =
+          listOf(
+            // TODO: 스페이스 설정 진입 트래킹
+            SettingsItem("현재 스페이스 설정", route = Route.SpaceSettings)
+          ),
+      )
     )
     add(
       SettingsSection(
         title = "환경",
-        items = listOf(
-          SettingsItem("테마", action = SettingsItemAction.Theme),
-          SettingsItem("에디터", route = Route.EditorSettings),
-          SettingsItem("위젯", route = Route.WidgetSettings),
-          SettingsItem("폰트", route = Route.FontSettings),
-          SettingsItem("프리셋", route = Route.PresetSettings),
-          SettingsItem("텍스트 대치", route = Route.TextReplacements),
-        ),
-      ),
+        items =
+          listOf(
+            SettingsItem("테마", action = SettingsItemAction.Theme),
+            SettingsItem("에디터", route = Route.EditorSettings),
+            SettingsItem("위젯", route = Route.WidgetSettings),
+            SettingsItem("폰트", route = Route.FontSettings),
+            SettingsItem("프리셋", route = Route.PresetSettings),
+            SettingsItem("텍스트 대치", route = Route.TextReplacements),
+          ),
+      )
     )
     add(
       SettingsSection(
         title = "구독",
-        items = listOf(
-          SettingsItem("플랜", action = SettingsItemAction.Plan),
-          SettingsItem("초대", route = Route.Referral),
-        ),
-      ),
+        items =
+          listOf(
+            SettingsItem("플랜", action = SettingsItemAction.Plan),
+            SettingsItem("초대", route = Route.Referral),
+          ),
+      )
     )
-    add(
-      SettingsSection(
-        title = "고급",
-        items = listOf(
-          SettingsItem("AI", route = Route.AiSettings),
-        ),
-      ),
-    )
+    add(SettingsSection(title = "고급", items = listOf(SettingsItem("AI", route = Route.AiSettings))))
     add(
       SettingsSection(
         title = "서비스 정보",
-        items = listOf(
-          SettingsItem("이용약관", externalUrl = "https://typie.co/legal/terms"),
-          SettingsItem("개인정보처리방침", externalUrl = "https://typie.co/legal/privacy"),
-          SettingsItem(
-            "사업자 정보",
-            externalUrl = "https://www.ftc.go.kr/bizCommPop.do?wrkr_no=6108803078"
+        items =
+          listOf(
+            SettingsItem("이용약관", externalUrl = "https://typie.co/legal/terms"),
+            SettingsItem("개인정보처리방침", externalUrl = "https://typie.co/legal/privacy"),
+            SettingsItem(
+              "사업자 정보",
+              externalUrl = "https://www.ftc.go.kr/bizCommPop.do?wrkr_no=6108803078",
+            ),
+            SettingsItem("오픈소스 라이센스", route = Route.OssLicenses),
+            SettingsItem("버전 정보", action = SettingsItemAction.VersionInfo),
           ),
-          SettingsItem("오픈소스 라이센스", route = Route.OssLicenses),
-          SettingsItem("버전 정보", action = SettingsItemAction.VersionInfo),
-        ),
-      ),
+      )
     )
     if (devModeEnabled) {
       add(
         SettingsSection(
           title = "개발자",
-          items = listOf(
-            SettingsItem("개발자 모드", action = SettingsItemAction.DeveloperMode),
-          ),
-        ),
+          items = listOf(SettingsItem("개발자 모드", action = SettingsItemAction.DeveloperMode)),
+        )
       )
     }
     add(
       SettingsSection(
         title = "기타",
-        items = listOf(
-          SettingsItem("로그아웃", action = SettingsItemAction.Logout),
-        ),
-      ),
+        items = listOf(SettingsItem("로그아웃", action = SettingsItemAction.Logout)),
+      )
     )
   }
 }
@@ -292,9 +273,8 @@ fun SettingsScreen() {
   }
 
   LaunchedEffect(deviceInfo) {
-    appVersion = runCatching {
-      deviceInfo.snapshot().appVersion.trim().takeIf { it.isNotEmpty() }
-    }.getOrNull()
+    appVersion =
+      runCatching { deviceInfo.snapshot().appVersion.trim().takeIf { it.isNotEmpty() } }.getOrNull()
   }
 
   ProvideTopBar(
@@ -311,11 +291,7 @@ fun SettingsScreen() {
   ) {
     val hasSubscription = currentSubscriptionState.hasSubscriptionOrNull()
 
-    Text(
-      "설정",
-      style = AppTheme.typography.display,
-      modifier = Modifier.padding(top = 4.dp),
-    )
+    Text("설정", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
     sections.forEach { section ->
       SettingsSectionCard(
@@ -335,10 +311,8 @@ fun SettingsScreen() {
           )
         },
         onVersionInfoClick = {
-          val result = settingsVersionTapResult(
-            devModeEnabled = devModeEnabled,
-            tapCount = devModeTapCount,
-          )
+          val result =
+            settingsVersionTapResult(devModeEnabled = devModeEnabled, tapCount = devModeTapCount)
 
           devModeTapCount = result.nextTapCount
 
@@ -346,13 +320,9 @@ fun SettingsScreen() {
             developerPreferences.devMode = true
           }
 
-          result.message?.let { message ->
-            toast.show(ToastType.Success, message)
-          }
+          result.message?.let { message -> toast.show(ToastType.Success, message) }
         },
-        onDeveloperModeChange = { next ->
-          developerPreferences.devMode = next
-        },
+        onDeveloperModeChange = { next -> developerPreferences.devMode = next },
         onItemClick = { item ->
           val route = settingsRouteFor(item)
 
@@ -363,9 +333,7 @@ fun SettingsScreen() {
           } else if (item.action == SettingsItemAction.Plan) {
             if (hasSubscription != null) {
               nav.navigate(
-                subscriptionRoute(
-                  subscriptionEntryDestination(hasSubscription = hasSubscription),
-                ),
+                subscriptionRoute(subscriptionEntryDestination(hasSubscription = hasSubscription))
               )
             } else {
               toast.show(ToastType.Notification, "이용권 상태를 확인 중이에요.")
@@ -410,40 +378,23 @@ private fun SettingsSectionCard(
   onDeveloperModeChange: (Boolean) -> Unit,
   onItemClick: suspend (SettingsItem) -> Unit,
 ) {
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    SectionTitle(
-      section.title,
-      modifier = Modifier.padding(top = 4.dp),
-    )
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    SectionTitle(section.title, modifier = Modifier.padding(top = 4.dp))
 
-    CardSurface(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
+    CardSurface(modifier = Modifier.fillMaxWidth()) {
       Column {
         section.items.forEachIndexed { index, item ->
           if (item.action == SettingsItemAction.Theme) {
-            SettingsThemeRow(
-              themeMode = themeMode,
-              onClick = onThemeClick,
-            )
+            SettingsThemeRow(themeMode = themeMode, onClick = onThemeClick)
           } else if (item.action == SettingsItemAction.VersionInfo) {
-            SettingsVersionRow(
-              appVersion = appVersion,
-              onClick = onVersionInfoClick,
-            )
+            SettingsVersionRow(appVersion = appVersion, onClick = onVersionInfoClick)
           } else if (item.action == SettingsItemAction.DeveloperMode) {
             SettingsDeveloperModeRow(
               enabled = devModeEnabled,
               onCheckedChange = onDeveloperModeChange,
             )
           } else {
-            SettingsRow(
-              item = item,
-              onClick = { onItemClick(item) },
-            )
+            SettingsRow(item = item, onClick = { onItemClick(item) })
           }
 
           if (index < section.items.lastIndex) {
@@ -456,10 +407,7 @@ private fun SettingsSectionCard(
 }
 
 @Composable
-private fun SettingsVersionRow(
-  appVersion: String?,
-  onClick: suspend () -> Unit,
-) {
+private fun SettingsVersionRow(appVersion: String?, onClick: suspend () -> Unit) {
   CardRow(onClick = onClick) {
     SettingsRowContent(
       label = "버전 정보",
@@ -477,35 +425,18 @@ private fun SettingsVersionRow(
 }
 
 @Composable
-private fun SettingsDeveloperModeRow(
-  enabled: Boolean,
-  onCheckedChange: (Boolean) -> Unit,
-) {
-  CardRow(
-    onClick = {
-      onCheckedChange(!enabled)
-    },
-  ) {
+private fun SettingsDeveloperModeRow(enabled: Boolean, onCheckedChange: (Boolean) -> Unit) {
+  CardRow(onClick = { onCheckedChange(!enabled) }) {
     SettingsRowContent(
       label = "개발자 모드",
-      trailing = {
-        SettingSwitch(
-          checked = enabled,
-          onCheckedChange = onCheckedChange,
-        )
-      },
+      trailing = { SettingSwitch(checked = enabled, onCheckedChange = onCheckedChange) },
     )
   }
 }
 
 @Composable
-private fun SettingsRow(
-  item: SettingsItem,
-  onClick: suspend () -> Unit,
-) {
-  CardRow(
-    onClick = onClick,
-  ) {
+private fun SettingsRow(item: SettingsItem, onClick: suspend () -> Unit) {
+  CardRow(onClick = onClick) {
     SettingsRowContent(
       label = item.label,
       trailing = {
@@ -520,10 +451,7 @@ private fun SettingsRow(
 }
 
 @Composable
-private fun SettingsThemeRow(
-  themeMode: ThemeMode,
-  onClick: suspend () -> Unit,
-) {
+private fun SettingsThemeRow(themeMode: ThemeMode, onClick: suspend () -> Unit) {
   CardRow(onClick = onClick) {
     SettingsRowContent(
       label = "테마",
@@ -546,49 +474,40 @@ private fun SettingsThemeRow(
   }
 }
 
-private fun settingsThemeSheet(
-  themeMode: ThemeMode,
-): SheetPresentation<ThemeMode> = sheetPresentation {
-  SheetLayout(
-    padding = SettingsThemeSheetPadding,
-    verticalSpacing = 8.dp,
-    header = {
-      ActionHeader(title = "테마")
-    },
-  ) {
-    SheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
-      SheetOptionRow(
-        selected = item.selected,
-        onClick = { complete(item.mode) },
-      ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          Icon(
-            icon = item.icon,
-            modifier = Modifier.size(18.dp),
-            tint = AppTheme.colors.textSecondary,
-          )
-          Text(
-            text = item.label,
-            style = AppTheme.typography.action,
-            modifier = Modifier.weight(1f),
-            color = AppTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
+private fun settingsThemeSheet(themeMode: ThemeMode): SheetPresentation<ThemeMode> =
+  sheetPresentation {
+    SheetLayout(
+      padding = SettingsThemeSheetPadding,
+      verticalSpacing = 8.dp,
+      header = { ActionHeader(title = "테마") },
+    ) {
+      SheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
+        SheetOptionRow(selected = item.selected, onClick = { complete(item.mode) }) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            Icon(
+              icon = item.icon,
+              modifier = Modifier.size(18.dp),
+              tint = AppTheme.colors.textSecondary,
+            )
+            Text(
+              text = item.label,
+              style = AppTheme.typography.action,
+              modifier = Modifier.weight(1f),
+              color = AppTheme.colors.textPrimary,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
         }
       }
     }
   }
-}
 
 @Composable
-private fun RowScope.SettingsRowContent(
-  label: String,
-  trailing: @Composable () -> Unit,
-) {
+private fun RowScope.SettingsRowContent(label: String, trailing: @Composable () -> Unit) {
   Text(
     text = label,
     style = AppTheme.typography.label,
@@ -600,5 +519,7 @@ private fun RowScope.SettingsRowContent(
   Row(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(0.dp),
-  ) { trailing() }
+  ) {
+    trailing()
+  }
 }

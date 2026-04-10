@@ -51,11 +51,11 @@ fun LoaderOverlay() {
 
   if (visible) {
     Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .alpha(alpha.value)
-        .pointerInput(Unit) {}
-        .background(AppColor.black.copy(alpha = 0.3f)),
+      modifier =
+        Modifier.fillMaxSize()
+          .alpha(alpha.value)
+          .pointerInput(Unit) {}
+          .background(AppColor.black.copy(alpha = 0.3f)),
       contentAlignment = Alignment.Center,
     ) {
       Spinner(color = AppTheme.colors.textPrimary)
@@ -66,14 +66,16 @@ fun LoaderOverlay() {
 @Composable
 private fun Spinner(color: Color, modifier: Modifier = Modifier) {
   val transition = rememberInfiniteTransition()
-  val rotation by transition.animateFloat(
-    initialValue = 0f,
-    targetValue = 360f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(1000, easing = LinearEasing),
-      repeatMode = RepeatMode.Restart,
-    ),
-  )
+  val rotation by
+    transition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec =
+        infiniteRepeatable(
+          animation = tween(1000, easing = LinearEasing),
+          repeatMode = RepeatMode.Restart,
+        ),
+    )
 
   Canvas(modifier.size(28.dp)) {
     drawArc(

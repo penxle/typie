@@ -17,13 +17,8 @@ fun BottomSheetActionList(
   modifier: Modifier = Modifier,
   content: @Composable ColumnScope.() -> Unit,
 ) {
-  CardSurface(
-    modifier = modifier.fillMaxWidth(),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      content = content,
-    )
+  CardSurface(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth(), content = content)
   }
 }
 
@@ -44,8 +39,6 @@ fun BottomSheetActionRow(
 }
 
 @Composable
-fun BottomSheetActionDivider(
-  modifier: Modifier = Modifier,
-) {
+fun BottomSheetActionDivider(modifier: Modifier = Modifier) {
   CardDivider(modifier = modifier)
 }

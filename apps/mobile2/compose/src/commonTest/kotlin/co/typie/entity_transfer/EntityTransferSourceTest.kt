@@ -8,35 +8,33 @@ class EntityTransferSourceTest {
 
   @Test
   fun folderInternalDepthContributionUsesMaxDescendantDepth() {
-    val source = EntityTransferSource.Folder(
-      id = "folder-1",
-      title = "프로젝트",
-      depth = 4,
-      maxDescendantFoldersDepth = 6,
-    )
+    val source =
+      EntityTransferSource.Folder(
+        id = "folder-1",
+        title = "프로젝트",
+        depth = 4,
+        maxDescendantFoldersDepth = 6,
+      )
 
     assertTrue(source.internalDepthContribution == 3)
   }
 
   @Test
   fun documentInternalDepthContributionIsZero() {
-    val source = EntityTransferSource.Document(
-      id = "document-1",
-      title = "문서",
-      depth = 7,
-    )
+    val source = EntityTransferSource.Document(id = "document-1", title = "문서", depth = 7)
 
     assertTrue(source.internalDepthContribution == 0)
   }
 
   @Test
   fun folderTransferDepthValidationMatchesFlutterParity() {
-    val source = EntityTransferSource.Folder(
-      id = "folder-1",
-      title = "프로젝트",
-      depth = 4,
-      maxDescendantFoldersDepth = 6,
-    )
+    val source =
+      EntityTransferSource.Folder(
+        id = "folder-1",
+        title = "프로젝트",
+        depth = 4,
+        maxDescendantFoldersDepth = 6,
+      )
 
     assertTrue(source.canTransferIntoDestinationDepth(destinationDepth = 96))
     assertFalse(source.canTransferIntoDestinationDepth(destinationDepth = 97))

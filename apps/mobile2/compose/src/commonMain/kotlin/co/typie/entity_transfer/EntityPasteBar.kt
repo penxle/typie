@@ -38,24 +38,22 @@ fun EntityPasteBar(
   val enabled = !loading
 
   Box(
-    modifier = Modifier
-      .padding(horizontal = 16.dp)
-      .padding(bottom = 16.dp + bottomOffset),
+    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp + bottomOffset),
     contentAlignment = Alignment.Center,
   ) {
     Row(
-      modifier = Modifier
-        .alpha(if (enabled) 1f else 0.72f)
-        .background(AppTheme.colors.brand, RoundedCornerShape(999.dp))
-        .border(1.dp, AppTheme.colors.brand.copy(alpha = 0.14f), RoundedCornerShape(999.dp)),
+      modifier =
+        Modifier.alpha(if (enabled) 1f else 0.72f)
+          .background(AppTheme.colors.brand, RoundedCornerShape(999.dp))
+          .border(1.dp, AppTheme.colors.brand.copy(alpha = 0.14f), RoundedCornerShape(999.dp)),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       InteractionScope {
         Row(
-          modifier = Modifier
-            .clickable(enabled = enabled, onClick = onPaste)
-            .pressScale(0.97f)
-            .padding(start = 18.dp, top = 14.dp, end = 20.dp, bottom = 14.dp),
+          modifier =
+            Modifier.clickable(enabled = enabled, onClick = onPaste)
+              .pressScale(0.97f)
+              .padding(start = 18.dp, top = 14.dp, end = 20.dp, bottom = 14.dp),
           horizontalArrangement = Arrangement.spacedBy(10.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -74,25 +72,21 @@ fun EntityPasteBar(
       }
 
       Box(
-        modifier = Modifier
-          .width(1.dp)
-          .height(18.dp)
-          .background(AppTheme.colors.textOnBrand.copy(alpha = 0.22f)),
+        modifier =
+          Modifier.width(1.dp)
+            .height(18.dp)
+            .background(AppTheme.colors.textOnBrand.copy(alpha = 0.22f))
       )
 
       InteractionScope {
         Box(
-          modifier = Modifier
-            .size(EntityPasteBarHeight)
-            .clickable(enabled = enabled, onClick = onClear)
-            .pressScale(0.96f),
+          modifier =
+            Modifier.size(EntityPasteBarHeight)
+              .clickable(enabled = enabled, onClick = onClear)
+              .pressScale(0.96f),
           contentAlignment = Alignment.Center,
         ) {
-          Icon(
-            icon = Lucide.X,
-            modifier = Modifier.size(18.dp),
-            tint = AppTheme.colors.textOnBrand,
-          )
+          Icon(icon = Lucide.X, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textOnBrand)
         }
       }
     }

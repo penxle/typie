@@ -28,15 +28,13 @@ fun TopBarButton(
   InteractionScope {
     Box(
       contentAlignment = Alignment.Center,
-      modifier = modifier
-        .size(TopBarDefaults.ButtonSize)
-        .then(shadowMod)
-        .background(bg, TopBarDefaults.ButtonShape)
-        .border(1.dp, borderColor, TopBarDefaults.ButtonShape)
-        .then(
-          if (onClick != null) Modifier.clickable(onClick)
-          else Modifier
-        ),
+      modifier =
+        modifier
+          .size(TopBarDefaults.ButtonSize)
+          .then(shadowMod)
+          .background(bg, TopBarDefaults.ButtonShape)
+          .border(1.dp, borderColor, TopBarDefaults.ButtonShape)
+          .then(if (onClick != null) Modifier.clickable(onClick) else Modifier),
     ) {
       Icon(
         icon = icon,

@@ -29,10 +29,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.autofill.ContentType
-import androidx.compose.ui.autofill.contentType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.autofill.contentType
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -71,7 +71,8 @@ internal fun resolveTextFieldKeyboardType(
   isPassword: Boolean,
   keyboardType: KeyboardType,
 ): KeyboardType {
-  return if (isPassword && keyboardType == KeyboardType.Text) KeyboardType.Password else keyboardType
+  return if (isPassword && keyboardType == KeyboardType.Text) KeyboardType.Password
+  else keyboardType
 }
 
 internal fun resolveTextFieldAutofillContentType(
@@ -232,9 +233,7 @@ fun TextField(
   var isFocused by remember { mutableStateOf(false) }
   val focusRequester = remember { FocusRequester() }
 
-  var textFieldValue by remember {
-    mutableStateOf(TextFieldValue(value, TextRange(value.length)))
-  }
+  var textFieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
   var suppressTabValueChange by remember { mutableStateOf(false) }
 
   if (textFieldValue.text != value) {
@@ -250,65 +249,64 @@ fun TextField(
 
   val colorSpec = tween<Color>(220)
 
-  val containerColor by animateColorAsState(
-    when {
-      !enabled -> AppTheme.colors.surfaceBase
-      isFocused -> AppTheme.colors.surfaceDefault
-      else -> AppTheme.colors.surfaceSunken
-    },
-    colorSpec,
-  )
+  val containerColor by
+    animateColorAsState(
+      when {
+        !enabled -> AppTheme.colors.surfaceBase
+        isFocused -> AppTheme.colors.surfaceDefault
+        else -> AppTheme.colors.surfaceSunken
+      },
+      colorSpec,
+    )
 
-  val borderColor by animateColorAsState(
-    when {
-      hasError -> AppTheme.colors.danger
-      isFocused -> AppTheme.colors.borderStrong
-      else -> AppTheme.colors.borderSubtle
-    },
-    colorSpec,
-  )
+  val borderColor by
+    animateColorAsState(
+      when {
+        hasError -> AppTheme.colors.danger
+        isFocused -> AppTheme.colors.borderStrong
+        else -> AppTheme.colors.borderSubtle
+      },
+      colorSpec,
+    )
 
-  val borderWidth by animateDpAsState(
-    if (isFocused || hasError) 1.5.dp else 1.dp,
-    tween(durationMillis = 220, easing = EaseInOutExpo),
-  )
+  val borderWidth by
+    animateDpAsState(
+      if (isFocused || hasError) 1.5.dp else 1.dp,
+      tween(durationMillis = 220, easing = EaseInOutExpo),
+    )
 
   val horizontalPadding = 16.dp
   val verticalPadding = 8.dp
   val labelTopPadding = 10.dp
 
-  val labelColor by animateColorAsState(
-    when {
-      hasError -> AppTheme.colors.danger
-      isInternal -> AppTheme.colors.textTertiary
-      isFocused -> AppTheme.colors.textPrimary
-      else -> AppTheme.colors.textSecondary
-    },
-    colorSpec,
-  )
+  val labelColor by
+    animateColorAsState(
+      when {
+        hasError -> AppTheme.colors.danger
+        isInternal -> AppTheme.colors.textTertiary
+        isFocused -> AppTheme.colors.textPrimary
+        else -> AppTheme.colors.textSecondary
+      },
+      colorSpec,
+    )
 
   val labelActive = isInternal && (isFocused || value.isNotEmpty())
   val fieldHeight = if (isInternal) 56.dp else 48.dp
   val tabNavigationEnabled = onTabAction != null || onShiftTabAction != null
 
   if (autoFocus) {
-    LaunchedEffect(autoFocus) {
-      focusRequester.requestFocus()
-    }
+    LaunchedEffect(autoFocus) { focusRequester.requestFocus() }
   }
 
-  val labelProgress by animateFloatAsState(
-    if (labelActive) 1f else 0f,
-    tween(durationMillis = 220, easing = EaseOutExpo)
-  )
+  val labelProgress by
+    animateFloatAsState(
+      if (labelActive) 1f else 0f,
+      tween(durationMillis = 220, easing = EaseOutExpo),
+    )
 
   Column(modifier = modifier) {
     if (!isInternal && labelPosition != LabelPosition.None) {
-      Text(
-        label,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textSecondary,
-      )
+      Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
 
       Spacer(Modifier.height(8.dp))
     }
@@ -316,13 +314,14 @@ fun TextField(
     BasicTextField(
       value = textFieldValue,
       onValueChange = { newValue ->
-        val result = resolveTextFieldValueChange(
-          currentValue = textFieldValue,
-          newValue = newValue,
-          tabNavigationEnabled = tabNavigationEnabled,
-          hasTabAction = onTabAction != null,
-          suppressTabValueChange = suppressTabValueChange,
-        )
+        val result =
+          resolveTextFieldValueChange(
+            currentValue = textFieldValue,
+            newValue = newValue,
+            tabNavigationEnabled = tabNavigationEnabled,
+            hasTabAction = onTabAction != null,
+            suppressTabValueChange = suppressTabValueChange,
+          )
         suppressTabValueChange = result.suppressTabValueChange
         if (result.triggerTabAction) {
           onTabAction?.invoke()
@@ -333,83 +332,81 @@ fun TextField(
       },
       enabled = enabled,
       readOnly = readOnly,
-      modifier = Modifier
-        .then(
-          if (resolvedContentType != null) {
-            Modifier.contentType(resolvedContentType)
-          } else {
-            Modifier
-          }
-        )
-        .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
-        .onFocusChanged { state ->
-          val wasFocused = isFocused
-          isFocused = state.isFocused
-          if (wasFocused && !state.isFocused) {
-            suppressTabValueChange = false
-            onBlur?.invoke()
-          }
-        }
-        .onPreviewKeyEvent {
-          val previewResult = resolveTextFieldPreviewKeyResult(it.key, it.type, it.isShiftPressed)
-          when (previewResult.tabAction) {
-            TextFieldTabAction.Next -> {
-              if (!tabNavigationEnabled) return@onPreviewKeyEvent false
-              suppressTabValueChange = previewResult.suppressTabValueChange
-              onTabAction?.invoke()
-              previewResult.consumeEvent
+      modifier =
+        Modifier.then(
+            if (resolvedContentType != null) {
+              Modifier.contentType(resolvedContentType)
+            } else {
+              Modifier
             }
-
-            TextFieldTabAction.Previous -> {
-              if (!tabNavigationEnabled) return@onPreviewKeyEvent false
-              suppressTabValueChange = previewResult.suppressTabValueChange
-              onShiftTabAction?.invoke()
-              previewResult.consumeEvent
+          )
+          .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
+          .onFocusChanged { state ->
+            val wasFocused = isFocused
+            isFocused = state.isFocused
+            if (wasFocused && !state.isFocused) {
+              suppressTabValueChange = false
+              onBlur?.invoke()
             }
+          }
+          .onPreviewKeyEvent {
+            val previewResult = resolveTextFieldPreviewKeyResult(it.key, it.type, it.isShiftPressed)
+            when (previewResult.tabAction) {
+              TextFieldTabAction.Next -> {
+                if (!tabNavigationEnabled) return@onPreviewKeyEvent false
+                suppressTabValueChange = previewResult.suppressTabValueChange
+                onTabAction?.invoke()
+                previewResult.consumeEvent
+              }
 
-            null -> {
-              if (previewResult.triggerImeAction) {
-                onImeAction?.invoke()
-                onImeAction != null
-              } else {
-                false
+              TextFieldTabAction.Previous -> {
+                if (!tabNavigationEnabled) return@onPreviewKeyEvent false
+                suppressTabValueChange = previewResult.suppressTabValueChange
+                onShiftTabAction?.invoke()
+                previewResult.consumeEvent
+              }
+
+              null -> {
+                if (previewResult.triggerImeAction) {
+                  onImeAction?.invoke()
+                  onImeAction != null
+                } else {
+                  false
+                }
               }
             }
-          }
-        },
-      textStyle = AppTheme.typography.body.copy(
-        color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted,
-      ),
+          },
+      textStyle =
+        AppTheme.typography.body.copy(
+          color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted
+        ),
       cursorBrush = SolidColor(AppTheme.colors.textPrimary),
-      keyboardOptions = KeyboardOptions(
-        keyboardType = resolvedKeyboardType,
-        imeAction = resolvedImeAction,
-      ),
-      keyboardActions = KeyboardActions(
-        onNext = { onImeAction?.invoke() },
-        onDone = { onImeAction?.invoke() },
-      ),
-      visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+      keyboardOptions =
+        KeyboardOptions(keyboardType = resolvedKeyboardType, imeAction = resolvedImeAction),
+      keyboardActions =
+        KeyboardActions(onNext = { onImeAction?.invoke() }, onDone = { onImeAction?.invoke() }),
+      visualTransformation =
+        if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
       singleLine = true,
       decorationBox = { innerTextField ->
         Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .height(fieldHeight)
-            .border(borderWidth, borderColor, shape)
-            .background(containerColor, shape)
-            .padding(horizontal = horizontalPadding),
+          modifier =
+            Modifier.fillMaxWidth()
+              .height(fieldHeight)
+              .border(borderWidth, borderColor, shape)
+              .background(containerColor, shape)
+              .padding(horizontal = horizontalPadding)
         ) {
           val hasSuffix = suffix != null
           val showStatusIcon = hasError || success
 
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-              .fillMaxWidth()
-              .align(if (isInternal) Alignment.BottomCenter else Alignment.Center)
-              .then(if (isInternal) Modifier.padding(bottom = verticalPadding) else Modifier)
-              .then(if (showStatusIcon && !hasSuffix) Modifier.padding(end = 28.dp) else Modifier),
+            modifier =
+              Modifier.fillMaxWidth()
+                .align(if (isInternal) Alignment.BottomCenter else Alignment.Center)
+                .then(if (isInternal) Modifier.padding(bottom = verticalPadding) else Modifier)
+                .then(if (showStatusIcon && !hasSuffix) Modifier.padding(end = 28.dp) else Modifier),
           ) {
             if (leadingIcon != null) {
               leadingIcon()
@@ -423,29 +420,28 @@ fun TextField(
                   label,
                   style = if (labelActive) AppTheme.typography.action else AppTheme.typography.body,
                   color = if (labelActive) labelColor else AppTheme.colors.textMuted,
-                  modifier = Modifier.graphicsLayer {
-                    val fieldHeightPx = fieldHeight.toPx()
-                    val paddingPx = verticalPadding.toPx()
-                    val contentCenterY = fieldHeightPx - paddingPx - size.height / 2
-                    val boxCenterY = fieldHeightPx / 2
-                    val topTargetY = labelTopPadding.toPx() + size.height * scale / 2
-                    val centerOffset = -(contentCenterY - boxCenterY)
-                    val topOffset = -(contentCenterY - topTargetY)
-                    scaleX = scale
-                    scaleY = scale
-                    translationY = centerOffset + labelProgress * (topOffset - centerOffset)
-                    transformOrigin = TransformOrigin(0f, 0.5f)
-                  },
+                  modifier =
+                    Modifier.graphicsLayer {
+                      val fieldHeightPx = fieldHeight.toPx()
+                      val paddingPx = verticalPadding.toPx()
+                      val contentCenterY = fieldHeightPx - paddingPx - size.height / 2
+                      val boxCenterY = fieldHeightPx / 2
+                      val topTargetY = labelTopPadding.toPx() + size.height * scale / 2
+                      val centerOffset = -(contentCenterY - boxCenterY)
+                      val topOffset = -(contentCenterY - topTargetY)
+                      scaleX = scale
+                      scaleY = scale
+                      translationY = centerOffset + labelProgress * (topOffset - centerOffset)
+                      transformOrigin = TransformOrigin(0f, 0.5f)
+                    },
                 )
               }
 
               val showPlaceholder =
                 value.isEmpty() && placeholder != null && (!isInternal || labelActive)
               if (showPlaceholder) {
-                val placeholderAlpha by animateFloatAsState(
-                  if (isInternal && !isFocused) 0f else 1f,
-                  tween(150),
-                )
+                val placeholderAlpha by
+                  animateFloatAsState(if (isInternal && !isFocused) 0f else 1f, tween(150))
                 Text(
                   placeholder,
                   style = AppTheme.typography.body,
@@ -458,16 +454,11 @@ fun TextField(
 
             if (suffix != null) {
               val suffixVisible = !isInternal || value.isNotEmpty() || isFocused
-              val suffixAlpha by animateFloatAsState(
-                if (suffixVisible) 1f else 0f,
-                tween(150),
-              )
+              val suffixAlpha by animateFloatAsState(if (suffixVisible) 1f else 0f, tween(150))
 
               if (suffixAlpha > 0f) {
                 Spacer(Modifier.width(4.dp))
-                Box(Modifier.alpha(suffixAlpha)) {
-                  suffix()
-                }
+                Box(Modifier.alpha(suffixAlpha)) { suffix() }
               }
             }
 
@@ -515,20 +506,14 @@ fun TextField(
           if (isInternal && hasSuffix && hasError) {
             Icon(
               icon = Lucide.CircleAlert,
-              modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(y = labelTopPadding)
-                .size(18.dp),
+              modifier = Modifier.align(Alignment.TopEnd).offset(y = labelTopPadding).size(18.dp),
               tint = AppTheme.colors.danger,
               contentDescription = "오류",
             )
           } else if (isInternal && hasSuffix && success) {
             Icon(
               icon = Lucide.Check,
-              modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(y = labelTopPadding)
-                .size(18.dp),
+              modifier = Modifier.align(Alignment.TopEnd).offset(y = labelTopPadding).size(18.dp),
               tint = AppTheme.colors.success,
               strokeWidth = 2.5f,
               contentDescription = "확인됨",
@@ -540,18 +525,17 @@ fun TextField(
 
     Spacer(Modifier.height(4.dp))
 
-    val helpColor by animateColorAsState(
-      if (hasError) AppTheme.colors.danger else AppTheme.colors.textTertiary,
-      colorSpec,
-    )
+    val helpColor by
+      animateColorAsState(
+        if (hasError) AppTheme.colors.danger else AppTheme.colors.textTertiary,
+        colorSpec,
+      )
 
     Text(
       text = error ?: help ?: "",
       style = helpTextStyle,
       color = helpColor,
-      modifier = Modifier
-        .defaultMinSize(minHeight = 16.dp)
-        .padding(start = 8.dp),
+      modifier = Modifier.defaultMinSize(minHeight = 16.dp).padding(start = 8.dp),
     )
   }
 }
@@ -583,46 +567,48 @@ fun TextField(
 
   val resolvedImeAction = imeAction ?: form?.imeActionFor(field)
 
-  val resolvedOnImeAction: (() -> Unit)? = when {
-    onImeAction != null -> onImeAction
-    form != null -> {
-      { form.focusNext(field) }
+  val resolvedOnImeAction: (() -> Unit)? =
+    when {
+      onImeAction != null -> onImeAction
+      form != null -> {
+        { form.focusNext(field) }
+      }
+
+      else -> null
     }
 
-    else -> null
-  }
+  val resolvedOnTabAction: (() -> Unit)? =
+    when {
+      form != null && !form.isLastField(field) -> {
+        { form.focusNext(field) }
+      }
 
-  val resolvedOnTabAction: (() -> Unit)? = when {
-    form != null && !form.isLastField(field) -> {
-      { form.focusNext(field) }
+      else -> null
     }
 
-    else -> null
-  }
+  val resolvedOnShiftTabAction: (() -> Unit)? =
+    when {
+      form != null && !form.isFirstField(field) -> {
+        { form.focusPrevious(field) }
+      }
 
-  val resolvedOnShiftTabAction: (() -> Unit)? = when {
-    form != null && !form.isFirstField(field) -> {
-      { form.focusPrevious(field) }
+      else -> null
     }
-
-    else -> null
-  }
 
   if (shouldAutoFocus && !isSkeleton) {
-    LaunchedEffect(shouldAutoFocus) {
-      field.focusRequester.requestFocus()
-    }
+    LaunchedEffect(shouldAutoFocus) { field.focusRequester.requestFocus() }
   }
 
   TextField(
     value = field.value,
     onValueChange = { field.setValue(it) },
     label = label,
-    modifier = if (!isSkeleton && (form != null || autoFocus)) {
-      modifier.focusRequester(field.focusRequester)
-    } else {
-      modifier
-    },
+    modifier =
+      if (!isSkeleton && (form != null || autoFocus)) {
+        modifier.focusRequester(field.focusRequester)
+      } else {
+        modifier
+      },
     help = help,
     helpTextStyle = helpTextStyle,
     error = field.errors.firstOrNull(),

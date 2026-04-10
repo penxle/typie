@@ -24,7 +24,7 @@ import co.typie.editor.ffi.Message
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
-  editor: Editor,
+  editor: Editor
 ): PlatformTextInputMethodRequest {
   return object : PlatformTextInputMethodRequest {
     override val value: () -> TextFieldValue = {
@@ -34,22 +34,19 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
       TextFieldValue(
         text = ctx.text,
         selection = TextRange(selectionStart, selectionEnd),
-        composition = ctx.composing?.let {
-          TextRange(
-            it.start - ctx.windowStart,
-            it.end - ctx.windowStart
-          )
-        },
+        composition =
+          ctx.composing?.let { TextRange(it.start - ctx.windowStart, it.end - ctx.windowStart) },
       )
     }
 
-    override val imeOptions: ImeOptions = ImeOptions(
-      autoCorrect = true,
-      capitalization = KeyboardCapitalization.None,
-      imeAction = ImeAction.Default,
-      keyboardType = KeyboardType.Text,
-      singleLine = false,
-    )
+    override val imeOptions: ImeOptions =
+      ImeOptions(
+        autoCorrect = true,
+        capitalization = KeyboardCapitalization.None,
+        imeAction = ImeAction.Default,
+        keyboardType = KeyboardType.Text,
+        singleLine = false,
+      )
 
     override val onEditCommand: (List<EditCommand>) -> Unit = { commands ->
       InputEditCommandHandler.handle(editor, commands)
@@ -73,17 +70,24 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val state: TextEditorState =
       object : TextEditorState {
-        override val selection: TextRange get() = value().selection
-        override val composition: TextRange? get() = value().composition
-        override val length: Int get() = value().text.length
+        override val selection: TextRange
+          get() = value().selection
+
+        override val composition: TextRange?
+          get() = value().composition
+
+        override val length: Int
+          get() = value().text.length
+
         override fun get(index: Int): Char = value().text[index]
+
         override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
           value().text.subSequence(startIndex, endIndex)
       }
 
-    override val editText: (block: TextEditingScope.() -> Unit) -> Unit =
-      { block ->
-        val scope = object : TextEditingScope {
+    override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
+      val scope =
+        object : TextEditingScope {
           override fun commitText(text: CharSequence, newCursorPosition: Int) {
             if (text.toString() == "\n") {
               editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
@@ -93,9 +97,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
           }
 
           override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
-            editor.enqueue(
-              Message.Composition(CompositionOp.Update(text.toString(), null))
-            )
+            editor.enqueue(Message.Composition(CompositionOp.Update(text.toString(), null)))
           }
 
           override fun finishComposingText() {
@@ -104,7 +106,7 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
           override fun deleteSurroundingTextInCodePoints(
             lengthBeforeCursor: Int,
-            lengthAfterCursor: Int
+            lengthAfterCursor: Int,
           ) {
             editor.enqueue(
               Message.Deletion(
@@ -114,8 +116,8 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
           }
         }
 
-        editor.batch { scope.block() }
-      }
+      editor.batch { scope.block() }
+    }
   }
 }
 

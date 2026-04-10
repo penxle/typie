@@ -6,10 +6,10 @@ import co.typie.service.EditorPreferencesService
 import co.typie.storage.Prefs
 import co.typie.storage.Vault
 import co.typie.ui.theme.ThemeMode
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.coroutines.test.runTest
 
 class LegacyMigrationCoordinatorTest {
   private val hiveReader = LegacyHiveBoxReader()
@@ -19,14 +19,16 @@ class LegacyMigrationCoordinatorTest {
     val prefs = createLegacyMigrationTestPrefs()
     val vault = createLegacyMigrationTestVault()
     val stateStore = LegacyMigrationStateStore(prefs)
-    val coordinator = createCoordinator(
-      prefs = prefs,
-      vault = vault,
-      stateStore = stateStore,
-      platformSource = object : LegacyMigrationPlatformSource {
-        override suspend fun load(): LegacyMigrationSource? = null
-      },
-    )
+    val coordinator =
+      createCoordinator(
+        prefs = prefs,
+        vault = vault,
+        stateStore = stateStore,
+        platformSource =
+          object : LegacyMigrationPlatformSource {
+            override suspend fun load(): LegacyMigrationSource? = null
+          },
+      )
 
     val result = coordinator.runIfNeeded()
 
@@ -42,26 +44,30 @@ class LegacyMigrationCoordinatorTest {
     val vault = createLegacyMigrationTestVault()
     val stateStore = LegacyMigrationStateStore(prefs)
     val encryptionKey = fixtureEncryptionKey()
-    val coordinator = createCoordinator(
-      prefs = prefs,
-      vault = vault,
-      stateStore = stateStore,
-      platformSource = object : LegacyMigrationPlatformSource {
-        override suspend fun load(): LegacyMigrationSource {
-          return LegacyMigrationSource(
-            authBox = LegacyEncryptedHiveBoxSource(
-              bytes = loadLegacyMigrationFixture("auth_box.hive"),
-              keyCrc = calculateLegacyHiveKeyCrc(encryptionKey),
-              decryptor = LegacyAuthPayloadDecryptor { payload ->
-                decryptLegacyHiveAesPayload(payload, encryptionKey)
-              },
-            ),
-            preferenceBox = byteArrayOf(1, 2, 3),
-            themeBox = loadLegacyMigrationFixture("theme_box.hive"),
-          )
-        }
-      },
-    )
+    val coordinator =
+      createCoordinator(
+        prefs = prefs,
+        vault = vault,
+        stateStore = stateStore,
+        platformSource =
+          object : LegacyMigrationPlatformSource {
+            override suspend fun load(): LegacyMigrationSource {
+              return LegacyMigrationSource(
+                authBox =
+                  LegacyEncryptedHiveBoxSource(
+                    bytes = loadLegacyMigrationFixture("auth_box.hive"),
+                    keyCrc = calculateLegacyHiveKeyCrc(encryptionKey),
+                    decryptor =
+                      LegacyAuthPayloadDecryptor { payload ->
+                        decryptLegacyHiveAesPayload(payload, encryptionKey)
+                      },
+                  ),
+                preferenceBox = byteArrayOf(1, 2, 3),
+                themeBox = loadLegacyMigrationFixture("theme_box.hive"),
+              )
+            }
+          },
+      )
 
     val result = coordinator.runIfNeeded()
 
@@ -75,24 +81,27 @@ class LegacyMigrationCoordinatorTest {
     val prefs = createLegacyMigrationTestPrefs()
     val vault = createLegacyMigrationTestVault()
     val stateStore = LegacyMigrationStateStore(prefs)
-    val coordinator = createCoordinator(
-      prefs = prefs,
-      vault = vault,
-      stateStore = stateStore,
-      platformSource = object : LegacyMigrationPlatformSource {
-        override suspend fun load(): LegacyMigrationSource {
-          return LegacyMigrationSource(
-            authBox = LegacyEncryptedHiveBoxSource(
-              bytes = loadLegacyMigrationFixture("auth_box.hive"),
-              keyCrc = 0,
-              decryptor = LegacyAuthPayloadDecryptor { error("boom") },
-            ),
-            preferenceBox = loadLegacyMigrationFixture("preference_box.hive"),
-            themeBox = loadLegacyMigrationFixture("theme_box.hive"),
-          )
-        }
-      },
-    )
+    val coordinator =
+      createCoordinator(
+        prefs = prefs,
+        vault = vault,
+        stateStore = stateStore,
+        platformSource =
+          object : LegacyMigrationPlatformSource {
+            override suspend fun load(): LegacyMigrationSource {
+              return LegacyMigrationSource(
+                authBox =
+                  LegacyEncryptedHiveBoxSource(
+                    bytes = loadLegacyMigrationFixture("auth_box.hive"),
+                    keyCrc = 0,
+                    decryptor = LegacyAuthPayloadDecryptor { error("boom") },
+                  ),
+                preferenceBox = loadLegacyMigrationFixture("preference_box.hive"),
+                themeBox = loadLegacyMigrationFixture("theme_box.hive"),
+              )
+            }
+          },
+      )
 
     val result = coordinator.runIfNeeded()
     val snapshot = TestPrefsSnapshot(prefs)
@@ -109,9 +118,10 @@ class LegacyMigrationCoordinatorTest {
     val prefs = createLegacyMigrationTestPrefs()
     val vault = createLegacyMigrationTestVault()
     val stateStore = LegacyMigrationStateStore(prefs)
-    val existingTokens = TestVaultSnapshot(vault).apply {
-      tokens = AuthTokens(sessionToken = "existing-session", accessToken = "existing-access")
-    }
+    val existingTokens =
+      TestVaultSnapshot(vault).apply {
+        tokens = AuthTokens(sessionToken = "existing-session", accessToken = "existing-access")
+      }
     TestPrefsSnapshot(prefs).apply {
       siteId = "existing-site"
       devMode = true
@@ -124,26 +134,30 @@ class LegacyMigrationCoordinatorTest {
       themeMode = ThemeMode.Light
     }
     val encryptionKey = fixtureEncryptionKey()
-    val coordinator = createCoordinator(
-      prefs = prefs,
-      vault = vault,
-      stateStore = stateStore,
-      platformSource = object : LegacyMigrationPlatformSource {
-        override suspend fun load(): LegacyMigrationSource {
-          return LegacyMigrationSource(
-            authBox = LegacyEncryptedHiveBoxSource(
-              bytes = loadLegacyMigrationFixture("auth_box.hive"),
-              keyCrc = calculateLegacyHiveKeyCrc(encryptionKey),
-              decryptor = LegacyAuthPayloadDecryptor { payload ->
-                decryptLegacyHiveAesPayload(payload, encryptionKey)
-              },
-            ),
-            preferenceBox = loadLegacyMigrationFixture("preference_box.hive"),
-            themeBox = loadLegacyMigrationFixture("theme_box.hive"),
-          )
-        }
-      },
-    )
+    val coordinator =
+      createCoordinator(
+        prefs = prefs,
+        vault = vault,
+        stateStore = stateStore,
+        platformSource =
+          object : LegacyMigrationPlatformSource {
+            override suspend fun load(): LegacyMigrationSource {
+              return LegacyMigrationSource(
+                authBox =
+                  LegacyEncryptedHiveBoxSource(
+                    bytes = loadLegacyMigrationFixture("auth_box.hive"),
+                    keyCrc = calculateLegacyHiveKeyCrc(encryptionKey),
+                    decryptor =
+                      LegacyAuthPayloadDecryptor { payload ->
+                        decryptLegacyHiveAesPayload(payload, encryptionKey)
+                      },
+                  ),
+                preferenceBox = loadLegacyMigrationFixture("preference_box.hive"),
+                themeBox = loadLegacyMigrationFixture("theme_box.hive"),
+              )
+            }
+          },
+      )
 
     val result = coordinator.runIfNeeded()
     val snapshot = TestPrefsSnapshot(prefs)
@@ -172,43 +186,75 @@ class LegacyMigrationCoordinatorTest {
 
   private fun fixtureEncryptionKey(): ByteArray {
     return byteArrayOf(
-      0, 1, 2, 3, 4, 5, 6, 7,
-      8, 9, 10, 11, 12, 13, 14, 15,
-      16, 17, 18, 19, 20, 21, 22, 23,
-      24, 25, 26, 27, 28, 29, 30, 31,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
     )
   }
 
   private class TestPrefsSnapshot(prefs: Prefs) {
     var siteId: String by prefs("site_id", "")
-    var devMode: Boolean by prefs(
-      DeveloperPreferencesService.DEV_MODE_KEY,
-      DeveloperPreferencesService.DEFAULT_DEV_MODE,
-    )
-    var typewriterEnabled: Boolean by prefs(
-      EditorPreferencesService.TYPEWRITER_ENABLED_KEY,
-      EditorPreferencesService.DEFAULT_TYPEWRITER_ENABLED,
-    )
-    var typewriterPosition: Double by prefs(
-      EditorPreferencesService.TYPEWRITER_POSITION_KEY,
-      EditorPreferencesService.DEFAULT_TYPEWRITER_POSITION,
-    )
-    var lineHighlightEnabled: Boolean by prefs(
-      EditorPreferencesService.LINE_HIGHLIGHT_ENABLED_KEY,
-      EditorPreferencesService.DEFAULT_LINE_HIGHLIGHT_ENABLED,
-    )
-    var autoSurroundEnabled: Boolean by prefs(
-      EditorPreferencesService.AUTO_SURROUND_ENABLED_KEY,
-      EditorPreferencesService.DEFAULT_AUTO_SURROUND_ENABLED,
-    )
-    var characterCountFloatingEnabled: Boolean by prefs(
-      EditorPreferencesService.CHARACTER_COUNT_FLOATING_ENABLED_KEY,
-      EditorPreferencesService.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED,
-    )
-    var widgetAutoFadeEnabled: Boolean by prefs(
-      EditorPreferencesService.WIDGET_AUTO_FADE_ENABLED_KEY,
-      EditorPreferencesService.DEFAULT_WIDGET_AUTO_FADE_ENABLED,
-    )
+    var devMode: Boolean by
+      prefs(DeveloperPreferencesService.DEV_MODE_KEY, DeveloperPreferencesService.DEFAULT_DEV_MODE)
+    var typewriterEnabled: Boolean by
+      prefs(
+        EditorPreferencesService.TYPEWRITER_ENABLED_KEY,
+        EditorPreferencesService.DEFAULT_TYPEWRITER_ENABLED,
+      )
+    var typewriterPosition: Double by
+      prefs(
+        EditorPreferencesService.TYPEWRITER_POSITION_KEY,
+        EditorPreferencesService.DEFAULT_TYPEWRITER_POSITION,
+      )
+    var lineHighlightEnabled: Boolean by
+      prefs(
+        EditorPreferencesService.LINE_HIGHLIGHT_ENABLED_KEY,
+        EditorPreferencesService.DEFAULT_LINE_HIGHLIGHT_ENABLED,
+      )
+    var autoSurroundEnabled: Boolean by
+      prefs(
+        EditorPreferencesService.AUTO_SURROUND_ENABLED_KEY,
+        EditorPreferencesService.DEFAULT_AUTO_SURROUND_ENABLED,
+      )
+    var characterCountFloatingEnabled: Boolean by
+      prefs(
+        EditorPreferencesService.CHARACTER_COUNT_FLOATING_ENABLED_KEY,
+        EditorPreferencesService.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED,
+      )
+    var widgetAutoFadeEnabled: Boolean by
+      prefs(
+        EditorPreferencesService.WIDGET_AUTO_FADE_ENABLED_KEY,
+        EditorPreferencesService.DEFAULT_WIDGET_AUTO_FADE_ENABLED,
+      )
     var themeMode: ThemeMode by prefs("theme_mode", ThemeMode.System)
   }
 
@@ -222,24 +268,28 @@ class LegacyMigrationCoordinatorTest {
     val vault = createLegacyMigrationTestVault()
     val stateStore = LegacyMigrationStateStore(prefs)
     val encryptionKey = fixtureEncryptionKey()
-    val coordinator = createCoordinator(
-      prefs = prefs,
-      vault = vault,
-      stateStore = stateStore,
-      platformSource = object : LegacyMigrationPlatformSource {
-        override suspend fun load(): LegacyMigrationSource {
-          return LegacyMigrationSource(
-            authBox = LegacyEncryptedHiveBoxSource(
-              bytes = loadLegacyMigrationFixture("auth_box.hive"),
-              keyCrc = calculateLegacyHiveKeyCrc(encryptionKey),
-              decryptor = LegacyAuthPayloadDecryptor { payload ->
-                decryptLegacyHiveAesPayload(payload, encryptionKey)
-              },
-            ),
-          )
-        }
-      },
-    )
+    val coordinator =
+      createCoordinator(
+        prefs = prefs,
+        vault = vault,
+        stateStore = stateStore,
+        platformSource =
+          object : LegacyMigrationPlatformSource {
+            override suspend fun load(): LegacyMigrationSource {
+              return LegacyMigrationSource(
+                authBox =
+                  LegacyEncryptedHiveBoxSource(
+                    bytes = loadLegacyMigrationFixture("auth_box.hive"),
+                    keyCrc = calculateLegacyHiveKeyCrc(encryptionKey),
+                    decryptor =
+                      LegacyAuthPayloadDecryptor { payload ->
+                        decryptLegacyHiveAesPayload(payload, encryptionKey)
+                      },
+                  )
+              )
+            }
+          },
+      )
     val vaultSnapshot = TestVaultSnapshot(vault)
 
     val firstResult = coordinator.runIfNeeded()

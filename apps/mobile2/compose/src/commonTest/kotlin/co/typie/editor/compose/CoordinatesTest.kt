@@ -11,31 +11,20 @@ import kotlin.test.assertNull
 
 class CoordinatesTest {
 
-  private val sizes = listOf(
-    Size(width = 400f, height = 600f),
-    Size(width = 400f, height = 800f),
-    Size(width = 400f, height = 500f),
-  )
-  private val offsets = mapOf(
-    0 to Offset(0f, 0f),
-    1 to Offset(0f, 600f),
-    2 to Offset(0f, 1400f),
-  )
+  private val sizes =
+    listOf(
+      Size(width = 400f, height = 600f),
+      Size(width = 400f, height = 800f),
+      Size(width = 400f, height = 500f),
+    )
+  private val offsets = mapOf(0 to Offset(0f, 0f), 1 to Offset(0f, 600f), 2 to Offset(0f, 1400f))
 
-  private val offsetsWithGap = mapOf(
-    0 to Offset(0f, 0f),
-    1 to Offset(0f, 620f),
-    2 to Offset(0f, 1440f),
-  )
+  private val offsetsWithGap =
+    mapOf(0 to Offset(0f, 0f), 1 to Offset(0f, 620f), 2 to Offset(0f, 1440f))
 
-  private val offsetsCentered = mapOf(
-    0 to Offset(50f, 0f),
-    1 to Offset(50f, 600f),
-  )
-  private val sizesCentered = listOf(
-    Size(width = 300f, height = 600f),
-    Size(width = 300f, height = 400f),
-  )
+  private val offsetsCentered = mapOf(0 to Offset(50f, 0f), 1 to Offset(50f, 600f))
+  private val sizesCentered =
+    listOf(Size(width = 300f, height = 600f), Size(width = 300f, height = 400f))
 
   @Test
   fun localToGlobal_adds_page_offset() {

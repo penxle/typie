@@ -1,9 +1,9 @@
 package co.typie.form
 
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.coroutines.test.runTest
 
 class RuleTest {
 
@@ -15,9 +15,7 @@ class RuleTest {
   }
 
   @Test
-  fun requiredAcceptsNonBlankString() = runTest {
-    assertNull(required<String>().validate("hello"))
-  }
+  fun requiredAcceptsNonBlankString() = runTest { assertNull(required<String>().validate("hello")) }
 
   @Test
   fun requiredRejectsNull() = runTest {
@@ -48,35 +46,23 @@ class RuleTest {
     assertNull(email().validate("user+tag@sub.domain.com"))
   }
 
-  @Test
-  fun emailSkipsBlank() = runTest {
-    assertNull(email().validate(""))
-  }
+  @Test fun emailSkipsBlank() = runTest { assertNull(email().validate("")) }
 
   @Test
   fun minLengthRejectsTooShort() = runTest {
     assertEquals("6자 이상 입력해주세요", minLength(6).validate("abc"))
   }
 
-  @Test
-  fun minLengthAcceptsExact() = runTest {
-    assertNull(minLength(3).validate("abc"))
-  }
+  @Test fun minLengthAcceptsExact() = runTest { assertNull(minLength(3).validate("abc")) }
 
-  @Test
-  fun minLengthSkipsBlank() = runTest {
-    assertNull(minLength(6).validate(""))
-  }
+  @Test fun minLengthSkipsBlank() = runTest { assertNull(minLength(6).validate("")) }
 
   @Test
   fun maxLengthRejectsTooLong() = runTest {
     assertEquals("3자 이하로 입력해주세요", maxLength(3).validate("abcd"))
   }
 
-  @Test
-  fun maxLengthAcceptsExact() = runTest {
-    assertNull(maxLength(3).validate("abc"))
-  }
+  @Test fun maxLengthAcceptsExact() = runTest { assertNull(maxLength(3).validate("abc")) }
 
   @Test
   fun patternRejectsNonMatching() = runTest {
@@ -90,10 +76,7 @@ class RuleTest {
     assertNull(digitOnly.validate("123"))
   }
 
-  @Test
-  fun minComparableRejects() = runTest {
-    assertEquals("최솟값은 10입니다", min(10).validate(5))
-  }
+  @Test fun minComparableRejects() = runTest { assertEquals("최솟값은 10입니다", min(10).validate(5)) }
 
   @Test
   fun minComparableAccepts() = runTest {
@@ -101,10 +84,7 @@ class RuleTest {
     assertNull(min(10).validate(15))
   }
 
-  @Test
-  fun maxComparableRejects() = runTest {
-    assertEquals("최댓값은 100입니다", max(100).validate(101))
-  }
+  @Test fun maxComparableRejects() = runTest { assertEquals("최댓값은 100입니다", max(100).validate(101)) }
 
   @Test
   fun maxComparableAccepts() = runTest {
@@ -121,9 +101,7 @@ class RuleTest {
 
   @Test
   fun customAsyncRule() = runTest {
-    val asyncRule = rule<String> { value ->
-      if (value == "taken") "이미 사용 중" else null
-    }
+    val asyncRule = rule<String> { value -> if (value == "taken") "이미 사용 중" else null }
     assertEquals("이미 사용 중", asyncRule.validate("taken"))
     assertNull(asyncRule.validate("available"))
   }

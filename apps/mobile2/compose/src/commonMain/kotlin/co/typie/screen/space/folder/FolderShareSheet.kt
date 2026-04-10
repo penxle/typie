@@ -40,9 +40,8 @@ import co.typie.form.FormState
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
-import co.typie.platform.Share
+import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -63,7 +62,6 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import co.typie.platform.PlatformModule
 
 private const val THUMBNAIL_WIDTH_DP = 64
 private const val THUMBNAIL_HEIGHT_DP = 38
@@ -73,12 +71,8 @@ private class FolderShareForm(
   initialVisibility: EntityVisibility,
   initialThumbnailUrl: String?,
 ) : FormState(scope) {
-  val visibility = field(initialVisibility) {
-    focusable = false
-  }
-  val thumbnailUrl = field(initialThumbnailUrl) {
-    focusable = false
-  }
+  val visibility = field(initialVisibility) { focusable = false }
+  val thumbnailUrl = field(initialThumbnailUrl) { focusable = false }
 }
 
 private data class FolderVisibilityOption(
@@ -123,9 +117,10 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   val share = PlatformModule.share
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val form = remember(folderId, initialVisibility, initialThumbnailUrl) {
-    FolderShareForm(scope, initialVisibility, initialThumbnailUrl)
-  }
+  val form =
+    remember(folderId, initialVisibility, initialThumbnailUrl) {
+      FolderShareForm(scope, initialVisibility, initialThumbnailUrl)
+    }
   var isUpdatingVisibility by remember { mutableStateOf(false) }
   var isUploadingThumbnail by remember { mutableStateOf(false) }
   var isRemovingThumbnail by remember { mutableStateOf(false) }
@@ -133,7 +128,11 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   var isSharing by remember { mutableStateOf(false) }
   var showThumbnailRemoveConfirm by remember { mutableStateOf(false) }
   val isBusy =
-    isUpdatingVisibility || isUploadingThumbnail || isRemovingThumbnail || isApplyingRecursive || isSharing
+    isUpdatingVisibility ||
+      isUploadingThumbnail ||
+      isRemovingThumbnail ||
+      isApplyingRecursive ||
+      isSharing
 
   fun updateVisibility(nextVisibility: EntityVisibility) {
     if (isUpdatingVisibility) return
@@ -142,9 +141,13 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
 
     isUpdatingVisibility = true
     scope.launch {
-      model.updateFolderVisibility(folderId = folderId, visibility = nextVisibility)
+      model
+        .updateFolderVisibility(folderId = folderId, visibility = nextVisibility)
         .withDefaultExceptionHandler(toast)
-        .onOk { form.visibility.commit(); onUpdated() }
+        .onOk {
+          form.visibility.commit()
+          onUpdated()
+        }
         .onException { form.visibility.rollback() }
       isUpdatingVisibility = false
     }
@@ -156,9 +159,13 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
     form.thumbnailUrl.setValue(null)
     isRemovingThumbnail = true
     scope.launch {
-      model.removeFolderThumbnail(folderId = folderId)
+      model
+        .removeFolderThumbnail(folderId = folderId)
         .withDefaultExceptionHandler(toast)
-        .onOk { form.thumbnailUrl.commit(); onUpdated() }
+        .onOk {
+          form.thumbnailUrl.commit()
+          onUpdated()
+        }
         .onException { form.thumbnailUrl.rollback() }
       isRemovingThumbnail = false
     }
@@ -169,12 +176,13 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
 
     isApplyingRecursive = true
     scope.launch {
-      model.applyFolderVisibilityRecursively(
-        folderId = folderId,
-        visibility = form.visibility.value
-      )
+      model
+        .applyFolderVisibilityRecursively(folderId = folderId, visibility = form.visibility.value)
         .withDefaultExceptionHandler(toast)
-        .onOk { onUpdated(); dismiss() }
+        .onOk {
+          onUpdated()
+          dismiss()
+        }
       isApplyingRecursive = false
     }
   }
@@ -206,7 +214,8 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
 
     isUploadingThumbnail = true
     scope.launch {
-      model.uploadFolderThumbnail(folderId = folderId, file = file)
+      model
+        .uploadFolderThumbnail(folderId = folderId, file = file)
         .withDefaultExceptionHandler(toast)
         .onOk { thumbnailResult ->
           form.thumbnailUrl.setValue(thumbnailResult.url)
@@ -229,38 +238,31 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
       )
     },
   ) {
-    Column(
-      verticalArrangement = Arrangement.spacedBy(32.dp),
-    ) {
-      FolderShareSection(
-        title = "폴더 조회 권한",
-      ) {
+    Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
+      FolderShareSection(title = "폴더 조회 권한") {
         FolderShareOptionRow(
           icon = Lucide.Blend,
           label = "공개 범위",
           trailing = {
             SelectField(
               field = form.visibility,
-              items = folderVisibilityOptions().map { option ->
-                SelectFieldItem(
-                  value = option.visibility,
-                  label = option.label,
-                  description = option.description,
-                  icon = option.icon,
-                )
-              },
+              items =
+                folderVisibilityOptions().map { option ->
+                  SelectFieldItem(
+                    value = option.visibility,
+                    label = option.label,
+                    description = option.description,
+                    icon = option.icon,
+                  )
+                },
               enabled = !isUpdatingVisibility && !isApplyingRecursive,
-              onSelected = { nextVisibility ->
-                updateVisibility(nextVisibility)
-              },
+              onSelected = { nextVisibility -> updateVisibility(nextVisibility) },
             )
           },
         )
       }
 
-      FolderShareSection(
-        title = "썸네일",
-      ) {
+      FolderShareSection(title = "썸네일") {
         FolderShareOptionRow(
           icon = Lucide.Image,
           label = "미리보기 이미지",
@@ -274,17 +276,13 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
                   filePicker("image/*")
                 }
               },
-              onRemoveClick = {
-                showThumbnailRemoveConfirm = true
-              },
+              onRemoveClick = { showThumbnailRemoveConfirm = true },
             )
           },
         )
       }
 
-      Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Button(
           text = "하위 요소에 동일한 설정 적용하기",
           variant = ButtonVariant.Secondary,
@@ -320,41 +318,24 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
 }
 
 @Composable
-private fun FolderShareSection(
-  title: String,
-  content: @Composable ColumnScope.() -> Unit,
-) {
+private fun FolderShareSection(title: String, content: @Composable ColumnScope.() -> Unit) {
   Column(
     modifier = Modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(16.dp),
     content = {
-      Text(
-        text = title,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textSecondary,
-      )
+      Text(text = title, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
       content()
     },
   )
 }
 
 @Composable
-private fun FolderShareOptionRow(
-  icon: IconData,
-  label: String,
-  trailing: @Composable () -> Unit,
-) {
+private fun FolderShareOptionRow(icon: IconData, label: String, trailing: @Composable () -> Unit) {
   Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .heightIn(min = 24.dp),
+    modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Icon(
-      icon = icon,
-      modifier = Modifier.size(20.dp),
-      tint = AppTheme.colors.textSecondary,
-    )
+    Icon(icon = icon, modifier = Modifier.size(20.dp), tint = AppTheme.colors.textSecondary)
 
     Spacer(Modifier.size(8.dp))
 
@@ -409,31 +390,28 @@ private fun FolderThumbnailUploadButton(
 
   InteractionScope {
     Box(
-      modifier = Modifier
-        .then(if (enabled) Modifier.clickable { onClick() } else Modifier)
-        .then(if (enabled) Modifier.pressScale(0.95f) else Modifier),
+      modifier =
+        Modifier.then(if (enabled) Modifier.clickable { onClick() } else Modifier)
+          .then(if (enabled) Modifier.pressScale(0.95f) else Modifier),
       contentAlignment = Alignment.Center,
     ) {
       Box(
-        modifier = Modifier
-          .size(width = THUMBNAIL_WIDTH_DP.dp, height = THUMBNAIL_HEIGHT_DP.dp)
-          .clip(shape)
-          .background(AppTheme.colors.surfaceSunken, shape)
-          .border(
-            width = 1.dp,
-            color = if (thumbnailUrl == null) AppTheme.colors.borderStrong else AppTheme.colors.borderSubtle,
-            shape = shape,
-          ),
+        modifier =
+          Modifier.size(width = THUMBNAIL_WIDTH_DP.dp, height = THUMBNAIL_HEIGHT_DP.dp)
+            .clip(shape)
+            .background(AppTheme.colors.surfaceSunken, shape)
+            .border(
+              width = 1.dp,
+              color =
+                if (thumbnailUrl == null) AppTheme.colors.borderStrong
+                else AppTheme.colors.borderSubtle,
+              shape = shape,
+            ),
         contentAlignment = Alignment.Center,
       ) {
         when {
           thumbnailUrl != null -> {
-            Img(
-              url = thumbnailUrl,
-              modifier = Modifier
-                .fillMaxSize()
-                .clip(shape),
-            )
+            Img(url = thumbnailUrl, modifier = Modifier.fillMaxSize().clip(shape))
           }
 
           isUploading -> {
@@ -461,10 +439,10 @@ private fun FolderThumbnailRemoveButton(
 ) {
   InteractionScope {
     Box(
-      modifier = Modifier
-        .heightIn(min = THUMBNAIL_HEIGHT_DP.dp)
-        .clickable(enabled = enabled) { onClick() }
-        .pressScale(0.95f),
+      modifier =
+        Modifier.heightIn(min = THUMBNAIL_HEIGHT_DP.dp)
+          .clickable(enabled = enabled) { onClick() }
+          .pressScale(0.95f),
       contentAlignment = Alignment.Center,
     ) {
       Text(
@@ -481,11 +459,12 @@ private fun FolderThumbnailRemoveButton(
 private fun FolderThumbnailSpinner() {
   val transition = rememberInfiniteTransition()
   val spinnerColor = AppTheme.colors.textTertiary
-  val rotation by transition.animateFloat(
-    initialValue = 0f,
-    targetValue = 360f,
-    animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
-  )
+  val rotation by
+    transition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
+    )
 
   Canvas(Modifier.size(14.dp)) {
     drawArc(

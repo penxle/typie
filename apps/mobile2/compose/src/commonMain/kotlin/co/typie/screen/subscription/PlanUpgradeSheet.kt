@@ -16,9 +16,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
@@ -40,7 +40,6 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -49,14 +48,10 @@ const val DEFAULT_PLAN_UPGRADE_TITLE = "플랜 업그레이드가 필요해요"
 sealed interface PlanUpgradeSheetResult {
   data object Upgrade : PlanUpgradeSheetResult
 
-  data class TrialStarted(
-    val celebration: SubscriptionCelebration,
-  ) : PlanUpgradeSheetResult
+  data class TrialStarted(val celebration: SubscriptionCelebration) : PlanUpgradeSheetResult
 }
 
-fun planUpgradeDismissResult(
-  celebration: SubscriptionCelebration?,
-): PlanUpgradeSheetResult? {
+fun planUpgradeDismissResult(celebration: SubscriptionCelebration?): PlanUpgradeSheetResult? {
   return celebration?.let(PlanUpgradeSheetResult::TrialStarted)
 }
 
@@ -64,8 +59,7 @@ fun planUpgradeRoute(result: PlanUpgradeSheetResult?): Route? {
   return when (result) {
     PlanUpgradeSheetResult.Upgrade -> Route.EnrollPlan
     is PlanUpgradeSheetResult.TrialStarted,
-    null,
-    -> null
+    null -> null
   }
 }
 
@@ -73,16 +67,12 @@ suspend fun BottomSheetHostState.showPlanUpgradeSheet(
   title: String = DEFAULT_PLAN_UPGRADE_TITLE,
   message: String,
 ): PlanUpgradeSheetResult? {
-  val result = try {
-    show<PlanUpgradeSheetResult> {
-      this.PlanUpgradeSheet(
-        title = title,
-        message = message,
-      )
+  val result =
+    try {
+      show<PlanUpgradeSheetResult> { this.PlanUpgradeSheet(title = title, message = message) }
+    } catch (_: CancellationException) {
+      return null
     }
-  } catch (_: CancellationException) {
-    return null
-  }
 
   if (result is PlanUpgradeSheetResult.TrialStarted) {
     try {
@@ -128,35 +118,23 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
     )
 
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
-        .padding(16.dp),
+      modifier =
+        Modifier.fillMaxWidth()
+          .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
+          .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Text(
-        text = "타이피 FULL ACCESS",
-        style = AppTheme.typography.title,
-      )
+      Text(text = "타이피 FULL ACCESS", style = AppTheme.typography.title)
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderStrong)
 
-      SubscriptionFeatureList(
-        features = fullPlanFeatures,
-        iconSize = 16.dp,
-        rowSpacing = 8.dp,
-      )
+      SubscriptionFeatureList(features = fullPlanFeatures, iconSize = 16.dp, rowSpacing = 8.dp)
     }
 
     if (canStartTrial) {
       Button(
         text = "2주 무료 체험하기",
-        leading = { color ->
-          Icon(
-            icon = Lucide.Zap,
-            tint = color,
-          )
-        },
+        leading = { color -> Icon(icon = Lucide.Zap, tint = color) },
         loading = model.isStartingTrial,
         loadingText = "무료 체험 시작 중...",
         onClick = { showTrialStartConfirm = true },
@@ -178,13 +156,12 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
       onConfirm = {
         showTrialStartConfirm = false
         scope.launch {
-          model.startTrial()
-            .withDefaultExceptionHandler(toast)
-            .onErr { error ->
-              when (error) {
-                PlanUpgradeTrialError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-              }
+          model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
+            when (error) {
+              PlanUpgradeTrialError.ServerError ->
+                toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
             }
+          }
         }
       },
       onDismiss = { showTrialStartConfirm = false },

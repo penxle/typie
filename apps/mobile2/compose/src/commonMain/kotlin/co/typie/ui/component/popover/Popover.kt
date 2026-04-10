@@ -69,10 +69,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
 
-data class PopoverPaneTransition(
-  val progress: Float,
-  val anchorContentRect: Rect,
-)
+data class PopoverPaneTransition(val progress: Float, val anchorContentRect: Rect)
 
 val LocalPopoverPaneTransition = staticCompositionLocalOf<PopoverPaneTransition?> { null }
 val LocalPopoverPaneEdgeAutoScrollState = staticCompositionLocalOf<EdgeAutoScrollState?> { null }
@@ -84,11 +81,10 @@ data class AnchorPointerState(
 )
 
 @Stable
-class PopoverScope internal constructor(
-  private val onClose: () -> Unit,
-) {
+class PopoverScope internal constructor(private val onClose: () -> Unit) {
   var pointerState: AnchorPointerState? by mutableStateOf(null)
     internal set
+
   var acceptsInput: Boolean by mutableStateOf(true)
     internal set
 
@@ -126,16 +122,19 @@ fun Popover(
   val layoutDirection = LocalLayoutDirection.current
   val armDistancePx = PopoverDefaults.ArmDistance.toPx(density)
   val safeDrawing = WindowInsets.safeDrawing
-  val resolvedScreenPadding = PopoverScreenPadding(
-    left = screenPadding.calculateStartPadding(layoutDirection).toPx(density).toInt() +
-      safeDrawing.getLeft(density, layoutDirection),
-    top = screenPadding.calculateTopPadding().toPx(density).toInt() +
-      safeDrawing.getTop(density),
-    right = screenPadding.calculateEndPadding(layoutDirection).toPx(density).toInt() +
-      safeDrawing.getRight(density, layoutDirection),
-    bottom = screenPadding.calculateBottomPadding().toPx(density).toInt() +
-      safeDrawing.getBottom(density),
-  )
+  val resolvedScreenPadding =
+    PopoverScreenPadding(
+      left =
+        screenPadding.calculateStartPadding(layoutDirection).toPx(density).toInt() +
+          safeDrawing.getLeft(density, layoutDirection),
+      top = screenPadding.calculateTopPadding().toPx(density).toInt() + safeDrawing.getTop(density),
+      right =
+        screenPadding.calculateEndPadding(layoutDirection).toPx(density).toInt() +
+          safeDrawing.getRight(density, layoutDirection),
+      bottom =
+        screenPadding.calculateBottomPadding().toPx(density).toInt() +
+          safeDrawing.getBottom(density),
+    )
 
   var isExpanded by remember { mutableStateOf(false) }
   var isOverlayVisible by remember { mutableStateOf(false) }
@@ -147,9 +146,7 @@ fun Popover(
   val dismissPopover by rememberUpdatedState { isExpanded = false }
   var outsideTapHostHandle by remember { mutableStateOf<PopoverOutsideTapHostHandle?>(null) }
 
-  val scope = remember {
-    PopoverScope(onClose = { isExpanded = false })
-  }
+  val scope = remember { PopoverScope(onClose = { isExpanded = false }) }
 
   LaunchedEffect(isExpanded) {
     if (isExpanded) {
@@ -157,18 +154,12 @@ fun Popover(
       isOverlayVisible = true
       animationProgress.stop()
       animationProgress.snapTo(0f)
-      animationProgress.animateTo(
-        1f,
-        tween(PopoverDefaults.ForwardDuration, easing = LinearEasing)
-      )
+      animationProgress.animateTo(1f, tween(PopoverDefaults.ForwardDuration, easing = LinearEasing))
     } else if (isOverlayVisible) {
       val from = if (animationProgress.value == 0f) 1f else animationProgress.value
       animationProgress.stop()
       animationProgress.snapTo(from)
-      animationProgress.animateTo(
-        0f,
-        tween(PopoverDefaults.ReverseDuration, easing = LinearEasing)
-      )
+      animationProgress.animateTo(0f, tween(PopoverDefaults.ReverseDuration, easing = LinearEasing))
       isOverlayVisible = false
       paneBoundsInWindow = null
       scope.pointerState = null
@@ -193,105 +184,102 @@ fun Popover(
 
   SideEffect {
     if (isExpanded) {
-      outsideTapHostHandle?.update(
-        paneBounds = paneBoundsInWindow,
-        onDismiss = dismissPopover,
-      )
+      outsideTapHostHandle?.update(paneBounds = paneBoundsInWindow, onDismiss = dismissPopover)
     }
   }
 
-  PlatformBackHandler(enabled = isOverlayVisible) {
-    isExpanded = false
-  }
+  PlatformBackHandler(enabled = isOverlayVisible) { isExpanded = false }
 
   Box(
-    modifier = Modifier
-      .onGloballyPositioned { coordinates ->
-        val pos = coordinates.positionInWindow().round()
-        anchorBounds = IntRect(pos, coordinates.size)
-      }
-      .pointerInput(Unit) {
-        awaitPointerEventScope {
-          while (true) {
-            val event = awaitPointerEvent()
-            if (event.type == PointerEventType.Press && !isOverlayVisible) {
-              val press = event.changes.firstOrNull() ?: continue
-              val anchorWindowOffset =
-                Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
-              val origin = press.position + anchorWindowOffset
-              val gestureTracker = PopoverAnchorGestureTracker(
-                origin = origin,
-                armDistancePx = armDistancePx,
-              )
-              val scrollLockHandle = scrollGestureLockState.acquire()
+    modifier =
+      Modifier.onGloballyPositioned { coordinates ->
+          val pos = coordinates.positionInWindow().round()
+          anchorBounds = IntRect(pos, coordinates.size)
+        }
+        .pointerInput(Unit) {
+          awaitPointerEventScope {
+            while (true) {
+              val event = awaitPointerEvent()
+              if (event.type == PointerEventType.Press && !isOverlayVisible) {
+                val press = event.changes.firstOrNull() ?: continue
+                val anchorWindowOffset =
+                  Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
+                val origin = press.position + anchorWindowOffset
+                val gestureTracker =
+                  PopoverAnchorGestureTracker(origin = origin, armDistancePx = armDistancePx)
+                val scrollLockHandle = scrollGestureLockState.acquire()
 
-              try {
-                isExpanded = true
-                val startUpdate = gestureTracker.start()
-                scope.pointerState = startUpdate.pointerState
-                if (startUpdate.consumeChange) {
-                  // Anchor-originated scrub should own the gesture so parent scroll containers stay still.
-                  press.consume()
-                }
-
-                val armStartMark = TimeSource.Monotonic.markNow()
-
-                while (true) {
-                  val moveEvent = awaitPointerEvent()
-                  val change = moveEvent.changes.find { it.id == press.id } ?: break
-
-                  val currentPos = change.position + anchorWindowOffset
-                  val elapsed = armStartMark.elapsedNow().inWholeMilliseconds
-                  val update = gestureTracker.update(
-                    currentPosition = currentPos,
-                    elapsedMillis = elapsed,
-                    isPressed = change.pressed,
-                  )
-                  scope.pointerState = update.pointerState
-                  if (update.consumeChange) {
-                    change.consume()
+                try {
+                  isExpanded = true
+                  val startUpdate = gestureTracker.start()
+                  scope.pointerState = startUpdate.pointerState
+                  if (startUpdate.consumeChange) {
+                    // Anchor-originated scrub should own the gesture so parent scroll containers
+                    // stay still.
+                    press.consume()
                   }
 
-                  if (!change.pressed) break
+                  val armStartMark = TimeSource.Monotonic.markNow()
+
+                  while (true) {
+                    val moveEvent = awaitPointerEvent()
+                    val change = moveEvent.changes.find { it.id == press.id } ?: break
+
+                    val currentPos = change.position + anchorWindowOffset
+                    val elapsed = armStartMark.elapsedNow().inWholeMilliseconds
+                    val update =
+                      gestureTracker.update(
+                        currentPosition = currentPos,
+                        elapsedMillis = elapsed,
+                        isPressed = change.pressed,
+                      )
+                    scope.pointerState = update.pointerState
+                    if (update.consumeChange) {
+                      change.consume()
+                    }
+
+                    if (!change.pressed) break
+                  }
+                } finally {
+                  scrollLockHandle.release()
                 }
-              } finally {
-                scrollLockHandle.release()
               }
             }
           }
         }
-      },
   ) {
-    val progress = if (isOverlayVisible) {
-      PopoverDefaults.PopoverEasing.transform(animationProgress.value).coerceIn(0f, 1f)
-    } else {
-      0f
-    }
+    val progress =
+      if (isOverlayVisible) {
+        PopoverDefaults.PopoverEasing.transform(animationProgress.value).coerceIn(0f, 1f)
+      } else {
+        0f
+      }
 
     Box(modifier = Modifier.alpha(1f - progress)) { anchor() }
 
     if (isOverlayVisible) {
-      val placementProvider = remember(placement, resolvedScreenPadding) {
-        PopoverPlacementProvider(placement, resolvedScreenPadding)
-      }
+      val placementProvider =
+        remember(placement, resolvedScreenPadding) {
+          PopoverPlacementProvider(placement, resolvedScreenPadding)
+        }
 
       Popup(
         popupPositionProvider = placementProvider,
         onDismissRequest = { isExpanded = false },
-        properties = PopupProperties(
-          dismissOnClickOutside = false,
-        ),
+        properties = PopupProperties(dismissOnClickOutside = false),
       ) {
         Box(
-          modifier = Modifier.onGloballyPositioned { coordinates ->
-            val positionInWindow = coordinates.positionInWindow()
-            paneBoundsInWindow = Rect(
-              left = positionInWindow.x,
-              top = positionInWindow.y,
-              right = positionInWindow.x + coordinates.size.width,
-              bottom = positionInWindow.y + coordinates.size.height,
-            )
-          },
+          modifier =
+            Modifier.onGloballyPositioned { coordinates ->
+              val positionInWindow = coordinates.positionInWindow()
+              paneBoundsInWindow =
+                Rect(
+                  left = positionInWindow.x,
+                  top = positionInWindow.y,
+                  right = positionInWindow.x + coordinates.size.width,
+                  bottom = positionInWindow.y + coordinates.size.height,
+                )
+            }
         ) {
           PopoverPanePopup(
             anchor = anchor,
@@ -329,121 +317,118 @@ private fun PopoverPanePopup(
   val density = LocalDensity.current
 
   SubcomposeLayout(
-    modifier = Modifier.then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier),
+    modifier = Modifier.then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier)
   ) { constraints ->
     val minWidthPx = minWidth.toPx(density).roundToInt()
-    val preferredPaneMaxWidth = availableWidthForPlacement(
-      windowWidth = constraints.maxWidth,
-      anchorBounds = anchorBounds,
-      screenPadding = screenPadding,
-      placement = placement,
-    )
-    val paneConstraints = constraints.copy(
-      minWidth = 0,
-      minHeight = 0,
-      maxWidth = min(
-        shrinkBounded(constraints.maxWidth, screenPadding.left + screenPadding.right),
-        preferredPaneMaxWidth,
-      ),
-      maxHeight = shrinkBounded(constraints.maxHeight, screenPadding.top + screenPadding.bottom),
-    )
-
-    val initialPanePlaceables = subcompose(PopoverSlot.InitialMeasurePane) {
-      ShrinkWrappedPane(
-        expandToMaxWidth = expandToMaxWidth,
-        content = pane,
+    val preferredPaneMaxWidth =
+      availableWidthForPlacement(
+        windowWidth = constraints.maxWidth,
+        anchorBounds = anchorBounds,
+        screenPadding = screenPadding,
+        placement = placement,
       )
-    }.map { it.measure(paneConstraints) }
+    val paneConstraints =
+      constraints.copy(
+        minWidth = 0,
+        minHeight = 0,
+        maxWidth =
+          min(
+            shrinkBounded(constraints.maxWidth, screenPadding.left + screenPadding.right),
+            preferredPaneMaxWidth,
+          ),
+        maxHeight = shrinkBounded(constraints.maxHeight, screenPadding.top + screenPadding.bottom),
+      )
+
+    val initialPanePlaceables =
+      subcompose(PopoverSlot.InitialMeasurePane) {
+          ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+        }
+        .map { it.measure(paneConstraints) }
 
     val initiallyMeasuredWidth =
       initialPanePlaceables.maxOfOrNull { it.width } ?: anchorBounds.width
     val initiallyMeasuredHeight =
       initialPanePlaceables.maxOfOrNull { it.height } ?: anchorBounds.height
-    val showBelow = shouldShowBelow(
-      placement = placement,
-      childHeight = initiallyMeasuredHeight,
-      windowHeight = constraints.maxHeight,
-      anchorRect = anchorBounds,
-      screenPadding = screenPadding,
-    )
-    val finalPaneConstraints = paneConstraints.copy(
-      maxHeight = availableHeightForPlacement(
+    val showBelow =
+      shouldShowBelow(
+        placement = placement,
+        childHeight = initiallyMeasuredHeight,
         windowHeight = constraints.maxHeight,
-        anchorBounds = anchorBounds,
+        anchorRect = anchorBounds,
         screenPadding = screenPadding,
-        showBelow = showBelow,
-      ),
-    )
-    val finalPanePlaceables = subcompose(PopoverSlot.FinalMeasurePane) {
-      ShrinkWrappedPane(
-        expandToMaxWidth = expandToMaxWidth,
-        content = pane,
       )
-    }.map { it.measure(finalPaneConstraints) }
+    val finalPaneConstraints =
+      paneConstraints.copy(
+        maxHeight =
+          availableHeightForPlacement(
+            windowHeight = constraints.maxHeight,
+            anchorBounds = anchorBounds,
+            screenPadding = screenPadding,
+            showBelow = showBelow,
+          )
+      )
+    val finalPanePlaceables =
+      subcompose(PopoverSlot.FinalMeasurePane) {
+          ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+        }
+        .map { it.measure(finalPaneConstraints) }
 
     val paneWidth = finalPanePlaceables.maxOfOrNull { it.width } ?: initiallyMeasuredWidth
     val paneHeight = finalPanePlaceables.maxOfOrNull { it.height } ?: initiallyMeasuredHeight
-    val resolvedPaneWidth = if (expandToMaxWidth) {
-      finalPaneConstraints.maxWidth
-    } else {
-      paneWidth.coerceAtLeast(minWidthPx).coerceAtMost(finalPaneConstraints.maxWidth)
-    }
+    val resolvedPaneWidth =
+      if (expandToMaxWidth) {
+        finalPaneConstraints.maxWidth
+      } else {
+        paneWidth.coerceAtLeast(minWidthPx).coerceAtMost(finalPaneConstraints.maxWidth)
+      }
     val paneSize = IntSize(resolvedPaneWidth, paneHeight)
     val anchorSize = anchorBounds.size
     val resolvedPlacement = resolvedPlacement(placement, showBelow)
-    val transition = PopoverPaneTransition(
-      progress = progress,
-      anchorContentRect = anchorContentRect(paneSize, anchorSize, resolvedPlacement),
-    )
+    val transition =
+      PopoverPaneTransition(
+        progress = progress,
+        anchorContentRect = anchorContentRect(paneSize, anchorSize, resolvedPlacement),
+      )
 
-    val surfacePlaceable = subcompose(PopoverSlot.Surface) {
-      CompositionLocalProvider(LocalPopoverPaneTransition provides transition) {
-        PopoverPaneSurface(
-          anchor = anchor,
-          pane = {
-            ShrinkWrappedPane(
-              expandToMaxWidth = expandToMaxWidth,
-              content = pane,
+    val surfacePlaceable =
+      subcompose(PopoverSlot.Surface) {
+          CompositionLocalProvider(LocalPopoverPaneTransition provides transition) {
+            PopoverPaneSurface(
+              anchor = anchor,
+              pane = { ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane) },
+              paneSize = paneSize,
+              anchorSize = anchorSize,
+              resolvedPlacement = resolvedPlacement,
+              progress = progress,
+              interactive = interactive,
+              collapsedCornerRadius = collapsedCornerRadius,
             )
-          },
-          paneSize = paneSize,
-          anchorSize = anchorSize,
-          resolvedPlacement = resolvedPlacement,
-          progress = progress,
-          interactive = interactive,
-          collapsedCornerRadius = collapsedCornerRadius,
-        )
-      }
-    }.single().measure(Constraints.fixed(resolvedPaneWidth, paneHeight))
+          }
+        }
+        .single()
+        .measure(Constraints.fixed(resolvedPaneWidth, paneHeight))
 
-    layout(resolvedPaneWidth, paneHeight) {
-      surfacePlaceable.place(0, 0)
-    }
+    layout(resolvedPaneWidth, paneHeight) { surfacePlaceable.place(0, 0) }
   }
 }
 
 @Composable
-private fun ShrinkWrappedPane(
-  expandToMaxWidth: Boolean = false,
-  content: @Composable () -> Unit,
-) {
+private fun ShrinkWrappedPane(expandToMaxWidth: Boolean = false, content: @Composable () -> Unit) {
   val scrollState = rememberScrollState()
   val edgeAutoScrollState = rememberEdgeAutoScrollState(verticalScrollableState = scrollState)
 
-  CompositionLocalProvider(
-    LocalPopoverPaneEdgeAutoScrollState provides edgeAutoScrollState,
-  ) {
+  CompositionLocalProvider(LocalPopoverPaneEdgeAutoScrollState provides edgeAutoScrollState) {
     Box(
-      modifier = Modifier
-        .then(
-          if (expandToMaxWidth) {
-            Modifier.fillMaxWidth()
-          } else {
-            Modifier.width(IntrinsicSize.Max)
-          }
-        )
-        .edgeAutoScroll(edgeAutoScrollState)
-        .verticalScroll(scrollState),
+      modifier =
+        Modifier.then(
+            if (expandToMaxWidth) {
+              Modifier.fillMaxWidth()
+            } else {
+              Modifier.width(IntrinsicSize.Max)
+            }
+          )
+          .edgeAutoScroll(edgeAutoScrollState)
+          .verticalScroll(scrollState)
     ) {
       content()
     }
@@ -466,63 +451,52 @@ private fun PopoverPaneSurface(
     sizeForProgress(anchorSize.width.toFloat(), paneSize.width.toFloat(), progress)
   val animatedHeight =
     sizeForProgress(anchorSize.height.toFloat(), paneSize.height.toFloat(), progress)
-  val animatedSurfaceSize = IntSize(
-    width = max(1, animatedWidth.roundToInt()),
-    height = max(1, animatedHeight.roundToInt()),
-  )
+  val animatedSurfaceSize =
+    IntSize(
+      width = max(1, animatedWidth.roundToInt()),
+      height = max(1, animatedHeight.roundToInt()),
+    )
   val surfaceOffset = alignedOffset(paneSize, animatedSurfaceSize, resolvedPlacement)
   val paneOffset = alignedOffset(animatedSurfaceSize, paneSize, resolvedPlacement)
   val anchorOffset = anchorContentOffset(paneSize, anchorSize, resolvedPlacement)
-  val cornerRadius = lerp(
-    collapsedCornerRadius.toPx(density),
-    PopoverDefaults.ExpandedRadius.toPx(density),
-    progress,
-  )
+  val cornerRadius =
+    lerp(
+      collapsedCornerRadius.toPx(density),
+      PopoverDefaults.ExpandedRadius.toPx(density),
+      progress,
+    )
   val shape = SquircleShape(cornerRadius.toDp(density))
   val shadowElevation = (12f * progress).dp
 
   Box(
-    modifier = Modifier.size(
-      width = paneSize.width.toDp(density),
-      height = paneSize.height.toDp(density),
-    ),
+    modifier =
+      Modifier.size(width = paneSize.width.toDp(density), height = paneSize.height.toDp(density))
   ) {
     Box(
-      modifier = Modifier
-        .offset { surfaceOffset }
-        .size(
-          width = animatedWidth.toDp(density),
-          height = animatedHeight.toDp(density),
-        )
-        .shadow(shadowElevation, shape)
-        .clip(shape)
-        .background(AppTheme.colors.surfaceRaised, shape)
-        .then(
-          if (interactive) {
-            Modifier
-          } else {
-            Modifier.pointerInput(Unit) {
-              awaitPointerEventScope {
-                while (true) {
-                  val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-                  event.changes.forEach { it.consume() }
+      modifier =
+        Modifier.offset { surfaceOffset }
+          .size(width = animatedWidth.toDp(density), height = animatedHeight.toDp(density))
+          .shadow(shadowElevation, shape)
+          .clip(shape)
+          .background(AppTheme.colors.surfaceRaised, shape)
+          .then(
+            if (interactive) {
+              Modifier
+            } else {
+              Modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                  while (true) {
+                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                    event.changes.forEach { it.consume() }
+                  }
                 }
               }
             }
-          }
-        ),
+          )
     ) {
       PopoverCropLayout(
-        pane = {
-          Box(modifier = Modifier.alpha(progress)) {
-            pane()
-          }
-        },
-        anchor = {
-          Box(modifier = Modifier.alpha(1f - progress)) {
-            anchor()
-          }
-        },
+        pane = { Box(modifier = Modifier.alpha(progress)) { pane() } },
+        anchor = { Box(modifier = Modifier.alpha(1f - progress)) { anchor() } },
         paneSize = paneSize,
         anchorSize = anchorSize,
         paneOffset = paneOffset,
@@ -554,10 +528,7 @@ private fun PopoverCropLayout(
 
     layout(constraints.maxWidth, constraints.maxHeight) {
       panePlaceable.place(paneOffset.x, paneOffset.y)
-      anchorPlaceable.place(
-        x = paneOffset.x + anchorOffset.x,
-        y = paneOffset.y + anchorOffset.y,
-      )
+      anchorPlaceable.place(x = paneOffset.x + anchorOffset.x, y = paneOffset.y + anchorOffset.y)
     }
   }
 }
@@ -602,15 +573,17 @@ private fun alignedOffset(
   childSize: IntSize,
   placement: PopoverPlacement,
 ): IntOffset {
-  val x = when (placement.align) {
-    PopoverAlign.Start -> 0
-    PopoverAlign.Center -> (containerSize.width - childSize.width) / 2
-    PopoverAlign.End -> containerSize.width - childSize.width
-  }
-  val y = when (placement.side) {
-    PopoverSide.Below -> 0
-    PopoverSide.Above -> containerSize.height - childSize.height
-  }
+  val x =
+    when (placement.align) {
+      PopoverAlign.Start -> 0
+      PopoverAlign.Center -> (containerSize.width - childSize.width) / 2
+      PopoverAlign.End -> containerSize.width - childSize.width
+    }
+  val y =
+    when (placement.side) {
+      PopoverSide.Below -> 0
+      PopoverSide.Above -> containerSize.height - childSize.height
+    }
 
   return IntOffset(x, y)
 }
@@ -651,13 +624,10 @@ private fun availableWidthForPlacement(
   }
 
   return when (placement.align) {
-    PopoverAlign.Start ->
-      max(0, windowWidth - screenPadding.right - anchorBounds.left)
+    PopoverAlign.Start -> max(0, windowWidth - screenPadding.right - anchorBounds.left)
 
-    PopoverAlign.Center ->
-      max(0, windowWidth - screenPadding.left - screenPadding.right)
+    PopoverAlign.Center -> max(0, windowWidth - screenPadding.left - screenPadding.right)
 
-    PopoverAlign.End ->
-      max(0, anchorBounds.right - screenPadding.left)
+    PopoverAlign.End -> max(0, anchorBounds.right - screenPadding.left)
   }
 }

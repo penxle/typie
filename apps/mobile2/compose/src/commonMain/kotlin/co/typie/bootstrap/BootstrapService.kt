@@ -3,7 +3,6 @@ package co.typie.bootstrap
 import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.graphql.Http
-import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import co.typie.startup.BootstrapStartupHandle
 import co.typie.storage.Prefs
@@ -12,15 +11,15 @@ import io.ktor.client.request.get
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 
 private const val BOOTSTRAP_REFRESH_INTERVAL_MS = 60_000L
@@ -59,9 +58,7 @@ object BootstrapService : BootstrapStartupHandle {
   }
 
   fun startAsync() {
-    scope.launch {
-      start()
-    }
+    scope.launch { start() }
   }
 
   suspend fun refresh(showLoading: Boolean = true) = mutex.withLock {
@@ -73,11 +70,12 @@ object BootstrapService : BootstrapStartupHandle {
       val payload = fetchPayload()
       if (payload != null) {
         cachedPayload = payload
-        _state.value = resolveBootstrapState(
-          bootstrap = json.decodeFromString(BootstrapPayload.serializer(), payload),
-          platform = PlatformModule.platform,
-          currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
-        )
+        _state.value =
+          resolveBootstrapState(
+            bootstrap = json.decodeFromString(BootstrapPayload.serializer(), payload),
+            platform = PlatformModule.platform,
+            currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
+          )
         Logger.i { "Bootstrap startup: loaded remote bootstrap." }
         return@withLock
       }
@@ -89,11 +87,12 @@ object BootstrapService : BootstrapStartupHandle {
 
     if (cachedPayload.isNotBlank()) {
       try {
-        _state.value = resolveBootstrapState(
-          bootstrap = json.decodeFromString(BootstrapPayload.serializer(), cachedPayload),
-          platform = PlatformModule.platform,
-          currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
-        )
+        _state.value =
+          resolveBootstrapState(
+            bootstrap = json.decodeFromString(BootstrapPayload.serializer(), cachedPayload),
+            platform = PlatformModule.platform,
+            currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
+          )
         Logger.i { "Bootstrap startup: loaded cached bootstrap." }
         return@withLock
       } catch (e: CancellationException) {
@@ -108,8 +107,7 @@ object BootstrapService : BootstrapStartupHandle {
   }
 
   private suspend fun fetchPayload(): String? {
-    return runCatching {
-      Http.get(bootstrapUrlForApiUrl(Konfig.API_URL)).body<String>()
-    }.getOrNull()
+    return runCatching { Http.get(bootstrapUrlForApiUrl(Konfig.API_URL)).body<String>() }
+      .getOrNull()
   }
 }

@@ -15,17 +15,19 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import co.typie.serialization.EnumSerializer
+import co.typie.startup.AppStartupService
+import co.typie.startup.AppStartupState
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.LocalHazeStyle
 import kotlinx.coroutines.flow.drop
 import kotlinx.serialization.Serializable
-import co.typie.startup.AppStartupState
-import co.typie.startup.AppStartupService
 
 @Serializable(with = ThemeMode.Serializer::class)
 enum class ThemeMode {
-  System, Light, Dark;
+  System,
+  Light,
+  Dark;
 
   data object Serializer : EnumSerializer<ThemeMode>(entries, String::lowercase)
 }
@@ -80,91 +82,78 @@ data class AppColors(
   val scrim: Color,
 )
 
-val LightColors = AppColors(
-  textPrimary = AppColor.light.gray.s900,
-  textSecondary = AppColor.light.gray.s700,
-  textTertiary = AppColor.light.gray.s500,
-  textMuted = AppColor.light.gray.s400,
+val LightColors =
+  AppColors(
+    textPrimary = AppColor.light.gray.s900,
+    textSecondary = AppColor.light.gray.s700,
+    textTertiary = AppColor.light.gray.s500,
+    textMuted = AppColor.light.gray.s400,
+    surfaceBase = AppColor.light.gray.s50,
+    surfaceDefault = AppColor.white,
+    surfaceSunken = AppColor.light.gray.s50,
+    surfaceRaised = AppColor.white,
+    surfaceTinted = AppColor.light.gray.s100,
+    brand = AppColor.light.brand.s500,
+    brandSubtle = AppColor.light.brand.s100,
+    textOnBrand = AppColor.white,
+    textOnBrandSubtle = AppColor.light.brand.s700,
+    danger = AppColor.light.red.s500,
+    dangerSubtle = AppColor.light.red.s100,
+    textOnDanger = AppColor.white,
+    textOnDangerSubtle = AppColor.light.red.s500,
+    success = AppColor.light.green.s400,
+    successSubtle = AppColor.light.green.s50,
+    textOnSuccess = AppColor.white,
+    textOnSuccessSubtle = AppColor.light.green.s800,
+    borderDefault = AppColor.light.gray.s200,
+    borderStrong = AppColor.light.gray.s300,
+    borderSubtle = AppColor.light.gray.s100,
+    shadow = Color(0x1409090C),
+    shadowAmbient = Color(0x0509090C),
+    skeletonBone = Color(0xFFF8F8FC),
+    skeletonHighlight = Color(0XFFf4F5FA),
+    scrim = Color(0x52000000),
+  )
 
-  surfaceBase = AppColor.light.gray.s50,
-  surfaceDefault = AppColor.white,
-  surfaceSunken = AppColor.light.gray.s50,
-  surfaceRaised = AppColor.white,
-  surfaceTinted = AppColor.light.gray.s100,
-
-  brand = AppColor.light.brand.s500,
-  brandSubtle = AppColor.light.brand.s100,
-  textOnBrand = AppColor.white,
-  textOnBrandSubtle = AppColor.light.brand.s700,
-
-  danger = AppColor.light.red.s500,
-  dangerSubtle = AppColor.light.red.s100,
-  textOnDanger = AppColor.white,
-  textOnDangerSubtle = AppColor.light.red.s500,
-
-  success = AppColor.light.green.s400,
-  successSubtle = AppColor.light.green.s50,
-  textOnSuccess = AppColor.white,
-  textOnSuccessSubtle = AppColor.light.green.s800,
-
-  borderDefault = AppColor.light.gray.s200,
-  borderStrong = AppColor.light.gray.s300,
-  borderSubtle = AppColor.light.gray.s100,
-
-  shadow = Color(0x1409090C),
-  shadowAmbient = Color(0x0509090C),
-
-  skeletonBone = Color(0xFFF8F8FC),
-  skeletonHighlight = Color(0XFFf4F5FA),
-
-  scrim = Color(0x52000000),
-)
-
-val DarkColors = AppColors(
-  textPrimary = AppColor.dark.gray.s50,
-  textSecondary = AppColor.dark.gray.s200,
-  textTertiary = AppColor.dark.gray.s300,
-  textMuted = AppColor.dark.gray.s400,
-
-  surfaceBase = AppColor.dark.gray.s950,
-  surfaceDefault = AppColor.dark.gray.s900,
-  surfaceSunken = AppColor.dark.gray.s700,
-  surfaceRaised = AppColor.dark.gray.s800,
-  surfaceTinted = AppColor.dark.gray.s700,
-
-  brand = AppColor.dark.brand.s400,
-  brandSubtle = AppColor.dark.brand.s900,
-  textOnBrand = AppColor.white,
-  textOnBrandSubtle = AppColor.dark.brand.s100,
-
-  danger = AppColor.dark.red.s300,
-  dangerSubtle = AppColor.dark.red.s200,
-  textOnDanger = AppColor.white,
-  textOnDangerSubtle = AppColor.dark.red.s900,
-
-  success = AppColor.dark.green.s200,
-  successSubtle = AppColor.dark.green.s900,
-  textOnSuccess = AppColor.white,
-  textOnSuccessSubtle = AppColor.dark.green.s100,
-
-  borderDefault = AppColor.dark.gray.s700,
-  borderStrong = AppColor.dark.gray.s600,
-  borderSubtle = AppColor.dark.gray.s800,
-
-  shadow = Color(0x660A0B0E),
-  shadowAmbient = Color(0x1A0A0B0E),
-
-  skeletonBone = Color(0xFF16161A),
-  skeletonHighlight = Color(0xFF1C1C20),
-
-  scrim = Color(0x52000000),
-)
+val DarkColors =
+  AppColors(
+    textPrimary = AppColor.dark.gray.s50,
+    textSecondary = AppColor.dark.gray.s200,
+    textTertiary = AppColor.dark.gray.s300,
+    textMuted = AppColor.dark.gray.s400,
+    surfaceBase = AppColor.dark.gray.s950,
+    surfaceDefault = AppColor.dark.gray.s900,
+    surfaceSunken = AppColor.dark.gray.s700,
+    surfaceRaised = AppColor.dark.gray.s800,
+    surfaceTinted = AppColor.dark.gray.s700,
+    brand = AppColor.dark.brand.s400,
+    brandSubtle = AppColor.dark.brand.s900,
+    textOnBrand = AppColor.white,
+    textOnBrandSubtle = AppColor.dark.brand.s100,
+    danger = AppColor.dark.red.s300,
+    dangerSubtle = AppColor.dark.red.s200,
+    textOnDanger = AppColor.white,
+    textOnDangerSubtle = AppColor.dark.red.s900,
+    success = AppColor.dark.green.s200,
+    successSubtle = AppColor.dark.green.s900,
+    textOnSuccess = AppColor.white,
+    textOnSuccessSubtle = AppColor.dark.green.s100,
+    borderDefault = AppColor.dark.gray.s700,
+    borderStrong = AppColor.dark.gray.s600,
+    borderSubtle = AppColor.dark.gray.s800,
+    shadow = Color(0x660A0B0E),
+    shadowAmbient = Color(0x1A0A0B0E),
+    skeletonBone = Color(0xFF16161A),
+    skeletonHighlight = Color(0xFF1C1C20),
+    scrim = Color(0x52000000),
+  )
 
 val LocalAppColors = staticCompositionLocalOf { LightColors }
 val LocalHazeState = staticCompositionLocalOf { HazeState() }
-val LocalThemeMode = compositionLocalOf<MutableState<ThemeMode>> {
-  error("No ThemeMode provided. Wrap your content with AppTheme.")
-}
+val LocalThemeMode =
+  compositionLocalOf<MutableState<ThemeMode>> {
+    error("No ThemeMode provided. Wrap your content with AppTheme.")
+  }
 
 internal fun resolveThemeModeForStartup(
   startupState: AppStartupState,
@@ -177,10 +166,7 @@ internal fun resolveThemeModeForStartup(
   }
 }
 
-internal fun resolveIsDarkTheme(
-  themeMode: ThemeMode,
-  systemIsDark: Boolean,
-): Boolean {
+internal fun resolveIsDarkTheme(themeMode: ThemeMode, systemIsDark: Boolean): Boolean {
   return when (themeMode) {
     ThemeMode.System -> systemIsDark
     ThemeMode.Light -> false
@@ -194,28 +180,24 @@ fun AppTheme(content: @Composable () -> Unit) {
   val themeService = ThemeService
   val startupState = appStartupService.state.collectAsState().value
   val isStartupReady = startupState is AppStartupState.Ready
-  val themeMode = remember(isStartupReady) {
-    mutableStateOf(
-      if (isStartupReady) {
-        resolveThemeModeForStartup(startupState, themeService.themeMode)
-      } else {
-        ThemeMode.System
-      },
-    )
-  }
+  val themeMode =
+    remember(isStartupReady) {
+      mutableStateOf(
+        if (isStartupReady) {
+          resolveThemeModeForStartup(startupState, themeService.themeMode)
+        } else {
+          ThemeMode.System
+        }
+      )
+    }
 
   LaunchedEffect(isStartupReady, themeMode) {
     if (!isStartupReady) return@LaunchedEffect
 
-    snapshotFlow { themeMode.value }
-      .drop(1)
-      .collect { themeService.themeMode = it }
+    snapshotFlow { themeMode.value }.drop(1).collect { themeService.themeMode = it }
   }
 
-  val isDark = resolveIsDarkTheme(
-    themeMode = themeMode.value,
-    systemIsDark = isSystemInDarkTheme(),
-  )
+  val isDark = resolveIsDarkTheme(themeMode = themeMode.value, systemIsDark = isSystemInDarkTheme())
 
   CompositionLocalProvider(
     LocalAppColors provides if (isDark) DarkColors else LightColors,

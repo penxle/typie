@@ -16,10 +16,11 @@ import kotlin.test.assertTrue
 class CancelPlanFlowTest {
   @Test
   fun `failed store open keeps screen open and exposes an error message`() {
-    val state = reduceCancelPlanFlowOnManagementResult(
-      current = CancelPlanFlowState(),
-      result = SubscriptionManagementResult.FailedToOpen,
-    )
+    val state =
+      reduceCancelPlanFlowOnManagementResult(
+        current = CancelPlanFlowState(),
+        result = SubscriptionManagementResult.FailedToOpen,
+      )
 
     assertFalse(state.awaitingStoreResult)
     assertFalse(state.shouldClose)
@@ -28,10 +29,11 @@ class CancelPlanFlowTest {
 
   @Test
   fun `awaiting state starts when subscription management moves to external store`() {
-    val state = reduceCancelPlanFlowOnManagementResult(
-      current = CancelPlanFlowState(),
-      result = SubscriptionManagementResult.AwaitingExternalResult,
-    )
+    val state =
+      reduceCancelPlanFlowOnManagementResult(
+        current = CancelPlanFlowState(),
+        result = SubscriptionManagementResult.AwaitingExternalResult,
+      )
 
     assertTrue(state.awaitingStoreResult)
     assertFalse(state.shouldClose)
@@ -39,10 +41,11 @@ class CancelPlanFlowTest {
 
   @Test
   fun `close is requested immediately when subscription management completes locally`() {
-    val state = reduceCancelPlanFlowOnManagementResult(
-      current = CancelPlanFlowState(),
-      result = SubscriptionManagementResult.CompletedLocally,
-    )
+    val state =
+      reduceCancelPlanFlowOnManagementResult(
+        current = CancelPlanFlowState(),
+        result = SubscriptionManagementResult.CompletedLocally,
+      )
 
     assertFalse(state.awaitingStoreResult)
     assertTrue(state.shouldClose)
@@ -50,10 +53,11 @@ class CancelPlanFlowTest {
 
   @Test
   fun `subscription refresh closes screen after external cancellation is reflected`() {
-    val state = reduceCancelPlanFlowOnSubscriptionState(
-      current = CancelPlanFlowState(awaitingStoreResult = true),
-      subscriptionState = SubscriptionState.Canceled,
-    )
+    val state =
+      reduceCancelPlanFlowOnSubscriptionState(
+        current = CancelPlanFlowState(awaitingStoreResult = true),
+        subscriptionState = SubscriptionState.Canceled,
+      )
 
     assertFalse(state.awaitingStoreResult)
     assertTrue(state.shouldClose)
@@ -61,10 +65,11 @@ class CancelPlanFlowTest {
 
   @Test
   fun `subscription refresh keeps waiting when subscription is still active`() {
-    val state = reduceCancelPlanFlowOnSubscriptionState(
-      current = CancelPlanFlowState(awaitingStoreResult = true),
-      subscriptionState = SubscriptionState.Active,
-    )
+    val state =
+      reduceCancelPlanFlowOnSubscriptionState(
+        current = CancelPlanFlowState(awaitingStoreResult = true),
+        subscriptionState = SubscriptionState.Active,
+      )
 
     assertTrue(state.awaitingStoreResult)
     assertFalse(state.shouldClose)
@@ -72,38 +77,27 @@ class CancelPlanFlowTest {
 
   @Test
   fun `consume close request clears only close flag`() {
-    val state = consumeCancelPlanCloseRequest(
-      CancelPlanFlowState(
-        awaitingStoreResult = false,
-        shouldClose = true,
-      ),
-    )
+    val state =
+      consumeCancelPlanCloseRequest(
+        CancelPlanFlowState(awaitingStoreResult = false, shouldClose = true)
+      )
 
-    assertEquals(
-      CancelPlanFlowState(
-        awaitingStoreResult = false,
-        shouldClose = false,
-      ),
-      state,
-    )
+    assertEquals(CancelPlanFlowState(awaitingStoreResult = false, shouldClose = false), state)
   }
 
   @Test
   fun `consume error message clears only error message`() {
-    val state = consumeCancelPlanErrorMessage(
-      CancelPlanFlowState(
-        awaitingStoreResult = true,
-        shouldClose = false,
-        errorMessage = OPEN_SUBSCRIPTION_MANAGEMENT_FAILURE_MESSAGE,
-      ),
-    )
+    val state =
+      consumeCancelPlanErrorMessage(
+        CancelPlanFlowState(
+          awaitingStoreResult = true,
+          shouldClose = false,
+          errorMessage = OPEN_SUBSCRIPTION_MANAGEMENT_FAILURE_MESSAGE,
+        )
+      )
 
     assertEquals(
-      CancelPlanFlowState(
-        awaitingStoreResult = true,
-        shouldClose = false,
-        errorMessage = null,
-      ),
+      CancelPlanFlowState(awaitingStoreResult = true, shouldClose = false, errorMessage = null),
       state,
     )
   }

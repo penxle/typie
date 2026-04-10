@@ -28,10 +28,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun SkeletonBone(
-  modifier: Modifier = Modifier,
-  shape: Shape = RoundedCornerShape(4.dp),
-) {
+fun SkeletonBone(modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(4.dp)) {
   val skeleton = LocalSkeleton.current
   val uniteGroup = LocalSkeletonUnite.current
 
@@ -42,7 +39,10 @@ fun SkeletonBone(
 
     Box(
       modifier
-        .onGloballyPositioned { coords = it; uniteGroup.register(it) }
+        .onGloballyPositioned {
+          coords = it
+          uniteGroup.register(it)
+        }
         .graphicsLayer { clip = false }
         .drawWithContent {
           val myCoords = coords ?: return@drawWithContent
@@ -53,14 +53,10 @@ fun SkeletonBone(
             size = Size(union.width, union.height),
             cornerRadius = CornerRadius(cornerRadius),
           )
-        },
+        }
     )
   } else {
-    Box(
-      modifier
-        .clip(shape)
-        .background(skeleton.color.value),
-    )
+    Box(modifier.clip(shape).background(skeleton.color.value))
   }
 }
 
@@ -81,27 +77,32 @@ fun SkeletonTextBone(
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     Layout(
-      modifier = modifier
-        .onGloballyPositioned { coords = it; uniteGroup.register(it) }
-        .graphicsLayer { clip = false }
-        .drawWithContent {
-          val myCoords = coords ?: return@drawWithContent
-          val union = uniteGroup.getUnionBounds(myCoords)
+      modifier =
+        modifier
+          .onGloballyPositioned {
+            coords = it
+            uniteGroup.register(it)
+          }
+          .graphicsLayer { clip = false }
+          .drawWithContent {
+            val myCoords = coords ?: return@drawWithContent
+            val union = uniteGroup.getUnionBounds(myCoords)
 
-          drawRoundRect(
-            color = boneColor,
-            topLeft = Offset(union.left, union.top),
-            size = Size(union.width, union.height),
-            cornerRadius = CornerRadius(cornerRadius),
-          )
-        },
+            drawRoundRect(
+              color = boneColor,
+              topLeft = Offset(union.left, union.top),
+              size = Size(union.width, union.height),
+              cornerRadius = CornerRadius(cornerRadius),
+            )
+          },
       measurePolicy = { _, constraints ->
-        val result = textMeasurer.measure(
-          text = text,
-          style = style,
-          maxLines = maxLines,
-          constraints = constraints,
-        )
+        val result =
+          textMeasurer.measure(
+            text = text,
+            style = style,
+            maxLines = maxLines,
+            constraints = constraints,
+          )
 
         layout(result.size.width, result.size.height) {}
       },
@@ -112,27 +113,30 @@ fun SkeletonTextBone(
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     Layout(
-      modifier = modifier.drawBehind {
-        val result = layoutResult ?: return@drawBehind
-        for (i in 0 until result.lineCount) {
-          drawRoundRect(
-            color = boneColor,
-            topLeft = Offset(result.getLineLeft(i), result.getLineTop(i)),
-            size = Size(
-              result.getLineRight(i) - result.getLineLeft(i),
-              result.getLineBottom(i) - result.getLineTop(i),
-            ),
-            cornerRadius = CornerRadius(cornerRadius),
-          )
-        }
-      },
+      modifier =
+        modifier.drawBehind {
+          val result = layoutResult ?: return@drawBehind
+          for (i in 0 until result.lineCount) {
+            drawRoundRect(
+              color = boneColor,
+              topLeft = Offset(result.getLineLeft(i), result.getLineTop(i)),
+              size =
+                Size(
+                  result.getLineRight(i) - result.getLineLeft(i),
+                  result.getLineBottom(i) - result.getLineTop(i),
+                ),
+              cornerRadius = CornerRadius(cornerRadius),
+            )
+          }
+        },
       measurePolicy = { _, constraints ->
-        val result = textMeasurer.measure(
-          text = text,
-          style = style,
-          maxLines = maxLines,
-          constraints = constraints,
-        )
+        val result =
+          textMeasurer.measure(
+            text = text,
+            style = style,
+            maxLines = maxLines,
+            constraints = constraints,
+          )
 
         layoutResult = result
         layout(result.size.width, result.size.height) {}
@@ -158,27 +162,32 @@ fun SkeletonTextBone(
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     Layout(
-      modifier = modifier
-        .onGloballyPositioned { coords = it; uniteGroup.register(it) }
-        .graphicsLayer { clip = false }
-        .drawWithContent {
-          val myCoords = coords ?: return@drawWithContent
-          val union = uniteGroup.getUnionBounds(myCoords)
+      modifier =
+        modifier
+          .onGloballyPositioned {
+            coords = it
+            uniteGroup.register(it)
+          }
+          .graphicsLayer { clip = false }
+          .drawWithContent {
+            val myCoords = coords ?: return@drawWithContent
+            val union = uniteGroup.getUnionBounds(myCoords)
 
-          drawRoundRect(
-            color = boneColor,
-            topLeft = Offset(union.left, union.top),
-            size = Size(union.width, union.height),
-            cornerRadius = CornerRadius(cornerRadius),
-          )
-        },
+            drawRoundRect(
+              color = boneColor,
+              topLeft = Offset(union.left, union.top),
+              size = Size(union.width, union.height),
+              cornerRadius = CornerRadius(cornerRadius),
+            )
+          },
       measurePolicy = { _, constraints ->
-        val result = textMeasurer.measure(
-          text = text,
-          style = style,
-          maxLines = maxLines,
-          constraints = constraints,
-        )
+        val result =
+          textMeasurer.measure(
+            text = text,
+            style = style,
+            maxLines = maxLines,
+            constraints = constraints,
+          )
 
         layout(result.size.width, result.size.height) {}
       },
@@ -189,27 +198,30 @@ fun SkeletonTextBone(
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     Layout(
-      modifier = modifier.drawBehind {
-        val result = layoutResult ?: return@drawBehind
-        for (i in 0 until result.lineCount) {
-          drawRoundRect(
-            color = boneColor,
-            topLeft = Offset(result.getLineLeft(i), result.getLineTop(i)),
-            size = Size(
-              result.getLineRight(i) - result.getLineLeft(i),
-              result.getLineBottom(i) - result.getLineTop(i),
-            ),
-            cornerRadius = CornerRadius(cornerRadius),
-          )
-        }
-      },
+      modifier =
+        modifier.drawBehind {
+          val result = layoutResult ?: return@drawBehind
+          for (i in 0 until result.lineCount) {
+            drawRoundRect(
+              color = boneColor,
+              topLeft = Offset(result.getLineLeft(i), result.getLineTop(i)),
+              size =
+                Size(
+                  result.getLineRight(i) - result.getLineLeft(i),
+                  result.getLineBottom(i) - result.getLineTop(i),
+                ),
+              cornerRadius = CornerRadius(cornerRadius),
+            )
+          }
+        },
       measurePolicy = { _, constraints ->
-        val result = textMeasurer.measure(
-          text = text,
-          style = style,
-          maxLines = maxLines,
-          constraints = constraints,
-        )
+        val result =
+          textMeasurer.measure(
+            text = text,
+            style = style,
+            maxLines = maxLines,
+            constraints = constraints,
+          )
 
         layoutResult = result
         layout(result.size.width, result.size.height) {}

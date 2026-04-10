@@ -37,18 +37,11 @@ object TopBarDefaults {
   val TitleIconGap: Dp = 10.dp
 
   fun hazeProgressive(): HazeProgressive =
-    HazeProgressive.verticalGradient(
-      startIntensity = 1f,
-      endIntensity = 0f,
-    )
+    HazeProgressive.verticalGradient(startIntensity = 1f, endIntensity = 0f)
 
-  @Composable
-  fun controlBackgroundColor(): Color =
-    AppTheme.colors.surfaceRaised
+  @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceRaised
 
-  @Composable
-  fun controlBorderColor(): Color =
-    AppTheme.colors.borderStrong
+  @Composable fun controlBorderColor(): Color = AppTheme.colors.borderStrong
 
   @Composable
   fun controlShadowModifier(shape: Shape = CircleShape): Modifier =

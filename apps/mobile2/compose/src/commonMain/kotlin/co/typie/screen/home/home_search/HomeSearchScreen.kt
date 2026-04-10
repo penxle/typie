@@ -16,20 +16,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.ime
-import co.typie.screen.home.home.HomeSearchFieldDefaults
-import co.typie.screen.home.home.resolveHomeSearchPlaceholder
 import co.typie.ext.plus
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
 import co.typie.route.Route
+import co.typie.screen.home.home.HomeSearchFieldDefaults
+import co.typie.screen.home.home.resolveHomeSearchPlaceholder
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val SearchScreenTopFadeHeight = 24.dp
 private val SearchScreenHeaderHeight = HomeSearchFieldDefaults.Height + 4.dp
@@ -40,9 +40,7 @@ fun HomeSearchScreen() {
   val model = viewModel { SearchViewModel() }
   val scrollState = rememberScrollState("home-search")
 
-  ProvideTopBar(
-    leading = { TopBarBackButton(onClick = { nav.pop() }) },
-  )
+  ProvideTopBar(leading = { TopBarBackButton(onClick = { nav.pop() }) })
 
   Screen(
     background = AppTheme.colors.surfaceBase,
@@ -50,17 +48,18 @@ fun HomeSearchScreen() {
     contentPadding = PaddingValues(0.dp),
     primaryScrollableState = scrollState,
     body = { contentPadding ->
-      val bottomInset = maxOf(
-        WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
-        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
-      )
+      val bottomInset =
+        maxOf(
+          WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
+          WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
+        )
 
       Box(Modifier.fillMaxSize()) {
         Column(
-          modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(contentPadding + PaddingValues(bottom = bottomInset + 12.dp)),
+          modifier =
+            Modifier.fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(contentPadding + PaddingValues(bottom = bottomInset + 12.dp))
         ) {
           SearchContent(
             searchViewModel = model,
@@ -77,10 +76,10 @@ fun HomeSearchScreen() {
         }
 
         SearchHeaderOverlay(
-          modifier = Modifier
-            .align(Alignment.TopCenter)
-            .fillMaxWidth()
-            .padding(top = contentPadding.calculateTopPadding()),
+          modifier =
+            Modifier.align(Alignment.TopCenter)
+              .fillMaxWidth()
+              .padding(top = contentPadding.calculateTopPadding())
         ) {
           SearchHeader(
             animateOnEnter = model.shouldAnimateHeaderOnEnter,
@@ -97,26 +96,13 @@ fun HomeSearchScreen() {
 }
 
 @Composable
-private fun SearchHeaderOverlay(
-  modifier: Modifier = Modifier,
-  header: @Composable () -> Unit,
-) {
-  Box(
-    modifier = modifier,
-  ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .background(AppTheme.colors.surfaceBase),
-    ) {
-      header()
-    }
+private fun SearchHeaderOverlay(modifier: Modifier = Modifier, header: @Composable () -> Unit) {
+  Box(modifier = modifier) {
+    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.surfaceBase)) { header() }
 
     SearchTopFade(
-      modifier = Modifier
-        .align(Alignment.BottomCenter)
-        .offset(y = SearchScreenTopFadeHeight)
-        .fillMaxWidth(),
+      modifier =
+        Modifier.align(Alignment.BottomCenter).offset(y = SearchScreenTopFadeHeight).fillMaxWidth()
     )
   }
 }
@@ -124,15 +110,14 @@ private fun SearchHeaderOverlay(
 @Composable
 private fun SearchTopFade(modifier: Modifier = Modifier) {
   Box(
-    modifier = modifier
-      .height(SearchScreenTopFadeHeight)
-      .background(
-        Brush.verticalGradient(
-          colors = listOf(
-            AppTheme.colors.surfaceBase,
-            AppTheme.colors.surfaceBase.copy(alpha = 0f),
-          ),
-        ),
-      ),
+    modifier =
+      modifier
+        .height(SearchScreenTopFadeHeight)
+        .background(
+          Brush.verticalGradient(
+            colors =
+              listOf(AppTheme.colors.surfaceBase, AppTheme.colors.surfaceBase.copy(alpha = 0f))
+          )
+        )
   )
 }

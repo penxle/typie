@@ -93,11 +93,13 @@ class FieldState<V>(
   }
 
   internal suspend fun validateForEvent(event: ValidateOn): List<String> {
-    val rules: List<Rule<V>> = when (event) {
-      ValidateOn.Change -> rulesByTiming[ValidateOn.Change].orEmpty()
-      ValidateOn.Blur -> rulesByTiming[ValidateOn.Change].orEmpty() + rulesByTiming[ValidateOn.Blur].orEmpty()
-      ValidateOn.Submit -> rulesByTiming.values.flatten()
-    }
+    val rules: List<Rule<V>> =
+      when (event) {
+        ValidateOn.Change -> rulesByTiming[ValidateOn.Change].orEmpty()
+        ValidateOn.Blur ->
+          rulesByTiming[ValidateOn.Change].orEmpty() + rulesByTiming[ValidateOn.Blur].orEmpty()
+        ValidateOn.Submit -> rulesByTiming.values.flatten()
+      }
     return rules.mapNotNull { it.validate(value) }
   }
 
@@ -107,6 +109,8 @@ class FieldState<V>(
   }
 
   operator fun component1(): V = value
+
   operator fun component2(): (V) -> Unit = { setValue(it) }
+
   operator fun component3(): List<String> = errors
 }

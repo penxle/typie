@@ -8,7 +8,6 @@ import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.ui.component.topbar.TopBarState
@@ -19,24 +18,11 @@ fun AuthShell(content: @Composable (Route) -> Unit) {
   val topBarState = remember { TopBarState() }
 
   val toast = LocalToast.current
-  LaunchedEffect(navigator.current) {
-    toast.bottomInset = navigator.current.toastBottomInset
-  }
+  LaunchedEffect(navigator.current) { toast.bottomInset = navigator.current.toastBottomInset }
 
-  DisposableEffect(Unit) {
-    onDispose {
-      navigator.clear()
-    }
-  }
+  DisposableEffect(Unit) { onDispose { navigator.clear() } }
 
-  NavigationScaffold(
-    navigator = navigator,
-    topBarState = topBarState,
-  ) {
-    NavigationStack(
-      navigator = navigator,
-      topBarState = topBarState,
-      content = content,
-    )
+  NavigationScaffold(navigator = navigator, topBarState = topBarState) {
+    NavigationStack(navigator = navigator, topBarState = topBarState, content = content)
   }
 }

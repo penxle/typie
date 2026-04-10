@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,9 +35,9 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.EntityListCard
-import co.typie.ui.component.EntityListItem
 import co.typie.ui.component.EntityListDocumentRow
 import co.typie.ui.component.EntityListFolderRow
+import co.typie.ui.component.EntityListItem
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
@@ -72,10 +71,7 @@ fun EntityContainerTopBarTrailing(
   onDoneClick: suspend () -> Unit,
 ) {
   if (isReordering) {
-    TopBarButton(
-      icon = Lucide.Check,
-      onClick = onDoneClick,
-    )
+    TopBarButton(icon = Lucide.Check, onClick = onDoneClick)
   } else {
     EntityContainerEditMenu(actions = actions)
   }
@@ -99,9 +95,7 @@ fun EntityContainerListContent(
   onDragMoved: () -> Unit,
   onDragStopped: (ReorderCommit<String>?) -> Unit,
 ) {
-  Column(
-    modifier = modifier.fillMaxSize(),
-  ) {
+  Column(modifier = modifier.fillMaxSize()) {
     header()
 
     if (isReordering) {
@@ -143,49 +137,41 @@ fun EntityContainerReorderListCard(
   LookaheadScope {
     val boundsTransform = remember {
       androidx.compose.animation.BoundsTransform { _, _ ->
-        spring(
-          dampingRatio = 0.9f,
-          stiffness = Spring.StiffnessMedium,
-        )
+        spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
       }
     }
 
-    Column(
-      modifier = modifier.fillMaxWidth(),
-      verticalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
       items.forEachIndexed { index, child ->
         key(child.id) {
           val isDragging = reorderState.isDragging(child.id)
 
           EntityContainerReorderRow(
-            modifier = Modifier
-              .then(
-                if (isDragging) {
-                  Modifier
-                } else {
-                  Modifier.animateBounds(
-                    lookaheadScope = this@LookaheadScope,
-                    boundsTransform = boundsTransform,
-                  )
-                },
-              )
-              .reorderableItem(
-                state = reorderState,
-                key = child.id,
-              ),
+            modifier =
+              Modifier.then(
+                  if (isDragging) {
+                    Modifier
+                  } else {
+                    Modifier.animateBounds(
+                      lookaheadScope = this@LookaheadScope,
+                      boundsTransform = boundsTransform,
+                    )
+                  }
+                )
+                .reorderableItem(state = reorderState, key = child.id),
             item = child,
             isDragging = isDragging,
             isFirst = index == 0,
             isLast = index == items.lastIndex,
-            dragHandleModifier = Modifier.reorderableDragHandle(
-              state = reorderState,
-              key = child.id,
-              enabled = !isPersistingReorder,
-              onDragStarted = onDragStarted,
-              onDragMoved = onDragMoved,
-              onDragStopped = onDragStopped,
-            ),
+            dragHandleModifier =
+              Modifier.reorderableDragHandle(
+                state = reorderState,
+                key = child.id,
+                enabled = !isPersistingReorder,
+                onDragStarted = onDragStarted,
+                onDragMoved = onDragMoved,
+                onDragStopped = onDragStopped,
+              ),
           )
         }
       }
@@ -194,9 +180,7 @@ fun EntityContainerReorderListCard(
 }
 
 @Composable
-private fun EntityContainerEditMenu(
-  actions: List<EntityContainerEditAction>,
-) {
+private fun EntityContainerEditMenu(actions: List<EntityContainerEditAction>) {
   Popover(
     placement = PopoverPlacement.BelowEnd,
     anchor = { TopBarButton(icon = Lucide.LayoutList) },
@@ -209,25 +193,20 @@ private fun EntityContainerEditMenu(
 }
 
 @Composable
-private fun PopoverScope.EntityContainerEditActionList(
-  actions: List<EntityContainerEditAction>,
-) {
+private fun PopoverScope.EntityContainerEditActionList(actions: List<EntityContainerEditAction>) {
   PopoverList(
-    items = actions.map { action ->
-      PopoverListItem(
-        content = {
-          EntityContainerEditActionRow(
-            action = action,
-            modifier = Modifier
-              .height(42.dp)
-              .padding(horizontal = 16.dp),
-          )
-        },
-        onSelected = {
-          action.onClick { close() }
-        },
-      )
-    },
+    items =
+      actions.map { action ->
+        PopoverListItem(
+          content = {
+            EntityContainerEditActionRow(
+              action = action,
+              modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
+            )
+          },
+          onSelected = { action.onClick { close() } },
+        )
+      }
   )
 }
 
@@ -236,15 +215,8 @@ private fun EntityContainerEditActionRow(
   action: EntityContainerEditAction,
   modifier: Modifier = Modifier,
 ) {
-  Row(
-    modifier = modifier,
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Icon(
-      icon = action.icon,
-      modifier = Modifier.size(18.dp),
-      tint = AppTheme.colors.textPrimary,
-    )
+  Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Icon(icon = action.icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textPrimary)
 
     Spacer(Modifier.width(12.dp))
 
@@ -266,63 +238,67 @@ private fun EntityContainerReorderRow(
   isLast: Boolean,
   dragHandleModifier: Modifier = Modifier,
 ) {
-  val topStartRadius by animateDpAsState(
-    targetValue = if (isFirst) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val topEndRadius by animateDpAsState(
-    targetValue = if (isFirst) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val bottomStartRadius by animateDpAsState(
-    targetValue = if (isLast) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val bottomEndRadius by animateDpAsState(
-    targetValue = if (isLast) 12.dp else 0.dp,
-    animationSpec = tween(durationMillis = 140),
-  )
-  val shape = RoundedCornerShape(
-    topStart = topStartRadius,
-    topEnd = topEndRadius,
-    bottomStart = bottomStartRadius,
-    bottomEnd = bottomEndRadius,
-  )
+  val topStartRadius by
+    animateDpAsState(
+      targetValue = if (isFirst) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val topEndRadius by
+    animateDpAsState(
+      targetValue = if (isFirst) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val bottomStartRadius by
+    animateDpAsState(
+      targetValue = if (isLast) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val bottomEndRadius by
+    animateDpAsState(
+      targetValue = if (isLast) 12.dp else 0.dp,
+      animationSpec = tween(durationMillis = 140),
+    )
+  val shape =
+    RoundedCornerShape(
+      topStart = topStartRadius,
+      topEnd = topEndRadius,
+      bottomStart = bottomStartRadius,
+      bottomEnd = bottomEndRadius,
+    )
   val density = LocalDensity.current
-  val animatedScale by animateFloatAsState(
-    targetValue = if (isDragging) 1.008f else 1f,
-    animationSpec = if (isDragging) {
-      tween(durationMillis = 120)
-    } else {
-      spring(
-        dampingRatio = 0.72f,
-        stiffness = Spring.StiffnessMediumLow,
-      )
-    },
-  )
-  val animatedElevation by animateDpAsState(
-    targetValue = if (isDragging) 3.dp else 0.dp,
-    animationSpec = if (isDragging) {
-      tween(durationMillis = 120)
-    } else {
-      spring(
-        dampingRatio = 0.72f,
-        stiffness = Spring.StiffnessMediumLow,
-      )
-    },
-  )
+  val animatedScale by
+    animateFloatAsState(
+      targetValue = if (isDragging) 1.008f else 1f,
+      animationSpec =
+        if (isDragging) {
+          tween(durationMillis = 120)
+        } else {
+          spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+        },
+    )
+  val animatedElevation by
+    animateDpAsState(
+      targetValue = if (isDragging) 3.dp else 0.dp,
+      animationSpec =
+        if (isDragging) {
+          tween(durationMillis = 120)
+        } else {
+          spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+        },
+    )
 
   CardSurface(
-    modifier = modifier
-      .fillMaxWidth()
-      .graphicsLayer {
-        scaleX = animatedScale
-        scaleY = animatedScale
-        shadowElevation = with(density) { animatedElevation.toPx() }
-        this.shape = shape
-        clip = false
-      }
-      .zIndex(if (isDragging) 1f else 0f),
+    modifier =
+      modifier
+        .fillMaxWidth()
+        .graphicsLayer {
+          scaleX = animatedScale
+          scaleY = animatedScale
+          shadowElevation = with(density) { animatedElevation.toPx() }
+          this.shape = shape
+          clip = false
+        }
+        .zIndex(if (isDragging) 1f else 0f),
     shape = shape,
     color = if (isDragging) AppTheme.colors.surfaceRaised else AppTheme.colors.surfaceDefault,
   ) {
@@ -331,13 +307,10 @@ private fun EntityContainerReorderRow(
         CardDivider(inset = 20.dp)
       }
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
+      Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(
-          modifier = dragHandleModifier
-            .size(width = EntityContainerReorderHandleWidth, height = 56.dp),
+          modifier =
+            dragHandleModifier.size(width = EntityContainerReorderHandleWidth, height = 56.dp),
           contentAlignment = Alignment.Center,
         ) {
           Icon(
@@ -348,19 +321,21 @@ private fun EntityContainerReorderRow(
         }
 
         when (val child = item.item) {
-          is EntityListItem.Document -> EntityListDocumentRow(
-            item = child,
-            modifier = Modifier.weight(1f),
-            interactive = false,
-            onClick = {},
-          )
+          is EntityListItem.Document ->
+            EntityListDocumentRow(
+              item = child,
+              modifier = Modifier.weight(1f),
+              interactive = false,
+              onClick = {},
+            )
 
-          is EntityListItem.Folder -> EntityListFolderRow(
-            item = child,
-            modifier = Modifier.weight(1f),
-            interactive = false,
-            onClick = {},
-          )
+          is EntityListItem.Folder ->
+            EntityListFolderRow(
+              item = child,
+              modifier = Modifier.weight(1f),
+              interactive = false,
+              onClick = {},
+            )
         }
       }
     }

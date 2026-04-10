@@ -15,11 +15,7 @@ internal class PopoverAnchorGestureTracker(
 
   fun start(): AnchorPointerUpdate {
     return AnchorPointerUpdate(
-      pointerState = AnchorPointerState(
-        position = origin,
-        isSelectionArmed = false,
-        isUp = false,
-      ),
+      pointerState = AnchorPointerState(position = origin, isSelectionArmed = false, isUp = false),
       consumeChange = true,
     )
   }
@@ -30,16 +26,19 @@ internal class PopoverAnchorGestureTracker(
     isPressed: Boolean,
   ): AnchorPointerUpdate {
     val distance = (currentPosition - origin).getDistance()
-    if (!isSelectionArmed && elapsedMillis >= PopoverDefaults.ArmDelayMs && distance > armDistancePx) {
+    if (
+      !isSelectionArmed && elapsedMillis >= PopoverDefaults.ArmDelayMs && distance > armDistancePx
+    ) {
       isSelectionArmed = true
     }
 
     return AnchorPointerUpdate(
-      pointerState = AnchorPointerState(
-        position = currentPosition,
-        isSelectionArmed = isSelectionArmed,
-        isUp = !isPressed,
-      ),
+      pointerState =
+        AnchorPointerState(
+          position = currentPosition,
+          isSelectionArmed = isSelectionArmed,
+          isUp = !isPressed,
+        ),
       consumeChange = true,
     )
   }

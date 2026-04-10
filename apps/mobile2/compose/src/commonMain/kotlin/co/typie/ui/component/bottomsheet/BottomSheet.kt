@@ -3,11 +3,6 @@ package co.typie.ui.component.bottomsheet
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -23,9 +18,11 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,26 +33,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.ext.clickable
 import co.typie.ext.imePadding
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.component.ResponsiveContainer
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 @Composable
 fun BottomSheetHost(state: BottomSheetHostState) {
   for (entry in state.entries) {
     key(entry) {
-      @Suppress("UNCHECKED_CAST")
-      BottomSheetOverlay(entry = entry as BottomSheetEntry<Any?>)
+      @Suppress("UNCHECKED_CAST") BottomSheetOverlay(entry = entry as BottomSheetEntry<Any?>)
     }
   }
 }
@@ -65,12 +64,11 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
   val viewModelStore = remember { ViewModelStore() }
   val viewModelStoreOwner = remember {
     object : ViewModelStoreOwner {
-      override val viewModelStore get() = viewModelStore
+      override val viewModelStore
+        get() = viewModelStore
     }
   }
-  DisposableEffect(Unit) {
-    onDispose { viewModelStore.clear() }
-  }
+  DisposableEffect(Unit) { onDispose { viewModelStore.clear() } }
 
   val coroutineScope = rememberCoroutineScope()
 
@@ -85,7 +83,11 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
   // 스크롤 최상단에서 아래로 overscroll → 시트 드래그로 전환
   val nestedScrollConnection = remember {
     object : NestedScrollConnection {
-      override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+      override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource,
+      ): Offset {
         if (available.y > 0f) {
           dragOffsetPx = (dragOffsetPx + available.y).coerceAtLeast(0f)
           return Offset(0f, available.y)
@@ -95,12 +97,12 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
     }
   }
 
-  val enterSpec = tween<Float>(BottomSheetDefaults.EnterDuration, easing = BottomSheetDefaults.EnterEasing)
-  val exitSpec = tween<Float>(BottomSheetDefaults.ExitDuration, easing = BottomSheetDefaults.ExitEasing)
+  val enterSpec =
+    tween<Float>(BottomSheetDefaults.EnterDuration, easing = BottomSheetDefaults.EnterEasing)
+  val exitSpec =
+    tween<Float>(BottomSheetDefaults.ExitDuration, easing = BottomSheetDefaults.ExitEasing)
 
-  LaunchedEffect(Unit) {
-    progress.animateTo(1f, enterSpec)
-  }
+  LaunchedEffect(Unit) { progress.animateTo(1f, enterSpec) }
 
   fun dismissWithResult(result: T) {
     if (isDismissing) return
@@ -120,17 +122,16 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
     }
   }
 
-  val sheetScope = remember(entry) {
-    object : BottomSheetScope<T> {
-      override fun dismiss(result: T) {
-        dismissWithResult(result)
+  val sheetScope =
+    remember(entry) {
+      object : BottomSheetScope<T> {
+        override fun dismiss(result: T) {
+          dismissWithResult(result)
+        }
       }
     }
-  }
 
-  PlatformBackHandler(enabled = !isDismissing) {
-    dismissWithoutResult()
-  }
+  PlatformBackHandler(enabled = !isDismissing) { dismissWithoutResult() }
 
   // 스와이프 제스처
   var dragDebt by remember { mutableFloatStateOf(0f) }
@@ -168,92 +169,93 @@ private fun <T> BottomSheetOverlay(entry: BottomSheetEntry<T>) {
   val totalOffsetY = if (measured) (animOffsetPx + dragOffsetPx).roundToInt() else 9999
 
   // scrim alpha는 시트 가시성에 비례
-  val visibility = if (measured && sheetHeightPx > 0f) {
-    (1f - (animOffsetPx + dragOffsetPx) / sheetHeightPx).coerceIn(0f, 1f)
-  } else 0f
+  val visibility =
+    if (measured && sheetHeightPx > 0f) {
+      (1f - (animOffsetPx + dragOffsetPx) / sheetHeightPx).coerceIn(0f, 1f)
+    } else 0f
   val scrimAlpha = visibility * BottomSheetDefaults.ScrimAlpha
 
-  Box(
-    modifier = Modifier.fillMaxSize(),
-    contentAlignment = Alignment.BottomCenter,
-  ) {
+  Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
     // Scrim
     Box(
-      Modifier
-        .fillMaxSize()
-        .alpha(scrimAlpha)
-        .background(AppTheme.colors.scrim)
-        .clickable { dismissWithoutResult() },
+      Modifier.fillMaxSize().alpha(scrimAlpha).background(AppTheme.colors.scrim).clickable {
+        dismissWithoutResult()
+      }
     )
 
     // Sheet surface
     val colors = AppTheme.colors
-    BoxWithConstraints(
-      modifier = Modifier
-        .fillMaxWidth()
-        .imePadding(),
-    ) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().imePadding()) {
       val maxSheetHeight = maxHeight * BottomSheetDefaults.MaxHeightFraction
 
-      ResponsiveContainer(
-        modifier = Modifier.fillMaxWidth(),
-        alignment = Alignment.BottomCenter,
-      ) {
+      ResponsiveContainer(modifier = Modifier.fillMaxWidth(), alignment = Alignment.BottomCenter) {
         Column(
           horizontalAlignment = Alignment.CenterHorizontally,
-          modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = maxSheetHeight)
-            .onSizeChanged { sheetHeightPx = it.height.toFloat() }
-            .offset { IntOffset(0, totalOffsetY) }
-            .dropShadow(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius)) {
-              color = colors.shadowAmbient
-              radius = 8f
-            }
-            .dropShadow(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius)) {
-              color = colors.shadow
-              offset = Offset(0f, -4f)
-              radius = 12f
-            }
-            .draggable(
-              state = draggableState,
-              orientation = Orientation.Vertical,
-              onDragStopped = { velocity ->
-                dragDebt = 0f
-                if (dragOffsetPx > sheetHeightPx * 0.3f || velocity > 1000f) {
-                  dismissWithoutResult()
-                } else {
-                  coroutineScope.launch {
-                    val snapBack = Animatable(dragOffsetPx)
-                    snapBack.animateTo(0f, enterSpec) { dragOffsetPx = value }
+          modifier =
+            Modifier.fillMaxWidth()
+              .heightIn(max = maxSheetHeight)
+              .onSizeChanged { sheetHeightPx = it.height.toFloat() }
+              .offset { IntOffset(0, totalOffsetY) }
+              .dropShadow(
+                RoundedCornerShape(
+                  topStart = BottomSheetDefaults.TopCornerRadius,
+                  topEnd = BottomSheetDefaults.TopCornerRadius,
+                )
+              ) {
+                color = colors.shadowAmbient
+                radius = 8f
+              }
+              .dropShadow(
+                RoundedCornerShape(
+                  topStart = BottomSheetDefaults.TopCornerRadius,
+                  topEnd = BottomSheetDefaults.TopCornerRadius,
+                )
+              ) {
+                color = colors.shadow
+                offset = Offset(0f, -4f)
+                radius = 12f
+              }
+              .draggable(
+                state = draggableState,
+                orientation = Orientation.Vertical,
+                onDragStopped = { velocity ->
+                  dragDebt = 0f
+                  if (dragOffsetPx > sheetHeightPx * 0.3f || velocity > 1000f) {
+                    dismissWithoutResult()
+                  } else {
+                    coroutineScope.launch {
+                      val snapBack = Animatable(dragOffsetPx)
+                      snapBack.animateTo(0f, enterSpec) { dragOffsetPx = value }
+                    }
                   }
-                }
-              },
-            )
-            .clip(RoundedCornerShape(topStart = BottomSheetDefaults.TopCornerRadius, topEnd = BottomSheetDefaults.TopCornerRadius))
-            .background(colors.surfaceRaised),
+                },
+              )
+              .clip(
+                RoundedCornerShape(
+                  topStart = BottomSheetDefaults.TopCornerRadius,
+                  topEnd = BottomSheetDefaults.TopCornerRadius,
+                )
+              )
+              .background(colors.surfaceRaised),
         ) {
           Spacer(modifier = Modifier.height(BottomSheetDefaults.HandleTopPadding))
           Box(
-            modifier = Modifier
-              .size(width = BottomSheetDefaults.HandleWidth, height = BottomSheetDefaults.HandleHeight)
-              .clip(RoundedCornerShape(BottomSheetDefaults.HandleHeight / 2))
-              .background(colors.borderSubtle),
+            modifier =
+              Modifier.size(
+                  width = BottomSheetDefaults.HandleWidth,
+                  height = BottomSheetDefaults.HandleHeight,
+                )
+                .clip(RoundedCornerShape(BottomSheetDefaults.HandleHeight / 2))
+                .background(colors.borderSubtle)
           )
           Spacer(modifier = Modifier.height(BottomSheetDefaults.HandleTopPadding))
 
           Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .weight(1f, fill = false)
-              .nestedScroll(nestedScrollConnection),
+            modifier =
+              Modifier.fillMaxWidth().weight(1f, fill = false).nestedScroll(nestedScrollConnection)
           ) {
             CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
-              Column(
-                modifier = Modifier.fillMaxWidth(),
-              ) {
-                entry.content.invoke(sheetScope)
-              }
+              Column(modifier = Modifier.fillMaxWidth()) { entry.content.invoke(sheetScope) }
             }
           }
         }

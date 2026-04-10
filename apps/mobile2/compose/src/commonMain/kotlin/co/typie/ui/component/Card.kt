@@ -44,13 +44,12 @@ fun CardSurface(
   content: @Composable BoxScope.() -> Unit,
 ) {
   Box(
-    modifier = if (clipContent) {
-      modifier
-        .clip(shape)
-        .background(color, shape)
-    } else {
-      modifier.background(color, shape)
-    },
+    modifier =
+      if (clipContent) {
+        modifier.clip(shape).background(color, shape)
+      } else {
+        modifier.background(color, shape)
+      },
     content = content,
   )
 }
@@ -65,16 +64,10 @@ fun CardActionTile(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   InteractionScope {
-    CardSurface(
-      modifier = modifier.clickable(onClick),
-      color = color,
-    ) {
+    CardSurface(modifier = modifier.clickable(onClick), color = color) {
       Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .heightIn(min = minHeight)
-          .padding(contentPadding)
-          .pressScale(),
+        modifier =
+          Modifier.fillMaxWidth().heightIn(min = minHeight).padding(contentPadding).pressScale(),
         verticalArrangement = Arrangement.SpaceBetween,
         content = content,
       )
@@ -92,11 +85,7 @@ fun CardRow(
 ) {
   InteractionScope {
     Row(
-      modifier = modifier
-        .fillMaxWidth()
-        .clickable(onClick)
-        .padding(contentPadding)
-        .pressScale(),
+      modifier = modifier.fillMaxWidth().clickable(onClick).padding(contentPadding).pressScale(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(spacing),
       content = content,
@@ -110,11 +99,5 @@ fun CardDivider(
   inset: Dp = CardDefaults.DividerInset,
   color: Color = AppTheme.colors.borderSubtle,
 ) {
-  Box(
-    modifier = modifier
-      .fillMaxWidth()
-      .height(1.dp)
-      .padding(horizontal = inset)
-      .background(color),
-  )
+  Box(modifier = modifier.fillMaxWidth().height(1.dp).padding(horizontal = inset).background(color))
 }

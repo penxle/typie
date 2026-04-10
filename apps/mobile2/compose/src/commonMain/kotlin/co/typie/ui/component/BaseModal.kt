@@ -32,16 +32,12 @@ internal fun BaseModal(
 ) {
   val scope = rememberCoroutineScope()
 
-  Dialog(
-    onDismissRequest = {
-      scope.launch { onDismissRequest() }
-    },
-  ) {
+  Dialog(onDismissRequest = { scope.launch { onDismissRequest() } }) {
     Column(
-      modifier = Modifier
-        .width(280.dp)
-        .clip(RoundedCornerShape(16.dp))
-        .background(AppTheme.colors.surfaceRaised),
+      modifier =
+        Modifier.width(280.dp)
+          .clip(RoundedCornerShape(16.dp))
+          .background(AppTheme.colors.surfaceRaised),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       Column(
@@ -50,19 +46,10 @@ internal fun BaseModal(
       ) {
         Text(title, style = AppTheme.typography.title)
         Spacer(Modifier.height(6.dp))
-        Text(
-          message,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
+        Text(message, style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
       }
 
-      Box(
-        Modifier
-          .fillMaxWidth()
-          .height(1.dp)
-          .background(AppTheme.colors.borderSubtle),
-      )
+      Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderSubtle))
 
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -80,26 +67,14 @@ internal fun RowScope.BaseModalActionButton(
   onClick: suspend () -> Unit,
 ) {
   Box(
-    modifier = Modifier
-      .weight(1f)
-      .clickable(onClick)
-      .padding(vertical = 14.dp),
+    modifier = Modifier.weight(1f).clickable(onClick).padding(vertical = 14.dp),
     contentAlignment = Alignment.Center,
   ) {
-    Text(
-      text = text,
-      style = AppTheme.typography.action,
-      color = color,
-    )
+    Text(text = text, style = AppTheme.typography.action, color = color)
   }
 }
 
 @Composable
 internal fun BaseModalActionDivider() {
-  Box(
-    modifier = Modifier
-      .width(1.dp)
-      .height(48.dp)
-      .background(AppTheme.colors.borderSubtle),
-  )
+  Box(modifier = Modifier.width(1.dp).height(48.dp).background(AppTheme.colors.borderSubtle))
 }

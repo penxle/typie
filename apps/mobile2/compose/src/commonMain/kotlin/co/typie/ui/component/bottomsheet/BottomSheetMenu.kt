@@ -34,13 +34,11 @@ import co.typie.ui.theme.AppTheme
 
 private val BottomSheetEntityHeaderIconSize = 20.dp
 private val BottomSheetEntityHeaderTitleGap = 12.dp
-private val BottomSheetEntityHeaderTextLeft = BottomSheetEntityHeaderIconSize + BottomSheetEntityHeaderTitleGap
+private val BottomSheetEntityHeaderTextLeft =
+  BottomSheetEntityHeaderIconSize + BottomSheetEntityHeaderTitleGap
 
 private val BottomSheetEntityMetadataTextStyle: TextStyle
-  @Composable get() = AppTheme.typography.caption.copy(
-    fontSize = 14.sp,
-    lineHeight = 20.sp,
-  )
+  @Composable get() = AppTheme.typography.caption.copy(fontSize = 14.sp, lineHeight = 20.sp)
 
 @Composable
 fun BottomSheetMenu(
@@ -50,10 +48,7 @@ fun BottomSheetMenu(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   Column(
-    modifier = modifier
-      .fillMaxWidth()
-      .imeOrNavigationBarsPadding()
-      .padding(horizontal = 24.dp),
+    modifier = modifier.fillMaxWidth().imeOrNavigationBarsPadding().padding(horizontal = 24.dp)
   ) {
     if (header != null) {
       Column(
@@ -68,10 +63,7 @@ fun BottomSheetMenu(
       }
     }
 
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      content = content,
-    )
+    Column(modifier = Modifier.fillMaxWidth(), content = content)
   }
 }
 
@@ -81,11 +73,7 @@ fun BottomSheetMenuDivider(
   inset: Dp = 0.dp,
   color: Color = AppTheme.colors.borderDefault,
 ) {
-  CardDivider(
-    modifier = modifier,
-    inset = inset,
-    color = color,
-  )
+  CardDivider(modifier = modifier, inset = inset, color = color)
 }
 
 @Composable
@@ -99,18 +87,10 @@ fun BottomSheetMenuActionRow(
 ) {
   InteractionScope {
     Row(
-      modifier = modifier
-        .fillMaxWidth()
-        .height(42.dp)
-        .clickable(onClick = onClick)
-        .pressScale(),
+      modifier = modifier.fillMaxWidth().height(42.dp).clickable(onClick = onClick).pressScale(),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Icon(
-        icon = icon,
-        modifier = Modifier.size(18.dp),
-        tint = tint ?: AppTheme.colors.textPrimary,
-      )
+      Icon(icon = icon, modifier = Modifier.size(18.dp), tint = tint ?: AppTheme.colors.textPrimary)
 
       Spacer(Modifier.width(12.dp))
 
@@ -140,20 +120,13 @@ fun BottomSheetEntityHeader(
   iconTint: Color = AppTheme.colors.textPrimary,
   supportingContent: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-  Column(
-    modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(4.dp),
-  ) {
+  Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
     Row(
       modifier = Modifier.fillMaxWidth(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(BottomSheetEntityHeaderTitleGap),
     ) {
-      Icon(
-        icon = icon,
-        modifier = Modifier.size(BottomSheetEntityHeaderIconSize),
-        tint = iconTint,
-      )
+      Icon(icon = icon, modifier = Modifier.size(BottomSheetEntityHeaderIconSize), tint = iconTint)
 
       Text(
         text = title,
@@ -201,11 +174,7 @@ fun BottomSheetEntityBreadcrumb(
           horizontalArrangement = Arrangement.spacedBy(4.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          Icon(
-            icon = Lucide.ChevronRight,
-            modifier = Modifier.size(14.dp),
-            tint = color,
-          )
+          Icon(icon = Lucide.ChevronRight, modifier = Modifier.size(14.dp), tint = color)
 
           Text(
             text = segment,
@@ -228,10 +197,5 @@ fun BottomSheetEntitySupportingText(
   color: Color = AppTheme.colors.textMuted,
   textStyle: TextStyle = BottomSheetEntityMetadataTextStyle,
 ) {
-  Text(
-    text = text,
-    modifier = modifier,
-    style = textStyle,
-    color = color,
-  )
+  Text(text = text, modifier = modifier, style = textStyle, color = color)
 }

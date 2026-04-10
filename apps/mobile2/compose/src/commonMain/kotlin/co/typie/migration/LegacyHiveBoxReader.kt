@@ -1,7 +1,8 @@
 package co.typie.migration
 
 object LegacyHiveBoxReader {
-  fun readBox(bytes: ByteArray): Map<String, Any?> = readFrames(bytes = bytes, keyCrc = 0, decrypt = null)
+  fun readBox(bytes: ByteArray): Map<String, Any?> =
+    readFrames(bytes = bytes, keyCrc = 0, decrypt = null)
 
   fun readEncryptedBox(
     bytes: ByteArray,
@@ -40,11 +41,12 @@ object LegacyHiveBoxReader {
       cursor = keyEnd
 
       val rawValueBytes = bytes.copyOfRange(cursor, crcOffset)
-      val value = when {
-        rawValueBytes.isEmpty() -> null
-        decrypt != null -> decodeValue(decrypt(rawValueBytes))
-        else -> decodeValue(rawValueBytes)
-      }
+      val value =
+        when {
+          rawValueBytes.isEmpty() -> null
+          decrypt != null -> decodeValue(decrypt(rawValueBytes))
+          else -> decodeValue(rawValueBytes)
+        }
 
       values[key] = value
       offset = frameEnd
@@ -55,18 +57,19 @@ object LegacyHiveBoxReader {
 
   private fun decodeValue(bytes: ByteArray): Any? {
     val cursor = ByteCursor(bytes)
-    val value = when (val typeId = cursor.readByte()) {
-      VALUE_TYPE_NULL -> null
-      VALUE_TYPE_INT -> cursor.readDouble().toLong()
-      VALUE_TYPE_DOUBLE -> cursor.readDouble()
-      VALUE_TYPE_BOOL -> cursor.readByte() != 0
-      VALUE_TYPE_STRING -> {
-        val length = cursor.readUInt32().toInt()
-        cursor.readString(length)
-      }
+    val value =
+      when (val typeId = cursor.readByte()) {
+        VALUE_TYPE_NULL -> null
+        VALUE_TYPE_INT -> cursor.readDouble().toLong()
+        VALUE_TYPE_DOUBLE -> cursor.readDouble()
+        VALUE_TYPE_BOOL -> cursor.readByte() != 0
+        VALUE_TYPE_STRING -> {
+          val length = cursor.readUInt32().toInt()
+          cursor.readString(length)
+        }
 
-      else -> error("Unsupported Hive value type: $typeId")
-    }
+        else -> error("Unsupported Hive value type: $typeId")
+      }
 
     require(cursor.isAtEnd()) { "Hive value payload has trailing bytes." }
     return value
@@ -147,14 +150,16 @@ private fun readUInt32(bytes: ByteArray, offset: Int): Long {
     ((bytes[offset + 3].toLong() and 0xFF) shl 24)
 }
 
-private val LEGACY_CRC32_TABLE = IntArray(256) { index ->
-  var value = index
-  repeat(8) {
-    value = if ((value and 1) != 0) {
-      0xEDB8_8320.toInt() xor (value ushr 1)
-    } else {
-      value ushr 1
+private val LEGACY_CRC32_TABLE =
+  IntArray(256) { index ->
+    var value = index
+    repeat(8) {
+      value =
+        if ((value and 1) != 0) {
+          0xEDB8_8320.toInt() xor (value ushr 1)
+        } else {
+          value ushr 1
+        }
     }
+    value
   }
-  value
-}

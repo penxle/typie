@@ -87,19 +87,14 @@ private val FolderIconPickerExpandedDetent = SheetDetent.TopGap(FolderIconPicker
 internal fun folderIconPickerSheetSpec(): SheetOverlaySpec {
   return SheetOverlaySpec(
     mode = SheetMode.Modal,
-    sizePolicy = SheetSizePolicy.Detents(
-      initial = FolderIconPickerCollapsedDetent,
-      available = listOf(
-        FolderIconPickerCollapsedDetent,
-        FolderIconPickerExpandedDetent,
+    sizePolicy =
+      SheetSizePolicy.Detents(
+        initial = FolderIconPickerCollapsedDetent,
+        available = listOf(FolderIconPickerCollapsedDetent, FolderIconPickerExpandedDetent),
+        dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
       ),
-      dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
-    ),
     chrome = SheetChrome.Default,
-    haptics = SheetHapticPolicy(
-      onPresent = true,
-      onDetentSnap = true,
-    ),
+    haptics = SheetHapticPolicy(onPresent = true, onDetentSnap = true),
   )
 }
 
@@ -109,29 +104,24 @@ internal fun folderIconPickerSheet(
   initialIcon: String?,
   initialColor: String?,
   onUpdated: () -> Unit = {},
-): SheetPresentation<Unit> = sheetPresentation(
-  spec = folderIconPickerSheetSpec(),
-) {
-  FolderIconPickerSheetContent(
-    model = model,
-    entityId = entityId,
-    initialIcon = initialIcon,
-    initialColor = initialColor,
-    onUpdated = onUpdated,
-  )
-}
+): SheetPresentation<Unit> =
+  sheetPresentation(spec = folderIconPickerSheetSpec()) {
+    FolderIconPickerSheetContent(
+      model = model,
+      entityId = entityId,
+      initialIcon = initialIcon,
+      initialColor = initialColor,
+      onUpdated = onUpdated,
+    )
+  }
 
 private class FolderIconPickerForm(
   scope: CoroutineScope,
   initialIconName: String,
   initialColor: String,
 ) : FormState(scope) {
-  val iconName = field(initialIconName) {
-    focusable = false
-  }
-  val color = field(initialColor) {
-    focusable = false
-  }
+  val iconName = field(initialIconName) { focusable = false }
+  val color = field(initialColor) { focusable = false }
 }
 
 @Composable
@@ -148,13 +138,14 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
     initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val form = remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
-    FolderIconPickerForm(
-      scope = scope,
-      initialIconName = normalizedInitialIcon,
-      initialColor = normalizedInitialColor,
-    )
-  }
+  val form =
+    remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
+      FolderIconPickerForm(
+        scope = scope,
+        initialIconName = normalizedInitialIcon,
+        initialColor = normalizedInitialColor,
+      )
+    }
 
   var isUpdating by remember { mutableStateOf(false) }
 
@@ -172,9 +163,13 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
     isUpdating = true
 
     scope.launch {
-      model.updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
+      model
+        .updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
         .withDefaultExceptionHandler(toast)
-        .onOk { form.commit(); onUpdated() }
+        .onOk {
+          form.commit()
+          onUpdated()
+        }
         .onException { form.rollback() }
       isUpdating = false
     }
@@ -188,10 +183,11 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
     fillHeight = true,
     bodyScroll = false,
     bodyInsetPolicy = SheetInsetPolicy.None,
-    padding = SheetPadding(
-      header = PaddingValues(horizontal = 16.dp),
-      body = PaddingValues(horizontal = 16.dp),
-    ),
+    padding =
+      SheetPadding(
+        header = PaddingValues(horizontal = 16.dp),
+        body = PaddingValues(horizontal = 16.dp),
+      ),
     header = {
       ActionHeader(
         title = "아이콘 변경",
@@ -207,10 +203,7 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
       )
     },
   ) {
-    Column(
-      modifier = Modifier.fillMaxSize(),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       IconColorRow(
         colors = entityIconColors,
         selectedColor = form.color.value,
@@ -218,15 +211,12 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
         onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
       )
 
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .weight(1f),
-      ) {
-        val safeBottom = WindowInsets.safeDrawing
-          .only(WindowInsetsSides.Bottom)
-          .asPaddingValues()
-          .calculateBottomPadding()
+      Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        val safeBottom =
+          WindowInsets.safeDrawing
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
 
         LazyVerticalGrid(
           columns = GridCells.Fixed(7),
@@ -249,18 +239,19 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
 
         if (iconGridState.canScrollBackward) {
           Box(
-            modifier = Modifier
-              .align(Alignment.TopCenter)
-              .fillMaxWidth()
-              .height(FolderIconPickerTopFadeHeight)
-              .background(
-                Brush.verticalGradient(
-                  colors = listOf(
-                    AppTheme.colors.surfaceRaised,
-                    AppTheme.colors.surfaceRaised.copy(alpha = 0f),
-                  ),
-                ),
-              ),
+            modifier =
+              Modifier.align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(FolderIconPickerTopFadeHeight)
+                .background(
+                  Brush.verticalGradient(
+                    colors =
+                      listOf(
+                        AppTheme.colors.surfaceRaised,
+                        AppTheme.colors.surfaceRaised.copy(alpha = 0f),
+                      )
+                  )
+                )
           )
         }
       }
@@ -301,24 +292,20 @@ private fun IconColorChip(
   InteractionScope {
     Box(
       contentAlignment = Alignment.Center,
-      modifier = Modifier
-        .size(20.dp)
-        .clip(CircleShape)
-        .background(color.color, CircleShape)
-        .border(
-          width = if (selected) 1.dp else 0.dp,
-          color = if (selected) AppTheme.colors.borderStrong else Color.Transparent,
-          shape = CircleShape,
-        )
-        .clickable(enabled = enabled) { onClick() }
-        .pressScale(0.96f),
+      modifier =
+        Modifier.size(20.dp)
+          .clip(CircleShape)
+          .background(color.color, CircleShape)
+          .border(
+            width = if (selected) 1.dp else 0.dp,
+            color = if (selected) AppTheme.colors.borderStrong else Color.Transparent,
+            shape = CircleShape,
+          )
+          .clickable(enabled = enabled) { onClick() }
+          .pressScale(0.96f),
     ) {
       if (selected) {
-        Icon(
-          icon = Lucide.Check,
-          modifier = Modifier.size(10.dp),
-          tint = Color.White,
-        )
+        Icon(icon = Lucide.Check, modifier = Modifier.size(10.dp), tint = Color.White)
       }
     }
   }
@@ -335,28 +322,24 @@ private fun IconGridCell(
   InteractionScope {
     Box(
       contentAlignment = Alignment.Center,
-      modifier = Modifier
-        .fillMaxWidth()
-        .aspectRatio(1f)
-        .clip(RoundedCornerShape(4.dp))
-        .background(if (selected) AppTheme.colors.surfaceSunken else Color.Transparent)
-        .clickable(enabled = enabled) { onSelect() }
-        .pressScale(0.98f),
+      modifier =
+        Modifier.fillMaxWidth()
+          .aspectRatio(1f)
+          .clip(RoundedCornerShape(4.dp))
+          .background(if (selected) AppTheme.colors.surfaceSunken else Color.Transparent)
+          .clickable(enabled = enabled) { onSelect() }
+          .pressScale(0.98f),
     ) {
-      Icon(
-        icon = icon.icon,
-        modifier = Modifier.size(FolderIconPickerGridIconSize),
-        tint = tint,
-      )
+      Icon(icon = icon.icon, modifier = Modifier.size(FolderIconPickerGridIconSize), tint = tint)
 
       if (selected) {
         Box(
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = FolderIconPickerSelectionDotBottomInset)
-            .size(FolderIconPickerSelectionDotSize)
-            .clip(CircleShape)
-            .background(tint, CircleShape),
+          modifier =
+            Modifier.align(Alignment.BottomCenter)
+              .padding(bottom = FolderIconPickerSelectionDotBottomInset)
+              .size(FolderIconPickerSelectionDotSize)
+              .clip(CircleShape)
+              .background(tint, CircleShape)
         )
       }
     }

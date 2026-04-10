@@ -29,13 +29,11 @@ data class LegacyPrefsImportSource(
   val themeValues: Map<String, Any?>,
 )
 
-data class LegacyPrefsImportReport(
-  val importedKeys: List<String>,
-  val skippedKeys: List<String>,
-) {
+data class LegacyPrefsImportReport(val importedKeys: List<String>, val skippedKeys: List<String>) {
   val status: LegacyMigrationPhaseStatus =
     when {
-      importedKeys.isNotEmpty() && skippedKeys.isNotEmpty() -> LegacyMigrationPhaseStatus.PartiallyImported
+      importedKeys.isNotEmpty() && skippedKeys.isNotEmpty() ->
+        LegacyMigrationPhaseStatus.PartiallyImported
       importedKeys.isNotEmpty() -> LegacyMigrationPhaseStatus.Imported
       skippedKeys.isNotEmpty() -> LegacyMigrationPhaseStatus.Skipped
       else -> LegacyMigrationPhaseStatus.NotStarted

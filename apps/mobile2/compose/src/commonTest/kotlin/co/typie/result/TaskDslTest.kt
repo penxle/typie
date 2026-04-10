@@ -1,9 +1,9 @@
 package co.typie.result
 
-import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.runBlocking
 
 class TaskDslTest {
 
@@ -13,13 +13,11 @@ class TaskDslTest {
     var settledResult: Result<String, Nothing>? = null
 
     task<Int, String, Nothing> {
-      emit(1)
-      emit(2)
-      "done"
-    }.collect(
-      onPending = { pendingValues.add(it) },
-      onSettled = { settledResult = it },
-    )
+        emit(1)
+        emit(2)
+        "done"
+      }
+      .collect(onPending = { pendingValues.add(it) }, onSettled = { settledResult = it })
 
     assertEquals(listOf(1, 2), pendingValues)
     assertIs<Result.Ok<String>>(settledResult)
@@ -32,12 +30,10 @@ class TaskDslTest {
     var settledResult: Result<Nothing, String>? = null
 
     task<Unit, Nothing, String> {
-      emit(Unit)
-      raise("error")
-    }.collect(
-      onPending = { pendingValues.add(it) },
-      onSettled = { settledResult = it },
-    )
+        emit(Unit)
+        raise("error")
+      }
+      .collect(onPending = { pendingValues.add(it) }, onSettled = { settledResult = it })
 
     assertEquals(1, pendingValues.size)
     assertIs<Result.Err<String>>(settledResult)
@@ -48,12 +44,8 @@ class TaskDslTest {
   fun exceptionEmitsSettledException() = runBlocking {
     var settledResult: Result<Nothing, Nothing>? = null
 
-    task<Unit, Nothing, Nothing> {
-      throw RuntimeException("boom")
-    }.collect(
-      onPending = {},
-      onSettled = { settledResult = it },
-    )
+    task<Unit, Nothing, Nothing> { throw RuntimeException("boom") }
+      .collect(onPending = {}, onSettled = { settledResult = it })
 
     assertIs<Result.Exception>(settledResult)
     assertEquals("boom", (settledResult as Result.Exception).exception.message)
@@ -62,12 +54,8 @@ class TaskDslTest {
   @Test
   fun cancellationExceptionIsRethrown() = runBlocking {
     try {
-      task<Unit, Nothing, Nothing> {
-        throw kotlinx.coroutines.CancellationException("cancel")
-      }.collect(
-        onPending = {},
-        onSettled = {},
-      )
+      task<Unit, Nothing, Nothing> { throw kotlinx.coroutines.CancellationException("cancel") }
+        .collect(onPending = {}, onSettled = {})
       error("should not reach")
     } catch (e: kotlinx.coroutines.CancellationException) {
       assertEquals("cancel", e.message)

@@ -1,18 +1,14 @@
 package co.typie.screen.more.stats
 
+import kotlin.math.roundToInt
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlin.math.roundToInt
-import kotlin.time.Clock
 
 val weekdayLabels = listOf("일", "월", "화", "수", "목", "금", "토")
 
-data class StatsCharacterCountChange(
-  val date: LocalDate,
-  val additions: Int,
-  val deletions: Int,
-)
+data class StatsCharacterCountChange(val date: LocalDate, val additions: Int, val deletions: Int)
 
 data class StreakData(
   val currentStreak: Int,
@@ -30,11 +26,7 @@ data class WeekdayData(
   val count: Int,
 )
 
-data class StatsActivityDay(
-  val date: LocalDate,
-  val additions: Int,
-  val deletions: Int,
-) {
+data class StatsActivityDay(val date: LocalDate, val additions: Int, val deletions: Int) {
   val total: Int = additions + deletions
 }
 
@@ -43,11 +35,12 @@ fun calculateStreakData(
   totalCharacterCount: Int,
   today: LocalDate = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date,
 ): StreakData {
-  val activeDates = characterCountChanges
-    .asSequence()
-    .filter { it.additions > 0 }
-    .map { it.date.toEpochDays() }
-    .toSet()
+  val activeDates =
+    characterCountChanges
+      .asSequence()
+      .filter { it.additions > 0 }
+      .map { it.date.toEpochDays() }
+      .toSet()
 
   var currentStreak = 0
   var checkDate = today.toEpochDays()
@@ -78,11 +71,12 @@ fun calculateStreakData(
   }
 
   val totalDays = activeDates.size
-  val avgCharactersPerDay = if (totalDays > 0) {
-    (totalCharacterCount.toDouble() / totalDays).roundToInt()
-  } else {
-    0
-  }
+  val avgCharactersPerDay =
+    if (totalDays > 0) {
+      (totalCharacterCount.toDouble() / totalDays).roundToInt()
+    } else {
+      0
+    }
 
   return StreakData(
     currentStreak = currentStreak,
@@ -94,7 +88,7 @@ fun calculateStreakData(
 }
 
 fun calculateWeekdayPattern(
-  characterCountChanges: List<StatsCharacterCountChange>,
+  characterCountChanges: List<StatsCharacterCountChange>
 ): List<WeekdayData> {
   val totals = MutableList(7) { 0 }
   val counts = MutableList(7) { 0 }
@@ -114,11 +108,12 @@ fun calculateWeekdayPattern(
       dayIndex = index,
       label = label,
       totalAdditions = totals[index],
-      avgAdditions = if (counts[index] > 0) {
-        (totals[index].toDouble() / counts[index]).roundToInt()
-      } else {
-        0
-      },
+      avgAdditions =
+        if (counts[index] > 0) {
+          (totals[index].toDouble() / counts[index]).roundToInt()
+        } else {
+          0
+        },
       count = counts[index],
     )
   }

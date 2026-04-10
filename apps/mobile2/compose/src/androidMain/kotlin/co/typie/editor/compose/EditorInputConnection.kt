@@ -17,14 +17,12 @@ import co.typie.editor.Editor
 import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.DeletionOp
 import co.typie.editor.ffi.Key
+import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SelectionOp
-import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 
-internal class EditorInputConnection(
-  private val editor: Editor,
-  private val view: View,
-) : InputConnection {
+internal class EditorInputConnection(private val editor: Editor, private val view: View) :
+  InputConnection {
   private var batchLevel = 0
 
   override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
@@ -76,16 +74,12 @@ internal class EditorInputConnection(
 
   override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
     val value = text?.toString() ?: return false
-    editor.enqueue(
-      Message.Composition(CompositionOp.Update(value, null))
-    )
+    editor.enqueue(Message.Composition(CompositionOp.Update(value, null)))
     return true
   }
 
   override fun setComposingRegion(start: Int, end: Int): Boolean {
-    editor.enqueue(
-      Message.Composition(CompositionOp.SetRegion(start, end))
-    )
+    editor.enqueue(Message.Composition(CompositionOp.SetRegion(start, end)))
     return true
   }
 
@@ -95,40 +89,31 @@ internal class EditorInputConnection(
   }
 
   override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-    editor.enqueue(
-      Message.Deletion(
-        DeletionOp.Surrounding(beforeLength, afterLength)
-      )
-    )
+    editor.enqueue(Message.Deletion(DeletionOp.Surrounding(beforeLength, afterLength)))
     return true
   }
 
   override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
-    editor.enqueue(
-      Message.Deletion(
-        DeletionOp.SurroundingCodePoints(beforeLength, afterLength)
-      )
-    )
+    editor.enqueue(Message.Deletion(DeletionOp.SurroundingCodePoints(beforeLength, afterLength)))
     return true
   }
 
   override fun setSelection(start: Int, end: Int): Boolean {
-    editor.enqueue(
-      Message.Selection(SelectionOp.SetFlat(start, end))
-    )
+    editor.enqueue(Message.Selection(SelectionOp.SetFlat(start, end)))
     return true
   }
 
   override fun sendKeyEvent(event: KeyEvent?): Boolean {
     if (event == null || event.action != KeyEvent.ACTION_DOWN) return false
-    val key = when (event.keyCode) {
-      KeyEvent.KEYCODE_DEL -> Key.Backspace
-      KeyEvent.KEYCODE_FORWARD_DEL -> Key.Delete
-      KeyEvent.KEYCODE_ENTER -> Key.Enter
-      KeyEvent.KEYCODE_TAB -> Key.Tab
-      KeyEvent.KEYCODE_ESCAPE -> Key.Escape
-      else -> return false
-    }
+    val key =
+      when (event.keyCode) {
+        KeyEvent.KEYCODE_DEL -> Key.Backspace
+        KeyEvent.KEYCODE_FORWARD_DEL -> Key.Delete
+        KeyEvent.KEYCODE_ENTER -> Key.Enter
+        KeyEvent.KEYCODE_TAB -> Key.Tab
+        KeyEvent.KEYCODE_ESCAPE -> Key.Escape
+        else -> return false
+      }
     editor.enqueue(Message.Key(FfiKeyEvent(key)))
     return true
   }
@@ -178,8 +163,7 @@ internal class EditorInputConnection(
     gesture: HandwritingGesture,
     executor: java.util.concurrent.Executor?,
     consumer: java.util.function.IntConsumer?,
-  ) {
-  }
+  ) {}
 
   override fun previewHandwritingGesture(
     gesture: android.view.inputmethod.PreviewableHandwritingGesture,

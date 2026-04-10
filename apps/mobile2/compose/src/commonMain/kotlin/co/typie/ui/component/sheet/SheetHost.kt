@@ -19,13 +19,11 @@ fun <R> sheetPresentation(
   spec: SheetOverlaySpec = SheetOverlaySpec(),
   content: @Composable SheetScope<R>.() -> Unit,
 ): SheetPresentation<R> {
-  return SheetPresentation(
-    spec = spec,
-    content = content,
-  )
+  return SheetPresentation(spec = spec, content = content)
 }
 
-class SheetHostState internal constructor(
+class SheetHostState
+internal constructor(
   private val presenter: SheetOverlayPresenter,
   private val launchScope: CoroutineScope,
 ) {
@@ -36,28 +34,18 @@ class SheetHostState internal constructor(
     return launchScope.launch(start = start, block = block)
   }
 
-  suspend fun <R> present(
-    sheet: SheetPresentation<R>,
-  ): SheetResult<R> {
-    return presenter.present(
-      spec = sheet.spec,
-      content = sheet.content,
-    )
+  suspend fun <R> present(sheet: SheetPresentation<R>): SheetResult<R> {
+    return presenter.present(spec = sheet.spec, content = sheet.content)
   }
 
   suspend fun <R> present(
     spec: SheetOverlaySpec = SheetOverlaySpec(),
     content: @Composable SheetScope<R>.() -> Unit,
   ): SheetResult<R> {
-    return presenter.present(
-      spec = spec,
-      content = content,
-    )
+    return presenter.present(spec = spec, content = content)
   }
 
-  suspend fun <R> await(
-    sheet: SheetPresentation<R>,
-  ): R {
+  suspend fun <R> await(sheet: SheetPresentation<R>): R {
     return when (val result = present(sheet)) {
       is SheetResult.Completed -> result.value
       is SheetResult.Dismissed -> throw CancellationException("Sheet dismissed: ${result.reason}")
@@ -68,12 +56,7 @@ class SheetHostState internal constructor(
     spec: SheetOverlaySpec = SheetOverlaySpec(),
     content: @Composable SheetScope<R>.() -> Unit,
   ): R {
-    return await(
-      sheet = sheetPresentation(
-        spec = spec,
-        content = content,
-      ),
-    )
+    return await(sheet = sheetPresentation(spec = spec, content = content))
   }
 
   fun <R> show(
@@ -81,9 +64,7 @@ class SheetHostState internal constructor(
     start: CoroutineStart = CoroutineStart.UNDISPATCHED,
     onResult: suspend (SheetResult<R>) -> Unit = {},
   ): Job {
-    return launchScope.launch(start = start) {
-      onResult(present(sheet))
-    }
+    return launchScope.launch(start = start) { onResult(present(sheet)) }
   }
 
   fun <R> show(
@@ -93,16 +74,12 @@ class SheetHostState internal constructor(
     content: @Composable SheetScope<R>.() -> Unit,
   ): Job {
     return show(
-      sheet = sheetPresentation(
-        spec = spec,
-        content = content,
-      ),
+      sheet = sheetPresentation(spec = spec, content = content),
       start = start,
       onResult = onResult,
     )
   }
 }
 
-val LocalSheetHost = staticCompositionLocalOf<SheetHostState> {
-  error("No SheetHostState provided")
-}
+val LocalSheetHost =
+  staticCompositionLocalOf<SheetHostState> { error("No SheetHostState provided") }

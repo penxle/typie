@@ -2,41 +2,43 @@ package co.typie.screen.subscription
 
 import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.SubscriptionDevScenario
-import co.typie.platform.Platform
 import co.typie.graphql.QueryState
+import co.typie.platform.Platform
+import co.typie.platform.PurchaseEvent
+import co.typie.platform.PurchasePlanInterval
+import co.typie.platform.PurchaseProduct
+import co.typie.platform.PurchaseService
 import co.typie.service.FULL_ACCESS_MONTHLY_PLAN_ID
 import co.typie.service.SubscriptionAvailability
 import co.typie.service.SubscriptionManagementResult
 import co.typie.service.SubscriptionService
 import co.typie.service.SubscriptionSnapshot
 import co.typie.service.SubscriptionState
-import co.typie.platform.PurchaseEvent
-import co.typie.platform.PurchasePlanInterval
-import co.typie.platform.PurchaseProduct
-import co.typie.platform.PurchaseService
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SubscriptionServiceTest {
   @Test
   fun `desktop ignores query loading and error so entry screens can render from placeholder data`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      select(SubscriptionDevScenario.NoSubscription)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-    )
+    val sandbox =
+      SubscriptionDevSandbox(Platform.Desktop).apply {
+        select(SubscriptionDevScenario.NoSubscription)
+      }
+    val service =
+      SubscriptionService(
+        platform = Platform.Desktop,
+        purchaseService = FakePurchaseService(),
+        subscriptionDevSandbox = sandbox,
+      )
 
     assertFalse(service.hasQueryError(QueryState.Error(Exception("offline"))))
     assertFalse(service.isQueryLoading(QueryState.Loading))
@@ -44,14 +46,14 @@ class SubscriptionServiceTest {
 
   @Test
   fun `desktop real data mode preserves remote query loading and error states`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      select(SubscriptionDevScenario.RemoteData)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-    )
+    val sandbox =
+      SubscriptionDevSandbox(Platform.Desktop).apply { select(SubscriptionDevScenario.RemoteData) }
+    val service =
+      SubscriptionService(
+        platform = Platform.Desktop,
+        purchaseService = FakePurchaseService(),
+        subscriptionDevSandbox = sandbox,
+      )
 
     assertTrue(service.hasQueryError(QueryState.Error(Exception("offline"))))
     assertTrue(service.isQueryLoading(QueryState.Loading))
@@ -60,11 +62,12 @@ class SubscriptionServiceTest {
 
   @Test
   fun `remote preserves query loading and error states`() {
-    val service = SubscriptionService(
-      platform = Platform.iOS,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = SubscriptionDevSandbox(Platform.iOS),
-    )
+    val service =
+      SubscriptionService(
+        platform = Platform.iOS,
+        purchaseService = FakePurchaseService(),
+        subscriptionDevSandbox = SubscriptionDevSandbox(Platform.iOS),
+      )
 
     assertTrue(service.hasQueryError(QueryState.Error(Exception("offline"))))
     assertTrue(service.isQueryLoading(QueryState.Loading))
@@ -73,33 +76,35 @@ class SubscriptionServiceTest {
 
   @Test
   fun `desktop canStartTrial reflects sandbox state instead of remote flag`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      select(SubscriptionDevScenario.NoSubscription)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-    )
+    val sandbox =
+      SubscriptionDevSandbox(Platform.Desktop).apply {
+        select(SubscriptionDevScenario.NoSubscription)
+      }
+    val service =
+      SubscriptionService(
+        platform = Platform.Desktop,
+        purchaseService = FakePurchaseService(),
+        subscriptionDevSandbox = sandbox,
+      )
 
     assertTrue(service.canStartTrial(remoteCanStartTrial = false))
   }
 
   @Test
   fun `desktop startTrial updates sandbox without running remote action`() = runTest {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      select(SubscriptionDevScenario.NoSubscription)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-    )
+    val sandbox =
+      SubscriptionDevSandbox(Platform.Desktop).apply {
+        select(SubscriptionDevScenario.NoSubscription)
+      }
+    val service =
+      SubscriptionService(
+        platform = Platform.Desktop,
+        purchaseService = FakePurchaseService(),
+        subscriptionDevSandbox = sandbox,
+      )
     var remoteCalled = false
 
-    val celebration = service.startTrial {
-      remoteCalled = true
-    }
+    val celebration = service.startTrial { remoteCalled = true }
 
     assertFalse(remoteCalled)
     assertEquals(SubscriptionDevScenario.Trial, sandbox.scenario.value)
@@ -109,16 +114,15 @@ class SubscriptionServiceTest {
   @Test
   fun `remote startTrial runs remote action and does not mutate sandbox`() = runTest {
     val sandbox = SubscriptionDevSandbox(Platform.iOS)
-    val service = SubscriptionService(
-      platform = Platform.iOS,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-    )
+    val service =
+      SubscriptionService(
+        platform = Platform.iOS,
+        purchaseService = FakePurchaseService(),
+        subscriptionDevSandbox = sandbox,
+      )
     var remoteCalled = false
 
-    val celebration = service.startTrial {
-      remoteCalled = true
-    }
+    val celebration = service.startTrial { remoteCalled = true }
 
     assertTrue(remoteCalled)
     assertEquals(SubscriptionDevScenario.RemoteData, sandbox.scenario.value)
@@ -128,19 +132,19 @@ class SubscriptionServiceTest {
   @Test
   fun `desktop purchase returns local celebration without calling purchase service`() = runTest {
     val purchaseService = FakePurchaseService()
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      select(SubscriptionDevScenario.NoSubscription)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = purchaseService,
-      subscriptionDevSandbox = sandbox,
-    )
+    val sandbox =
+      SubscriptionDevSandbox(Platform.Desktop).apply {
+        select(SubscriptionDevScenario.NoSubscription)
+      }
+    val service =
+      SubscriptionService(
+        platform = Platform.Desktop,
+        purchaseService = purchaseService,
+        subscriptionDevSandbox = sandbox,
+      )
 
-    val result = service.purchase(
-      product = fakeProduct(PurchasePlanInterval.Yearly),
-      accountId = "user-uuid",
-    )
+    val result =
+      service.purchase(product = fakeProduct(PurchasePlanInterval.Yearly), accountId = "user-uuid")
 
     assertTrue(result.started)
     assertEquals("구독이 시작됐어요!", result.celebration?.title)
@@ -149,34 +153,37 @@ class SubscriptionServiceTest {
   }
 
   @Test
-  fun `remote purchase delegates to purchase service and returns no immediate celebration`() = runTest {
-    val purchaseService = FakePurchaseService(startPurchaseResult = true)
-    val service = SubscriptionService(
-      platform = Platform.Android,
-      purchaseService = purchaseService,
-      subscriptionDevSandbox = SubscriptionDevSandbox(Platform.Android),
-    )
+  fun `remote purchase delegates to purchase service and returns no immediate celebration`() =
+    runTest {
+      val purchaseService = FakePurchaseService(startPurchaseResult = true)
+      val service =
+        SubscriptionService(
+          platform = Platform.Android,
+          purchaseService = purchaseService,
+          subscriptionDevSandbox = SubscriptionDevSandbox(Platform.Android),
+        )
 
-    val result = service.purchase(
-      product = fakeProduct(PurchasePlanInterval.Monthly),
-      accountId = "user-uuid",
-    )
+      val result =
+        service.purchase(
+          product = fakeProduct(PurchasePlanInterval.Monthly),
+          accountId = "user-uuid",
+        )
 
-    assertTrue(result.started)
-    assertNull(result.celebration)
-    assertEquals(1, purchaseService.purchaseCalls)
-  }
+      assertTrue(result.started)
+      assertNull(result.celebration)
+      assertEquals(1, purchaseService.purchaseCalls)
+    }
 
   @Test
   fun `desktop openSubscriptionManagement completes locally by scheduling cancel`() = runTest {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop).apply {
-      purchase(PurchasePlanInterval.Monthly)
-    }
-    val service = SubscriptionService(
-      platform = Platform.Desktop,
-      purchaseService = FakePurchaseService(),
-      subscriptionDevSandbox = sandbox,
-    )
+    val sandbox =
+      SubscriptionDevSandbox(Platform.Desktop).apply { purchase(PurchasePlanInterval.Monthly) }
+    val service =
+      SubscriptionService(
+        platform = Platform.Desktop,
+        purchaseService = FakePurchaseService(),
+        subscriptionDevSandbox = sandbox,
+      )
 
     val result = service.openSubscriptionManagement()
 
@@ -187,11 +194,12 @@ class SubscriptionServiceTest {
   @Test
   fun `remote openSubscriptionManagement waits for external store result`() = runTest {
     val purchaseService = FakePurchaseService(openSubscriptionManagementResult = true)
-    val service = SubscriptionService(
-      platform = Platform.Android,
-      purchaseService = purchaseService,
-      subscriptionDevSandbox = SubscriptionDevSandbox(Platform.Android),
-    )
+    val service =
+      SubscriptionService(
+        platform = Platform.Android,
+        purchaseService = purchaseService,
+        subscriptionDevSandbox = SubscriptionDevSandbox(Platform.Android),
+      )
 
     val result = service.openSubscriptionManagement()
 
@@ -235,10 +243,7 @@ private class FakePurchaseService(
 
   override suspend fun queryProducts(): Map<PurchasePlanInterval, PurchaseProduct> = emptyMap()
 
-  override suspend fun purchase(
-    product: PurchaseProduct,
-    accountId: String,
-  ): Boolean {
+  override suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean {
     purchaseCalls += 1
     return startPurchaseResult
   }

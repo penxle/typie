@@ -24,31 +24,25 @@ fun SettingControlRow(
   onClick: (suspend () -> Unit)? = null,
   trailing: @Composable RowScope.() -> Unit = {},
 ) {
-  val interactiveModifier = if (enabled && onClick != null) {
-    Modifier
-      .clickable(onClick)
-      .pressScale()
-  } else {
-    Modifier
-  }
+  val interactiveModifier =
+    if (enabled && onClick != null) {
+      Modifier.clickable(onClick).pressScale()
+    } else {
+      Modifier
+    }
 
   InteractionScope {
     Row(
-      modifier = modifier
-        .fillMaxWidth()
-        .then(interactiveModifier)
-        .padding(horizontal = 20.dp, vertical = 18.dp),
+      modifier =
+        modifier
+          .fillMaxWidth()
+          .then(interactiveModifier)
+          .padding(horizontal = 20.dp, vertical = 18.dp),
       horizontalArrangement = Arrangement.spacedBy(16.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        Text(
-          text = label,
-          style = AppTheme.typography.label,
-        )
+      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = label, style = AppTheme.typography.label)
         Text(
           text = description,
           style = AppTheme.typography.caption,

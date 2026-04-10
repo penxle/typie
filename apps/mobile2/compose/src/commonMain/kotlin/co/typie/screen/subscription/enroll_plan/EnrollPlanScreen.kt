@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,17 +33,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
-import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
-import co.typie.overlay.Loader
 import co.typie.overlay.LocalLoader
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
@@ -82,7 +78,6 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -99,10 +94,7 @@ fun EnrollPlanScreen() {
   LaunchedEffect(model.celebration) {
     val celebration = model.celebration ?: return@LaunchedEffect
     bottomSheetHost.show {
-      SubscriptionCelebrationSheet(
-        title = celebration.title,
-        message = celebration.message,
-      )
+      SubscriptionCelebrationSheet(title = celebration.title, message = celebration.message)
     }
     model.consumeCelebration()
   }
@@ -125,7 +117,9 @@ fun EnrollPlanScreen() {
 
   Screen(
     scrollState = scrollState,
-    loading = SubscriptionService.isQueryLoading(model.query.state) || currentSubscriptionState !is QueryState.Success,
+    loading =
+      SubscriptionService.isQueryLoading(model.query.state) ||
+        currentSubscriptionState !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
@@ -160,25 +154,17 @@ fun EnrollPlanScreen() {
       productsLoaded = model.productsLoaded,
       monthlyProduct = model.products[PurchasePlanInterval.Monthly],
       yearlyProduct = model.products[PurchasePlanInterval.Yearly],
-      onStartTrial = {
-        showTrialStartConfirm = true
-      },
+      onStartTrial = { showTrialStartConfirm = true },
       onPurchaseMonthly = { product ->
         // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
         scope.launch {
-          loader.runWith {
-            model.purchase(product)
-              .withDefaultExceptionHandler(toast)
-          }
+          loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
         }
       },
       onPurchaseYearly = { product ->
         // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
         scope.launch {
-          loader.runWith {
-            model.purchase(product)
-              .withDefaultExceptionHandler(toast)
-          }
+          loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
         }
       },
     )
@@ -195,13 +181,11 @@ fun EnrollPlanScreen() {
         showTrialStartConfirm = false
         scope.launch {
           loader.runWith {
-            model.startTrial()
-              .withDefaultExceptionHandler(toast)
-              .onErr { error ->
-                when (error) {
-                  EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-                }
+            model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
+              when (error) {
+                EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
               }
+            }
           }
         }
       },
@@ -216,13 +200,9 @@ private fun SubscriptionPlanCard(
   features: List<SubscriptionFeature>,
   badge: SubscriptionStatusBadge? = null,
 ) {
-  CardSurface(
-    modifier = Modifier.fillMaxWidth(),
-  ) {
+  CardSurface(modifier = Modifier.fillMaxWidth()) {
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(18.dp),
+      modifier = Modifier.fillMaxWidth().padding(18.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Row(
@@ -230,11 +210,7 @@ private fun SubscriptionPlanCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        Text(
-          text = title,
-          style = AppTheme.typography.title,
-          modifier = Modifier.weight(1f),
-        )
+        Text(text = title, style = AppTheme.typography.title, modifier = Modifier.weight(1f))
 
         if (badge != null) {
           SubscriptionStatusBadgeChip(badge)
@@ -260,16 +236,10 @@ private fun FullAccessCard(
   onPurchaseMonthly: suspend (PurchaseProduct) -> Unit,
   onPurchaseYearly: suspend (PurchaseProduct) -> Unit,
 ) {
-  CardSurface(
-    modifier = Modifier.fillMaxWidth(),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-    ) {
+  CardSurface(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
       Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(18.dp),
+        modifier = Modifier.fillMaxWidth().padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         Row(
@@ -298,20 +268,14 @@ private fun FullAccessCard(
       CardDivider()
 
       Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         if (canStartTrial) {
           Button(
             text = "2주 무료 체험하기",
             leading = { color ->
-              Icon(
-                icon = Lucide.Zap,
-                modifier = Modifier.size(16.dp),
-                tint = color,
-              )
+              Icon(icon = Lucide.Zap, modifier = Modifier.size(16.dp), tint = color)
             },
             onClick = onStartTrial,
           )
@@ -321,10 +285,11 @@ private fun FullAccessCard(
           label = "1개월 구독하기",
           product = monthlyProduct,
           productsLoaded = productsLoaded,
-          isActive = isCurrentFullPlan(
-            currentPlanId = currentPlanId,
-            interval = PurchasePlanInterval.Monthly,
-          ),
+          isActive =
+            isCurrentFullPlan(
+              currentPlanId = currentPlanId,
+              interval = PurchasePlanInterval.Monthly,
+            ),
           onClick = onPurchaseMonthly,
         )
 
@@ -332,10 +297,11 @@ private fun FullAccessCard(
           label = "1년 구독하기",
           product = yearlyProduct,
           productsLoaded = productsLoaded,
-          isActive = isCurrentFullPlan(
-            currentPlanId = currentPlanId,
-            interval = PurchasePlanInterval.Yearly,
-          ),
+          isActive =
+            isCurrentFullPlan(
+              currentPlanId = currentPlanId,
+              interval = PurchasePlanInterval.Yearly,
+            ),
           onClick = onPurchaseYearly,
         )
       }
@@ -344,14 +310,12 @@ private fun FullAccessCard(
 }
 
 @Composable
-private fun SubscriptionStatusBadgeChip(
-  status: SubscriptionStatusBadge,
-) {
+private fun SubscriptionStatusBadgeChip(status: SubscriptionStatusBadge) {
   Box(
-    modifier = Modifier
-      .clip(RoundedCornerShape(6.dp))
-      .background(AppTheme.colors.brandSubtle)
-      .padding(horizontal = 8.dp, vertical = 4.dp),
+    modifier =
+      Modifier.clip(RoundedCornerShape(6.dp))
+        .background(AppTheme.colors.brandSubtle)
+        .padding(horizontal = 8.dp, vertical = 4.dp),
     contentAlignment = Alignment.Center,
   ) {
     Text(
@@ -370,30 +334,24 @@ private fun SubscriptionPurchaseRow(
   isActive: Boolean,
   onClick: suspend (PurchaseProduct) -> Unit,
 ) {
-  val productState = subscriptionProductState(
-    product = product,
-    productsLoaded = productsLoaded,
-  )
+  val productState = subscriptionProductState(product = product, productsLoaded = productsLoaded)
 
   InteractionScope {
     Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(10.dp))
-        .background(AppTheme.colors.surfaceSunken)
-        .clickable {
-          val currentProduct = product ?: return@clickable
-          onClick(currentProduct)
-        }
-        .padding(13.dp)
-        .pressScale(),
+      modifier =
+        Modifier.fillMaxWidth()
+          .clip(RoundedCornerShape(10.dp))
+          .background(AppTheme.colors.surfaceSunken)
+          .clickable {
+            val currentProduct = product ?: return@clickable
+            onClick(currentProduct)
+          }
+          .padding(13.dp)
+          .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-      Text(
-        text = label,
-        style = AppTheme.typography.action,
-      )
+      Text(text = label, style = AppTheme.typography.action)
 
       if (isActive) {
         SubscriptionStatusBadgeChip(SubscriptionStatusBadge.Current)
@@ -403,16 +361,14 @@ private fun SubscriptionPurchaseRow(
 
       when (productState) {
         SubscriptionProductState.Loading -> SubscriptionPriceSpinner()
-        SubscriptionProductState.Unavailable -> Text(
-          text = PRODUCT_UNAVAILABLE_MESSAGE,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
-        SubscriptionProductState.Available -> {
+        SubscriptionProductState.Unavailable ->
           Text(
-            text = product!!.price,
-            style = AppTheme.typography.action,
+            text = PRODUCT_UNAVAILABLE_MESSAGE,
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.textTertiary,
           )
+        SubscriptionProductState.Available -> {
+          Text(text = product!!.price, style = AppTheme.typography.action)
 
           Icon(
             icon = Lucide.ChevronRight,
@@ -429,19 +385,18 @@ private fun SubscriptionPurchaseRow(
 private fun SubscriptionPriceSpinner() {
   val transition = rememberInfiniteTransition()
   val color = AppTheme.colors.textSecondary
-  val rotation by transition.animateFloat(
-    initialValue = 0f,
-    targetValue = 360f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(1000, easing = LinearEasing),
-      repeatMode = RepeatMode.Restart,
-    ),
-  )
+  val rotation by
+    transition.animateFloat(
+      initialValue = 0f,
+      targetValue = 360f,
+      animationSpec =
+        infiniteRepeatable(
+          animation = tween(1000, easing = LinearEasing),
+          repeatMode = RepeatMode.Restart,
+        ),
+    )
 
-  Box(
-    modifier = Modifier.size(16.dp),
-    contentAlignment = Alignment.Center,
-  ) {
+  Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
     Canvas(Modifier.size(14.dp)) {
       drawArc(
         color = color,

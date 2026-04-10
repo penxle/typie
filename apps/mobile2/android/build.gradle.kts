@@ -1,9 +1,7 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-val versionProps = Properties().apply {
-  load(rootProject.file("version.properties").reader())
-}
+val versionProps = Properties().apply { load(rootProject.file("version.properties").reader()) }
 val debugKeystore = file("keystore-debug.jks")
 
 plugins {
@@ -13,11 +11,7 @@ plugins {
 }
 
 kotlin {
-  target {
-    compilerOptions {
-      jvmTarget.set(JvmTarget.JVM_11)
-    }
-  }
+  target { compilerOptions { jvmTarget.set(JvmTarget.JVM_11) } }
 
   dependencies {
     implementation(projects.compose)
@@ -46,11 +40,7 @@ android {
 
   sourceSets["main"].jniLibs.directories.add("src/main/jniLibs")
 
-  packaging {
-    resources {
-      excludes += "/META-INF/{AL2.0,LGPL2.1}"
-    }
-  }
+  packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 
   signingConfigs {
     getByName("debug") {
@@ -70,9 +60,7 @@ android {
   }
 
   buildTypes {
-    getByName("debug") {
-      signingConfig = signingConfigs.getByName("debug")
-    }
+    getByName("debug") { signingConfig = signingConfigs.getByName("debug") }
 
     getByName("release") {
       isMinifyEnabled = false

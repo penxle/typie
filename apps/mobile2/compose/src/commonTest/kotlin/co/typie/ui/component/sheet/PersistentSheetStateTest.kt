@@ -8,13 +8,12 @@ class PersistentSheetStateTest {
 
   @Test
   fun showAndHideToggleVisibility() {
-    val state = PersistentSheetState(
-      controller = SheetControllerState(
-        mode = SheetMode.Persistent,
-        dismissPolicy = SheetDismissPolicy(),
-      ),
-      spec = PersistentSheetSpec(),
-    )
+    val state =
+      PersistentSheetState(
+        controller =
+          SheetControllerState(mode = SheetMode.Persistent, dismissPolicy = SheetDismissPolicy()),
+        spec = PersistentSheetSpec(),
+      )
 
     assertTrue(state.visible)
 

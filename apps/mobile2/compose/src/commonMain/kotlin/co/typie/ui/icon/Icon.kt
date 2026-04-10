@@ -29,9 +29,7 @@ fun Icon(
     return
   }
 
-  val vector = remember(icon, strokeWidth) {
-    icon.toImageVector(strokeWidth)
-  }
+  val vector = remember(icon, strokeWidth) { icon.toImageVector(strokeWidth) }
 
   Image(
     painter = rememberVectorPainter(vector),
@@ -43,20 +41,22 @@ fun Icon(
 
 private fun IconData.toImageVector(strokeWidth: Float): ImageVector =
   ImageVector.Builder(
-    defaultWidth = viewportWidth.dp,
-    defaultHeight = viewportHeight.dp,
-    viewportWidth = viewportWidth,
-    viewportHeight = viewportHeight,
-  ).apply {
-    for (p in paths) {
-      addPath(
-        pathData = PathParser().parsePathString(p.data).toNodes(),
-        fill = if (p.style == PathStyle.Fill) SolidColor(Color.Black) else null,
-        stroke = if (p.style == PathStyle.Stroke) SolidColor(Color.Black) else null,
-        strokeLineWidth = if (p.style == PathStyle.Stroke) strokeWidth else 0f,
-        strokeLineCap = p.strokeLineCap,
-        strokeLineJoin = p.strokeLineJoin,
-        pathFillType = p.fillType,
-      )
+      defaultWidth = viewportWidth.dp,
+      defaultHeight = viewportHeight.dp,
+      viewportWidth = viewportWidth,
+      viewportHeight = viewportHeight,
+    )
+    .apply {
+      for (p in paths) {
+        addPath(
+          pathData = PathParser().parsePathString(p.data).toNodes(),
+          fill = if (p.style == PathStyle.Fill) SolidColor(Color.Black) else null,
+          stroke = if (p.style == PathStyle.Stroke) SolidColor(Color.Black) else null,
+          strokeLineWidth = if (p.style == PathStyle.Stroke) strokeWidth else 0f,
+          strokeLineCap = p.strokeLineCap,
+          strokeLineJoin = p.strokeLineJoin,
+          pathFillType = p.fillType,
+        )
+      }
     }
-  }.build()
+    .build()

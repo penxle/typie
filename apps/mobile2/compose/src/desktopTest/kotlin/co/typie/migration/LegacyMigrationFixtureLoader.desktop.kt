@@ -9,8 +9,9 @@ import javax.crypto.spec.SecretKeySpec
 actual fun loadLegacyMigrationFixture(name: String): ByteArray {
   val path = "legacy_migration/$name"
   return checkNotNull(object {}.javaClass.classLoader.getResourceAsStream(path)) {
-    "Missing legacy migration fixture: $path"
-  }.use { it.readBytes() }
+      "Missing legacy migration fixture: $path"
+    }
+    .use { it.readBytes() }
 }
 
 actual fun decryptLegacyHiveAesPayload(payload: ByteArray, key: ByteArray): ByteArray {

@@ -16,7 +16,6 @@ internal fun showBottomSheetFromPopoverAction(
   presenterScope.launch(start = CoroutineStart.UNDISPATCHED) {
     try {
       bottomSheetHost.show(content)
-    } catch (_: CancellationException) {
-    }
+    } catch (_: CancellationException) {}
   }
 }

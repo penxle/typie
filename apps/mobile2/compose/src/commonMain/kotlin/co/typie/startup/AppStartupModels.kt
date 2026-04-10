@@ -12,9 +12,10 @@ fun interface BootstrapStartupHandle {
 
 sealed interface AppStartupState {
   data object NotStarted : AppStartupState
+
   data object Migrating : AppStartupState
+
   data object FailedButContinuing : AppStartupState
-  data class Ready(
-    val migrationResult: LegacyMigrationRunResult?,
-  ) : AppStartupState
+
+  data class Ready(val migrationResult: LegacyMigrationRunResult?) : AppStartupState
 }

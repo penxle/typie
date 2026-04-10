@@ -10,9 +10,5 @@ val Long.comma: String
     val prefix = digits.substring(0, startIndex)
     val body = digits.substring(startIndex)
 
-    return prefix + body
-      .reversed()
-      .chunked(3)
-      .joinToString(",")
-      .reversed()
+    return prefix + body.reversed().chunked(3).joinToString(",").reversed()
   }

@@ -18,11 +18,7 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.topbar.ProvideTopBar
 
 @Composable
-fun UpdateRequiredScreen(
-  storeUrl: String,
-  currentVersion: String,
-  requiredVersion: String,
-) {
+fun UpdateRequiredScreen(storeUrl: String, currentVersion: String, requiredVersion: String) {
   val uriHandler = LocalUriHandler.current
 
   ProvideTopBar(enabled = false)
@@ -34,9 +30,7 @@ fun UpdateRequiredScreen(
     detail = {
       CardSurface(modifier = Modifier.fillMaxWidth()) {
         Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
           verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
           AppStateVersionRow(label = "현재 버전", value = currentVersion)
@@ -44,15 +38,14 @@ fun UpdateRequiredScreen(
         }
       }
     },
-    secondaryAction = AppStateAction(
-      label = "고객센터",
-      variant = ButtonVariant.Secondary,
-      leadingIcon = Lucide.Headphones,
-      onClick = { uriHandler.openUri(SUPPORT_URL) },
-    ),
-    primaryAction = AppStateAction(
-      label = "업데이트하고 접속하기",
-      onClick = { uriHandler.openUri(storeUrl) },
-    ),
+    secondaryAction =
+      AppStateAction(
+        label = "고객센터",
+        variant = ButtonVariant.Secondary,
+        leadingIcon = Lucide.Headphones,
+        onClick = { uriHandler.openUri(SUPPORT_URL) },
+      ),
+    primaryAction =
+      AppStateAction(label = "업데이트하고 접속하기", onClick = { uriHandler.openUri(storeUrl) }),
   )
 }

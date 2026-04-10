@@ -12,11 +12,12 @@ class FieldStateTest {
     rules: List<Rule<String>> = emptyList(),
     deferredRules: List<DeferredRule<String>> = emptyList(),
     validateOn: ValidateOn = ValidateOn.Submit,
-  ) = FieldState(
-    initialValue = initialValue,
-    rulesByTiming = if (rules.isEmpty()) emptyMap() else mapOf(validateOn to rules),
-    deferredRules = deferredRules,
-  )
+  ) =
+    FieldState(
+      initialValue = initialValue,
+      rulesByTiming = if (rules.isEmpty()) emptyMap() else mapOf(validateOn to rules),
+      deferredRules = deferredRules,
+    )
 
   @Test
   fun initialState() {
