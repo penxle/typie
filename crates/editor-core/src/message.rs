@@ -248,19 +248,3 @@ pub enum Message {
     History { op: HistoryOp },
     System { event: SystemEvent },
 }
-
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InputContextRange {
-    pub start: usize,
-    pub end: usize,
-}
-
-#[ffi]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InputContext {
-    pub text: String,
-    pub window_start: usize,
-    pub selection: InputContextRange,
-    pub composing: Option<InputContextRange>,
-}

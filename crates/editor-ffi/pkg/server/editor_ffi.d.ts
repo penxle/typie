@@ -210,14 +210,14 @@ export interface ImageNode {
     proportion?: number;
 }
 
-export interface InputContext {
+export interface Ime {
     text: string;
     window_start: number;
-    selection: InputContextRange;
-    composing: InputContextRange | undefined;
+    selection: ImeRange;
+    composing: ImeRange | undefined;
 }
 
-export interface InputContextRange {
+export interface ImeRange {
     start: number;
     end: number;
 }
@@ -311,7 +311,7 @@ export type CompositionOp = { type: "update"; text: string; replace_length: numb
 
 export type CursorRect = PageRect;
 
-export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movement };
+export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movement } | { type: "surrounding"; before: number; after: number } | { type: "surrounding_code_points"; before: number; after: number };
 
 export type Direction = "forward" | "backward";
 
@@ -351,9 +351,9 @@ export type NodeOp = { type: "delete"; id: NodeId } | { type: "set_attrs"; id: N
 
 export type PointerEvent = { type: "down"; page: number; x: number; y: number; count: number; modifiers?: InputModifiers } | { type: "move"; page: number; x: number; y: number } | { type: "up" };
 
-export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection };
+export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection } | { type: "set_flat"; start: number; end: number };
 
-export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "input_context" | "modifiers";
+export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers";
 
 export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_manifest_loaded"; family: string; weight: number } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number } | { type: "set_external_height"; node_id: NodeId; height: number };
 
@@ -368,7 +368,7 @@ declare class Editor {
     [Symbol.dispose](): void;
     cursor(): PageRect | undefined;
     enqueue(message: Message): void;
-    input_context(before_limit: number, after_limit: number): InputContext;
+    ime(before_limit: number, after_limit: number): Ime;
     inspect_state(options?: InspectStateOptions | null): string;
     inspect_state_as_macro(): string;
     page_sizes(): Size[];

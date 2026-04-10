@@ -11,7 +11,7 @@ import co.typie.editor.ffi.CursorRect
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.EditorHost
-import co.typie.editor.ffi.InputContext
+import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.Selection
@@ -39,7 +39,7 @@ class Editor private constructor(
   var pageSizes by mutableStateOf<List<Size>>(emptyList())
     private set
 
-  var inputContext by mutableStateOf<InputContext?>(null)
+  var ime by mutableStateOf<Ime?>(null)
     private set
 
   internal val focusRequester = FocusRequester()
@@ -93,11 +93,12 @@ class Editor private constructor(
     { _, event ->
       for (field in event.fields) {
         when (field) {
+          StateField.Doc -> {}
           StateField.Cursor -> cursor = inner.cursor()
           StateField.Selection -> selection = inner.selection()
           StateField.PageSizes -> pageSizes = inner.pageSizes()
-          StateField.InputContext -> inputContext = inner.inputContext(Int.MAX_VALUE, Int.MAX_VALUE)
-          else -> {}
+          StateField.Ime -> ime = inner.ime(Int.MAX_VALUE, Int.MAX_VALUE)
+          StateField.Modifiers -> {}
         }
       }
     }
@@ -128,8 +129,7 @@ class Editor private constructor(
 
   fun inspectStateAsMacro(): String = inner.inspectStateAsMacro()
 
-  fun inputContext(beforeLimit: Int, afterLimit: Int): InputContext =
-    inner.inputContext(beforeLimit, afterLimit)
+  fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
 
   companion object : KoinComponent {
     suspend fun create(

@@ -5,6 +5,7 @@ mod error;
 mod event;
 mod handle;
 mod history;
+mod ime;
 mod message;
 mod state_field;
 
@@ -13,5 +14,6 @@ pub use error::*;
 pub use event::*;
 pub use handle::*;
 pub use history::*;
+pub use ime::*;
 pub use message::*;
 pub use state_field::*;

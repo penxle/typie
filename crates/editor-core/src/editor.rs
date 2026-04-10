@@ -10,11 +10,11 @@ use editor_view::Viewport;
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use crate::FontData;
 use crate::error::EditorError;
-use crate::event::EditorEvent;
+use crate::event::{EditorEvent, FontData};
 use crate::handle;
 use crate::history::History;
+use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
 
@@ -61,11 +61,7 @@ impl Editor {
         self.renderer.set_theme_variant(variant);
     }
 
-    pub fn input_context(
-        &self,
-        before_limit: usize,
-        after_limit: usize,
-    ) -> Result<InputContext, EditorError> {
+    pub fn ime(&self, before_limit: usize, after_limit: usize) -> Result<Ime, EditorError> {
         let state = self.state();
         let doc = &state.doc;
         let doc_size = doc.flat_size();
@@ -93,15 +89,15 @@ impl Editor {
         let window_end = sel_end.saturating_add(after_limit).min(doc_size);
 
         let text = doc.flat_text(window_start..window_end);
-        let composing = state.composition.map(|c| InputContextRange {
+        let composing = state.composition.map(|c| ImeRange {
             start: c.start,
             end: c.end,
         });
 
-        Ok(InputContext {
+        Ok(Ime {
             text,
             window_start,
-            selection: InputContextRange {
+            selection: ImeRange {
                 start: sel_start,
                 end: sel_end,
             },
@@ -136,13 +132,13 @@ impl Editor {
 
         if steps.iter().any(|s| s.is_doc_step()) {
             fields.push(StateField::Doc);
-            fields.push(StateField::InputContext);
+            fields.push(StateField::Ime);
         }
 
         if steps.iter().any(|s| s.is_selection_step()) {
             fields.push(StateField::Cursor);
             fields.push(StateField::Selection);
-            fields.push(StateField::InputContext);
+            fields.push(StateField::Ime);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
@@ -536,7 +532,7 @@ mod tests {
             selection: (t1, 2)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.input_context(usize::MAX, usize::MAX).unwrap();
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap();
         // flat: O(p)=0, "hello"=1..6, C(p)=6 → flat_size=7
         // (t1,2) → flat 3; window covers full doc [0,7)
         assert_eq!(ctx.text, "\u{2028}hello\u{2029}");
@@ -553,7 +549,7 @@ mod tests {
             selection: (t1, 6)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.input_context(3, 3).unwrap();
+        let ctx = editor.ime(3, 3).unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
         // (t1,6) → flat 7; window [7-3, 7+3) = [4, 10) → "lo wor"
         assert_eq!(ctx.window_start, 4);
@@ -569,7 +565,7 @@ mod tests {
             selection: (t1, 2) -> (t1, 8)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.input_context(usize::MAX, usize::MAX).unwrap();
+        let ctx = editor.ime(usize::MAX, usize::MAX).unwrap();
         // flat: O(p)=0, "hello world"=1..12, C(p)=12 → flat_size=13
         // (t1,2)→flat 3, (t1,8)→flat 9; window covers full doc [0,13)
         assert_eq!(ctx.text, "\u{2028}hello world\u{2029}");
@@ -584,7 +580,7 @@ mod tests {
             selection: (t1, 0)
         };
         let editor = Editor::new_test(state);
-        let ctx = editor.input_context(100, 100).unwrap();
+        let ctx = editor.ime(100, 100).unwrap();
         assert!(
             !ctx.text.is_empty(),
             "IME buffer must not be empty for empty blockquote"

@@ -1282,7 +1282,7 @@ mod tests {
             selection: (t1, 0)
         };
         let editor = Editor::new_test(s);
-        let ctx = editor.input_context(100, 100).unwrap();
+        let ctx = editor.ime(100, 100).unwrap();
         assert!(
             !ctx.text.is_empty(),
             "empty blockquote paragraph should have tokens in buffer"

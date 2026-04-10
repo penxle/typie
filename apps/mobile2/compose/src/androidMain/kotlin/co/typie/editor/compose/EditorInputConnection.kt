@@ -29,18 +29,18 @@ internal class EditorInputConnection(
 
   override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
     if (n < 0) return null
-    val ctx = editor.inputContext(n, 0)
+    val ctx = editor.ime(n, 0)
     return ctx.text.substring(0, ctx.selection.start - ctx.windowStart)
   }
 
   override fun getTextAfterCursor(n: Int, flags: Int): CharSequence? {
     if (n < 0) return null
-    val ctx = editor.inputContext(0, n)
+    val ctx = editor.ime(0, n)
     return ctx.text.substring(ctx.selection.end - ctx.windowStart)
   }
 
   override fun getSelectedText(flags: Int): CharSequence? {
-    val ctx = editor.inputContext(0, 0)
+    val ctx = editor.ime(0, 0)
     val start = ctx.selection.start - ctx.windowStart
     val end = ctx.selection.end - ctx.windowStart
     val text = ctx.text.substring(start, end)
@@ -54,7 +54,7 @@ internal class EditorInputConnection(
     flags: Int,
   ): SurroundingText? {
     if (beforeLength < 0 || afterLength < 0) return null
-    val ctx = editor.inputContext(beforeLength, afterLength)
+    val ctx = editor.ime(beforeLength, afterLength)
     val selStart = ctx.selection.start - ctx.windowStart
     val selEnd = ctx.selection.end - ctx.windowStart
     return SurroundingText(ctx.text, selStart, selEnd, ctx.windowStart)

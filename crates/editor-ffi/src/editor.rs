@@ -92,17 +92,12 @@ impl Editor {
         })
     }
 
-    pub fn input_context(
+    pub fn ime(
         &self,
         before_limit: usize,
         after_limit: usize,
-    ) -> EditorResult<Complex<editor_core::InputContext>> {
-        self.with_inner(|inner| {
-            Ok(inner
-                .editor
-                .input_context(before_limit, after_limit)?
-                .into_ffi()?)
-        })
+    ) -> EditorResult<Complex<editor_core::Ime>> {
+        self.with_inner(|inner| Ok(inner.editor.ime(before_limit, after_limit)?.into_ffi()?))
     }
 }
 
