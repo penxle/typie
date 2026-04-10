@@ -20,11 +20,11 @@
   };
 
   const toggleModifier = (modifier_type: ModifierType) => {
-    enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type } });
+    enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type } });
   };
 
   const setModifier = (modifier: Modifier) => {
-    enqueue({ type: 'formatting', op: { type: 'set_modifier', modifier } });
+    enqueue({ type: 'modifier', op: { type: 'set', modifier } });
   };
 
   const selectStyle = css.raw({
@@ -112,9 +112,5 @@
 
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
-  <ToolbarButton
-    icon={RemoveFormattingIcon}
-    label="서식 지우기"
-    onclick={() => enqueue({ type: 'formatting', op: { type: 'clear_modifiers' } })}
-  />
+  <ToolbarButton icon={RemoveFormattingIcon} label="서식 지우기" onclick={() => enqueue({ type: 'modifier', op: { type: 'clear_all' } })} />
 </div>

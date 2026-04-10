@@ -89,10 +89,10 @@ pub enum DeletionOp {
 #[ffi]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum FormattingOp {
-    ToggleModifier { modifier_type: ModifierType },
-    SetModifier { modifier: Modifier },
-    ClearModifiers,
+pub enum ModifierOp {
+    Toggle { modifier_type: ModifierType },
+    Set { modifier: Modifier },
+    ClearAll,
 }
 
 #[ffi]
@@ -136,7 +136,6 @@ pub enum TableOp {
 pub enum NodeOp {
     Delete { id: NodeId },
     SetAttrs { id: NodeId, attrs: Node },
-    ToggleFold { id: NodeId },
     Table { id: NodeId, op: TableOp },
 }
 
@@ -239,8 +238,8 @@ pub enum Message {
     Pointer { event: PointerEvent },
     Insertion { op: InsertionOp },
     Deletion { op: DeletionOp },
-    Formatting { op: FormattingOp },
     Selection { op: SelectionOp },
+    Modifier { op: ModifierOp },
     Node { op: NodeOp },
     Clipboard { op: ClipboardOp },
     Composition { op: CompositionOp },

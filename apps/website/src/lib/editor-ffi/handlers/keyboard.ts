@@ -72,22 +72,22 @@ const bindings: KeyBinding[] = [
   {
     key: 'b',
     modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'bold' } }),
+    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'bold' } }),
   },
   {
     key: 'i',
     modifiers: ['mod'],
-    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'italic' } }),
+    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'italic' } }),
   },
   {
     key: 's',
     modifiers: ['mod', 'shift'],
-    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'strikethrough' } }),
+    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'strikethrough' } }),
   },
   {
     key: 'u',
     modifiers: ['mod', 'shift'],
-    action: (ed) => ed.enqueue({ type: 'formatting', op: { type: 'toggle_modifier', modifier_type: 'underline' } }),
+    action: (ed) => ed.enqueue({ type: 'modifier', op: { type: 'toggle', modifier_type: 'underline' } }),
   },
 
   { key: 'q', modifiers: ['ctrl'], predicate: () => isMac, action: (ed) => ed.inspect('state') },

@@ -201,7 +201,7 @@ impl Editor {
             Message::Pointer { event } => handle::handle_pointer_event(self, event)?,
             Message::Insertion { op } => handle::handle_insertion_op(self, op)?,
             Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
-            Message::Formatting { op } => handle::handle_formatting_op(self, op)?,
+            Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,

@@ -1,5 +1,5 @@
 use editor_common::StrExt;
-use editor_model::{Modifier, Node, NodeRef};
+use editor_model::{Modifier, ModifierType, Node, NodeRef};
 use editor_schema::{Expand, ModifierSpecExt};
 use editor_state::{PendingModifier, PendingModifiers};
 
@@ -72,9 +72,18 @@ pub(crate) fn resolve_inherited_modifiers(node: &NodeRef) -> Vec<Modifier> {
     found
 }
 
+pub(crate) fn check_range_all_has_modifier(nodes: &[NodeRef], modifier_type: ModifierType) -> bool {
+    nodes.iter().all(|node| {
+        node.modifiers()
+            .iter()
+            .any(|m| m.as_type() == modifier_type)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use editor_macros::state;
+    use editor_model::ModifierType;
 
     use super::*;
 
@@ -218,5 +227,43 @@ mod tests {
                 .iter()
                 .any(|m| matches!(m, Modifier::FontWeight { value: 700 }))
         );
+    }
+
+    #[test]
+    fn check_range_all_has_italic() {
+        let (state, t1, t2) = state! {
+            doc { root { paragraph {
+                t1: text("Hello") [italic]
+                t2: text("World") [italic]
+            } } }
+            selection: (t1, 0)
+        };
+        let nodes: Vec<_> = [t1, t2]
+            .iter()
+            .filter_map(|id| state.doc.node(*id))
+            .collect();
+        assert!(check_range_all_has_modifier(&nodes, ModifierType::Italic));
+    }
+
+    #[test]
+    fn check_range_not_all_has_italic() {
+        let (state, t1, t2) = state! {
+            doc { root { paragraph {
+                t1: text("Hello") [italic]
+                t2: text("World")
+            } } }
+            selection: (t1, 0)
+        };
+        let nodes: Vec<_> = [t1, t2]
+            .iter()
+            .filter_map(|id| state.doc.node(*id))
+            .collect();
+        assert!(!check_range_all_has_modifier(&nodes, ModifierType::Italic));
+    }
+
+    #[test]
+    fn check_range_empty_is_true() {
+        let nodes: Vec<NodeRef> = vec![];
+        assert!(check_range_all_has_modifier(&nodes, ModifierType::Italic));
     }
 }
