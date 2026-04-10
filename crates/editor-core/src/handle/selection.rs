@@ -1,4 +1,6 @@
 use editor_commands::{self as commands};
+use editor_schema::ResolvedPositionFlatExt;
+use editor_state::{Position, ResolvedPosition, Selection};
 use editor_transaction::HistoryMeta;
 
 use crate::editor::Editor;
@@ -15,6 +17,21 @@ pub fn handle_selection_op(editor: &mut Editor, op: SelectionOp) -> Result<(), E
             }
             SelectionOp::All => {
                 commands::select_all(tr)?;
+            }
+            SelectionOp::SetFlat { start, end } => {
+                let doc = tr.doc();
+                let start_pos = match ResolvedPosition::from_flat(&doc, start) {
+                    Some(p) => p,
+                    None => return Ok(()),
+                };
+                let end_pos = match ResolvedPosition::from_flat(&doc, end) {
+                    Some(p) => p,
+                    None => return Ok(()),
+                };
+                commands::set_selection(
+                    tr,
+                    Selection::new(Position::from(&start_pos), Position::from(&end_pos)),
+                )?;
             }
         }
         Ok(())

@@ -82,6 +82,8 @@ pub enum InsertionOp {
 pub enum DeletionOp {
     Selection,
     Move { movement: Movement },
+    Surrounding { before: usize, after: usize },
+    SurroundingCodePoints { before: usize, after: usize },
 }
 
 #[ffi]
@@ -99,6 +101,7 @@ pub enum FormattingOp {
 pub enum SelectionOp {
     All,
     Set { selection: Selection },
+    SetFlat { start: usize, end: usize },
 }
 
 #[ffi]

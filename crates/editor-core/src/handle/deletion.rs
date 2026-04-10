@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use editor_commands::{self as commands};
-use editor_state::Selection;
+use editor_commands::{self as commands, CommandError, CommandResult};
+use editor_schema::{DocFlatExt, ResolvedPositionFlatExt};
+use editor_state::{ResolvedPosition, Selection};
+use editor_transaction::Transaction;
 
 use crate::editor::Editor;
 use crate::error::EditorError;
@@ -41,6 +43,19 @@ pub fn handle_deletion_op(editor: &mut Editor, op: DeletionOp) -> Result<(), Edi
                 Ok(())
             })?;
         }
+        DeletionOp::Surrounding { before, after } => {
+            editor.transact(|tr| {
+                let (before_chars, after_chars) = utf16_to_char_counts(tr, before, after)?;
+                delete_surrounding(tr, before_chars, after_chars)?;
+                Ok(())
+            })?;
+        }
+        DeletionOp::SurroundingCodePoints { before, after } => {
+            editor.transact(|tr| {
+                delete_surrounding(tr, before, after)?;
+                Ok(())
+            })?;
+        }
         DeletionOp::Move { movement } => {
             let head = editor.state().selection.head;
             let resource_guard = editor.resource.lock().unwrap();
@@ -60,6 +75,116 @@ pub fn handle_deletion_op(editor: &mut Editor, op: DeletionOp) -> Result<(), Edi
         }
     }
     Ok(())
+}
+
+fn replace_text_range(tr: &mut Transaction, start: usize, end: usize, text: &str) -> CommandResult {
+    let doc = tr.doc();
+    let start_pos = ResolvedPosition::from_flat(&doc, start)
+        .ok_or(CommandError::Corrupted("flat start unresolvable".into()))?;
+    let end_pos = ResolvedPosition::from_flat(&doc, end)
+        .ok_or(CommandError::Corrupted("flat end unresolvable".into()))?;
+
+    commands::chain!(
+        tr,
+        commands::set_selection(Selection::new((&start_pos).into(), (&end_pos).into())),
+        commands::when!(start != end, commands::delete_selection()),
+        commands::when!(!text.is_empty(), commands::insert_text(text)),
+    )
+}
+
+fn delete_surrounding(tr: &mut Transaction, before: usize, after: usize) -> CommandResult {
+    let doc = tr.doc();
+    let cursor_flat = tr
+        .selection()
+        .head
+        .resolve(&doc)
+        .ok_or(CommandError::Corrupted("cursor unresolvable".into()))?
+        .to_flat();
+
+    let (before_anchor, after_anchor) = match tr.composition() {
+        Some(comp) => (comp.start.min(cursor_flat), comp.end.max(cursor_flat)),
+        None => (cursor_flat, cursor_flat),
+    };
+
+    let doc_size = doc.flat_size();
+    let del_start = before_anchor.saturating_sub(before);
+    let del_end_after = after_anchor.saturating_add(after).min(doc_size);
+
+    let before_count = before_anchor - del_start;
+    let any_delete = del_end_after > after_anchor || before_anchor > del_start;
+
+    if del_end_after > after_anchor {
+        replace_text_range(tr, after_anchor, del_end_after, "")?;
+    }
+    if before_anchor > del_start {
+        replace_text_range(tr, del_start, before_anchor, "")?;
+    }
+
+    // replace_text_range leaves cursor at del_start, which is correct when there is no
+    // composition (before_anchor == cursor_flat). With composition the cursor must shift
+    // left by before_count to preserve its logical position relative to the surrounding text.
+    if any_delete {
+        let new_cursor_flat = cursor_flat - before_count;
+        let doc_after = tr.doc();
+        let resolved = ResolvedPosition::from_flat(&doc_after, new_cursor_flat)
+            .ok_or(CommandError::Corrupted("cursor restore failed".into()))?;
+        commands::set_selection(tr, Selection::collapsed((&resolved).into()))?;
+    }
+
+    Ok(true)
+}
+
+fn utf16_to_char_counts(
+    tr: &Transaction,
+    before_u16: usize,
+    after_u16: usize,
+) -> Result<(usize, usize), CommandError> {
+    let doc = tr.doc();
+    let cursor_flat = tr
+        .selection()
+        .head
+        .resolve(&doc)
+        .ok_or(CommandError::Corrupted("cursor unresolvable".into()))?
+        .to_flat();
+    let doc_size = doc.flat_size();
+
+    let before_window_start = cursor_flat.saturating_sub(before_u16);
+    let after_window_end = cursor_flat.saturating_add(after_u16).min(doc_size);
+    let text_before = doc.flat_text(before_window_start..cursor_flat);
+    let text_after = doc.flat_text(cursor_flat..after_window_end);
+
+    Ok((
+        utf16_count_backward_as_chars(&text_before, before_u16),
+        utf16_count_forward_as_chars(&text_after, after_u16),
+    ))
+}
+
+fn utf16_count_backward_as_chars(text: &str, target: usize) -> usize {
+    let mut chars = 0;
+    let mut units = 0;
+    for c in text.chars().rev() {
+        let c_units = c.len_utf16();
+        if units + c_units > target {
+            break;
+        }
+        units += c_units;
+        chars += 1;
+    }
+    chars
+}
+
+fn utf16_count_forward_as_chars(text: &str, target: usize) -> usize {
+    let mut chars = 0;
+    let mut units = 0;
+    for c in text.chars() {
+        let c_units = c.len_utf16();
+        if units + c_units > target {
+            break;
+        }
+        units += c_units;
+        chars += 1;
+    }
+    chars
 }
 
 #[cfg(test)]
