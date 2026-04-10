@@ -46,7 +46,7 @@ import UIKit
   }
 }
 
-@MainActor @objcMembers public final class SubscriptionPurchaseBridge: NSObject, @preconcurrency SKProductsRequestDelegate, @preconcurrency SKPaymentTransactionObserver {
+@MainActor @objcMembers public final class SubscriptionPurchaseBridge: NSObject, SKProductsRequestDelegate, SKPaymentTransactionObserver {
   private var productsRequest: SKProductsRequest?
   private var productsCompletion: (([PurchaseProductPayload]?, NSError?) -> Void)?
   private var productsById: [String: SKProduct] = [:]
@@ -125,7 +125,7 @@ import UIKit
   }
 
   public func openSubscriptionManagement(
-    completion: @escaping (Bool) -> Void
+    completion: @escaping @Sendable (Bool) -> Void
   ) {
     guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else {
       completion(false)

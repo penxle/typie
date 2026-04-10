@@ -1,0 +1,57 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typie"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "타이피"
+          }
+        }
+      }
+    },
+    "Privacy - Photo Library Additions Usage Description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow access to save photos to your photo library."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사진을 사진 보관함에 저장하려면 접근이 필요합니다."
+          }
+        }
+      }
+    },
+    "Privacy - Photo Library Usage Description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow access to your photo library to use photos in your documents, profile, and spaces."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서, 프로필, 스페이스에서 사진을 사용하려면 사진 보관함 접근이 필요합니다."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.2"
+}
