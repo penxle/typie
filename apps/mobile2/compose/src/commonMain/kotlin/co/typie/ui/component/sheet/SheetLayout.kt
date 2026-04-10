@@ -27,8 +27,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -50,6 +52,12 @@ import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
+
+internal val LocalSheetDragRegionModifier = staticCompositionLocalOf<Modifier> { Modifier }
+
+fun Modifier.sheetDragRegion(): Modifier = composed {
+  this.then(LocalSheetDragRegionModifier.current)
+}
 
 @Composable
 fun SheetLayout(
@@ -82,6 +90,7 @@ fun SheetLayout(
     if (header != null) {
       Column(
         modifier = Modifier
+          .sheetDragRegion()
           .fillMaxWidth()
           .padding(padding.header),
         verticalArrangement = Arrangement.spacedBy(8.dp),

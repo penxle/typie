@@ -344,6 +344,12 @@ private fun <R> SheetOverlayHost(
       if (!entry.isTopOfStack || isResolving) return@rememberDraggableState
       sheetHeightPx = (sheetHeightPx - delta).coerceIn(0f, maxDetentHeightPx.coerceAtLeast(sheetHeightPx))
     }
+    val dragRegionModifier = Modifier.draggable(
+      state = draggableState,
+      orientation = Orientation.Vertical,
+      enabled = entry.isTopOfStack && !isResolving,
+      onDragStopped = { velocity -> settleOrDismiss(velocity) },
+    )
 
     PlatformBackHandler(
       enabled = !isResolving && entry.isTopOfStack && entry.spec.dismissPolicy.back && entry.mode == SheetMode.Modal,
@@ -436,12 +442,6 @@ private fun <R> SheetOverlayHost(
               offset = Offset(0f, -4f)
               radius = 12f
             }
-            .draggable(
-              state = draggableState,
-              orientation = Orientation.Vertical,
-              enabled = entry.isTopOfStack && !isResolving,
-              onDragStopped = { velocity -> settleOrDismiss(velocity) },
-            )
             .clip(
               RoundedCornerShape(
                 topStart = entry.spec.chrome.topCornerRadius,
@@ -453,14 +453,20 @@ private fun <R> SheetOverlayHost(
           when (val handle = entry.spec.chrome.handle) {
             SheetHandleStyle.Hidden -> Unit
             is SheetHandleStyle.Visible -> {
-              Spacer(modifier = Modifier.height(handle.topPadding))
               Box(
                 modifier = Modifier
-                  .size(width = handle.width, height = handle.height)
-                  .clip(RoundedCornerShape(handle.height / 2))
-                  .background(currentColors.borderSubtle),
-              )
-              Spacer(modifier = Modifier.height(handle.bottomPadding))
+                  .then(dragRegionModifier)
+                  .fillMaxWidth()
+                  .height(handle.topPadding + handle.height + handle.bottomPadding),
+                contentAlignment = Alignment.Center,
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(width = handle.width, height = handle.height)
+                    .clip(RoundedCornerShape(handle.height / 2))
+                    .background(currentColors.borderSubtle),
+                )
+              }
             }
           }
 
@@ -470,7 +476,10 @@ private fun <R> SheetOverlayHost(
               .weight(1f, fill = false)
               .nestedScroll(nestedScrollConnection),
           ) {
-            CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
+            CompositionLocalProvider(
+              LocalViewModelStoreOwner provides viewModelStoreOwner,
+              LocalSheetDragRegionModifier provides dragRegionModifier,
+            ) {
               Column(
                 modifier = Modifier
                   .fillMaxWidth()

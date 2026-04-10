@@ -140,6 +140,31 @@ class SheetDetentResolverTest {
   }
 
   @Test
+  fun fromCurrentDetentSkipsIntermediateCollapseDetentsDuringDragDismiss() {
+    val detents = listOf(
+      ResolvedSheetDetent(SheetDetentId.Fixed(360.dp), 360.dp),
+      ResolvedSheetDetent(SheetDetentId.TopGap(128.dp), 672.dp),
+    )
+
+    val settled = resolveSheetSettledDetent(
+      policy = SheetSizePolicy.Detents(
+        initial = SheetDetent.Fixed(360.dp),
+        available = listOf(
+          SheetDetent.Fixed(360.dp),
+          SheetDetent.TopGap(128.dp),
+        ),
+        dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
+      ),
+      detents = detents,
+      currentDetentId = SheetDetentId.TopGap(128.dp),
+      sheetHeight = 500.dp,
+      velocity = 0f,
+    )
+
+    assertEquals(SheetDetentId.TopGap(128.dp), settled?.id)
+  }
+
+  @Test
   fun dragDismissDefaultsToMinDetentAnchor() {
     val detents = listOf(
       ResolvedSheetDetent(SheetDetentId.Fixed(360.dp), 360.dp),

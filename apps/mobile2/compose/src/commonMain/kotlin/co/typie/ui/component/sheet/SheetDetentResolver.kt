@@ -58,6 +58,7 @@ internal fun resolveSheetSettledDetent(
     abs((detent.height - sheetHeight).value)
   } ?: return null
   val current = detents.firstOrNull { it.id == currentDetentId } ?: return nearest
+  val minDetent = detents.minByOrNull { it.height.value } ?: current
   val largerDetents = detents.filter { it.height > current.height }
   val smallerDetents = detents.filter { it.height < current.height }
 
@@ -79,6 +80,7 @@ internal fun resolveSheetSettledDetent(
 
   if (
     policy.allowsDragCollapse() &&
+    !policy.skipsDragCollapseToSmallerDetents(currentDetent = current, minDetent = minDetent) &&
     smallerDetents.isNotEmpty() &&
     (
       velocity >= SheetDefaults.DetentSnapVelocityThreshold ||
@@ -95,6 +97,14 @@ internal fun resolveSheetSettledDetent(
 
   return current
 }
+
+private fun SheetSizePolicy.skipsDragCollapseToSmallerDetents(
+  currentDetent: ResolvedSheetDetent,
+  minDetent: ResolvedSheetDetent,
+): Boolean =
+  this is SheetSizePolicy.Detents &&
+    dragDismissBehavior == SheetDragDismissBehavior.FromCurrentDetent &&
+    currentDetent.id != minDetent.id
 
 internal fun shouldDismissDraggedSheet(
   policy: SheetSizePolicy,

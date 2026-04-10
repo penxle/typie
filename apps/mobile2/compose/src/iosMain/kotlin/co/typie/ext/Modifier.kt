@@ -1,7 +1,6 @@
 package co.typie.ext
 
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -18,14 +17,8 @@ actual fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean): Modi
   foundationHorizontalScroll(state, enabled = enabled && !isLocked)
 }
 
-actual fun Modifier.desktopScrollBehavior(
-  state: ScrollableState,
-  orientation: Orientation,
-  enabled: Boolean,
-): Modifier = this
-
 internal actual fun Modifier.desktopDragScroll(
   state: ScrollableState,
-  orientation: Orientation,
+  orientation: androidx.compose.foundation.gestures.Orientation,
   enabled: Boolean,
 ): Modifier = this

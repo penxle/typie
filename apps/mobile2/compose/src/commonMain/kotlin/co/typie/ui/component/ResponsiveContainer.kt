@@ -113,7 +113,7 @@ private fun ResponsiveContainerGutter(
       .width(width)
       .fillMaxHeight()
       .desktopDragScroll(
-        state = primaryScrollableState,
+        state = gutterScrollableState,
         orientation = Orientation.Vertical,
         enabled = !isLocked,
       )
