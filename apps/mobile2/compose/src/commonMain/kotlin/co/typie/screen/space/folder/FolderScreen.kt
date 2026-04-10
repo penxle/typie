@@ -72,6 +72,7 @@ import co.typie.ui.component.entity_container.calculateEntityReorderOrdersFromOr
 import co.typie.ui.component.entity_container.displayOrderedEntityItems
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableListContainer
+import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -90,6 +91,7 @@ fun FolderScreen(entityId: String) {
   val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
   val presenterScope = rememberCoroutineScope()
   val toast = LocalToast.current
   val clipboard = koinInject<EntityClipboardService>()
@@ -223,18 +225,15 @@ fun FolderScreen(entityId: String) {
           closePopover()
           return
         }
-        showBottomSheetFromPopoverAction(
-          closePopover = closePopover,
-          presenterScope = presenterScope,
-          bottomSheetHost = bottomSheetHost,
-        ) {
-          FolderIconPickerSheet(
+        closePopover()
+        sheetHost.show(
+          folderIconPickerSheet(
             model = model,
             entityId = resolvedEntity.id,
             initialIcon = resolvedEntity.icon,
             initialColor = resolvedEntity.iconColor,
-          )
-        }
+          ),
+        )
       }
 
       FolderAction.Share -> {
@@ -505,14 +504,14 @@ fun FolderScreen(entityId: String) {
                     }
 
                     FolderAction.ChangeIcon -> {
-                      bottomSheetHost.show {
-                        FolderIconPickerSheet(
+                      sheetHost.await(
+                        folderIconPickerSheet(
                           model = model,
                           entityId = item.id,
                           initialIcon = item.iconName,
                           initialColor = item.iconColor,
-                        )
-                      }
+                        ),
+                      )
                     }
 
                     FolderAction.OpenExternal -> uriHandler.openUri(item.url)

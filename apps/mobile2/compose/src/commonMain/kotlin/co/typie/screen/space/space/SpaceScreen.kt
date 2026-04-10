@@ -44,10 +44,10 @@ import co.typie.overlay.EntityMoveSheet
 import co.typie.screen.space.folder.FolderItemActionsSheet
 import co.typie.screen.space.folder.FolderAction
 import co.typie.screen.space.folder.FolderDeleteRequest
-import co.typie.screen.space.folder.FolderIconPickerSheet
 import co.typie.screen.space.folder.FolderRenameSheet
 import co.typie.screen.space.folder.FolderShareSheet
 import co.typie.screen.space.folder.FolderViewModel
+import co.typie.screen.space.folder.folderIconPickerSheet
 import co.typie.screen.space.folder.toTransferSource
 import co.typie.graphql.RefetchOnAppResumeEffect
 import co.typie.graphql.RefetchOnScreenEnterEffect
@@ -57,7 +57,6 @@ import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
-import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
@@ -80,6 +79,7 @@ import co.typie.ui.component.entity_container.calculateEntityReorderOrdersFromOr
 import co.typie.ui.component.entity_container.displayOrderedEntityItems
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableListContainer
+import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -103,6 +103,7 @@ fun SpaceScreen() {
   val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
   val toast = LocalToast.current
   val clipboard = koinInject<EntityClipboardService>()
   val model = koinViewModel<SpaceViewModel>()
@@ -323,15 +324,15 @@ fun SpaceScreen() {
                     }
 
                     FolderAction.ChangeIcon -> {
-                      bottomSheetHost.show {
-                        FolderIconPickerSheet(
+                      sheetHost.await(
+                        folderIconPickerSheet(
                           model = folderActionModel,
                           entityId = item.id,
                           initialIcon = item.iconName,
                           initialColor = item.iconColor,
                           onUpdated = model::refetch,
-                        )
-                      }
+                        ),
+                      )
                     }
 
                     FolderAction.OpenExternal -> uriHandler.openUri(item.url)

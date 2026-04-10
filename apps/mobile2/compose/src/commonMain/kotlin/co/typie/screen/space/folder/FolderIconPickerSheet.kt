@@ -6,15 +6,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,9 +33,10 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
+import co.typie.ext.verticalScroll
 import co.typie.form.FormState
 import co.typie.icons.Lucide
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
@@ -43,25 +45,76 @@ import co.typie.ui.EntityIconOption
 import co.typie.ui.entityIconColors
 import co.typie.ui.entityIcons
 import co.typie.ui.resolveEntityIconTint
-import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.HeaderTextAction
+import co.typie.ui.component.sheet.SheetChrome
+import co.typie.ui.component.sheet.SheetDetent
+import co.typie.ui.component.sheet.SheetDragDismissBehavior
+import co.typie.ui.component.sheet.SheetHapticPolicy
+import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetMode
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetOverlaySpec
+import co.typie.ui.component.sheet.SheetPadding
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.SheetSizePolicy
+import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import co.typie.overlay.LocalToast
 
 private const val DEFAULT_ENTITY_ICON_NAME = "folder"
 private const val DEFAULT_ENTITY_ICON_COLOR = "gray"
 private val FolderIconPickerCellSpacing = 2.dp
 private val FolderIconPickerGridIconSize = 18.dp
-private val FolderIconPickerGridMaxHeight = 240.dp
+private val FolderIconPickerCollapsedHeight = 360.dp
+private val FolderIconPickerExpandedTopGap = 128.dp
 private val FolderIconPickerSelectionDotSize = 4.dp
 private val FolderIconPickerSelectionDotBottomInset = 4.dp
 private val FolderIconPickerGridBottomInset = 12.dp
 private val FolderIconPickerTopFadeHeight = 16.dp
+private val FolderIconPickerCollapsedDetent = SheetDetent.Fixed(FolderIconPickerCollapsedHeight)
+private val FolderIconPickerExpandedDetent = SheetDetent.TopGap(FolderIconPickerExpandedTopGap)
+
+internal fun folderIconPickerSheetSpec(): SheetOverlaySpec {
+  return SheetOverlaySpec(
+    mode = SheetMode.Modal,
+    sizePolicy = SheetSizePolicy.Detents(
+      initial = FolderIconPickerCollapsedDetent,
+      available = listOf(
+        FolderIconPickerCollapsedDetent,
+        FolderIconPickerExpandedDetent,
+      ),
+      dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
+    ),
+    chrome = SheetChrome.Default,
+    haptics = SheetHapticPolicy(
+      onPresent = true,
+      onDetentSnap = true,
+    ),
+  )
+}
+
+internal fun folderIconPickerSheet(
+  model: FolderViewModel,
+  entityId: String,
+  initialIcon: String?,
+  initialColor: String?,
+  onUpdated: () -> Unit = {},
+): SheetPresentation<Unit> = sheetPresentation(
+  spec = folderIconPickerSheetSpec(),
+) {
+  FolderIconPickerSheetContent(
+    model = model,
+    entityId = entityId,
+    initialIcon = initialIcon,
+    initialColor = initialColor,
+    onUpdated = onUpdated,
+  )
+}
 
 private class FolderIconPickerForm(
   scope: CoroutineScope,
@@ -77,7 +130,7 @@ private class FolderIconPickerForm(
 }
 
 @Composable
-fun BottomSheetScope<Unit>.FolderIconPickerSheet(
+private fun SheetScope<Unit>.FolderIconPickerSheetContent(
   model: FolderViewModel,
   entityId: String,
   initialIcon: String?,
@@ -126,20 +179,31 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
     resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
   val iconGridScrollState = rememberScrollState()
 
-  BottomSheetScaffold(
-    title = "아이콘 변경",
-    applyContentImeOrNavigationBarsPadding = false,
-    leadingAction = {
-      BottomSheetHeaderTextAction(
-        text = "완료",
-        color = AppTheme.colors.brand,
-        textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
-        enabled = !isUpdating,
-        onClick = { dismiss() },
+  SheetLayout(
+    fillHeight = true,
+    bodyScroll = false,
+    bodyInsetPolicy = SheetInsetPolicy.None,
+    padding = SheetPadding(
+      header = PaddingValues(horizontal = 16.dp),
+      body = PaddingValues(horizontal = 16.dp),
+    ),
+    header = {
+      ActionHeader(
+        title = "아이콘 변경",
+        leading = {
+          HeaderTextAction(
+            text = "완료",
+            color = AppTheme.colors.brand,
+            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
+            enabled = !isUpdating,
+            onClick = { dismiss() },
+          )
+        },
       )
     },
   ) {
     Column(
+      modifier = Modifier.fillMaxSize(),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       IconColorRow(
@@ -149,11 +213,14 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
         onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
       )
 
-      Box(modifier = Modifier.fillMaxWidth()) {
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .weight(1f),
+      ) {
         BoxWithConstraints(
           modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = FolderIconPickerGridMaxHeight)
+            .fillMaxSize()
             .verticalScroll(iconGridScrollState),
         ) {
           val cellSize = ((maxWidth - FolderIconPickerCellSpacing * 6) / 7).let { size ->
@@ -189,7 +256,7 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
             modifier = Modifier
               .align(Alignment.TopCenter)
               .fillMaxWidth()
-              .heightIn(min = FolderIconPickerTopFadeHeight, max = FolderIconPickerTopFadeHeight)
+              .height(FolderIconPickerTopFadeHeight)
               .background(
                 Brush.verticalGradient(
                   colors = listOf(

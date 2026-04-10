@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
@@ -38,6 +39,10 @@ import co.typie.startup.AppStartupService
 import co.typie.ui.component.bottomsheet.BottomSheetHost
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetHostState
+import co.typie.ui.component.sheet.SheetOverlayHosts
+import co.typie.ui.component.sheet.SheetOverlayPresenterState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
@@ -69,11 +74,15 @@ fun RootShell() {
   val toast = remember { Toast() }
   val loader = remember { Loader() }
   val bottomSheetHost = remember { BottomSheetHostState() }
+  val sheetOverlayPresenter = remember { SheetOverlayPresenterState() }
+  val sheetHostScope = rememberCoroutineScope()
+  val sheetHost = remember(sheetOverlayPresenter, sheetHostScope) { SheetHostState(sheetOverlayPresenter, sheetHostScope) }
 
   val focusManager = LocalFocusManager.current
 
   CompositionLocalProvider(
     LocalBottomSheetHost provides bottomSheetHost,
+    LocalSheetHost provides sheetHost,
     LocalToast provides toast,
     LocalLoader provides loader,
   ) {
@@ -118,6 +127,7 @@ fun RootShell() {
       }
 
       BottomSheetHost(bottomSheetHost)
+      SheetOverlayHosts(sheetOverlayPresenter)
       LoaderOverlay()
       ToastOverlay()
     }
