@@ -10,7 +10,7 @@ import kotlin.coroutines.resumeWithException
 
 actual class NaverSingleSignOnProvider : SingleSignOnAdapter {
 
-  override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
+  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
     val context = ctx as Activity
 
     NidOAuth.logout(object : NidOAuthCallback {

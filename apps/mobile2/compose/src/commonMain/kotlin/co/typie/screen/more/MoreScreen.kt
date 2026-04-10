@@ -47,6 +47,9 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
+import co.typie.shell.MainBottomBarActionButton
+import co.typie.shell.MainBottomBarPill
+import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -76,6 +79,11 @@ fun MoreScreen() {
     center = { Text("더 보기", style = AppTheme.typography.title) },
     trailing = { TopBarButton(Lucide.Settings, onClick = { nav.navigate(Route.Settings) }) },
     scrollOffset = scrollState.topBarScrollOffset(),
+  )
+
+  ProvideBottomBar(
+    pill = { MainBottomBarPill() },
+    action = { MainBottomBarActionButton() },
   )
 
   if (subscriptionService.hasQueryError(model.query.state)) {

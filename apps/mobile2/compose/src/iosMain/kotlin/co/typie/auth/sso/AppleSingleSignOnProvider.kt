@@ -9,7 +9,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 actual class AppleSingleSignOnProvider : SingleSignOnAdapter {
-  override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
+  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
     val code = suspendCancellableCoroutine { continuation ->
       AppleSingleSignOnBridge().authenticateWithCompletion { code, error ->
         if (error != null) {

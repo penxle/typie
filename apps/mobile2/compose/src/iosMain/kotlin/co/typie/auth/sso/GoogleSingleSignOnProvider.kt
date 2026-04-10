@@ -9,7 +9,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 actual class GoogleSingleSignOnProvider : SingleSignOnAdapter {
-  override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
+  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
     val code = suspendCancellableCoroutine { continuation ->
       GoogleSingleSignOnBridge().authenticateWithCompletion { code, error ->
         if (error != null) {

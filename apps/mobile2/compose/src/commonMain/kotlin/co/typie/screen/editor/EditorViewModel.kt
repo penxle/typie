@@ -38,7 +38,7 @@ class EditorViewModel : ViewModel() {
         children = listOf("1", "3", "5"),
       ),
       "1" to NodeEntry(
-        node = Node.Paragraph(),
+        node = Node.Paragraph,
         parent = "10",
         children = listOf("2"),
       ),
@@ -47,7 +47,7 @@ class EditorViewModel : ViewModel() {
         parent = "1",
       ),
       "3" to NodeEntry(
-        node = Node.Paragraph(),
+        node = Node.Paragraph,
         parent = "10",
         children = listOf("4"),
       ),
@@ -56,7 +56,7 @@ class EditorViewModel : ViewModel() {
         parent = "3",
       ),
       "5" to NodeEntry(
-        node = Node.Paragraph(),
+        node = Node.Paragraph,
         parent = "10",
         children = listOf("6"),
       ),
@@ -65,7 +65,7 @@ class EditorViewModel : ViewModel() {
         parent = "5",
       ),
       "7" to NodeEntry(
-        node = Node.Paragraph(),
+        node = Node.Paragraph,
         parent = "0",
       ),
     ),

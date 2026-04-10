@@ -9,7 +9,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 actual class KakaoSingleSignOnProvider : SingleSignOnAdapter {
-  override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
+  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
     val accessToken = suspendCancellableCoroutine { continuation ->
       KakaoSingleSignOnBridge().authenticateWithCompletion { accessToken, error ->
         if (error != null) {

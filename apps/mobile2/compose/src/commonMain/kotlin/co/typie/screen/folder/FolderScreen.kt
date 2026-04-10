@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -54,11 +55,13 @@ import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.screen.entity_move.EntityMoveSheet
-import co.typie.shell.LocalBottomBarState
+import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
+import co.typie.shell.MainBottomBarPill
+import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.showBottomSheetFromPopoverAction
 import co.typie.ui.component.entity_container.EntityContainerEditAction
@@ -92,17 +95,12 @@ fun FolderScreen(entityId: String) {
   val clipboard = koinInject<EntityClipboardService>()
   val model = koinViewModel<FolderViewModel>(key = "folder:$entityId")
   val scrollState = rememberScrollState("folder-scroll:$entityId")
-  val bottomBarState = LocalBottomBarState.current
   var isReordering by remember { mutableStateOf(false) }
   var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
   var deleteRequest by remember(entityId) { mutableStateOf<FolderDeleteRequest?>(null) }
   val siteId = model.siteId
-
-  LaunchedEffect(Unit) {
-    bottomBarState.visible = true
-  }
 
   LaunchedEffect(entityId) {
     model.entityId = entityId
@@ -417,6 +415,11 @@ fun FolderScreen(entityId: String) {
         )
       }
     },
+  )
+
+  ProvideBottomBar(
+    pill = { MainBottomBarPill() },
+    action = { SpaceBottomBarActionButton() },
   )
 
   if (model.query.state is QueryState.Error) {

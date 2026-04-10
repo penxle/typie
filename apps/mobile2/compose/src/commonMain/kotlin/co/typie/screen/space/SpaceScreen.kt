@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -59,7 +60,9 @@ import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
-import co.typie.shell.LocalBottomBarState
+import co.typie.shell.SpaceBottomBarActionButton
+import co.typie.shell.MainBottomBarPill
+import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
@@ -104,7 +107,6 @@ fun SpaceScreen() {
   val model = koinViewModel<SpaceViewModel>()
   val folderActionModel = koinViewModel<FolderViewModel>(key = "space-folder-actions")
   val scrollState = rememberScrollState("space")
-  val bottomBarState = LocalBottomBarState.current
   val presenterScope = rememberCoroutineScope()
   var isReordering by remember { mutableStateOf(false) }
   var isPersistingReorder by remember { mutableStateOf(false) }
@@ -112,10 +114,6 @@ fun SpaceScreen() {
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
   var deleteRequest by remember { mutableStateOf<FolderDeleteRequest?>(null) }
   val siteId = model.siteId
-
-  LaunchedEffect(Unit) {
-    bottomBarState.visible = true
-  }
 
   RefetchOnScreenEnterEffect(model::onScreenEntered)
   RefetchOnAppResumeEffect(model::refetch)
@@ -223,6 +221,11 @@ fun SpaceScreen() {
       }
     },
     scrollOffset = scrollState.topBarScrollOffset(),
+  )
+
+  ProvideBottomBar(
+    pill = { MainBottomBarPill() },
+    action = { SpaceBottomBarActionButton() },
   )
 
   if (model.query.state is QueryState.Error) {

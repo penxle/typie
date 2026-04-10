@@ -15,6 +15,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import co.typie.ui.component.bottombar.BottomBar
+import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.topbar.TopBar
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.TopBarState
@@ -27,6 +29,7 @@ import dev.chrisbanes.haze.hazeSource
 fun NavigationScaffold(
   navigator: Navigator,
   topBarState: TopBarState,
+  bottomBarState: BottomBarState? = null,
   modifier: Modifier = Modifier,
   overlay: @Composable BoxScope.() -> Unit = {},
   content: @Composable () -> Unit,
@@ -57,6 +60,10 @@ fun NavigationScaffold(
         TopBar(state = topBarState)
         Spacer(Modifier.height(TopBarDefaults.BlurFadeHeight))
       }
+    }
+
+    if (bottomBarState != null) {
+      BottomBar(state = bottomBarState)
     }
 
     overlay()

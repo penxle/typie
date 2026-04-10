@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ProvidedValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,9 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
 import co.typie.route.transitionStyleTo
+import co.typie.ui.component.bottombar.BottomBarState
+import co.typie.ui.component.bottombar.LocalBottomBarState
+import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.NavDirection
 import co.typie.ui.component.topbar.TopBarState
@@ -47,10 +51,12 @@ private enum class AnimState { Idle, Push, Pop, Dragging }
 fun NavigationStack(
   navigator: Navigator,
   topBarState: TopBarState,
+  bottomBarState: BottomBarState? = null,
   modifier: Modifier = Modifier,
   content: @Composable (Route) -> Unit,
 ) {
   val exitTopBarState = remember { TopBarState() }
+  val exitBottomBarState = remember { bottomBarState?.let { BottomBarState() } }
 
   @Composable
   fun RouteContent(route: Route) {
@@ -63,6 +69,7 @@ fun NavigationStack(
       LocalViewModelStoreOwner provides owner,
       LocalRoute provides route,
     ) {
+      ProvideBottomBar(enabled = false)
       content(route)
     }
   }
@@ -97,6 +104,8 @@ fun NavigationStack(
           animState = AnimState.Idle
           topBarState.clearRoute(poppedRoute)
           exitTopBarState.clearRoute(poppedRoute)
+          bottomBarState?.clearRoute(poppedRoute)
+          exitBottomBarState?.clearRoute(poppedRoute)
           navigator.completeTransition()
         }
       }
@@ -128,6 +137,8 @@ fun NavigationStack(
           visibleRoute = navigator.current
           topBarState.clearRoute(poppedRoute)
           exitTopBarState.clearRoute(poppedRoute)
+          bottomBarState?.clearRoute(poppedRoute)
+          exitBottomBarState?.clearRoute(poppedRoute)
           navigator.completeTransition()
         }
       }
@@ -179,6 +190,15 @@ fun NavigationStack(
           AnimState.Dragging -> if (navigator.popRequested) topBarState else exitTopBarState
           else -> topBarState
         }
+        val behindBottomBar = if (bottomBarState != null && exitBottomBarState != null) {
+          when (animState) {
+            AnimState.Push -> exitBottomBarState
+            AnimState.Dragging -> if (navigator.popRequested) bottomBarState else exitBottomBarState
+            else -> bottomBarState
+          }
+        } else {
+          bottomBarState
+        }
 
         if (useFadeTransition) {
           val behindAlpha = when (animState) {
@@ -189,13 +209,21 @@ fun NavigationStack(
           }
 
           Box(Modifier.fillMaxSize().graphicsLayer { alpha = behindAlpha }) {
-            CompositionLocalProvider(LocalTopBarState provides behindTopBar) {
+            val behindProviders = buildList<ProvidedValue<*>> {
+              add(LocalTopBarState provides behindTopBar)
+              behindBottomBar?.let { add(LocalBottomBarState provides it) }
+            }
+            CompositionLocalProvider(*behindProviders.toTypedArray()) {
               RouteContent(behindRoute!!)
             }
           }
         } else {
           Box(Modifier.fillMaxSize().graphicsLayer { translationX = behindOffset }) {
-            CompositionLocalProvider(LocalTopBarState provides behindTopBar) {
+            val behindProviders = buildList<ProvidedValue<*>> {
+              add(LocalTopBarState provides behindTopBar)
+              behindBottomBar?.let { add(LocalBottomBarState provides it) }
+            }
+            CompositionLocalProvider(*behindProviders.toTypedArray()) {
               RouteContent(behindRoute!!)
             }
           }
@@ -221,6 +249,15 @@ fun NavigationStack(
         AnimState.Pop -> exitTopBarState
         AnimState.Dragging -> if (navigator.popRequested) exitTopBarState else topBarState
         else -> topBarState
+      }
+      val mainBottomBar = if (bottomBarState != null && exitBottomBarState != null) {
+        when (animState) {
+          AnimState.Pop -> exitBottomBarState
+          AnimState.Dragging -> if (navigator.popRequested) exitBottomBarState else bottomBarState
+          else -> bottomBarState
+        }
+      } else {
+        bottomBarState
       }
 
       Box(Modifier.fillMaxSize().graphicsLayer {
@@ -252,7 +289,11 @@ fun NavigationStack(
           }
         }
       }) {
-        CompositionLocalProvider(LocalTopBarState provides mainTopBar) {
+        val mainProviders = buildList<ProvidedValue<*>> {
+          add(LocalTopBarState provides mainTopBar)
+          mainBottomBar?.let { add(LocalBottomBarState provides it) }
+        }
+        CompositionLocalProvider(*mainProviders.toTypedArray()) {
           RouteContent(mainRoute)
         }
       }
@@ -287,6 +328,8 @@ fun NavigationStack(
                       visibleRoute = navigator.current
                       topBarState.clearRoute(poppedRoute)
                       exitTopBarState.clearRoute(poppedRoute)
+                      bottomBarState?.clearRoute(poppedRoute)
+                      exitBottomBarState?.clearRoute(poppedRoute)
                     } else {
                       progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
                     }

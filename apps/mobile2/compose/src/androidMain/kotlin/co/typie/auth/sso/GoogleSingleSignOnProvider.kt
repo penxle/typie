@@ -10,7 +10,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
 actual class GoogleSingleSignOnProvider : SingleSignOnAdapter {
 
-  override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
+  actual override suspend fun authenticate(ctx: Any?): SingleSignOnCredential {
     val context = ctx as Activity
     val option = GetSignInWithGoogleOption.Builder(Konfig.GOOGLE_SERVER_CLIENT_ID).build()
     val request = GetCredentialRequest.Builder().addCredentialOption(option).build()

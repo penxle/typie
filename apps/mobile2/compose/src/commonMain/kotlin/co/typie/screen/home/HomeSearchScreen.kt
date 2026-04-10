@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -23,7 +22,6 @@ import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
 import co.typie.route.Route
-import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
@@ -39,11 +37,6 @@ fun HomeSearchScreen() {
   val nav = Nav.current
   val model = koinViewModel<SearchViewModel>()
   val scrollState = rememberScrollState("home-search")
-  val bottomBarState = LocalBottomBarState.current
-
-  LaunchedEffect(Unit) {
-    bottomBarState.visible = false
-  }
 
   ProvideTopBar(
     leading = { TopBarBackButton(onClick = { nav.pop() }) },

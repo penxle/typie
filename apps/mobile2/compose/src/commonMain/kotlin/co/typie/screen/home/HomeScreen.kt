@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,7 +41,9 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
-import co.typie.shell.LocalBottomBarState
+import co.typie.shell.MainBottomBarActionButton
+import co.typie.shell.MainBottomBarPill
+import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainer
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -64,12 +65,7 @@ fun HomeScreen() {
   val model = koinViewModel<HomeViewModel>()
   val nav = Nav.current
   val scrollState = rememberScrollState()
-  val bottomBarState = LocalBottomBarState.current
   val siteId = model.siteId
-
-  LaunchedEffect(Unit) {
-    bottomBarState.visible = true
-  }
 
   RefetchOnScreenEnterEffect(model::onScreenEntered)
   RefetchOnAppResumeEffect(model::refetch)
@@ -80,6 +76,11 @@ fun HomeScreen() {
     leading = { SpacePopover() },
     center = { Text("홈", style = AppTheme.typography.title) },
     scrollOffset = scrollState.topBarScrollOffset(),
+  )
+
+  ProvideBottomBar(
+    pill = { MainBottomBarPill() },
+    action = { MainBottomBarActionButton() },
   )
 
   if (model.query.state is QueryState.Error) {
