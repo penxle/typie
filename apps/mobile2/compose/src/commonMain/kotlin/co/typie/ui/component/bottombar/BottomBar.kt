@@ -29,6 +29,8 @@ fun BottomBar(
     animationSpec = tween(300, easing = EaseOutCubic),
   )
 
+  if (alpha == 0f) return
+
   Box(
     modifier
       .fillMaxSize()
