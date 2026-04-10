@@ -4,16 +4,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -32,8 +40,6 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
-import co.typie.ext.safeBottomPadding
-import co.typie.ext.verticalScroll
 import co.typie.form.FormState
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
@@ -42,9 +48,6 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.EntityIconColorOption
 import co.typie.ui.EntityIconOption
-import co.typie.ui.entityIconColors
-import co.typie.ui.entityIcons
-import co.typie.ui.resolveEntityIconTint
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.SheetChrome
@@ -54,14 +57,16 @@ import co.typie.ui.component.sheet.SheetHapticPolicy
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetMode
-import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.SheetOverlaySpec
 import co.typie.ui.component.sheet.SheetPadding
+import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetSizePolicy
-import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.entityIconColors
+import co.typie.ui.entityIcons
 import co.typie.ui.icon.Icon
+import co.typie.ui.resolveEntityIconTint
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -177,7 +182,7 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
 
   val currentTint =
     resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
-  val iconGridScrollState = rememberScrollState()
+  val iconGridState = rememberLazyGridState()
 
   SheetLayout(
     fillHeight = true,
@@ -218,40 +223,31 @@ private fun SheetScope<Unit>.FolderIconPickerSheetContent(
           .fillMaxWidth()
           .weight(1f),
       ) {
-        BoxWithConstraints(
-          modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(iconGridScrollState),
-        ) {
-          val cellSize = ((maxWidth - FolderIconPickerCellSpacing * 6) / 7).let { size ->
-            if (size < 32.dp) 32.dp else size
-          }
+        val safeBottom = WindowInsets.safeDrawing
+          .only(WindowInsetsSides.Bottom)
+          .asPaddingValues()
+          .calculateBottomPadding()
 
-          Column(
-            modifier = Modifier.safeBottomPadding(FolderIconPickerGridBottomInset),
-            verticalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
-          ) {
-            entityIcons.chunked(7).forEach { row ->
-              Row(
-                horizontalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
-                modifier = Modifier.fillMaxWidth(),
-              ) {
-                row.forEach { icon ->
-                  IconGridCell(
-                    icon = icon,
-                    tint = currentTint,
-                    selected = form.iconName.value == icon.name,
-                    enabled = !isUpdating,
-                    size = cellSize,
-                    onSelect = { updateSelection(icon.name, form.color.value) },
-                  )
-                }
-              }
-            }
+        LazyVerticalGrid(
+          columns = GridCells.Fixed(7),
+          state = iconGridState,
+          modifier = Modifier.fillMaxSize(),
+          contentPadding = PaddingValues(bottom = FolderIconPickerGridBottomInset + safeBottom),
+          horizontalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
+          verticalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
+        ) {
+          items(entityIcons, key = { it.name }) { icon ->
+            IconGridCell(
+              icon = icon,
+              tint = currentTint,
+              selected = form.iconName.value == icon.name,
+              enabled = !isUpdating,
+              onSelect = { updateSelection(icon.name, form.color.value) },
+            )
           }
         }
 
-        if (iconGridScrollState.value > 0) {
+        if (iconGridState.canScrollBackward) {
           Box(
             modifier = Modifier
               .align(Alignment.TopCenter)
@@ -334,14 +330,14 @@ private fun IconGridCell(
   tint: Color,
   selected: Boolean,
   enabled: Boolean,
-  size: androidx.compose.ui.unit.Dp,
   onSelect: () -> Unit,
 ) {
   InteractionScope {
     Box(
       contentAlignment = Alignment.Center,
       modifier = Modifier
-        .size(size)
+        .fillMaxWidth()
+        .aspectRatio(1f)
         .clip(RoundedCornerShape(4.dp))
         .background(if (selected) AppTheme.colors.surfaceSunken else Color.Transparent)
         .clickable(enabled = enabled) { onSelect() }
