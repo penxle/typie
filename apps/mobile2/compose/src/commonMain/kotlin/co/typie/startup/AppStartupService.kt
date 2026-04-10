@@ -1,7 +1,9 @@
 package co.typie.startup
 
 import co.touchlab.kermit.Logger
-import co.typie.migration.LegacyMigrationRunner
+import co.typie.auth.AuthService
+import co.typie.bootstrap.BootstrapService
+import co.typie.migration.LegacyMigrationCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,14 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.koin.core.annotation.Single
 
-@Single
-class AppStartupService(
-  private val migrationRunner: LegacyMigrationRunner,
-  private val authStartupHandle: AuthStartupHandle,
-  private val bootstrapStartupHandle: BootstrapStartupHandle,
-) {
+object AppStartupService {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val mutex = Mutex()
   private var started = false
@@ -47,7 +43,7 @@ class AppStartupService(
     _state.value = AppStartupState.Migrating
 
     val migrationResult = try {
-      migrationRunner.runIfNeeded()
+      LegacyMigrationCoordinator.runIfNeeded()
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
@@ -57,8 +53,8 @@ class AppStartupService(
     }
 
     Logger.i { "App startup: starting auth and bootstrap services." }
-    authStartupHandle.start()
-    bootstrapStartupHandle.start()
+    AuthService.start()
+    BootstrapService.start()
     _state.value = AppStartupState.Ready(migrationResult = migrationResult)
     Logger.i {
       "App startup: ready migration=${migrationResult?.sourceState?.name ?: "FAILED"} auth=${migrationResult?.authResult?.name ?: "FAILED"} prefs=${migrationResult?.prefsResult?.name ?: "FAILED"}."

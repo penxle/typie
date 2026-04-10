@@ -2,11 +2,9 @@ package co.typie.storage
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import eu.anifantakis.lib.ksafe.KSafe
+import co.typie.platform.PlatformModule
 import eu.anifantakis.lib.ksafe.KSafeWriteMode
 import eu.anifantakis.lib.ksafe.invoke
-import org.koin.core.annotation.Named
-import org.koin.core.annotation.Single
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -29,20 +27,18 @@ internal fun <T> ReadWriteProperty<Any?, T>.withComposeState(): ReadWritePropert
   }
 }
 
-@Single
-class Prefs(@Named("ksafe.prefs") val prefs: KSafe) {
+object Prefs {
   inline operator fun <reified T> invoke(
     key: String,
     defaultValue: T,
   ): ReadWriteProperty<Any?, T> =
-    prefs.invoke(defaultValue, key, mode = KSafeWriteMode.Plain).withComposeState()
+    PlatformModule.ksafePrefs.invoke(defaultValue, key, mode = KSafeWriteMode.Plain).withComposeState()
 }
 
-@Single
-class Vault(@Named("ksafe.vault") val vault: KSafe) {
+object Vault {
   inline operator fun <reified T> invoke(
     key: String,
     defaultValue: T,
   ): ReadWriteProperty<Any?, T> =
-    vault.invoke(defaultValue, key).withComposeState()
+    PlatformModule.ksafeVault.invoke(defaultValue, key).withComposeState()
 }

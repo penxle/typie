@@ -38,6 +38,7 @@ import co.typie.graphql.SpacePopover_Query
 import co.typie.graphql.executeMutation
 import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.CreateSiteInput
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
@@ -50,7 +51,6 @@ import co.typie.result.result
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.service.SiteService
-import com.apollographql.apollo.ApolloClient
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
@@ -72,11 +72,9 @@ import co.typie.ui.shape.SquircleShape
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
-import org.koin.core.annotation.KoinViewModel
 
 val SpacePopoverLeadingKey = Any()
 private val SpacePopoverVerticalOffset = (TopBarDefaults.Height - TopBarDefaults.ButtonSize) / 2
@@ -87,11 +85,9 @@ private val SpacePopoverScreenPadding = PaddingValues(
   bottom = SpacePopoverVerticalOffset + 100.dp,
 )
 
-@KoinViewModel
-class SpacePopoverViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(scope = viewModelScope) { SpacePopover_Query() }
+class SpacePopoverViewModel : ViewModel() {
+
+  val query = Apollo.watchQuery(scope = viewModelScope) { SpacePopover_Query() }
   var isCreatingSite by mutableStateOf(false)
   var pendingCreatedSiteId by mutableStateOf<String?>(null)
     private set
@@ -103,7 +99,7 @@ class SpacePopoverViewModel(
 
     isCreatingSite = true
     return result<Unit, Nothing> {
-      val data = apolloClient.executeMutation(
+      val data = Apollo.executeMutation(
         SpacePopover_CreateSite_Mutation(
           input = CreateSiteInput(name = name.trim().ifBlank { "새 스페이스" }),
         ),
@@ -123,12 +119,10 @@ class SpacePopoverViewModel(
 
 @Composable
 fun SpacePopover() {
-  val authService = koinInject<AuthService>()
-  val sessionKey = authService.tokens?.sessionToken ?: "no-session"
-  val model = koinViewModel<SpacePopoverViewModel>(key = "space-popover:$sessionKey")
-  val siteService = koinInject<SiteService>()
+  val sessionKey = AuthService.tokens?.sessionToken ?: "no-session"
+  val model = viewModel(key = "space-popover:$sessionKey") { SpacePopoverViewModel() }
   val presenterScope = rememberCoroutineScope()
-  val selectedSiteId = siteService.siteId
+  val selectedSiteId = SiteService.siteId
 
   LaunchedEffect(selectedSiteId) {
     if (selectedSiteId.isNotBlank()) {
@@ -141,7 +135,7 @@ fun SpacePopover() {
       is QueryState.Success -> {
         val availableSiteIds = state.data.me.sites.map { it.id }
         val selection = resolveSpacePopoverSelection(
-          selectedSiteId = siteService.siteId,
+          selectedSiteId = SiteService.siteId,
           availableSiteIds = availableSiteIds,
         )
 
@@ -157,12 +151,12 @@ fun SpacePopover() {
 
         if (pendingCreatedSiteId != null) {
           LaunchedEffect(pendingCreatedSiteId) {
-            siteService.siteId = pendingCreatedSiteId
+            SiteService.siteId = pendingCreatedSiteId
             model.consumePendingCreatedSiteSelection(pendingCreatedSiteId)
           }
-        } else if (selection.currentSiteId != siteService.siteId) {
+        } else if (selection.currentSiteId != SiteService.siteId) {
           LaunchedEffect(selection.currentSiteId) {
-            siteService.siteId = selection.currentSiteId
+            SiteService.siteId = selection.currentSiteId
           }
         }
 
@@ -228,7 +222,6 @@ private fun PopoverScope.SpacePopoverPane(
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val scope = rememberCoroutineScope()
-  val siteService = koinInject<SiteService>()
   val bottomSheetHost = LocalBottomSheetHost.current
   val panePadding = PopoverDefaults.PanePadding
 
@@ -290,7 +283,7 @@ private fun PopoverScope.SpacePopoverPane(
             PopoverListItem(
               content = { SpacePopoverSiteItem(site) },
               onSelected = {
-                siteService.siteId = site.id
+                SiteService.siteId = site.id
                 close()
               },
             ),

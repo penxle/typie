@@ -11,7 +11,7 @@ import co.typie.editor.LocalEditorState
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarTitle
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun EditorScreen(slug: String) {
@@ -19,7 +19,7 @@ fun EditorScreen(slug: String) {
     center = { TopBarTitle("문서") },
   )
 
-  val model = koinViewModel<EditorViewModel>()
+  val model = viewModel { EditorViewModel() }
 
   Screen(body = { contentPadding ->
     CompositionLocalProvider(LocalEditorState provides model.editorState) {

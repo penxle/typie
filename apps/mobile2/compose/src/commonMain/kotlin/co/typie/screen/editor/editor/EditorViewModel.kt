@@ -10,9 +10,7 @@ import co.typie.editor.ffi.Node
 import co.typie.editor.ffi.NodeEntry
 import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
 class EditorViewModel : ViewModel() {
   val editorState = EditorState()
 

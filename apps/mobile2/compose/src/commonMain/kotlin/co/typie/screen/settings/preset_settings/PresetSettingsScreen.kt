@@ -76,7 +76,7 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import kotlinx.coroutines.CancellationException
 import co.typie.overlay.LocalToast
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.roundToInt
 
 private enum class PresetEditorField {
@@ -122,7 +122,7 @@ private class PageMarginSheetForm(
 
 @Composable
 fun PresetSettingsScreen() {
-  val model = koinViewModel<PresetSettingsViewModel>()
+  val model = viewModel { PresetSettingsViewModel() }
   val toast = LocalToast.current
   val bottomSheetHost = LocalBottomSheetHost.current
   val scrollState = rememberScrollState()

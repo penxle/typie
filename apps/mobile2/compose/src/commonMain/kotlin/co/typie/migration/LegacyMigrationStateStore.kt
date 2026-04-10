@@ -1,20 +1,18 @@
 package co.typie.migration
 
 import co.typie.storage.Prefs
-import org.koin.core.annotation.Single
 import kotlin.time.Clock
 
-@Single
-class LegacyMigrationStateStore(prefs: Prefs) {
-  private var schemaVersion: Int by prefs("legacy_migration_schema_version", 0)
-  private var lastResultName: String by prefs("legacy_migration_last_result", LegacyMigrationPhaseStatus.NotStarted.name)
-  private var lastAttemptAtMillis: Long by prefs("legacy_migration_last_attempt_at", 0L)
-  private var completedAtMillis: Long by prefs("legacy_migration_completed_at", 0L)
-  private var handledSession: Boolean by prefs("legacy_migration_handled_session", false)
-  private var importedSession: Boolean by prefs("legacy_migration_imported_session", false)
-  private var importedPrefs: Boolean by prefs("legacy_migration_imported_prefs", false)
-  private var importedPrefKeys: List<String> by prefs("legacy_migration_imported_pref_keys", emptyList<String>())
-  private var skippedPrefKeys: List<String> by prefs("legacy_migration_skipped_pref_keys", emptyList<String>())
+object LegacyMigrationStateStore {
+  private var schemaVersion: Int by Prefs("legacy_migration_schema_version", 0)
+  private var lastResultName: String by Prefs("legacy_migration_last_result", LegacyMigrationPhaseStatus.NotStarted.name)
+  private var lastAttemptAtMillis: Long by Prefs("legacy_migration_last_attempt_at", 0L)
+  private var completedAtMillis: Long by Prefs("legacy_migration_completed_at", 0L)
+  private var handledSession: Boolean by Prefs("legacy_migration_handled_session", false)
+  private var importedSession: Boolean by Prefs("legacy_migration_imported_session", false)
+  private var importedPrefs: Boolean by Prefs("legacy_migration_imported_prefs", false)
+  private var importedPrefKeys: List<String> by Prefs("legacy_migration_imported_pref_keys", emptyList<String>())
+  private var skippedPrefKeys: List<String> by Prefs("legacy_migration_skipped_pref_keys", emptyList<String>())
 
   fun isSessionHandled(): Boolean = handledSession
 

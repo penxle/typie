@@ -10,10 +10,8 @@ import io.ktor.client.plugins.ResponseException
 import io.ktor.client.plugins.plugin
 import io.ktor.client.plugins.websocket.WebSockets
 import kotlinx.coroutines.delay
-import org.koin.core.annotation.Single
 
-@Single
-fun httpClient(networkSimulator: NetworkSimulator): HttpClient = HttpClient {
+val Http: HttpClient = HttpClient {
   followRedirects = false
 
   install(WebSockets)
@@ -27,7 +25,7 @@ fun httpClient(networkSimulator: NetworkSimulator): HttpClient = HttpClient {
   }
 }.apply {
   plugin(HttpSend).intercept { context ->
-    when (networkSimulator.preset.value) {
+    when (NetworkSimulator.preset.value) {
       NetworkPreset.Normal -> execute(context)
       NetworkPreset.Slow -> {
         delay(2000L)

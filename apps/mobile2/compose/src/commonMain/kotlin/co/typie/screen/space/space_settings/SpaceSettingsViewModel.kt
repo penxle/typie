@@ -19,6 +19,9 @@ import co.typie.graphql.SpaceSettingsScreen_Query
 import co.typie.graphql.SpaceSettingsScreen_UpdateSiteSlug_Mutation
 import co.typie.graphql.SpaceSettingsScreen_UpdateSite_Mutation
 import co.typie.graphql.TypieError
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildSite
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.DeleteSiteInput
@@ -26,24 +29,20 @@ import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.graphql.type.UpdateSiteInput
 import co.typie.graphql.type.UpdateSiteSlugInput
-import co.typie.graphql.type.buildSite
-import co.typie.graphql.type.buildUser
 import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.Task
+import co.typie.graphql.Apollo
 import co.typie.result.loading
-import co.typie.result.result
 import co.typie.result.task
 import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.hasSubscriptionOrNull
 import co.typie.service.SiteService
-import com.apollographql.apollo.ApolloClient
+import co.typie.service.hasSubscriptionOrNull
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.api.CacheKey
 import com.apollographql.cache.normalized.apolloStore
 import kotlinx.coroutines.CoroutineScope
-import org.koin.core.annotation.KoinViewModel
 
 private val UNAVAILABLE_SITE_SLUGS =
   listOf("admin", "app", "cname", "dev", "docs", "help", "template", "www")
@@ -87,20 +86,17 @@ sealed interface SubmitError {
   data object SubscriptionUnknown : SubmitError
 }
 
-@KoinViewModel
-class SpaceSettingsViewModel(
-  val siteService: SiteService,
-  private val apolloClient: ApolloClient,
-  private val blobService: BlobService,
-  private val currentSubscriptionStore: CurrentSubscriptionStore,
-) : ViewModel() {
+class SpaceSettingsViewModel : ViewModel() {
+  val siteService = SiteService
+  private val blobService = BlobService
+  private val currentSubscriptionStore = CurrentSubscriptionStore
   val state = SpaceSettingsScreenState(viewModelScope)
   var isSubmitting by mutableStateOf(false)
     private set
   var isDeletingSite by mutableStateOf(false)
     private set
 
-  val query = apolloClient.watchQuery(
+  val query = Apollo.watchQuery(
     scope = viewModelScope,
     placeholderData = placeholderData(),
     onInitialData = { data ->
@@ -126,7 +122,7 @@ class SpaceSettingsViewModel(
       mimeType = file.mimeType,
     )
 
-    val image = apolloClient.executeMutation(
+    val image = Apollo.executeMutation(
       SpaceSettingsScreen_PersistBlobAsImage_Mutation(
         input = PersistBlobAsImageInput(path = path),
       ),
@@ -140,7 +136,7 @@ class SpaceSettingsViewModel(
     if (!state.form.validate()) return Result.Ok(Unit)
 
     return loading({ isSubmitting = it }) {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         SpaceSettingsScreen_UpdateSite_Mutation(
           input = UpdateSiteInput(
             siteId = siteService.siteId,
@@ -155,7 +151,7 @@ class SpaceSettingsViewModel(
         when (currentSubscriptionStore.state.value.hasSubscriptionOrNull()) {
           true -> {
             try {
-              apolloClient.executeMutation(
+              Apollo.executeMutation(
                 SpaceSettingsScreen_UpdateSiteSlug_Mutation(
                   input = UpdateSiteSlugInput(
                     siteId = siteService.siteId,
@@ -182,13 +178,13 @@ class SpaceSettingsViewModel(
 
   // TODO: 스페이스 삭제 트래킹
   suspend fun deleteSite(): Result<Unit, Nothing> = loading({ isDeletingSite = it }) {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       SpaceSettingsScreen_DeleteSite_Mutation(
         input = DeleteSiteInput(siteId = siteService.siteId),
       ),
     )
 
-    apolloClient.apolloStore.remove(CacheKey(query.data.me.id))
+    Apollo.apolloStore.remove(CacheKey(query.data.me.id))
 
     val remainingSiteIds = query.data.me.sites.map { it.id }.filter { it != siteService.siteId }
     siteService.siteId = remainingSiteIds.first()

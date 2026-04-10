@@ -27,9 +27,9 @@ import co.typie.generated.resources.Res
 import co.typie.graphql.QueryState
 import co.typie.graphql.SocialAccountsScreen_Query
 import co.typie.graphql.type.SingleSignOnProvider
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
-import com.apollographql.apollo.ApolloClient
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ErrorDialog
@@ -41,8 +41,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.core.annotation.KoinViewModel
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 internal fun socialAccountProviderName(provider: SingleSignOnProvider): String {
   return when (provider) {
@@ -56,7 +55,7 @@ internal fun socialAccountProviderName(provider: SingleSignOnProvider): String {
 
 @Composable
 fun SocialAccountsScreen() {
-  val model = koinViewModel<SocialAccountsViewModel>()
+  val model = viewModel { SocialAccountsViewModel() }
   val scrollState = rememberScrollState()
   val singleSignOns = model.query.data?.me?.singleSignOns.orEmpty()
 
@@ -234,9 +233,7 @@ private fun ProviderIconBadge(
   )
 }
 
-@KoinViewModel
-internal class SocialAccountsViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(scope = viewModelScope) { SocialAccountsScreen_Query() }
+internal class SocialAccountsViewModel : ViewModel() {
+
+  val query = Apollo.watchQuery(scope = viewModelScope) { SocialAccountsScreen_Query() }
 }

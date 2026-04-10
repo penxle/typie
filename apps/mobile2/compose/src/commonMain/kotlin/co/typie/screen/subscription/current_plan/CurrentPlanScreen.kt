@@ -45,14 +45,12 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.koinInject
 
 @Composable
 fun CurrentPlanScreen() {
   val nav = Nav.current
-  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scrollState = rememberScrollState()
-  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -61,7 +59,7 @@ fun CurrentPlanScreen() {
   )
 
   if (currentSubscriptionState is QueryState.Error) {
-    ErrorDialog { currentSubscriptionStore.refresh() }
+    ErrorDialog { CurrentSubscriptionStore.refresh() }
   }
 
   LaunchedEffect(currentSubscriptionState) {

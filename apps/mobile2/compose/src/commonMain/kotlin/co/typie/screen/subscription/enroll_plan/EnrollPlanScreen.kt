@@ -82,22 +82,19 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun EnrollPlanScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
-  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
-  val subscriptionService = koinInject<SubscriptionService>()
   val toast = LocalToast.current
   val loader = LocalLoader.current
-  val model = koinViewModel<EnrollPlanViewModel>()
+  val model = viewModel { EnrollPlanViewModel() }
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   var showTrialStartConfirm by remember { mutableStateOf(false) }
-  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
 
   LaunchedEffect(model.celebration) {
     val celebration = model.celebration ?: return@LaunchedEffect
@@ -122,13 +119,13 @@ fun EnrollPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (subscriptionService.hasQueryError(model.query.state)) {
+  if (SubscriptionService.hasQueryError(model.query.state)) {
     ErrorDialog { model.query.refetch() }
   }
 
   Screen(
     scrollState = scrollState,
-    loading = subscriptionService.isQueryLoading(model.query.state) || currentSubscriptionState !is QueryState.Success,
+    loading = SubscriptionService.isQueryLoading(model.query.state) || currentSubscriptionState !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
@@ -136,7 +133,7 @@ fun EnrollPlanScreen() {
     val currentPlanId = currentSubscription?.planId
     val hasSubscription = currentSubscription != null
     val isOnTrial = currentSubscription?.availability == SubscriptionAvailability.Trial
-    val canStartTrial = subscriptionService.canStartTrial(model.query.data.me.canStartTrial)
+    val canStartTrial = SubscriptionService.canStartTrial(model.query.data.me.canStartTrial)
 
     Text(
       text = "이용권 구매/변경",

@@ -9,19 +9,19 @@ import co.typie.graphql.TextReplacementsScreen_DeleteTextReplacement_Mutation
 import co.typie.graphql.TextReplacementsScreen_MoveTextReplacement_Mutation
 import co.typie.graphql.TextReplacementsScreen_Query
 import co.typie.graphql.TextReplacementsScreen_UpdateTextReplacement_Mutation
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.CreateTextReplacementInput
 import co.typie.graphql.type.DeleteTextReplacementInput
 import co.typie.graphql.type.MoveTextReplacementInput
 import co.typie.graphql.type.TextReplacementState
 import co.typie.graphql.type.UpdateTextReplacementInput
-import co.typie.graphql.type.buildUser
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CoroutineScope
-import org.koin.core.annotation.KoinViewModel
 
 class TextReplacementForm(
   scope: CoroutineScope,
@@ -39,11 +39,8 @@ sealed interface SaveRuleError {
   data class ValidationFailed(val message: String) : SaveRuleError
 }
 
-@KoinViewModel
-class TextReplacementsViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(scope = viewModelScope, placeholderData()) { TextReplacementsScreen_Query() }
+class TextReplacementsViewModel : ViewModel() {
+  val query = Apollo.watchQuery(scope = viewModelScope, placeholderData()) { TextReplacementsScreen_Query() }
 
   val normalizedItems: List<NormalizedTextReplacement>
     get() = normalizeTextReplacements(query.data.me.textReplacements)
@@ -116,13 +113,13 @@ class TextReplacementsViewModel(
         builder.lowerOrder(lastOrder)
       }
 
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         TextReplacementsScreen_CreateTextReplacement_Mutation(
           input = builder.build(),
         ),
       )
     } else {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         TextReplacementsScreen_UpdateTextReplacement_Mutation(
           input = UpdateTextReplacementInput.Builder()
             .textReplacementId(editingItem.textReplacementId)
@@ -144,7 +141,7 @@ class TextReplacementsViewModel(
   }
 
   suspend fun deleteCustom(item: NormalizedTextReplacement): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       TextReplacementsScreen_DeleteTextReplacement_Mutation(
         input = DeleteTextReplacementInput.Builder()
           .textReplacementId(item.textReplacementId)
@@ -159,7 +156,7 @@ class TextReplacementsViewModel(
     lowerOrder: String?,
     upperOrder: String?,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       TextReplacementsScreen_MoveTextReplacement_Mutation(
         input = MoveTextReplacementInput.Builder()
           .textReplacementId(textReplacementId)
@@ -194,7 +191,7 @@ class TextReplacementsViewModel(
     textReplacementId: String,
     enabled: Boolean,
   ) {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       TextReplacementsScreen_UpdateTextReplacement_Mutation(
         input = UpdateTextReplacementInput.Builder()
           .textReplacementId(textReplacementId)

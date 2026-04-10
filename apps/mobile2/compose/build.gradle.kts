@@ -31,7 +31,6 @@ plugins {
   alias(libs.plugins.android.multiplatformLibrary)
   alias(libs.plugins.compose.multiplatform)
   alias(libs.plugins.compose.compiler)
-  alias(libs.plugins.koin.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.apollo)
   alias(libs.plugins.aboutLibraries)
@@ -145,10 +144,6 @@ kotlin {
     implementation(libs.compose.ui)
     implementation(libs.compose.uiToolingPreview)
     implementation(libs.kermit)
-    implementation(libs.koin.annotations)
-    implementation(libs.koin.compose)
-    implementation(libs.koin.compose.viewmodel)
-    implementation(libs.koin.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
@@ -231,8 +226,11 @@ apollo {
     generateInputBuilders = true
     generateFragmentImplementations = true
 
-    plugin("com.apollographql.cache:normalized-cache-apollo-compiler-plugin:${libs.versions.apollo.normalized.cache.get()}") {
-      argument("com.apollographql.cache.packageName", packageName.get())
+    plugin("com.apollographql.cache:normalized-cache-apollo-compiler-plugin:${libs.versions.apollo.normalized.cache.get()}")
+    pluginArgument("com.apollographql.cache.packageName", packageName.get())
+
+    dataBuildersOutputDirConnection {
+      connectToKotlinSourceSet("commonMain")
     }
   }
 }

@@ -10,15 +10,12 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import co.typie.platform.PurchaseActivityHolder
 import co.typie.startup.AppStartupService
 import co.typie.startup.AppStartupState
-import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
-  private val appStartupService: AppStartupService by inject()
-
   override fun onCreate(savedInstanceState: Bundle?) {
     val splashScreen = installSplashScreen()
-    appStartupService.startAsync()
-    splashScreen.setKeepOnScreenCondition { appStartupService.state.value !is AppStartupState.Ready }
+    AppStartupService.startAsync()
+    splashScreen.setKeepOnScreenCondition { AppStartupService.state.value !is AppStartupState.Ready }
 
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)

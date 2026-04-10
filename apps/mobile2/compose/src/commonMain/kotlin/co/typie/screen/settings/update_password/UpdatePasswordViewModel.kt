@@ -10,17 +10,17 @@ import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
 import co.typie.graphql.UpdatePasswordScreen_Query
 import co.typie.graphql.UpdatePasswordScreen_UpdatePassword_Mutation
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdatePasswordInput
-import co.typie.graphql.type.buildUser
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
+import co.typie.graphql.Apollo
 import co.typie.result.loading
 import co.typie.result.result
-import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CoroutineScope
-import org.koin.core.annotation.KoinViewModel
 
 enum class PasswordField {
   CurrentPassword,
@@ -78,16 +78,13 @@ sealed interface UpdatePasswordError {
   data object CurrentPasswordRequired : UpdatePasswordError
 }
 
-@KoinViewModel
-class UpdatePasswordViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
+class UpdatePasswordViewModel : ViewModel() {
   val state = UpdatePasswordScreenState(viewModelScope)
   var isSubmitting by mutableStateOf(false)
     private set
 
   val query =
-    apolloClient.watchQuery(
+    Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
       onInitialData = { data ->
@@ -114,7 +111,7 @@ class UpdatePasswordViewModel(
 
     return loading({ isSubmitting = it }) {
       try {
-        apolloClient.executeMutation(
+        Apollo.executeMutation(
           UpdatePasswordScreen_UpdatePassword_Mutation(
             input = UpdatePasswordInput(
               currentPassword = if (hasPassword) {

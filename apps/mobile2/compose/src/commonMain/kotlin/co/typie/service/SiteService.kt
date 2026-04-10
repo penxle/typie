@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import co.typie.storage.Prefs
-import org.koin.core.annotation.Single
 
 internal fun resolveStoredSiteId(
   userId: String,
@@ -20,11 +19,10 @@ internal fun resolveStoredSiteId(
     ?: ""
 }
 
-@Single
-class SiteService(prefs: Prefs) {
-  private var currentUserId: String by prefs("current_user_id", "")
-  private var siteIdsByUserId: Map<String, String> by prefs("site_ids_by_user_id", emptyMap<String, String>())
-  private var legacySiteId: String by prefs("site_id", "")
+object SiteService {
+  private var currentUserId: String by Prefs("current_user_id", "")
+  private var siteIdsByUserId: Map<String, String> by Prefs("site_ids_by_user_id", emptyMap<String, String>())
+  private var legacySiteId: String by Prefs("site_id", "")
   private var currentSiteId by mutableStateOf(loadCurrentSiteId())
 
   var siteId: String

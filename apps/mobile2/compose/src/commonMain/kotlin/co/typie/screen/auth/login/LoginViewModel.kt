@@ -19,18 +19,14 @@ import co.typie.graphql.type.AuthorizeSingleSignOnInput
 import co.typie.graphql.type.LoginWithEmailInput
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.result.Result
+import co.typie.graphql.Apollo
 import co.typie.result.loading
 import co.typie.result.result
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class LoginSingleSignOnViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
+class LoginSingleSignOnViewModel : ViewModel() {
   suspend fun loginWith(provider: SingleSignOnProvider, ctx: Any?): Result<Unit, Nothing> = result {
     val ssoProvider = when (provider) {
       SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
@@ -42,7 +38,7 @@ class LoginSingleSignOnViewModel(
 
     val credential = ssoProvider.authenticate(ctx)
 
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       LoginScreen_AuthorizeSingleSignOn_Mutation(
         AuthorizeSingleSignOnInput(
           provider = credential.provider,
@@ -74,10 +70,7 @@ class LoginWithEmailState(scope: CoroutineScope) {
   val form = LoginWithEmailForm(scope)
 }
 
-@KoinViewModel
-class LoginWithEmailViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
+class LoginWithEmailViewModel : ViewModel() {
   val state = LoginWithEmailState(viewModelScope)
   var isSubmitting by mutableStateOf(false)
     private set
@@ -87,7 +80,7 @@ class LoginWithEmailViewModel(
 
     return loading({ isSubmitting = it }) {
       try {
-        apolloClient.executeMutation(
+        Apollo.executeMutation(
           LoginWithEmailScreen_LoginWithEmail_Mutation(
             LoginWithEmailInput(
               email = state.form.email.value,

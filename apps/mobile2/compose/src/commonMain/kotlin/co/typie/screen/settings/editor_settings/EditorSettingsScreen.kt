@@ -44,11 +44,11 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun EditorSettingsScreen() {
-  val model = koinViewModel<EditorSettingsViewModel>()
+  val model = viewModel { EditorSettingsViewModel() }
   val editorPreferences = model.editorPreferencesService
   val scrollState = rememberScrollState()
 

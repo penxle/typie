@@ -12,28 +12,24 @@ import co.typie.graphql.TrashScreen_WithSiteId_Query
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.PurgeEntitiesInput
 import co.typie.graphql.type.RecoverEntityInput
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
 import co.typie.service.SiteService
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-internal class TrashViewModel(
-  val siteService: SiteService,
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
+internal class TrashViewModel : ViewModel() {
+  val siteService = SiteService
   var entityId: String? by mutableStateOf(null)
 
-  val siteQuery = apolloClient.watchQuery(
+  val siteQuery = Apollo.watchQuery(
     scope = viewModelScope,
     skip = { entityId != null },
   ) {
     TrashScreen_WithSiteId_Query(siteId = siteService.siteId)
   }
 
-  val entityQuery = apolloClient.watchQuery(
+  val entityQuery = Apollo.watchQuery(
     scope = viewModelScope,
     skip = { entityId == null },
   ) {
@@ -50,7 +46,7 @@ internal class TrashViewModel(
 
   suspend fun recoverEntity(item: TrashItem): Result<String, Nothing> {
     return result {
-      val data = apolloClient.executeMutation(
+      val data = Apollo.executeMutation(
         TrashScreen_RecoverEntity_Mutation(
           input = RecoverEntityInput(entityId = item.id),
         ),
@@ -61,7 +57,7 @@ internal class TrashViewModel(
 
   suspend fun purgeEntities(entityIds: List<String>): Result<Unit, Nothing> {
     return result {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         TrashScreen_PurgeEntities_Mutation(
           input = PurgeEntitiesInput(entityIds = entityIds),
         ),

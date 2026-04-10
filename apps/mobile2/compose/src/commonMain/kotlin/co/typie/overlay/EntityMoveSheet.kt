@@ -60,7 +60,7 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private const val MOVE_DEPTH_LIMIT_MESSAGE = "폴더의 최대 깊이를 초과했어요"
 
@@ -94,7 +94,7 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
   onMoved: () -> Unit = {},
 ) {
   val toast = LocalToast.current
-  val model = koinViewModel<EntityMoveSheetViewModel>(key = "entity-move:${source.id}")
+  val model = viewModel(key = "entity-move:${source.id}") { EntityMoveSheetViewModel() }
   var isMoving by remember(source.id) { mutableStateOf(false) }
   var displayedContent by remember(source.id) { mutableStateOf<MoveDestinationContent?>(null) }
   var navigationDirection by remember(source.id) { mutableStateOf(MoveDestinationNavigationDirection.None) }

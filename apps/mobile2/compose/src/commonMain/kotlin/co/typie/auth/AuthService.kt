@@ -3,12 +3,12 @@ package co.typie.auth
 import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.dev.SimulatedNetworkFailureException
+import co.typie.graphql.Apollo
+import co.typie.graphql.Http
 import co.typie.service.SiteService
 import co.typie.startup.AuthStartupHandle
 import co.typie.storage.Vault
-import com.apollographql.apollo.ApolloClient
 import com.apollographql.cache.normalized.apolloStore
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.network.sockets.ConnectTimeoutException
@@ -37,9 +37,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.io.IOException
-import org.koin.core.annotation.Single
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 
 internal data class AuthenticatedUserContext(
   val userId: String,
@@ -90,14 +87,8 @@ internal fun classifyAuthFailure(error: Throwable): AuthFailureDisposition {
   return AuthFailureDisposition.ClearSession
 }
 
-@Single(binds = [AuthStartupHandle::class])
-class AuthService(
-  private val vault: Vault,
-  private val httpClient: HttpClient,
-  private val siteService: SiteService,
-) : KoinComponent, AuthStartupHandle {
-  private val apolloClient: ApolloClient by inject()
-  var tokens: AuthTokens? by vault("tokens", null)
+object AuthService : AuthStartupHandle {
+  var tokens: AuthTokens? by Vault("tokens", null)
     private set
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -192,7 +183,7 @@ class AuthService(
     val currentSessionToken = tokens?.sessionToken
     if (currentSessionToken != null) {
       try {
-        httpClient.get("${Konfig.AUTH_URL}/logout") {
+        Http.get("${Konfig.AUTH_URL}/logout") {
           parameter("redirect_uri", "typie:///")
           header("Cookie", "typie-st=$currentSessionToken")
         }
@@ -206,8 +197,8 @@ class AuthService(
 
   suspend fun clearSession() {
     tokens = null
-    siteService.clearCurrentUser()
-    apolloClient.apolloStore.clearAll()
+    SiteService.clearCurrentUser()
+    Apollo.apolloStore.clearAll()
     _state.value = AuthState.Unauthenticated
   }
 
@@ -246,14 +237,14 @@ class AuthService(
   }
 
   private fun ensureValidSiteId(authenticatedUserContext: AuthenticatedUserContext) {
-    siteService.bindUser(
+    SiteService.bindUser(
       userId = authenticatedUserContext.userId,
       availableSiteIds = authenticatedUserContext.siteIds,
     )
   }
 
   private suspend fun exchangeToken(sessionToken: String): String {
-    val authorizeResponse = httpClient.get("${Konfig.AUTH_URL}/authorize") {
+    val authorizeResponse = Http.get("${Konfig.AUTH_URL}/authorize") {
       parameter("response_type", "code")
       parameter("redirect_uri", "typie:///authorize")
       parameter("client_id", Konfig.OIDC_CLIENT_ID)
@@ -273,7 +264,7 @@ class AuthService(
     val code = locationUri.parameters["code"]
       ?: error("No code in authorize response")
 
-    val tokenResponse = httpClient.submitForm(
+    val tokenResponse = Http.submitForm(
       url = "${Konfig.AUTH_URL}/token",
       formParameters = parameters {
         append("code", code)
@@ -291,7 +282,7 @@ class AuthService(
   }
 
   private suspend fun fetchAuthenticatedUserContext(accessToken: String): AuthenticatedUserContext {
-    val response = httpClient.post("${Konfig.API_URL}/graphql") {
+    val response = Http.post("${Konfig.API_URL}/graphql") {
       header("Authorization", "Bearer $accessToken")
       contentType(ContentType.Application.Json)
       setBody("""{"query":"{ me { id sites { id } } }"}""")

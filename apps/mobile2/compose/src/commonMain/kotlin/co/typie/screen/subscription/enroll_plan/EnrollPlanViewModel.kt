@@ -7,29 +7,29 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.EnrollPlanScreen_Query
 import co.typie.graphql.EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionCelebration
-import co.typie.service.SubscriptionService
-import co.typie.service.purchaseCelebration
 import co.typie.graphql.EnrollPlanScreen_SubscribePlanWithTrial_Mutation
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.InAppPurchaseStore
 import co.typie.graphql.type.SubscribeOrChangePlanWithInAppPurchaseInput
-import co.typie.graphql.type.buildUser
 import co.typie.graphql.watchQuery
 import co.typie.platform.PurchaseEvent
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
 import co.typie.platform.PurchaseStore
 import co.typie.result.Result
+import co.typie.graphql.Apollo
 import co.typie.result.loading
 import co.typie.result.result
+import co.typie.service.CurrentSubscriptionStore
+import co.typie.service.SubscriptionCelebration
+import co.typie.service.SubscriptionService
+import co.typie.service.purchaseCelebration
 import co.typie.service.shouldShowPurchaseCelebration
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.launch
-import org.koin.core.annotation.KoinViewModel
 
 sealed interface EnrollPlanError {
   data object ServerError : EnrollPlanError
@@ -40,16 +40,13 @@ sealed interface PurchaseError {
   data object Unknown : PurchaseError
 }
 
-@KoinViewModel
-class EnrollPlanViewModel(
-  private val apolloClient: ApolloClient,
-  private val subscriptionService: SubscriptionService,
-  private val currentSubscriptionStore: CurrentSubscriptionStore,
-) : ViewModel() {
+class EnrollPlanViewModel : ViewModel() {
+  private val subscriptionService = SubscriptionService
+  private val currentSubscriptionStore = CurrentSubscriptionStore
   var isStartingTrial by mutableStateOf(false)
     private set
 
-  val query = apolloClient.watchQuery(
+  val query = Apollo.watchQuery(
     scope = viewModelScope,
     placeholderData = placeholderData(),
     skip = { subscriptionService.usesSandbox },
@@ -82,7 +79,7 @@ class EnrollPlanViewModel(
   suspend fun startTrial(): Result<Unit, EnrollPlanError> = loading({ isStartingTrial = it }) {
     try {
       celebration = subscriptionService.startTrial {
-        apolloClient.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+        Apollo.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
         currentSubscriptionStore.refresh()
         query.refetch()
       }
@@ -129,7 +126,7 @@ class EnrollPlanViewModel(
     val verificationData = event.verificationData()
 
     try {
-      val response = apolloClient.executeMutation(
+      val response = Apollo.executeMutation(
         EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation(
           input = SubscribeOrChangePlanWithInAppPurchaseInput(
             data = verificationData,

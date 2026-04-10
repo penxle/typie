@@ -29,7 +29,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val SearchScreenTopFadeHeight = 24.dp
 private val SearchScreenHeaderHeight = HomeSearchFieldDefaults.Height + 4.dp
@@ -37,7 +37,7 @@ private val SearchScreenHeaderHeight = HomeSearchFieldDefaults.Height + 4.dp
 @Composable
 fun HomeSearchScreen() {
   val nav = Nav.current
-  val model = koinViewModel<SearchViewModel>()
+  val model = viewModel { SearchViewModel() }
   val scrollState = rememberScrollState("home-search")
 
   ProvideTopBar(

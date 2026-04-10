@@ -30,7 +30,7 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private fun securityPasswordItemLabel(hasPassword: Boolean): String {
   return if (hasPassword) "비밀번호 변경" else "비밀번호 설정"
@@ -39,7 +39,7 @@ private fun securityPasswordItemLabel(hasPassword: Boolean): String {
 @Composable
 fun SecuritySettingsScreen() {
   val nav = Nav.current
-  val model = koinViewModel<SecuritySettingsViewModel>()
+  val model = viewModel { SecuritySettingsViewModel() }
   val scrollState = rememberScrollState()
   val hasPassword = model.query.data.me.hasPassword
 

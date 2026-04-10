@@ -21,7 +21,6 @@ import androidx.compose.ui.window.application
 import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
 import co.typie.dev.createDevToolsWindow
-import co.typie.di.initKoin
 import co.typie.bootstrap.BootstrapDevSandbox
 import co.typie.dev.SubscriptionDevSandbox
 import com.sun.jna.Library
@@ -29,7 +28,6 @@ import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
-import org.koin.mp.KoinPlatform.getKoin
 import java.awt.Taskbar
 import java.awt.Toolkit
 import java.util.prefs.Preferences
@@ -110,11 +108,7 @@ fun main() {
     .inputStream.bufferedReader().readText().trim()
   System.setProperty("jna.library.path", java.io.File(dir, "target/$hostTarget/release-uniffi").absolutePath)
 
-  initKoin {
-    printLogger()
-  }
-
-  val networkSimulator = getKoin().get<NetworkSimulator>()
+  val networkSimulator = NetworkSimulator
 
   if (Taskbar.isTaskbarSupported()) {
     Taskbar.getTaskbar().iconImage =
@@ -206,8 +200,8 @@ fun main() {
         createDevToolsWindow(
           mainWindow = mainWindow,
           networkSimulator = networkSimulator,
-          bootstrapDevSandbox = getKoin().get<BootstrapDevSandbox>(),
-          subscriptionDevSandbox = getKoin().get<SubscriptionDevSandbox>(),
+          bootstrapDevSandbox = BootstrapDevSandbox,
+          subscriptionDevSandbox = SubscriptionDevSandbox,
         )
       }
     }

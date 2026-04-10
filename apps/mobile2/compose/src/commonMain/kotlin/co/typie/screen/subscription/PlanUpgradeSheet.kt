@@ -40,10 +40,9 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 const val DEFAULT_PLAN_UPGRADE_TITLE = "플랜 업그레이드가 필요해요"
 
@@ -106,12 +105,11 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
   title: String = DEFAULT_PLAN_UPGRADE_TITLE,
   message: String,
 ) {
-  val subscriptionService = koinInject<SubscriptionService>()
   val toast = LocalToast.current
-  val model = koinViewModel<PlanUpgradeSheetViewModel>()
+  val model = viewModel { PlanUpgradeSheetViewModel() }
   val scope = rememberCoroutineScope()
   var showTrialStartConfirm by remember { mutableStateOf(false) }
-  val canStartTrial = subscriptionService.canStartTrial(model.query.data.me.canStartTrial)
+  val canStartTrial = SubscriptionService.canStartTrial(model.query.data.me.canStartTrial)
   val dismissResult = planUpgradeDismissResult(model.celebration)
 
   LaunchedEffect(dismissResult) {

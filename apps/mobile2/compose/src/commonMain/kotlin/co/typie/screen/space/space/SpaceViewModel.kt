@@ -6,24 +6,19 @@ import co.typie.graphql.EntityContainer_MoveEntity_Mutation
 import co.typie.graphql.SpaceScreen_Query
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.MoveEntityInput
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
 import co.typie.service.SiteService
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class SpaceViewModel(
-  private val apolloClient: ApolloClient,
-  private val siteService: SiteService,
-) : ViewModel() {
+class SpaceViewModel : ViewModel() {
   private var hasEnteredScreen = false
 
   val siteId: String
-    get() = siteService.siteId
+    get() = SiteService.siteId
 
-  val query = apolloClient.watchQuery(scope = viewModelScope) { SpaceScreen_Query(siteId = siteService.siteId) }
+  val query = Apollo.watchQuery(scope = viewModelScope) { SpaceScreen_Query(siteId = SiteService.siteId) }
 
   fun refetch() {
     query.refetch()
@@ -43,7 +38,7 @@ class SpaceViewModel(
     lowerOrder: String?,
     upperOrder: String?,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       EntityContainer_MoveEntity_Mutation(
         input = MoveEntityInput.Builder()
           .entityId(entityId)

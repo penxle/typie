@@ -19,13 +19,10 @@ import co.typie.result.loading
 import co.typie.result.result
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class CancelPlanViewModel(
-  private val currentSubscriptionStore: CurrentSubscriptionStore,
-  private val subscriptionService: SubscriptionService,
-) : ViewModel() {
+class CancelPlanViewModel : ViewModel() {
+  private val currentSubscriptionStore = CurrentSubscriptionStore
+  private val subscriptionService = SubscriptionService
   var flowState by mutableStateOf(CancelPlanFlowState())
     private set
 

@@ -30,7 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import co.typie.auth.sso.activityContext
-import co.typie.di.Platform
+import co.typie.platform.Platform
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -56,10 +56,10 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.platform.PlatformModule
 import co.typie.ui.theme.AppTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun LoginScreen() {
@@ -146,10 +146,10 @@ private fun LoginSSOContent(
   onEmailClick: () -> Unit,
   onSuccess: () -> Unit,
 ) {
-  val model = koinViewModel<LoginSingleSignOnViewModel>()
+  val model = viewModel { LoginSingleSignOnViewModel() }
   val toast = LocalToast.current
   val loader = LocalLoader.current
-  val platform = koinInject<Platform>()
+  val platform = PlatformModule.platform
   val scope = rememberCoroutineScope()
   val ctx = activityContext()
 
@@ -226,7 +226,7 @@ private fun LoginEmailContent(
   onBack: () -> Unit,
   onSuccess: () -> Unit,
 ) {
-  val model = koinViewModel<LoginWithEmailViewModel>()
+  val model = viewModel { LoginWithEmailViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = model.state.form

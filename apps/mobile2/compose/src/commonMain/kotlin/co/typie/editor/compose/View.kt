@@ -19,7 +19,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import co.typie.di.Platform
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import co.typie.editor.Editor
 import co.typie.editor.LocalEditorState
 import co.typie.editor.ffi.Doc
@@ -28,12 +29,11 @@ import co.typie.editor.ffi.Viewport
 import co.typie.ext.verticalScroll
 import co.typie.ui.state.rememberScrollState
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 import androidx.compose.ui.geometry.Size as ComposeSize
 
 @Composable
 fun EditorView(doc: Doc, selection: Selection) {
-  val platform = koinInject<Platform>()
+  val platform = PlatformModule.platform
   val density = LocalDensity.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()

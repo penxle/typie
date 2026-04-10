@@ -3,6 +3,7 @@ package co.typie.entity_transfer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import co.typie.graphql.Apollo
 import co.typie.graphql.EntityClipboard_CopyEntities_Mutation
 import co.typie.graphql.EntityClipboard_MoveEntities_Mutation
 import co.typie.graphql.TypieError
@@ -13,9 +14,7 @@ import co.typie.result.Result
 import co.typie.result.Task
 import co.typie.result.task
 import co.typie.service.SiteRefreshCoordinator
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CancellationException
-import org.koin.core.annotation.Single
 
 enum class EntityClipboardMode { Copy, Cut }
 
@@ -64,12 +63,9 @@ interface EntityClipboardMutationExecutor {
   suspend fun moveEntities(request: EntityClipboardMoveRequest)
 }
 
-@Single(binds = [EntityClipboardMutationExecutor::class])
-class ApolloEntityClipboardMutationExecutor(
-  private val apolloClient: ApolloClient,
-) : EntityClipboardMutationExecutor {
+object ApolloEntityClipboardMutationExecutor : EntityClipboardMutationExecutor {
   override suspend fun copyEntities(request: EntityClipboardCopyRequest) {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       EntityClipboard_CopyEntities_Mutation(
         input = CopyEntitiesInput.Builder()
           .entityIds(request.entityIds)
@@ -83,7 +79,7 @@ class ApolloEntityClipboardMutationExecutor(
   }
 
   override suspend fun moveEntities(request: EntityClipboardMoveRequest) {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       EntityClipboard_MoveEntities_Mutation(
         input = MoveEntitiesInput.Builder()
           .entityIds(request.entityIds)
@@ -97,11 +93,7 @@ class ApolloEntityClipboardMutationExecutor(
   }
 }
 
-@Single
-class EntityClipboardService(
-  private val executor: EntityClipboardMutationExecutor,
-  private val siteRefreshCoordinator: SiteRefreshCoordinator,
-) {
+object EntityClipboardService {
   var state: EntityClipboardState? by mutableStateOf(null)
     private set
 
@@ -157,7 +149,7 @@ class EntityClipboardService(
 
     try {
       when (clipboard.mode) {
-        EntityClipboardMode.Copy -> executor.copyEntities(
+        EntityClipboardMode.Copy -> ApolloEntityClipboardMutationExecutor.copyEntities(
           EntityClipboardCopyRequest(
             entityIds = itemIds,
             targetSiteId = target.siteId,
@@ -167,7 +159,7 @@ class EntityClipboardService(
           ),
         )
 
-        EntityClipboardMode.Cut -> executor.moveEntities(
+        EntityClipboardMode.Cut -> ApolloEntityClipboardMutationExecutor.moveEntities(
           EntityClipboardMoveRequest(
             entityIds = itemIds,
             parentEntityId = target.destinationEntityId,
@@ -189,9 +181,9 @@ class EntityClipboardService(
       clear()
     }
 
-    siteRefreshCoordinator.notifySiteChanged(target.siteId)
+    SiteRefreshCoordinator.notifySiteChanged(target.siteId)
     if (clipboard.sourceSiteId != target.siteId) {
-      siteRefreshCoordinator.notifySiteChanged(clipboard.sourceSiteId)
+      SiteRefreshCoordinator.notifySiteChanged(clipboard.sourceSiteId)
     }
 
     itemIds.size

@@ -1,9 +1,6 @@
 package co.typie.migration
 
-import org.koin.core.annotation.Single
-
-@Single
-class LegacyHiveBoxReader {
+object LegacyHiveBoxReader {
   fun readBox(bytes: ByteArray): Map<String, Any?> = readFrames(bytes = bytes, keyCrc = 0, decrypt = null)
 
   fun readEncryptedBox(
@@ -110,21 +107,19 @@ class LegacyHiveBoxReader {
     fun isAtEnd(): Boolean = offset == bytes.size
   }
 
-  companion object {
-    private const val BYTE_MASK = 0xFF
-    private const val FRAME_LENGTH_BYTES = 4
-    private const val CRC_LENGTH = 4
-    private const val FRAME_MIN_LENGTH = 8
-    private const val DOUBLE_LENGTH = 8
+  private const val BYTE_MASK = 0xFF
+  private const val FRAME_LENGTH_BYTES = 4
+  private const val CRC_LENGTH = 4
+  private const val FRAME_MIN_LENGTH = 8
+  private const val DOUBLE_LENGTH = 8
 
-    private const val FRAME_KEY_UTF8_STRING = 1
+  private const val FRAME_KEY_UTF8_STRING = 1
 
-    private const val VALUE_TYPE_NULL = 0
-    private const val VALUE_TYPE_INT = 1
-    private const val VALUE_TYPE_DOUBLE = 2
-    private const val VALUE_TYPE_BOOL = 3
-    private const val VALUE_TYPE_STRING = 4
-  }
+  private const val VALUE_TYPE_NULL = 0
+  private const val VALUE_TYPE_INT = 1
+  private const val VALUE_TYPE_DOUBLE = 2
+  private const val VALUE_TYPE_BOOL = 3
+  private const val VALUE_TYPE_STRING = 4
 }
 
 internal fun calculateLegacyCrc32(

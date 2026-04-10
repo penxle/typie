@@ -4,26 +4,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import co.touchlab.kermit.Logger
 import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
+import co.typie.graphql.Apollo
 import co.typie.service.SiteRefreshCoordinator
 import co.typie.service.SiteService
-import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.annotations.ApolloExperimental
-import org.koin.compose.koinInject
 
 @OptIn(ApolloExperimental::class)
 @Composable
 internal fun SiteUpdateStreamEffect() {
-  val apolloClient = koinInject<ApolloClient>()
-  val siteRefreshCoordinator = koinInject<SiteRefreshCoordinator>()
-  val siteService = koinInject<SiteService>()
-  val siteId = siteService.siteId
+  val siteId = SiteService.siteId
 
   LaunchedEffect(siteId) {
     if (siteId.isBlank()) {
       return@LaunchedEffect
     }
 
-    apolloClient.subscription(MainShell_SiteUpdateStream_Subscription(siteId = siteId))
+    Apollo.subscription(MainShell_SiteUpdateStream_Subscription(siteId = siteId))
       .retryOnError(true)
       .toFlow()
       .collect { response ->
@@ -36,7 +32,7 @@ internal fun SiteUpdateStreamEffect() {
         }
 
         if (response.data?.siteUpdateStream != null) {
-          siteRefreshCoordinator.notifySiteChanged(siteId)
+          SiteRefreshCoordinator.notifySiteChanged(siteId)
         }
       }
   }

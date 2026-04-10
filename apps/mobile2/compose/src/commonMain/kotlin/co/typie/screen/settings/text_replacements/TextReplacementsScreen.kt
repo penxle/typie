@@ -88,7 +88,7 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import co.typie.overlay.LocalToast
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
 
@@ -96,7 +96,7 @@ private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
 fun TextReplacementsScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
   val haptic = LocalHapticFeedback.current
-  val model = koinViewModel<TextReplacementsViewModel>()
+  val model = viewModel { TextReplacementsViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   var isPersistingCustomReorder by remember { mutableStateOf(false) }

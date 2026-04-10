@@ -4,7 +4,7 @@ import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.SubscriptionDevScenario
 import co.typie.dev.subscriptionDevCanStartTrial
 import co.typie.dev.subscriptionDevSubscription
-import co.typie.di.Platform
+import co.typie.platform.Platform
 import co.typie.graphql.QueryState
 import co.typie.platform.PurchasePlanInterval
 import co.typie.service.FULL_ACCESS_MONTHLY_PLAN_ID

@@ -15,7 +15,6 @@ import co.typie.route.Route
 import co.typie.service.SiteRefreshCoordinator
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
-import org.koin.compose.koinInject
 
 @Composable
 fun RefetchOnScreenEnterEffect(
@@ -66,7 +65,7 @@ fun RefetchOnSiteUpdateEffect(
 ) {
   val nav = Nav.current
   val route = LocalRoute.current
-  val siteRefreshCoordinator = koinInject<SiteRefreshCoordinator>()
+  val siteRefreshCoordinator = SiteRefreshCoordinator
   val latestOnRefetch by rememberUpdatedState(onRefetch)
 
   LaunchedEffect(siteId, nav, route) {

@@ -6,42 +6,15 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Environment
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
-import co.typie.di.PlatformContext
-import co.typie.migration.AndroidLegacyMigrationPlatformSource
-import co.typie.migration.LegacyMigrationPlatformSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.koin.core.annotation.Module
-import org.koin.core.annotation.Single
 import java.io.File
 
-@Module
-actual class PlatformServiceModule {
-  @Single
-  actual fun clipboard(ctx: PlatformContext): Clipboard = AndroidClipboard(ctx.context)
-
-  @Single
-  actual fun deviceInfo(ctx: PlatformContext): DeviceInfo = AndroidDeviceInfo(ctx.context)
-
-  @Single
-  actual fun fileSystem(ctx: PlatformContext): FileSystem = AndroidFileSystem(ctx.context)
-
-  @Single
-  actual fun legacyMigrationPlatformSource(ctx: PlatformContext): LegacyMigrationPlatformSource =
-    AndroidLegacyMigrationPlatformSource(ctx.context)
-
-  @Single
-  actual fun purchaseService(ctx: PlatformContext): PurchaseService = AndroidPurchaseService(ctx.context)
-
-  @Single
-  actual fun share(ctx: PlatformContext): Share = AndroidShare(ctx.context)
-}
-
-private class AndroidDeviceInfo(
+internal class AndroidDeviceInfo(
   private val context: Context,
 ) : DeviceInfo {
   override suspend fun snapshot(): DeviceInfoSnapshot = withContext(Dispatchers.IO) {
@@ -78,7 +51,7 @@ private class AndroidDeviceInfo(
   }
 }
 
-private class AndroidClipboard(
+internal class AndroidClipboard(
   private val context: Context,
 ) : Clipboard {
   override suspend fun copy(bytes: ByteArray, mimeType: String): Boolean = withContext(Dispatchers.IO) {
@@ -111,7 +84,7 @@ private class AndroidClipboard(
   }
 }
 
-private class AndroidFileSystem(
+internal class AndroidFileSystem(
   private val context: Context,
 ) : FileSystem {
   override suspend fun save(
@@ -167,7 +140,7 @@ private class AndroidFileSystem(
   }
 }
 
-private class AndroidShare(
+internal class AndroidShare(
   private val context: Context,
 ) : Share {
   override suspend fun share(bytes: ByteArray, mimeType: String): Boolean = withContext(Dispatchers.IO) {

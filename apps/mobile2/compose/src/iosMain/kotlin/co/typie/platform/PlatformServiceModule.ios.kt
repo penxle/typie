@@ -2,9 +2,6 @@
 
 package co.typie.platform
 
-import co.typie.di.PlatformContext
-import co.typie.migration.IOSLegacyMigrationPlatformSource
-import co.typie.migration.LegacyMigrationPlatformSource
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
@@ -12,8 +9,6 @@ import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import org.koin.core.annotation.Module
-import org.koin.core.annotation.Single
 import platform.Foundation.NSBundle
 import platform.Foundation.NSData
 import platform.Foundation.NSDocumentDirectory
@@ -36,29 +31,7 @@ import platform.UIKit.UIPasteboard
 import platform.UIKit.UIViewController
 import kotlin.coroutines.resume
 
-@Module
-actual class PlatformServiceModule {
-  @Single
-  actual fun clipboard(ctx: PlatformContext): Clipboard = IOSClipboard()
-
-  @Single
-  actual fun deviceInfo(ctx: PlatformContext): DeviceInfo = IOSDeviceInfo()
-
-  @Single
-  actual fun fileSystem(ctx: PlatformContext): FileSystem = IOSFileSystem()
-
-  @Single
-  actual fun legacyMigrationPlatformSource(ctx: PlatformContext): LegacyMigrationPlatformSource =
-    IOSLegacyMigrationPlatformSource()
-
-  @Single
-  actual fun purchaseService(ctx: PlatformContext): PurchaseService = IOSPurchaseService()
-
-  @Single
-  actual fun share(ctx: PlatformContext): Share = IOSShare()
-}
-
-private class IOSDeviceInfo : DeviceInfo {
+internal class IOSDeviceInfo : DeviceInfo {
   override suspend fun snapshot(): DeviceInfoSnapshot = withContext(Dispatchers.Default) {
     val device = UIDevice.currentDevice
     val bundle = NSBundle.mainBundle
@@ -76,7 +49,7 @@ private class IOSDeviceInfo : DeviceInfo {
   }
 }
 
-private class IOSClipboard : Clipboard {
+internal class IOSClipboard : Clipboard {
   override suspend fun copy(bytes: ByteArray, mimeType: String): Boolean =
     withContext(Dispatchers.Default) {
       runCatching {
@@ -98,7 +71,7 @@ private class IOSClipboard : Clipboard {
     }
 }
 
-private class IOSFileSystem : FileSystem {
+internal class IOSFileSystem : FileSystem {
   override suspend fun save(
     bytes: ByteArray,
     name: String,
@@ -159,7 +132,7 @@ private fun ByteArray.toNSData(): NSData {
   }
 }
 
-private class IOSShare : Share {
+internal class IOSShare : Share {
   override suspend fun share(bytes: ByteArray, mimeType: String): Boolean =
     withContext(Dispatchers.Main) {
       runCatching {

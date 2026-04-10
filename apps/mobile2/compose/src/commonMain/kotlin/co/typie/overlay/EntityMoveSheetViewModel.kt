@@ -11,29 +11,24 @@ import co.typie.graphql.EntityMoveSheet_Folder_Query
 import co.typie.graphql.EntityMoveSheet_Root_Query
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.MoveEntityInput
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
 import co.typie.service.SiteService
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class EntityMoveSheetViewModel(
-  private val apolloClient: ApolloClient,
-  private val siteService: SiteService,
-) : ViewModel() {
+class EntityMoveSheetViewModel : ViewModel() {
   var destinationEntityId: String? by mutableStateOf(null)
     private set
 
-  val rootQuery = apolloClient.watchQuery(
+  val rootQuery = Apollo.watchQuery(
     scope = viewModelScope,
     skip = { destinationEntityId != null },
   ) {
-    EntityMoveSheet_Root_Query(siteId = siteService.siteId)
+    EntityMoveSheet_Root_Query(siteId = SiteService.siteId)
   }
 
-  val entityQuery = apolloClient.watchQuery(
+  val entityQuery = Apollo.watchQuery(
     scope = viewModelScope,
     skip = { destinationEntityId == null },
   ) {
@@ -62,7 +57,7 @@ class EntityMoveSheetViewModel(
     lowerOrder: String?,
     upperOrder: String?,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       EntityContainer_MoveEntity_Mutation(
         input = MoveEntityInput.Builder()
           .entityId(source.id)

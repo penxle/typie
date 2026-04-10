@@ -2,7 +2,6 @@ package co.typie.dev
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import org.koin.core.annotation.Single
 
 enum class NetworkPreset {
   Normal,
@@ -12,8 +11,7 @@ enum class NetworkPreset {
 
 class SimulatedNetworkFailureException : Exception("Simulated network failure")
 
-@Single
-class NetworkSimulator {
+object NetworkSimulator {
   private val _preset = MutableStateFlow(NetworkPreset.Normal)
   val preset: StateFlow<NetworkPreset> = _preset
 

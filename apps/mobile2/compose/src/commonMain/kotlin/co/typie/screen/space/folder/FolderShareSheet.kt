@@ -63,7 +63,7 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
+import co.typie.platform.PlatformModule
 
 private const val THUMBNAIL_WIDTH_DP = 64
 private const val THUMBNAIL_HEIGHT_DP = 38
@@ -120,7 +120,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   initialThumbnailUrl: String?,
   onUpdated: () -> Unit = {},
 ) {
-  val share = koinInject<Share>()
+  val share = PlatformModule.share
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(folderId, initialVisibility, initialThumbnailUrl) {

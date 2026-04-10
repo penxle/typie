@@ -1,14 +1,15 @@
 package co.typie.service
 
 import co.touchlab.kermit.Logger
-import co.typie.di.Platform
+import co.typie.graphql.Apollo
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import co.typie.graphql.CurrentPlanScreen_Query
 import co.typie.graphql.QueryState
 import co.typie.dev.SubscriptionDevScenario
 import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.subscriptionDevSubscription
 import co.typie.graphql.toSubscriptionSnapshot
-import com.apollographql.apollo.ApolloClient
 import com.apollographql.cache.normalized.FetchPolicy
 import com.apollographql.cache.normalized.fetchPolicy
 import com.apollographql.cache.normalized.watch
@@ -27,24 +28,18 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import org.koin.core.annotation.Single
 
-@Single
-class CurrentSubscriptionStore(
-  private val apolloClient: ApolloClient,
-  private val platform: Platform,
-  private val subscriptionDevSandbox: SubscriptionDevSandbox,
-) {
+object CurrentSubscriptionStore {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val remoteState = MutableStateFlow<QueryState<SubscriptionSnapshot?>>(QueryState.Loading)
   private var remoteWatchJob: Job? = null
 
   val state: StateFlow<QueryState<SubscriptionSnapshot?>> = combine(
-    subscriptionDevSandbox.scenario,
+    SubscriptionDevSandbox.scenario,
     remoteState,
   ) { scenario, currentRemoteState ->
     effectiveCurrentSubscriptionState(
-      platform = platform,
+      platform = PlatformModule.platform,
       scenario = scenario,
       remoteState = currentRemoteState,
     )
@@ -52,19 +47,19 @@ class CurrentSubscriptionStore(
     scope = scope,
     started = SharingStarted.Eagerly,
     initialValue = effectiveCurrentSubscriptionState(
-      platform = platform,
-      scenario = subscriptionDevSandbox.scenario.value,
+      platform = PlatformModule.platform,
+      scenario = SubscriptionDevSandbox.scenario.value,
       remoteState = remoteState.value,
     ),
   )
 
   val usesSandbox: Boolean
-    get() = platform == Platform.Desktop && subscriptionDevSandbox.usesSandbox
+    get() = PlatformModule.platform == Platform.Desktop && SubscriptionDevSandbox.usesSandbox
 
   init {
     scope.launch {
-      subscriptionDevSandbox.scenario
-        .map { scenario -> platform == Platform.Desktop && scenario != SubscriptionDevScenario.RemoteData }
+      SubscriptionDevSandbox.scenario
+        .map { scenario -> PlatformModule.platform == Platform.Desktop && scenario != SubscriptionDevScenario.RemoteData }
         .distinctUntilChanged()
         .collect { useSandbox ->
           if (useSandbox) {
@@ -82,7 +77,7 @@ class CurrentSubscriptionStore(
 
     scope.launch {
       try {
-        apolloClient.query(CurrentPlanScreen_Query())
+        Apollo.query(CurrentPlanScreen_Query())
           .fetchPolicy(FetchPolicy.NetworkOnly)
           .execute()
       } catch (e: CancellationException) {
@@ -103,7 +98,7 @@ class CurrentSubscriptionStore(
 
     remoteWatchJob = scope.launch {
       try {
-        apolloClient.query(CurrentPlanScreen_Query()).watch().collect { response ->
+        Apollo.query(CurrentPlanScreen_Query()).watch().collect { response ->
           val data = response.data
           if (data != null) {
             val subscription = data.me.subscription?.toSubscriptionSnapshot()

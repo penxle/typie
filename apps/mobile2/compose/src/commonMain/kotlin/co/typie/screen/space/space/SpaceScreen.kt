@@ -91,8 +91,7 @@ import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val SpaceScreenPasteBarBottomSpacerHeight = 176.dp
 private val SpaceScreenPasteBarBottomOffset = 28.dp
@@ -105,9 +104,9 @@ fun SpaceScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
   val sheetHost = LocalSheetHost.current
   val toast = LocalToast.current
-  val clipboard = koinInject<EntityClipboardService>()
-  val model = koinViewModel<SpaceViewModel>()
-  val folderActionModel = koinViewModel<FolderViewModel>(key = "space-folder-actions")
+  val clipboard = EntityClipboardService
+  val model = viewModel { SpaceViewModel() }
+  val folderActionModel = viewModel(key = "space-folder-actions") { FolderViewModel() }
   val scrollState = rememberScrollState("space")
   val presenterScope = rememberCoroutineScope()
   var isReordering by remember { mutableStateOf(false) }

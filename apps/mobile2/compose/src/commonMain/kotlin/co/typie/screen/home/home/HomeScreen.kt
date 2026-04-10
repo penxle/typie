@@ -59,11 +59,11 @@ import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun HomeScreen() {
-  val model = koinViewModel<HomeViewModel>()
+  val model = viewModel { HomeViewModel() }
   val nav = Nav.current
   val scrollState = rememberScrollState()
   val siteId = model.siteId

@@ -1,23 +1,16 @@
 package co.typie.migration
 
 import co.touchlab.kermit.Logger
-import org.koin.core.annotation.Single
+import co.typie.platform.PlatformModule
 
 fun interface LegacyMigrationRunner {
   suspend fun runIfNeeded(): LegacyMigrationRunResult
 }
 
-@Single(binds = [LegacyMigrationRunner::class])
-class LegacyMigrationCoordinator(
-  private val platformSource: LegacyMigrationPlatformSource,
-  private val hiveBoxReader: LegacyHiveBoxReader,
-  private val stateStore: LegacyMigrationStateStore,
-  private val authImporter: LegacyAuthImporter,
-  private val prefsImporter: LegacyPrefsImporter,
-) : LegacyMigrationRunner {
+object LegacyMigrationCoordinator : LegacyMigrationRunner {
   override suspend fun runIfNeeded(): LegacyMigrationRunResult {
     Logger.i { "Legacy migration: checking legacy source." }
-    val source = platformSource.load()
+    val source = PlatformModule.legacyMigrationPlatformSource.load()
       ?: return LegacyMigrationRunResult(
         sourceState = LegacyMigrationSourceState.Missing,
         authResult = LegacyMigrationStepResult.NotAttempted,
@@ -27,7 +20,7 @@ class LegacyMigrationCoordinator(
       }
 
     val authResult = when {
-      stateStore.isSessionHandled() -> LegacyMigrationStepResult.Skipped
+      LegacyMigrationStateStore.isSessionHandled() -> LegacyMigrationStepResult.Skipped
       else -> source.authBox?.let(::importAuth).orElseNotAttempted()
     }
     val prefsResult = takeIf { source.preferenceBox != null || source.themeBox != null }
@@ -47,13 +40,13 @@ class LegacyMigrationCoordinator(
 
   private fun importAuth(source: LegacyEncryptedHiveBoxSource): LegacyMigrationStepResult {
     return runCatching {
-      val authValues = hiveBoxReader.readEncryptedBox(
+      val authValues = LegacyHiveBoxReader.readEncryptedBox(
         bytes = source.bytes,
         keyCrc = source.keyCrc,
         decrypt = source.decryptor::decrypt,
       )
       val sessionToken = authValues["session_token"] as? String ?: error("Missing session_token in legacy auth box.")
-      authImporter.importSessionToken(sessionToken)
+      LegacyAuthImporter.importSessionToken(sessionToken)
     }.onFailure { error ->
       Logger.e(error) {
         "Legacy migration: auth import failed (${error::class.simpleName}): ${error.message ?: "<no message>"}."
@@ -63,9 +56,9 @@ class LegacyMigrationCoordinator(
 
   private fun importPrefs(source: LegacyMigrationSource): LegacyMigrationStepResult {
     return runCatching {
-      val preferenceValues = source.preferenceBox?.let(hiveBoxReader::readBox).orEmpty()
-      val themeValues = source.themeBox?.let(hiveBoxReader::readBox).orEmpty()
-      val report = prefsImporter.import(
+      val preferenceValues = source.preferenceBox?.let(LegacyHiveBoxReader::readBox).orEmpty()
+      val themeValues = source.themeBox?.let(LegacyHiveBoxReader::readBox).orEmpty()
+      val report = LegacyPrefsImporter.import(
         LegacyPrefsImportSource(
           preferenceValues = preferenceValues,
           themeValues = themeValues,

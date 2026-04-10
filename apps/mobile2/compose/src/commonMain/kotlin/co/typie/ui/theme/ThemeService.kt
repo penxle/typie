@@ -1,9 +1,7 @@
 package co.typie.ui.theme
 
 import co.typie.storage.Prefs
-import org.koin.core.annotation.Single
 
-@Single
-class ThemeService(prefs: Prefs) {
-  var themeMode: ThemeMode by prefs("theme_mode", ThemeMode.System)
+object ThemeService {
+  var themeMode: ThemeMode by Prefs("theme_mode", ThemeMode.System)
 }

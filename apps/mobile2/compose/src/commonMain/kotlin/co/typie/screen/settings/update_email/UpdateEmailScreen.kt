@@ -37,12 +37,12 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import co.typie.overlay.LocalToast
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun UpdateEmailScreen() {
   val nav = Nav.current
-  val model = koinViewModel<UpdateEmailViewModel>()
+  val model = viewModel { UpdateEmailViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()

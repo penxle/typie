@@ -1,6 +1,5 @@
-import java.util.Properties
-
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 val versionProps = Properties().apply {
   load(rootProject.file("version.properties").reader())
@@ -26,7 +25,6 @@ kotlin {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.splashscreen)
     implementation(libs.compose.uiToolingPreview)
-    implementation(libs.koin.android)
     implementation(libs.ktor.client.okhttp)
 
     implementation(libs.kakao.user)
@@ -46,7 +44,7 @@ android {
     versionName = versionProps["versionName"] as String
   }
 
-  sourceSets["main"].jniLibs.srcDirs("src/main/jniLibs")
+  sourceSets["main"].jniLibs.directories.add("src/main/jniLibs")
 
   packaging {
     resources {

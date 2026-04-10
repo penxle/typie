@@ -1,6 +1,7 @@
 package co.typie.dev
 
-import co.typie.di.Platform
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import co.typie.platform.PurchasePlanInterval
 import co.typie.service.FULL_ACCESS_MONTHLY_PLAN_ID
 import co.typie.service.FULL_ACCESS_YEARLY_PLAN_ID
@@ -13,7 +14,6 @@ import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import org.koin.core.annotation.Single
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -31,15 +31,12 @@ enum class SubscriptionDevScenario(
   Manual("수동 이용권"),
 }
 
-@Single
-class SubscriptionDevSandbox(
-  private val platform: Platform,
-) {
+object SubscriptionDevSandbox {
   private val _scenario = MutableStateFlow(SubscriptionDevScenario.RemoteData)
   val scenario: StateFlow<SubscriptionDevScenario> = _scenario
 
   val enabled: Boolean
-    get() = platform == Platform.Desktop
+    get() = PlatformModule.platform == Platform.Desktop
 
   val usesSandbox: Boolean
     get() = enabled && _scenario.value != SubscriptionDevScenario.RemoteData

@@ -60,7 +60,7 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
 import co.typie.overlay.LocalToast
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 data class SettingsItem(
   val label: String,
@@ -267,7 +267,7 @@ fun SettingsScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
-  val model = koinViewModel<SettingsViewModel>()
+  val model = viewModel { SettingsViewModel() }
   val toast = LocalToast.current
   val currentSubscriptionStore = model.currentSubscriptionStore
   val subscriptionService = model.subscriptionService

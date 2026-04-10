@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
-import org.koin.core.annotation.Single
 
 internal const val DEFAULT_SITE_REFRESH_DEBOUNCE_MS = 200L
 
@@ -20,8 +19,7 @@ internal fun Flow<String>.coalescedSiteRefreshes(
     .coalescedRefreshSignals(delayMillis = debounceMs)
 }
 
-@Single
-class SiteRefreshCoordinator {
+object SiteRefreshCoordinator {
   private val signals = MutableSharedFlow<String>(
     extraBufferCapacity = 64,
     onBufferOverflow = BufferOverflow.DROP_OLDEST,

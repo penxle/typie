@@ -1,15 +1,14 @@
 package co.typie.service
 
-import co.typie.di.Platform
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import co.typie.graphql.QueryState
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseEvent
 import co.typie.platform.PurchaseProduct
-import co.typie.platform.PurchaseService
 import co.typie.dev.SubscriptionDevSandbox
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import org.koin.core.annotation.Single
 
 data class SubscriptionCelebration(
   val title: String,
@@ -27,20 +26,15 @@ enum class SubscriptionManagementResult {
   CompletedLocally,
 }
 
-@Single
-class SubscriptionService(
-  private val platform: Platform,
-  private val purchaseService: PurchaseService,
-  private val subscriptionDevSandbox: SubscriptionDevSandbox,
-) {
+object SubscriptionService {
   val usesSandbox: Boolean
-    get() = platform == Platform.Desktop && subscriptionDevSandbox.usesSandbox
+    get() = PlatformModule.platform == Platform.Desktop && SubscriptionDevSandbox.usesSandbox
 
   val purchaseEvents: Flow<PurchaseEvent>
     get() = if (usesSandbox) {
       emptyFlow()
     } else {
-      purchaseService.events
+      PlatformModule.purchaseService.events
     }
 
   fun hasQueryError(state: QueryState<*>): Boolean {
@@ -53,19 +47,19 @@ class SubscriptionService(
 
   fun canStartTrial(remoteCanStartTrial: Boolean): Boolean {
     return if (usesSandbox) {
-      subscriptionDevSandbox.canStartTrial
+      SubscriptionDevSandbox.canStartTrial
     } else {
       remoteCanStartTrial
     }
   }
 
   suspend fun queryProducts(): Map<PurchasePlanInterval, PurchaseProduct> {
-    return purchaseService.queryProducts()
+    return PlatformModule.purchaseService.queryProducts()
   }
 
   suspend fun startTrial(remoteAction: suspend () -> Unit): SubscriptionCelebration {
     if (usesSandbox) {
-      subscriptionDevSandbox.startTrial()
+      SubscriptionDevSandbox.startTrial()
     } else {
       remoteAction()
     }
@@ -78,7 +72,7 @@ class SubscriptionService(
     accountId: String,
   ): PurchaseStartResult {
     if (usesSandbox) {
-      subscriptionDevSandbox.purchase(product.interval)
+      SubscriptionDevSandbox.purchase(product.interval)
 
       return PurchaseStartResult(
         started = true,
@@ -87,7 +81,7 @@ class SubscriptionService(
     }
 
     return PurchaseStartResult(
-      started = purchaseService.purchase(
+      started = PlatformModule.purchaseService.purchase(
         product = product,
         accountId = accountId,
       ),
@@ -96,11 +90,11 @@ class SubscriptionService(
 
   suspend fun openSubscriptionManagement(): SubscriptionManagementResult {
     if (usesSandbox) {
-      subscriptionDevSandbox.scheduleCancel()
+      SubscriptionDevSandbox.scheduleCancel()
       return SubscriptionManagementResult.CompletedLocally
     }
 
-    return if (purchaseService.openSubscriptionManagement()) {
+    return if (PlatformModule.purchaseService.openSubscriptionManagement()) {
       SubscriptionManagementResult.AwaitingExternalResult
     } else {
       SubscriptionManagementResult.FailedToOpen

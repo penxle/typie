@@ -3,7 +3,6 @@ package co.typie.graphql
 import co.touchlab.kermit.Logger
 import co.typie.Konfig
 import co.typie.auth.AuthService
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -14,7 +13,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.koin.core.annotation.Single
 
 private const val CreateWsSessionMutation =
   """{"query":"mutation CreateWsSession_Mutation { createWsSession }"}"""
@@ -27,21 +25,17 @@ internal fun parseCreateWsSessionResponse(body: String): String {
     ?: throw IllegalStateException("Missing websocket session token")
 }
 
-@Single
-class WebSocketSessionService(
-  private val authService: AuthService,
-  private val httpClient: HttpClient,
-) {
+object WebSocketSessionService {
   suspend fun createConnectionPayload(): Map<String, Any?> = mapOf("session" to createSession())
 
   suspend fun createSession(): String {
-    val accessToken = authService.tokens?.accessToken ?: authService.refreshTokens()
+    val accessToken = AuthService.tokens?.accessToken ?: AuthService.refreshTokens()
       ?: error("Missing access token for websocket session")
 
     return try {
       requestSession(accessToken)
     } catch (firstError: Exception) {
-      val refreshedAccessToken = authService.refreshTokens()
+      val refreshedAccessToken = AuthService.refreshTokens()
       if (refreshedAccessToken == null || refreshedAccessToken == accessToken) {
         throw firstError
       }
@@ -52,7 +46,7 @@ class WebSocketSessionService(
   }
 
   private suspend fun requestSession(accessToken: String): String {
-    val response = httpClient.post("${Konfig.API_URL}/graphql") {
+    val response = Http.post("${Konfig.API_URL}/graphql") {
       header("Authorization", "Bearer $accessToken")
       contentType(ContentType.Application.Json)
       setBody(CreateWsSessionMutation)

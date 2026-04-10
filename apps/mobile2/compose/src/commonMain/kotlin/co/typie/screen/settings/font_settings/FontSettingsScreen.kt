@@ -68,8 +68,7 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.component.weightSpecimenFallbacks
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private data class PendingFontDeletion(
   val familyDisplayName: String,
@@ -78,10 +77,10 @@ private data class PendingFontDeletion(
 
 @Composable
 fun FontSettingsScreen() {
-  val model = koinViewModel<FontSettingsViewModel>()
+  val model = viewModel { FontSettingsViewModel() }
   val nav = Nav.current
   val toast = LocalToast.current
-  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
+  val currentSubscriptionStore = CurrentSubscriptionStore
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current

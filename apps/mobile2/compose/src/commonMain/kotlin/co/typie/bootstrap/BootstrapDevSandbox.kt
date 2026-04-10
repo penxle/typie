@@ -1,9 +1,9 @@
 package co.typie.bootstrap
 
-import co.typie.di.Platform
+import co.typie.platform.Platform
+import co.typie.platform.PlatformModule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import org.koin.core.annotation.Single
 
 private const val BOOTSTRAP_DEV_STORE_URL = "https://apps.apple.com/app/id6745595771"
 
@@ -16,15 +16,12 @@ enum class BootstrapDevScenario(
   UpdateRequired("업데이트 필요"),
 }
 
-@Single
-class BootstrapDevSandbox(
-  private val platform: Platform,
-) {
+object BootstrapDevSandbox {
   private val _scenario = MutableStateFlow(BootstrapDevScenario.RemoteData)
   val scenario: StateFlow<BootstrapDevScenario> = _scenario
 
   val enabled: Boolean
-    get() = platform == Platform.Desktop
+    get() = PlatformModule.platform == Platform.Desktop
 
   val usesSandbox: Boolean
     get() = enabled && _scenario.value != BootstrapDevScenario.RemoteData

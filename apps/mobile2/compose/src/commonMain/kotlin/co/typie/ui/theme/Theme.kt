@@ -20,7 +20,6 @@ import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.LocalHazeStyle
 import kotlinx.coroutines.flow.drop
 import kotlinx.serialization.Serializable
-import org.koin.compose.koinInject
 import co.typie.startup.AppStartupState
 import co.typie.startup.AppStartupService
 
@@ -191,8 +190,8 @@ internal fun resolveIsDarkTheme(
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-  val appStartupService = koinInject<AppStartupService>()
-  val themeService = koinInject<ThemeService>()
+  val appStartupService = AppStartupService
+  val themeService = ThemeService
   val startupState = appStartupService.state.collectAsState().value
   val isStartupReady = startupState is AppStartupState.Ready
   val themeMode = remember(isStartupReady) {

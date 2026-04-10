@@ -2,27 +2,22 @@ package co.typie.migration
 
 import co.typie.auth.AuthTokens
 import co.typie.storage.Vault
-import org.koin.core.annotation.Single
 
-@Single
-class LegacyAuthImporter(
-  vault: Vault,
-  private val stateStore: LegacyMigrationStateStore,
-) {
-  private var tokens: AuthTokens? by vault("tokens", null)
+object LegacyAuthImporter {
+  private var tokens: AuthTokens? by Vault("tokens", null)
 
   fun importSessionToken(sessionToken: String): LegacyMigrationStepResult {
-    if (stateStore.isSessionHandled()) {
+    if (LegacyMigrationStateStore.isSessionHandled()) {
       return LegacyMigrationStepResult.Skipped
     }
 
     if (tokens != null) {
-      stateStore.recordAuthSkipped()
+      LegacyMigrationStateStore.recordAuthSkipped()
       return LegacyMigrationStepResult.Skipped
     }
 
     tokens = AuthTokens(sessionToken = sessionToken)
-    stateStore.recordAuthImported()
+    LegacyMigrationStateStore.recordAuthImported()
     return LegacyMigrationStepResult.Imported
   }
 }

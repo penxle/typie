@@ -1,12 +1,7 @@
 package co.typie.platform
 
-import co.typie.di.PlatformContext
-import co.typie.migration.DesktopLegacyMigrationPlatformSource
-import co.typie.migration.LegacyMigrationPlatformSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.koin.core.annotation.Module
-import org.koin.core.annotation.Single
 import java.awt.Image
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
@@ -16,29 +11,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import javax.imageio.ImageIO
 
-@Module
-actual class PlatformServiceModule {
-  @Single
-  actual fun clipboard(ctx: PlatformContext): Clipboard = DesktopClipboard()
-
-  @Single
-  actual fun deviceInfo(ctx: PlatformContext): DeviceInfo = DesktopDeviceInfo()
-
-  @Single
-  actual fun fileSystem(ctx: PlatformContext): FileSystem = DesktopFileSystem()
-
-  @Single
-  actual fun legacyMigrationPlatformSource(ctx: PlatformContext): LegacyMigrationPlatformSource =
-    DesktopLegacyMigrationPlatformSource()
-
-  @Single
-  actual fun purchaseService(ctx: PlatformContext): PurchaseService = DesktopPurchaseService()
-
-  @Single
-  actual fun share(ctx: PlatformContext): Share = DesktopShare()
-}
-
-private class DesktopDeviceInfo : DeviceInfo {
+internal class DesktopDeviceInfo : DeviceInfo {
   override suspend fun snapshot(): DeviceInfoSnapshot = withContext(Dispatchers.IO) {
     val osName = System.getProperty("os.name")?.takeIf { it.isNotBlank() } ?: "Desktop"
     val osVersion = System.getProperty("os.version")?.takeIf { it.isNotBlank() } ?: "unknown"
@@ -58,7 +31,7 @@ private class DesktopDeviceInfo : DeviceInfo {
   }
 }
 
-private class DesktopClipboard : Clipboard {
+internal class DesktopClipboard : Clipboard {
   override suspend fun copy(bytes: ByteArray, mimeType: String): Boolean = withContext(Dispatchers.IO) {
     runCatching {
       if (mimeType.startsWith("image/")) {
@@ -79,7 +52,7 @@ private class DesktopClipboard : Clipboard {
   }
 }
 
-private class ImageTransferable(
+internal class ImageTransferable(
   private val image: Image,
 ) : Transferable {
   override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(DataFlavor.imageFlavor)
@@ -90,7 +63,7 @@ private class ImageTransferable(
   }
 }
 
-private class DesktopFileSystem : FileSystem {
+internal class DesktopFileSystem : FileSystem {
   override suspend fun save(
     bytes: ByteArray,
     name: String,
@@ -112,7 +85,7 @@ private class DesktopFileSystem : FileSystem {
   }
 }
 
-private class DesktopShare : Share {
+internal class DesktopShare : Share {
   // NOTE: Desktop share flow is not supported yet.
   override suspend fun share(bytes: ByteArray, mimeType: String): Boolean = false
   override suspend fun share(text: String): Boolean = false

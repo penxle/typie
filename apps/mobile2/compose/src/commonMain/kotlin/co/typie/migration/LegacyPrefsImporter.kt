@@ -4,43 +4,38 @@ import co.typie.service.DeveloperPreferencesService
 import co.typie.service.EditorPreferencesService
 import co.typie.storage.Prefs
 import co.typie.ui.theme.ThemeMode
-import org.koin.core.annotation.Single
 
-@Single
-class LegacyPrefsImporter(
-  prefs: Prefs,
-  private val stateStore: LegacyMigrationStateStore,
-) {
-  private var siteId: String by prefs("site_id", "")
-  private var devMode: Boolean by prefs(
+object LegacyPrefsImporter {
+  private var siteId: String by Prefs("site_id", "")
+  private var devMode: Boolean by Prefs(
     DeveloperPreferencesService.DEV_MODE_KEY,
     DeveloperPreferencesService.DEFAULT_DEV_MODE,
   )
-  private var typewriterEnabled: Boolean by prefs(
+  private var typewriterEnabled: Boolean by Prefs(
     EditorPreferencesService.TYPEWRITER_ENABLED_KEY,
     EditorPreferencesService.DEFAULT_TYPEWRITER_ENABLED,
   )
-  private var typewriterPosition: Double by prefs(
+  private var typewriterPosition: Double by Prefs(
     EditorPreferencesService.TYPEWRITER_POSITION_KEY,
     EditorPreferencesService.DEFAULT_TYPEWRITER_POSITION,
   )
-  private var lineHighlightEnabled: Boolean by prefs(
+  private var lineHighlightEnabled: Boolean by Prefs(
     EditorPreferencesService.LINE_HIGHLIGHT_ENABLED_KEY,
     EditorPreferencesService.DEFAULT_LINE_HIGHLIGHT_ENABLED,
   )
-  private var autoSurroundEnabled: Boolean by prefs(
+  private var autoSurroundEnabled: Boolean by Prefs(
     EditorPreferencesService.AUTO_SURROUND_ENABLED_KEY,
     EditorPreferencesService.DEFAULT_AUTO_SURROUND_ENABLED,
   )
-  private var characterCountFloatingEnabled: Boolean by prefs(
+  private var characterCountFloatingEnabled: Boolean by Prefs(
     EditorPreferencesService.CHARACTER_COUNT_FLOATING_ENABLED_KEY,
     EditorPreferencesService.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED,
   )
-  private var widgetAutoFadeEnabled: Boolean by prefs(
+  private var widgetAutoFadeEnabled: Boolean by Prefs(
     EditorPreferencesService.WIDGET_AUTO_FADE_ENABLED_KEY,
     EditorPreferencesService.DEFAULT_WIDGET_AUTO_FADE_ENABLED,
   )
-  private var themeMode: ThemeMode by prefs("theme_mode", ThemeMode.System)
+  private var themeMode: ThemeMode by Prefs("theme_mode", ThemeMode.System)
 
   fun import(source: LegacyPrefsImportSource): LegacyPrefsImportReport {
     val importedKeys = mutableListOf<String>()
@@ -130,7 +125,7 @@ class LegacyPrefsImporter(
     val mappedThemeMode = mapLegacyThemeMode(source.themeValues["mode"] as? String)
     if (mappedThemeMode != null) {
       val targetKey = "theme_mode"
-      if (stateStore.isPrefHandled(targetKey) || themeMode != ThemeMode.System) {
+      if (LegacyMigrationStateStore.isPrefHandled(targetKey) || themeMode != ThemeMode.System) {
         skippedKeys += targetKey
       } else {
         themeMode = mappedThemeMode
@@ -142,7 +137,7 @@ class LegacyPrefsImporter(
       importedKeys = importedKeys.sorted(),
       skippedKeys = skippedKeys.sorted(),
     )
-    stateStore.recordPrefsImport(report)
+    LegacyMigrationStateStore.recordPrefsImport(report)
     return report
   }
 
@@ -157,7 +152,7 @@ class LegacyPrefsImporter(
     skippedKeys: MutableList<String>,
   ) {
     val value = source[sourceKey] as? String ?: return
-    if (stateStore.isPrefHandled(targetKey) || currentValue != defaultValue) {
+    if (LegacyMigrationStateStore.isPrefHandled(targetKey) || currentValue != defaultValue) {
       skippedKeys += targetKey
       return
     }
@@ -177,7 +172,7 @@ class LegacyPrefsImporter(
     skippedKeys: MutableList<String>,
   ) {
     val value = source[sourceKey] as? Boolean ?: return
-    if (stateStore.isPrefHandled(targetKey) || currentValue != defaultValue) {
+    if (LegacyMigrationStateStore.isPrefHandled(targetKey) || currentValue != defaultValue) {
       skippedKeys += targetKey
       return
     }
@@ -197,7 +192,7 @@ class LegacyPrefsImporter(
     skippedKeys: MutableList<String>,
   ) {
     val value = (source[sourceKey] as? Number)?.toDouble() ?: return
-    if (stateStore.isPrefHandled(targetKey) || currentValue != defaultValue) {
+    if (LegacyMigrationStateStore.isPrefHandled(targetKey) || currentValue != defaultValue) {
       skippedKeys += targetKey
       return
     }

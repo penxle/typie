@@ -1,6 +1,6 @@
 package co.typie.bootstrap
 
-import co.typie.di.Platform
+import co.typie.platform.Platform
 import co.typie.datetime.toInstantOrNull
 import io.ktor.http.Url
 import kotlinx.serialization.Serializable

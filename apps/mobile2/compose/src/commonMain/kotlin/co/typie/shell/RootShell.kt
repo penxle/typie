@@ -46,14 +46,13 @@ import co.typie.ui.component.sheet.SheetOverlayPresenterState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
-import org.koin.compose.koinInject
 
 @Composable
 fun RootShell() {
-  val appStartupService = koinInject<AppStartupService>()
-  val authService = koinInject<AuthService>()
-  val bootstrapService = koinInject<BootstrapService>()
-  val bootstrapDevSandbox = koinInject<BootstrapDevSandbox>()
+  val appStartupService = AppStartupService
+  val authService = AuthService
+  val bootstrapService = BootstrapService
+  val bootstrapDevSandbox = BootstrapDevSandbox
   val startupState by appStartupService.state.collectAsState()
   val authState by authService.state.collectAsState()
   val bootstrapState by bootstrapService.state.collectAsState()

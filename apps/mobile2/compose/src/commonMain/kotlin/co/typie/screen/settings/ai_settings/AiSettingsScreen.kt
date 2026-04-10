@@ -41,11 +41,11 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import co.typie.overlay.LocalToast
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun AiSettingsScreen() {
-  val model = koinViewModel<AiSettingsViewModel>()
+  val model = viewModel { AiSettingsViewModel() }
   val toast = LocalToast.current
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()

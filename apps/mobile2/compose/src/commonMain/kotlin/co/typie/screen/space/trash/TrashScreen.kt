@@ -68,7 +68,7 @@ import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import co.typie.overlay.LocalToast
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 internal enum class TrashItemType(
   val label: String,
@@ -134,7 +134,7 @@ fun TrashScreen(entityId: String? = null) {
   val nav = Nav.current
   val toast = LocalToast.current
   val bottomSheetHost = LocalBottomSheetHost.current
-  val model = koinViewModel<TrashViewModel>(key = "trash:${entityId ?: "site"}")
+  val model = viewModel(key = "trash:${entityId ?: "site"}") { TrashViewModel() }
   val screenScope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   var purgeRequest by remember(entityId) { mutableStateOf<TrashPurgeRequest?>(null) }

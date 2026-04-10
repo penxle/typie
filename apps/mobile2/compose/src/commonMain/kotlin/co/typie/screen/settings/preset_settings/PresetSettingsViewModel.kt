@@ -5,21 +5,18 @@ import androidx.lifecycle.viewModelScope
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.PresetSettingsScreen_Query
 import co.typie.graphql.PresetSettingsScreen_UpdatePreferences_Mutation
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdatePreferencesInput
-import co.typie.graphql.type.buildUser
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
-import com.apollographql.apollo.ApolloClient
 import kotlinx.serialization.json.JsonObject
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-internal class PresetSettingsViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  internal val query = apolloClient.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { PresetSettingsScreen_Query() }
+internal class PresetSettingsViewModel : ViewModel() {
+  internal val query = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { PresetSettingsScreen_Query() }
 
   internal val currentTemplate: PresetTemplate
     get() = PresetTemplate.fromPreferencesJson(query.data.me.preferences)
@@ -46,7 +43,7 @@ internal class PresetSettingsViewModel(
   }
 
   private suspend fun updateTemplate(value: JsonObject): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       PresetSettingsScreen_UpdatePreferences_Mutation(
         input = UpdatePreferencesInput(value = value),
       ),

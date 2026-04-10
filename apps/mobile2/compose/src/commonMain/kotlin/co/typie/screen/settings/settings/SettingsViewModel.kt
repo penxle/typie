@@ -5,25 +5,22 @@ import androidx.lifecycle.viewModelScope
 import co.typie.auth.AuthService
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.SettingsScreen_Query
-import co.typie.graphql.type.buildUser
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
-import co.typie.platform.DeviceInfo
+import co.typie.platform.PlatformModule
 import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionService
 import co.typie.service.DeveloperPreferencesService
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
+import co.typie.service.SubscriptionService
 
-@KoinViewModel
-class SettingsViewModel(
-  private val apolloClient: ApolloClient,
-  val authService: AuthService,
-  val deviceInfo: DeviceInfo,
-  val developerPreferences: DeveloperPreferencesService,
-  val currentSubscriptionStore: CurrentSubscriptionStore,
-  val subscriptionService: SubscriptionService,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { SettingsScreen_Query() }
+class SettingsViewModel : ViewModel() {
+  val authService = AuthService
+  val deviceInfo = PlatformModule.deviceInfo
+  val developerPreferences = DeveloperPreferencesService
+  val currentSubscriptionStore = CurrentSubscriptionStore
+  val subscriptionService = SubscriptionService
+  val query = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { SettingsScreen_Query() }
 }
 
 private fun placeholderData() = SettingsScreen_Query.Data(PlaceholderResolver) {

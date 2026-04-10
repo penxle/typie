@@ -10,7 +10,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
     InitLoggerKt.doInitLogger()
-    KoinInitKt.doInitKoin()
 
     let info = Bundle.main.infoDictionary ?? [:]
 

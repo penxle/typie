@@ -45,14 +45,12 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun DeleteUserScreen() {
   val nav = Nav.current
-  val model = koinViewModel<DeleteUserViewModel>()
-  val authService = koinInject<AuthService>()
+  val model = viewModel { DeleteUserViewModel() }
   val toast = LocalToast.current
   val scrollState = rememberScrollState()
   var isAcknowledged by remember { mutableStateOf(false) }
@@ -69,7 +67,7 @@ fun DeleteUserScreen() {
       .withDefaultExceptionHandler(toast)
       .onOk {
         toast.dismiss()
-        authService.clearSession()
+        AuthService.clearSession()
       }
   }
 

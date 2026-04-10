@@ -6,26 +6,26 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.blob.BlobService
-import co.typie.graphql.FontSettingsScreen_ArchiveFont_Mutation
+import co.typie.graphql.Apollo
 import co.typie.graphql.FontSettingsScreen_ArchiveFontFamily_Mutation
+import co.typie.graphql.FontSettingsScreen_ArchiveFont_Mutation
 import co.typie.graphql.FontSettingsScreen_PersistBlobAsFont_Mutation
 import co.typie.graphql.FontSettingsScreen_Query
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.ArchiveFontFamilyInput
 import co.typie.graphql.type.ArchiveFontInput
 import co.typie.graphql.type.PersistBlobAsFontInput
-import co.typie.graphql.type.buildUser
 import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.Task
 import co.typie.result.result
 import co.typie.result.task
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CancellationException
-import org.koin.core.annotation.KoinViewModel
 
 internal class FontSettingsScreenState {
   var isUploading by mutableStateOf(false)
@@ -47,14 +47,11 @@ internal class FontSettingsScreenState {
     internal set
 }
 
-@KoinViewModel
-class FontSettingsViewModel(
-  private val apolloClient: ApolloClient,
-  private val blobService: BlobService,
-) : ViewModel() {
+class FontSettingsViewModel : ViewModel() {
+  private val blobService = BlobService
   internal val state = FontSettingsScreenState()
 
-  val query = apolloClient.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { FontSettingsScreen_Query() }
+  val query = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { FontSettingsScreen_Query() }
 
   internal val userFontFamilies: List<FontSettingsFamily>
     get() = uploadedFontFamilies(query.data.me.documentFontFamilies.map { it.toModel() })
@@ -88,7 +85,7 @@ class FontSettingsViewModel(
             mimeType = file.mimeType ?: "font/ttf",
           )
 
-          val result = apolloClient.executeMutation(
+          val result = Apollo.executeMutation(
             FontSettingsScreen_PersistBlobAsFont_Mutation(
               input = PersistBlobAsFontInput(path = path),
             ),
@@ -149,7 +146,7 @@ class FontSettingsViewModel(
     if (state.deletingFamilyId != null || state.deletingFontId != null) return Result.Ok(Unit)
     state.deletingFamilyId = family.id
     return result<Unit, Nothing> {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         FontSettingsScreen_ArchiveFontFamily_Mutation(
           input = ArchiveFontFamilyInput(fontFamilyId = family.id),
         ),
@@ -162,7 +159,7 @@ class FontSettingsViewModel(
     if (state.deletingFamilyId != null || state.deletingFontId != null) return Result.Ok(Unit)
     state.deletingFontId = font.id
     return result<Unit, Nothing> {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         FontSettingsScreen_ArchiveFont_Mutation(
           input = ArchiveFontInput(fontId = font.id),
         ),

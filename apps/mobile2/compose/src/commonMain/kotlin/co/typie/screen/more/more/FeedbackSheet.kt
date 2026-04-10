@@ -42,11 +42,11 @@ import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.graphql.Apollo
+import co.typie.platform.PlatformModule
 import co.typie.ui.theme.AppTheme
-import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CancellationException
-import org.koin.compose.koinInject
 
 private data class FeedbackTopic(
   val value: String,
@@ -83,8 +83,7 @@ private data class FeedbackMetadata(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BottomSheetScope<Unit>.FeedbackSheet() {
-  val apolloClient = koinInject<ApolloClient>()
-  val deviceInfo = koinInject<DeviceInfo>()
+  val deviceInfo = PlatformModule.deviceInfo
   val toast = LocalToast.current
 
   var topic by remember { mutableStateOf<String?>(null) }
@@ -116,7 +115,7 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
       }
       val metadata = buildFeedbackMetadata(deviceSnapshot)
 
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         MoreScreen_SubmitFeedback_Mutation(
           input = SubmitFeedbackInput(
             topic = topic.toOptionalInput(),

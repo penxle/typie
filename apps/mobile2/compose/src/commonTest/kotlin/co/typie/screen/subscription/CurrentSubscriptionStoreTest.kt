@@ -2,7 +2,7 @@ package co.typie.screen.subscription
 
 import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.SubscriptionDevScenario
-import co.typie.di.Platform
+import co.typie.platform.Platform
 import co.typie.graphql.CurrentPlanScreen_Query
 import co.typie.graphql.QueryState
 import co.typie.service.CurrentSubscriptionStore

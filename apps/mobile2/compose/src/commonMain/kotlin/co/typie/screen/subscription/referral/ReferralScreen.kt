@@ -54,16 +54,16 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
+import co.typie.platform.PlatformModule
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun ReferralScreen() {
-  val model = koinViewModel<ReferralViewModel>()
+  val model = viewModel { ReferralViewModel() }
   val toast = LocalToast.current
-  val clipboard = koinInject<Clipboard>()
-  val share = koinInject<Share>()
+  val clipboard = PlatformModule.clipboard
+  val share = PlatformModule.share
   val scrollState = rememberScrollState()
   var inviteMessage by remember { mutableStateOf<String?>(null) }
   var isInviteLoading by remember { mutableStateOf(false) }

@@ -4,16 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.SecuritySettingsScreen_Query
-import co.typie.graphql.type.buildUser
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class SecuritySettingsViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(
+class SecuritySettingsViewModel : ViewModel() {
+  val query = Apollo.watchQuery(
     scope = viewModelScope,
     placeholderData = placeholderData(),
   ) { SecuritySettingsScreen_Query() }

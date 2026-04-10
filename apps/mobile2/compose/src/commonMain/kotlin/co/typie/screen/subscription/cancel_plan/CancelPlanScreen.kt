@@ -41,20 +41,18 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.theme.AppTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun CancelPlanScreen() {
   val nav = Nav.current
-  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val toast = LocalToast.current
-  val model = koinViewModel<CancelPlanViewModel>()
+  val model = viewModel { CancelPlanViewModel() }
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val lifecycleOwner = LocalLifecycleOwner.current
-  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -63,7 +61,7 @@ fun CancelPlanScreen() {
   )
 
   if (currentSubscriptionState is QueryState.Error) {
-    ErrorDialog { currentSubscriptionStore.refresh() }
+    ErrorDialog { CurrentSubscriptionStore.refresh() }
   }
 
   DisposableEffect(lifecycleOwner) {

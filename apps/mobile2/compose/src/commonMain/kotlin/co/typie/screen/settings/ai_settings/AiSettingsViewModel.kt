@@ -8,25 +8,22 @@ import androidx.lifecycle.viewModelScope
 import co.typie.graphql.AiSettingsScreen_Query
 import co.typie.graphql.AiSettingsScreen_UpdatePreferences_Mutation
 import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdatePreferencesInput
-import co.typie.graphql.type.buildUser
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
-import com.apollographql.apollo.ApolloClient
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class AiSettingsViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
+class AiSettingsViewModel : ViewModel() {
+  val query = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
     AiSettingsScreen_Query()
   }
 
@@ -50,7 +47,7 @@ class AiSettingsViewModel(
     val previous = aiOptIn
     aiOptIn = enabled
     return loading<Unit, Nothing>({ isUpdatingAiOptIn = it }) {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         AiSettingsScreen_UpdatePreferences_Mutation(
           input = UpdatePreferencesInput(
             value = JsonObject(mapOf("aiOptIn" to JsonPrimitive(enabled))),

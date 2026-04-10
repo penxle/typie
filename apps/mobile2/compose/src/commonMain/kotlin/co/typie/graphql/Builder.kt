@@ -1,9 +1,9 @@
 package co.typie.graphql
 
-import co.typie.graphql.schema.__Schema
-import com.apollographql.apollo.api.BuilderScope
+import co.typie.graphql.builder.resolver.DefaultFakeResolver
+import co.typie.graphql.builder.resolver.adaptToJson
 import com.apollographql.apollo.api.CompiledField
-import com.apollographql.apollo.api.DefaultFakeResolver
+import com.apollographql.apollo.api.DataBuilderScope
 import com.apollographql.apollo.api.FakeResolver
 import com.apollographql.apollo.api.FakeResolverContext
 import kotlinx.serialization.json.JsonNull
@@ -13,13 +13,13 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 
 object PlaceholderResolver : FakeResolver {
-  private val delegate = DefaultFakeResolver(__Schema.all)
+  private val delegate = DefaultFakeResolver()
 
   override fun resolveLeaf(context: FakeResolverContext): Any {
     return when (context.mergedField.type.rawType().name) {
       "BigInt" -> context.id.hashCode().absoluteValue.toLong() % 1000000L
-      "Binary" -> ByteArray(0)
-      "DateTime" -> Clock.System.now() - (context.id.hashCode().absoluteValue % 30).days
+      "Binary" -> "AA=="
+      "DateTime" -> context.adaptToJson(Clock.System.now() - (context.id.hashCode().absoluteValue % 30).days)
       "JSON" -> JsonNull
       else -> delegate.resolveLeaf(context)
     }
@@ -44,5 +44,5 @@ object PlaceholderResolver : FakeResolver {
 
 private const val FILLER = '\uAC00'
 
-fun BuilderScope.text(length: IntRange, lines: Int = 1): String =
+fun DataBuilderScope.text(length: IntRange, lines: Int = 1): String =
   (1..lines).joinToString("\n") { FILLER.toString().repeat(length.random()) }

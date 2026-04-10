@@ -11,17 +11,17 @@ import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
 import co.typie.graphql.UpdateEmailScreen_Query
 import co.typie.graphql.UpdateEmailScreen_SendEmailUpdateEmail_Mutation
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.SendEmailUpdateEmailInput
-import co.typie.graphql.type.buildUser
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
+import co.typie.graphql.Apollo
 import co.typie.result.loading
 import co.typie.result.result
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CoroutineScope
-import org.koin.core.annotation.KoinViewModel
 
 sealed interface UpdateEmailError {
   data object EmailAlreadyExists : UpdateEmailError
@@ -39,15 +39,12 @@ class UpdateEmailScreenState(scope: CoroutineScope) {
   val form = UpdateEmailForm(scope)
 }
 
-@KoinViewModel
-class UpdateEmailViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
+class UpdateEmailViewModel : ViewModel() {
   val state = UpdateEmailScreenState(viewModelScope)
   var isSubmitting by mutableStateOf(false)
     private set
 
-  val query = apolloClient.watchQuery(
+  val query = Apollo.watchQuery(
     scope = viewModelScope,
     placeholderData = placeholderData(),
   ) { UpdateEmailScreen_Query() }
@@ -57,7 +54,7 @@ class UpdateEmailViewModel(
 
     return loading({ isSubmitting = it }) {
       try {
-        apolloClient.executeMutation(
+        Apollo.executeMutation(
           UpdateEmailScreen_SendEmailUpdateEmail_Mutation(
             input = SendEmailUpdateEmailInput(
               email = state.form.email.value.trim(),

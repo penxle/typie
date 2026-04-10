@@ -14,18 +14,15 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import com.hashsequence.coilresvg.ResvgDecoder
-import io.ktor.client.HttpClient
-import org.koin.compose.koinInject
+import co.typie.graphql.Http
 
 @Composable
 fun App() {
-  val httpClient = koinInject<HttpClient>()
-
   setSingletonImageLoaderFactory { context ->
     ImageLoader.Builder(context)
       .crossfade(true)
       .components {
-        add(KtorNetworkFetcherFactory(httpClient))
+        add(KtorNetworkFetcherFactory(Http))
         add(ResvgDecoder.Factory())
       }
       .build()

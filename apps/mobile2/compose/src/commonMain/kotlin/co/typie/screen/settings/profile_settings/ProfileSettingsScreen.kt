@@ -47,8 +47,8 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Clock
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import co.typie.platform.PlatformModule
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 internal fun profileSettingsMarketingConsentMessage(marketingConsent: Boolean): String {
   val action = if (marketingConsent) "동의" else "거부"
@@ -58,9 +58,9 @@ internal fun profileSettingsMarketingConsentMessage(marketingConsent: Boolean): 
 @Composable
 fun ProfileSettingsScreen() {
   val nav = Nav.current
-  val model = koinViewModel<ProfileSettingsViewModel>()
+  val model = viewModel { ProfileSettingsViewModel() }
   val toast = LocalToast.current
-  val clipboard = koinInject<Clipboard>()
+  val clipboard = PlatformModule.clipboard
   val scrollState = rememberScrollState()
   val initialMarketingConsent = model.query.data.me.marketingConsent
   var marketingConsent by remember(initialMarketingConsent) { mutableStateOf(initialMarketingConsent) }

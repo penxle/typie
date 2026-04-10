@@ -83,8 +83,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private data class SpaceDateDisplayOption(
   val value: SiteDateDisplay,
@@ -106,14 +105,13 @@ private fun spaceDateDisplayLabel(value: SiteDateDisplay): String {
 @Composable
 fun SpaceSettingsScreen() {
   val nav = Nav.current
-  val model = koinViewModel<SpaceSettingsViewModel>()
+  val model = viewModel { SpaceSettingsViewModel() }
   val toast = LocalToast.current
-  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
   val scrollState = rememberScrollState()
   var showLastSiteAlert by remember { mutableStateOf(false) }
-  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
 
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker

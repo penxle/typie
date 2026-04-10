@@ -47,12 +47,12 @@ import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
 import co.typie.overlay.LocalToast
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun UpdateProfileScreen() {
   val nav = Nav.current
-  val model = koinViewModel<UpdateProfileViewModel>()
+  val model = viewModel { UpdateProfileViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()

@@ -5,7 +5,6 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
   repositories {
-    maven("https://packages.jetbrains.team/maven/p/kt/dev")
     mavenCentral()
     google {
       mavenContent {
@@ -20,7 +19,6 @@ pluginManagement {
 
 dependencyResolutionManagement {
   repositories {
-    maven("https://packages.jetbrains.team/maven/p/kt/dev")
     mavenCentral()
     google {
       mavenContent {

@@ -4,18 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.StatsScreen_Query
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
+import co.typie.graphql.builder.buildUserUsage
 import co.typie.graphql.text
-import co.typie.graphql.type.buildUser
-import co.typie.graphql.type.buildUserUsage
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class StatsViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { StatsScreen_Query() }
+class StatsViewModel : ViewModel() {
+
+  val query = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { StatsScreen_Query() }
 }
 
 private fun placeholderData() = StatsScreen_Query.Data(PlaceholderResolver) {

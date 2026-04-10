@@ -14,7 +14,7 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
-import co.typie.di.Platform
+import co.typie.platform.Platform
 import co.typie.editor.Editor
 import co.typie.editor.createBindings
 import co.typie.editor.ffi.EditorEvent

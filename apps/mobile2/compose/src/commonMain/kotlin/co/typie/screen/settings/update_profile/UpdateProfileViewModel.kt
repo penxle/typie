@@ -13,21 +13,20 @@ import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.UpdateProfileScreen_PersistBlobAsImage_Mutation
 import co.typie.graphql.UpdateProfileScreen_Query
 import co.typie.graphql.UpdateProfileScreen_UpdateUser_Mutation
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.UpdateUserInput
-import co.typie.graphql.type.buildUser
 import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.Task
+import co.typie.graphql.Apollo
 import co.typie.result.loading
-import co.typie.result.result
 import co.typie.result.task
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CoroutineScope
-import org.koin.core.annotation.KoinViewModel
 
 class UpdateProfileForm(scope: CoroutineScope) : FormState(scope) {
   val name = field("") {
@@ -48,17 +47,14 @@ class UpdateProfileScreenState(scope: CoroutineScope) {
   var avatarPreviewUrl: String? by mutableStateOf(null)
 }
 
-@KoinViewModel
-class UpdateProfileViewModel(
-  private val apolloClient: ApolloClient,
-  private val blobService: BlobService,
-) : ViewModel() {
+class UpdateProfileViewModel : ViewModel() {
+  private val blobService = BlobService
   val state = UpdateProfileScreenState(viewModelScope)
   var isSubmitting by mutableStateOf(false)
     private set
 
   val query =
-    apolloClient.watchQuery(
+    Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
       onInitialData = { data ->
@@ -76,7 +72,7 @@ class UpdateProfileViewModel(
       mimeType = file.mimeType,
     )
 
-    val result = apolloClient.executeMutation(
+    val result = Apollo.executeMutation(
       UpdateProfileScreen_PersistBlobAsImage_Mutation(
         input = PersistBlobAsImageInput(path = path),
       ),
@@ -90,7 +86,7 @@ class UpdateProfileViewModel(
     if (!state.form.validate()) return Result.Ok(Unit)
 
     return loading({ isSubmitting = it }) {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         UpdateProfileScreen_UpdateUser_Mutation(
           UpdateUserInput(
             avatarId = state.form.avatarId.value,

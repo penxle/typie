@@ -56,22 +56,21 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import com.apollographql.apollo.ApolloClient
+import co.typie.graphql.Apollo
+import co.typie.platform.PlatformModule
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.io.encoding.Base64
 import kotlin.math.max
 
 @Composable
 fun StatsScreen() {
-  val model = koinViewModel<StatsViewModel>()
-  val apolloClient = koinInject<ApolloClient>()
+  val model = viewModel { StatsViewModel() }
   val toast = LocalToast.current
-  val clipboard = koinInject<Clipboard>()
-  val fileSystem = koinInject<FileSystem>()
+  val clipboard = PlatformModule.clipboard
+  val fileSystem = PlatformModule.fileSystem
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
 
@@ -112,7 +111,7 @@ fun StatsScreen() {
 
     suspend fun fetchActivityImage(): ByteArray? {
       return runCatching {
-        apolloClient.executeMutation(StatsScreen_GenerateActivityImage_Mutation())
+        Apollo.executeMutation(StatsScreen_GenerateActivityImage_Mutation())
       }.mapCatching { result ->
         Base64.decode(result.generateActivityImage.toString())
       }.getOrNull()

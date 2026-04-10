@@ -10,7 +10,6 @@ import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.CursorRect
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.EditorEvent
-import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
 import co.typie.editor.ffi.Message
@@ -22,8 +21,7 @@ import co.typie.editor.ffi.Viewport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.get
+import co.typie.platform.PlatformModule
 import kotlin.reflect.KClass
 
 class Editor private constructor(
@@ -131,24 +129,21 @@ class Editor private constructor(
 
   fun ime(beforeLimit: Int, afterLimit: Int): Ime = inner.ime(beforeLimit, afterLimit)
 
-  companion object : KoinComponent {
+  companion object {
     suspend fun create(
       doc: Doc,
       selection: Selection,
       viewport: Viewport,
       scope: CoroutineScope,
     ): Editor {
-      val host: EditorHost = get()
-      val fontLoader: FontLoader = get()
+      FontLoader.initFonts()
 
-      fontLoader.initFonts()
-
-      val inner = host.createEditor(doc, selection, viewport)
+      val inner = PlatformModule.editorHost.createEditor(doc, selection, viewport)
       val editor = Editor(inner, scope)
 
       editor.on<EditorEvent.StateChanged>(editor.stateChangedHandler)
-      editor.on<EditorEvent.FontManifestMissing>(fontLoader.fontManifestMissingHandler)
-      editor.on<EditorEvent.FontDataMissing>(fontLoader.fontDataMissingHandler)
+      editor.on<EditorEvent.FontManifestMissing>(FontLoader.fontManifestMissingHandler)
+      editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
 
       editor.enqueue(Message.System(SystemEvent.Initialize))
 

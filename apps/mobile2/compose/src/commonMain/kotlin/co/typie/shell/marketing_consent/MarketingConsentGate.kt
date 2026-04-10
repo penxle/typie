@@ -32,6 +32,7 @@ import co.typie.graphql.MarketingConsentGate_UpdateMarketingConsent_Mutation
 import co.typie.graphql.QueryState
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdateMarketingConsentInput
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
@@ -41,20 +42,18 @@ import co.typie.result.Result
 import co.typie.result.onOk
 import co.typie.result.result
 import co.typie.result.withDefaultExceptionHandler
-import com.apollographql.apollo.ApolloClient
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.time.Clock
 import kotlin.time.Instant
-import org.koin.compose.viewmodel.koinViewModel
-import org.koin.core.annotation.KoinViewModel
 
 @Composable
 fun MarketingConsentGate() {
-  val model = koinViewModel<MarketingConsentGateViewModel>()
+  val model = viewModel { MarketingConsentGateViewModel() }
   val toast = LocalToast.current
   val data = (model.query.state as? QueryState.Success)?.data ?: return
   var handledInSession by remember { mutableStateOf(false) }
@@ -90,15 +89,13 @@ internal fun marketingConsentToastMessage(
   return "${now.formatKoreanDate()}에 마케팅 수신 ${action}처리됐어요."
 }
 
-@KoinViewModel
-class MarketingConsentGateViewModel(
-  private val apolloClient: ApolloClient,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(scope = viewModelScope) { MarketingConsentGate_Query() }
+class MarketingConsentGateViewModel : ViewModel() {
+
+  val query = Apollo.watchQuery(scope = viewModelScope) { MarketingConsentGate_Query() }
 
   suspend fun updateMarketingConsent(marketingConsent: Boolean): Result<Unit, Nothing> {
     return result {
-      apolloClient.executeMutation(
+      Apollo.executeMutation(
         MarketingConsentGate_UpdateMarketingConsent_Mutation(
           input = UpdateMarketingConsentInput(marketingConsent = marketingConsent),
         ),

@@ -18,7 +18,7 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 fun NotesScreen() {
-//  val model = koinViewModel<NotesViewModel>()
+//  val model = viewModel { NotesViewModel() }
 
   ProvideTopBar(
     leadingKey = SpacePopoverLeadingKey,

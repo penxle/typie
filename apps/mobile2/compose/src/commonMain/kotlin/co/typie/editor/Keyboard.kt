@@ -6,7 +6,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
-import co.typie.di.Platform
+import co.typie.platform.Platform
 import co.typie.editor.ffi.Axis
 import co.typie.editor.ffi.Direction
 import co.typie.editor.ffi.Message

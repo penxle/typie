@@ -25,11 +25,11 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun WidgetSettingsScreen() {
-  val model = koinViewModel<WidgetSettingsViewModel>()
+  val model = viewModel { WidgetSettingsViewModel() }
   val editorPreferences = model.editorPreferencesService
   val scrollState = rememberScrollState()
 

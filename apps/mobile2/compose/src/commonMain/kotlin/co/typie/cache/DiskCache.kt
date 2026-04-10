@@ -1,6 +1,5 @@
 package co.typie.cache
 
-import co.typie.di.PlatformContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
@@ -8,17 +7,15 @@ import okio.ByteString.Companion.encodeUtf8
 import okio.FileSystem
 import okio.Path
 import okio.SYSTEM
-import org.koin.core.annotation.Single
 
 interface DiskCache {
   suspend fun get(url: String): ByteArray?
   suspend fun put(url: String, data: ByteArray)
 }
 
-@Single
-fun diskCache(ctx: PlatformContext): DiskCache = OkioDiskCache(diskCacheDir(ctx))
+fun diskCache(): DiskCache = OkioDiskCache(diskCacheDir())
 
-expect fun diskCacheDir(ctx: PlatformContext): Path
+expect fun diskCacheDir(): Path
 
 private class OkioDiskCache(
   private val cacheDir: Path,

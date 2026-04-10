@@ -7,30 +7,27 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.EnrollPlanScreen_SubscribePlanWithTrial_Mutation
 import co.typie.graphql.PlaceholderResolver
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionCelebration
-import co.typie.service.SubscriptionService
 import co.typie.graphql.PlanUpgradeSheet_Query
 import co.typie.graphql.TypieError
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
-import co.typie.graphql.type.buildUser
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
+import co.typie.service.CurrentSubscriptionStore
+import co.typie.service.SubscriptionCelebration
+import co.typie.service.SubscriptionService
 
 sealed interface PlanUpgradeTrialError {
   data object ServerError : PlanUpgradeTrialError
 }
 
-@KoinViewModel
-class PlanUpgradeSheetViewModel(
-  private val apolloClient: ApolloClient,
-  private val subscriptionService: SubscriptionService,
-  private val currentSubscriptionStore: CurrentSubscriptionStore,
-) : ViewModel() {
-  val query = apolloClient.watchQuery(
+class PlanUpgradeSheetViewModel : ViewModel() {
+  private val subscriptionService = SubscriptionService
+  private val currentSubscriptionStore = CurrentSubscriptionStore
+  val query = Apollo.watchQuery(
     scope = viewModelScope,
     placeholderData = placeholderData(),
     skip = { subscriptionService.usesSandbox },
@@ -46,7 +43,7 @@ class PlanUpgradeSheetViewModel(
     return loading({ isStartingTrial = it }) {
       try {
         celebration = subscriptionService.startTrial {
-          apolloClient.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+          Apollo.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
           currentSubscriptionStore.refresh()
           query.refetch()
         }

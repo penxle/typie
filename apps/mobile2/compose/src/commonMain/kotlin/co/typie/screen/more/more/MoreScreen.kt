@@ -58,19 +58,16 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
-  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
-  val subscriptionService = koinInject<SubscriptionService>()
 
-  val model = koinViewModel<MoreViewModel>()
-  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
+  val model = viewModel { MoreViewModel() }
+  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
 
   val scrollState = rememberScrollState()
 
@@ -86,13 +83,13 @@ fun MoreScreen() {
     action = { MainBottomBarActionButton() },
   )
 
-  if (subscriptionService.hasQueryError(model.query.state)) {
+  if (SubscriptionService.hasQueryError(model.query.state)) {
     ErrorDialog { model.query.refetch() }
   }
 
   Screen(
     scrollState = scrollState,
-    loading = subscriptionService.isQueryLoading(model.query.state),
+    loading = SubscriptionService.isQueryLoading(model.query.state),
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {

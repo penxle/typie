@@ -21,32 +21,27 @@ import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.RenameFolderInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.graphql.type.UpdateFoldersOptionInput
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.result
 import co.typie.service.SiteService
-import com.apollographql.apollo.ApolloClient
-import org.koin.core.annotation.KoinViewModel
 
 data class FolderThumbnailResult(
   val id: String,
   val url: String,
 )
 
-@KoinViewModel
-class FolderViewModel(
-  private val apolloClient: ApolloClient,
-  private val siteService: SiteService,
-  private val blobService: BlobService,
-) : ViewModel() {
+class FolderViewModel : ViewModel() {
+  private val blobService = BlobService
   private var hasEnteredScreen = false
   var entityId by mutableStateOf("")
 
   val siteId: String
-    get() = siteService.siteId
+    get() = SiteService.siteId
 
-  val query = apolloClient.watchQuery(
+  val query = Apollo.watchQuery(
     scope = viewModelScope,
     skip = { entityId.isBlank() },
   ) {
@@ -71,7 +66,7 @@ class FolderViewModel(
     folderId: String,
     visibility: EntityVisibility,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
         input = folderOptionsInput(folderId) {
           visibility(visibility)
@@ -91,13 +86,13 @@ class FolderViewModel(
       mimeType = file.mimeType,
     )
 
-    val image = apolloClient.executeMutation(
+    val image = Apollo.executeMutation(
       FolderShare_PersistBlobAsImage_Mutation(
         input = PersistBlobAsImageInput(path = path),
       ),
     ).persistBlobAsImage
 
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
         input = folderOptionsInput(folderId) {
           thumbnailId(image.id)
@@ -113,7 +108,7 @@ class FolderViewModel(
   suspend fun removeFolderThumbnail(
     folderId: String,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
         input = folderOptionsInput(folderId) {
           thumbnailId(null)
@@ -127,7 +122,7 @@ class FolderViewModel(
     folderId: String,
     visibility: EntityVisibility,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
         input = folderOptionsInput(folderId) {
           visibility(visibility)
@@ -146,7 +141,7 @@ class FolderViewModel(
     val trimmedName = name.trim()
     val normalizedCurrentName = currentName.trim()
     if (trimmedName.isEmpty() || trimmedName == normalizedCurrentName) return@result
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       FolderActions_RenameFolder_Mutation(
         input = RenameFolderInput(folderId = folderId, name = trimmedName),
       ),
@@ -159,7 +154,7 @@ class FolderViewModel(
     icon: String,
     iconColor: String,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       FolderActions_UpdateEntityIcon_Mutation(
         input = UpdateEntityIconInput(
           entityId = entityId,
@@ -174,7 +169,7 @@ class FolderViewModel(
   suspend fun deleteFolderEntity(
     entityId: String,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       FolderActions_DeleteEntities_Mutation(
         input = DeleteEntitiesInput(entityIds = listOf(entityId)),
       ),
@@ -187,7 +182,7 @@ class FolderViewModel(
     lowerOrder: String?,
     upperOrder: String?,
   ): Result<Unit, Nothing> = result {
-    apolloClient.executeMutation(
+    Apollo.executeMutation(
       EntityContainer_MoveEntity_Mutation(
         input = MoveEntityInput.Builder()
           .entityId(entityId)

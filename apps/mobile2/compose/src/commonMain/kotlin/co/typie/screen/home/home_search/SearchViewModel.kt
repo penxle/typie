@@ -5,25 +5,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.graphql.HomeSearch_Header_Query
 import co.typie.graphql.HomeScreen_Search_Query
+import co.typie.graphql.HomeSearch_Header_Query
 import co.typie.graphql.PlaceholderResolver
-import co.typie.graphql.type.buildSite
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildSite
+import co.typie.graphql.Apollo
 import co.typie.graphql.watchQuery
 import co.typie.service.SiteService
 import co.typie.storage.Prefs
-import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.koin.core.annotation.KoinViewModel
 
-@KoinViewModel
-class SearchViewModel(
-  private val apolloClient: ApolloClient,
-  private val siteService: SiteService,
-  prefs: Prefs,
-) : ViewModel() {
+class SearchViewModel : ViewModel() {
   var shouldAnimateHeaderOnEnter by mutableStateOf(true)
     private set
 
@@ -35,15 +30,15 @@ class SearchViewModel(
   var activeQuery by mutableStateOf("")
     private set
 
-  val siteQuery = apolloClient.watchQuery(scope = viewModelScope, placeholderData = placeholderSiteData()) { HomeSearch_Header_Query(siteId = siteService.siteId) }
+  val siteQuery = Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderSiteData()) { HomeSearch_Header_Query(siteId = SiteService.siteId) }
 
-  val searchResults = apolloClient.watchQuery(
+  val searchResults = Apollo.watchQuery(
     scope = viewModelScope,
     skip = { activeQuery.isBlank() },
     resetOnChange = false,
-  ) { HomeScreen_Search_Query(siteId = siteService.siteId, query = activeQuery) }
+  ) { HomeScreen_Search_Query(siteId = SiteService.siteId, query = activeQuery) }
 
-  private var storedRecentSearches: List<String> by prefs("recent_searches", emptyList())
+  private var storedRecentSearches: List<String> by Prefs("recent_searches", emptyList())
   private var debounceJob: Job? = null
 
   init {

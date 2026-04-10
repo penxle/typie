@@ -79,8 +79,7 @@ import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val FolderScreenPasteBarBottomSpacerHeight = 176.dp
 private val FolderScreenPasteBarBottomOffset = 28.dp
@@ -94,8 +93,8 @@ fun FolderScreen(entityId: String) {
   val sheetHost = LocalSheetHost.current
   val presenterScope = rememberCoroutineScope()
   val toast = LocalToast.current
-  val clipboard = koinInject<EntityClipboardService>()
-  val model = koinViewModel<FolderViewModel>(key = "folder:$entityId")
+  val clipboard = EntityClipboardService
+  val model = viewModel(key = "folder:$entityId") { FolderViewModel() }
   val scrollState = rememberScrollState("folder-scroll:$entityId")
   var isReordering by remember { mutableStateOf(false) }
   var isPersistingReorder by remember { mutableStateOf(false) }
