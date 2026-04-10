@@ -34,6 +34,10 @@ internal class LegacyMigrationBridge {
 }
 
 internal fun ByteArray.toNSData(): NSData {
+  if (isEmpty()) {
+    return NSData.create(bytes = null, length = 0u)
+  }
+
   return usePinned { pinned ->
     NSData.create(
       bytes = pinned.addressOf(0),
@@ -43,6 +47,10 @@ internal fun ByteArray.toNSData(): NSData {
 }
 
 internal fun NSData.toByteArray(): ByteArray {
+  if (length == 0uL) {
+    return ByteArray(0)
+  }
+
   val byteArray = ByteArray(length.toInt())
   byteArray.usePinned { pinned ->
     memcpy(pinned.addressOf(0), bytes, length)

@@ -55,7 +55,9 @@ class LegacyMigrationCoordinator(
       val sessionToken = authValues["session_token"] as? String ?: error("Missing session_token in legacy auth box.")
       authImporter.importSessionToken(sessionToken)
     }.onFailure { error ->
-      Logger.e(error) { "Legacy migration: auth import failed (${error::class.simpleName})." }
+      Logger.e(error) {
+        "Legacy migration: auth import failed (${error::class.simpleName}): ${error.message ?: "<no message>"}."
+      }
     }.getOrElse { LegacyMigrationStepResult.Failed }
   }
 
@@ -82,7 +84,9 @@ class LegacyMigrationCoordinator(
         LegacyMigrationPhaseStatus.Failed -> LegacyMigrationStepResult.Failed
       }
     }.onFailure { error ->
-      Logger.e(error) { "Legacy migration: prefs import failed (${error::class.simpleName})." }
+      Logger.e(error) {
+        "Legacy migration: prefs import failed (${error::class.simpleName}): ${error.message ?: "<no message>"}."
+      }
     }.getOrElse { LegacyMigrationStepResult.Failed }
   }
 }
