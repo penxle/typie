@@ -176,6 +176,13 @@ open class FormState(
     chain[index + 1].focusRequester.requestFocus()
   }
 
+  fun focusPrevious(field: FieldState<*>) {
+    val chain = focusChain
+    val index = chain.indexOf(field)
+    if (index <= 0) return
+    chain[index - 1].focusRequester.requestFocus()
+  }
+
   fun imeActionFor(field: FieldState<*>): ImeAction =
     if (isLastField(field)) ImeAction.Done else ImeAction.Next
 

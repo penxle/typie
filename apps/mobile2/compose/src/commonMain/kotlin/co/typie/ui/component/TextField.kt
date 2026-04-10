@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -81,6 +82,126 @@ internal fun resolveTextFieldAutofillContentType(
   return if (isPassword) ContentType.Password else null
 }
 
+internal fun shouldHandleTextFieldImeAction(
+  key: Key,
+  type: KeyEventType,
+  isShiftPressed: Boolean,
+): Boolean {
+  if (type != KeyEventType.KeyDown) return false
+  if (key == Key.Tab && !isShiftPressed) return false
+  return key == Key.Enter
+}
+
+internal enum class TextFieldTabAction {
+  Next,
+  Previous,
+}
+
+internal fun resolveTextFieldTabAction(
+  key: Key,
+  type: KeyEventType,
+  isShiftPressed: Boolean,
+): TextFieldTabAction? {
+  if (type != KeyEventType.KeyDown || key != Key.Tab) return null
+  return if (isShiftPressed) TextFieldTabAction.Previous else TextFieldTabAction.Next
+}
+
+internal data class TextFieldPreviewKeyResult(
+  val tabAction: TextFieldTabAction?,
+  val triggerImeAction: Boolean,
+  val consumeEvent: Boolean,
+  val suppressTabValueChange: Boolean,
+)
+
+internal fun resolveTextFieldPreviewKeyResult(
+  key: Key,
+  type: KeyEventType,
+  isShiftPressed: Boolean,
+): TextFieldPreviewKeyResult {
+  val tabAction = resolveTextFieldTabAction(key, type, isShiftPressed)
+  if (tabAction != null) {
+    return TextFieldPreviewKeyResult(
+      tabAction = tabAction,
+      triggerImeAction = false,
+      consumeEvent = true,
+      suppressTabValueChange = true,
+    )
+  }
+
+  return TextFieldPreviewKeyResult(
+    tabAction = null,
+    triggerImeAction = shouldHandleTextFieldImeAction(key, type, isShiftPressed),
+    consumeEvent = false,
+    suppressTabValueChange = false,
+  )
+}
+
+internal data class TextFieldValueChangeResult(
+  val nextValue: TextFieldValue,
+  val triggerTabAction: Boolean,
+  val consumeValueChange: Boolean,
+  val suppressTabValueChange: Boolean,
+)
+
+internal fun resolveTextFieldValueChange(
+  currentValue: TextFieldValue,
+  newValue: TextFieldValue,
+  tabNavigationEnabled: Boolean,
+  hasTabAction: Boolean,
+  suppressTabValueChange: Boolean,
+): TextFieldValueChangeResult {
+  val selectionStart = minOf(currentValue.selection.start, currentValue.selection.end)
+  val selectionEnd = maxOf(currentValue.selection.start, currentValue.selection.end)
+  val expectedTabValue = buildString {
+    append(currentValue.text.substring(0, selectionStart))
+    append('\t')
+    append(currentValue.text.substring(selectionEnd))
+  }
+
+  if (newValue.text != expectedTabValue) {
+    return TextFieldValueChangeResult(
+      nextValue = newValue,
+      triggerTabAction = false,
+      consumeValueChange = false,
+      suppressTabValueChange = false,
+    )
+  }
+
+  if (!tabNavigationEnabled) {
+    return TextFieldValueChangeResult(
+      nextValue = newValue,
+      triggerTabAction = false,
+      consumeValueChange = false,
+      suppressTabValueChange = false,
+    )
+  }
+
+  if (suppressTabValueChange) {
+    return TextFieldValueChangeResult(
+      nextValue = currentValue,
+      triggerTabAction = false,
+      consumeValueChange = true,
+      suppressTabValueChange = true,
+    )
+  }
+
+  if (hasTabAction) {
+    return TextFieldValueChangeResult(
+      nextValue = currentValue,
+      triggerTabAction = true,
+      consumeValueChange = true,
+      suppressTabValueChange = false,
+    )
+  }
+
+  return TextFieldValueChangeResult(
+    nextValue = currentValue,
+    triggerTabAction = false,
+    consumeValueChange = true,
+    suppressTabValueChange = false,
+  )
+}
+
 @Composable
 fun TextField(
   value: String,
@@ -102,6 +223,8 @@ fun TextField(
   keyboardType: KeyboardType = KeyboardType.Text,
   imeAction: ImeAction? = null,
   onImeAction: (() -> Unit)? = null,
+  onTabAction: (() -> Unit)? = null,
+  onShiftTabAction: (() -> Unit)? = null,
   leadingIcon: @Composable (() -> Unit)? = null,
   suffix: @Composable (() -> Unit)? = null,
 ) {
@@ -112,9 +235,11 @@ fun TextField(
   var textFieldValue by remember {
     mutableStateOf(TextFieldValue(value, TextRange(value.length)))
   }
+  var suppressTabValueChange by remember { mutableStateOf(false) }
 
   if (textFieldValue.text != value) {
     textFieldValue = TextFieldValue(value, TextRange(value.length))
+    suppressTabValueChange = false
   }
 
   val hasError = error != null
@@ -164,6 +289,7 @@ fun TextField(
 
   val labelActive = isInternal && (isFocused || value.isNotEmpty())
   val fieldHeight = if (isInternal) 56.dp else 48.dp
+  val tabNavigationEnabled = onTabAction != null || onShiftTabAction != null
 
   if (autoFocus) {
     LaunchedEffect(autoFocus) {
@@ -190,8 +316,20 @@ fun TextField(
     BasicTextField(
       value = textFieldValue,
       onValueChange = { newValue ->
-        textFieldValue = newValue
-        onValueChange(newValue.text)
+        val result = resolveTextFieldValueChange(
+          currentValue = textFieldValue,
+          newValue = newValue,
+          tabNavigationEnabled = tabNavigationEnabled,
+          hasTabAction = onTabAction != null,
+          suppressTabValueChange = suppressTabValueChange,
+        )
+        suppressTabValueChange = result.suppressTabValueChange
+        if (result.triggerTabAction) {
+          onTabAction?.invoke()
+        } else if (!result.consumeValueChange) {
+          textFieldValue = result.nextValue
+          onValueChange(result.nextValue.text)
+        }
       },
       enabled = enabled,
       readOnly = readOnly,
@@ -207,14 +345,36 @@ fun TextField(
         .onFocusChanged { state ->
           val wasFocused = isFocused
           isFocused = state.isFocused
-          if (wasFocused && !state.isFocused) onBlur?.invoke()
+          if (wasFocused && !state.isFocused) {
+            suppressTabValueChange = false
+            onBlur?.invoke()
+          }
         }
         .onPreviewKeyEvent {
-          if (it.type == KeyEventType.KeyDown && it.key == Key.Enter) {
-            onImeAction?.invoke()
-            onImeAction != null
-          } else {
-            false
+          val previewResult = resolveTextFieldPreviewKeyResult(it.key, it.type, it.isShiftPressed)
+          when (previewResult.tabAction) {
+            TextFieldTabAction.Next -> {
+              if (!tabNavigationEnabled) return@onPreviewKeyEvent false
+              suppressTabValueChange = previewResult.suppressTabValueChange
+              onTabAction?.invoke()
+              previewResult.consumeEvent
+            }
+
+            TextFieldTabAction.Previous -> {
+              if (!tabNavigationEnabled) return@onPreviewKeyEvent false
+              suppressTabValueChange = previewResult.suppressTabValueChange
+              onShiftTabAction?.invoke()
+              previewResult.consumeEvent
+            }
+
+            null -> {
+              if (previewResult.triggerImeAction) {
+                onImeAction?.invoke()
+                onImeAction != null
+              } else {
+                false
+              }
+            }
           }
         },
       textStyle = AppTheme.typography.body.copy(
@@ -432,6 +592,22 @@ fun TextField(
     else -> null
   }
 
+  val resolvedOnTabAction: (() -> Unit)? = when {
+    form != null && !form.isLastField(field) -> {
+      { form.focusNext(field) }
+    }
+
+    else -> null
+  }
+
+  val resolvedOnShiftTabAction: (() -> Unit)? = when {
+    form != null && !form.isFirstField(field) -> {
+      { form.focusPrevious(field) }
+    }
+
+    else -> null
+  }
+
   if (shouldAutoFocus && !isSkeleton) {
     LaunchedEffect(shouldAutoFocus) {
       field.focusRequester.requestFocus()
@@ -462,6 +638,8 @@ fun TextField(
     keyboardType = keyboardType,
     imeAction = resolvedImeAction,
     onImeAction = resolvedOnImeAction,
+    onTabAction = resolvedOnTabAction,
+    onShiftTabAction = resolvedOnShiftTabAction,
     leadingIcon = leadingIcon,
     suffix = suffix,
   )
