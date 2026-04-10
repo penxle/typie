@@ -18,14 +18,18 @@ class TopBarState {
   internal val centerEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
   internal val trailingEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
   internal val customEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
+  private val leadingOwners = mutableMapOf<Any, Any>()
+  private val centerOwners = mutableMapOf<Any, Any>()
+  private val trailingOwners = mutableMapOf<Any, Any>()
+  private val customOwners = mutableMapOf<Any, Any>()
   var customKey: Any by mutableStateOf(NullKey)
 
-  fun setCustom(key: Any, content: (@Composable () -> Unit)?) {
-    if (content != null) {
-      customEntries[key] = content
-    } else {
-      customEntries.remove(key)
-    }
+  fun setCustom(
+    key: Any,
+    content: (@Composable () -> Unit)?,
+    owner: Any? = null,
+  ) {
+    setEntry(customEntries, customOwners, key, content, owner)
     customKey = if (content != null) key else NullKey
   }
 
@@ -40,18 +44,30 @@ class TopBarState {
   /** 0f = blur 없음, 1f = full blur. NavigationStack이 전환 progress에 연동하여 업데이트. */
   var blurFactor: Float by mutableStateOf(1f)
 
-  fun setLeading(key: Any, content: (@Composable () -> Unit)?) {
-    if (content != null) leadingEntries[key] = content else leadingEntries.remove(key)
+  fun setLeading(
+    key: Any,
+    content: (@Composable () -> Unit)?,
+    owner: Any? = null,
+  ) {
+    setEntry(leadingEntries, leadingOwners, key, content, owner)
     leadingKey = key
   }
 
-  fun setCenter(key: Any, content: (@Composable () -> Unit)?) {
-    if (content != null) centerEntries[key] = content else centerEntries.remove(key)
+  fun setCenter(
+    key: Any,
+    content: (@Composable () -> Unit)?,
+    owner: Any? = null,
+  ) {
+    setEntry(centerEntries, centerOwners, key, content, owner)
     centerKey = key
   }
 
-  fun setTrailing(key: Any, content: (@Composable () -> Unit)?) {
-    if (content != null) trailingEntries[key] = content else trailingEntries.remove(key)
+  fun setTrailing(
+    key: Any,
+    content: (@Composable () -> Unit)?,
+    owner: Any? = null,
+  ) {
+    setEntry(trailingEntries, trailingOwners, key, content, owner)
     trailingKey = key
   }
 
@@ -61,10 +77,73 @@ class TopBarState {
   }
 
   fun clearRoute(key: Any) {
-    leadingEntries.remove(key)
-    centerEntries.remove(key)
-    trailingEntries.remove(key)
-    customEntries.remove(key)
+    clearOwnedEntries(
+      route = key,
+      currentKey = leadingKey,
+      entries = leadingEntries,
+      owners = leadingOwners,
+      onCurrentKeyCleared = { leadingKey = it },
+    )
+    clearOwnedEntries(
+      route = key,
+      currentKey = centerKey,
+      entries = centerEntries,
+      owners = centerOwners,
+      onCurrentKeyCleared = { centerKey = it },
+    )
+    clearOwnedEntries(
+      route = key,
+      currentKey = trailingKey,
+      entries = trailingEntries,
+      owners = trailingOwners,
+      onCurrentKeyCleared = { trailingKey = it },
+    )
+    clearOwnedEntries(
+      route = key,
+      currentKey = customKey,
+      entries = customEntries,
+      owners = customOwners,
+      onCurrentKeyCleared = { customKey = it },
+    )
+  }
+
+  private fun setEntry(
+    entries: MutableMap<Any, @Composable () -> Unit>,
+    owners: MutableMap<Any, Any>,
+    key: Any,
+    content: (@Composable () -> Unit)?,
+    owner: Any?,
+  ) {
+    if (content != null) {
+      entries[key] = content
+      if (key != NullKey && owner != null) {
+        owners[key] = owner
+      }
+    } else {
+      entries.remove(key)
+    }
+  }
+
+  private fun clearOwnedEntries(
+    route: Any,
+    currentKey: Any,
+    entries: MutableMap<Any, @Composable () -> Unit>,
+    owners: MutableMap<Any, Any>,
+    onCurrentKeyCleared: (Any) -> Unit,
+  ) {
+    val keysToRemove = linkedSetOf(route)
+    owners.entries
+      .filterTo(mutableListOf()) { (_, owner) -> owner == route }
+      .forEach { (entryKey, _) -> keysToRemove += entryKey }
+
+    keysToRemove.forEach { entryKey ->
+      entries.remove(entryKey)
+      owners.remove(entryKey)
+    }
+
+    if (currentKey in keysToRemove) {
+      onCurrentKeyCleared(NullKey)
+    }
   }
 
   companion object {
@@ -116,30 +195,26 @@ fun ProvideTopBar(
 ) {
   val state = LocalTopBarState.current ?: return
   val fallbackEntryKey = remember { Any() }
+  val owner = LocalRoute.current
 
   state.enabled = enabled
   if (enabled) {
     val routeKey = if (needsImplicitRouteKey(enabled, center, centerKey, trailing, trailingKey, custom, customKey)) {
-      LocalRoute.current
+      owner
     } else {
       null
     }
+    val resolvedLeadingKey = if (leading != null) leadingKey else TopBarState.NullKey
+    val resolvedCenterKey = if (center != null) resolveTopBarEntryKey(centerKey, routeKey, fallbackEntryKey) else TopBarState.NullKey
+    val resolvedTrailingKey = if (trailing != null) resolveTopBarEntryKey(trailingKey, routeKey, fallbackEntryKey) else TopBarState.NullKey
+    val resolvedCustomKey = resolveTopBarEntryKey(customKey, routeKey, fallbackEntryKey)
 
-    state.setLeading(if (leading != null) leadingKey else TopBarState.NullKey, leading)
-    state.setCenter(
-      if (center != null) resolveTopBarEntryKey(centerKey, routeKey, fallbackEntryKey) else TopBarState.NullKey,
-      center,
-    )
-    state.setTrailing(
-      if (trailing != null) resolveTopBarEntryKey(trailingKey, routeKey, fallbackEntryKey) else TopBarState.NullKey,
-      trailing,
-    )
+    state.setLeading(resolvedLeadingKey, leading, owner)
+    state.setCenter(resolvedCenterKey, center, owner)
+    state.setTrailing(resolvedTrailingKey, trailing, owner)
     state.scrollOffset = scrollOffset
     state.visible = visible
-    state.setCustom(
-      resolveTopBarEntryKey(customKey, routeKey, fallbackEntryKey),
-      custom,
-    )
+    state.setCustom(resolvedCustomKey, custom, owner)
   } else {
     state.setLeading(TopBarState.NullKey, null)
     state.setCenter(TopBarState.NullKey, null)
