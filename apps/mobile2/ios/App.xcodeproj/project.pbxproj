@@ -423,6 +423,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		AC83D80FFC3B46D51005E2C9 = {
 			isa = XCSwiftPackageProductDependency;
+			package = AD70A8C673ABD67E11E0951C;
 			productName = KotlinMultiplatformLinkedPackage;
 		};
 /* End XCSwiftPackageProductDependency section */
