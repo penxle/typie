@@ -1,15 +1,15 @@
 // swift-tools-version: 5.9
 import PackageDescription
 let package = Package(
-  name: "_internal_linkage_SwiftPMImport",
+  name: "KotlinMultiplatformLinkedPackage",
   platforms: [
     .iOS("15.6")
   ],
   products: [
     .library(
-      name: "_internal_linkage_SwiftPMImport",
+      name: "KotlinMultiplatformLinkedPackage",
       type: .none,
-      targets: ["_internal_linkage_SwiftPMImport"]
+      targets: ["KotlinMultiplatformLinkedPackage"]
     )
   ],
   dependencies: [
@@ -19,7 +19,7 @@ let package = Package(
   ],
   targets: [
     .target(
-      name: "_internal_linkage_SwiftPMImport",
+      name: "KotlinMultiplatformLinkedPackage",
       dependencies: [
         .product(
           name: "Bridge",

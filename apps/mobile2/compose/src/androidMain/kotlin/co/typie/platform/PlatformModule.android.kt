@@ -15,18 +15,18 @@ import kotlinx.coroutines.runBlocking
 actual object PlatformModule {
   lateinit var context: Context
 
-  actual val platform: Platform get() = Platform.Android
-  actual val ksafePrefs: KSafe get() = KSafe(context = context, fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT)
-  actual val ksafeVault: KSafe get() = KSafe(context = context, fileName = "vault")
-  actual val clipboard: Clipboard get() = AndroidClipboard(context)
-  actual val deviceInfo: DeviceInfo get() = AndroidDeviceInfo(context)
-  actual val fileSystem: FileSystem get() = AndroidFileSystem(context)
-  actual val legacyMigrationPlatformSource: LegacyMigrationPlatformSource get() = AndroidLegacyMigrationPlatformSource(context)
-  actual val purchaseService: PurchaseService get() = AndroidPurchaseService(context)
-  actual val share: Share get() = AndroidShare(context)
-  actual val editorHost: EditorHost get() {
+  actual val platform: Platform = Platform.Android
+  actual val ksafePrefs: KSafe by lazy { KSafe(context = context, fileName = "prefs", memoryPolicy = KSafeMemoryPolicy.PLAIN_TEXT) }
+  actual val ksafeVault: KSafe by lazy { KSafe(context = context, fileName = "vault") }
+  actual val clipboard: Clipboard by lazy { AndroidClipboard(context) }
+  actual val deviceInfo: DeviceInfo by lazy { AndroidDeviceInfo(context) }
+  actual val fileSystem: FileSystem by lazy { AndroidFileSystem(context) }
+  actual val legacyMigrationPlatformSource: LegacyMigrationPlatformSource by lazy { AndroidLegacyMigrationPlatformSource(context) }
+  actual val purchaseService: PurchaseService by lazy { AndroidPurchaseService(context) }
+  actual val share: Share by lazy { AndroidShare(context) }
+  actual val editorHost: EditorHost by lazy {
     val icuData = context.assets.open("icu.zst").readBytes()
-    return runBlocking { JnaEditorHost.create(BackendKind.Gpu, icuData) }
+    runBlocking { JnaEditorHost.create(BackendKind.Gpu, icuData) }
   }
-  actual val diskCache: DiskCache get() = diskCache()
+  actual val diskCache: DiskCache by lazy { diskCache() }
 }
