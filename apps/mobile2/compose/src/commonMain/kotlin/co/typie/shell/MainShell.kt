@@ -132,7 +132,7 @@ private fun BottomBarPill(
 
   LaunchedEffect(isPillPressed) {
     if (isPillPressed) {
-      pillScale.animateTo(1.03f, tween(150, easing = EaseOutCubic))
+      pillScale.animateTo(1.01f, tween(150, easing = EaseOutCubic))
     } else {
       pillScale.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 300f))
     }

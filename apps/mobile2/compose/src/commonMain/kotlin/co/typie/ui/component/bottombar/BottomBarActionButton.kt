@@ -74,7 +74,7 @@ data class ActionMenuItem(
   val onClick: () -> Unit = {},
 )
 
-private const val ACTION_SIZE = 52
+private const val ACTION_SIZE = 56
 private const val ACTION_GAP = 8
 private const val ACTION_MENU_GAP = 10
 private const val ACTION_SELECTION_ARM_DELAY_MS = 150L
@@ -152,7 +152,7 @@ fun BottomBarActionButton(
 
   LaunchedEffect(if (hasMenu) isMenuPressed else isActionPressed) {
     if (if (hasMenu) isMenuPressed else isActionPressed) {
-      actionScale.animateTo(1.05f, tween(150, easing = EaseOutCubic))
+      actionScale.animateTo(1.02f, tween(150, easing = EaseOutCubic))
     } else {
       actionScale.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 300f))
     }
