@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.auth.AuthService
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
@@ -32,14 +31,10 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
-import co.typie.platform.DeviceInfo
 import co.typie.route.Route
-import co.typie.screen.subscription.CurrentSubscriptionStore
-import co.typie.screen.subscription.SubscriptionService
 import co.typie.screen.subscription.hasSubscriptionOrNull
 import co.typie.screen.subscription.subscriptionEntryDestination
 import co.typie.screen.subscription.subscriptionRoute
-import co.typie.service.DeveloperPreferencesService
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
@@ -272,13 +267,13 @@ fun SettingsScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
-  val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
-  val subscriptionService = koinInject<SubscriptionService>()
   val model = koinViewModel<SettingsViewModel>()
-  val authService = koinInject<AuthService>()
-  val deviceInfo = koinInject<DeviceInfo>()
-  val developerPreferences = koinInject<DeveloperPreferencesService>()
   val toast = koinInject<Toast>()
+  val currentSubscriptionStore = model.currentSubscriptionStore
+  val subscriptionService = model.subscriptionService
+  val authService = model.authService
+  val deviceInfo = model.deviceInfo
+  val developerPreferences = model.developerPreferences
   val scrollState = rememberScrollState()
   val themeModeState = LocalThemeMode.current
   val devModeEnabled = developerPreferences.devMode

@@ -69,7 +69,13 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
+import co.typie.overlay.Toast
+import co.typie.result.Result
+import co.typie.result.isOk
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import kotlinx.coroutines.CancellationException
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.roundToInt
 
@@ -117,6 +123,7 @@ private class PageMarginSheetForm(
 @Composable
 fun PresetSettingsScreen() {
   val model = koinViewModel<PresetSettingsViewModel>()
+  val toast = koinInject<Toast>()
   val bottomSheetHost = LocalBottomSheetHost.current
   val scrollState = rememberScrollState()
   var showResetConfirm by remember { mutableStateOf(false) }
@@ -320,9 +327,9 @@ fun PresetSettingsScreen() {
       confirmText = "초기화",
       confirmIsDestructive = true,
       onConfirm = {
-        if (model.resetTemplate()) {
-          showResetConfirm = false
-        }
+        model.resetTemplate()
+          .withDefaultExceptionHandler(toast)
+          .onOk { showResetConfirm = false }
       },
       onDismiss = { showResetConfirm = false },
     )
@@ -406,6 +413,7 @@ private fun BottomSheetScope<Unit>.FontFamilySheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
+  val toast = koinInject<Toast>()
   var isSaving by remember { mutableStateOf(false) }
   var selectedFamilyName by remember { mutableStateOf(template.fontFamily) }
 
@@ -458,6 +466,7 @@ private fun BottomSheetScope<Unit>.FontFamilySheet(
   if (isSaving && selectedFamily != null) {
     rememberImmediateSave(
       key = selectedFamilyName,
+      toast = toast,
       onFinish = { success ->
         isSaving = false
         if (success) {
@@ -479,6 +488,7 @@ private fun BottomSheetScope<Unit>.FontWeightSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
+  val toast = koinInject<Toast>()
   val family = model.activeDocumentFontFamilies.firstOrNull { it.familyName == template.fontFamily }
   val fonts = family?.fonts.orEmpty().distinctBy { it.weight }.sortedBy { it.weight }
   var isSaving by remember { mutableStateOf(false) }
@@ -536,6 +546,7 @@ private fun BottomSheetScope<Unit>.FontWeightSheet(
   if (isSaving) {
     rememberImmediateSave(
       key = selectedWeight,
+      toast = toast,
       onFinish = { success ->
         isSaving = false
         if (success) {
@@ -553,6 +564,7 @@ private fun BottomSheetScope<Unit>.FontSizeSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val form = remember(scope, template.fontSize) {
     FontSizeSheetForm(scope, template.fontSize)
@@ -575,12 +587,10 @@ private fun BottomSheetScope<Unit>.FontSizeSheet(
       }
 
       isSaving = true
-      val success = model.saveTemplate(template.withFontSize(draftValue))
+      model.saveTemplate(template.withFontSize(draftValue))
+        .withDefaultExceptionHandler(toast)
+        .onOk { dismiss() }
       isSaving = false
-
-      if (success) {
-        dismiss()
-      }
     },
   ) {
     TextField(
@@ -675,6 +685,7 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
+  val toast = koinInject<Toast>()
   val initialLayout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
   val form = remember(scope, initialLayout) {
@@ -716,12 +727,10 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
       )
 
       isSaving = true
-      val success = model.saveTemplate(template.withLayout(nextLayout))
+      model.saveTemplate(template.withLayout(nextLayout))
+        .withDefaultExceptionHandler(toast)
+        .onOk { dismiss() }
       isSaving = false
-
-      if (success) {
-        dismiss()
-      }
     },
   ) {
     Column(
@@ -833,6 +842,7 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
+  val toast = koinInject<Toast>()
   val layout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
   val form = remember(scope, layout) {
@@ -867,12 +877,10 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
       nextLayout = clampPaginatedLayout(nextLayout)
 
       isSaving = true
-      val success = model.saveTemplate(template.withLayout(nextLayout))
+      model.saveTemplate(template.withLayout(nextLayout))
+        .withDefaultExceptionHandler(toast)
+        .onOk { dismiss() }
       isSaving = false
-
-      if (success) {
-        dismiss()
-      }
     },
   ) {
     Column(
@@ -934,8 +942,9 @@ private fun <T> BottomSheetScope<Unit>.PresetOptionSheet(
   title: String,
   initialValue: T,
   options: List<PresetOption<T>>,
-  onSaveValue: suspend (T) -> Boolean,
+  onSaveValue: suspend (T) -> Result<Unit, Nothing>,
 ) {
+  val toast = koinInject<Toast>()
   var isSaving by remember { mutableStateOf(false) }
   var selectedValue by remember { mutableStateOf(initialValue) }
 
@@ -958,6 +967,7 @@ private fun <T> BottomSheetScope<Unit>.PresetOptionSheet(
   if (isSaving) {
     rememberImmediateSave(
       key = selectedValue,
+      toast = toast,
       onFinish = { success ->
         isSaving = false
         if (success) {
@@ -976,8 +986,9 @@ private fun BottomSheetScope<Unit>.PresetColorSheet(
   initialValue: String,
   options: List<PresetOption<String>>,
   background: Boolean,
-  onSaveValue: suspend (String) -> Boolean,
+  onSaveValue: suspend (String) -> Result<Unit, Nothing>,
 ) {
+  val toast = koinInject<Toast>()
   var isSaving by remember { mutableStateOf(false) }
   var selectedValue by remember { mutableStateOf(initialValue) }
 
@@ -1010,6 +1021,7 @@ private fun BottomSheetScope<Unit>.PresetColorSheet(
   if (isSaving) {
     rememberImmediateSave(
       key = selectedValue,
+      toast = toast,
       onFinish = { success ->
         isSaving = false
         if (success) {
@@ -1113,11 +1125,12 @@ private fun PresetColorSwatch(
 @Composable
 private fun rememberImmediateSave(
   key: Any?,
+  toast: Toast,
   onFinish: (Boolean) -> Unit,
-  action: suspend () -> Boolean,
+  action: suspend () -> Result<Unit, Nothing>,
 ) {
   androidx.compose.runtime.LaunchedEffect(key) {
-    onFinish(action())
+    onFinish(action().withDefaultExceptionHandler(toast).isOk)
   }
 }
 

@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -23,6 +24,7 @@ import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardSurface
@@ -34,6 +36,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -43,6 +46,7 @@ fun CancelPlanScreen() {
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val toast = koinInject<Toast>()
   val model = koinViewModel<CancelPlanViewModel>()
+  val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val lifecycleOwner = LocalLifecycleOwner.current
   val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
@@ -152,11 +156,14 @@ fun CancelPlanScreen() {
     Button(
       text = "스토어로 이동해서 해지하기",
       variant = ButtonVariant.Danger,
-      loading = model.openSubscriptionManagementAction.running,
+      loading = model.isOpeningSubscriptionManagement,
       loadingText = "스토어로 이동 중...",
       onClick = {
         // TODO: Mixpanel/Appsflyer cancel_plan_try
-        model.openSubscriptionManagement()
+        scope.launch {
+          model.openSubscriptionManagement()
+            .withDefaultExceptionHandler(toast)
+        }
       },
     )
 

@@ -92,7 +92,7 @@ class FontSettingsModelsTest {
   }
 
   @Test
-  fun `summarizeFontUploadResults groups successful uploads by family and labels weights`() {
+  fun `summarizeFontUploadResults groups successful uploads by family`() {
     val summary = summarizeFontUploadResults(
       successes = listOf(
         FontUploadSuccess(
@@ -119,17 +119,12 @@ class FontSettingsModelsTest {
 
     assertNotNull(summary)
     assertEquals(FontUploadSummaryStatus.Success, summary.status)
-    assertEquals(3, summary.successCount)
-    assertEquals(0, summary.failureCount)
-    assertEquals(1, Regex("프리텐다드").findAll(summary.message).count())
-    assertTrue(summary.message.contains("보통"))
-    assertTrue(summary.message.contains("굵게"))
-    assertTrue(summary.message.contains("코펍월드돋움"))
-    assertTrue(summary.message.contains("Semi Condensed (450)"))
+    assertEquals(3, summary.successes.size)
+    assertEquals(0, summary.failures.size)
   }
 
   @Test
-  fun `summarizeFontUploadResults includes both success and failure sections for partial uploads`() {
+  fun `summarizeFontUploadResults includes both success and failure for partial uploads`() {
     val summary = summarizeFontUploadResults(
       successes = listOf(
         FontUploadSuccess(
@@ -142,18 +137,17 @@ class FontSettingsModelsTest {
       failures = listOf(
         FontUploadFailure(
           name = "Italic.ttf",
-          error = "기울어진 폰트는 업로드할 수 없어요.",
+          error = FontUploadError.InvalidFontStyle,
         ),
       ),
     )
 
     assertNotNull(summary)
     assertEquals(FontUploadSummaryStatus.PartialSuccess, summary.status)
-    assertEquals(1, summary.successCount)
-    assertEquals(1, summary.failureCount)
-    assertTrue(summary.message.contains("프리텐다드"))
-    assertTrue(summary.message.contains("보통"))
-    assertTrue(summary.message.contains("Italic.ttf"))
+    assertEquals(1, summary.successes.size)
+    assertEquals(1, summary.failures.size)
+    assertEquals("Italic.ttf", summary.failures.first().name)
+    assertEquals(FontUploadError.InvalidFontStyle, summary.failures.first().error)
   }
 
   @Test
@@ -163,21 +157,21 @@ class FontSettingsModelsTest {
       failures = listOf(
         FontUploadFailure(
           name = "Broken.otf",
-          error = "TTF 파일만 업로드할 수 있어요.",
+          error = FontUploadError.UnsupportedFormat,
         ),
         FontUploadFailure(
           name = "Italic.ttf",
-          error = "기울어진 폰트는 업로드할 수 없어요.",
+          error = FontUploadError.InvalidFontStyle,
         ),
       ),
     )
 
     assertNotNull(summary)
     assertEquals(FontUploadSummaryStatus.Failure, summary.status)
-    assertEquals(0, summary.successCount)
-    assertEquals(2, summary.failureCount)
-    assertTrue(summary.message.contains("Broken.otf"))
-    assertTrue(summary.message.contains("Italic.ttf"))
+    assertEquals(0, summary.successes.size)
+    assertEquals(2, summary.failures.size)
+    assertEquals("Broken.otf", summary.failures[0].name)
+    assertEquals("Italic.ttf", summary.failures[1].name)
   }
 
   @Test

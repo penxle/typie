@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Modifier
@@ -16,6 +17,10 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.LabelPosition
@@ -25,16 +30,31 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun UpdatePasswordScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdatePasswordViewModel>()
+  val toast = koinInject<Toast>()
+  val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val hasPassword = model.query.data.me.hasPassword
   val buttonText = if (hasPassword) "변경" else "설정"
   val loadingText = if (hasPassword) "변경 중..." else "설정 중..."
+
+  fun submit() {
+    scope.launch {
+      model.submit()
+        .withDefaultExceptionHandler(toast)
+        .onOk {
+          toast.show(ToastType.Success, "비밀번호가 변경되었어요.")
+          nav.pop()
+        }
+    }
+  }
 
   ProvideTopBar(
     center = { Text("비밀번호 변경", style = AppTheme.typography.title) },
@@ -54,9 +74,9 @@ fun UpdatePasswordScreen() {
         modifier = Modifier
           .padding(horizontal = 16.dp)
           .padding(bottom = 16.dp),
-        loading = model.submitAction.running,
+        loading = model.isSubmitting,
         loadingText = loadingText,
-        onClick = { model.submit { nav.pop() } },
+        onClick = { submit() },
       )
     },
   ) {
@@ -87,7 +107,7 @@ fun UpdatePasswordScreen() {
           placeholder = "********",
           isPassword = true,
           contentType = ContentType.NewPassword,
-          onImeAction = { model.submit { nav.pop() } },
+          onImeAction = { submit() },
         )
 
         Spacer(Modifier.height(24.dp))

@@ -48,6 +48,8 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardDivider
@@ -132,20 +134,18 @@ fun BottomSheetScope<Unit>.EntityMoveSheet(
     }
 
     isMoving = true
-    val success = model.moveEntity(
+    model.moveEntity(
       source = source,
       parentEntityId = resolvedDestination.destinationEntityId,
       lowerOrder = resolvedDestination.lastChildOrder,
       upperOrder = null,
     )
+      .withDefaultExceptionHandler(toast)
+      .onOk {
+        onMoved()
+        dismiss()
+      }
     isMoving = false
-
-    if (!success) {
-      return
-    }
-
-    onMoved()
-    dismiss()
   }
 
   fun navigateTo(nextDestinationId: String?) {

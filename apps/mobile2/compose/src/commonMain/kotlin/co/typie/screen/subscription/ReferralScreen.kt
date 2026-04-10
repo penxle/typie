@@ -34,6 +34,7 @@ import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.Clipboard
 import co.typie.platform.Share
+import co.typie.result.fold
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ErrorDialog
@@ -72,7 +73,8 @@ fun ReferralScreen() {
     isInviteLoading = true
 
     return try {
-      val message = runCatching { model.issueReferralInviteMessage() }.getOrNull()
+      val message = model.issueReferralInviteMessage()
+        .fold(onOk = { it }, onErr = { null }, onException = { null })
       inviteMessage = message
 
       if (message == null && showErrorToast) {

@@ -5,9 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.touchlab.kermit.Logger
 import co.typie.graphql.QueryState
-import co.typie.ui.state.AsyncAction
+import co.typie.result.Result
+import co.typie.result.loading
+import co.typie.result.result
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
@@ -20,7 +21,8 @@ class CancelPlanViewModel(
   var flowState by mutableStateOf(CancelPlanFlowState())
     private set
 
-  val openSubscriptionManagementAction = AsyncAction(viewModelScope)
+  var isOpeningSubscriptionManagement by mutableStateOf(false)
+    private set
 
   val shouldClose: Boolean
     get() = flowState.shouldClose
@@ -53,15 +55,8 @@ class CancelPlanViewModel(
     )
   }
 
-  fun openSubscriptionManagement() {
-    openSubscriptionManagementAction.launch(
-      onFailure = { e ->
-        Logger.e(e) { "Failed to open subscription management" }
-        onOpenSubscriptionManagementResult(SubscriptionManagementResult.FailedToOpen)
-      },
-    ) {
-        onOpenSubscriptionManagementResult(subscriptionService.openSubscriptionManagement())
-    }
+  suspend fun openSubscriptionManagement(): Result<Unit, Nothing> = loading({ isOpeningSubscriptionManagement = it }) {
+    onOpenSubscriptionManagementResult(subscriptionService.openSubscriptionManagement())
   }
 
   fun onResumed() {

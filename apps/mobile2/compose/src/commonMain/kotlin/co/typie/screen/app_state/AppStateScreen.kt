@@ -34,6 +34,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Instant
+import org.koin.compose.viewmodel.koinViewModel
 
 private const val SUPPORT_URL = "https://penxle.channel.io/home"
 
@@ -41,6 +42,8 @@ private const val SUPPORT_URL = "https://penxle.channel.io/home"
 fun OfflineScreen(
   onRetry: suspend () -> Unit,
 ) {
+  val model = koinViewModel<AppStateViewModel>()
+
   ProvideTopBar(enabled = false)
 
   AppStateScaffold(
@@ -60,6 +63,7 @@ fun MaintenanceScreen(
   message: String,
   until: Instant?,
 ) {
+  val model = koinViewModel<AppStateViewModel>()
   val uriHandler = LocalUriHandler.current
 
   ProvideTopBar(enabled = false)
@@ -88,6 +92,7 @@ fun UpdateRequiredScreen(
   currentVersion: String,
   requiredVersion: String,
 ) {
+  val model = koinViewModel<AppStateViewModel>()
   val uriHandler = LocalUriHandler.current
 
   ProvideTopBar(enabled = false)

@@ -3,38 +3,31 @@ package co.typie.screen.folder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.blob.BlobService
-import co.touchlab.kermit.Logger
-import co.typie.graphql.FolderActions_DeleteEntities_Mutation
-import co.typie.graphql.FolderActions_UpdateEntityIcon_Mutation
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
+import co.typie.graphql.FolderActions_DeleteEntities_Mutation
+import co.typie.graphql.FolderActions_RenameFolder_Mutation
+import co.typie.graphql.FolderActions_UpdateEntityIcon_Mutation
+import co.typie.graphql.FolderScreen_Query
 import co.typie.graphql.FolderShare_PersistBlobAsImage_Mutation
 import co.typie.graphql.FolderShare_UpdateFoldersOption_Mutation
-import co.typie.graphql.FolderScreen_Query
-import co.typie.graphql.FolderActions_RenameFolder_Mutation
-import co.typie.graphql.GraphQLViewModel
-import co.typie.graphql.type.EntityVisibility
+import co.typie.graphql.executeMutation
 import co.typie.graphql.type.DeleteEntitiesInput
+import co.typie.graphql.type.EntityVisibility
 import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.type.PersistBlobAsImageInput
+import co.typie.graphql.type.RenameFolderInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.graphql.type.UpdateFoldersOptionInput
-import co.typie.graphql.type.RenameFolderInput
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
+import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
+import co.typie.result.Result
+import co.typie.result.result
 import co.typie.service.SiteService
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
+import com.apollographql.apollo.ApolloClient
 import org.koin.core.annotation.KoinViewModel
-
-private const val GENERIC_MUTATION_ERROR_MESSAGE = "오류가 발생했어요. 잠시 후 다시 시도해주세요."
-private const val RENAME_FOLDER_SUCCESS_MESSAGE = "폴더 이름이 변경되었어요."
-private const val THUMBNAIL_UPLOAD_ERROR_MESSAGE = "썸네일 업로드에 실패했어요. 다시 시도해주세요."
-private const val THUMBNAIL_REMOVE_SUCCESS_MESSAGE = "썸네일이 삭제되었어요."
-private const val THUMBNAIL_REMOVE_ERROR_MESSAGE = "썸네일을 삭제할 수 없어요."
-private const val RECURSIVE_VISIBILITY_SUCCESS_MESSAGE = "하위 요소에도 동일한 설정이 적용되었어요."
 
 data class FolderThumbnailResult(
   val id: String,
@@ -43,17 +36,18 @@ data class FolderThumbnailResult(
 
 @KoinViewModel
 class FolderViewModel(
+  private val apolloClient: ApolloClient,
   private val siteService: SiteService,
   private val blobService: BlobService,
-  private val toast: Toast,
-) : GraphQLViewModel() {
+) : ViewModel() {
   private var hasEnteredScreen = false
   var entityId by mutableStateOf("")
 
   val siteId: String
     get() = siteService.siteId
 
-  val query = watchQuery(
+  val query = apolloClient.watchQuery(
+    scope = viewModelScope,
     skip = { entityId.isBlank() },
   ) {
     FolderScreen_Query(entityId = entityId)
@@ -70,378 +64,150 @@ class FolderViewModel(
       refetch()
       return
     }
-
     hasEnteredScreen = true
   }
 
-  fun updateFolderVisibility(
+  suspend fun updateFolderVisibility(
     folderId: String,
     visibility: EntityVisibility,
-    onFinished: (Boolean) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(
-        updateFolderVisibilityInternal(
-          folderId = folderId,
-          visibility = visibility,
-        ),
-      )
-    }
+  ): Result<Unit, Nothing> = result {
+    apolloClient.executeMutation(
+      FolderShare_UpdateFoldersOption_Mutation(
+        input = folderOptionsInput(folderId) {
+          visibility(visibility)
+        },
+      ),
+    )
+    refetch()
   }
 
-  private suspend fun updateFolderVisibilityInternal(
-    folderId: String,
-    visibility: EntityVisibility,
-  ): Boolean {
-    // TODO: Track folder visibility updates.
-    try {
-      executeMutation(
-        FolderShare_UpdateFoldersOption_Mutation(
-          input = folderOptionsInput(folderId) {
-            visibility(visibility)
-          },
-        ),
-      )
-
-      refetch()
-      return true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to update folder visibility" }
-      toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
-      return false
-    }
-  }
-
-  fun uploadFolderThumbnail(
+  suspend fun uploadFolderThumbnail(
     folderId: String,
     file: PlatformFile,
-    onFinished: (FolderThumbnailResult?) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(
-        uploadFolderThumbnailInternal(
-          folderId = folderId,
-          file = file,
-        ),
-      )
-    }
+  ): Result<FolderThumbnailResult, Nothing> = result {
+    val path = blobService.uploadBytes(
+      bytes = file.bytes,
+      filename = file.filename,
+      mimeType = file.mimeType,
+    )
+
+    val image = apolloClient.executeMutation(
+      FolderShare_PersistBlobAsImage_Mutation(
+        input = PersistBlobAsImageInput(path = path),
+      ),
+    ).persistBlobAsImage
+
+    apolloClient.executeMutation(
+      FolderShare_UpdateFoldersOption_Mutation(
+        input = folderOptionsInput(folderId) {
+          thumbnailId(image.id)
+        },
+      ),
+    )
+
+    refetch()
+
+    FolderThumbnailResult(id = image.id, url = image.url)
   }
 
-  private suspend fun uploadFolderThumbnailInternal(
+  suspend fun removeFolderThumbnail(
     folderId: String,
-    file: PlatformFile,
-  ): FolderThumbnailResult? {
-    // TODO: Track folder thumbnail upload.
-    try {
-      val path = blobService.uploadBytes(
-        bytes = file.bytes,
-        filename = file.filename,
-        mimeType = file.mimeType,
-      )
-
-      val image = executeMutation(
-        FolderShare_PersistBlobAsImage_Mutation(
-          input = PersistBlobAsImageInput(
-            path = path,
-          ),
-        ),
-      ).persistBlobAsImage
-
-      executeMutation(
-        FolderShare_UpdateFoldersOption_Mutation(
-          input = folderOptionsInput(folderId) {
-            thumbnailId(image.id)
-          },
-        ),
-      )
-
-      refetch()
-
-      return FolderThumbnailResult(
-        id = image.id,
-        url = image.url,
-      )
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to upload folder thumbnail" }
-      toast.show(ToastType.Error, THUMBNAIL_UPLOAD_ERROR_MESSAGE)
-      return null
-    }
+  ): Result<Unit, Nothing> = result {
+    apolloClient.executeMutation(
+      FolderShare_UpdateFoldersOption_Mutation(
+        input = folderOptionsInput(folderId) {
+          thumbnailId(null)
+        },
+      ),
+    )
+    refetch()
   }
 
-  fun removeFolderThumbnail(
-    folderId: String,
-    onFinished: (Boolean) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(
-        removeFolderThumbnailInternal(folderId = folderId),
-      )
-    }
-  }
-
-  private suspend fun removeFolderThumbnailInternal(
-    folderId: String,
-  ): Boolean {
-    // TODO: Track folder thumbnail removal.
-    try {
-      executeMutation(
-        FolderShare_UpdateFoldersOption_Mutation(
-          input = folderOptionsInput(folderId) {
-            thumbnailId(null)
-          },
-        ),
-      )
-
-      refetch()
-      toast.show(ToastType.Success, THUMBNAIL_REMOVE_SUCCESS_MESSAGE)
-      return true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to remove folder thumbnail" }
-      toast.show(ToastType.Error, THUMBNAIL_REMOVE_ERROR_MESSAGE)
-      return false
-    }
-  }
-
-  fun applyFolderVisibilityRecursively(
+  suspend fun applyFolderVisibilityRecursively(
     folderId: String,
     visibility: EntityVisibility,
-    onFinished: (Boolean) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(
-        applyFolderVisibilityRecursivelyInternal(
-          folderId = folderId,
-          visibility = visibility,
-        ),
-      )
-    }
+  ): Result<Unit, Nothing> = result {
+    apolloClient.executeMutation(
+      FolderShare_UpdateFoldersOption_Mutation(
+        input = folderOptionsInput(folderId) {
+          visibility(visibility)
+          recursive(true)
+        },
+      ),
+    )
+    refetch()
   }
 
-  private suspend fun applyFolderVisibilityRecursivelyInternal(
-    folderId: String,
-    visibility: EntityVisibility,
-  ): Boolean {
-    // TODO: Track recursive folder visibility application.
-    try {
-      executeMutation(
-        FolderShare_UpdateFoldersOption_Mutation(
-          input = folderOptionsInput(folderId) {
-            visibility(visibility)
-            recursive(true)
-          },
-        ),
-      )
-
-      refetch()
-      toast.show(ToastType.Success, RECURSIVE_VISIBILITY_SUCCESS_MESSAGE)
-      return true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to apply folder visibility recursively" }
-      toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
-      return false
-    }
-  }
-
-  fun renameFolder(
+  suspend fun renameFolder(
     folderId: String,
     currentName: String,
     name: String,
-    onFinished: (Boolean) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(
-        renameFolderInternal(
-          folderId = folderId,
-          currentName = currentName,
-          name = name,
-        ),
-      )
-    }
-  }
-
-  private suspend fun renameFolderInternal(
-    folderId: String,
-    currentName: String,
-    name: String,
-  ): Boolean {
+  ): Result<Unit, Nothing> = result {
     val trimmedName = name.trim()
     val normalizedCurrentName = currentName.trim()
-    if (trimmedName.isEmpty()) {
-      return false
-    }
-
-    if (trimmedName == normalizedCurrentName) {
-      return true
-    }
-
-    try {
-      executeMutation(
-        FolderActions_RenameFolder_Mutation(
-          input = RenameFolderInput(
-            folderId = folderId,
-            name = trimmedName,
-          ),
-        ),
-      )
-
-      refetch()
-      toast.show(ToastType.Success, RENAME_FOLDER_SUCCESS_MESSAGE)
-      return true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to rename folder" }
-      toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
-      return false
-    }
+    if (trimmedName.isEmpty() || trimmedName == normalizedCurrentName) return@result
+    apolloClient.executeMutation(
+      FolderActions_RenameFolder_Mutation(
+        input = RenameFolderInput(folderId = folderId, name = trimmedName),
+      ),
+    )
+    refetch()
   }
 
-  fun updateEntityIcon(
+  suspend fun updateEntityIcon(
     entityId: String,
     icon: String,
     iconColor: String,
-    onFinished: (Boolean) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(
-        updateEntityIconInternal(
+  ): Result<Unit, Nothing> = result {
+    apolloClient.executeMutation(
+      FolderActions_UpdateEntityIcon_Mutation(
+        input = UpdateEntityIconInput(
           entityId = entityId,
-          icon = icon,
-          iconColor = iconColor,
+          icon = icon.trim(),
+          iconColor = iconColor.trim(),
         ),
-      )
-    }
+      ),
+    )
+    refetch()
   }
 
-  private suspend fun updateEntityIconInternal(
+  suspend fun deleteFolderEntity(
     entityId: String,
-    icon: String,
-    iconColor: String,
-  ): Boolean {
-    val normalizedIcon = icon.trim()
-    val normalizedColor = iconColor.trim()
-
-    try {
-      executeMutation(
-        FolderActions_UpdateEntityIcon_Mutation(
-          input = UpdateEntityIconInput(
-            entityId = entityId,
-            icon = normalizedIcon,
-            iconColor = normalizedColor,
-          ),
-        ),
-      )
-
-      refetch()
-      return true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to update entity icon" }
-      toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
-      return false
-    }
+  ): Result<Unit, Nothing> = result {
+    apolloClient.executeMutation(
+      FolderActions_DeleteEntities_Mutation(
+        input = DeleteEntitiesInput(entityIds = listOf(entityId)),
+      ),
+    )
   }
 
-  fun deleteFolderEntity(
-    entityId: String,
-    onFinished: (Boolean) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(deleteFolderEntityInternal(entityId = entityId))
-    }
-  }
-
-  private suspend fun deleteFolderEntityInternal(
-    entityId: String,
-  ): Boolean {
-    try {
-      executeMutation(
-        FolderActions_DeleteEntities_Mutation(
-          input = DeleteEntitiesInput(
-            entityIds = listOf(entityId),
-          ),
-        ),
-      )
-      return true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to delete folder entity" }
-      toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
-      return false
-    }
-  }
-
-  fun moveChildEntity(
+  suspend fun moveChildEntity(
     entityId: String,
     parentEntityId: String,
     lowerOrder: String?,
     upperOrder: String?,
-    onFinished: (Boolean) -> Unit = {},
-  ) {
-    viewModelScope.launch {
-      onFinished(
-        moveChildEntityInternal(
-          entityId = entityId,
-          parentEntityId = parentEntityId,
-          lowerOrder = lowerOrder,
-          upperOrder = upperOrder,
-        ),
-      )
-    }
-  }
-
-  private suspend fun moveChildEntityInternal(
-    entityId: String,
-    parentEntityId: String,
-    lowerOrder: String?,
-    upperOrder: String?,
-  ): Boolean {
-    try {
-      executeMutation(
-        EntityContainer_MoveEntity_Mutation(
-          input = MoveEntityInput.Builder()
-            .entityId(entityId)
-            .parentEntityId(parentEntityId)
-            .apply {
-              if (lowerOrder != null) {
-                lowerOrder(lowerOrder)
-              }
-              if (upperOrder != null) {
-                upperOrder(upperOrder)
-              }
-            }
-            .build(),
-        ),
-      )
-
-      refetch()
-      return true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to move folder child entity" }
-      toast.show(ToastType.Error, GENERIC_MUTATION_ERROR_MESSAGE)
-      return false
-    }
+  ): Result<Unit, Nothing> = result {
+    apolloClient.executeMutation(
+      EntityContainer_MoveEntity_Mutation(
+        input = MoveEntityInput.Builder()
+          .entityId(entityId)
+          .parentEntityId(parentEntityId)
+          .apply {
+            if (lowerOrder != null) lowerOrder(lowerOrder)
+            if (upperOrder != null) upperOrder(upperOrder)
+          }
+          .build(),
+      ),
+    )
+    refetch()
   }
 
   private fun folderOptionsInput(
     folderId: String,
     block: UpdateFoldersOptionInput.Builder.() -> Unit,
-  ): UpdateFoldersOptionInput {
-    return UpdateFoldersOptionInput.Builder()
+  ): UpdateFoldersOptionInput =
+    UpdateFoldersOptionInput.Builder()
       .folderIds(listOf(folderId))
       .apply(block)
       .build()
-  }
 }

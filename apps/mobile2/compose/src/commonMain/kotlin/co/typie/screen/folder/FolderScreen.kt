@@ -1,11 +1,11 @@
 package co.typie.screen.folder
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -28,14 +28,17 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
-import co.typie.ext.safeDrawing
-import co.typie.ext.safeBottomPadding
-import co.typie.ext.verticalScroll
 import co.typie.entity_transfer.EntityClipboardMode
 import co.typie.entity_transfer.EntityClipboardService
 import co.typie.entity_transfer.EntityPasteBar
 import co.typie.entity_transfer.EntityPasteTarget
+import co.typie.entity_transfer.EntityTransferSource
 import co.typie.entity_transfer.entityPasteBarToastBottomInset
+import co.typie.entity_transfer.toMessage
+import co.typie.result.onErr
+import co.typie.ext.safeBottomPadding
+import co.typie.ext.safeDrawing
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.RefetchOnAppResumeEffect
 import co.typie.graphql.RefetchOnScreenEnterEffect
@@ -45,9 +48,11 @@ import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.onException
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
-import co.typie.entity_transfer.EntityTransferSource
 import co.typie.screen.entity_move.EntityMoveSheet
 import co.typie.shell.LocalBottomBarState
 import co.typie.ui.component.ConfirmModal
@@ -426,16 +431,16 @@ fun FolderScreen(entityId: String) {
       confirmIsDestructive = true,
       onConfirm = {
         deleteRequest = null
-        model.deleteFolderEntity(request.entityId) { success ->
-          if (success) {
-            if (request.shouldPopOnSuccess) {
-              presenterScope.launch {
+        presenterScope.launch {
+          model.deleteFolderEntity(request.entityId)
+            .withDefaultExceptionHandler(toast)
+            .onOk {
+              if (request.shouldPopOnSuccess) {
                 nav.pop()
+              } else {
+                model.refetch()
               }
-            } else {
-              model.refetch()
             }
-          }
         }
       },
       onDismiss = { deleteRequest = null },
@@ -452,7 +457,8 @@ fun FolderScreen(entityId: String) {
         0.dp,
         contentPadding.calculateTopPadding() - TopBarDefaults.BlurFadeHeight - TopBarDefaults.ContentTopSpacing,
       )
-      val reorderViewportBottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
+      val reorderViewportBottomInset =
+        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
 
       Box(
         modifier = Modifier
@@ -584,16 +590,18 @@ fun FolderScreen(entityId: String) {
             }
 
             isPersistingReorder = true
-            model.moveChildEntity(
-              entityId = commit.movedKey,
-              parentEntityId = parentEntityId,
-              lowerOrder = reorderOrders.lowerOrder,
-              upperOrder = reorderOrders.upperOrder,
-            ) { success ->
+            presenterScope.launch {
+              model.moveChildEntity(
+                entityId = commit.movedKey,
+                parentEntityId = parentEntityId,
+                lowerOrder = reorderOrders.lowerOrder,
+                upperOrder = reorderOrders.upperOrder,
+              )
+                .withDefaultExceptionHandler(toast)
+                .onException {
+                  reorderState.resetToServerKeys(serverChildIds)
+                }
               isPersistingReorder = false
-              if (!success) {
-                reorderState.resetToServerKeys(serverChildIds)
-              }
             }
           },
         )
@@ -611,21 +619,30 @@ fun FolderScreen(entityId: String) {
                 targetOffsetY = { it / 2 },
               ),
             ) {
-            EntityPasteBar(
-              bottomOffset = Route.Folder(entityId).toastBottomInset + FolderScreenPasteBarBottomOffset,
-              loading = isPasting,
-              onClear = { clipboard.clear() },
-              onPaste = {
-                if (!isPasting) {
-                  isPasting = true
-                  try {
-                    clipboard.pasteInto(resolvedPasteTarget)
-                  } finally {
-                    isPasting = false
+              EntityPasteBar(
+                bottomOffset = Route.Folder(entityId).toastBottomInset + FolderScreenPasteBarBottomOffset,
+                loading = isPasting,
+                onClear = { clipboard.clear() },
+                onPaste = {
+                  if (!isPasting) {
+                    isPasting = true
+                    presenterScope.launch {
+                      clipboard.pasteInto(resolvedPasteTarget).collect(
+                        onPending = { count ->
+                          toast.show(ToastType.Loading, "${count}개의 항목을 붙여넣는 중이에요", kotlin.time.Duration.ZERO)
+                        },
+                        onSettled = { result ->
+                          result
+                            .withDefaultExceptionHandler(toast)
+                            .onOk { count -> toast.show(ToastType.Success, "${count}개의 항목을 붙여넣었어요") }
+                            .onErr { error -> toast.show(ToastType.Error, error.toMessage()) }
+                        },
+                      )
+                      isPasting = false
+                    }
                   }
-                }
-              },
-            )
+                },
+              )
             }
           }
         }

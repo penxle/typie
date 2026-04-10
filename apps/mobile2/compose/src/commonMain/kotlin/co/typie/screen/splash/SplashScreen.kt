@@ -13,9 +13,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import co.typie.generated.resources.Res
 import co.typie.ui.component.Img
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun SplashScreen() {
+  val model = koinViewModel<SplashViewModel>()
   val isDark = isSystemInDarkTheme()
   val backgroundColor = if (isDark) Color.Black else Color.White
   val iconTint = if (isDark) Color.White else Color(0xFFFAAD00)

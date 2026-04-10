@@ -26,6 +26,9 @@ import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.Clipboard
+import co.typie.result.onException
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.CardDivider
@@ -68,18 +71,18 @@ fun ProfileSettingsScreen() {
   LaunchedEffect(pendingMarketingConsent) {
     val requested = pendingMarketingConsent ?: return@LaunchedEffect
 
-    try {
-      model.updateMarketingConsent(requested)
-      committedMarketingConsent = requested
-      marketingConsentModalMessage = profileSettingsMarketingConsentMessage(requested)
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to update marketing consent (${e::class.simpleName}): ${e.message}" }
-      marketingConsent = committedMarketingConsent
-      toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-    } finally {
-      isUpdatingMarketingConsent = false
-      pendingMarketingConsent = null
-    }
+    model.updateMarketingConsent(requested)
+      .withDefaultExceptionHandler(toast)
+      .onOk {
+        committedMarketingConsent = requested
+        marketingConsentModalMessage = profileSettingsMarketingConsentMessage(requested)
+      }
+      .onException {
+        marketingConsent = committedMarketingConsent
+      }
+
+    isUpdatingMarketingConsent = false
+    pendingMarketingConsent = null
   }
 
   suspend fun copyAccountId() {

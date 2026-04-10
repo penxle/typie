@@ -1,28 +1,31 @@
 package co.typie.screen.update_email
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.touchlab.kermit.Logger
 import co.typie.form.FormState
 import co.typie.form.email
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
 import co.typie.graphql.UpdateEmailScreen_Query
 import co.typie.graphql.UpdateEmailScreen_SendEmailUpdateEmail_Mutation
+import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.SendEmailUpdateEmailInput
 import co.typie.graphql.type.buildUser
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
-import co.typie.ui.state.AsyncAction
+import co.typie.graphql.watchQuery
+import co.typie.result.Result
+import co.typie.result.loading
+import co.typie.result.result
+import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CoroutineScope
 import org.koin.core.annotation.KoinViewModel
 
-internal fun updateEmailErrorMessage(code: String): String? {
-  return when (code) {
-    "user_email_exists" -> "이미 사용중인 이메일이에요."
-    else -> null
-  }
+sealed interface UpdateEmailError {
+  data object EmailAlreadyExists : UpdateEmailError
+  data class Unknown(val code: String) : UpdateEmailError
 }
 
 class UpdateEmailForm(scope: CoroutineScope) : FormState(scope) {
@@ -38,48 +41,38 @@ class UpdateEmailScreenState(scope: CoroutineScope) {
 
 @KoinViewModel
 class UpdateEmailViewModel(
-  private val toast: Toast,
-) : GraphQLViewModel() {
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
   val state = UpdateEmailScreenState(viewModelScope)
-  val submitAction = AsyncAction(viewModelScope)
+  var isSubmitting by mutableStateOf(false)
+    private set
 
-  val query = watchQuery(
+  val query = apolloClient.watchQuery(
+    scope = viewModelScope,
     placeholderData = placeholderData(),
   ) { UpdateEmailScreen_Query() }
 
-  fun submit(onSuccess: suspend () -> Unit) {
-    submitAction.launch(
-      onFailure = { e ->
-        when (e) {
-          is TypieError -> {
-            val message = updateEmailErrorMessage(e.code)
-            if (message != null) {
-              toast.show(ToastType.Error, message)
-            } else {
-              toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-            }
-          }
+  suspend fun submit(): Result<Unit, UpdateEmailError> {
+    if (!state.form.validate()) return Result.Ok(Unit)
 
-          else -> {
-            Logger.e(e) { "Failed to send update email request" }
-            toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-          }
-        }
-      },
-    ) {
-        if (!state.form.validate()) return@launch
-
-        executeMutation(
+    return loading({ isSubmitting = it }) {
+      try {
+        apolloClient.executeMutation(
           UpdateEmailScreen_SendEmailUpdateEmail_Mutation(
             input = SendEmailUpdateEmailInput(
               email = state.form.email.value.trim(),
             ),
           ),
         )
+      } catch (e: TypieError) {
+        when (e.code) {
+          "user_email_exists" -> raise(UpdateEmailError.EmailAlreadyExists)
+          else -> raise(UpdateEmailError.Unknown(e.code))
+        }
+      }
 
-        // TODO: 이메일 변경 트래킹
-        state.form.commit()
-        onSuccess()
+      // TODO: 이메일 변경 트래킹
+      state.form.commit()
     }
   }
 }

@@ -19,14 +19,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.QueryState
 import co.typie.graphql.SocialAccountsScreen_Query
 import co.typie.graphql.type.SingleSignOnProvider
+import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
+import com.apollographql.apollo.ApolloClient
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ErrorDialog
@@ -232,6 +235,8 @@ private fun ProviderIconBadge(
 }
 
 @KoinViewModel
-internal class SocialAccountsViewModel : GraphQLViewModel() {
-  val query = watchQuery { SocialAccountsScreen_Query() }
+internal class SocialAccountsViewModel(
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
+  val query = apolloClient.watchQuery(scope = viewModelScope) { SocialAccountsScreen_Query() }
 }

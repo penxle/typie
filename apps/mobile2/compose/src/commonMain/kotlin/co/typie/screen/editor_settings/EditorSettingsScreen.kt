@@ -31,7 +31,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
-import co.typie.service.EditorPreferencesService
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
@@ -45,11 +44,12 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
-import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun EditorSettingsScreen() {
-  val editorPreferences = koinInject<EditorPreferencesService>()
+  val model = koinViewModel<EditorSettingsViewModel>()
+  val editorPreferences = model.editorPreferencesService
   val scrollState = rememberScrollState()
 
   val typewriterEnabled = editorPreferences.typewriterEnabled

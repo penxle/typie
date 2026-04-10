@@ -42,6 +42,7 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.koin.compose.viewmodel.koinViewModel
 
 private sealed interface OssLicensesScreenState {
   data object Loading : OssLicensesScreenState
@@ -74,6 +75,7 @@ private val ossLicensesJson = Json {
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 fun OssLicensesScreen() {
+  val model = koinViewModel<OssLicensesViewModel>()
   val bottomSheetHost = LocalBottomSheetHost.current
   val scrollState = rememberScrollState()
   var reloadToken by remember { mutableIntStateOf(0) }

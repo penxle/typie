@@ -24,17 +24,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.touchlab.kermit.Logger
 import co.typie.auth.AuthService
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
-import co.typie.graphql.DeleteUserScreen_DeleteUser_Mutation
-import co.typie.graphql.TypieError
-import co.typie.graphql.executeMutation
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardRow
@@ -46,19 +44,17 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import com.apollographql.apollo.ApolloClient
-import kotlinx.coroutines.CancellationException
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun DeleteUserScreen() {
   val nav = Nav.current
-  val apolloClient = koinInject<ApolloClient>()
+  val model = koinViewModel<DeleteUserViewModel>()
   val authService = koinInject<AuthService>()
   val toast = koinInject<Toast>()
   val scrollState = rememberScrollState()
   var isAcknowledged by remember { mutableStateOf(false) }
-  var isSubmitting by remember { mutableStateOf(false) }
 
   suspend fun submit() {
     val validationMessage = deleteUserValidationMessage(isAcknowledged = isAcknowledged)
@@ -67,29 +63,13 @@ fun DeleteUserScreen() {
       return
     }
 
-    isSubmitting = true
     toast.show(ToastType.Loading, "탈퇴하는 중...")
-    try {
-      val data = apolloClient.executeMutation(DeleteUserScreen_DeleteUser_Mutation())
-      if (!data.deleteUser) {
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-        return
+    model.deleteUser()
+      .withDefaultExceptionHandler(toast)
+      .onOk {
+        toast.dismiss()
+        authService.clearSession()
       }
-
-      toast.dismiss()
-      authService.clearSession()
-    } catch (e: CancellationException) {
-      toast.dismiss()
-      throw e
-    } catch (e: TypieError) {
-      Logger.e(e) { "Failed to delete user" }
-      toast.show(ToastType.Error, deleteUserErrorMessage(code = e.code, message = e.message))
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to delete user" }
-      toast.show(ToastType.Error, e.message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-    } finally {
-      isSubmitting = false
-    }
   }
 
   ProvideTopBar(
@@ -110,7 +90,7 @@ fun DeleteUserScreen() {
         Button(
           text = "탈퇴하기",
           variant = ButtonVariant.Danger,
-          loading = isSubmitting,
+          loading = model.isSubmitting,
           loadingText = "탈퇴하는 중...",
           onClick = { submit() },
         )
@@ -118,7 +98,7 @@ fun DeleteUserScreen() {
         Button(
           text = "타이피 계속 이용하기",
           variant = ButtonVariant.Secondary,
-          enabled = !isSubmitting,
+          enabled = !model.isSubmitting,
           onClick = { nav.pop() },
         )
       }

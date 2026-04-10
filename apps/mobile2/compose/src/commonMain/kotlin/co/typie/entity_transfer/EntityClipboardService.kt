@@ -3,25 +3,19 @@ package co.typie.entity_transfer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import co.touchlab.kermit.Logger
 import co.typie.graphql.EntityClipboard_CopyEntities_Mutation
 import co.typie.graphql.EntityClipboard_MoveEntities_Mutation
 import co.typie.graphql.TypieError
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.CopyEntitiesInput
 import co.typie.graphql.type.MoveEntitiesInput
-import co.typie.overlay.Toast
+import co.typie.result.Result
+import co.typie.result.Task
+import co.typie.result.task
 import co.typie.service.SiteRefreshCoordinator
 import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CancellationException
 import org.koin.core.annotation.Single
-
-private const val DEFAULT_PASTE_ERROR_MESSAGE = "붙여넣기 중 오류가 발생했어요"
-
-private class EntityPasteException(
-  val toastMessage: String,
-  cause: Throwable,
-) : Exception(cause)
 
 enum class EntityClipboardMode { Copy, Cut }
 
@@ -55,6 +49,14 @@ data class EntityClipboardMoveRequest(
   val upperOrder: String?,
   val targetSiteId: String?,
 )
+
+sealed interface PasteError {
+  data object SiteMismatch : PasteError
+  data object CircularReference : PasteError
+  data object SourceNotFound : PasteError
+  data object CharacterCountLimitExceeded : PasteError
+  data object BlobSizeLimitExceeded : PasteError
+}
 
 interface EntityClipboardMutationExecutor {
   suspend fun copyEntities(request: EntityClipboardCopyRequest)
@@ -98,7 +100,6 @@ class ApolloEntityClipboardMutationExecutor(
 @Single
 class EntityClipboardService(
   private val executor: EntityClipboardMutationExecutor,
-  private val toast: Toast,
   private val siteRefreshCoordinator: SiteRefreshCoordinator,
 ) {
   var state: EntityClipboardState? by mutableStateOf(null)
@@ -147,62 +148,41 @@ class EntityClipboardService(
     }
   }
 
-  suspend fun pasteInto(target: EntityPasteTarget): Boolean {
-    val clipboard = state ?: return false
-    if (!canPaste(target)) {
-      return false
-    }
+  fun pasteInto(target: EntityPasteTarget): Task<Int, Int, PasteError> = task {
+    val clipboard = state ?: return@task 0
+    if (!canPaste(target)) return@task 0
 
     val itemIds = clipboard.items.map(EntityTransferSource::id)
-    val itemCount = itemIds.size
+    emit(itemIds.size)
 
     try {
-      toast.withLoading(
-        message = "${itemCount}개의 항목을 붙여넣는 중이에요",
-        errorMessage = DEFAULT_PASTE_ERROR_MESSAGE,
-      ) {
-        try {
-          when (clipboard.mode) {
-            EntityClipboardMode.Copy -> executor.copyEntities(
-              EntityClipboardCopyRequest(
-                entityIds = itemIds,
-                targetSiteId = target.siteId,
-                parentEntityId = target.destinationEntityId,
-                lowerOrder = target.lowerOrder,
-                upperOrder = target.upperOrder,
-              ),
-            )
+      when (clipboard.mode) {
+        EntityClipboardMode.Copy -> executor.copyEntities(
+          EntityClipboardCopyRequest(
+            entityIds = itemIds,
+            targetSiteId = target.siteId,
+            parentEntityId = target.destinationEntityId,
+            lowerOrder = target.lowerOrder,
+            upperOrder = target.upperOrder,
+          ),
+        )
 
-            EntityClipboardMode.Cut -> executor.moveEntities(
-              EntityClipboardMoveRequest(
-                entityIds = itemIds,
-                parentEntityId = target.destinationEntityId,
-                lowerOrder = target.lowerOrder,
-                upperOrder = target.upperOrder,
-                targetSiteId = target.siteId.takeIf { it != clipboard.sourceSiteId },
-              ),
-            )
-          }
-        } catch (e: CancellationException) {
-          throw e
-        } catch (e: Throwable) {
-          throw EntityPasteException(
-            toastMessage = getPasteErrorMessage(e),
-            cause = e,
-          )
-        }
-
-        success("${itemCount}개의 항목을 붙여넣었어요")
+        EntityClipboardMode.Cut -> executor.moveEntities(
+          EntityClipboardMoveRequest(
+            entityIds = itemIds,
+            parentEntityId = target.destinationEntityId,
+            lowerOrder = target.lowerOrder,
+            upperOrder = target.upperOrder,
+            targetSiteId = target.siteId.takeIf { it != clipboard.sourceSiteId },
+          ),
+        )
       }
-    } catch (e: EntityPasteException) {
-      toast.show(type = co.typie.overlay.ToastType.Error, message = e.toastMessage)
-      Logger.e(e) { "Failed to paste ${itemIds.size} entities" }
-      return false
     } catch (e: CancellationException) {
       throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to paste ${itemIds.size} entities" }
-      return false
+    } catch (e: Throwable) {
+      val pasteError = classifyPasteError(e)
+      if (pasteError != null) raise(pasteError)
+      throw e
     }
 
     if (clipboard.mode == EntityClipboardMode.Cut) {
@@ -213,7 +193,8 @@ class EntityClipboardService(
     if (clipboard.sourceSiteId != target.siteId) {
       siteRefreshCoordinator.notifySiteChanged(clipboard.sourceSiteId)
     }
-    return true
+
+    itemIds.size
   }
 
   private fun setState(
@@ -233,14 +214,14 @@ class EntityClipboardService(
   }
 }
 
-fun getPasteErrorMessage(error: Throwable): String {
-  val typieError = error as? TypieError ?: return DEFAULT_PASTE_ERROR_MESSAGE
+private fun classifyPasteError(error: Throwable): PasteError? {
+  val typieError = error as? TypieError ?: return null
   return when (typieError.code) {
-    "site_mismatch" -> "이 위치에는 붙여넣을 수 없어요."
-    "circular_reference" -> "자기 자신 또는 하위 항목 안에는 붙여넣을 수 없어요."
-    "paste_source_not_found" -> "붙여넣을 항목을 찾을 수 없어요."
-    "character_count_limit_exceeded" -> "현재 플랜의 글자 수 제한을 초과했어요."
-    "blob_size_limit_exceeded" -> "현재 플랜의 파일 크기 제한을 초과했어요."
-    else -> DEFAULT_PASTE_ERROR_MESSAGE
+    "site_mismatch" -> PasteError.SiteMismatch
+    "circular_reference" -> PasteError.CircularReference
+    "paste_source_not_found" -> PasteError.SourceNotFound
+    "character_count_limit_exceeded" -> PasteError.CharacterCountLimitExceeded
+    "blob_size_limit_exceeded" -> PasteError.BlobSizeLimitExceeded
+    else -> null
   }
 }

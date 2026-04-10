@@ -28,7 +28,11 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import co.typie.platform.rememberFilePicker
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Img
@@ -40,13 +44,16 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlin.time.Duration
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun UpdateProfileScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdateProfileViewModel>()
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
 
@@ -54,8 +61,17 @@ fun UpdateProfileScreen() {
     val file = files.firstOrNull() ?: return@rememberFilePicker
 
     scope.launch {
-      val avatarId = model.uploadAvatar(file) ?: return@launch
-      model.state.form.avatarId.setValue(avatarId)
+      model.uploadAvatar(file).collect(
+        onPending = { toast.show(ToastType.Loading, "프로필 사진 업로드 중...", Duration.ZERO) },
+        onSettled = { result ->
+          result
+            .withDefaultExceptionHandler(toast)
+            .onOk { avatarId ->
+              toast.show(ToastType.Success, "프로필 사진이 업로드되었어요.")
+              model.state.form.avatarId.setValue(avatarId)
+            }
+        },
+      )
     }
   }
 
@@ -77,9 +93,18 @@ fun UpdateProfileScreen() {
         modifier = Modifier
           .padding(horizontal = 16.dp)
           .padding(bottom = 16.dp),
-        loading = model.submitAction.running,
+        loading = model.isSubmitting,
         loadingText = "변경 중...",
-        onClick = { model.submit { nav.pop() } },
+        onClick = {
+          scope.launch {
+            model.submit()
+              .withDefaultExceptionHandler(toast)
+              .onOk {
+                toast.show(ToastType.Success, "프로필이 변경되었어요.")
+                nav.pop()
+              }
+          }
+        },
       )
     },
   ) {
@@ -107,7 +132,16 @@ fun UpdateProfileScreen() {
           field = model.state.form.name,
           label = "닉네임",
           labelPosition = LabelPosition.Internal,
-          onImeAction = { model.submit { nav.pop() } },
+          onImeAction = {
+            scope.launch {
+              model.submit()
+                .withDefaultExceptionHandler(toast)
+                .onOk {
+                  toast.show(ToastType.Success, "프로필이 변경되었어요.")
+                  nav.pop()
+                }
+            }
+          },
         )
 
         Spacer(Modifier.height(24.dp))

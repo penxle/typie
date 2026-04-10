@@ -29,19 +29,27 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.typie.auth.AuthService
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.QueryState
 import co.typie.graphql.SpacePopover_CreateSite_Mutation
 import co.typie.graphql.SpacePopover_Query
+import co.typie.graphql.executeMutation
 import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.CreateSiteInput
+import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.Result
+import co.typie.result.onOk
+import co.typie.result.result
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.service.SiteService
+import com.apollographql.apollo.ApolloClient
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
@@ -64,7 +72,6 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -81,38 +88,29 @@ private val SpacePopoverScreenPadding = PaddingValues(
 
 @KoinViewModel
 class SpacePopoverViewModel(
-  private val toast: Toast,
-) : GraphQLViewModel() {
-  val query = watchQuery { SpacePopover_Query() }
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
+  val query = apolloClient.watchQuery(scope = viewModelScope) { SpacePopover_Query() }
   var isCreatingSite by mutableStateOf(false)
   var pendingCreatedSiteId by mutableStateOf<String?>(null)
     private set
 
-  suspend fun createSite(name: String): Boolean {
+  suspend fun createSite(name: String): Result<Unit, Nothing> {
     if (isCreatingSite) {
-      return false
+      return Result.Ok(Unit)
     }
 
     isCreatingSite = true
-    return try {
-      val result = executeMutation(
+    return result<Unit, Nothing> {
+      val data = apolloClient.executeMutation(
         SpacePopover_CreateSite_Mutation(
           input = CreateSiteInput(name = name.trim().ifBlank { "새 스페이스" }),
         ),
       )
 
-      pendingCreatedSiteId = result.createSite.id
+      pendingCreatedSiteId = data.createSite.id
       query.refetch()
-      toast.show(ToastType.Success, "새 스페이스가 생성되었어요.")
-      true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (_: Exception) {
-      toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      false
-    } finally {
-      isCreatingSite = false
-    }
+    }.also { isCreatingSite = false }
   }
 
   fun consumePendingCreatedSiteSelection(siteId: String) {
@@ -321,6 +319,7 @@ private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
   model: SpacePopoverViewModel,
 ) {
   var name by remember { mutableStateOf("") }
+  val toast = koinInject<Toast>()
 
   BottomSheetScaffold(
     title = "새 스페이스 생성",
@@ -357,9 +356,12 @@ private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
         loading = model.isCreatingSite,
         enabled = !model.isCreatingSite,
         onClick = {
-          if (model.createSite(name)) {
-            dismiss()
-          }
+          model.createSite(name)
+            .withDefaultExceptionHandler(toast)
+            .onOk {
+              toast.show(ToastType.Success, "새 스페이스가 생성되었어요.")
+              dismiss()
+            }
         },
         modifier = Modifier.weight(1f),
       )

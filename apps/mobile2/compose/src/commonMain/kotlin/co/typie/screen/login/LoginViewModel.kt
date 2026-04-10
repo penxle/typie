@@ -1,69 +1,62 @@
 package co.typie.screen.login
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.touchlab.kermit.Logger
 import co.typie.auth.sso.AppleSingleSignOnProvider
 import co.typie.auth.sso.GoogleSingleSignOnProvider
 import co.typie.auth.sso.KakaoSingleSignOnProvider
 import co.typie.auth.sso.NaverSingleSignOnProvider
 import co.typie.form.FormState
 import co.typie.form.email
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.LoginScreen_AuthorizeSingleSignOn_Mutation
 import co.typie.graphql.LoginWithEmailScreen_LoginWithEmail_Mutation
 import co.typie.graphql.TypieError
+import co.typie.graphql.executeMutation
 import co.typie.graphql.type.AuthorizeSingleSignOnInput
 import co.typie.graphql.type.LoginWithEmailInput
 import co.typie.graphql.type.SingleSignOnProvider
-import co.typie.overlay.Loader
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
-import co.typie.ui.state.AsyncAction
-import kotlinx.coroutines.CancellationException
+import co.typie.result.Result
+import co.typie.result.loading
+import co.typie.result.result
+import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
 class LoginSingleSignOnViewModel(
-  private val toast: Toast,
-  private val loader: Loader,
-) : GraphQLViewModel() {
-  fun loginWith(provider: SingleSignOnProvider, ctx: Any?, onSuccess: () -> Unit = {}) {
-    viewModelScope.launch {
-      try {
-        loader.runWith {
-          val provider = when (provider) {
-            SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
-            SingleSignOnProvider.KAKAO -> KakaoSingleSignOnProvider()
-            SingleSignOnProvider.NAVER -> NaverSingleSignOnProvider()
-            SingleSignOnProvider.APPLE -> AppleSingleSignOnProvider()
-            else -> throw IllegalArgumentException("Unknown provider: $provider")
-          }
-
-          val credential = provider.authenticate(ctx)
-
-          executeMutation(
-            LoginScreen_AuthorizeSingleSignOn_Mutation(
-              AuthorizeSingleSignOnInput(
-                provider = credential.provider,
-                params = JsonObject(credential.params.mapValues { (_, v) -> JsonPrimitive(v) }),
-              )
-            )
-          )
-        }
-
-        onSuccess()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to login with $provider" }
-        toast.show(ToastType.Error, "로그인에 실패했어요. 다시 시도해주세요.")
-      }
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
+  suspend fun loginWith(provider: SingleSignOnProvider, ctx: Any?): Result<Unit, Nothing> = result {
+    val ssoProvider = when (provider) {
+      SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
+      SingleSignOnProvider.KAKAO -> KakaoSingleSignOnProvider()
+      SingleSignOnProvider.NAVER -> NaverSingleSignOnProvider()
+      SingleSignOnProvider.APPLE -> AppleSingleSignOnProvider()
+      else -> throw IllegalArgumentException("Unknown provider: $provider")
     }
+
+    val credential = ssoProvider.authenticate(ctx)
+
+    apolloClient.executeMutation(
+      LoginScreen_AuthorizeSingleSignOn_Mutation(
+        AuthorizeSingleSignOnInput(
+          provider = credential.provider,
+          params = JsonObject(credential.params.mapValues { (_, v) -> JsonPrimitive(v) }),
+        )
+      )
+    )
   }
+}
+
+sealed interface LoginWithEmailError {
+  data object InvalidCredentials : LoginWithEmailError
+  data object PasswordNotSet : LoginWithEmailError
+  data class Unknown(val code: String) : LoginWithEmailError
 }
 
 class LoginWithEmailForm(scope: CoroutineScope) : FormState(scope) {
@@ -83,33 +76,18 @@ class LoginWithEmailState(scope: CoroutineScope) {
 
 @KoinViewModel
 class LoginWithEmailViewModel(
-  private val toast: Toast,
-) : GraphQLViewModel() {
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
   val state = LoginWithEmailState(viewModelScope)
-  val submitAction = AsyncAction(viewModelScope)
+  var isSubmitting by mutableStateOf(false)
+    private set
 
-  fun submit(onSubmit: () -> Unit) {
-    submitAction.launch(
-      onFailure = { e ->
-        when (e) {
-          is TypieError -> {
-            when (e.code) {
-              "invalid_credentials" -> toast.show(ToastType.Error, "이메일 또는 비밀번호가 올바르지 않아요.")
-              "password_not_set" -> toast.show(ToastType.Error, "비밀번호가 설정되지 않았어요.")
-              else -> toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-            }
-          }
+  suspend fun submit(): Result<Unit, LoginWithEmailError> {
+    if (!state.form.validate()) return Result.Ok(Unit)
 
-          else -> {
-            Logger.e(e) { "Failed to login with email" }
-            toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-          }
-        }
-      },
-    ) {
-        if (!state.form.validate()) return@launch
-
-        executeMutation(
+    return loading({ isSubmitting = it }) {
+      try {
+        apolloClient.executeMutation(
           LoginWithEmailScreen_LoginWithEmail_Mutation(
             LoginWithEmailInput(
               email = state.form.email.value,
@@ -117,8 +95,13 @@ class LoginWithEmailViewModel(
             ),
           ),
         )
-
-        onSubmit()
+      } catch (e: TypieError) {
+        when (e.code) {
+          "invalid_credentials" -> raise(LoginWithEmailError.InvalidCredentials)
+          "password_not_set" -> raise(LoginWithEmailError.PasswordNotSet)
+          else -> raise(LoginWithEmailError.Unknown(e.code))
+        }
+      }
     }
   }
 }

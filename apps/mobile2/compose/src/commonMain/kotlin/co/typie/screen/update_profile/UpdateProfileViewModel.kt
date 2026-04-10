@@ -3,25 +3,29 @@ package co.typie.screen.update_profile
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.touchlab.kermit.Logger
 import co.typie.blob.BlobService
 import co.typie.form.FormState
 import co.typie.form.ValidateOn
 import co.typie.form.maxLength
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.UpdateProfileScreen_PersistBlobAsImage_Mutation
 import co.typie.graphql.UpdateProfileScreen_Query
 import co.typie.graphql.UpdateProfileScreen_UpdateUser_Mutation
+import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.UpdateUserInput
 import co.typie.graphql.type.buildUser
+import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
-import co.typie.ui.state.AsyncAction
+import co.typie.result.Result
+import co.typie.result.Task
+import co.typie.result.loading
+import co.typie.result.result
+import co.typie.result.task
+import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.CoroutineScope
 import org.koin.core.annotation.KoinViewModel
 
@@ -46,14 +50,16 @@ class UpdateProfileScreenState(scope: CoroutineScope) {
 
 @KoinViewModel
 class UpdateProfileViewModel(
+  private val apolloClient: ApolloClient,
   private val blobService: BlobService,
-  private val toast: Toast,
-) : GraphQLViewModel() {
+) : ViewModel() {
   val state = UpdateProfileScreenState(viewModelScope)
-  val submitAction = AsyncAction(viewModelScope)
+  var isSubmitting by mutableStateOf(false)
+    private set
 
   val query =
-    watchQuery(
+    apolloClient.watchQuery(
+      scope = viewModelScope,
       placeholderData = placeholderData(),
       onInitialData = { data ->
         state.form.name.initialValue = data.me.name
@@ -61,57 +67,39 @@ class UpdateProfileViewModel(
       },
     ) { UpdateProfileScreen_Query() }
 
-  suspend fun uploadAvatar(file: PlatformFile): String? {
-    return try {
-      toast.withLoading(
-        message = "프로필 사진 업로드 중...",
-        errorMessage = "프로필 사진 업로드에 실패했어요. 다시 시도해주세요.",
-      ) {
-        val path = blobService.uploadBytes(
-          bytes = file.bytes,
-          filename = file.filename,
-          mimeType = file.mimeType,
-        )
+  fun uploadAvatar(file: PlatformFile): Task<Unit, String, Nothing> = task {
+    emit(Unit)
 
-        val result = executeMutation(
-          UpdateProfileScreen_PersistBlobAsImage_Mutation(
-            input = PersistBlobAsImageInput(path = path),
-          ),
-        )
+    val path = blobService.uploadBytes(
+      bytes = file.bytes,
+      filename = file.filename,
+      mimeType = file.mimeType,
+    )
 
-        state.avatarPreviewUrl = result.persistBlobAsImage.url
-        success("프로필 사진이 업로드되었어요.")
+    val result = apolloClient.executeMutation(
+      UpdateProfileScreen_PersistBlobAsImage_Mutation(
+        input = PersistBlobAsImageInput(path = path),
+      ),
+    )
 
-        result.persistBlobAsImage.id
-      }
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to upload avatar" }
-      null
-    }
+    state.avatarPreviewUrl = result.persistBlobAsImage.url
+    result.persistBlobAsImage.id
   }
 
-  fun submit(onSubmit: suspend () -> Unit) {
-    submitAction.launch(
-      onFailure = { e ->
-        Logger.e(e) { "Failed to update profile" }
-        toast.show(ToastType.Error, e.message ?: "프로필 변경에 실패했어요. 다시 시도해주세요.")
-      },
-    ) {
-        if (!state.form.validate()) return@launch
+  suspend fun submit(): Result<Unit, Nothing> {
+    if (!state.form.validate()) return Result.Ok(Unit)
 
-        executeMutation(
-          UpdateProfileScreen_UpdateUser_Mutation(
-            UpdateUserInput(
-              avatarId = state.form.avatarId.value,
-              name = state.form.name.value.trim(),
-            ),
+    return loading({ isSubmitting = it }) {
+      apolloClient.executeMutation(
+        UpdateProfileScreen_UpdateUser_Mutation(
+          UpdateUserInput(
+            avatarId = state.form.avatarId.value,
+            name = state.form.name.value.trim(),
           ),
-        )
+        ),
+      )
 
-        toast.show(ToastType.Success, "프로필이 변경되었어요.")
-
-        state.form.commit()
-        onSubmit()
+      state.form.commit()
     }
   }
 }

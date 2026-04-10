@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -41,8 +41,11 @@ import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
-import co.typie.platform.rememberFilePicker
 import co.typie.platform.Share
+import co.typie.platform.rememberFilePicker
+import co.typie.result.onException
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.ConfirmModal
@@ -54,8 +57,8 @@ import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.dismiss
-import co.typie.ui.icon.IconData
 import co.typie.ui.icon.Icon
+import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -81,7 +84,7 @@ private data class FolderVisibilityOption(
   val visibility: EntityVisibility,
   val label: String,
   val description: String,
-  val icon: co.typie.ui.icon.IconData,
+  val icon: IconData,
 )
 
 private fun folderVisibilityOptions(): List<FolderVisibilityOption> {
@@ -128,7 +131,8 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   var isApplyingRecursive by remember { mutableStateOf(false) }
   var isSharing by remember { mutableStateOf(false) }
   var showThumbnailRemoveConfirm by remember { mutableStateOf(false) }
-  val isBusy = isUpdatingVisibility || isUploadingThumbnail || isRemovingThumbnail || isApplyingRecursive || isSharing
+  val isBusy =
+    isUpdatingVisibility || isUploadingThumbnail || isRemovingThumbnail || isApplyingRecursive || isSharing
 
   fun updateVisibility(nextVisibility: EntityVisibility) {
     if (isUpdatingVisibility) return
@@ -136,16 +140,11 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
     if (form.visibility.initialValue == nextVisibility) return
 
     isUpdatingVisibility = true
-    model.updateFolderVisibility(
-      folderId = folderId,
-      visibility = nextVisibility,
-    ) { success ->
-      if (success) {
-        form.visibility.commit()
-        onUpdated()
-      } else {
-        form.visibility.rollback()
-      }
+    scope.launch {
+      model.updateFolderVisibility(folderId = folderId, visibility = nextVisibility)
+        .withDefaultExceptionHandler(toast)
+        .onOk { form.visibility.commit(); onUpdated() }
+        .onException { form.visibility.rollback() }
       isUpdatingVisibility = false
     }
   }
@@ -155,13 +154,11 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
 
     form.thumbnailUrl.setValue(null)
     isRemovingThumbnail = true
-    model.removeFolderThumbnail(folderId = folderId) { success ->
-      if (success) {
-        form.thumbnailUrl.commit()
-        onUpdated()
-      } else {
-        form.thumbnailUrl.rollback()
-      }
+    scope.launch {
+      model.removeFolderThumbnail(folderId = folderId)
+        .withDefaultExceptionHandler(toast)
+        .onOk { form.thumbnailUrl.commit(); onUpdated() }
+        .onException { form.thumbnailUrl.rollback() }
       isRemovingThumbnail = false
     }
   }
@@ -170,14 +167,13 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
     if (isApplyingRecursive || isUpdatingVisibility) return
 
     isApplyingRecursive = true
-    model.applyFolderVisibilityRecursively(
-      folderId = folderId,
-      visibility = form.visibility.value,
-    ) { success ->
-      if (success) {
-        onUpdated()
-        dismiss()
-      }
+    scope.launch {
+      model.applyFolderVisibilityRecursively(
+        folderId = folderId,
+        visibility = form.visibility.value
+      )
+        .withDefaultExceptionHandler(toast)
+        .onOk { onUpdated(); dismiss() }
       isApplyingRecursive = false
     }
   }
@@ -208,15 +204,14 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
     if (isUploadingThumbnail || isRemovingThumbnail) return@rememberFilePicker
 
     isUploadingThumbnail = true
-    model.uploadFolderThumbnail(
-      folderId = folderId,
-      file = file,
-    ) { result ->
-      if (result != null) {
-        form.thumbnailUrl.setValue(result.url)
-        form.thumbnailUrl.commit()
-        onUpdated()
-      }
+    scope.launch {
+      model.uploadFolderThumbnail(folderId = folderId, file = file)
+        .withDefaultExceptionHandler(toast)
+        .onOk { thumbnailResult ->
+          form.thumbnailUrl.setValue(thumbnailResult.url)
+          form.thumbnailUrl.commit()
+          onUpdated()
+        }
       isUploadingThumbnail = false
     }
   }

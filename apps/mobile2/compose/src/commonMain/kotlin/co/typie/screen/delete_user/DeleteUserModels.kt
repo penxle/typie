@@ -1,5 +1,7 @@
 package co.typie.screen.delete_user
 
+import co.typie.result.DEFAULT_ERROR_MESSAGE
+
 internal fun deleteUserNoticeItems(): List<String> {
   return listOf(
     "- 작성한 모든 글과 데이터는 탈퇴와 함께 삭제되며 재가입시에도 복구할 수 없어요.",
@@ -16,6 +18,6 @@ internal fun deleteUserValidationMessage(isAcknowledged: Boolean): String? {
 internal fun deleteUserErrorMessage(code: String, message: String?): String {
   return when (code) {
     "overdue_invoices_exist" -> "미납된 결제가 있어 회원 탈퇴를 진행할 수 없어요. 결제 상태를 먼저 확인해주세요."
-    else -> message ?: "오류가 발생했어요. 잠시 후 다시 시도해주세요."
+    else -> message ?: DEFAULT_ERROR_MESSAGE
   }
 }

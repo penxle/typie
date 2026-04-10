@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Modifier
@@ -18,6 +19,12 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
+import co.typie.result.DEFAULT_ERROR_MESSAGE
+import co.typie.result.onErr
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.ErrorDialog
@@ -28,12 +35,16 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun UpdateEmailScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdateEmailViewModel>()
+  val toast = koinInject<Toast>()
+  val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val showSuccessModal: suspend () -> Unit = {
     nav.showModal {
@@ -49,6 +60,21 @@ fun UpdateEmailScreen() {
           nav.pop()
         },
       )
+    }
+  }
+
+  fun submit() {
+    scope.launch {
+      model.submit()
+        .withDefaultExceptionHandler(toast)
+        .onOk { showSuccessModal() }
+        .onErr { error ->
+          val message = when (error) {
+            UpdateEmailError.EmailAlreadyExists -> "이미 사용중인 이메일이에요."
+            is UpdateEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
+          }
+          toast.show(ToastType.Error, message)
+        }
     }
   }
 
@@ -70,9 +96,9 @@ fun UpdateEmailScreen() {
         modifier = Modifier
           .padding(horizontal = 16.dp)
           .padding(bottom = 16.dp),
-        loading = model.submitAction.running,
+        loading = model.isSubmitting,
         loadingText = "변경 중...",
-        onClick = { model.submit(showSuccessModal) },
+        onClick = { submit() },
       )
     },
   ) {
@@ -96,7 +122,7 @@ fun UpdateEmailScreen() {
           placeholder = "me@example.com",
           contentType = ContentType.EmailAddress,
           keyboardType = KeyboardType.Email,
-          onImeAction = { model.submit(showSuccessModal) },
+          onImeAction = { submit() },
         )
   }
 }

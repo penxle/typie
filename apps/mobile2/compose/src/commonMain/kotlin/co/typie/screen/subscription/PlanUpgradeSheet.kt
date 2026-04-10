@@ -11,11 +11,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.typie.icons.Lucide
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
+import co.typie.result.DEFAULT_ERROR_MESSAGE
+import co.typie.result.onErr
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
@@ -29,6 +35,7 @@ import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -94,7 +101,9 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
   message: String,
 ) {
   val subscriptionService = koinInject<SubscriptionService>()
+  val toast = koinInject<Toast>()
   val model = koinViewModel<PlanUpgradeSheetViewModel>()
+  val scope = rememberCoroutineScope()
   var showTrialStartConfirm by remember { mutableStateOf(false) }
   val canStartTrial = subscriptionService.canStartTrial(model.query.data.me.canStartTrial)
   val dismissResult = planUpgradeDismissResult(model.celebration)
@@ -144,7 +153,7 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
             tint = color,
           )
         },
-        loading = model.startTrialAction.running,
+        loading = model.isStartingTrial,
         loadingText = "무료 체험 시작 중...",
         onClick = { showTrialStartConfirm = true },
       )
@@ -164,7 +173,15 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
       confirmText = TRIAL_START_CONFIRM_ACTION,
       onConfirm = {
         showTrialStartConfirm = false
-        model.startTrial()
+        scope.launch {
+          model.startTrial()
+            .withDefaultExceptionHandler(toast)
+            .onErr { error ->
+              when (error) {
+                PlanUpgradeTrialError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+              }
+            }
+        }
       },
       onDismiss = { showTrialStartConfirm = false },
     )

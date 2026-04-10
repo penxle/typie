@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Alignment
@@ -36,6 +37,13 @@ import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
+import co.typie.overlay.Loader
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
+import co.typie.result.DEFAULT_ERROR_MESSAGE
+import co.typie.result.onErr
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
@@ -47,6 +55,7 @@ import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -136,8 +145,21 @@ private fun LoginSSOContent(
   onSuccess: () -> Unit,
 ) {
   val model = koinViewModel<LoginSingleSignOnViewModel>()
+  val toast = koinInject<Toast>()
+  val loader = koinInject<Loader>()
   val platform = koinInject<Platform>()
+  val scope = rememberCoroutineScope()
   val ctx = activityContext()
+
+  fun loginWith(provider: SingleSignOnProvider) {
+    scope.launch {
+      loader.runWith {
+        model.loginWith(provider, ctx)
+          .withDefaultExceptionHandler(toast)
+          .onOk { onSuccess() }
+      }
+    }
+  }
 
   Column(
     modifier = Modifier.fillMaxWidth(),
@@ -153,7 +175,7 @@ private fun LoginSSOContent(
         foregroundColor = Color(0xFF000000),
         backgroundColor = Color(0xFFFFFFFF),
         borderColor = AppTheme.colors.borderDefault,
-        onClick = { model.loginWith(SingleSignOnProvider.GOOGLE, ctx, onSuccess) },
+        onClick = { loginWith(SingleSignOnProvider.GOOGLE) },
       )
 
       SingleSignOnButton(
@@ -162,7 +184,7 @@ private fun LoginSSOContent(
         iconTint = Color(0xFF000000),
         foregroundColor = Color(0xFF000000),
         backgroundColor = Color(0xFFFEE500),
-        onClick = { model.loginWith(SingleSignOnProvider.KAKAO, ctx, onSuccess) },
+        onClick = { loginWith(SingleSignOnProvider.KAKAO) },
       )
 
       SingleSignOnButton(
@@ -171,7 +193,7 @@ private fun LoginSSOContent(
         iconTint = Color(0xFFFFFFFF),
         foregroundColor = Color(0xFFFFFFFF),
         backgroundColor = Color(0xFF03C75A),
-        onClick = { model.loginWith(SingleSignOnProvider.NAVER, ctx, onSuccess) },
+        onClick = { loginWith(SingleSignOnProvider.NAVER) },
       )
 
       if (platform != Platform.Android) {
@@ -181,7 +203,7 @@ private fun LoginSSOContent(
           iconTint = Color(0xFFFFFFFF),
           foregroundColor = Color(0xFFFFFFFF),
           backgroundColor = Color(0xFF000000),
-          onClick = { model.loginWith(SingleSignOnProvider.APPLE, ctx, onSuccess) },
+          onClick = { loginWith(SingleSignOnProvider.APPLE) },
         )
       }
     }
@@ -203,7 +225,25 @@ private fun LoginEmailContent(
   onSuccess: () -> Unit,
 ) {
   val model = koinViewModel<LoginWithEmailViewModel>()
+  val toast = koinInject<Toast>()
+  val scope = rememberCoroutineScope()
   val form = model.state.form
+
+  fun submit() {
+    scope.launch {
+      model.submit()
+        .withDefaultExceptionHandler(toast)
+        .onOk { onSuccess() }
+        .onErr { error ->
+          val message = when (error) {
+            LoginWithEmailError.InvalidCredentials -> "이메일 또는 비밀번호가 올바르지 않아요."
+            LoginWithEmailError.PasswordNotSet -> "비밀번호가 설정되지 않았어요."
+            is LoginWithEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
+          }
+          toast.show(ToastType.Error, message)
+        }
+    }
+  }
 
   Column(
     modifier = Modifier.fillMaxWidth(),
@@ -224,15 +264,15 @@ private fun LoginEmailContent(
       placeholder = "********",
       isPassword = true,
       contentType = ContentType.Password,
-      onImeAction = { model.submit(onSuccess) },
+      onImeAction = { submit() },
     )
 
     Spacer(Modifier.height(8.dp))
 
     Button(
       text = "로그인",
-      onClick = { model.submit(onSuccess) },
-      loading = model.submitAction.running,
+      onClick = { submit() },
+      loading = model.isSubmitting,
       loadingText = "로그인 중...",
     )
 

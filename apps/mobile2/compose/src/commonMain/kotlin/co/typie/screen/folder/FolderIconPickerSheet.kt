@@ -16,9 +16,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,6 +34,10 @@ import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
 import co.typie.form.FormState
 import co.typie.icons.Lucide
+import co.typie.overlay.Toast
+import co.typie.result.onException
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.screen.home.EntityIconColorOption
 import co.typie.screen.home.EntityIconOption
 import co.typie.screen.home.entityIconColors
@@ -46,6 +50,8 @@ import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 private const val DEFAULT_ENTITY_ICON_NAME = "folder"
 private const val DEFAULT_ENTITY_ICON_COLOR = "gray"
@@ -78,8 +84,11 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
   initialColor: String?,
   onUpdated: () -> Unit = {},
 ) {
-  val normalizedInitialIcon = initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
-  val normalizedInitialColor = initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
+  val normalizedInitialIcon =
+    initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
+  val normalizedInitialColor =
+    initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val form = remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
     FolderIconPickerForm(
@@ -104,22 +113,17 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
     form.color.setValue(nextColor)
     isUpdating = true
 
-    model.updateEntityIcon(
-      entityId = entityId,
-      icon = nextIconName,
-      iconColor = nextColor,
-    ) { success ->
-      if (success) {
-        form.commit()
-        onUpdated()
-      } else {
-        form.rollback()
-      }
+    scope.launch {
+      model.updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
+        .withDefaultExceptionHandler(toast)
+        .onOk { form.commit(); onUpdated() }
+        .onException { form.rollback() }
       isUpdating = false
     }
   }
 
-  val currentTint = resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
+  val currentTint =
+    resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
   val iconGridScrollState = rememberScrollState()
 
   BottomSheetScaffold(

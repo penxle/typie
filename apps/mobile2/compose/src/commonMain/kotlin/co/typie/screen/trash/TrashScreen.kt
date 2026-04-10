@@ -21,23 +21,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import co.touchlab.kermit.Logger
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.QueryState
-import co.typie.graphql.TrashScreen_PurgeEntities_Mutation
-import co.typie.graphql.TrashScreen_RecoverEntity_Mutation
 import co.typie.graphql.TrashScreen_WithEntityId_Query
 import co.typie.graphql.TrashScreen_WithSiteId_Query
 import co.typie.graphql.type.EntityState
-import co.typie.graphql.type.PurgeEntitiesInput
-import co.typie.graphql.type.RecoverEntityInput
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.screen.home.resolveEntityIconAppearance
-import co.typie.service.SiteService
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ConfirmModal
@@ -70,12 +65,10 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Instant
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-import org.koin.core.annotation.KoinViewModel
 
 internal enum class TrashItemType(
   val label: String,
@@ -136,73 +129,6 @@ private data class TrashActionItem(
   val onClick: suspend () -> Unit,
 )
 
-@KoinViewModel
-internal class TrashViewModel(
-  val siteService: SiteService,
-  private val toast: Toast,
-) : GraphQLViewModel() {
-  var entityId: String? by mutableStateOf(null)
-
-  val siteQuery = watchQuery(
-    skip = { entityId != null },
-  ) {
-    TrashScreen_WithSiteId_Query(siteId = siteService.siteId)
-  }
-
-  val entityQuery = watchQuery(
-    skip = { entityId == null },
-  ) {
-    TrashScreen_WithEntityId_Query(entityId = requireNotNull(entityId))
-  }
-
-  fun refetch() {
-    if (entityId == null) {
-      siteQuery.refetch()
-    } else {
-      entityQuery.refetch()
-    }
-  }
-
-  suspend fun recoverEntity(item: TrashItem): Boolean {
-    return try {
-      val result = executeMutation(
-        TrashScreen_RecoverEntity_Mutation(
-          input = RecoverEntityInput(entityId = item.id),
-        ),
-      )
-      toast.show(ToastType.Success, "\"${trashRecoveryPath(result.recoverEntity)}\" ${item.type.label}를 복원했어요")
-      true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "trash recover failed entityId=${item.id}" }
-      toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      false
-    }
-  }
-
-  suspend fun purgeEntities(
-    entityIds: List<String>,
-    successMessage: String,
-  ): Boolean {
-    return try {
-      executeMutation(
-        TrashScreen_PurgeEntities_Mutation(
-          input = PurgeEntitiesInput(entityIds = entityIds),
-        ),
-      )
-      toast.show(ToastType.Success, successMessage)
-      true
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      Logger.e(e) { "trash purge failed entityIds=${entityIds.joinToString()}" }
-      toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      false
-    }
-  }
-}
-
 @Composable
 fun TrashScreen(entityId: String? = null) {
   val nav = Nav.current
@@ -231,9 +157,12 @@ fun TrashScreen(entityId: String? = null) {
             label = "복원",
             icon = Lucide.Undo2,
             onClick = {
-              if (model.recoverEntity(item)) {
-                model.refetch()
-              }
+              model.recoverEntity(item)
+                .withDefaultExceptionHandler(toast)
+                .onOk { message ->
+                  toast.show(ToastType.Success, message)
+                  model.refetch()
+                }
             },
           ),
           TrashActionItem(
@@ -271,9 +200,12 @@ fun TrashScreen(entityId: String? = null) {
             label = "복원",
             icon = Lucide.Undo2,
             onClick = {
-              if (model.recoverEntity(currentItem)) {
-                nav.pop()
-              }
+              model.recoverEntity(currentItem)
+                .withDefaultExceptionHandler(toast)
+                .onOk { message ->
+                  toast.show(ToastType.Success, message)
+                  nav.pop()
+                }
             },
           ),
         )
@@ -427,13 +359,16 @@ fun TrashScreen(entityId: String? = null) {
         if (request != null) {
           purgeRequest = null
           screenScope.launch {
-            if (model.purgeEntities(request.entityIds, request.successMessage)) {
-              if (request.shouldPop) {
-                nav.pop()
-              } else {
-                model.refetch()
+            model.purgeEntities(request.entityIds)
+              .withDefaultExceptionHandler(toast)
+              .onOk {
+                toast.show(ToastType.Success, request.successMessage)
+                if (request.shouldPop) {
+                  nav.pop()
+                } else {
+                  model.refetch()
+                }
               }
-            }
           }
         }
       },
@@ -699,13 +634,3 @@ private fun TrashScreen_WithEntityId_Query.DeletedChildren.toTrashItem(siteName:
   }
 }
 
-private fun trashRecoveryPath(
-  entity: TrashScreen_RecoverEntity_Mutation.RecoverEntity,
-): String {
-  val segments = buildList {
-    addAll(entity.ancestors.mapNotNull { it.node.onFolder?.name })
-    add(entity.node.onFolder?.name ?: entity.node.onDocument?.title ?: "삭제된 항목")
-  }
-
-  return segments.joinToString(" › ")
-}

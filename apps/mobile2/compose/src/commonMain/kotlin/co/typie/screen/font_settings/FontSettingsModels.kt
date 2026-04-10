@@ -16,6 +16,11 @@ internal data class FontSettingsFamily(
   val fonts: List<FontSettingsFont>,
 )
 
+internal data class FontUploadProgress(
+  val current: Int,
+  val total: Int,
+)
+
 internal data class FontUploadSuccess(
   val familyId: String,
   val familyDisplayName: String,
@@ -23,9 +28,16 @@ internal data class FontUploadSuccess(
   val subfamilyDisplayName: String?,
 )
 
+internal enum class FontUploadError {
+  UnsupportedFormat,
+  InvalidFontStyle,
+  UploadFailed,
+  RefreshFailed,
+}
+
 internal data class FontUploadFailure(
   val name: String,
-  val error: String,
+  val error: FontUploadError,
 )
 
 internal enum class FontUploadSummaryStatus {
@@ -36,10 +48,8 @@ internal enum class FontUploadSummaryStatus {
 
 internal data class FontUploadSummary(
   val status: FontUploadSummaryStatus,
-  val title: String,
-  val message: String,
-  val successCount: Int,
-  val failureCount: Int,
+  val successes: List<FontUploadSuccess>,
+  val failures: List<FontUploadFailure>,
 )
 
 internal enum class FontUploadAction {
@@ -132,56 +142,9 @@ internal fun summarizeFontUploadResults(
     else -> FontUploadSummaryStatus.PartialSuccess
   }
 
-  val title = when (status) {
-    FontUploadSummaryStatus.Success -> "폰트 업로드 완료"
-    FontUploadSummaryStatus.PartialSuccess -> "폰트 업로드 일부 완료"
-    FontUploadSummaryStatus.Failure -> "폰트 업로드 실패"
-  }
-
-  val sections = buildList {
-    if (successes.isNotEmpty()) {
-      val successesByFamily = linkedMapOf<String, MutableList<FontUploadSuccess>>()
-      successes.forEach { success ->
-        successesByFamily.getOrPut(success.familyId) { mutableListOf() }.add(success)
-      }
-
-      val successLines = successesByFamily.values.map { familyUploads ->
-        val familyDisplayName = familyUploads.first().familyDisplayName
-        val labels = familyUploads
-          .sortedBy { it.weight }
-          .map { fontWeightLabel(it.weight, it.subfamilyDisplayName) }
-          .joinToString(", ")
-        "• $familyDisplayName ($labels)"
-      }
-
-      add("${successes.size}개의 폰트가 추가되었어요.\n\n${successLines.joinToString("\n")}")
-    }
-
-    if (failures.isNotEmpty()) {
-      val failureLines = failures.joinToString("\n") { failure -> "• ${failure.name}: ${failure.error}" }
-      add("${failures.size}개의 폰트 업로드에 실패했어요.\n\n$failureLines")
-    }
-  }
-
-  val note = if (status == FontUploadSummaryStatus.Success) {
-    "업로드한 폰트는 이 화면에서 관리할 수 있어요."
-  } else {
-    null
-  }
-
-  val message = buildString {
-    append(sections.joinToString("\n\n"))
-    if (note != null) {
-      append("\n\n")
-      append(note)
-    }
-  }
-
   return FontUploadSummary(
     status = status,
-    title = title,
-    message = message,
-    successCount = successes.size,
-    failureCount = failures.size,
+    successes = successes,
+    failures = failures,
   )
 }

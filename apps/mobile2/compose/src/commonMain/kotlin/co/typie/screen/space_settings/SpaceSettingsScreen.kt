@@ -41,8 +41,12 @@ import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.route.Route
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import co.typie.platform.rememberFilePicker
+import co.typie.result.onErr
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.screen.subscription.CurrentSubscriptionStore
 import co.typie.screen.subscription.hasSubscriptionOrNull
 import co.typie.screen.subscription.planUpgradeRoute
@@ -76,6 +80,7 @@ import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlin.time.Duration
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -101,6 +106,7 @@ private fun spaceDateDisplayLabel(value: SiteDateDisplay): String {
 fun SpaceSettingsScreen() {
   val nav = Nav.current
   val model = koinViewModel<SpaceSettingsViewModel>()
+  val toast = koinInject<Toast>()
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
@@ -110,7 +116,16 @@ fun SpaceSettingsScreen() {
 
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker
-    scope.launch { model.uploadLogo(file) }
+    scope.launch {
+      model.uploadLogo(file).collect(
+        onPending = { toast.show(ToastType.Loading, "로고 업로드 중...", Duration.ZERO) },
+        onSettled = { result ->
+          result
+            .withDefaultExceptionHandler(toast)
+            .onOk { toast.show(ToastType.Success, "로고가 업로드되었어요.") }
+        },
+      )
+    }
   }
 
   ProvideTopBar(
@@ -134,9 +149,21 @@ fun SpaceSettingsScreen() {
         modifier = Modifier
           .padding(horizontal = 16.dp)
           .padding(bottom = 16.dp),
-        loading = model.submitAction.running,
+        loading = model.isSubmitting,
         loadingText = "저장 중...",
-        onClick = { model.submit { nav.pop() } },
+        onClick = {
+          scope.launch {
+            model.submit()
+              .withDefaultExceptionHandler(toast)
+              .onOk { nav.pop() }
+              .onErr { error ->
+                when (error) {
+                  SubmitError.SlugAlreadyExists -> toast.show(ToastType.Error, "이미 사용 중인 URL이에요.")
+                  SubmitError.SubscriptionUnknown -> toast.show(ToastType.Error, "이용권 상태를 확인하는 중이에요. 잠시 후 다시 시도해주세요.")
+                }
+              }
+          }
+        },
       )
     },
   ) {
@@ -351,6 +378,7 @@ private fun MoreMenu(
   showLastSiteAlert: () -> Unit,
 ) {
   val nav = Nav.current
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
 
@@ -392,11 +420,16 @@ private fun MoreMenu(
                     bottomSheetHost.show {
                       DeleteSiteConfirmSheet(
                         totalCount = totalCount,
-                        isDeleting = model.deleteSiteAction.running,
+                        isDeleting = model.isDeletingSite,
                         onDelete = {
-                          model.deleteSite {
-                            dismiss()
-                            nav.pop()
+                          scope.launch {
+                            model.deleteSite()
+                              .withDefaultExceptionHandler(toast)
+                              .onOk {
+                                toast.show(ToastType.Success, "스페이스가 삭제되었어요.")
+                                dismiss()
+                                nav.pop()
+                              }
                           }
                         },
                       )

@@ -56,6 +56,7 @@ import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
 import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.shell.LocalBottomBarState
@@ -80,6 +81,11 @@ import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import co.typie.entity_transfer.toMessage
+import co.typie.result.onErr
+import co.typie.result.onException
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -231,10 +237,10 @@ fun SpaceScreen() {
       confirmIsDestructive = true,
       onConfirm = {
         deleteRequest = null
-        folderActionModel.deleteFolderEntity(request.entityId) { success ->
-          if (success) {
-            model.refetch()
-          }
+        presenterScope.launch {
+          folderActionModel.deleteFolderEntity(request.entityId)
+            .withDefaultExceptionHandler(toast)
+            .onOk { model.refetch() }
         }
       },
       onDismiss = { deleteRequest = null },
@@ -400,16 +406,16 @@ fun SpaceScreen() {
 
             isPersistingReorder = true
             presenterScope.launch {
-              val success = model.moveRootEntity(
+              model.moveRootEntity(
                 entityId = commit.movedKey,
                 lowerOrder = reorderOrders.lowerOrder,
                 upperOrder = reorderOrders.upperOrder,
               )
+                .withDefaultExceptionHandler(toast)
+                .onException {
+                  reorderState.resetToServerKeys(serverEntityIds)
+                }
               isPersistingReorder = false
-
-              if (!success) {
-                reorderState.resetToServerKeys(serverEntityIds)
-              }
             }
           },
         )
@@ -434,9 +440,18 @@ fun SpaceScreen() {
                 onPaste = {
                   if (!isPasting) {
                     isPasting = true
-                    try {
-                      clipboard.pasteInto(resolvedPasteTarget)
-                    } finally {
+                    presenterScope.launch {
+                      clipboard.pasteInto(resolvedPasteTarget).collect(
+                        onPending = { count ->
+                          toast.show(ToastType.Loading, "${count}개의 항목을 붙여넣는 중이에요", kotlin.time.Duration.ZERO)
+                        },
+                        onSettled = { result ->
+                          result
+                            .withDefaultExceptionHandler(toast)
+                            .onOk { count -> toast.show(ToastType.Success, "${count}개의 항목을 붙여넣었어요") }
+                            .onErr { error -> toast.show(ToastType.Error, error.toMessage()) }
+                        },
+                      )
                       isPasting = false
                     }
                   }

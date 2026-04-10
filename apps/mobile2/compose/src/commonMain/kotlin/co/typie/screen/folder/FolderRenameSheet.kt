@@ -1,7 +1,7 @@
 package co.typie.screen.folder
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,7 +13,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import co.typie.form.FormState
 import co.typie.form.ValidateOn
-import co.typie.form.required
+import co.typie.overlay.Toast
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.TextField
 import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
@@ -22,6 +24,7 @@ import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 private class FolderRenameForm(
   scope: CoroutineScope,
@@ -41,6 +44,7 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
   initialName: String,
   onUpdated: () -> Unit = {},
 ) {
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val form = remember(folderId, initialName) {
     FolderRenameForm(scope, initialName)
@@ -73,14 +77,14 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
       folderId = folderId,
       currentName = normalizedInitialName,
       name = nextName,
-    ) { success ->
-      isSubmitting = false
-      if (success) {
+    )
+      .withDefaultExceptionHandler(toast)
+      .onOk {
         form.name.commit()
         onUpdated()
         dismiss()
       }
-    }
+    isSubmitting = false
   }
 
   BottomSheetScaffold(

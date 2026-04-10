@@ -53,6 +53,11 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.type.TextReplacementState
 import co.typie.icons.Lucide
+import co.typie.overlay.Toast
+import co.typie.result.onErr
+import co.typie.result.onException
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
@@ -82,6 +87,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
@@ -91,6 +97,7 @@ fun TextReplacementsScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
   val haptic = LocalHapticFeedback.current
   val model = koinViewModel<TextReplacementsViewModel>()
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   var isPersistingCustomReorder by remember { mutableStateOf(false) }
   val scrollState = rememberScrollState("text-replacements")
@@ -182,14 +189,14 @@ fun TextReplacementsScreen() {
                   model.toggleSmartQuotes(
                     items = model.normalizedItems,
                     enabled = !model.isSmartQuoteEnabled,
-                  )
+                  ).withDefaultExceptionHandler(toast)
                 },
                 onCheckedChange = { next ->
                   scope.launch {
                     model.toggleSmartQuotes(
                       items = model.normalizedItems,
                       enabled = next,
-                    )
+                    ).withDefaultExceptionHandler(toast)
                   }
                 },
               )
@@ -207,10 +214,10 @@ fun TextReplacementsScreen() {
               TextReplacementPresetRow(
                 item = item,
                 checked = item.state == TextReplacementState.ACTIVE,
-                onClick = { model.togglePreset(item) },
+                onClick = { model.togglePreset(item).withDefaultExceptionHandler(toast) },
                 onCheckedChange = {
                   scope.launch {
-                    model.togglePreset(item)
+                    model.togglePreset(item).withDefaultExceptionHandler(toast)
                   }
                 },
               )
@@ -293,16 +300,16 @@ fun TextReplacementsScreen() {
 
                             isPersistingCustomReorder = true
                             scope.launch {
-                              val success = model.moveCustom(
+                              model.moveCustom(
                                 textReplacementId = commit.movedKey,
                                 lowerOrder = reorderOrders.lowerOrder,
                                 upperOrder = reorderOrders.upperOrder,
                               )
+                                .withDefaultExceptionHandler(toast)
+                                .onException {
+                                  reorderState.resetToServerKeys(serverCustomItemIds)
+                                }
                               isPersistingCustomReorder = false
-
-                              if (!success) {
-                                reorderState.resetToServerKeys(serverCustomItemIds)
-                              }
                             }
                           },
                         ),
@@ -313,7 +320,7 @@ fun TextReplacementsScreen() {
                         isLast = index == displayCustomItems.lastIndex,
                         onToggleChange = {
                           scope.launch {
-                            model.toggleCustom(item)
+                            model.toggleCustom(item).withDefaultExceptionHandler(toast)
                           }
                         },
                         onEditClick = {
@@ -692,6 +699,7 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
   lastCustomOrder: String?,
 ) {
   val isEditing = editingItem != null
+  val toast = koinInject<Toast>()
   val scope = rememberCoroutineScope()
   val form = remember(editingItem?.textReplacementId) {
     TextReplacementForm(
@@ -732,7 +740,7 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
     errorText = null
     isSaving = true
 
-    val success = model.saveCustomRule(
+    model.saveCustomRule(
       editingItem = editingItem,
       match = form.match.value,
       substitute = form.substitute.value,
@@ -740,12 +748,17 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
       note = form.note.value,
       lastOrder = lastCustomOrder,
     )
+      .withDefaultExceptionHandler(toast)
+      .onOk { dismiss(Unit) }
+      .onErr { error ->
+        when (error) {
+          is SaveRuleError.ValidationFailed -> {
+            errorText = error.message
+          }
+        }
+      }
 
     isSaving = false
-
-    if (success) {
-      dismiss(Unit)
-    }
   }
 
   BottomSheetScaffold(
@@ -837,12 +850,10 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
         showDeleteConfirm = false
         scope.launch {
           isDeleting = true
-          val success = model.deleteCustom(requireNotNull(editingItem))
+          model.deleteCustom(requireNotNull(editingItem))
+            .withDefaultExceptionHandler(toast)
+            .onOk { dismiss(Unit) }
           isDeleting = false
-
-          if (success) {
-            dismiss(Unit)
-          }
         }
       },
       onDismiss = { showDeleteConfirm = false },

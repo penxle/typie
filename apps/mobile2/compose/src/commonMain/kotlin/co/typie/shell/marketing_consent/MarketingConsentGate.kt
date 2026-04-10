@@ -24,16 +24,23 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import co.touchlab.kermit.Logger
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.typie.datetime.formatKoreanDate
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.MarketingConsentGate_Query
 import co.typie.graphql.MarketingConsentGate_UpdateMarketingConsent_Mutation
 import co.typie.graphql.QueryState
+import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdateMarketingConsentInput
+import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.Result
+import co.typie.result.onOk
+import co.typie.result.result
+import co.typie.result.withDefaultExceptionHandler
+import com.apollographql.apollo.ApolloClient
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Text
@@ -41,12 +48,14 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Clock
 import kotlin.time.Instant
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 
 @Composable
 fun MarketingConsentGate() {
   val model = koinViewModel<MarketingConsentGateViewModel>()
+  val toast = koinInject<Toast>()
   val data = (model.query.state as? QueryState.Success)?.data ?: return
   var handledInSession by remember { mutableStateOf(false) }
   var pendingConsent by remember { mutableStateOf<Boolean?>(null) }
@@ -62,10 +71,12 @@ fun MarketingConsentGate() {
     pendingConsent = pendingConsent,
     onConsent = { consent ->
       pendingConsent = consent
-      val updated = model.updateMarketingConsent(consent)
-      if (updated) {
-        handledInSession = true
-      }
+      model.updateMarketingConsent(consent)
+        .withDefaultExceptionHandler(toast)
+        .onOk {
+          toast.show(ToastType.Success, marketingConsentToastMessage(consent))
+          handledInSession = true
+        }
       pendingConsent = null
     },
   )
@@ -81,23 +92,17 @@ internal fun marketingConsentToastMessage(
 
 @KoinViewModel
 class MarketingConsentGateViewModel(
-  private val toast: Toast,
-) : GraphQLViewModel() {
-  val query = watchQuery { MarketingConsentGate_Query() }
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
+  val query = apolloClient.watchQuery(scope = viewModelScope) { MarketingConsentGate_Query() }
 
-  suspend fun updateMarketingConsent(marketingConsent: Boolean): Boolean {
-    return try {
-      executeMutation(
+  suspend fun updateMarketingConsent(marketingConsent: Boolean): Result<Unit, Nothing> {
+    return result {
+      apolloClient.executeMutation(
         MarketingConsentGate_UpdateMarketingConsent_Mutation(
           input = UpdateMarketingConsentInput(marketingConsent = marketingConsent),
         ),
       )
-      toast.show(ToastType.Success, marketingConsentToastMessage(marketingConsent))
-      true
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to update marketing consent" }
-      toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      false
     }
   }
 }

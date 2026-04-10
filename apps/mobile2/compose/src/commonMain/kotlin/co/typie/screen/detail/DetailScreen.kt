@@ -20,11 +20,13 @@ import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.TopBarTitle
 import co.typie.ui.theme.AppTheme
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 
 private val DetailTrailingKey = Any()
 
 @Composable
 fun DetailScreen(id: String) {
+  val model = koinViewModel<DetailViewModel>()
   val nav = Nav.current
   val toast = koinInject<Toast>()
 

@@ -115,3 +115,22 @@ class WatchQuery<D : Query.Data, out R> private constructor(
     execute(query())
   }
 }
+
+fun <D : Query.Data> ApolloClient.watchQuery(
+  scope: CoroutineScope,
+  onInitialData: ((D) -> Unit)? = null,
+  skip: () -> Boolean = { false },
+  resetOnChange: Boolean = true,
+  query: () -> Query<D>,
+): WatchQuery<D, D?> =
+  WatchQuery(scope, this, query, onInitialData = onInitialData, skip = skip, resetOnChange = resetOnChange)
+
+fun <D : Query.Data> ApolloClient.watchQuery(
+  scope: CoroutineScope,
+  placeholderData: D,
+  onInitialData: ((D) -> Unit)? = null,
+  skip: () -> Boolean = { false },
+  resetOnChange: Boolean = true,
+  query: () -> Query<D>,
+): WatchQuery<D, D> =
+  WatchQuery(scope, this, query, placeholderData, onInitialData, skip, resetOnChange)

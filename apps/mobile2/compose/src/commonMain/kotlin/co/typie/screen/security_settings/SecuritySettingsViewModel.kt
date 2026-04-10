@@ -1,14 +1,20 @@
 package co.typie.screen.security_settings
 
-import co.typie.graphql.GraphQLViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.SecuritySettingsScreen_Query
 import co.typie.graphql.type.buildUser
+import co.typie.graphql.watchQuery
+import com.apollographql.apollo.ApolloClient
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
-class SecuritySettingsViewModel : GraphQLViewModel() {
-  val query = watchQuery(
+class SecuritySettingsViewModel(
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
+  val query = apolloClient.watchQuery(
+    scope = viewModelScope,
     placeholderData = placeholderData(),
   ) { SecuritySettingsScreen_Query() }
 }

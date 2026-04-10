@@ -3,52 +3,53 @@ package co.typie.screen.subscription
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.touchlab.kermit.Logger
 import co.typie.graphql.EnrollPlanScreen_SubscribePlanWithTrial_Mutation
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.PlanUpgradeSheet_Query
 import co.typie.graphql.TypieError
+import co.typie.graphql.executeMutation
 import co.typie.graphql.type.buildUser
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
-import co.typie.ui.state.AsyncAction
+import co.typie.graphql.watchQuery
+import co.typie.result.Result
+import co.typie.result.loading
+import com.apollographql.apollo.ApolloClient
 import org.koin.core.annotation.KoinViewModel
+
+sealed interface PlanUpgradeTrialError {
+  data object ServerError : PlanUpgradeTrialError
+}
 
 @KoinViewModel
 class PlanUpgradeSheetViewModel(
-  private val toast: Toast,
+  private val apolloClient: ApolloClient,
   private val subscriptionService: SubscriptionService,
   private val currentSubscriptionStore: CurrentSubscriptionStore,
-) : GraphQLViewModel() {
-  val query = watchQuery(
-    placeholderData(),
+) : ViewModel() {
+  val query = apolloClient.watchQuery(
+    scope = viewModelScope,
+    placeholderData = placeholderData(),
     skip = { subscriptionService.usesSandbox },
   ) { PlanUpgradeSheet_Query() }
 
-  val startTrialAction = AsyncAction(viewModelScope)
+  var isStartingTrial by mutableStateOf(false)
+    private set
 
   var celebration by mutableStateOf<SubscriptionCelebration?>(null)
     private set
 
-  fun startTrial() {
-    startTrialAction.launch(
-      onFailure = { e ->
-        when (e) {
-          is TypieError -> toast.show(ToastType.Error, e.message ?: DEFAULT_ERROR_MESSAGE)
-          else -> {
-            Logger.e(e) { "Failed to start subscription trial from upgrade sheet" }
-            toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-          }
-        }
-      },
-    ) {
+  suspend fun startTrial(): Result<Unit, PlanUpgradeTrialError> {
+    return loading({ isStartingTrial = it }) {
+      try {
         celebration = subscriptionService.startTrial {
-          executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+          apolloClient.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
           currentSubscriptionStore.refresh()
           query.refetch()
         }
+      } catch (e: TypieError) {
+        raise(PlanUpgradeTrialError.ServerError)
+      }
     }
   }
 }
@@ -59,4 +60,3 @@ private fun placeholderData() = PlanUpgradeSheet_Query.Data(PlaceholderResolver)
   }
 }
 
-private const val DEFAULT_ERROR_MESSAGE = "오류가 발생했어요. 잠시 후 다시 시도해주세요."

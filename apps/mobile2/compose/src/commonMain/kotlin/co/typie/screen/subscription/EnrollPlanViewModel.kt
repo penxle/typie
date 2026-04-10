@@ -3,40 +3,50 @@ package co.typie.screen.subscription
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.touchlab.kermit.Logger
 import co.typie.graphql.EnrollPlanScreen_Query
 import co.typie.graphql.EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation
 import co.typie.graphql.EnrollPlanScreen_SubscribePlanWithTrial_Mutation
-import co.typie.graphql.GraphQLViewModel
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.TypieError
+import co.typie.graphql.executeMutation
 import co.typie.graphql.type.InAppPurchaseStore
 import co.typie.graphql.type.SubscribeOrChangePlanWithInAppPurchaseInput
 import co.typie.graphql.type.buildUser
-import co.typie.overlay.Loader
-import co.typie.overlay.Toast
-import co.typie.overlay.ToastType
+import co.typie.graphql.watchQuery
 import co.typie.platform.PurchaseEvent
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
 import co.typie.platform.PurchaseStore
-import co.typie.ui.state.AsyncAction
+import co.typie.result.Result
+import co.typie.result.loading
+import co.typie.result.result
+import com.apollographql.apollo.ApolloClient
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
+sealed interface EnrollPlanError {
+  data object ServerError : EnrollPlanError
+}
+
+sealed interface PurchaseError {
+  data class ServerError(val code: String?) : PurchaseError
+  data object Unknown : PurchaseError
+}
+
 @KoinViewModel
 class EnrollPlanViewModel(
-  private val loader: Loader,
-  private val toast: Toast,
+  private val apolloClient: ApolloClient,
   private val subscriptionService: SubscriptionService,
   private val currentSubscriptionStore: CurrentSubscriptionStore,
-) : GraphQLViewModel() {
-  val startTrialAction = AsyncAction(viewModelScope)
-  private val purchaseAction = AsyncAction(viewModelScope)
+) : ViewModel() {
+  var isStartingTrial by mutableStateOf(false)
+    private set
 
-  val query = watchQuery(
-    placeholderData(),
+  val query = apolloClient.watchQuery(
+    scope = viewModelScope,
+    placeholderData = placeholderData(),
     skip = { subscriptionService.usesSandbox },
   ) { EnrollPlanScreen_Query() }
 
@@ -47,6 +57,9 @@ class EnrollPlanViewModel(
     private set
 
   var celebration by mutableStateOf<SubscriptionCelebration?>(null)
+    private set
+
+  var purchaseError by mutableStateOf<PurchaseError?>(null)
     private set
 
   init {
@@ -61,48 +74,29 @@ class EnrollPlanViewModel(
     }
   }
 
-  fun startTrial() {
-    startTrialAction.launch(
-      onFailure = { e ->
-        when (e) {
-          is TypieError -> toast.show(ToastType.Error, e.message ?: DEFAULT_ERROR_MESSAGE)
-          else -> {
-            Logger.e(e) { "Failed to start subscription trial" }
-            toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-          }
-        }
-      },
-    ) {
-        celebration = loader.runWith {
-          subscriptionService.startTrial {
-            executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
-            currentSubscriptionStore.refresh()
-            query.refetch()
-          }
-        }
-        // TODO: Mixpanel start_trial
+  suspend fun startTrial(): Result<Unit, EnrollPlanError> = loading({ isStartingTrial = it }) {
+    try {
+      celebration = subscriptionService.startTrial {
+        apolloClient.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+        currentSubscriptionStore.refresh()
+        query.refetch()
+      }
+      // TODO: Mixpanel start_trial
+    } catch (e: TypieError) {
+      raise(EnrollPlanError.ServerError)
     }
   }
 
-  fun purchase(product: PurchaseProduct) {
-    purchaseAction.launch(
-      onFailure = { e ->
-        Logger.e(e) { "Failed to start subscription purchase" }
-        toast.show(ToastType.Error, PURCHASE_START_FAILURE_MESSAGE)
-      },
-    ) {
-        val result = loader.runWith {
-          subscriptionService.purchase(
-            product = product,
-            accountId = query.data.me.uuid,
-          )
-        }
+  suspend fun purchase(product: PurchaseProduct): Result<Unit, Nothing> = result {
+    val purchaseResult = subscriptionService.purchase(
+      product = product,
+      accountId = query.data.me.uuid,
+    )
 
-        celebration = result.celebration
+    celebration = purchaseResult.celebration
 
-        if (!result.started) {
-          toast.show(ToastType.Error, PURCHASE_START_FAILURE_MESSAGE)
-        }
+    if (!purchaseResult.started) {
+      throw IllegalStateException("Purchase not started")
     }
   }
 
@@ -110,11 +104,14 @@ class EnrollPlanViewModel(
     celebration = null
   }
 
+  fun consumePurchaseError() {
+    purchaseError = null
+  }
+
   private suspend fun loadProducts() {
     try {
       products = subscriptionService.queryProducts()
-    } catch (error: Exception) {
-      Logger.e(error) { "Failed to query subscription products" }
+    } catch (_: Exception) {
       products = emptyMap()
     } finally {
       productsLoaded = true
@@ -127,7 +124,7 @@ class EnrollPlanViewModel(
     val verificationData = event.verificationData()
 
     try {
-      val response = executeMutation(
+      val response = apolloClient.executeMutation(
         EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation(
           input = SubscribeOrChangePlanWithInAppPurchaseInput(
             data = verificationData,
@@ -151,10 +148,9 @@ class EnrollPlanViewModel(
         celebration = purchaseCelebration()
       }
     } catch (e: TypieError) {
-      toast.show(ToastType.Error, e.message ?: DEFAULT_ERROR_MESSAGE)
-    } catch (e: Exception) {
-      Logger.e(e) { "Failed to verify in-app purchase" }
-      toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+      purchaseError = PurchaseError.ServerError(e.code)
+    } catch (_: Exception) {
+      purchaseError = PurchaseError.Unknown
     }
   }
 }
@@ -181,5 +177,3 @@ private fun placeholderData() = EnrollPlanScreen_Query.Data(PlaceholderResolver)
   }
 }
 
-private const val DEFAULT_ERROR_MESSAGE = "오류가 발생했어요. 잠시 후 다시 시도해주세요."
-private const val PURCHASE_START_FAILURE_MESSAGE = "결제를 시작할 수 없어요. 잠시 후 다시 시도해주세요."

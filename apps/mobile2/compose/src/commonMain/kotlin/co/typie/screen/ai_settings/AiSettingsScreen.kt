@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,19 +22,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewModelScope
-import co.touchlab.kermit.Logger
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
-import co.typie.graphql.AiSettingsScreen_Query
-import co.typie.graphql.AiSettingsScreen_UpdatePreferences_Mutation
-import co.typie.graphql.GraphQLViewModel
-import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.QueryState
-import co.typie.graphql.type.UpdatePreferencesInput
-import co.typie.graphql.type.buildUser
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ErrorDialog
@@ -45,20 +39,16 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.jsonPrimitive
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-import org.koin.core.annotation.KoinViewModel
 
 @Composable
 fun AiSettingsScreen() {
   val model = koinViewModel<AiSettingsViewModel>()
+  val toast = koinInject<Toast>()
   val scrollState = rememberScrollState()
+  val scope = rememberCoroutineScope()
   var showEnableConfirm by remember { mutableStateOf(false) }
 
   LaunchedEffect(model.query.state) {
@@ -71,7 +61,9 @@ fun AiSettingsScreen() {
     if (enabled) {
       showEnableConfirm = true
     } else {
-      model.updateAiOptIn(false)
+      scope.launch {
+        model.updateAiOptIn(false).withDefaultExceptionHandler(toast)
+      }
     }
   }
 
@@ -169,7 +161,9 @@ fun AiSettingsScreen() {
       confirmText = "활성화",
       onConfirm = {
         showEnableConfirm = false
-        model.updateAiOptIn(true)
+        scope.launch {
+          model.updateAiOptIn(true).withDefaultExceptionHandler(toast)
+        }
       },
       onDismiss = {
         showEnableConfirm = false
@@ -207,63 +201,3 @@ private fun AiSettingsNoticeItem(
   }
 }
 
-@KoinViewModel
-class AiSettingsViewModel(
-  private val toast: Toast,
-) : GraphQLViewModel() {
-  val query = watchQuery(placeholderData()) { AiSettingsScreen_Query() }
-
-  var aiOptIn by mutableStateOf(false)
-    private set
-
-  var isUpdatingAiOptIn by mutableStateOf(false)
-    private set
-
-  private var hasInitializedAiOptIn by mutableStateOf(false)
-
-  fun initializeAiOptIn(enabled: Boolean) {
-    if (hasInitializedAiOptIn) return
-    aiOptIn = enabled
-    hasInitializedAiOptIn = true
-  }
-
-  fun updateAiOptIn(enabled: Boolean) {
-    if (isUpdatingAiOptIn || aiOptIn == enabled) return
-
-    viewModelScope.launch {
-      val previous = aiOptIn
-      isUpdatingAiOptIn = true
-      aiOptIn = enabled
-      try {
-        executeMutation(
-          AiSettingsScreen_UpdatePreferences_Mutation(
-            input = UpdatePreferencesInput(
-              value = JsonObject(mapOf("aiOptIn" to JsonPrimitive(enabled))),
-            ),
-          ),
-        )
-        query.refetch()
-      } catch (e: CancellationException) {
-        aiOptIn = previous
-        throw e
-      } catch (e: Exception) {
-        Logger.e(e) { "Failed to update aiOptIn" }
-        aiOptIn = previous
-        toast.show(ToastType.Error, "오류가 발생했어요. 잠시 후 다시 시도해주세요.")
-      } finally {
-        isUpdatingAiOptIn = false
-      }
-    }
-  }
-}
-
-private fun JsonElement.aiOptIn(): Boolean {
-  val json = this as? JsonObject ?: return false
-  return json["aiOptIn"]?.jsonPrimitive?.booleanOrNull ?: false
-}
-
-private fun placeholderData() = AiSettingsScreen_Query.Data(PlaceholderResolver) {
-  me = buildUser {
-    preferences = JsonObject(emptyMap())
-  }
-}

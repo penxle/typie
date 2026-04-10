@@ -25,6 +25,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,8 +41,14 @@ import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.overlay.Loader
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
+import co.typie.result.DEFAULT_ERROR_MESSAGE
+import co.typie.result.onErr
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
@@ -57,6 +64,7 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -65,7 +73,10 @@ fun EnrollPlanScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val subscriptionService = koinInject<SubscriptionService>()
+  val toast = koinInject<Toast>()
+  val loader = koinInject<Loader>()
   val model = koinViewModel<EnrollPlanViewModel>()
+  val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   var showTrialStartConfirm by remember { mutableStateOf(false) }
   val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
@@ -79,6 +90,12 @@ fun EnrollPlanScreen() {
       )
     }
     model.consumeCelebration()
+  }
+
+  LaunchedEffect(model.purchaseError) {
+    model.purchaseError ?: return@LaunchedEffect
+    toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+    model.consumePurchaseError()
   }
 
   ProvideTopBar(
@@ -133,11 +150,21 @@ fun EnrollPlanScreen() {
       },
       onPurchaseMonthly = { product ->
         // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-        model.purchase(product)
+        scope.launch {
+          loader.runWith {
+            model.purchase(product)
+              .withDefaultExceptionHandler(toast)
+          }
+        }
       },
       onPurchaseYearly = { product ->
         // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-        model.purchase(product)
+        scope.launch {
+          loader.runWith {
+            model.purchase(product)
+              .withDefaultExceptionHandler(toast)
+          }
+        }
       },
     )
 
@@ -151,7 +178,17 @@ fun EnrollPlanScreen() {
       confirmText = TRIAL_START_CONFIRM_ACTION,
       onConfirm = {
         showTrialStartConfirm = false
-        model.startTrial()
+        scope.launch {
+          loader.runWith {
+            model.startTrial()
+              .withDefaultExceptionHandler(toast)
+              .onErr { error ->
+                when (error) {
+                  EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+                }
+              }
+          }
+        }
       },
       onDismiss = { showTrialStartConfirm = false },
     )

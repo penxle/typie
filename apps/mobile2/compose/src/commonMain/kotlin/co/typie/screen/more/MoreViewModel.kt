@@ -1,15 +1,20 @@
 package co.typie.screen.more
 
-import co.typie.graphql.GraphQLViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.typie.graphql.MoreScreen_Query
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.text
 import co.typie.graphql.type.buildUser
+import co.typie.graphql.watchQuery
+import com.apollographql.apollo.ApolloClient
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
-class MoreViewModel : GraphQLViewModel() {
-  val query = watchQuery(placeholderData()) { MoreScreen_Query() }
+class MoreViewModel(
+  private val apolloClient: ApolloClient,
+) : ViewModel() {
+  val query = apolloClient.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) { MoreScreen_Query() }
 }
 
 private fun placeholderData() = MoreScreen_Query.Data(PlaceholderResolver) {

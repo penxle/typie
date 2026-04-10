@@ -32,8 +32,12 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.Toast
+import co.typie.overlay.ToastType
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.rememberFilePicker
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.screen.subscription.CurrentSubscriptionStore
 import co.typie.screen.subscription.hasSubscriptionOrNull
 import co.typie.screen.subscription.planUpgradeRoute
@@ -61,6 +65,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.component.weightSpecimenFallbacks
+import kotlin.time.Duration
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -74,6 +79,7 @@ private data class PendingFontDeletion(
 fun FontSettingsScreen() {
   val model = koinViewModel<FontSettingsViewModel>()
   val nav = Nav.current
+  val toast = koinInject<Toast>()
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
@@ -86,7 +92,21 @@ fun FontSettingsScreen() {
     selectionMode = FilePickerSelectionMode.Multiple,
   ) { files ->
     if (files.isEmpty()) return@rememberFilePicker
-    scope.launch { model.uploadFonts(files) }
+    scope.launch {
+      model.uploadFonts(files).collect(
+        onPending = { progress ->
+          toast.show(ToastType.Loading, "폰트 업로드 중... (${progress.current}/${progress.total})", Duration.ZERO)
+        },
+        onSettled = { result ->
+          toast.dismiss()
+          result
+            .withDefaultExceptionHandler(toast)
+            .onOk { summary ->
+              model.state.uploadSummary = summary
+            }
+        },
+      )
+    }
   }
 
   fun requestUpload() {
@@ -180,8 +200,10 @@ fun FontSettingsScreen() {
       confirmText = "삭제",
       confirmIsDestructive = true,
       onConfirm = {
-        model.deleteFamily(family)
         pendingFamilyDeletion = null
+        model.deleteFamily(family)
+          .withDefaultExceptionHandler(toast)
+          .onOk { toast.show(ToastType.Success, "\"${family.displayName}\" 폰트 패밀리를 삭제했어요.") }
       },
       onDismiss = { pendingFamilyDeletion = null },
     )
@@ -194,20 +216,25 @@ fun FontSettingsScreen() {
       confirmText = "삭제",
       confirmIsDestructive = true,
       onConfirm = {
-        model.deleteFont(
-          familyDisplayName = pending.familyDisplayName,
-          font = pending.font,
-        )
         pendingFontDeletion = null
+        model.deleteFont(pending.font)
+          .withDefaultExceptionHandler(toast)
+          .onOk {
+            toast.show(
+              ToastType.Success,
+              "\"${pending.familyDisplayName} ${fontWeightLabel(pending.font.weight, pending.font.subfamilyDisplayName)}\" 폰트를 삭제했어요.",
+            )
+          }
       },
       onDismiss = { pendingFontDeletion = null },
     )
   }
 
   model.state.uploadSummary?.let { summary ->
+    val (title, message) = fontUploadSummaryDisplay(summary)
     AlertModal(
-      title = summary.title,
-      message = summary.message,
+      title = title,
+      message = message,
       onConfirm = { model.dismissUploadSummary() },
       onDismiss = { model.dismissUploadSummary() },
     )
@@ -409,6 +436,67 @@ private fun FontDeleteButton(
       )
     }
   }
+}
+
+private fun fontUploadErrorMessage(error: FontUploadError): String {
+  return when (error) {
+    FontUploadError.UnsupportedFormat -> "TTF 파일만 업로드할 수 있어요."
+    FontUploadError.InvalidFontStyle -> "기울어진 폰트는 업로드할 수 없어요."
+    FontUploadError.UploadFailed -> "폰트 업로드에 실패했어요."
+    FontUploadError.RefreshFailed -> "폰트 목록을 새로고침하지 못했어요. 화면을 다시 열어주세요."
+  }
+}
+
+private fun fontUploadSummaryDisplay(summary: FontUploadSummary): Pair<String, String> {
+  val title = when (summary.status) {
+    FontUploadSummaryStatus.Success -> "폰트 업로드 완료"
+    FontUploadSummaryStatus.PartialSuccess -> "폰트 업로드 일부 완료"
+    FontUploadSummaryStatus.Failure -> "폰트 업로드 실패"
+  }
+
+  val sections = buildList {
+    if (summary.successes.isNotEmpty()) {
+      val successesByFamily = linkedMapOf<String, MutableList<FontUploadSuccess>>()
+      summary.successes.forEach { success ->
+        successesByFamily.getOrPut(success.familyId) { mutableListOf() }.add(success)
+      }
+
+      val successLines = successesByFamily.values.map { familyUploads ->
+        val familyDisplayName = familyUploads.first().familyDisplayName
+        val labels = familyUploads
+          .sortedBy { it.weight }
+          .map { fontWeightLabel(it.weight, it.subfamilyDisplayName) }
+          .joinToString(", ")
+        "\u2022 $familyDisplayName ($labels)"
+      }
+
+      add("${summary.successes.size}개의 폰트가 추가되었어요.\n\n${successLines.joinToString("\n")}")
+    }
+
+    if (summary.failures.isNotEmpty()) {
+      val failureLines = summary.failures.joinToString("\n") { failure ->
+        val errorMessage = fontUploadErrorMessage(failure.error)
+        if (failure.name.isNotEmpty()) "\u2022 ${failure.name}: $errorMessage" else "\u2022 $errorMessage"
+      }
+      add("${summary.failures.size}개의 폰트 업로드에 실패했어요.\n\n$failureLines")
+    }
+  }
+
+  val note = if (summary.status == FontUploadSummaryStatus.Success) {
+    "업로드한 폰트는 이 화면에서 관리할 수 있어요."
+  } else {
+    null
+  }
+
+  val message = buildString {
+    append(sections.joinToString("\n\n"))
+    if (note != null) {
+      append("\n\n")
+      append(note)
+    }
+  }
+
+  return title to message
 }
 
 @Composable
