@@ -41,6 +41,7 @@ import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.rememberFilePicker
@@ -106,7 +107,7 @@ private fun spaceDateDisplayLabel(value: SiteDateDisplay): String {
 fun SpaceSettingsScreen() {
   val nav = Nav.current
   val model = koinViewModel<SpaceSettingsViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
@@ -378,7 +379,7 @@ private fun MoreMenu(
   showLastSiteAlert: () -> Unit,
 ) {
   val nav = Nav.current
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
 

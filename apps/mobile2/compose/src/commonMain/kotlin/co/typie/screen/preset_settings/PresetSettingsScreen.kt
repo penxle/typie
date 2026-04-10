@@ -75,7 +75,7 @@ import co.typie.result.isOk
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import kotlinx.coroutines.CancellationException
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.roundToInt
 
@@ -123,7 +123,7 @@ private class PageMarginSheetForm(
 @Composable
 fun PresetSettingsScreen() {
   val model = koinViewModel<PresetSettingsViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val bottomSheetHost = LocalBottomSheetHost.current
   val scrollState = rememberScrollState()
   var showResetConfirm by remember { mutableStateOf(false) }
@@ -413,7 +413,7 @@ private fun BottomSheetScope<Unit>.FontFamilySheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   var isSaving by remember { mutableStateOf(false) }
   var selectedFamilyName by remember { mutableStateOf(template.fontFamily) }
 
@@ -488,7 +488,7 @@ private fun BottomSheetScope<Unit>.FontWeightSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val family = model.activeDocumentFontFamilies.firstOrNull { it.familyName == template.fontFamily }
   val fonts = family?.fonts.orEmpty().distinctBy { it.weight }.sortedBy { it.weight }
   var isSaving by remember { mutableStateOf(false) }
@@ -564,7 +564,7 @@ private fun BottomSheetScope<Unit>.FontSizeSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(scope, template.fontSize) {
     FontSizeSheetForm(scope, template.fontSize)
@@ -685,7 +685,7 @@ private fun BottomSheetScope<Unit>.PageSizeSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val initialLayout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
   val form = remember(scope, initialLayout) {
@@ -842,7 +842,7 @@ private fun BottomSheetScope<Unit>.PageMarginSheet(
   model: PresetSettingsViewModel,
   template: PresetTemplate,
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val layout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
   val form = remember(scope, layout) {
@@ -944,7 +944,7 @@ private fun <T> BottomSheetScope<Unit>.PresetOptionSheet(
   options: List<PresetOption<T>>,
   onSaveValue: suspend (T) -> Result<Unit, Nothing>,
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   var isSaving by remember { mutableStateOf(false) }
   var selectedValue by remember { mutableStateOf(initialValue) }
 
@@ -988,7 +988,7 @@ private fun BottomSheetScope<Unit>.PresetColorSheet(
   background: Boolean,
   onSaveValue: suspend (String) -> Result<Unit, Nothing>,
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   var isSaving by remember { mutableStateOf(false) }
   var selectedValue by remember { mutableStateOf(initialValue) }
 

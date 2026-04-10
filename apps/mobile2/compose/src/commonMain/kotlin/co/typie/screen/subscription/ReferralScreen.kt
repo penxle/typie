@@ -30,6 +30,7 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.Clipboard
@@ -60,7 +61,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun ReferralScreen() {
   val model = koinViewModel<ReferralViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val clipboard = koinInject<Clipboard>()
   val share = koinInject<Share>()
   val scrollState = rememberScrollState()

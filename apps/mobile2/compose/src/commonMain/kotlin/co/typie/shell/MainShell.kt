@@ -43,7 +43,7 @@ import co.typie.icons.Lucide
 import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.shell.marketing_consent.MarketingConsentGate
@@ -53,7 +53,6 @@ import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.koinInject
 
 @Composable
 fun MainShell(content: @Composable (Route) -> Unit) {
@@ -66,7 +65,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 
   val topBarState = remember { TopBarState() }
 
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   LaunchedEffect(activeNavigator.current) {
     toast.bottomInset = activeNavigator.current.toastBottomInset
   }

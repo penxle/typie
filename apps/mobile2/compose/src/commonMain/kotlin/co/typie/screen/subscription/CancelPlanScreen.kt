@@ -22,6 +22,7 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.withDefaultExceptionHandler
@@ -44,7 +45,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun CancelPlanScreen() {
   val nav = Nav.current
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val model = koinViewModel<CancelPlanViewModel>()
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()

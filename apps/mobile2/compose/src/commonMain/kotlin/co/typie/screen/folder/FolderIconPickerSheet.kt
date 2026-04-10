@@ -51,7 +51,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 
 private const val DEFAULT_ENTITY_ICON_NAME = "folder"
 private const val DEFAULT_ENTITY_ICON_COLOR = "gray"
@@ -88,7 +88,7 @@ fun BottomSheetScope<Unit>.FolderIconPickerSheet(
     initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
   val normalizedInitialColor =
     initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
     FolderIconPickerForm(

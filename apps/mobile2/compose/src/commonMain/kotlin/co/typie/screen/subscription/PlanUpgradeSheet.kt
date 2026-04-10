@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.typie.icons.Lucide
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.DEFAULT_ERROR_MESSAGE
@@ -101,7 +102,7 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
   message: String,
 ) {
   val subscriptionService = koinInject<SubscriptionService>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val model = koinViewModel<PlanUpgradeSheetViewModel>()
   val scope = rememberCoroutineScope()
   var showTrialStartConfirm by remember { mutableStateOf(false) }

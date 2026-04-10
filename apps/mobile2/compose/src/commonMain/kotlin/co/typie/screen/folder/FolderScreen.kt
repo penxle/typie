@@ -47,7 +47,7 @@ import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -91,7 +91,7 @@ fun FolderScreen(entityId: String) {
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
   val presenterScope = rememberCoroutineScope()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val clipboard = koinInject<EntityClipboardService>()
   val model = koinViewModel<FolderViewModel>(key = "folder:$entityId")
   val scrollState = rememberScrollState("folder-scroll:$entityId")

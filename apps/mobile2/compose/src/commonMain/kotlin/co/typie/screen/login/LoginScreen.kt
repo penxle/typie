@@ -38,6 +38,8 @@ import co.typie.ext.safeBottomPadding
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.overlay.Loader
+import co.typie.overlay.LocalLoader
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.DEFAULT_ERROR_MESSAGE
@@ -145,8 +147,8 @@ private fun LoginSSOContent(
   onSuccess: () -> Unit,
 ) {
   val model = koinViewModel<LoginSingleSignOnViewModel>()
-  val toast = koinInject<Toast>()
-  val loader = koinInject<Loader>()
+  val toast = LocalToast.current
+  val loader = LocalLoader.current
   val platform = koinInject<Platform>()
   val scope = rememberCoroutineScope()
   val ctx = activityContext()
@@ -225,7 +227,7 @@ private fun LoginEmailContent(
   onSuccess: () -> Unit,
 ) {
   val model = koinViewModel<LoginWithEmailViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = model.state.form
 

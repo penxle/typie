@@ -42,6 +42,8 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.overlay.Loader
+import co.typie.overlay.LocalLoader
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.PurchasePlanInterval
@@ -73,8 +75,8 @@ fun EnrollPlanScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val subscriptionService = koinInject<SubscriptionService>()
-  val toast = koinInject<Toast>()
-  val loader = koinInject<Loader>()
+  val toast = LocalToast.current
+  val loader = LocalLoader.current
   val model = koinViewModel<EnrollPlanViewModel>()
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()

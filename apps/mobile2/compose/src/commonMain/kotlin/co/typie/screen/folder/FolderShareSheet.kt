@@ -39,6 +39,7 @@ import co.typie.ext.pressScale
 import co.typie.form.FormState
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.Share
@@ -120,7 +121,7 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
   onUpdated: () -> Unit = {},
 ) {
   val share = koinInject<Share>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(folderId, initialVisibility, initialThumbnailUrl) {
     FolderShareForm(scope, initialVisibility, initialThumbnailUrl)

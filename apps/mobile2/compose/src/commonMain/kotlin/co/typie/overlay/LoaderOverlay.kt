@@ -31,11 +31,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.koinInject
 
 @Composable
 fun LoaderOverlay() {
-  val loader = koinInject<Loader>()
+  val loader = LocalLoader.current
   val loading by loader.loading.collectAsState()
   var visible by remember { mutableStateOf(false) }
   val alpha = remember { Animatable(0f) }

@@ -21,7 +21,11 @@ import co.typie.auth.AuthService
 import co.typie.bootstrap.BootstrapDevSandbox
 import co.typie.bootstrap.BootstrapService
 import co.typie.bootstrap.effectiveBootstrapState
+import co.typie.overlay.Loader
 import co.typie.overlay.LoaderOverlay
+import co.typie.overlay.LocalLoader
+import co.typie.overlay.LocalToast
+import co.typie.overlay.Toast
 import co.typie.overlay.ToastOverlay
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
@@ -61,11 +65,17 @@ fun RootShell() {
       scenario = bootstrapScenario,
     ),
   )
+  val toast = remember { Toast() }
+  val loader = remember { Loader() }
   val bottomSheetHost = remember { BottomSheetHostState() }
 
   val focusManager = LocalFocusManager.current
 
-  CompositionLocalProvider(LocalBottomSheetHost provides bottomSheetHost) {
+  CompositionLocalProvider(
+    LocalBottomSheetHost provides bottomSheetHost,
+    LocalToast provides toast,
+    LocalLoader provides loader,
+  ) {
     Box(
       Modifier
         .fillMaxSize()

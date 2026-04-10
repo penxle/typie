@@ -56,6 +56,7 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.route.Route
@@ -102,7 +103,7 @@ fun SpaceScreen() {
   val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val clipboard = koinInject<EntityClipboardService>()
   val model = koinViewModel<SpaceViewModel>()
   val folderActionModel = koinViewModel<FolderViewModel>(key = "space-folder-actions")

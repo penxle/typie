@@ -34,6 +34,7 @@ import co.typie.graphql.executeMutation
 import co.typie.graphql.type.UpdateMarketingConsentInput
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.Result
@@ -48,14 +49,13 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Clock
 import kotlin.time.Instant
-import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 
 @Composable
 fun MarketingConsentGate() {
   val model = koinViewModel<MarketingConsentGateViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val data = (model.query.state as? QueryState.Success)?.data ?: return
   var handledInSession by remember { mutableStateOf(false) }
   var pendingConsent by remember { mutableStateOf<Boolean?>(null) }

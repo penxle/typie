@@ -41,6 +41,7 @@ import co.typie.graphql.type.CreateSiteInput
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.Result
@@ -319,7 +320,7 @@ private fun BottomSheetScope<Unit>.CreateSpaceBottomSheet(
   model: SpacePopoverViewModel,
 ) {
   var name by remember { mutableStateOf("") }
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
 
   BottomSheetScaffold(
     title = "새 스페이스 생성",

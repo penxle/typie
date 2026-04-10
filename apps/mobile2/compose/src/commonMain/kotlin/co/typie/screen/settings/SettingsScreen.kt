@@ -59,7 +59,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 import org.koin.compose.viewmodel.koinViewModel
 
 data class SettingsItem(
@@ -268,7 +268,7 @@ fun SettingsScreen() {
   val uriHandler = LocalUriHandler.current
   val bottomSheetHost = LocalBottomSheetHost.current
   val model = koinViewModel<SettingsViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val currentSubscriptionStore = model.currentSubscriptionStore
   val subscriptionService = model.subscriptionService
   val authService = model.authService

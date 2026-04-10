@@ -9,10 +9,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.koin.core.annotation.Single
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+
+val LocalToast = staticCompositionLocalOf<Toast> {
+  error("No Toast provided")
+}
 
 enum class ToastType { Success, Error, Notification, Loading }
 
@@ -23,7 +27,6 @@ data class ToastState(
   val duration: Duration,
 )
 
-@Single
 class Toast {
   private var nextId = 0L
   private val _state = MutableStateFlow<ToastState?>(null)

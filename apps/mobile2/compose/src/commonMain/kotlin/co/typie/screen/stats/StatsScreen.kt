@@ -33,6 +33,7 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.StatsScreen_GenerateActivityImage_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.icons.Lucide
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.Clipboard
@@ -68,7 +69,7 @@ import kotlin.math.max
 fun StatsScreen() {
   val model = koinViewModel<StatsViewModel>()
   val apolloClient = koinInject<ApolloClient>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val clipboard = koinInject<Clipboard>()
   val fileSystem = koinInject<FileSystem>()
   val scrollState = rememberScrollState()

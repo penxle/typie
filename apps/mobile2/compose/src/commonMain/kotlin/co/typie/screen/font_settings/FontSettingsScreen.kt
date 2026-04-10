@@ -32,6 +32,7 @@ import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.FilePickerSelectionMode
@@ -79,7 +80,7 @@ private data class PendingFontDeletion(
 fun FontSettingsScreen() {
   val model = koinViewModel<FontSettingsViewModel>()
   val nav = Nav.current
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val currentSubscriptionStore = koinInject<CurrentSubscriptionStore>()
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()

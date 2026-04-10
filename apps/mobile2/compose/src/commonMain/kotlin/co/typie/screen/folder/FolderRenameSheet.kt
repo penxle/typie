@@ -24,7 +24,7 @@ import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 
 private class FolderRenameForm(
   scope: CoroutineScope,
@@ -44,7 +44,7 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
   initialName: String,
   onUpdated: () -> Unit = {},
 ) {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(folderId, initialName) {
     FolderRenameForm(scope, initialName)

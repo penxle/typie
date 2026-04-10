@@ -87,7 +87,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 import org.koin.compose.viewmodel.koinViewModel
 
 private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
@@ -97,7 +97,7 @@ fun TextReplacementsScreen() {
   val bottomSheetHost = LocalBottomSheetHost.current
   val haptic = LocalHapticFeedback.current
   val model = koinViewModel<TextReplacementsViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   var isPersistingCustomReorder by remember { mutableStateOf(false) }
   val scrollState = rememberScrollState("text-replacements")
@@ -699,7 +699,7 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
   lastCustomOrder: String?,
 ) {
   val isEditing = editingItem != null
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(editingItem?.textReplacementId) {
     TextReplacementForm(

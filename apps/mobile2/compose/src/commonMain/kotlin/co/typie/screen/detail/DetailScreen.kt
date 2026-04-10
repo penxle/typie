@@ -19,7 +19,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.TopBarTitle
 import co.typie.ui.theme.AppTheme
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 import org.koin.compose.viewmodel.koinViewModel
 
 private val DetailTrailingKey = Any()
@@ -28,7 +28,7 @@ private val DetailTrailingKey = Any()
 fun DetailScreen(id: String) {
   val model = koinViewModel<DetailViewModel>()
   val nav = Nav.current
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
 
   ProvideTopBar(
     center = {

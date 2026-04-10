@@ -3,9 +3,12 @@ package co.typie.overlay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.koin.core.annotation.Single
+import androidx.compose.runtime.staticCompositionLocalOf
 
-@Single
+val LocalLoader = staticCompositionLocalOf<Loader> {
+  error("No Loader provided")
+}
+
 class Loader {
   private val _loading = MutableStateFlow(false)
   val loading: StateFlow<Boolean> = _loading.asStateFlow()

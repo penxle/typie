@@ -23,6 +23,7 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.Clipboard
@@ -58,7 +59,7 @@ internal fun profileSettingsMarketingConsentMessage(marketingConsent: Boolean): 
 fun ProfileSettingsScreen() {
   val nav = Nav.current
   val model = koinViewModel<ProfileSettingsViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val clipboard = koinInject<Clipboard>()
   val scrollState = rememberScrollState()
   val initialMarketingConsent = model.query.data.me.marketingConsent

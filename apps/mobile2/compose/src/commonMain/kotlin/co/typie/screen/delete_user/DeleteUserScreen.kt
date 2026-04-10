@@ -29,6 +29,7 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.result.onOk
@@ -52,7 +53,7 @@ fun DeleteUserScreen() {
   val nav = Nav.current
   val model = koinViewModel<DeleteUserViewModel>()
   val authService = koinInject<AuthService>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scrollState = rememberScrollState()
   var isAcknowledged by remember { mutableStateOf(false) }
 

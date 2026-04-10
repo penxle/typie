@@ -67,7 +67,7 @@ import co.typie.ui.theme.AppTheme
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 import org.koin.compose.viewmodel.koinViewModel
 
 internal enum class TrashItemType(
@@ -132,7 +132,7 @@ private data class TrashActionItem(
 @Composable
 fun TrashScreen(entityId: String? = null) {
   val nav = Nav.current
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val bottomSheetHost = LocalBottomSheetHost.current
   val model = koinViewModel<TrashViewModel>(key = "trash:${entityId ?: "site"}")
   val screenScope = rememberCoroutineScope()

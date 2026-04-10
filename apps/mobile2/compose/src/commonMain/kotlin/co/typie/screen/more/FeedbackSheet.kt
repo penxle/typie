@@ -29,6 +29,7 @@ import co.typie.graphql.MoreScreen_SubmitFeedback_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.SubmitFeedbackInput
 import co.typie.icons.Lucide
+import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastType
 import co.typie.platform.DeviceInfo
@@ -84,7 +85,7 @@ private data class FeedbackMetadata(
 fun BottomSheetScope<Unit>.FeedbackSheet() {
   val apolloClient = koinInject<ApolloClient>()
   val deviceInfo = koinInject<DeviceInfo>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
 
   var topic by remember { mutableStateOf<String?>(null) }
   var mood by remember { mutableStateOf<String?>(null) }

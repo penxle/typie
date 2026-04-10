@@ -36,14 +36,14 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
+import co.typie.overlay.LocalToast
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun UpdateEmailScreen() {
   val nav = Nav.current
   val model = koinViewModel<UpdateEmailViewModel>()
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val showSuccessModal: suspend () -> Unit = {

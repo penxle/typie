@@ -67,11 +67,10 @@ import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
 @Composable
 fun ToastOverlay() {
-  val toast = koinInject<Toast>()
+  val toast = LocalToast.current
   val toastState by toast.state.collectAsState()
 
   val density = LocalDensity.current
