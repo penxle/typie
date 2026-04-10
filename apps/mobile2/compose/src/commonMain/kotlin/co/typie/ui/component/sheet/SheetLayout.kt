@@ -64,7 +64,7 @@ fun SheetLayout(
   modifier: Modifier = Modifier,
   fillHeight: Boolean = false,
   bodyScroll: Boolean = true,
-  bodyInsetPolicy: SheetInsetPolicy = SheetInsetPolicy.Container,
+  bodyInsetPolicy: SheetInsetPolicy = SheetInsetPolicy.ContentTail,
   padding: SheetPadding = SheetPadding(),
   verticalSpacing: Dp = 12.dp,
   header: (@Composable ColumnScope.() -> Unit)? = null,

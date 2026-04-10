@@ -10,7 +10,13 @@ object SheetDetentResolver {
     context: SheetDetentContext,
   ): List<ResolvedSheetDetent> =
     when (policy) {
-      SheetSizePolicy.Intrinsic -> listOf(resolveDetent(SheetDetent.Intrinsic, context))
+      is SheetSizePolicy.Intrinsic -> listOf(
+        ResolvedSheetDetent(
+          id = SheetDetentId.Intrinsic,
+          height = minOf(context.contentHeight, context.viewportHeight - policy.topGap)
+            .coerceIn(0.dp, context.viewportHeight),
+        ),
+      )
       is SheetSizePolicy.Fixed -> listOf(resolveDetent(SheetDetent.Fixed(policy.height), context))
       is SheetSizePolicy.Max -> listOf(resolveDetent(SheetDetent.TopGap(policy.topGap), context))
       is SheetSizePolicy.Detents -> (listOf(policy.initial) + policy.available)

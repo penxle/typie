@@ -67,8 +67,9 @@ class SheetControllerState<R>(
     stackDepth: Int,
     isTopOfStack: Boolean,
   ) {
+    val nextDetents = detents.toList()
     _resolvedDetents.clear()
-    _resolvedDetents.addAll(detents)
+    _resolvedDetents.addAll(nextDetents)
     if (_resolvedDetents.none { it.id == currentDetentId }) {
       currentDetentId = initialDetentId
     }

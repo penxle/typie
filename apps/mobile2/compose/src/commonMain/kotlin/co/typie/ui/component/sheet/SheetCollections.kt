@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -195,13 +197,15 @@ fun SheetMenuActionRow(
   modifier: Modifier = Modifier,
   tint: Color? = null,
   trailingIcon: IconData? = null,
+  contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
 ) {
   InteractionScope {
     Row(
       modifier = modifier
         .fillMaxWidth()
-        .height(42.dp)
         .clickable(onClick = onClick)
+        .heightIn(min = 44.dp)
+        .padding(contentPadding)
         .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
     ) {

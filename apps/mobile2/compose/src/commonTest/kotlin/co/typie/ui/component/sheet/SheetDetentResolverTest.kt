@@ -7,9 +7,23 @@ import kotlin.test.assertEquals
 class SheetDetentResolverTest {
 
   @Test
-  fun intrinsicClampsToViewportHeight() {
+  fun intrinsicLeavesDefaultTopGap() {
     val resolved = SheetDetentResolver.resolve(
-      policy = SheetSizePolicy.Intrinsic,
+      policy = SheetSizePolicy.Intrinsic(),
+      context = SheetDetentContext(
+        viewportHeight = 600.dp,
+        contentHeight = 720.dp,
+      ),
+    )
+
+    assertEquals(listOf(536.dp), resolved.map { it.height })
+    assertEquals(SheetDetentId.Intrinsic, resolved.single().id)
+  }
+
+  @Test
+  fun intrinsicCanOverrideTopGap() {
+    val resolved = SheetDetentResolver.resolve(
+      policy = SheetSizePolicy.Intrinsic(topGap = 0.dp),
       context = SheetDetentContext(
         viewportHeight = 600.dp,
         contentHeight = 720.dp,

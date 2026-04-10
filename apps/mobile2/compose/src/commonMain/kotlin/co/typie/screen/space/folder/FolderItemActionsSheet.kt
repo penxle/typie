@@ -1,23 +1,36 @@
 package co.typie.screen.space.folder
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import co.typie.entity_transfer.EntityTransferSource
 import co.typie.icons.Lucide
 import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.component.EntityListItem
 import co.typie.ui.component.breadcrumbNames
-import co.typie.ui.component.bottomsheet.BottomSheetEntityBreadcrumb
-import co.typie.ui.component.bottomsheet.BottomSheetEntityHeader
-import co.typie.ui.component.bottomsheet.BottomSheetEntitySupportingText
-import co.typie.ui.component.bottomsheet.BottomSheetMenu
-import co.typie.ui.component.bottomsheet.BottomSheetMenuActionRow
-import co.typie.ui.component.bottomsheet.BottomSheetMenuDivider
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.SheetEntityBreadcrumb
+import co.typie.ui.component.sheet.SheetEntityHeader
+import co.typie.ui.component.sheet.SheetEntitySupportingText
+import co.typie.ui.component.sheet.SheetDismissReason
+import co.typie.ui.component.sheet.SheetHostState
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetMenuActionRow
+import co.typie.ui.component.sheet.SheetMenuDivider
+import co.typie.ui.component.sheet.SheetPadding
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+
+private val MenuSheetHorizontalPadding = 24.dp
+private val MenuSheetActionContentPadding = PaddingValues(horizontal = MenuSheetHorizontalPadding, vertical = 8.dp)
+private val MenuSheetRowPadding = PaddingValues(vertical = 12.dp)
 
 internal data class FolderDeleteRequest(
   val entityId: String,
@@ -34,11 +47,34 @@ internal fun EntityListItem.Folder.toTransferSource(): EntityTransferSource.Fold
   )
 }
 
-@Composable
-internal fun BottomSheetScope<Unit>.FolderItemActionsSheet(
+private fun folderItemActionsSheet(
   item: EntityListItem.Folder,
-  actionScope: CoroutineScope,
+  onAction: (FolderAction) -> Unit,
+): SheetPresentation<Unit> = sheetPresentation {
+  FolderItemActionsSheetContent(
+    item = item,
+    onAction = onAction,
+  )
+}
+
+internal fun SheetHostState.showFolderItemActionsSheet(
+  item: EntityListItem.Folder,
   onAction: suspend (FolderAction) -> Unit,
+): Job {
+  return show(
+    sheet = folderItemActionsSheet(
+      item = item,
+      onAction = { action ->
+        launch { onAction(action) }
+      },
+    ),
+  )
+}
+
+@Composable
+private fun SheetScope<Unit>.FolderItemActionsSheetContent(
+  item: EntityListItem.Folder,
+  onAction: (FolderAction) -> Unit,
 ) {
   val entityIcon = resolveEntityIconAppearance(
     iconName = item.iconName,
@@ -52,47 +88,62 @@ internal fun BottomSheetScope<Unit>.FolderItemActionsSheet(
     availability = item.availability,
   )
 
-  BottomSheetMenu(
-    showHeaderDivider = false,
+  SheetLayout(
+    bodyScroll = false,
+    padding = SheetPadding.None,
+    verticalSpacing = 0.dp,
     header = {
-      BottomSheetEntityHeader(
-        title = item.name,
-        icon = entityIcon.icon,
-        iconTint = entityIcon.tint,
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        BottomSheetEntityBreadcrumb(segments = item.breadcrumbNames())
-        BottomSheetEntitySupportingText(
-          text = visibility.label,
-          color = if (visibility.isShared) AppTheme.colors.brand else AppTheme.colors.textMuted,
-        )
-        BottomSheetEntitySupportingText(
-          text = co.typie.ui.component.formatFolderMetadataSummary(
-            folderCount = item.folderCount,
-            documentCount = item.documentCount,
-            characterCount = item.characterCount,
-          ),
-        )
+        SheetEntityHeader(
+          title = item.name,
+          icon = entityIcon.icon,
+          modifier = Modifier.padding(horizontal = MenuSheetHorizontalPadding),
+          iconTint = entityIcon.tint,
+        ) {
+          SheetEntityBreadcrumb(segments = item.breadcrumbNames())
+          SheetEntitySupportingText(
+            text = visibility.label,
+            color = if (visibility.isShared) AppTheme.colors.brand else AppTheme.colors.textMuted,
+          )
+          SheetEntitySupportingText(
+            text = co.typie.ui.component.formatFolderMetadataSummary(
+              folderCount = item.folderCount,
+              documentCount = item.documentCount,
+              characterCount = item.characterCount,
+            ),
+          )
+        }
+
+        SheetMenuDivider()
       }
     },
   ) {
-    folderPrimaryActionSections().forEachIndexed { index, section ->
-      if (index > 0) {
-        BottomSheetMenuDivider()
-      }
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(MenuSheetActionContentPadding),
+    ) {
+      folderPrimaryActionSections().forEachIndexed { index, section ->
+        if (index > 0) {
+          SheetMenuDivider()
+        }
 
-      section.items.forEach { action ->
-        BottomSheetMenuActionRow(
-          icon = action.icon,
-          label = action.label,
-          tint = if (action.isDanger) AppTheme.colors.danger else null,
-          trailingIcon = action.trailingIcon,
-          onClick = {
-            dismiss()
-            actionScope.launch {
+        section.items.forEach { action ->
+          SheetMenuActionRow(
+            icon = action.icon,
+            label = action.label,
+            contentPadding = MenuSheetRowPadding,
+            tint = if (action.isDanger) AppTheme.colors.danger else null,
+            trailingIcon = action.trailingIcon,
+            onClick = {
+              dismiss(SheetDismissReason.Programmatic)
               onAction(action.action)
-            }
-          },
-        )
+            },
+          )
+        }
       }
     }
   }

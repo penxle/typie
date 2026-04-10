@@ -2,10 +2,10 @@ package co.typie.screen.settings.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,20 +21,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import co.typie.ext.InteractionScope
-import co.typie.ext.clickable
-import co.typie.ext.navigationBarsPadding
-import co.typie.ext.pressScale
-import co.typie.ext.verticalScroll
-import co.typie.graphql.QueryState
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.route.Route
-import co.typie.service.hasSubscriptionOrNull
 import co.typie.screen.subscription.subscriptionEntryDestination
 import co.typie.screen.subscription.subscriptionRoute
+import co.typie.service.hasSubscriptionOrNull
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
@@ -44,12 +39,15 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.BottomSheetOptionList
-import co.typie.ui.component.bottomsheet.BottomSheetOptionRow
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetOptionList
+import co.typie.ui.component.sheet.SheetOptionRow
+import co.typie.ui.component.sheet.SheetPadding
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.completedOrNull
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -59,8 +57,6 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
-import co.typie.overlay.LocalToast
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 data class SettingsItem(
   val label: String,
@@ -103,6 +99,11 @@ data class SettingsVersionTapResult(
 
 private const val SETTINGS_DEVELOPER_MODE_REQUIRED_TAP_COUNT = 7
 private const val SETTINGS_DEVELOPER_MODE_HINT_START_TAP_COUNT = 4
+
+private val SettingsThemeSheetPadding = SheetPadding(
+  header = PaddingValues(horizontal = 16.dp),
+  body = PaddingValues(horizontal = 16.dp),
+)
 
 internal fun settingsRouteFor(item: SettingsItem): Route? {
   return item.route
@@ -235,7 +236,10 @@ internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSec
         items = listOf(
           SettingsItem("이용약관", externalUrl = "https://typie.co/legal/terms"),
           SettingsItem("개인정보처리방침", externalUrl = "https://typie.co/legal/privacy"),
-          SettingsItem("사업자 정보", externalUrl = "https://www.ftc.go.kr/bizCommPop.do?wrkr_no=6108803078"),
+          SettingsItem(
+            "사업자 정보",
+            externalUrl = "https://www.ftc.go.kr/bizCommPop.do?wrkr_no=6108803078"
+          ),
           SettingsItem("오픈소스 라이센스", route = Route.OssLicenses),
           SettingsItem("버전 정보", action = SettingsItemAction.VersionInfo),
         ),
@@ -266,8 +270,8 @@ internal fun settingsSections(devModeEnabled: Boolean = false): List<SettingsSec
 fun SettingsScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
-  val bottomSheetHost = LocalBottomSheetHost.current
   val model = viewModel { SettingsViewModel() }
+  val sheetHost = LocalSheetHost.current
   val toast = LocalToast.current
   val currentSubscriptionStore = model.currentSubscriptionStore
   val subscriptionService = model.subscriptionService
@@ -320,15 +324,15 @@ fun SettingsScreen() {
         appVersion = appVersion,
         devModeEnabled = devModeEnabled,
         onThemeClick = {
-          bottomSheetHost.show {
-            SettingsThemeSheet(
-              themeMode = themeModeState.value,
-              onThemeModeChange = {
+          sheetHost.show(
+            sheet = settingsThemeSheet(themeMode = themeModeState.value),
+            onResult = { result ->
+              result.completedOrNull()?.let {
                 // TODO: 테마 변경 트래킹
                 themeModeState.value = it
-              },
-            )
-          }
+              }
+            },
+          )
         },
         onVersionInfoClick = {
           val result = settingsVersionTapResult(
@@ -371,11 +375,11 @@ fun SettingsScreen() {
           } else {
             toast.show(ToastType.Notification, "준비 중인 기능이에요.")
           }
-          },
-        )
-      }
+        },
+      )
+    }
 
-      Spacer(Modifier.size(72.dp))
+    Spacer(Modifier.size(72.dp))
   }
 
   if (showLogoutConfirm) {
@@ -542,50 +546,40 @@ private fun SettingsThemeRow(
   }
 }
 
-@Composable
-private fun BottomSheetScope<Unit>.SettingsThemeSheet(
+private fun settingsThemeSheet(
   themeMode: ThemeMode,
-  onThemeModeChange: (ThemeMode) -> Unit,
-) {
-  BottomSheetScaffold(title = "테마") {
-    BottomSheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
-      SettingsThemeSheetOption(
-        item = item,
-        onClick = {
-          onThemeModeChange(item.mode)
-          dismiss()
-        },
-      )
-    }
-  }
-}
-
-@Composable
-private fun SettingsThemeSheetOption(
-  item: SettingsThemeSelectionItem,
-  onClick: suspend () -> Unit,
-) {
-  BottomSheetOptionRow(
-    selected = item.selected,
-    onClick = onClick,
+): SheetPresentation<ThemeMode> = sheetPresentation {
+  SheetLayout(
+    padding = SettingsThemeSheetPadding,
+    verticalSpacing = 8.dp,
+    header = {
+      ActionHeader(title = "테마")
+    },
   ) {
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Icon(
-        icon = item.icon,
-        modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.textSecondary,
-      )
-      Text(
-        text = item.label,
-        style = AppTheme.typography.action,
-        modifier = Modifier.weight(1f),
-        color = AppTheme.colors.textPrimary,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
+    SheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
+      SheetOptionRow(
+        selected = item.selected,
+        onClick = { complete(item.mode) },
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          Icon(
+            icon = item.icon,
+            modifier = Modifier.size(18.dp),
+            tint = AppTheme.colors.textSecondary,
+          )
+          Text(
+            text = item.label,
+            style = AppTheme.typography.action,
+            modifier = Modifier.weight(1f),
+            color = AppTheme.colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
     }
   }
 }

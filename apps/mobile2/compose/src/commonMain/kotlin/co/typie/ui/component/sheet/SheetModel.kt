@@ -220,7 +220,10 @@ data class ResolvedSheetDetent(
 )
 
 sealed interface SheetSizePolicy {
-  data object Intrinsic : SheetSizePolicy
+  @Immutable
+  data class Intrinsic(
+    val topGap: Dp = SheetDefaults.IntrinsicTopGap,
+  ) : SheetSizePolicy
 
   @Immutable
   data class Fixed(
@@ -252,7 +255,7 @@ data class SheetHapticPolicy(
 @Immutable
 data class SheetOverlaySpec(
   val mode: SheetMode = SheetMode.Modal,
-  val sizePolicy: SheetSizePolicy = SheetSizePolicy.Intrinsic,
+  val sizePolicy: SheetSizePolicy = SheetSizePolicy.Intrinsic(),
   val dismissPolicy: SheetDismissPolicy = SheetDismissPolicy(),
   val chrome: SheetChrome = SheetChrome.Default,
   val haptics: SheetHapticPolicy = SheetHapticPolicy(),
@@ -266,7 +269,7 @@ data class SheetOverlaySpec(
 
 internal fun SheetSizePolicy.initialDetentId(): SheetDetentId =
   when (this) {
-    SheetSizePolicy.Intrinsic -> SheetDetentId.Intrinsic
+    is SheetSizePolicy.Intrinsic -> SheetDetentId.Intrinsic
     is SheetSizePolicy.Fixed -> SheetDetentId.Fixed(height)
     is SheetSizePolicy.Max -> SheetDetentId.TopGap(topGap)
     is SheetSizePolicy.Detents -> initial.id
@@ -274,7 +277,7 @@ internal fun SheetSizePolicy.initialDetentId(): SheetDetentId =
 
 internal fun SheetSizePolicy.requiresContentMeasurement(): Boolean =
   when (this) {
-    SheetSizePolicy.Intrinsic -> true
+    is SheetSizePolicy.Intrinsic -> true
     is SheetSizePolicy.Fixed,
     is SheetSizePolicy.Max,
     -> false
@@ -295,7 +298,7 @@ internal fun SheetSizePolicy.allowsDragCollapse(): Boolean =
     else -> true
   }
 
-private fun SheetDetent.requiresContentMeasurement(): Boolean =
+internal fun SheetDetent.requiresContentMeasurement(): Boolean =
   when (this) {
     SheetDetent.Intrinsic -> true
     is SheetDetent.Content,

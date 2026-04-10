@@ -29,6 +29,13 @@ class SheetHostState internal constructor(
   private val presenter: SheetOverlayPresenter,
   private val launchScope: CoroutineScope,
 ) {
+  internal fun launch(
+    start: CoroutineStart = CoroutineStart.UNDISPATCHED,
+    block: suspend CoroutineScope.() -> Unit,
+  ): Job {
+    return launchScope.launch(start = start, block = block)
+  }
+
   suspend fun <R> present(
     sheet: SheetPresentation<R>,
   ): SheetResult<R> {
@@ -72,7 +79,7 @@ class SheetHostState internal constructor(
   fun <R> show(
     sheet: SheetPresentation<R>,
     start: CoroutineStart = CoroutineStart.UNDISPATCHED,
-    onResult: (SheetResult<R>) -> Unit = {},
+    onResult: suspend (SheetResult<R>) -> Unit = {},
   ): Job {
     return launchScope.launch(start = start) {
       onResult(present(sheet))
@@ -82,7 +89,7 @@ class SheetHostState internal constructor(
   fun <R> show(
     spec: SheetOverlaySpec = SheetOverlaySpec(),
     start: CoroutineStart = CoroutineStart.UNDISPATCHED,
-    onResult: (SheetResult<R>) -> Unit = {},
+    onResult: suspend (SheetResult<R>) -> Unit = {},
     content: @Composable SheetScope<R>.() -> Unit,
   ): Job {
     return show(

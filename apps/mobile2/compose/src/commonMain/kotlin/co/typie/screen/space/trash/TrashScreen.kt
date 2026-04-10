@@ -3,9 +3,9 @@ package co.typie.screen.space.trash
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,18 +21,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.graphql.QueryState
 import co.typie.graphql.TrashScreen_WithEntityId_Query
 import co.typie.graphql.TrashScreen_WithSiteId_Query
 import co.typie.graphql.type.EntityState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.Toast
+import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ConfirmModal
@@ -40,35 +40,43 @@ import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.BottomSheetEntityBreadcrumb
-import co.typie.ui.component.bottomsheet.BottomSheetEntityHeader
-import co.typie.ui.component.bottomsheet.BottomSheetEntitySupportingText
-import co.typie.ui.component.bottomsheet.BottomSheetMenu
-import co.typie.ui.component.bottomsheet.BottomSheetMenuActionRow
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.TrashDocumentRow
+import co.typie.ui.component.TrashFolderRow
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetDismissReason
+import co.typie.ui.component.sheet.SheetEntityBreadcrumb
+import co.typie.ui.component.sheet.SheetEntityHeader
+import co.typie.ui.component.sheet.SheetEntitySupportingText
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetMenuActionRow
+import co.typie.ui.component.sheet.SheetMenuDivider
+import co.typie.ui.component.sheet.SheetPadding
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
-import co.typie.ui.component.TrashDocumentRow
-import co.typie.ui.component.TrashFolderRow
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import co.typie.overlay.LocalToast
-import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlin.time.Instant
+
+private val MenuSheetHorizontalPadding = 24.dp
+private val MenuSheetActionContentPadding =
+  PaddingValues(horizontal = MenuSheetHorizontalPadding, vertical = 8.dp)
+private val MenuSheetRowPadding = PaddingValues(vertical = 12.dp)
 
 internal enum class TrashItemType(
   val label: String,
@@ -133,8 +141,8 @@ private data class TrashActionItem(
 fun TrashScreen(entityId: String? = null) {
   val nav = Nav.current
   val toast = LocalToast.current
-  val bottomSheetHost = LocalBottomSheetHost.current
   val model = viewModel(key = "trash:${entityId ?: "site"}") { TrashViewModel() }
+  val sheetHost = LocalSheetHost.current
   val screenScope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   var purgeRequest by remember(entityId) { mutableStateOf<TrashPurgeRequest?>(null) }
@@ -146,12 +154,12 @@ fun TrashScreen(entityId: String? = null) {
 
   val queryState = if (entityId == null) model.siteQuery.state else model.entityQuery.state
   val content = trashContent(queryState = queryState)
+  val dangerColor = AppTheme.colors.danger
 
-  suspend fun showItemActionsSheet(item: TrashItem) {
-    bottomSheetHost.show {
-      TrashActionsSheet(
+  fun showItemActionsSheet(item: TrashItem) {
+    sheetHost.show(
+      sheet = trashActionsSheet(
         item = item,
-        actionScope = screenScope,
         actions = listOf(
           TrashActionItem(
             label = "복원",
@@ -168,7 +176,7 @@ fun TrashScreen(entityId: String? = null) {
           TrashActionItem(
             label = "영구 삭제",
             icon = Lucide.Trash2,
-            tint = AppTheme.colors.danger,
+            tint = dangerColor,
             onClick = {
               purgeRequest = TrashPurgeRequest(
                 title = "${item.type.label} 영구 삭제",
@@ -180,12 +188,16 @@ fun TrashScreen(entityId: String? = null) {
             },
           ),
         ),
-      )
-    }
+        onAction = { action ->
+          sheetHost.launch { action.onClick() }
+        },
+      ),
+    )
   }
 
   LaunchedEffect(queryState, entityId) {
-    val data = (queryState as? QueryState.Success<*>)?.data as? TrashScreen_WithEntityId_Query.Data ?: return@LaunchedEffect
+    val data = (queryState as? QueryState.Success<*>)?.data as? TrashScreen_WithEntityId_Query.Data
+      ?: return@LaunchedEffect
     if (entityId != null && data.entity.state != EntityState.DELETED) {
       nav.pop()
     }
@@ -276,76 +288,76 @@ fun TrashScreen(entityId: String? = null) {
     scrollState = scrollState,
     loading = queryState !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
-    extraPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
+    extraPadding = PaddingValues(bottom = 16.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-      Text(
-        text = content.title,
-        style = AppTheme.typography.display,
-        modifier = Modifier.padding(top = 4.dp),
-      )
+    Text(
+      text = content.title,
+      style = AppTheme.typography.display,
+      modifier = Modifier.padding(top = 4.dp),
+    )
 
-      Text(
-        text = content.subtitle,
-        style = AppTheme.typography.body,
-        color = AppTheme.colors.textTertiary,
-      )
+    Text(
+      text = content.subtitle,
+      style = AppTheme.typography.body,
+      color = AppTheme.colors.textTertiary,
+    )
 
-      SectionTitle("삭제된 항목")
+    SectionTitle("삭제된 항목")
 
-      if (content.items.isEmpty()) {
-        CardSurface(modifier = Modifier.fillMaxWidth()) {
-          Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(vertical = 36.dp, horizontal = 20.dp),
-            contentAlignment = Alignment.Center,
-          ) {
-            Text(
-              text = content.emptyMessage,
-              style = AppTheme.typography.label,
-              color = AppTheme.colors.textTertiary,
-            )
-          }
+    if (content.items.isEmpty()) {
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 36.dp, horizontal = 20.dp),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(
+            text = content.emptyMessage,
+            style = AppTheme.typography.label,
+            color = AppTheme.colors.textTertiary,
+          )
         }
-      } else {
-        CardSurface(modifier = Modifier.fillMaxWidth()) {
-          Column {
-            content.items.forEachIndexed { index, item ->
-              if (index > 0) {
-                CardDivider()
+      }
+    } else {
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        Column {
+          content.items.forEachIndexed { index, item ->
+            if (index > 0) {
+              CardDivider()
+            }
+
+            when (item.type) {
+              TrashItemType.Folder -> {
+                TrashFolderRow(
+                  title = item.title,
+                  iconName = item.iconName,
+                  iconColor = item.iconColor,
+                  onLongPress = { showItemActionsSheet(item) },
+                  onClick = { nav.navigate(Route.Trash(item.id)) },
+                )
               }
 
-              when (item.type) {
-                TrashItemType.Folder -> {
-                  TrashFolderRow(
-                    title = item.title,
-                    iconName = item.iconName,
-                    iconColor = item.iconColor,
-                    onLongPress = { showItemActionsSheet(item) },
-                    onClick = { nav.navigate(Route.Trash(item.id)) },
-                  )
-                }
-
-                TrashItemType.Document -> {
-                  TrashDocumentRow(
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    excerpt = item.excerpt,
-                    updatedAt = item.updatedAt,
-                    iconName = item.iconName,
-                    iconColor = item.iconColor,
-                    onLongPress = { showItemActionsSheet(item) },
-                    onClick = { showItemActionsSheet(item) },
-                  )
-                }
+              TrashItemType.Document -> {
+                TrashDocumentRow(
+                  title = item.title,
+                  subtitle = item.subtitle,
+                  excerpt = item.excerpt,
+                  updatedAt = item.updatedAt,
+                  iconName = item.iconName,
+                  iconColor = item.iconColor,
+                  onLongPress = { showItemActionsSheet(item) },
+                  onClick = { showItemActionsSheet(item) },
+                )
               }
             }
           }
         }
       }
+    }
 
-      Spacer(Modifier.height(72.dp))
+    Spacer(Modifier.height(72.dp))
   }
 
   if (purgeRequest != null) {
@@ -377,11 +389,23 @@ fun TrashScreen(entityId: String? = null) {
   }
 }
 
-@Composable
-private fun BottomSheetScope<Unit>.TrashActionsSheet(
+private fun trashActionsSheet(
   item: TrashItem,
-  actionScope: CoroutineScope,
   actions: List<TrashActionItem>,
+  onAction: (TrashActionItem) -> Unit,
+): SheetPresentation<Unit> = sheetPresentation {
+  TrashActionsSheetContent(
+    item = item,
+    actions = actions,
+    onAction = onAction,
+  )
+}
+
+@Composable
+private fun SheetScope<Unit>.TrashActionsSheetContent(
+  item: TrashItem,
+  actions: List<TrashActionItem>,
+  onAction: (TrashActionItem) -> Unit,
 ) {
   val entityIcon = resolveEntityIconAppearance(
     iconName = item.iconName,
@@ -391,31 +415,46 @@ private fun BottomSheetScope<Unit>.TrashActionsSheet(
     colors = AppTheme.colors,
   )
 
-  BottomSheetMenu(
+  SheetLayout(
+    bodyScroll = false,
+    padding = SheetPadding.None,
+    verticalSpacing = 0.dp,
     header = {
-      BottomSheetEntityHeader(
-        title = item.title,
-        icon = entityIcon.icon,
-        iconTint = entityIcon.tint,
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        BottomSheetEntityBreadcrumb(segments = item.breadcrumbSegments)
+        SheetEntityHeader(
+          title = item.title,
+          icon = entityIcon.icon,
+          modifier = Modifier.padding(horizontal = MenuSheetHorizontalPadding),
+          iconTint = entityIcon.tint,
+        ) {
+          SheetEntityBreadcrumb(segments = item.breadcrumbSegments)
+          SheetEntitySupportingText(text = "삭제됨")
+        }
 
-        BottomSheetEntitySupportingText(text = "삭제됨")
+        SheetMenuDivider()
       }
     },
   ) {
-    actions.forEach { action ->
-      BottomSheetMenuActionRow(
-        icon = action.icon,
-        label = action.label,
-        tint = action.tint,
-        onClick = {
-          dismiss()
-          actionScope.launch {
-            action.onClick()
-          }
-        },
-      )
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(MenuSheetActionContentPadding),
+    ) {
+      actions.forEach { action ->
+        SheetMenuActionRow(
+          icon = action.icon,
+          label = action.label,
+          contentPadding = MenuSheetRowPadding,
+          tint = action.tint,
+          onClick = {
+            dismiss(SheetDismissReason.Programmatic)
+            onAction(action)
+          },
+        )
+      }
     }
   }
 }
@@ -430,7 +469,10 @@ private fun TrashTopBarMenu(actions: List<TrashActionItem>, actionScope: Corouti
 }
 
 @Composable
-private fun PopoverScope.TrashTopBarMenuPane(actions: List<TrashActionItem>, actionScope: CoroutineScope) {
+private fun PopoverScope.TrashTopBarMenuPane(
+  actions: List<TrashActionItem>,
+  actionScope: CoroutineScope
+) {
   Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
     PopoverList(
       items = actions.map { action ->
@@ -633,4 +675,3 @@ private fun TrashScreen_WithEntityId_Query.DeletedChildren.toTrashItem(siteName:
     )
   }
 }
-

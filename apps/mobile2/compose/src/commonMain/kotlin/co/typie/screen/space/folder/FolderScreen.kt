@@ -486,83 +486,77 @@ fun FolderScreen(entityId: String) {
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
           onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
           onFolderLongPress = { item ->
-            bottomSheetHost.show {
-              FolderItemActionsSheet(
-                item = item,
-                actionScope = presenterScope,
-                onAction = { action ->
-                  when (action) {
-                    FolderAction.Rename -> {
-                      bottomSheetHost.show {
-                        FolderRenameSheet(
-                          model = model,
-                          folderId = item.folderId,
-                          initialName = item.name,
-                        )
-                      }
-                    }
-
-                    FolderAction.ChangeIcon -> {
-                      sheetHost.await(
-                        folderIconPickerSheet(
-                          model = model,
-                          entityId = item.id,
-                          initialIcon = item.iconName,
-                          initialColor = item.iconColor,
-                        ),
-                      )
-                    }
-
-                    FolderAction.OpenExternal -> uriHandler.openUri(item.url)
-
-                    FolderAction.Share -> {
-                      bottomSheetHost.show {
-                        FolderShareSheet(
-                          model = model,
-                          folderId = item.folderId,
-                          folderUrl = item.url,
-                          initialVisibility = requireNotNull(item.visibility),
-                          initialThumbnailUrl = item.thumbnailUrl,
-                        )
-                      }
-                    }
-
-                    FolderAction.Move -> {
-                      bottomSheetHost.show {
-                        EntityMoveSheet(
-                          source = item.toTransferSource(),
-                          onMoved = model::refetch,
-                        )
-                      }
-                    }
-
-                    FolderAction.Copy -> {
-                      clipboard.setCopy(
-                        sourceSiteId = siteId,
-                        items = listOf(item.toTransferSource()),
-                      )
-                    }
-
-                    FolderAction.Cut -> {
-                      clipboard.setCut(
-                        sourceSiteId = siteId,
-                        items = listOf(item.toTransferSource()),
-                      )
-                    }
-
-                    FolderAction.Delete -> {
-                      deleteRequest = FolderDeleteRequest(
-                        entityId = item.id,
-                        folderName = item.name,
-                        shouldPopOnSuccess = false,
-                      )
-                    }
-
-                    FolderAction.SelectMultiple,
-                    FolderAction.StartReorder -> Unit
+            sheetHost.showFolderItemActionsSheet(item) { action ->
+              when (action) {
+                FolderAction.Rename -> {
+                  bottomSheetHost.show {
+                    FolderRenameSheet(
+                      model = model,
+                      folderId = item.folderId,
+                      initialName = item.name,
+                    )
                   }
-                },
-              )
+                }
+
+                FolderAction.ChangeIcon -> {
+                  sheetHost.await(
+                    folderIconPickerSheet(
+                      model = model,
+                      entityId = item.id,
+                      initialIcon = item.iconName,
+                      initialColor = item.iconColor,
+                    ),
+                  )
+                }
+
+                FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                FolderAction.Share -> {
+                  bottomSheetHost.show {
+                    FolderShareSheet(
+                      model = model,
+                      folderId = item.folderId,
+                      folderUrl = item.url,
+                      initialVisibility = requireNotNull(item.visibility),
+                      initialThumbnailUrl = item.thumbnailUrl,
+                    )
+                  }
+                }
+
+                FolderAction.Move -> {
+                  bottomSheetHost.show {
+                    EntityMoveSheet(
+                      source = item.toTransferSource(),
+                      onMoved = model::refetch,
+                    )
+                  }
+                }
+
+                FolderAction.Copy -> {
+                  clipboard.setCopy(
+                    sourceSiteId = siteId,
+                    items = listOf(item.toTransferSource()),
+                  )
+                }
+
+                FolderAction.Cut -> {
+                  clipboard.setCut(
+                    sourceSiteId = siteId,
+                    items = listOf(item.toTransferSource()),
+                  )
+                }
+
+                FolderAction.Delete -> {
+                  deleteRequest = FolderDeleteRequest(
+                    entityId = item.id,
+                    folderName = item.name,
+                    shouldPopOnSuccess = false,
+                  )
+                }
+
+                FolderAction.SelectMultiple,
+                FolderAction.StartReorder -> Unit
+              }
             }
           },
           onDragStarted = {

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Easing
 import androidx.compose.ui.unit.dp
 
 object SheetDefaults {
+  val IntrinsicTopGap = 64.dp
   const val EnterDuration = 320
   const val ExitDuration = 240
   const val HeightAnimationDuration = 220

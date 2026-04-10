@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ui.theme.AppTheme
 
 data class PersistentSheetSpec(
-  val sizePolicy: SheetSizePolicy = SheetSizePolicy.Intrinsic,
+  val sizePolicy: SheetSizePolicy = SheetSizePolicy.Intrinsic(),
   val chrome: SheetChrome = SheetChrome.Default,
   val haptics: SheetHapticPolicy = SheetHapticPolicy(onPresent = false),
 )
@@ -74,7 +74,7 @@ fun PersistentSheet(
   if (!state.visible) return
 
   val density = LocalDensity.current
-  var measuredContentHeightPx by remember { mutableFloatStateOf(0f) }
+  var measuredSheetHeightPx by remember { mutableFloatStateOf(0f) }
   var sheetHeightPx by remember { mutableFloatStateOf(0f) }
   val colors = AppTheme.colors
   val sheetScope = remember(state) {
@@ -90,25 +90,20 @@ fun PersistentSheet(
   BoxWithConstraints(
     modifier = modifier.fillMaxWidth(),
   ) {
-    val requiresContentMeasurement = remember(state.spec.sizePolicy) {
-      state.spec.sizePolicy.requiresContentMeasurement()
-    }
     val resolvedDetents = remember(
       state.spec.sizePolicy,
       maxHeight,
-      if (requiresContentMeasurement) measuredContentHeightPx else 0f,
+      measuredSheetHeightPx,
     ) {
-      SheetDetentResolver.resolve(
+      resolveDetentsForSheetMeasurement(
         policy = state.spec.sizePolicy,
-        context = SheetDetentContext(
-          viewportHeight = maxHeight,
-          contentHeight = if (requiresContentMeasurement && measuredContentHeightPx > 0f) {
-            with(density) { measuredContentHeightPx.toDp() }
-          } else {
-            maxHeight
-          },
-        ),
+        viewportHeight = maxHeight,
+        measuredSheetHeightPx = measuredSheetHeightPx,
+        density = density,
       )
+    }
+    val requiresContentMeasurement = remember(state.spec.sizePolicy) {
+      state.spec.sizePolicy.requiresContentMeasurement()
     }
     val initialDetentId = state.spec.sizePolicy.initialDetentId()
     val initialDetent = resolvedDetents.firstOrNull { it.id == initialDetentId } ?: resolvedDetents.firstOrNull()
@@ -150,8 +145,8 @@ fun PersistentSheet(
         .onSizeChanged { size ->
           if (requiresContentMeasurement) {
             val nextHeight = size.height.toFloat()
-            if (nextHeight > measuredContentHeightPx) {
-              measuredContentHeightPx = nextHeight
+            if (nextHeight > measuredSheetHeightPx) {
+              measuredSheetHeightPx = nextHeight
             }
           }
         }

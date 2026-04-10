@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -65,8 +66,6 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.bottomsheet.BottomSheetOptionList
-import co.typie.ui.component.bottomsheet.BottomSheetOptionRow
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -76,6 +75,16 @@ import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetOptionList
+import co.typie.ui.component.sheet.SheetOptionRow
+import co.typie.ui.component.sheet.SheetPadding
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.completedOrNull
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.icon.Icon
@@ -102,6 +111,11 @@ private fun spaceDateDisplayLabel(value: SiteDateDisplay): String {
   return spaceDateDisplayOptions().firstOrNull { it.value == value }?.label ?: "미표시"
 }
 
+private val SpaceDateDisplaySheetPadding = SheetPadding(
+  header = PaddingValues(horizontal = 16.dp),
+  body = PaddingValues(horizontal = 16.dp),
+)
+
 @Composable
 fun SpaceSettingsScreen() {
   val nav = Nav.current
@@ -109,6 +123,7 @@ fun SpaceSettingsScreen() {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
   val scrollState = rememberScrollState()
   var showLastSiteAlert by remember { mutableStateOf(false) }
   val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
@@ -269,15 +284,14 @@ fun SpaceSettingsScreen() {
         ) {
           CardRow(
             onClick = {
-              bottomSheetHost.show {
-                SpaceDateDisplaySheet(
-                  selected = model.state.form.dateDisplay.value,
-                  onSelected = { selected ->
+              sheetHost.show(
+                sheet = spaceDateDisplaySheet(selected = model.state.form.dateDisplay.value),
+                onResult = { result ->
+                  result.completedOrNull()?.let { selected ->
                     model.state.form.dateDisplay.setValue(selected)
-                    dismiss()
-                  },
-                )
-              }
+                  }
+                },
+              )
             },
           ) {
             SpaceSettingsRowContent(
@@ -334,40 +348,31 @@ private fun RowScope.SpaceSettingsRowContent(
   )
 }
 
-@Composable
-private fun BottomSheetScope<Unit>.SpaceDateDisplaySheet(
+private fun spaceDateDisplaySheet(
   selected: SiteDateDisplay,
-  onSelected: (SiteDateDisplay) -> Unit,
-) {
-  BottomSheetScaffold(title = "글 목록에 표시할 날짜") {
-    BottomSheetOptionList(items = spaceDateDisplayOptions()) { item ->
-      SpaceDateDisplaySheetOption(
-        label = item.label,
-        selected = item.value == selected,
-        onClick = { onSelected(item.value) },
-      )
-    }
-  }
-}
-
-@Composable
-private fun SpaceDateDisplaySheetOption(
-  label: String,
-  selected: Boolean,
-  onClick: suspend () -> Unit,
-) {
-  BottomSheetOptionRow(
-    selected = selected,
-    onClick = onClick,
+) : SheetPresentation<SiteDateDisplay> = sheetPresentation {
+  SheetLayout(
+    padding = SpaceDateDisplaySheetPadding,
+    verticalSpacing = 8.dp,
+    header = {
+      ActionHeader(title = "글 목록에 표시할 날짜")
+    },
   ) {
-    Text(
-      text = label,
-      style = AppTheme.typography.action,
-      modifier = Modifier.fillMaxWidth(),
-      color = AppTheme.colors.textPrimary,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    SheetOptionList(items = spaceDateDisplayOptions()) { item ->
+      SheetOptionRow(
+        selected = item.value == selected,
+        onClick = { complete(item.value) },
+      ) {
+        Text(
+          text = item.label,
+          style = AppTheme.typography.action,
+          modifier = Modifier.fillMaxWidth(),
+          color = AppTheme.colors.textPrimary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+    }
   }
 }
 
