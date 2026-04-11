@@ -1,7 +1,7 @@
 package co.typie.ui.theme
 
-import co.typie.storage.Prefs
+import co.typie.storage.prefs
 
 object ThemeService {
-  var themeMode: ThemeMode by Prefs("theme_mode", ThemeMode.System)
+  var themeMode: ThemeMode by prefs("theme_mode", ThemeMode.System)
 }

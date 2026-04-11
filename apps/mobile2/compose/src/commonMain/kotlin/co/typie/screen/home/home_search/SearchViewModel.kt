@@ -13,7 +13,7 @@ import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildSite
 import co.typie.graphql.watchQuery
 import co.typie.service.SiteService
-import co.typie.storage.Prefs
+import co.typie.storage.prefs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -32,20 +32,20 @@ class SearchViewModel : ViewModel() {
     private set
 
   val siteQuery =
-    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderSiteData()) {
-      HomeSearch_Header_Query(siteId = SiteService.siteId)
-    }
+      Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderSiteData()) {
+        HomeSearch_Header_Query(siteId = SiteService.siteId)
+      }
 
   val searchResults =
-    Apollo.watchQuery(
-      scope = viewModelScope,
-      skip = { activeQuery.isBlank() },
-      resetOnChange = false,
-    ) {
-      HomeScreen_Search_Query(siteId = SiteService.siteId, query = activeQuery)
-    }
+      Apollo.watchQuery(
+          scope = viewModelScope,
+          skip = { activeQuery.isBlank() },
+          resetOnChange = false,
+      ) {
+        HomeScreen_Search_Query(siteId = SiteService.siteId, query = activeQuery)
+      }
 
-  private var storedRecentSearches: List<String> by Prefs("recent_searches", emptyList())
+  private var storedRecentSearches: List<String> by prefs("recent_searches", emptyList())
   private var debounceJob: Job? = null
 
   init {
@@ -76,11 +76,11 @@ class SearchViewModel : ViewModel() {
     val trimmed = queryText.trim()
     if (trimmed.isBlank()) return
     val updated =
-      recentSearches.toMutableList().apply {
-        remove(trimmed)
-        add(0, trimmed)
-        if (size > 10) removeLast()
-      }
+        recentSearches.toMutableList().apply {
+          remove(trimmed)
+          add(0, trimmed)
+          if (size > 10) removeLast()
+        }
     recentSearches = updated
     storedRecentSearches = updated
   }
@@ -97,4 +97,4 @@ class SearchViewModel : ViewModel() {
 }
 
 private fun placeholderSiteData() =
-  HomeSearch_Header_Query.Data(PlaceholderResolver) { site = buildSite { name = "" } }
+    HomeSearch_Header_Query.Data(PlaceholderResolver) { site = buildSite { name = "" } }

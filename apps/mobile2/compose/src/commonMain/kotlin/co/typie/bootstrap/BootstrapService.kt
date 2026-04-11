@@ -5,7 +5,7 @@ import co.typie.Konfig
 import co.typie.graphql.Http
 import co.typie.platform.PlatformModule
 import co.typie.startup.BootstrapStartupHandle
-import co.typie.storage.Prefs
+import co.typie.storage.prefs
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import kotlinx.coroutines.CancellationException
@@ -31,7 +31,7 @@ object BootstrapService : BootstrapStartupHandle {
   private var started = false
   private var refreshLoopJob: Job? = null
 
-  private var cachedPayload by Prefs("bootstrap_cache", "")
+  private var cachedPayload by prefs("bootstrap_cache", "")
 
   private val _state = MutableStateFlow<BootstrapState>(BootstrapState.Loading)
   val state: StateFlow<BootstrapState> = _state
@@ -71,11 +71,11 @@ object BootstrapService : BootstrapStartupHandle {
       if (payload != null) {
         cachedPayload = payload
         _state.value =
-          resolveBootstrapState(
-            bootstrap = json.decodeFromString(BootstrapPayload.serializer(), payload),
-            platform = PlatformModule.platform,
-            currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
-          )
+            resolveBootstrapState(
+                bootstrap = json.decodeFromString(BootstrapPayload.serializer(), payload),
+                platform = PlatformModule.platform,
+                currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
+            )
         Logger.i { "Bootstrap startup: loaded remote bootstrap." }
         return@withLock
       }
@@ -88,11 +88,11 @@ object BootstrapService : BootstrapStartupHandle {
     if (cachedPayload.isNotBlank()) {
       try {
         _state.value =
-          resolveBootstrapState(
-            bootstrap = json.decodeFromString(BootstrapPayload.serializer(), cachedPayload),
-            platform = PlatformModule.platform,
-            currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
-          )
+            resolveBootstrapState(
+                bootstrap = json.decodeFromString(BootstrapPayload.serializer(), cachedPayload),
+                platform = PlatformModule.platform,
+                currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
+            )
         Logger.i { "Bootstrap startup: loaded cached bootstrap." }
         return@withLock
       } catch (e: CancellationException) {
@@ -108,6 +108,6 @@ object BootstrapService : BootstrapStartupHandle {
 
   private suspend fun fetchPayload(): String? {
     return runCatching { Http.get(bootstrapUrlForApiUrl(Konfig.API_URL)).body<String>() }
-      .getOrNull()
+        .getOrNull()
   }
 }

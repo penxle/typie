@@ -1,10 +1,10 @@
 package co.typie.migration
 
 import co.typie.auth.AuthTokens
-import co.typie.storage.Vault
+import co.typie.storage.vault
 
 object LegacyAuthImporter {
-  private var tokens: AuthTokens? by Vault("tokens", null)
+  private var tokens: AuthTokens? by vault("tokens", null)
 
   fun importSessionToken(sessionToken: String): LegacyMigrationStepResult {
     if (LegacyMigrationStateStore.isSessionHandled()) {
