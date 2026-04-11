@@ -284,13 +284,13 @@
     >
       {#if recursiveState === 'inflight'}
         <RingSpinner style={css.raw({ size: '14px' })} />
-        적용중...
+        적용 중...
       {:else if recursiveState === 'success'}
         <Icon icon={CheckIcon} size={14} />
         적용됨
       {:else}
         <Icon icon={Layers2Icon} size={14} />
-        하위 요소에 동일한 설정 적용하기
+        하위 항목에 동일한 설정 적용하기
       {/if}
     </Button>
   </div>

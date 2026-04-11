@@ -63,10 +63,18 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val THUMBNAIL_WIDTH_DP = 64
 private const val THUMBNAIL_HEIGHT_DP = 38
+
+private enum class RecursiveApplyPhase {
+  Idle,
+  Inflight,
+  Success,
+}
 
 private class FolderShareForm(
   scope: CoroutineScope,
@@ -125,9 +133,11 @@ fun folderShareSheet(
   var isUpdatingVisibility by remember { mutableStateOf(false) }
   var isUploadingThumbnail by remember { mutableStateOf(false) }
   var isRemovingThumbnail by remember { mutableStateOf(false) }
-  var isApplyingRecursive by remember { mutableStateOf(false) }
   var isSharing by remember { mutableStateOf(false) }
   var showThumbnailRemoveConfirm by remember { mutableStateOf(false) }
+  var recursiveApplyPhase by remember(folderId) { mutableStateOf(RecursiveApplyPhase.Idle) }
+  var recursiveApplyResetJob by remember(folderId) { mutableStateOf<Job?>(null) }
+  val isApplyingRecursive = recursiveApplyPhase == RecursiveApplyPhase.Inflight
   val isBusy =
     isUpdatingVisibility ||
       isUploadingThumbnail ||
@@ -175,16 +185,25 @@ fun folderShareSheet(
   fun applyRecursiveVisibility() {
     if (isApplyingRecursive || isUpdatingVisibility) return
 
-    isApplyingRecursive = true
+    recursiveApplyResetJob?.cancel()
+    recursiveApplyPhase = RecursiveApplyPhase.Inflight
     scope.launch {
       model
         .applyFolderVisibilityRecursively(folderId = folderId, visibility = form.visibility.value)
         .withDefaultExceptionHandler(toast)
         .onOk {
           onUpdated()
-          dismiss()
+          recursiveApplyResetJob?.cancel()
+          recursiveApplyPhase = RecursiveApplyPhase.Success
+          recursiveApplyResetJob = scope.launch {
+            delay(2_000)
+            recursiveApplyPhase = RecursiveApplyPhase.Idle
+          }
         }
-      isApplyingRecursive = false
+        .onException {
+          recursiveApplyResetJob?.cancel()
+          recursiveApplyPhase = RecursiveApplyPhase.Idle
+        }
     }
   }
 
@@ -288,14 +307,39 @@ fun folderShareSheet(
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Button(
-          text = "하위 요소에 동일한 설정 적용하기",
-          variant = ButtonVariant.Secondary,
-          enabled = !isUpdatingVisibility && !isApplyingRecursive,
-          loading = isApplyingRecursive,
-          loadingText = "적용 중...",
-          onClick = { applyRecursiveVisibility() },
-        )
+        when (recursiveApplyPhase) {
+          RecursiveApplyPhase.Inflight ->
+            Button(
+              text = "하위 항목에 동일한 설정 적용하기",
+              variant = ButtonVariant.Secondary,
+              enabled = !isUpdatingVisibility && !isApplyingRecursive,
+              loading = true,
+              loadingText = "적용 중...",
+              onClick = { applyRecursiveVisibility() },
+            )
+
+          RecursiveApplyPhase.Success ->
+            Button(
+              text = "적용됨",
+              leading = { color ->
+                Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = color)
+              },
+              variant = ButtonVariant.Secondary,
+              enabled = !isUpdatingVisibility && !isApplyingRecursive,
+              onClick = { applyRecursiveVisibility() },
+            )
+
+          RecursiveApplyPhase.Idle ->
+            Button(
+              text = "하위 항목에 동일한 설정 적용하기",
+              leading = { color ->
+                Icon(icon = Lucide.Layers2, modifier = Modifier.size(16.dp), tint = color)
+              },
+              variant = ButtonVariant.Secondary,
+              enabled = !isUpdatingVisibility && !isApplyingRecursive,
+              onClick = { applyRecursiveVisibility() },
+            )
+        }
 
         Button(
           text = "공유하기",
