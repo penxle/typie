@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,6 +54,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.TitleHeader
 import co.typie.ui.component.sheet.dismiss
@@ -107,10 +109,15 @@ private enum class LoginStep {
   Email,
 }
 
+private val LoginStepHorizontalPadding = 16.dp
+
 private fun loginSheet(): SheetPresentation<Unit> = sheetPresentation {
   var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
 
-  SheetLayout(header = { TitleHeader(title = "로그인") }) {
+  SheetLayout(
+    header = { TitleHeader(title = "로그인") },
+    padding = SheetPadding(body = PaddingValues(vertical = 0.dp)),
+  ) {
     AnimatedContent(
       targetState = step,
       transitionSpec = {
@@ -151,7 +158,10 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
     }
   }
 
-  Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = LoginStepHorizontalPadding),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
       SingleSignOnButton(
         text = "구글로 시작하기",
@@ -229,7 +239,7 @@ private fun LoginEmailContent(onBack: () -> Unit, onSuccess: () -> Unit) {
     }
   }
 
-  Column(modifier = Modifier.fillMaxWidth()) {
+  Column(modifier = Modifier.fillMaxWidth().padding(horizontal = LoginStepHorizontalPadding)) {
     TextField(
       field = form.email,
       label = "이메일",

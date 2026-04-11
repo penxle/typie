@@ -134,12 +134,12 @@ fun feedbackSheet(): SheetPresentation<Unit> = sheetPresentation {
   }
 
   SheetLayout(
-    fillHeight = true,
     bodyInsetPolicy = SheetInsetPolicy.Container,
     header = { ActionHeader(title = "의견 보내기") },
     footer = {
       Button(
         text = "보내기",
+        modifier = Modifier.padding(bottom = 16.dp),
         loadingText = "보내는 중...",
         variant =
           if (topic != null && content.trim().isNotEmpty()) {

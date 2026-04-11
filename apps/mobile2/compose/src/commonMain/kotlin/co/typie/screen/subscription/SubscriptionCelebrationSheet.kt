@@ -24,7 +24,6 @@ import co.typie.ui.theme.AppTheme
 fun subscriptionCelebrationSheet(title: String, message: String): SheetPresentation<Unit> =
   sheetPresentation {
     SheetLayout(
-      fillHeight = true,
       bodyInsetPolicy = SheetInsetPolicy.Container,
       header = { ActionHeader(title = title) },
       footer = { Button(text = "시작하기", onClick = { dismiss() }) },

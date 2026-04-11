@@ -2,6 +2,7 @@ package co.typie.screen.space.folder
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.desktopDragScroll
 import co.typie.ext.pressScale
 import co.typie.form.FormState
 import co.typie.icons.Lucide
@@ -194,7 +196,9 @@ internal fun folderIconPickerSheet(
           LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             state = iconGridState,
-            modifier = Modifier.fillMaxSize(),
+            modifier =
+              Modifier.fillMaxSize()
+                .desktopDragScroll(state = iconGridState, orientation = Orientation.Vertical),
             contentPadding = PaddingValues(bottom = FolderIconPickerGridBottomInset + safeBottom),
             horizontalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
             verticalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),

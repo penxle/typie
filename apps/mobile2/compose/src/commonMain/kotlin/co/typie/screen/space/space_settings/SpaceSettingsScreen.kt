@@ -212,12 +212,14 @@ fun SpaceSettingsScreen() {
                   .then(
                     if (hasSubscription == false) {
                       Modifier.clickable {
-                        planUpgradeRoute(
-                            sheetHost.showPlanUpgradeSheet(
-                              message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                        scope.launch {
+                          planUpgradeRoute(
+                              sheetHost.showPlanUpgradeSheet(
+                                message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                              )
                             )
-                          )
-                          ?.let { route -> nav.navigate(route) }
+                            ?.let { route -> nav.navigate(route) }
+                        }
                       }
                     } else {
                       Modifier
@@ -484,25 +486,26 @@ private fun deleteSiteConfirmSheet(
     },
   ) {
     Text(
-      "스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.",
-      style = AppTheme.typography.caption,
+      text =
+        buildString {
+          append("스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.")
+          if (totalCount > 0) {
+            append('\n')
+            append("삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수($totalCount)를 입력해주세요.")
+          }
+        },
+      style = AppTheme.typography.body,
       color = AppTheme.colors.textSecondary,
     )
 
     if (totalCount > 0) {
-      Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderSubtle))
-
-      Text(
-        "삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수($totalCount)를 입력해주세요.",
-        style = AppTheme.typography.caption,
-      )
-
       TextField(
         value = inputValue,
         onValueChange = { inputValue = it },
-        label = "문서 수",
+        label = "",
         labelPosition = LabelPosition.None,
         placeholder = confirmText,
+        autoFocus = true,
         keyboardType = KeyboardType.Number,
       )
     }

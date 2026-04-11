@@ -42,7 +42,6 @@ import co.typie.ui.component.sheet.completedOrNull
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 const val DEFAULT_PLAN_UPGRADE_TITLE = "플랜 업그레이드가 필요해요"
@@ -82,7 +81,6 @@ private fun planUpgradeSheet(
   }
 
   SheetLayout(
-    fillHeight = true,
     bodyInsetPolicy = SheetInsetPolicy.Container,
     header = { ActionHeader(title = title) },
     footer = {
@@ -161,16 +159,12 @@ suspend fun SheetHostState.showPlanUpgradeSheet(
     present(planUpgradeSheet(title = title, message = message)).completedOrNull() ?: return null
 
   if (result is PlanUpgradeSheetResult.TrialStarted) {
-    try {
-      present(
-        subscriptionCelebrationSheet(
-          title = result.celebration.title,
-          message = result.celebration.message,
-        )
+    show(
+      subscriptionCelebrationSheet(
+        title = result.celebration.title,
+        message = result.celebration.message,
       )
-    } catch (_: CancellationException) {
-      // Celebration sheet dismissal does not affect the original result.
-    }
+    )
   }
 
   return result

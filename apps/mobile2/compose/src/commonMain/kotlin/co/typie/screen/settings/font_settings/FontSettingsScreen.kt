@@ -235,7 +235,6 @@ private fun fontUploadSheet(
     }
 
   SheetLayout(
-    fillHeight = true,
     bodyInsetPolicy = SheetInsetPolicy.Container,
     header = { ActionHeader(title = "폰트 업로드하기") },
     footer = {

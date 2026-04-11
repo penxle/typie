@@ -60,6 +60,102 @@ class SheetOverlayHostTest {
   }
 
   @Test
+  fun reversingAfterOvershootingMaxHeightRecoversOverflowBeforeCollapsing() {
+    val overshotState =
+      consumeSheetDragDelta(
+        currentHeightPx = 820f,
+        currentOffsetPx = 0f,
+        delta = -120f,
+        minHeightPx = 480f,
+        maxHeightPx = 820f,
+        trackUpperBoundaryOverflow = true,
+      )
+
+    assertEquals(820f, overshotState.heightPx)
+    assertEquals(-120f, overshotState.offsetPx)
+
+    val recoveredState =
+      consumeSheetDragDelta(
+        currentHeightPx = overshotState.heightPx,
+        currentOffsetPx = overshotState.offsetPx,
+        delta = 80f,
+        minHeightPx = 480f,
+        maxHeightPx = 820f,
+        trackUpperBoundaryOverflow = true,
+      )
+
+    assertEquals(820f, recoveredState.heightPx)
+    assertEquals(-40f, recoveredState.offsetPx)
+  }
+
+  @Test
+  fun downwardDragRecoversExistingNegativeOverflowBeforeCollapsing() {
+    val nextState =
+      consumeSheetDragDelta(
+        currentHeightPx = 820f,
+        currentOffsetPx = -120f,
+        delta = 80f,
+        minHeightPx = 480f,
+        maxHeightPx = 820f,
+      )
+
+    assertEquals(820f, nextState.heightPx)
+    assertEquals(-40f, nextState.offsetPx)
+  }
+
+  @Test
+  fun nestedScrollOverflowIsRecoveredBeforeSheetCollapses() {
+    val preScrollState =
+      consumeSheetDragDelta(
+        currentHeightPx = 760f,
+        currentOffsetPx = 0f,
+        delta = -100f,
+        minHeightPx = 480f,
+        maxHeightPx = 820f,
+      )
+    val postScrollOverflowState =
+      consumeSheetDragDelta(
+        currentHeightPx = preScrollState.heightPx,
+        currentOffsetPx = preScrollState.offsetPx,
+        delta = -40f,
+        minHeightPx = 480f,
+        maxHeightPx = 820f,
+        trackUpperBoundaryOverflow = true,
+      )
+    val recoveredState =
+      consumeSheetDragDelta(
+        currentHeightPx = postScrollOverflowState.heightPx,
+        currentOffsetPx = postScrollOverflowState.offsetPx,
+        delta = 25f,
+        minHeightPx = 480f,
+        maxHeightPx = 820f,
+      )
+
+    assertEquals(820f, preScrollState.heightPx)
+    assertEquals(0f, preScrollState.offsetPx)
+    assertEquals(820f, postScrollOverflowState.heightPx)
+    assertEquals(-40f, postScrollOverflowState.offsetPx)
+    assertEquals(820f, recoveredState.heightPx)
+    assertEquals(-15f, recoveredState.offsetPx)
+  }
+
+  @Test
+  fun negativeDragOffsetDoesNotAffectVisibleSheetOffsetOrFraction() {
+    assertEquals(
+      240,
+      resolveSheetOffsetY(progress = 0.5f, renderedSheetHeightPx = 480f, dragOffsetPx = -60f),
+    )
+    assertEquals(
+      0.5f,
+      resolveSheetVisibleFraction(
+        progress = 0.5f,
+        renderedSheetHeightPx = 480f,
+        dragOffsetPx = -60f,
+      ),
+    )
+  }
+
+  @Test
   fun sheetOffsetCombinesVisibilityAndDragOffset() {
     assertEquals(
       300,
@@ -117,6 +213,63 @@ class SheetOverlayHostTest {
   }
 
   @Test
+  fun modalSheetFocusRequestSkipsWhenFocusIsAlreadyInsideSheet() {
+    assertEquals(
+      false,
+      shouldRequestModalSheetFocus(
+        isTopOfStack = true,
+        mode = SheetMode.Modal,
+        progress = 0.4f,
+        sheetHasFocus = true,
+      ),
+    )
+  }
+
+  @Test
+  fun modalSheetFocusRequestNeedsVisibleTopModalWithoutExistingFocus() {
+    assertEquals(
+      true,
+      shouldRequestModalSheetFocus(
+        isTopOfStack = true,
+        mode = SheetMode.Modal,
+        progress = 0.4f,
+        sheetHasFocus = false,
+      ),
+    )
+  }
+
+  @Test
+  fun modalSheetFocusRequestIgnoresHiddenOrNonModalSheets() {
+    assertEquals(
+      false,
+      shouldRequestModalSheetFocus(
+        isTopOfStack = true,
+        mode = SheetMode.Modal,
+        progress = 0f,
+        sheetHasFocus = false,
+      ),
+    )
+    assertEquals(
+      false,
+      shouldRequestModalSheetFocus(
+        isTopOfStack = true,
+        mode = SheetMode.NonModalOverlay,
+        progress = 1f,
+        sheetHasFocus = false,
+      ),
+    )
+    assertEquals(
+      false,
+      shouldRequestModalSheetFocus(
+        isTopOfStack = false,
+        mode = SheetMode.Modal,
+        progress = 1f,
+        sheetHasFocus = false,
+      ),
+    )
+  }
+
+  @Test
   fun constrainedMeasuredSheetDetectionRequiresVisibleHeightToBeSmallerThanNaturalHeight() {
     assertEquals(
       true,
@@ -133,6 +286,91 @@ class SheetOverlayHostTest {
         requiresContentMeasurement = true,
         measuredSheetHeightPx = 480f,
         renderedSheetHeightPx = 480f,
+      ),
+    )
+  }
+
+  @Test
+  fun intrinsicSheetDoesNotLockRenderedHeightAtNaturalContentSize() {
+    assertEquals(
+      false,
+      shouldApplyRenderedSheetHeight(
+        policy = SheetSizePolicy.Intrinsic(),
+        targetDetentId = SheetDetentId.Intrinsic,
+        requiresContentMeasurement = true,
+        measuredSheetHeightPx = 480f,
+        renderedSheetHeightPx = 480f,
+      ),
+    )
+  }
+
+  @Test
+  fun contentDrivenDetentLocksRenderedHeightOnlyWhileConstrained() {
+    val policy =
+      SheetSizePolicy.Detents(
+        initial = SheetDetent.Content(maxTopGap = 64.dp),
+        available = listOf(SheetDetent.Content(maxTopGap = 64.dp), SheetDetent.Fixed(560.dp)),
+      )
+
+    assertEquals(
+      false,
+      shouldApplyRenderedSheetHeight(
+        policy = policy,
+        targetDetentId = SheetDetentId.Content(64.dp),
+        requiresContentMeasurement = true,
+        measuredSheetHeightPx = 480f,
+        renderedSheetHeightPx = 480f,
+      ),
+    )
+
+    assertEquals(
+      true,
+      shouldApplyRenderedSheetHeight(
+        policy = policy,
+        targetDetentId = SheetDetentId.Content(64.dp),
+        requiresContentMeasurement = true,
+        measuredSheetHeightPx = 560f,
+        renderedSheetHeightPx = 480f,
+      ),
+    )
+  }
+
+  @Test
+  fun intrinsicResizeDoesNotAnimateWhileDetentTransitionsStillDo() {
+    assertEquals(
+      false,
+      shouldAnimateSheetHeightChange(
+        policy = SheetSizePolicy.Intrinsic(),
+        targetDetentId = SheetDetentId.Intrinsic,
+        lastSettledDetentId = SheetDetentId.Intrinsic,
+      ),
+    )
+
+    assertEquals(
+      true,
+      shouldAnimateSheetHeightChange(
+        policy =
+          SheetSizePolicy.Detents(
+            initial = SheetDetent.Fixed(360.dp),
+            available = listOf(SheetDetent.Fixed(360.dp), SheetDetent.Intrinsic),
+          ),
+        targetDetentId = SheetDetentId.Intrinsic,
+        lastSettledDetentId = SheetDetentId.Fixed(360.dp),
+      ),
+    )
+  }
+
+  @Test
+  fun intrinsicResizeUsesLatestTargetHeightInCurrentFrame() {
+    assertEquals(
+      560f,
+      resolveRenderedSheetHeightPx(
+        currentSheetHeightPx = 480f,
+        requiresContentMeasurement = true,
+        measuredSheetHeightPx = 560f,
+        initialSheetHeightPx = 0f,
+        targetSheetHeightPx = 560f,
+        shouldAnimateTargetHeightChange = false,
       ),
     )
   }
