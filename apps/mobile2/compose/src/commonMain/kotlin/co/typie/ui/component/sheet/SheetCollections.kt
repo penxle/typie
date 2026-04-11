@@ -15,10 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -26,6 +23,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
+import co.typie.ui.component.Divider
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -119,9 +117,6 @@ fun SheetOptionRow(
   }
 }
 
-private val SheetEntityMetadataTextStyle: TextStyle
-  @Composable get() = AppTheme.typography.caption.copy(fontSize = 14.sp, lineHeight = 20.sp)
-
 @Composable
 fun SheetMenu(
   modifier: Modifier = Modifier,
@@ -138,22 +133,13 @@ fun SheetMenu(
       )
       Spacer(Modifier.size(if (showHeaderDivider) 16.dp else 8.dp))
       if (showHeaderDivider) {
-        SheetMenuDivider()
+        Divider(color = AppTheme.colors.borderDefault)
         Spacer(Modifier.size(8.dp))
       }
     }
 
     Column(modifier = Modifier.fillMaxWidth(), content = content)
   }
-}
-
-@Composable
-fun SheetMenuDivider(
-  modifier: Modifier = Modifier,
-  inset: Dp = 0.dp,
-  color: Color = AppTheme.colors.borderDefault,
-) {
-  CardDivider(modifier = modifier, inset = inset, color = color)
 }
 
 @Composable
@@ -197,41 +183,4 @@ fun SheetMenuActionRow(
       }
     }
   }
-}
-
-@Composable
-fun SheetEntityHeader(
-  title: String,
-  icon: IconData,
-  modifier: Modifier = Modifier,
-  iconTint: Color = AppTheme.colors.textPrimary,
-  supportingContent: (@Composable ColumnScope.() -> Unit)? = null,
-) {
-  EntityHeader(
-    title = title,
-    icon = icon,
-    modifier = modifier,
-    iconTint = iconTint,
-    supportingContent = supportingContent,
-  )
-}
-
-@Composable
-fun SheetEntityBreadcrumb(
-  segments: List<String>,
-  modifier: Modifier = Modifier,
-  textStyle: TextStyle = SheetEntityMetadataTextStyle,
-  color: Color = AppTheme.colors.textTertiary,
-) {
-  EntityBreadcrumb(segments = segments, modifier = modifier, textStyle = textStyle, color = color)
-}
-
-@Composable
-fun SheetEntitySupportingText(
-  text: String,
-  modifier: Modifier = Modifier,
-  color: Color = AppTheme.colors.textMuted,
-  textStyle: TextStyle = SheetEntityMetadataTextStyle,
-) {
-  EntitySupportingText(text = text, modifier = modifier, color = color, textStyle = textStyle)
 }

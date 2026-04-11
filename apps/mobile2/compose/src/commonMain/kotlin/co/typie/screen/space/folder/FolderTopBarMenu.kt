@@ -2,7 +2,6 @@ package co.typie.screen.space.folder
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,6 +36,11 @@ import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
+import co.typie.ui.component.EntityBreadcrumb
+import co.typie.ui.component.EntityBreadcrumbLayout
+import co.typie.ui.component.EntityHeader
+import co.typie.ui.component.EntityHeaderDefaults
+import co.typie.ui.component.EntitySupportingText
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.LocalPopoverPaneTransition
@@ -66,19 +70,10 @@ internal val FolderTopBarPopoverScreenPadding =
     bottom = FolderTopBarVerticalOffset + 100.dp,
   )
 private val FolderPaneHeaderTopHeight = 28.dp
-private val FolderPaneHeaderIconTargetLeft = 16.dp
-private val FolderPaneHeaderIconTargetSize = 20.dp
-private val FolderPaneHeaderTitleGap = 12.dp
 private val FolderPaneHeaderSourceHorizontalInset = 14.dp
 private val FolderPaneHeaderSourceIconSize = 18.dp
 private val FolderPaneHeaderSourceIconGap = 10.dp
-private val FolderPaneHeaderTextLeft =
-  FolderPaneHeaderIconTargetLeft + FolderPaneHeaderIconTargetSize + FolderPaneHeaderTitleGap
 private val FolderPaneHeaderCloseButtonSize = 44.dp
-private val FolderPaneHeaderCloseButtonVisualSize = 24.dp
-private val FolderPaneHeaderCloseButtonIconSize = 16.dp
-private val FolderPaneHeaderCloseButtonEndInset = 6.dp
-private val FolderPaneHeaderCloseButtonGap = 8.dp
 
 @Composable
 internal fun FolderTopBarCenterMenu(
@@ -240,103 +235,66 @@ private fun FolderTopBarPaneHeader(
   val visibility =
     folderVisibilityPresentation(visibility = visibilityName, availability = availabilityName)
 
-  Column(modifier = Modifier.fillMaxWidth()) {
-    Box(modifier = Modifier.fillMaxWidth().height(FolderPaneHeaderTopHeight)) {
-      PopoverTransitionElement(
-        collapsedFrame =
-          PopoverTransitionFrame(
-            left = FolderPaneHeaderSourceHorizontalInset,
-            top = (TopBarDefaults.ButtonSize - FolderPaneHeaderSourceIconSize) / 2,
-            width = FolderPaneHeaderSourceIconSize,
-            height = FolderPaneHeaderSourceIconSize,
-          ),
-        expandedFrame =
-          PopoverTransitionFrame(
-            left = FolderPaneHeaderIconTargetLeft,
-            top = (FolderPaneHeaderTopHeight - FolderPaneHeaderIconTargetSize) / 2,
-            width = FolderPaneHeaderIconTargetSize,
-            height = FolderPaneHeaderIconTargetSize,
-          ),
-      ) {
-        Icon(
-          icon = entityIcon.icon,
-          modifier = Modifier.size(FolderPaneHeaderIconTargetSize),
-          tint = entityIcon.tint,
-        )
-      }
-
-      FolderTopBarTransitionTitle(title = title)
-
-      FolderTopBarCloseButton(
-        onClick = onClose,
-        modifier =
-          Modifier.align(Alignment.CenterEnd).padding(end = FolderPaneHeaderCloseButtonEndInset),
-      )
-    }
-
-    Spacer(Modifier.height(4.dp))
-
-    Column(modifier = Modifier.padding(start = FolderPaneHeaderTextLeft, end = 16.dp)) {
-      FolderTopBarBreadcrumbs(names = breadcrumbNames)
-
-      Spacer(Modifier.height(4.dp))
-
-      Text(
-        text = visibility.label,
-        style = AppTheme.typography.caption.copy(fontSize = 14.sp),
-        color = if (visibility.isShared) AppTheme.colors.brand else AppTheme.colors.textMuted,
-      )
-
-      Text(
-        text = subtitle,
-        style = AppTheme.typography.caption.copy(fontSize = 14.sp),
-        color = AppTheme.colors.textMuted,
-      )
-    }
-  }
-}
-
-@Composable
-private fun FolderTopBarBreadcrumbs(names: List<String>) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.spacedBy(4.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    names.forEachIndexed { index, name ->
-      if (index == 0) {
-        Text(
-          text = name,
-          modifier = Modifier.weight(1f, fill = false),
-          style = AppTheme.typography.caption.copy(fontSize = 14.sp),
-          color = AppTheme.colors.textTertiary,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      } else {
-        Row(
-          modifier = Modifier.weight(1f, fill = false),
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
-          verticalAlignment = Alignment.CenterVertically,
+  EntityHeader(
+    topContentModifier = Modifier.fillMaxWidth().height(FolderPaneHeaderTopHeight),
+    supportingContentPadding =
+      PaddingValues(
+        start =
+          EntityHeaderDefaults.SupportingContentEndInset +
+            EntityHeaderDefaults.IconSize +
+            EntityHeaderDefaults.TitleGap,
+        end = EntityHeaderDefaults.SupportingContentEndInset,
+      ),
+    topContent = {
+      Box(modifier = Modifier.fillMaxWidth().height(FolderPaneHeaderTopHeight)) {
+        PopoverTransitionElement(
+          collapsedFrame =
+            PopoverTransitionFrame(
+              left = FolderPaneHeaderSourceHorizontalInset,
+              top = (TopBarDefaults.ButtonSize - FolderPaneHeaderSourceIconSize) / 2,
+              width = FolderPaneHeaderSourceIconSize,
+              height = FolderPaneHeaderSourceIconSize,
+            ),
+          expandedFrame =
+            PopoverTransitionFrame(
+              left = EntityHeaderDefaults.SupportingContentEndInset,
+              top = (FolderPaneHeaderTopHeight - EntityHeaderDefaults.IconSize) / 2,
+              width = EntityHeaderDefaults.IconSize,
+              height = EntityHeaderDefaults.IconSize,
+            ),
         ) {
           Icon(
-            icon = Lucide.ChevronRight,
-            modifier = Modifier.size(14.dp),
-            tint = AppTheme.colors.textTertiary,
-          )
-
-          Text(
-            text = name,
-            modifier = Modifier.weight(1f, fill = false),
-            style = AppTheme.typography.caption.copy(fontSize = 14.sp),
-            color = AppTheme.colors.textTertiary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            icon = entityIcon.icon,
+            modifier = Modifier.size(EntityHeaderDefaults.IconSize),
+            tint = entityIcon.tint,
           )
         }
+
+        FolderTopBarTransitionTitle(title = title)
+
+        FolderTopBarCloseButton(
+          onClick = onClose,
+          modifier = Modifier.align(Alignment.CenterEnd).padding(end = 6.dp),
+        )
       }
-    }
-  }
+    },
+    supportingContent = {
+      EntityBreadcrumb(
+        segments = breadcrumbNames,
+        layout = EntityBreadcrumbLayout.SingleLineEllipsis,
+        color = AppTheme.colors.textTertiary,
+      )
+
+      Column {
+        EntitySupportingText(
+          text = visibility.label,
+          color = if (visibility.isShared) AppTheme.colors.brand else AppTheme.colors.textMuted,
+        )
+
+        EntitySupportingText(text = subtitle, color = AppTheme.colors.textMuted)
+      }
+    },
+  )
 }
 
 @Composable
@@ -362,13 +320,15 @@ private fun FolderTopBarTransitionTitle(title: String) {
     val horizontalInsetPx = with(density) { FolderPaneHeaderSourceHorizontalInset.toPx() }
     val sourceIconSizePx = with(density) { FolderPaneHeaderSourceIconSize.toPx() }
     val sourceIconGapPx = with(density) { FolderPaneHeaderSourceIconGap.toPx() }
-    val targetTextLeftPx = with(density) { FolderPaneHeaderTextLeft.toPx() }
-    val trailingReservedWidthPx =
+    val targetTextLeftPx =
       with(density) {
-        FolderPaneHeaderCloseButtonEndInset.toPx() +
-          FolderPaneHeaderCloseButtonSize.toPx() +
-          FolderPaneHeaderCloseButtonGap.toPx()
+        (EntityHeaderDefaults.SupportingContentEndInset +
+            EntityHeaderDefaults.IconSize +
+            EntityHeaderDefaults.TitleGap)
+          .toPx()
       }
+    val trailingReservedWidthPx =
+      with(density) { 6.dp.toPx() + FolderPaneHeaderCloseButtonSize.toPx() + 8.dp.toPx() }
     val targetTextWidthPx =
       max(0f, resolvedPaneWidthPx - targetTextLeftPx - trailingReservedWidthPx)
     val sourceTextLeftPx =
@@ -420,15 +380,11 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
       Box(
         contentAlignment = Alignment.Center,
         modifier =
-          Modifier.size(FolderPaneHeaderCloseButtonVisualSize)
+          Modifier.size(24.dp)
             .then(TopBarDefaults.controlShadowModifier(CircleShape))
             .background(TopBarDefaults.controlBackgroundColor(), CircleShape),
       ) {
-        Icon(
-          icon = Lucide.X,
-          modifier = Modifier.size(FolderPaneHeaderCloseButtonIconSize),
-          tint = AppTheme.colors.textPrimary,
-        )
+        Icon(icon = Lucide.X, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textPrimary)
       }
     }
   }

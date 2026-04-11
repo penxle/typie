@@ -9,15 +9,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import co.typie.entity_transfer.EntityTransferSource
 import co.typie.icons.Lucide
+import co.typie.ui.component.Divider
+import co.typie.ui.component.EntityBreadcrumb
+import co.typie.ui.component.EntityHeader
 import co.typie.ui.component.EntityListItem
+import co.typie.ui.component.EntitySupportingText
 import co.typie.ui.component.breadcrumbNames
 import co.typie.ui.component.sheet.SheetDismissReason
-import co.typie.ui.component.sheet.SheetEntityBreadcrumb
-import co.typie.ui.component.sheet.SheetEntityHeader
-import co.typie.ui.component.sheet.SheetEntitySupportingText
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetMenuActionRow
-import co.typie.ui.component.sheet.SheetMenuDivider
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.sheetPresentation
@@ -68,18 +68,18 @@ internal fun folderItemActionsSheet(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        SheetEntityHeader(
+        EntityHeader(
           title = item.name,
           icon = entityIcon.icon,
           modifier = Modifier.padding(horizontal = MenuSheetHorizontalPadding),
           iconTint = entityIcon.tint,
         ) {
-          SheetEntityBreadcrumb(segments = item.breadcrumbNames())
-          SheetEntitySupportingText(
+          EntityBreadcrumb(segments = item.breadcrumbNames())
+          EntitySupportingText(
             text = visibility.label,
             color = if (visibility.isShared) AppTheme.colors.brand else AppTheme.colors.textMuted,
           )
-          SheetEntitySupportingText(
+          EntitySupportingText(
             text =
               co.typie.ui.component.formatFolderMetadataSummary(
                 folderCount = item.folderCount,
@@ -89,14 +89,14 @@ internal fun folderItemActionsSheet(
           )
         }
 
-        SheetMenuDivider()
+        Divider(color = AppTheme.colors.borderDefault)
       }
     },
   ) {
     Column(modifier = Modifier.fillMaxWidth().padding(MenuSheetActionContentPadding)) {
       folderPrimaryActionSections().forEachIndexed { index, section ->
         if (index > 0) {
-          SheetMenuDivider()
+          Divider()
         }
 
         section.items.forEach { action ->

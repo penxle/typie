@@ -36,6 +36,10 @@ import co.typie.route.Route
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.ConfirmModal
+import co.typie.ui.component.Divider
+import co.typie.ui.component.EntityBreadcrumb
+import co.typie.ui.component.EntityHeader
+import co.typie.ui.component.EntitySupportingText
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
@@ -50,12 +54,8 @@ import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.sheet.SheetDismissReason
-import co.typie.ui.component.sheet.SheetEntityBreadcrumb
-import co.typie.ui.component.sheet.SheetEntityHeader
-import co.typie.ui.component.sheet.SheetEntitySupportingText
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetMenuActionRow
-import co.typie.ui.component.sheet.SheetMenuDivider
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.sheetPresentation
@@ -412,17 +412,17 @@ private fun trashActionsSheet(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        SheetEntityHeader(
+        EntityHeader(
           title = item.title,
           icon = entityIcon.icon,
           modifier = Modifier.padding(horizontal = MenuSheetHorizontalPadding),
           iconTint = entityIcon.tint,
         ) {
-          SheetEntityBreadcrumb(segments = item.breadcrumbSegments)
-          SheetEntitySupportingText(text = "삭제됨")
+          EntityBreadcrumb(segments = item.breadcrumbSegments)
+          EntitySupportingText(text = "삭제됨")
         }
 
-        SheetMenuDivider()
+        Divider(color = AppTheme.colors.borderDefault)
       }
     },
   ) {

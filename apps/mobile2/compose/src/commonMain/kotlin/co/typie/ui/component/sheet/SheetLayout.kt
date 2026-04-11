@@ -44,7 +44,6 @@ import co.typie.ext.ime
 import co.typie.ext.pressScale
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
-import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
@@ -299,100 +298,6 @@ private fun HeaderActionSpinner(color: Color, modifier: Modifier = Modifier) {
         ),
     )
   }
-}
-
-private val SheetEntityHeaderIconSize = 20.dp
-private val SheetEntityHeaderTitleGap = 12.dp
-private val SheetEntityHeaderTextLeft = SheetEntityHeaderIconSize + SheetEntityHeaderTitleGap
-
-private val SheetEntityMetadataTextStyle: TextStyle
-  @Composable get() = AppTheme.typography.caption
-
-@Composable
-fun EntityHeader(
-  title: String,
-  icon: IconData,
-  modifier: Modifier = Modifier,
-  iconTint: Color = AppTheme.colors.textPrimary,
-  supportingContent: (@Composable ColumnScope.() -> Unit)? = null,
-) {
-  Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(SheetEntityHeaderTitleGap),
-    ) {
-      Icon(icon = icon, modifier = Modifier.size(SheetEntityHeaderIconSize), tint = iconTint)
-
-      Text(
-        text = title,
-        style = AppTheme.typography.title,
-        modifier = Modifier.weight(1f),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
-
-    if (supportingContent != null) {
-      Column(
-        modifier = Modifier.padding(start = SheetEntityHeaderTextLeft, end = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        content = supportingContent,
-      )
-    }
-  }
-}
-
-@Composable
-fun EntityBreadcrumb(
-  segments: List<String>,
-  modifier: Modifier = Modifier,
-  textStyle: TextStyle = SheetEntityMetadataTextStyle,
-  color: Color = AppTheme.colors.textTertiary,
-) {
-  androidx.compose.foundation.layout.FlowRow(
-    modifier = modifier,
-    horizontalArrangement = Arrangement.spacedBy(4.dp),
-    verticalArrangement = Arrangement.spacedBy(2.dp),
-  ) {
-    segments.forEachIndexed { index, segment ->
-      if (index == 0) {
-        Text(
-          text = segment,
-          style = textStyle,
-          color = color,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier,
-        )
-      } else {
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Icon(icon = Lucide.ChevronRight, modifier = Modifier.size(14.dp), tint = color)
-
-          Text(
-            text = segment,
-            style = textStyle,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
-      }
-    }
-  }
-}
-
-@Composable
-fun EntitySupportingText(
-  text: String,
-  modifier: Modifier = Modifier,
-  color: Color = AppTheme.colors.textMuted,
-  textStyle: TextStyle = SheetEntityMetadataTextStyle,
-) {
-  Text(text = text, modifier = modifier, style = textStyle, color = color)
 }
 
 @Composable
