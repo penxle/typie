@@ -6,7 +6,7 @@ import co.typie.editor.ffi.FontFamily
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
 import co.typie.generated.resources.Res
-import co.typie.graphql.Http
+import co.typie.network.Http
 import co.typie.platform.PlatformModule
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsBytes
@@ -33,15 +33,15 @@ private data class FontPathEntry(val path: String, val hash: String)
 
 @Serializable
 private data class FallbackFamily(
-  @SerialName("familyName") val familyName: String,
-  @SerialName("fonts") val fonts: List<FallbackFont>,
+    @SerialName("familyName") val familyName: String,
+    @SerialName("fonts") val fonts: List<FallbackFont>,
 )
 
 @Serializable
 private data class FallbackFont(
-  @SerialName("weight") val weight: Int,
-  @SerialName("path") val path: String,
-  @SerialName("hash") val hash: String,
+    @SerialName("weight") val weight: Int,
+    @SerialName("path") val path: String,
+    @SerialName("hash") val hash: String,
 )
 
 @Serializable private data class HashResponse(@SerialName("hash") val hash: String)
@@ -66,10 +66,10 @@ object FontLoader {
     initialized = true
 
     val phantomFonts =
-      listOf(
-        "Noto (Phantom)" to "files/editor/Noto-Phantom.bin",
-        "Noto Emoji (Phantom)" to "files/editor/Noto-Phantom-Emoji.bin",
-      )
+        listOf(
+            "Noto (Phantom)" to "files/editor/Noto-Phantom.bin",
+            "Noto Emoji (Phantom)" to "files/editor/Noto-Phantom-Emoji.bin",
+        )
 
     for ((familyName, path) in phantomFonts) {
       val data = Res.readBytes(path)
@@ -82,9 +82,9 @@ object FontLoader {
     PlatformModule.editorHost.loadFallbackFontManifests(fallbackManifestData)
 
     val fallbackFamilies =
-      Json.decodeFromString<List<FallbackFamily>>(
-        Res.readBytes("files/editor/fallbacks.json").decodeToString()
-      )
+        Json.decodeFromString<List<FallbackFamily>>(
+            Res.readBytes("files/editor/fallbacks.json").decodeToString()
+        )
 
     for (family in fallbackFamilies) {
       for (font in family.fonts) {
@@ -96,9 +96,9 @@ object FontLoader {
   }
 
   val fontManifestMissingHandler: EditorEventListener<EditorEvent.FontManifestMissing> =
-    { editor, event ->
-      loadManifest(editor, event.family, event.weight)
-    }
+      { editor, event ->
+        loadManifest(editor, event.family, event.weight)
+      }
 
   val fontDataMissingHandler: EditorEventListener<EditorEvent.FontDataMissing> = { editor, event ->
     loadData(editor, event.family, event.weight, event.required, event.prefetch)
@@ -131,11 +131,11 @@ object FontLoader {
   }
 
   private fun loadData(
-    editor: Editor,
-    family: String,
-    weight: Int,
-    required: List<FontData>,
-    prefetch: List<FontData>,
+      editor: Editor,
+      family: String,
+      weight: Int,
+      required: List<FontData>,
+      prefetch: List<FontData>,
   ) {
     val info = fontPaths[fontKey(family, weight)] ?: return
     val baseUrl = "$CDN_BASE/${info.path}/${info.hash}"
@@ -220,9 +220,11 @@ object FontLoader {
 
     suspend fun enqueue(key: String, priority: Int, block: suspend () -> Unit) {
       mutex.withLock {
-        if (key in FontLoader.loaded) return
+        if (key in loaded) return
         val insertAt =
-          pending.indexOfFirst { it.priority < priority }.let { if (it == -1) pending.size else it }
+            pending
+                .indexOfFirst { it.priority < priority }
+                .let { if (it == -1) pending.size else it }
         pending.add(insertAt, PreloadItem(key, priority, block))
       }
 
@@ -232,15 +234,15 @@ object FontLoader {
     private suspend fun flush() {
       while (true) {
         val item =
-          mutex.withLock {
-            if (inflight >= PRELOAD_CONCURRENCY || pending.isEmpty()) return
-            val item = pending.removeFirst()
-            if (item.key in FontLoader.loaded) return@withLock null
-            inflight++
-            item
-          } ?: continue
+            mutex.withLock {
+              if (inflight >= PRELOAD_CONCURRENCY || pending.isEmpty()) return
+              val item = pending.removeFirst()
+              if (item.key in loaded) return@withLock null
+              inflight++
+              item
+            } ?: continue
 
-        FontLoader.scope.launch {
+        scope.launch {
           try {
             item.block()
           } catch (_: Exception) {

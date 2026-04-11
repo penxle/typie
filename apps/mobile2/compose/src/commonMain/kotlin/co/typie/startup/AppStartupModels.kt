@@ -2,10 +2,6 @@ package co.typie.startup
 
 import co.typie.migration.LegacyMigrationRunResult
 
-fun interface AuthStartupHandle {
-  suspend fun start()
-}
-
 fun interface BootstrapStartupHandle {
   suspend fun start()
 }

@@ -26,7 +26,7 @@ internal fun resolveRootShellDestination(
     return RootShellDestination.Splash
   }
 
-  if (authState is AuthState.Initializing || bootstrapState is BootstrapState.Loading) {
+  if (bootstrapState is BootstrapState.Loading) {
     return RootShellDestination.Splash
   }
 
@@ -52,7 +52,6 @@ internal fun resolveRootShellDestination(
     else ->
       when (authState) {
         is AuthState.Authenticated -> RootShellDestination.Main
-        is AuthState.Offline -> RootShellDestination.System(Route.Offline)
         else -> RootShellDestination.Auth
       }
   }

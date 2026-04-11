@@ -5,7 +5,7 @@ package co.typie
 import androidx.compose.runtime.Composable
 import co.typie.dev.SystemChrome
 import co.typie.ext.ScrollGestureLockScope
-import co.typie.graphql.Http
+import co.typie.network.Http
 import co.typie.shell.RootShell
 import co.typie.ui.component.popover.PopoverOutsideTapHost
 import co.typie.ui.theme.AppTheme
@@ -20,12 +20,12 @@ import com.hashsequence.coilresvg.ResvgDecoder
 fun App() {
   setSingletonImageLoaderFactory { context ->
     ImageLoader.Builder(context)
-      .crossfade(true)
-      .components {
-        add(KtorNetworkFetcherFactory(Http))
-        add(ResvgDecoder.Factory())
-      }
-      .build()
+        .crossfade(true)
+        .components {
+          add(KtorNetworkFetcherFactory(Http))
+          add(ResvgDecoder.Factory())
+        }
+        .build()
   }
 
   AppTheme { SystemChrome { ScrollGestureLockScope { PopoverOutsideTapHost { RootShell() } } } }

@@ -4,5 +4,5 @@ export default {
   '*': ['cspell --no-progress --relative --no-must-find-files'],
   '*.dart': (files) => [...files.map((f) => `dart fix --apply "${f}"`), `dart format ${files.join(' ')}`],
   '*.rs': ['cargo fmt --'],
-  '*.{kt,kts}': ['ktfmt'],
+  '*.{kt,kts}': ['ktfmt --google-style'],
 };

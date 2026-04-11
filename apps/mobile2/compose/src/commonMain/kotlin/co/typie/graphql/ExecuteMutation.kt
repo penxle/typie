@@ -5,18 +5,18 @@ import com.apollographql.apollo.api.Mutation
 
 suspend fun <D : Mutation.Data> ApolloClient.executeMutation(mutation: Mutation<D>): D {
   val response = mutation(mutation).execute()
-  val gqlError = response.errors?.firstOrNull()
+  val graphError = response.errors?.firstOrNull()
 
   if (response.exception != null) {
     throw response.exception!!
-  } else if (gqlError != null) {
-    val type = gqlError.extensions?.get("type") as? String
+  } else if (graphError != null) {
+    val type = graphError.extensions?.get("type") as? String
     if (type == "TypieError") {
-      val code = gqlError.extensions?.get("code") as String
-      val message = (gqlError.extensions?.get("message") as? String) ?: gqlError.message
+      val code = graphError.extensions?.get("code") as String
+      val message = (graphError.extensions?.get("message") as? String) ?: graphError.message
       throw TypieError(code = code, message = message)
     } else {
-      throw Exception(gqlError.message)
+      throw Exception(graphError.message)
     }
   } else {
     return response.dataOrThrow()

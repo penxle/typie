@@ -9,18 +9,27 @@ import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 val doppler: String =
-  listOf("/opt/homebrew/bin/doppler", "/usr/local/bin/doppler").firstOrNull { file(it).exists() }
-    ?: "doppler"
+    listOf("/opt/homebrew/bin/doppler", "/usr/local/bin/doppler").firstOrNull { file(it).exists() }
+        ?: "doppler"
 
 val dopplerSecrets: Map<String, String> by lazy {
   val output =
-    providers
-      .exec {
-        commandLine(doppler, "secrets", "download", "-c", "dev", "--no-file", "--format", "json")
-      }
-      .standardOutput
-      .asText
-      .get()
+      providers
+          .exec {
+            commandLine(
+                doppler,
+                "secrets",
+                "download",
+                "-c",
+                "dev",
+                "--no-file",
+                "--format",
+                "json",
+            )
+          }
+          .standardOutput
+          .asText
+          .get()
   @Suppress("UNCHECKED_CAST")
   groovy.json.JsonSlurper().parseText(output) as Map<String, String>
 }
@@ -28,7 +37,7 @@ val dopplerSecrets: Map<String, String> by lazy {
 fun env(key: String): String = System.getenv(key) ?: dopplerSecrets[key] ?: error("$key is not set")
 
 val aboutLibrariesComposeResourceFile =
-  layout.projectDirectory.file("src/commonMain/composeResources/files/aboutlibraries.json")
+    layout.projectDirectory.file("src/commonMain/composeResources/files/aboutlibraries.json")
 
 plugins {
   alias(libs.plugins.kotlin.multiplatform)
@@ -82,8 +91,8 @@ kotlin {
     iosMinimumDeploymentTarget.set("15.6")
 
     localSwiftPackage(
-      directory = rootProject.layout.projectDirectory.dir("ios/Bridge"),
-      products = listOf("Bridge"),
+        directory = rootProject.layout.projectDirectory.dir("ios/Bridge"),
+        products = listOf("Bridge"),
     )
   }
 
@@ -142,6 +151,9 @@ kotlin {
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.websockets)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.apollo.runtime)
     implementation(libs.apollo.engine.ktor)
     implementation(libs.apollo.normalized.cache)
@@ -179,9 +191,9 @@ tasks.named("copyNonXmlValueResourcesForCommonMain") { dependsOn("exportLibraryD
 val versionProps = Properties().apply { load(rootProject.file("version.properties").reader()) }
 
 rootProject
-  .file("ios/Configuration/Config.local.xcconfig")
-  .writeText(
-    """
+    .file("ios/Configuration/Config.local.xcconfig")
+    .writeText(
+        """
   |MARKETING_VERSION=${versionProps["versionName"]}
   |GOOGLE_IOS_CLIENT_ID=${env("GOOGLE_IOS_CLIENT_ID")}
   |GOOGLE_DOT_REVERSED_IOS_CLIENT_ID=${env("GOOGLE_DOT_REVERSED_IOS_CLIENT_ID")}
@@ -190,8 +202,8 @@ rootProject
   |NAVER_CLIENT_ID=${env("NAVER_CLIENT_ID")}
   |NAVER_CLIENT_SECRET=${env("NAVER_CLIENT_SECRET")}
   """
-      .trimMargin()
-  )
+            .trimMargin()
+    )
 
 apollo {
   service("typie") {
@@ -199,15 +211,15 @@ apollo {
 
     srcDir("src/commonMain/kotlin")
     schemaFiles.from(
-      "src/commonMain/graphql/schema.graphqls",
-      "src/commonMain/graphql/apollo.graphqls",
+        "src/commonMain/graphql/schema.graphqls",
+        "src/commonMain/graphql/apollo.graphqls",
     )
 
     mapScalar("DateTime", "kotlin.time.Instant", "co.typie.graphql.adapter.InstantAdapter")
     mapScalar(
-      "JSON",
-      "kotlinx.serialization.json.JsonElement",
-      "co.typie.graphql.adapter.JsonElementAdapter",
+        "JSON",
+        "kotlinx.serialization.json.JsonElement",
+        "co.typie.graphql.adapter.JsonElementAdapter",
     )
 
     addTypename = "always"
@@ -216,7 +228,7 @@ apollo {
     generateFragmentImplementations = true
 
     plugin(
-      "com.apollographql.cache:normalized-cache-apollo-compiler-plugin:${libs.versions.apollo.normalized.cache.get()}"
+        "com.apollographql.cache:normalized-cache-apollo-compiler-plugin:${libs.versions.apollo.normalized.cache.get()}"
     )
     pluginArgument("com.apollographql.cache.packageName", packageName.get())
 

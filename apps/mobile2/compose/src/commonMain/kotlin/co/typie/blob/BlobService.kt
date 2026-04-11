@@ -2,13 +2,13 @@ package co.typie.blob
 
 import co.typie.graphql.Apollo
 import co.typie.graphql.BlobService_IssueBlobUploadUrl_Mutation
-import co.typie.graphql.Http
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.IssueBlobUploadUrlInput
+import co.typie.network.Http
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
-import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.headers
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -27,15 +27,17 @@ object BlobService {
       url = result.issueBlobUploadUrl.url,
       formData =
         formData {
-          result.issueBlobUploadUrl.fields.jsonObject.asStringMap().forEach { (key, value) ->
-            append(key, value)
+          result.issueBlobUploadUrl.fields.jsonObject.asStringMap().forEach {
+            append(it.key, it.value)
           }
+
           append("Content-Type", resolvedMimeType)
+
           append(
             key = "file",
             value = bytes,
             headers =
-              Headers.build {
+              headers {
                 append(HttpHeaders.ContentType, resolvedMimeType)
                 append(HttpHeaders.ContentDisposition, """filename="$filename"""")
               },
@@ -48,5 +50,5 @@ object BlobService {
 }
 
 private fun JsonObject.asStringMap(): Map<String, String> {
-  return mapValues { (_, value) -> value.jsonPrimitive.content }
+  return mapValues { it.value.jsonPrimitive.content }
 }

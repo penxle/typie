@@ -1,6 +1,5 @@
 package co.typie.migration
 
-import co.typie.auth.AuthTokens
 import co.typie.storage.vault
 
 object LegacyAuthImporter {

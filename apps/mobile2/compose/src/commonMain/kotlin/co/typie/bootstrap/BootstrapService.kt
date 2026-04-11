@@ -2,7 +2,7 @@ package co.typie.bootstrap
 
 import co.touchlab.kermit.Logger
 import co.typie.Konfig
-import co.typie.graphql.Http
+import co.typie.network.Http
 import co.typie.platform.PlatformModule
 import co.typie.startup.BootstrapStartupHandle
 import co.typie.storage.prefs

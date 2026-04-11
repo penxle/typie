@@ -1,6 +1,5 @@
 package co.typie.migration
 
-import co.typie.auth.AuthTokens
 import co.typie.service.DeveloperPreferencesService
 import co.typie.service.EditorPreferencesService
 import co.typie.storage.Prefs

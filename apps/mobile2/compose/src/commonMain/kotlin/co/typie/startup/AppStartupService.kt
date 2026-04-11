@@ -52,8 +52,8 @@ object AppStartupService {
       }
 
     Logger.i { "App startup: starting auth and bootstrap services." }
-    AuthService.start()
     BootstrapService.start()
+    AuthService.renew()
     _state.value = AppStartupState.Ready(migrationResult = migrationResult)
     Logger.i {
       "App startup: ready migration=${migrationResult?.sourceState?.name ?: "FAILED"} auth=${migrationResult?.authResult?.name ?: "FAILED"} prefs=${migrationResult?.prefsResult?.name ?: "FAILED"}."

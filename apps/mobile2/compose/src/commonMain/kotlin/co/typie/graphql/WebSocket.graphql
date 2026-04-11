@@ -1,0 +1,3 @@
+mutation WebSocket_CreateWsSession_Mutation {
+  createWsSession
+}

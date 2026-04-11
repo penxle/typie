@@ -1,11 +1,11 @@
 package co.typie.auth
 
-sealed interface AuthState {
-  data object Initializing : AuthState
+import kotlinx.serialization.Serializable
 
+sealed interface AuthState {
   data object Authenticated : AuthState
 
   data object Unauthenticated : AuthState
-
-  data object Offline : AuthState
 }
+
+@Serializable data class AuthTokens(val sessionToken: String, val accessToken: String)
