@@ -71,11 +71,11 @@ object BootstrapService : BootstrapStartupHandle {
       if (payload != null) {
         cachedPayload = payload
         _state.value =
-            resolveBootstrapState(
-                bootstrap = json.decodeFromString(BootstrapPayload.serializer(), payload),
-                platform = PlatformModule.platform,
-                currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
-            )
+          resolveBootstrapState(
+            bootstrap = json.decodeFromString(BootstrapPayload.serializer(), payload),
+            platform = PlatformModule.platform,
+            currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
+          )
         Logger.i { "Bootstrap startup: loaded remote bootstrap." }
         return@withLock
       }
@@ -88,11 +88,11 @@ object BootstrapService : BootstrapStartupHandle {
     if (cachedPayload.isNotBlank()) {
       try {
         _state.value =
-            resolveBootstrapState(
-                bootstrap = json.decodeFromString(BootstrapPayload.serializer(), cachedPayload),
-                platform = PlatformModule.platform,
-                currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
-            )
+          resolveBootstrapState(
+            bootstrap = json.decodeFromString(BootstrapPayload.serializer(), cachedPayload),
+            platform = PlatformModule.platform,
+            currentVersion = PlatformModule.deviceInfo.snapshot().appVersion,
+          )
         Logger.i { "Bootstrap startup: loaded cached bootstrap." }
         return@withLock
       } catch (e: CancellationException) {
@@ -108,6 +108,6 @@ object BootstrapService : BootstrapStartupHandle {
 
   private suspend fun fetchPayload(): String? {
     return runCatching { Http.get(bootstrapUrlForApiUrl(Konfig.API_URL)).body<String>() }
-        .getOrNull()
+      .getOrNull()
   }
 }

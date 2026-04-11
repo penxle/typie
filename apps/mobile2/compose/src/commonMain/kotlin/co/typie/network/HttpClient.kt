@@ -13,22 +13,22 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.delay
 
 val Http: HttpClient =
-    HttpClient {
-          expectSuccess = true
-          followRedirects = false
+  HttpClient {
+      expectSuccess = true
+      followRedirects = false
 
-          install(WebSockets)
-          install(ContentNegotiation) { json(json) }
-        }
-        .apply {
-          plugin(HttpSend).intercept { context ->
-            when (NetworkSimulator.preset.value) {
-              NetworkPreset.Normal -> execute(context)
-              NetworkPreset.Slow -> {
-                delay(2000L)
-                execute(context)
-              }
-              NetworkPreset.Offline -> throw SimulatedNetworkFailureException()
-            }
+      install(WebSockets)
+      install(ContentNegotiation) { json(json) }
+    }
+    .apply {
+      plugin(HttpSend).intercept { context ->
+        when (NetworkSimulator.preset.value) {
+          NetworkPreset.Normal -> execute(context)
+          NetworkPreset.Slow -> {
+            delay(2000L)
+            execute(context)
           }
+          NetworkPreset.Offline -> throw SimulatedNetworkFailureException()
         }
+      }
+    }

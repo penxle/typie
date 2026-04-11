@@ -66,42 +66,42 @@ fun DeleteUserScreen() {
   ProvideTopBar(center = { Text("회원 탈퇴", style = AppTheme.typography.title) })
 
   Screen(
-      scrollState = scrollState,
-      background = AppTheme.colors.surfaceBase,
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-      bottomBar = {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Button(
-              text = "탈퇴하기",
-              variant = ButtonVariant.Danger,
-              loading = model.isSubmitting,
-              loadingText = "탈퇴하는 중...",
-              onClick = { submit() },
-          )
+    scrollState = scrollState,
+    background = AppTheme.colors.surfaceBase,
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+    bottomBar = {
+      Column(
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Button(
+          text = "탈퇴하기",
+          variant = ButtonVariant.Danger,
+          loading = model.isSubmitting,
+          loadingText = "탈퇴하는 중...",
+          onClick = { submit() },
+        )
 
-          Button(
-              text = "타이피 계속 이용하기",
-              variant = ButtonVariant.Secondary,
-              enabled = !model.isSubmitting,
-              onClick = { nav.pop() },
-          )
-        }
-      },
+        Button(
+          text = "타이피 계속 이용하기",
+          variant = ButtonVariant.Secondary,
+          enabled = !model.isSubmitting,
+          onClick = { nav.pop() },
+        )
+      }
+    },
   ) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+      modifier = Modifier.fillMaxWidth(),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
       Text("정말 탈퇴하시겠어요?", style = AppTheme.typography.title.copy(textAlign = TextAlign.Center))
 
       Text(
-          "탈퇴 전 아래 유의사항을 확인해주세요.",
-          style = AppTheme.typography.caption.copy(textAlign = TextAlign.Center),
-          color = AppTheme.colors.textTertiary,
+        "탈퇴 전 아래 유의사항을 확인해주세요.",
+        style = AppTheme.typography.caption.copy(textAlign = TextAlign.Center),
+        color = AppTheme.colors.textTertiary,
       )
     }
 
@@ -110,14 +110,14 @@ fun DeleteUserScreen() {
 
       CardSurface(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+          modifier = Modifier.fillMaxWidth().padding(16.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           deleteUserNoticeItems().forEach { item ->
             Text(
-                text = item,
-                style = AppTheme.typography.caption,
-                color = AppTheme.colors.textSecondary,
+              text = item,
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textSecondary,
             )
           }
         }
@@ -125,8 +125,8 @@ fun DeleteUserScreen() {
     }
 
     DeleteUserAcknowledgeRow(
-        checked = isAcknowledged,
-        onToggle = { isAcknowledged = !isAcknowledged },
+      checked = isAcknowledged,
+      onToggle = { isAcknowledged = !isAcknowledged },
     )
   }
 }
@@ -135,41 +135,41 @@ fun DeleteUserScreen() {
 private fun DeleteUserAcknowledgeRow(checked: Boolean, onToggle: () -> Unit) {
   CardSurface(modifier = Modifier.fillMaxWidth()) {
     CardRow(
-        onClick = { onToggle() },
-        spacing = 12.dp,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+      onClick = { onToggle() },
+      spacing = 12.dp,
+      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
     ) {
       Box(
-          modifier =
-              Modifier.size(20.dp)
-                  .clip(RoundedCornerShape(6.dp))
-                  .background(
-                      if (checked) AppTheme.colors.brand else AppTheme.colors.surfaceTinted,
-                      RoundedCornerShape(6.dp),
-                  )
-                  .border(
-                      1.dp,
-                      if (checked) AppTheme.colors.brand.copy(alpha = 0.72f)
-                      else AppTheme.colors.borderDefault,
-                      RoundedCornerShape(6.dp),
-                  ),
-          contentAlignment = Alignment.Center,
+        modifier =
+          Modifier.size(20.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+              if (checked) AppTheme.colors.brand else AppTheme.colors.surfaceTinted,
+              RoundedCornerShape(6.dp),
+            )
+            .border(
+              1.dp,
+              if (checked) AppTheme.colors.brand.copy(alpha = 0.72f)
+              else AppTheme.colors.borderDefault,
+              RoundedCornerShape(6.dp),
+            ),
+        contentAlignment = Alignment.Center,
       ) {
         if (checked) {
           Icon(
-              icon = Lucide.Check,
-              modifier = Modifier.size(14.dp),
-              tint = AppTheme.colors.textOnBrand,
+            icon = Lucide.Check,
+            modifier = Modifier.size(14.dp),
+            tint = AppTheme.colors.textOnBrand,
           )
         }
       }
 
       Text(
-          text = "위 유의사항을 모두 확인했어요",
-          style = AppTheme.typography.action,
-          modifier = Modifier.weight(1f),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
+        text = "위 유의사항을 모두 확인했어요",
+        style = AppTheme.typography.action,
+        modifier = Modifier.weight(1f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
       )
     }
   }

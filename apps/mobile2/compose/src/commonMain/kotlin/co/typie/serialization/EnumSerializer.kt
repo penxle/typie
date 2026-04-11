@@ -11,11 +11,11 @@ import kotlinx.serialization.encoding.Encoder
 
 @OptIn(InternalSerializationApi::class)
 open class EnumSerializer<T : Enum<T>>(
-    private val entries: EnumEntries<T>,
-    private val convert: (String) -> String,
+  private val entries: EnumEntries<T>,
+  private val convert: (String) -> String,
 ) : KSerializer<T> {
   override val descriptor: SerialDescriptor =
-      buildSerialDescriptor(entries.first()::class.qualifiedName ?: "Enum", SerialKind.ENUM)
+    buildSerialDescriptor(entries.first()::class.qualifiedName ?: "Enum", SerialKind.ENUM)
 
   override fun serialize(encoder: Encoder, value: T) = encoder.encodeString(convert(value.name))
 

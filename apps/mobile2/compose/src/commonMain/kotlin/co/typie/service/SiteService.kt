@@ -6,10 +6,10 @@ import androidx.compose.runtime.setValue
 import co.typie.storage.prefs
 
 internal fun resolveStoredSiteId(
-    userId: String,
-    availableSiteIds: List<String>,
-    siteIdsByUserId: Map<String, String>,
-    legacySiteId: String,
+  userId: String,
+  availableSiteIds: List<String>,
+  siteIdsByUserId: Map<String, String>,
+  legacySiteId: String,
 ): String {
   val storedSiteId = siteIdsByUserId[userId]
   val preferredSiteId = storedSiteId ?: legacySiteId.takeIf { it.isNotEmpty() }
@@ -20,7 +20,7 @@ internal fun resolveStoredSiteId(
 object SiteService {
   private var currentUserId: String by prefs("current_user_id", "")
   private var siteIdsByUserId: Map<String, String> by
-      prefs("site_ids_by_user_id", emptyMap<String, String>())
+    prefs("site_ids_by_user_id", emptyMap<String, String>())
   private var legacySiteId: String by prefs("site_id", "")
   private var currentSiteId by mutableStateOf(loadCurrentSiteId())
 
@@ -38,12 +38,12 @@ object SiteService {
     currentUserId = userId
 
     val resolvedSiteId =
-        resolveStoredSiteId(
-            userId = userId,
-            availableSiteIds = availableSiteIds,
-            siteIdsByUserId = siteIdsByUserId,
-            legacySiteId = legacySiteId,
-        )
+      resolveStoredSiteId(
+        userId = userId,
+        availableSiteIds = availableSiteIds,
+        siteIdsByUserId = siteIdsByUserId,
+        legacySiteId = legacySiteId,
+      )
 
     if (resolvedSiteId.isNotEmpty()) {
       siteIdsByUserId = siteIdsByUserId + (userId to resolvedSiteId)

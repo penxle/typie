@@ -20,12 +20,12 @@ import com.hashsequence.coilresvg.ResvgDecoder
 fun App() {
   setSingletonImageLoaderFactory { context ->
     ImageLoader.Builder(context)
-        .crossfade(true)
-        .components {
-          add(KtorNetworkFetcherFactory(Http))
-          add(ResvgDecoder.Factory())
-        }
-        .build()
+      .crossfade(true)
+      .components {
+        add(KtorNetworkFetcherFactory(Http))
+        add(ResvgDecoder.Factory())
+      }
+      .build()
   }
 
   AppTheme { SystemChrome { ScrollGestureLockScope { PopoverOutsideTapHost { RootShell() } } } }

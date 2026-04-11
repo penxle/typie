@@ -61,40 +61,39 @@ fun RootShell() {
   LaunchedEffect(Unit) { appStartupService.start() }
 
   val shellTargetState =
-      rootShellTargetState(
-          startupState = startupState,
-          authState = authState,
-          bootstrapState =
-              effectiveBootstrapState(remoteState = bootstrapState, scenario = bootstrapScenario),
-      )
+    rootShellTargetState(
+      startupState = startupState,
+      authState = authState,
+      bootstrapState =
+        effectiveBootstrapState(remoteState = bootstrapState, scenario = bootstrapScenario),
+    )
   val toast = remember { Toast() }
   val loader = remember { Loader() }
   val bottomSheetHost = remember { BottomSheetHostState() }
   val sheetOverlayPresenter = remember { SheetOverlayPresenterState() }
   val sheetHostScope = rememberCoroutineScope()
   val sheetHost =
-      remember(sheetOverlayPresenter, sheetHostScope) {
-        SheetHostState(sheetOverlayPresenter, sheetHostScope)
-      }
+    remember(sheetOverlayPresenter, sheetHostScope) {
+      SheetHostState(sheetOverlayPresenter, sheetHostScope)
+    }
 
   val focusManager = LocalFocusManager.current
 
   CompositionLocalProvider(
-      LocalBottomSheetHost provides bottomSheetHost,
-      LocalSheetHost provides sheetHost,
-      LocalToast provides toast,
-      LocalLoader provides loader,
+    LocalBottomSheetHost provides bottomSheetHost,
+    LocalSheetHost provides sheetHost,
+    LocalToast provides toast,
+    LocalLoader provides loader,
   ) {
     Box(
-        Modifier.fillMaxSize().preferredFrameRate(FrameRateCategory.High).pointerInput(Unit) {
-          detectTapGestures { focusManager.clearFocus() }
-        }
+      Modifier.fillMaxSize().preferredFrameRate(FrameRateCategory.High).pointerInput(Unit) {
+        detectTapGestures { focusManager.clearFocus() }
+      }
     ) {
       Crossfade(
-          shellTargetState,
-          modifier =
-              Modifier.background(AppTheme.colors.surfaceDefault)
-                  .hazeSource(LocalHazeState.current),
+        shellTargetState,
+        modifier =
+          Modifier.background(AppTheme.colors.surfaceDefault).hazeSource(LocalHazeState.current),
       ) { state ->
         key(state) {
           when (val destination = state.destination) {
@@ -102,25 +101,25 @@ fun RootShell() {
             is RootShellDestination.Main -> MainShell { route -> MainRoutes(route) }
             is RootShellDestination.Auth -> AuthShell { route -> AuthRoutes(route) }
             is RootShellDestination.System ->
-                when (val route = destination.route) {
-                  is Route.Offline -> OfflineScreen(onRetry = {})
+              when (val route = destination.route) {
+                is Route.Offline -> OfflineScreen(onRetry = {})
 
-                  is Route.Maintenance ->
-                      MaintenanceScreen(
-                          title = route.title,
-                          message = route.message,
-                          until = route.until,
-                      )
+                is Route.Maintenance ->
+                  MaintenanceScreen(
+                    title = route.title,
+                    message = route.message,
+                    until = route.until,
+                  )
 
-                  is Route.UpdateRequired ->
-                      UpdateRequiredScreen(
-                          storeUrl = route.storeUrl,
-                          currentVersion = route.currentVersion,
-                          requiredVersion = route.requiredVersion,
-                      )
+                is Route.UpdateRequired ->
+                  UpdateRequiredScreen(
+                    storeUrl = route.storeUrl,
+                    currentVersion = route.currentVersion,
+                    requiredVersion = route.requiredVersion,
+                  )
 
-                  else -> {}
-                }
+                else -> {}
+              }
           }
         }
       }
