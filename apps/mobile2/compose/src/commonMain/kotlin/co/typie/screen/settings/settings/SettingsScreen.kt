@@ -301,7 +301,7 @@ fun SettingsScreen() {
         devModeEnabled = devModeEnabled,
         onThemeClick = {
           sheetHost.show(
-            sheet = settingsThemeSheet(themeMode = themeModeState.value),
+            settingsThemeSheet(themeMode = themeModeState.value),
             onResult = { result ->
               result.completedOrNull()?.let {
                 // TODO: 테마 변경 트래킹

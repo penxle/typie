@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,10 +33,13 @@ import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.BottomSheetHostState
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.SheetHostState
+import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.completedOrNull
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
@@ -63,38 +65,10 @@ fun planUpgradeRoute(result: PlanUpgradeSheetResult?): Route? {
   }
 }
 
-suspend fun BottomSheetHostState.showPlanUpgradeSheet(
+private fun planUpgradeSheet(
   title: String = DEFAULT_PLAN_UPGRADE_TITLE,
   message: String,
-): PlanUpgradeSheetResult? {
-  val result =
-    try {
-      show<PlanUpgradeSheetResult> { this.PlanUpgradeSheet(title = title, message = message) }
-    } catch (_: CancellationException) {
-      return null
-    }
-
-  if (result is PlanUpgradeSheetResult.TrialStarted) {
-    try {
-      show<Unit> {
-        SubscriptionCelebrationSheet(
-          title = result.celebration.title,
-          message = result.celebration.message,
-        )
-      }
-    } catch (_: CancellationException) {
-      // Celebration sheet dismissal does not affect the original result.
-    }
-  }
-
-  return result
-}
-
-@Composable
-fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
-  title: String = DEFAULT_PLAN_UPGRADE_TITLE,
-  message: String,
-) {
+): SheetPresentation<PlanUpgradeSheetResult> = sheetPresentation {
   val toast = LocalToast.current
   val model = viewModel { PlanUpgradeSheetViewModel() }
   val scope = rememberCoroutineScope()
@@ -104,10 +78,36 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
 
   LaunchedEffect(dismissResult) {
     val result = dismissResult ?: return@LaunchedEffect
-    dismiss(result)
+    complete(result)
   }
 
-  BottomSheetScaffold(title = title) {
+  SheetLayout(
+    fillHeight = true,
+    bodyInsetPolicy = SheetInsetPolicy.Container,
+    header = { ActionHeader(title = title) },
+    footer = {
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        if (canStartTrial) {
+          Button(
+            text = "2주 무료 체험하기",
+            leading = { color -> Icon(icon = Lucide.Zap, tint = color) },
+            loading = model.isStartingTrial,
+            loadingText = "무료 체험 시작 중...",
+            onClick = { showTrialStartConfirm = true },
+          )
+        }
+
+        Button(
+          text = "업그레이드",
+          variant = if (canStartTrial) ButtonVariant.Secondary else ButtonVariant.Primary,
+          onClick = { complete(PlanUpgradeSheetResult.Upgrade) },
+        )
+      }
+    },
+  ) {
     SubscriptionBadgeRow()
 
     Text(
@@ -130,22 +130,6 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
 
       SubscriptionFeatureList(features = fullPlanFeatures, iconSize = 16.dp, rowSpacing = 8.dp)
     }
-
-    if (canStartTrial) {
-      Button(
-        text = "2주 무료 체험하기",
-        leading = { color -> Icon(icon = Lucide.Zap, tint = color) },
-        loading = model.isStartingTrial,
-        loadingText = "무료 체험 시작 중...",
-        onClick = { showTrialStartConfirm = true },
-      )
-    }
-
-    Button(
-      text = "업그레이드",
-      variant = if (canStartTrial) ButtonVariant.Secondary else ButtonVariant.Primary,
-      onClick = { dismiss(PlanUpgradeSheetResult.Upgrade) },
-    )
   }
 
   if (showTrialStartConfirm) {
@@ -167,4 +151,27 @@ fun BottomSheetScope<PlanUpgradeSheetResult>.PlanUpgradeSheet(
       onDismiss = { showTrialStartConfirm = false },
     )
   }
+}
+
+suspend fun SheetHostState.showPlanUpgradeSheet(
+  title: String = DEFAULT_PLAN_UPGRADE_TITLE,
+  message: String,
+): PlanUpgradeSheetResult? {
+  val result =
+    present(planUpgradeSheet(title = title, message = message)).completedOrNull() ?: return null
+
+  if (result is PlanUpgradeSheetResult.TrialStarted) {
+    try {
+      present(
+        subscriptionCelebrationSheet(
+          title = result.celebration.title,
+          message = result.celebration.message,
+        )
+      )
+    } catch (_: CancellationException) {
+      // Celebration sheet dismissal does not affect the original result.
+    }
+  }
+
+  return result
 }

@@ -43,6 +43,18 @@ class SheetDetentResolverTest {
   }
 
   @Test
+  fun maxPolicyUsesDefaultTopGap() {
+    val resolved =
+      SheetDetentResolver.resolve(
+        policy = SheetSizePolicy.Max(),
+        context = SheetDetentContext(viewportHeight = 800.dp, contentHeight = 200.dp),
+      )
+
+    assertEquals(736.dp, resolved.single().height)
+    assertEquals(SheetDetentId.TopGap(64.dp), resolved.single().id)
+  }
+
+  @Test
   fun detentPolicyResolvesAndSortsDistinctHeights() {
     val resolved =
       SheetDetentResolver.resolve(

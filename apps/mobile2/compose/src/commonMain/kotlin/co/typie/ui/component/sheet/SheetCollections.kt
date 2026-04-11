@@ -160,7 +160,7 @@ fun SheetMenuDivider(
 fun SheetMenuActionRow(
   icon: IconData,
   label: String,
-  onClick: suspend () -> Unit,
+  onClick: () -> Unit,
   modifier: Modifier = Modifier,
   tint: Color? = null,
   trailingIcon: IconData? = null,
@@ -171,7 +171,7 @@ fun SheetMenuActionRow(
       modifier =
         modifier
           .fillMaxWidth()
-          .clickable(onClick = onClick)
+          .clickable { onClick() }
           .heightIn(min = 44.dp)
           .padding(contentPadding)
           .pressScale(),

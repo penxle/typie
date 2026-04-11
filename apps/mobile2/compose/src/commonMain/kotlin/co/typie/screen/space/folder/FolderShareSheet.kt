@@ -53,10 +53,12 @@ import co.typie.ui.component.Img
 import co.typie.ui.component.SelectField
 import co.typie.ui.component.SelectFieldItem
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.HeaderTextAction
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
@@ -105,15 +107,14 @@ private fun folderVisibilityOptions(): List<FolderVisibilityOption> {
   )
 }
 
-@Composable
-fun BottomSheetScope<Unit>.FolderShareSheet(
+fun folderShareSheet(
   model: FolderViewModel,
   folderId: String,
   folderUrl: String,
   initialVisibility: EntityVisibility,
   initialThumbnailUrl: String?,
   onUpdated: () -> Unit = {},
-) {
+): SheetPresentation<Unit> = sheetPresentation {
   val share = PlatformModule.share
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -226,17 +227,21 @@ fun BottomSheetScope<Unit>.FolderShareSheet(
     }
   }
 
-  BottomSheetScaffold(
-    title = "이 폴더 공유하기",
-    leadingAction = {
-      BottomSheetHeaderTextAction(
-        text = "완료",
-        color = AppTheme.colors.brand,
-        textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
-        enabled = !isBusy,
-        onClick = { dismiss() },
+  SheetLayout(
+    header = {
+      ActionHeader(
+        title = "이 폴더 공유하기",
+        leading = {
+          HeaderTextAction(
+            text = "완료",
+            color = AppTheme.colors.brand,
+            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
+            enabled = !isBusy,
+            onClick = { dismiss() },
+          )
+        },
       )
-    },
+    }
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
       FolderShareSection(title = "폴더 조회 권한") {
@@ -391,7 +396,7 @@ private fun FolderThumbnailUploadButton(
   InteractionScope {
     Box(
       modifier =
-        Modifier.then(if (enabled) Modifier.clickable { onClick() } else Modifier)
+        Modifier.then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
           .then(if (enabled) Modifier.pressScale(0.95f) else Modifier),
       contentAlignment = Alignment.Center,
     ) {

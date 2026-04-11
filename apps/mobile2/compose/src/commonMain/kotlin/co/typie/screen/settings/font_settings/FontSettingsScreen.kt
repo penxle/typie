@@ -47,11 +47,14 @@ import co.typie.ui.component.FontSpecimen
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
-import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.familySpecimenFallbacks
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
@@ -73,7 +76,7 @@ fun FontSettingsScreen() {
   val currentSubscriptionStore = CurrentSubscriptionStore
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
-  val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
   var pendingFamilyDeletion by remember { mutableStateOf<FontSettingsFamily?>(null) }
   var pendingFontDeletion by remember { mutableStateOf<PendingFontDeletion?>(null) }
   val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
@@ -108,27 +111,20 @@ fun FontSettingsScreen() {
 
     when (currentSubscriptionState.hasSubscriptionOrNull()?.let(::fontUploadAction)) {
       FontUploadAction.PickFont -> {
-        scope.launch {
-          bottomSheetHost.show {
-            FontUploadSheet(
-              isUploading = model.state.isUploading,
-              uploadCurrentIndex = model.state.uploadCurrentIndex,
-              uploadTotalCount = model.state.uploadTotalCount,
-              onUploadClick = {
-                dismiss()
-                filePicker("*/*")
-              },
-            )
-          }
-        }
+        sheetHost.show(
+          fontUploadSheet(
+            isUploading = model.state.isUploading,
+            uploadCurrentIndex = model.state.uploadCurrentIndex,
+            uploadTotalCount = model.state.uploadTotalCount,
+            onUploadClick = { filePicker("*/*") },
+          )
+        )
       }
 
       FontUploadAction.ShowPlanUpgradeSheet -> {
         scope.launch {
           planUpgradeRoute(
-              bottomSheetHost.showPlanUpgradeSheet(
-                message = "폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
-              )
+              sheetHost.showPlanUpgradeSheet(message = "폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.")
             )
             ?.let { route -> nav.navigate(route) }
         }
@@ -226,13 +222,12 @@ fun FontSettingsScreen() {
   }
 }
 
-@Composable
-private fun BottomSheetScope<Unit>.FontUploadSheet(
+private fun fontUploadSheet(
   isUploading: Boolean,
   uploadCurrentIndex: Int,
   uploadTotalCount: Int,
   onUploadClick: suspend () -> Unit,
-) {
+): SheetPresentation<Unit> = sheetPresentation {
   val loadingText =
     if (isUploading && uploadTotalCount > 0) {
       "업로드 중... (${uploadCurrentIndex.coerceAtLeast(1)}/$uploadTotalCount)"
@@ -240,7 +235,22 @@ private fun BottomSheetScope<Unit>.FontUploadSheet(
       "업로드 중..."
     }
 
-  BottomSheetScaffold(title = "폰트 업로드하기") {
+  SheetLayout(
+    fillHeight = true,
+    bodyInsetPolicy = SheetInsetPolicy.Container,
+    header = { ActionHeader(title = "폰트 업로드하기") },
+    footer = {
+      Button(
+        text = "폰트 파일 선택",
+        loading = isUploading,
+        loadingText = loadingText,
+        onClick = {
+          dismiss()
+          onUploadClick()
+        },
+      )
+    },
+  ) {
     CardSurface(modifier = Modifier.fillMaxWidth()) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -256,13 +266,6 @@ private fun BottomSheetScope<Unit>.FontUploadSheet(
         FontSettingsBullet("저작권에 위배되는 폰트는 삭제될 수 있어요.")
       }
     }
-
-    Button(
-      text = "폰트 파일 선택",
-      loading = isUploading,
-      loadingText = loadingText,
-      onClick = onUploadClick,
-    )
   }
 }
 

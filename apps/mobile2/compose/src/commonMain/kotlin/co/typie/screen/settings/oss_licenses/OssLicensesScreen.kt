@@ -26,9 +26,11 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.TitleHeader
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -68,7 +70,7 @@ private val ossLicensesJson = Json { ignoreUnknownKeys = true }
 @Composable
 fun OssLicensesScreen() {
   val model = viewModel { OssLicensesViewModel() }
-  val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
   val scrollState = rememberScrollState()
   var reloadToken by remember { mutableIntStateOf(0) }
   var state by remember { mutableStateOf<OssLicensesScreenState>(OssLicensesScreenState.Loading) }
@@ -121,7 +123,7 @@ fun OssLicensesScreen() {
           CardSurface(modifier = Modifier.fillMaxWidth()) {
             Column {
               current.entries.forEachIndexed { index, entry ->
-                CardRow(onClick = { bottomSheetHost.show { OssLicenseDetailSheet(entry) } }) {
+                CardRow(onClick = { sheetHost.show(ossLicenseDetailSheet(entry)) }) {
                   OssLicenseRowContent(entry)
                 }
 
@@ -216,17 +218,17 @@ private fun RowScope.OssLicenseRowContent(entry: OssLicenseEntry) {
   )
 }
 
-@Composable
-private fun BottomSheetScope<Unit>.OssLicenseDetailSheet(entry: OssLicenseEntry) {
-  BottomSheetScaffold(title = entry.packageName) {
-    entry.paragraphs.forEach { paragraph ->
-      Text(
-        text = paragraph,
-        style = AppTheme.typography.body,
-        color = AppTheme.colors.textSecondary,
-      )
-    }
+private fun ossLicenseDetailSheet(entry: OssLicenseEntry): SheetPresentation<Unit> =
+  sheetPresentation {
+    SheetLayout(header = { TitleHeader(title = entry.packageName) }) {
+      entry.paragraphs.forEach { paragraph ->
+        Text(
+          text = paragraph,
+          style = AppTheme.typography.body,
+          color = AppTheme.colors.textSecondary,
+        )
+      }
 
-    Spacer(Modifier.size(8.dp))
+      Spacer(Modifier.size(8.dp))
+    }
   }
-}

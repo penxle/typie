@@ -34,9 +34,6 @@ import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
 import co.typie.screen.system.splash.SplashScreen
 import co.typie.screen.system.update_required.UpdateRequiredScreen
-import co.typie.ui.component.bottomsheet.BottomSheetHost
-import co.typie.ui.component.bottomsheet.BottomSheetHostState
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.sheet.SheetHostState
 import co.typie.ui.component.sheet.SheetOverlayHosts
@@ -72,7 +69,6 @@ fun RootShell() {
 
   val toast = remember { Toast() }
   val loader = remember { Loader() }
-  val bottomSheetHost = remember { BottomSheetHostState() }
   val sheetOverlayPresenter = remember { SheetOverlayPresenterState() }
   val sheetHostScope = rememberCoroutineScope()
   val sheetHost =
@@ -83,7 +79,6 @@ fun RootShell() {
   val focusManager = LocalFocusManager.current
 
   CompositionLocalProvider(
-    LocalBottomSheetHost provides bottomSheetHost,
     LocalSheetHost provides sheetHost,
     LocalToast provides toast,
     LocalLoader provides loader,
@@ -107,7 +102,6 @@ fun RootShell() {
         }
       }
 
-      BottomSheetHost(bottomSheetHost)
       SheetOverlayHosts(sheetOverlayPresenter)
       LoaderOverlay()
       ToastOverlay()

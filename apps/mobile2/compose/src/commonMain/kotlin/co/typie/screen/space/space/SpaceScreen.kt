@@ -45,9 +45,9 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
-import co.typie.overlay.EntityMoveSheet
 import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
+import co.typie.overlay.entityMoveSheet
 import co.typie.result.onErr
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -56,11 +56,11 @@ import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.screen.space.folder.FolderAction
 import co.typie.screen.space.folder.FolderDeleteRequest
-import co.typie.screen.space.folder.FolderRenameSheet
-import co.typie.screen.space.folder.FolderShareSheet
 import co.typie.screen.space.folder.FolderViewModel
 import co.typie.screen.space.folder.folderIconPickerSheet
-import co.typie.screen.space.folder.showFolderItemActionsSheet
+import co.typie.screen.space.folder.folderItemActionsSheet
+import co.typie.screen.space.folder.folderRenameSheet
+import co.typie.screen.space.folder.folderShareSheet
 import co.typie.screen.space.folder.toTransferSource
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
@@ -72,7 +72,6 @@ import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.entity_container.EntityContainerEditAction
 import co.typie.ui.component.entity_container.EntityContainerListContent
 import co.typie.ui.component.entity_container.EntityContainerTopBarTrailing
@@ -98,7 +97,6 @@ fun SpaceScreen() {
   val nav = Nav.current
   val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
-  val bottomSheetHost = LocalBottomSheetHost.current
   val sheetHost = LocalSheetHost.current
   val toast = LocalToast.current
   val clipboard = EntityClipboardService
@@ -295,79 +293,80 @@ fun SpaceScreen() {
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
           onFolderClick = { entityId -> nav.navigate(Route.Folder(entityId)) },
           onFolderLongPress = { item ->
-            sheetHost.showFolderItemActionsSheet(item) { action ->
-              when (action) {
-                FolderAction.Rename -> {
-                  bottomSheetHost.show {
-                    FolderRenameSheet(
-                      model = folderActionModel,
-                      folderId = item.folderId,
-                      initialName = item.name,
-                      onUpdated = model::refetch,
+            sheetHost.show(
+              folderItemActionsSheet(item) { action ->
+                when (action) {
+                  FolderAction.Rename -> {
+                    sheetHost.show(
+                      folderRenameSheet(
+                        model = folderActionModel,
+                        folderId = item.folderId,
+                        initialName = item.name,
+                        onUpdated = model::refetch,
+                      )
                     )
                   }
-                }
 
-                FolderAction.ChangeIcon -> {
-                  sheetHost.await(
-                    folderIconPickerSheet(
-                      model = folderActionModel,
-                      entityId = item.id,
-                      initialIcon = item.iconName,
-                      initialColor = item.iconColor,
-                      onUpdated = model::refetch,
-                    )
-                  )
-                }
-
-                FolderAction.OpenExternal -> uriHandler.openUri(item.url)
-
-                FolderAction.Share -> {
-                  bottomSheetHost.show {
-                    FolderShareSheet(
-                      model = folderActionModel,
-                      folderId = item.folderId,
-                      folderUrl = item.url,
-                      initialVisibility = requireNotNull(item.visibility),
-                      initialThumbnailUrl = item.thumbnailUrl,
-                      onUpdated = model::refetch,
+                  FolderAction.ChangeIcon -> {
+                    sheetHost.show(
+                      folderIconPickerSheet(
+                        model = folderActionModel,
+                        entityId = item.id,
+                        initialIcon = item.iconName,
+                        initialColor = item.iconColor,
+                        onUpdated = model::refetch,
+                      )
                     )
                   }
-                }
 
-                FolderAction.Move -> {
-                  bottomSheetHost.show {
-                    EntityMoveSheet(source = item.toTransferSource(), onMoved = model::refetch)
+                  FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                  FolderAction.Share -> {
+                    sheetHost.show(
+                      folderShareSheet(
+                        model = folderActionModel,
+                        folderId = item.folderId,
+                        folderUrl = item.url,
+                        initialVisibility = requireNotNull(item.visibility),
+                        initialThumbnailUrl = item.thumbnailUrl,
+                        onUpdated = model::refetch,
+                      )
+                    )
                   }
-                }
 
-                FolderAction.Copy -> {
-                  clipboard.setCopy(
-                    sourceSiteId = Preference.siteId.value!!,
+                  FolderAction.Move -> {
+                    sheetHost.show(
+                      entityMoveSheet(source = item.toTransferSource(), onMoved = model::refetch)
+                    )
+                  }
+
+                  FolderAction.Copy -> {
+                    clipboard.setCopy(
+                      sourceSiteId = Preference.siteId.value!!,
+                      items = listOf(item.toTransferSource()),
+                    )
+                  }
+
+                  FolderAction.Cut -> {
+                    clipboard.setCut(sourceSiteId = Preference.siteId.value!!,
                     items = listOf(item.toTransferSource()),
                   )
                 }
 
-                FolderAction.Cut -> {
-                  clipboard.setCut(
-                    sourceSiteId = Preference.siteId.value!!,
-                    items = listOf(item.toTransferSource()),
-                  )
-                }
+                  FolderAction.Delete -> {
+                    deleteRequest =
+                      FolderDeleteRequest(
+                        entityId = item.id,
+                        folderName = item.name,
+                        shouldPopOnSuccess = false,
+                      )
+                  }
 
-                FolderAction.Delete -> {
-                  deleteRequest =
-                    FolderDeleteRequest(
-                      entityId = item.id,
-                      folderName = item.name,
-                      shouldPopOnSuccess = false,
-                    )
+                  FolderAction.SelectMultiple,
+                  FolderAction.StartReorder -> Unit
                 }
-
-                FolderAction.SelectMultiple,
-                FolderAction.StartReorder -> Unit
               }
-            }
+            )
           },
           onDragStarted = {
             haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)

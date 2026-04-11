@@ -58,7 +58,6 @@ import co.typie.ui.component.sheet.SheetMenuActionRow
 import co.typie.ui.component.sheet.SheetMenuDivider
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
@@ -158,39 +157,38 @@ fun TrashScreen(entityId: String? = null) {
 
   fun showItemActionsSheet(item: TrashItem) {
     sheetHost.show(
-      sheet =
-        trashActionsSheet(
-          item = item,
-          actions =
-            listOf(
-              TrashActionItem(
-                label = "복원",
-                icon = Lucide.Undo2,
-                onClick = {
-                  model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
-                    toast.show(ToastType.Success, message)
-                    model.refetch()
-                  }
-                },
-              ),
-              TrashActionItem(
-                label = "영구 삭제",
-                icon = Lucide.Trash2,
-                tint = dangerColor,
-                onClick = {
-                  purgeRequest =
-                    TrashPurgeRequest(
-                      title = "${item.type.label} 영구 삭제",
-                      message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
-                      confirmText = "삭제",
-                      entityIds = listOf(item.id),
-                      successMessage = "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
-                    )
-                },
-              ),
+      trashActionsSheet(
+        item = item,
+        actions =
+          listOf(
+            TrashActionItem(
+              label = "복원",
+              icon = Lucide.Undo2,
+              onClick = {
+                model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
+                  toast.show(ToastType.Success, message)
+                  model.refetch()
+                }
+              },
             ),
-          onAction = { action -> sheetHost.launch { action.onClick() } },
-        )
+            TrashActionItem(
+              label = "영구 삭제",
+              icon = Lucide.Trash2,
+              tint = dangerColor,
+              onClick = {
+                purgeRequest =
+                  TrashPurgeRequest(
+                    title = "${item.type.label} 영구 삭제",
+                    message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
+                    confirmText = "삭제",
+                    entityIds = listOf(item.id),
+                    successMessage = "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
+                  )
+              },
+            ),
+          ),
+        onAction = { action -> sheetHost.launch { action.onClick() } },
+      )
     )
   }
 
@@ -394,15 +392,6 @@ private fun trashActionsSheet(
   actions: List<TrashActionItem>,
   onAction: (TrashActionItem) -> Unit,
 ): SheetPresentation<Unit> = sheetPresentation {
-  TrashActionsSheetContent(item = item, actions = actions, onAction = onAction)
-}
-
-@Composable
-private fun SheetScope<Unit>.TrashActionsSheetContent(
-  item: TrashItem,
-  actions: List<TrashActionItem>,
-  onAction: (TrashActionItem) -> Unit,
-) {
   val entityIcon =
     resolveEntityIconAppearance(
       iconName = item.iconName,

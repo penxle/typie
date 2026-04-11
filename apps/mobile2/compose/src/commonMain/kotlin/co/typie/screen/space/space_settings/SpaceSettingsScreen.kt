@@ -62,10 +62,6 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
-import co.typie.ui.component.bottomsheet.dismiss
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -73,11 +69,13 @@ import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.completedOrNull
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -111,7 +109,6 @@ fun SpaceSettingsScreen() {
   val model = viewModel { SpaceSettingsViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val bottomSheetHost = LocalBottomSheetHost.current
   val sheetHost = LocalSheetHost.current
   val scrollState = rememberScrollState()
   var showLastSiteAlert by remember { mutableStateOf(false) }
@@ -217,7 +214,7 @@ fun SpaceSettingsScreen() {
                     if (hasSubscription == false) {
                       Modifier.clickable {
                         planUpgradeRoute(
-                            bottomSheetHost.showPlanUpgradeSheet(
+                            sheetHost.showPlanUpgradeSheet(
                               message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                             )
                           )
@@ -265,7 +262,7 @@ fun SpaceSettingsScreen() {
           CardRow(
             onClick = {
               sheetHost.show(
-                sheet = spaceDateDisplaySheet(selected = model.state.form.dateDisplay.value),
+                spaceDateDisplaySheet(selected = model.state.form.dateDisplay.value),
                 onResult = { result ->
                   result.completedOrNull()?.let { selected ->
                     model.state.form.dateDisplay.setValue(selected)
@@ -355,7 +352,7 @@ private fun MoreMenu(model: SpaceSettingsViewModel, showLastSiteAlert: () -> Uni
   val nav = Nav.current
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
 
   Popover(
     placement = PopoverPlacement.BelowEnd,
@@ -391,24 +388,23 @@ private fun MoreMenu(model: SpaceSettingsViewModel, showLastSiteAlert: () -> Uni
                   if (isLastSite) {
                     showLastSiteAlert()
                   } else {
-                    scope.launch {
-                      val totalCount = data.site.documentCount + data.site.folderCount
-                      bottomSheetHost.show {
-                        DeleteSiteConfirmSheet(
-                          totalCount = totalCount,
-                          isDeleting = model.isDeletingSite,
-                          onDelete = {
+                    sheetHost.show(
+                      deleteSiteConfirmSheet(
+                        totalCount = data.site.documentCount + data.site.folderCount,
+                        isDeleting = { model.isDeletingSite },
+                        onDelete = {
+                          if (!model.isDeletingSite) {
                             scope.launch {
                               model.deleteSite().withDefaultExceptionHandler(toast).onOk {
                                 toast.show(ToastType.Success, "스페이스가 삭제되었어요.")
-                                dismiss()
+                                complete(Unit)
                                 nav.pop()
                               }
                             }
-                          },
-                        )
-                      }
-                    }
+                          }
+                        },
+                      )
+                    )
                   }
                 },
               )
@@ -459,17 +455,35 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
   }
 }
 
-@Composable
-fun BottomSheetScope<Unit>.DeleteSiteConfirmSheet(
+private fun deleteSiteConfirmSheet(
   totalCount: Int,
-  isDeleting: Boolean,
-  onDelete: () -> Unit,
-) {
+  isDeleting: () -> Boolean,
+  onDelete: suspend SheetScope<Unit>.() -> Unit,
+): SheetPresentation<Unit> = sheetPresentation {
+  val isDeleting = isDeleting()
   var inputValue by remember { mutableStateOf("") }
   val confirmText = "$totalCount"
   val isConfirmed = totalCount == 0 || inputValue == confirmText
 
-  BottomSheetScaffold(title = "스페이스 삭제") {
+  SheetLayout(
+    bodyInsetPolicy = SheetInsetPolicy.Container,
+    padding = SpaceDateDisplaySheetPadding,
+    verticalSpacing = 8.dp,
+    header = { ActionHeader(title = "스페이스 삭제") },
+    footer = {
+      Button(
+        text = "삭제",
+        variant = if (isConfirmed) ButtonVariant.Danger else ButtonVariant.Secondary,
+        enabled = isConfirmed && !isDeleting,
+        loading = isDeleting,
+        loadingText = "삭제 중...",
+        onClick = {
+          if (!isConfirmed || isDeleting) return@Button
+          onDelete()
+        },
+      )
+    },
+  ) {
     Text(
       "스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.",
       style = AppTheme.typography.caption,
@@ -493,14 +507,5 @@ fun BottomSheetScope<Unit>.DeleteSiteConfirmSheet(
         keyboardType = KeyboardType.Number,
       )
     }
-
-    Button(
-      text = "삭제",
-      variant = if (isConfirmed) ButtonVariant.Danger else ButtonVariant.Secondary,
-      enabled = isConfirmed && !isDeleting,
-      loading = isDeleting,
-      loadingText = "삭제 중...",
-      onClick = { if (isConfirmed) onDelete() },
-    )
   }
 }

@@ -2,7 +2,6 @@ package co.typie.screen.space.folder
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -17,10 +16,12 @@ import co.typie.overlay.LocalToast
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.TextField
-import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.HeaderTextAction
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -29,13 +30,12 @@ private class FolderRenameForm(scope: CoroutineScope, initialName: String) : For
   val name = field(initialName) { validateOn(ValidateOn.Change) { required("폴더 이름을 입력해주세요.") } }
 }
 
-@Composable
-fun BottomSheetScope<Unit>.FolderRenameSheet(
+fun folderRenameSheet(
   model: FolderViewModel,
   folderId: String,
   initialName: String,
   onUpdated: () -> Unit = {},
-) {
+): SheetPresentation<Unit> = sheetPresentation {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(folderId, initialName) { FolderRenameForm(scope, initialName) }
@@ -74,26 +74,30 @@ fun BottomSheetScope<Unit>.FolderRenameSheet(
     isSubmitting = false
   }
 
-  BottomSheetScaffold(
-    title = "이름 변경",
-    leadingAction = {
-      BottomSheetHeaderTextAction(
-        text = "취소",
-        color = AppTheme.colors.brand,
-        enabled = !isSubmitting,
-        onClick = { dismiss() },
+  SheetLayout(
+    header = {
+      ActionHeader(
+        title = "이름 변경",
+        leading = {
+          HeaderTextAction(
+            text = "취소",
+            color = AppTheme.colors.brand,
+            enabled = !isSubmitting,
+            onClick = { dismiss() },
+          )
+        },
+        trailing = {
+          HeaderTextAction(
+            text = "저장",
+            color = AppTheme.colors.brand,
+            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
+            enabled = canSubmit,
+            loading = isSubmitting,
+            onClick = { submit() },
+          )
+        },
       )
-    },
-    trailingAction = {
-      BottomSheetHeaderTextAction(
-        text = "저장",
-        color = AppTheme.colors.brand,
-        textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
-        enabled = canSubmit,
-        loading = isSubmitting,
-        onClick = { submit() },
-      )
-    },
+    }
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
       TextField(

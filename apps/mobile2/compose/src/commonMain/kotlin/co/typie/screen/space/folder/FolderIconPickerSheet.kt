@@ -60,8 +60,8 @@ import co.typie.ui.component.sheet.SheetMode
 import co.typie.ui.component.sheet.SheetOverlaySpec
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetSizePolicy
+import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.entityIconColors
 import co.typie.ui.entityIcons
@@ -84,20 +84,6 @@ private val FolderIconPickerTopFadeHeight = 16.dp
 private val FolderIconPickerCollapsedDetent = SheetDetent.Fixed(FolderIconPickerCollapsedHeight)
 private val FolderIconPickerExpandedDetent = SheetDetent.TopGap(FolderIconPickerExpandedTopGap)
 
-internal fun folderIconPickerSheetSpec(): SheetOverlaySpec {
-  return SheetOverlaySpec(
-    mode = SheetMode.Modal,
-    sizePolicy =
-      SheetSizePolicy.Detents(
-        initial = FolderIconPickerCollapsedDetent,
-        available = listOf(FolderIconPickerCollapsedDetent, FolderIconPickerExpandedDetent),
-        dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
-      ),
-    chrome = SheetChrome.Default,
-    haptics = SheetHapticPolicy(onPresent = true, onDetentSnap = true),
-  )
-}
-
 internal fun folderIconPickerSheet(
   model: FolderViewModel,
   entityId: String,
@@ -105,14 +91,145 @@ internal fun folderIconPickerSheet(
   initialColor: String?,
   onUpdated: () -> Unit = {},
 ): SheetPresentation<Unit> =
-  sheetPresentation(spec = folderIconPickerSheetSpec()) {
-    FolderIconPickerSheetContent(
-      model = model,
-      entityId = entityId,
-      initialIcon = initialIcon,
-      initialColor = initialColor,
-      onUpdated = onUpdated,
-    )
+  sheetPresentation(
+    spec =
+      SheetOverlaySpec(
+        mode = SheetMode.Modal,
+        sizePolicy =
+          SheetSizePolicy.Detents(
+            initial = FolderIconPickerCollapsedDetent,
+            available = listOf(FolderIconPickerCollapsedDetent, FolderIconPickerExpandedDetent),
+            dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
+          ),
+        chrome = SheetChrome.Default,
+        haptics = SheetHapticPolicy(onPresent = true, onDetentSnap = true),
+      )
+  ) {
+    val normalizedInitialIcon =
+      initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
+    val normalizedInitialColor =
+      initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val form =
+      remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
+        FolderIconPickerForm(
+          scope = scope,
+          initialIconName = normalizedInitialIcon,
+          initialColor = normalizedInitialColor,
+        )
+      }
+
+    var isUpdating by remember { mutableStateOf(false) }
+
+    fun updateSelection(nextIconName: String, nextColor: String) {
+      if (isUpdating) {
+        return
+      }
+
+      if (form.iconName.initialValue == nextIconName && form.color.initialValue == nextColor) {
+        return
+      }
+
+      form.iconName.setValue(nextIconName)
+      form.color.setValue(nextColor)
+      isUpdating = true
+
+      scope.launch {
+        model
+          .updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
+          .withDefaultExceptionHandler(toast)
+          .onOk {
+            form.commit()
+            onUpdated()
+          }
+          .onException { form.rollback() }
+        isUpdating = false
+      }
+    }
+
+    val currentTint =
+      resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
+    val iconGridState = rememberLazyGridState()
+
+    SheetLayout(
+      fillHeight = true,
+      bodyScroll = false,
+      bodyInsetPolicy = SheetInsetPolicy.None,
+      padding =
+        SheetPadding(
+          header = PaddingValues(horizontal = 16.dp),
+          body = PaddingValues(horizontal = 16.dp),
+        ),
+      header = {
+        ActionHeader(
+          title = "아이콘 변경",
+          leading = {
+            HeaderTextAction(
+              text = "완료",
+              color = AppTheme.colors.brand,
+              textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
+              enabled = !isUpdating,
+              onClick = { dismiss() },
+            )
+          },
+        )
+      },
+    ) {
+      Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        IconColorRow(
+          colors = entityIconColors,
+          selectedColor = form.color.value,
+          enabled = !isUpdating,
+          onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
+        )
+
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+          val safeBottom =
+            WindowInsets.safeDrawing
+              .only(WindowInsetsSides.Bottom)
+              .asPaddingValues()
+              .calculateBottomPadding()
+
+          LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            state = iconGridState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = FolderIconPickerGridBottomInset + safeBottom),
+            horizontalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
+            verticalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
+          ) {
+            items(entityIcons, key = { it.name }) { icon ->
+              IconGridCell(
+                icon = icon,
+                tint = currentTint,
+                selected = form.iconName.value == icon.name,
+                enabled = !isUpdating,
+                onSelect = { updateSelection(icon.name, form.color.value) },
+              )
+            }
+          }
+
+          if (iconGridState.canScrollBackward) {
+            Box(
+              modifier =
+                Modifier.align(Alignment.TopCenter)
+                  .fillMaxWidth()
+                  .height(FolderIconPickerTopFadeHeight)
+                  .background(
+                    Brush.verticalGradient(
+                      colors =
+                        listOf(
+                          AppTheme.colors.surfaceRaised,
+                          AppTheme.colors.surfaceRaised.copy(alpha = 0f),
+                        )
+                    )
+                  )
+            )
+          }
+        }
+      }
+    }
   }
 
 private class FolderIconPickerForm(
@@ -122,141 +239,6 @@ private class FolderIconPickerForm(
 ) : FormState(scope) {
   val iconName = field(initialIconName) { focusable = false }
   val color = field(initialColor) { focusable = false }
-}
-
-@Composable
-private fun SheetScope<Unit>.FolderIconPickerSheetContent(
-  model: FolderViewModel,
-  entityId: String,
-  initialIcon: String?,
-  initialColor: String?,
-  onUpdated: () -> Unit = {},
-) {
-  val normalizedInitialIcon =
-    initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
-  val normalizedInitialColor =
-    initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
-  val toast = LocalToast.current
-  val scope = rememberCoroutineScope()
-  val form =
-    remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
-      FolderIconPickerForm(
-        scope = scope,
-        initialIconName = normalizedInitialIcon,
-        initialColor = normalizedInitialColor,
-      )
-    }
-
-  var isUpdating by remember { mutableStateOf(false) }
-
-  fun updateSelection(nextIconName: String, nextColor: String) {
-    if (isUpdating) {
-      return
-    }
-
-    if (form.iconName.initialValue == nextIconName && form.color.initialValue == nextColor) {
-      return
-    }
-
-    form.iconName.setValue(nextIconName)
-    form.color.setValue(nextColor)
-    isUpdating = true
-
-    scope.launch {
-      model
-        .updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
-        .withDefaultExceptionHandler(toast)
-        .onOk {
-          form.commit()
-          onUpdated()
-        }
-        .onException { form.rollback() }
-      isUpdating = false
-    }
-  }
-
-  val currentTint =
-    resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
-  val iconGridState = rememberLazyGridState()
-
-  SheetLayout(
-    fillHeight = true,
-    bodyScroll = false,
-    bodyInsetPolicy = SheetInsetPolicy.None,
-    padding =
-      SheetPadding(
-        header = PaddingValues(horizontal = 16.dp),
-        body = PaddingValues(horizontal = 16.dp),
-      ),
-    header = {
-      ActionHeader(
-        title = "아이콘 변경",
-        leading = {
-          HeaderTextAction(
-            text = "완료",
-            color = AppTheme.colors.brand,
-            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
-            enabled = !isUpdating,
-            onClick = { dismiss() },
-          )
-        },
-      )
-    },
-  ) {
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      IconColorRow(
-        colors = entityIconColors,
-        selectedColor = form.color.value,
-        enabled = !isUpdating,
-        onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
-      )
-
-      Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-        val safeBottom =
-          WindowInsets.safeDrawing
-            .only(WindowInsetsSides.Bottom)
-            .asPaddingValues()
-            .calculateBottomPadding()
-
-        LazyVerticalGrid(
-          columns = GridCells.Fixed(7),
-          state = iconGridState,
-          modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(bottom = FolderIconPickerGridBottomInset + safeBottom),
-          horizontalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
-          verticalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
-        ) {
-          items(entityIcons, key = { it.name }) { icon ->
-            IconGridCell(
-              icon = icon,
-              tint = currentTint,
-              selected = form.iconName.value == icon.name,
-              enabled = !isUpdating,
-              onSelect = { updateSelection(icon.name, form.color.value) },
-            )
-          }
-        }
-
-        if (iconGridState.canScrollBackward) {
-          Box(
-            modifier =
-              Modifier.align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(FolderIconPickerTopFadeHeight)
-                .background(
-                  Brush.verticalGradient(
-                    colors =
-                      listOf(
-                        AppTheme.colors.surfaceRaised,
-                        AppTheme.colors.surfaceRaised.copy(alpha = 0f),
-                      )
-                  )
-                )
-          )
-        }
-      }
-    }
-  }
 }
 
 @Composable

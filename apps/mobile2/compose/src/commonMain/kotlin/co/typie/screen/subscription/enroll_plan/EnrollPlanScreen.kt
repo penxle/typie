@@ -47,13 +47,13 @@ import co.typie.platform.PurchaseProduct
 import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.screen.subscription.SubscriptionCelebrationSheet
 import co.typie.screen.subscription.SubscriptionFeature
 import co.typie.screen.subscription.SubscriptionFeatureList
 import co.typie.screen.subscription.SubscriptionProductState
 import co.typie.screen.subscription.SubscriptionStatusBadge
 import co.typie.screen.subscription.basicPlanFeatures
 import co.typie.screen.subscription.fullPlanFeatures
+import co.typie.screen.subscription.subscriptionCelebrationSheet
 import co.typie.screen.subscription.subscriptionProductState
 import co.typie.screen.subscription.subscriptionStatusBadgeLabel
 import co.typie.service.CurrentSubscriptionStore
@@ -71,7 +71,7 @@ import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
+import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -82,7 +82,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun EnrollPlanScreen() {
-  val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
   val toast = LocalToast.current
   val loader = LocalLoader.current
   val model = viewModel { EnrollPlanViewModel() }
@@ -93,9 +93,9 @@ fun EnrollPlanScreen() {
 
   LaunchedEffect(model.celebration) {
     val celebration = model.celebration ?: return@LaunchedEffect
-    bottomSheetHost.show {
-      SubscriptionCelebrationSheet(title = celebration.title, message = celebration.message)
-    }
+    sheetHost.show(
+      subscriptionCelebrationSheet(title = celebration.title, message = celebration.message)
+    )
     model.consumeCelebration()
   }
 

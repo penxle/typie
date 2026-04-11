@@ -189,7 +189,7 @@ sealed interface SheetSizePolicy {
 
   @Immutable data class Fixed(val height: Dp) : SheetSizePolicy
 
-  @Immutable data class Max(val topGap: Dp) : SheetSizePolicy
+  @Immutable data class Max(val topGap: Dp = SheetDefaults.MaxTopGap) : SheetSizePolicy
 
   @Immutable
   data class Detents(

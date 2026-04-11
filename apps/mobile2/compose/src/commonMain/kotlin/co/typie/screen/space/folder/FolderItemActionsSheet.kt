@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import co.typie.entity_transfer.EntityTransferSource
@@ -16,17 +15,14 @@ import co.typie.ui.component.sheet.SheetDismissReason
 import co.typie.ui.component.sheet.SheetEntityBreadcrumb
 import co.typie.ui.component.sheet.SheetEntityHeader
 import co.typie.ui.component.sheet.SheetEntitySupportingText
-import co.typie.ui.component.sheet.SheetHostState
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetMenuActionRow
 import co.typie.ui.component.sheet.SheetMenuDivider
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.Job
 
 private val MenuSheetHorizontalPadding = 24.dp
 private val MenuSheetActionContentPadding =
@@ -48,28 +44,10 @@ internal fun EntityListItem.Folder.toTransferSource(): EntityTransferSource.Fold
   )
 }
 
-private fun folderItemActionsSheet(
+internal fun folderItemActionsSheet(
   item: EntityListItem.Folder,
   onAction: (FolderAction) -> Unit,
 ): SheetPresentation<Unit> = sheetPresentation {
-  FolderItemActionsSheetContent(item = item, onAction = onAction)
-}
-
-internal fun SheetHostState.showFolderItemActionsSheet(
-  item: EntityListItem.Folder,
-  onAction: suspend (FolderAction) -> Unit,
-): Job {
-  return show(
-    sheet =
-      folderItemActionsSheet(item = item, onAction = { action -> launch { onAction(action) } })
-  )
-}
-
-@Composable
-private fun SheetScope<Unit>.FolderItemActionsSheetContent(
-  item: EntityListItem.Folder,
-  onAction: (FolderAction) -> Unit,
-) {
   val entityIcon =
     resolveEntityIconAppearance(
       iconName = item.iconName,

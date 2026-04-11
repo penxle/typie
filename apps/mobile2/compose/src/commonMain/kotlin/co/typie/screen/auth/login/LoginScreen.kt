@@ -51,17 +51,20 @@ import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.TitleHeader
+import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen() {
-  val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
+  val loginSheet = remember { loginSheet() }
 
   ProvideTopBar(enabled = false)
 
@@ -92,7 +95,7 @@ fun LoginScreen() {
           verticalArrangement = Arrangement.spacedBy(8.dp),
           horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-          Button(text = "시작하기", onClick = { bottomSheetHost.show { LoginBottomSheet() } })
+          Button(text = "시작하기", onClick = { sheetHost.show(loginSheet) })
         }
       }
     }
@@ -104,11 +107,10 @@ private enum class LoginStep {
   Email,
 }
 
-@Composable
-fun BottomSheetScope<Unit>.LoginBottomSheet() {
+private fun loginSheet(): SheetPresentation<Unit> = sheetPresentation {
   var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
 
-  BottomSheetScaffold(title = "로그인") {
+  SheetLayout(header = { TitleHeader(title = "로그인") }) {
     AnimatedContent(
       targetState = step,
       transitionSpec = {

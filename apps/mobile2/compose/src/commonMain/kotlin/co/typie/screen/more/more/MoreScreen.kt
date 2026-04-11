@@ -46,7 +46,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
+import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -60,7 +60,7 @@ import co.typie.ui.theme.AppTheme
 fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
-  val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
 
   val model = viewModel { MoreViewModel() }
   val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
@@ -307,7 +307,7 @@ fun MoreScreen() {
       }
 
       CardActionTile(
-        onClick = { bottomSheetHost.show { FeedbackSheet() } },
+        onClick = { sheetHost.show(feedbackSheet()) },
         modifier = Modifier.weight(1f),
       ) {
         Row(

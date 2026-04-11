@@ -67,14 +67,16 @@ import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.bottomsheet.BottomSheetHeaderTextAction
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
 import co.typie.ui.component.reorder.reorderableListContainer
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.HeaderTextAction
+import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
@@ -83,14 +85,13 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
 
 @Composable
 fun TextReplacementsScreen() {
-  val bottomSheetHost = LocalBottomSheetHost.current
+  val sheetHost = LocalSheetHost.current
   val haptic = LocalHapticFeedback.current
   val model = viewModel { TextReplacementsViewModel() }
   val toast = LocalToast.current
@@ -104,16 +105,14 @@ fun TextReplacementsScreen() {
   val serverCustomItemIds =
     remember(serverCustomItems) { normalizedCustomItemIds(serverCustomItems) }
 
-  suspend fun openForm(editingItem: NormalizedTextReplacement? = null) {
-    try {
-      bottomSheetHost.show {
-        TextReplacementFormSheet(
-          model = model,
-          editingItem = editingItem,
-          lastCustomOrder = serverCustomItems.lastOrNull()?.order,
-        )
-      }
-    } catch (_: CancellationException) {}
+  fun openForm(editingItem: NormalizedTextReplacement? = null) {
+    sheetHost.show(
+      TextReplacementFormSheet(
+        model = model,
+        editingItem = editingItem,
+        lastCustomOrder = serverCustomItems.lastOrNull()?.order,
+      )
+    )
   }
 
   ProvideTopBar(
@@ -656,12 +655,11 @@ private fun TextReplacementRuleToken(text: String, modifier: Modifier = Modifier
   }
 }
 
-@Composable
-private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
+private fun TextReplacementFormSheet(
   model: TextReplacementsViewModel,
   editingItem: NormalizedTextReplacement?,
   lastCustomOrder: String?,
-) {
+): SheetPresentation<Unit> = sheetPresentation {
   val isEditing = editingItem != null
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -708,7 +706,7 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
         lastOrder = lastCustomOrder,
       )
       .withDefaultExceptionHandler(toast)
-      .onOk { dismiss(Unit) }
+      .onOk { complete(Unit) }
       .onErr { error ->
         when (error) {
           is SaveRuleError.ValidationFailed -> {
@@ -720,26 +718,30 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
     isSaving = false
   }
 
-  BottomSheetScaffold(
-    title = if (isEditing) "대치 규칙 수정" else "대치 규칙 추가",
-    leadingAction = {
-      BottomSheetHeaderTextAction(
-        text = "취소",
-        color = AppTheme.colors.brand,
-        enabled = !isSaving && !isDeleting,
-        onClick = { dismiss(Unit) },
+  SheetLayout(
+    header = {
+      ActionHeader(
+        title = if (isEditing) "대치 규칙 수정" else "대치 규칙 추가",
+        leading = {
+          HeaderTextAction(
+            text = "취소",
+            color = AppTheme.colors.brand,
+            enabled = !isSaving && !isDeleting,
+            onClick = { dismiss() },
+          )
+        },
+        trailing = {
+          HeaderTextAction(
+            text = "저장",
+            color = AppTheme.colors.brand,
+            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
+            enabled = !isDeleting,
+            loading = isSaving,
+            onClick = { submit() },
+          )
+        },
       )
-    },
-    trailingAction = {
-      BottomSheetHeaderTextAction(
-        text = "저장",
-        color = AppTheme.colors.brand,
-        textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
-        enabled = !isDeleting,
-        loading = isSaving,
-        onClick = { submit() },
-      )
-    },
+    }
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
       Column {
@@ -802,7 +804,7 @@ private fun BottomSheetScope<Unit>.TextReplacementFormSheet(
         scope.launch {
           isDeleting = true
           model.deleteCustom(requireNotNull(editingItem)).withDefaultExceptionHandler(toast).onOk {
-            dismiss(Unit)
+            complete(Unit)
           }
           isDeleting = false
         }

@@ -34,9 +34,12 @@ import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextArea
-import co.typie.ui.component.bottomsheet.BottomSheetScaffold
-import co.typie.ui.component.bottomsheet.BottomSheetScope
-import co.typie.ui.component.bottomsheet.dismiss
+import co.typie.ui.component.sheet.ActionHeader
+import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
@@ -72,8 +75,7 @@ private data class FeedbackMetadata(
 )
 
 @OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun BottomSheetScope<Unit>.FeedbackSheet() {
+fun feedbackSheet(): SheetPresentation<Unit> = sheetPresentation {
   val deviceInfo = PlatformModule.deviceInfo
   val toast = LocalToast.current
 
@@ -131,7 +133,26 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
     }
   }
 
-  BottomSheetScaffold(title = "의견 보내기") {
+  SheetLayout(
+    fillHeight = true,
+    bodyInsetPolicy = SheetInsetPolicy.Container,
+    header = { ActionHeader(title = "의견 보내기") },
+    footer = {
+      Button(
+        text = "보내기",
+        loadingText = "보내는 중...",
+        variant =
+          if (topic != null && content.trim().isNotEmpty()) {
+            ButtonVariant.Primary
+          } else {
+            ButtonVariant.Secondary
+          },
+        loading = isSubmitting,
+        enabled = !isSubmitting,
+        onClick = { submit() },
+      )
+    },
+  ) {
     FlowRow(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -163,20 +184,6 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
         )
       }
     }
-
-    Button(
-      text = "보내기",
-      loadingText = "보내는 중...",
-      variant =
-        if (topic != null && content.trim().isNotEmpty()) {
-          ButtonVariant.Primary
-        } else {
-          ButtonVariant.Secondary
-        },
-      loading = isSubmitting,
-      enabled = !isSubmitting,
-      onClick = { submit() },
-    )
   }
 }
 
