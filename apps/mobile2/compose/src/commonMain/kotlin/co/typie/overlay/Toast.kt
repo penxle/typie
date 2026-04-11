@@ -10,9 +10,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 val LocalToast = staticCompositionLocalOf<Toast> { error("No Toast provided") }
 
@@ -32,16 +29,17 @@ data class ToastState(
 
 class Toast {
   private var nextId = 0L
-  private val _state = MutableStateFlow<ToastState?>(null)
-  val state: StateFlow<ToastState?> = _state.asStateFlow()
+  var state by mutableStateOf<ToastState?>(null)
+    private set
+
   var bottomInset: Dp by mutableStateOf(0.dp)
 
   fun show(type: ToastType, message: String, duration: Duration = 2.seconds) {
-    _state.value = ToastState(nextId++, type, message, adaptiveDuration(duration, message))
+    state = ToastState(nextId++, type, message, adaptiveDuration(duration, message))
   }
 
   fun dismiss() {
-    _state.value = null
+    state = null
   }
 
   suspend fun <T> withLoading(
@@ -51,28 +49,28 @@ class Toast {
   ): T {
     val scope = LoadingToastScope()
     val id = nextId++
-    _state.value = ToastState(id, ToastType.Loading, message, Duration.ZERO)
+    state = ToastState(id, ToastType.Loading, message, Duration.ZERO)
     try {
       val result = scope.block()
       val msg = scope.successMessage ?: message
-      if (_state.value?.id == id) {
-        _state.value = ToastState(id, ToastType.Success, msg, adaptiveDuration(2.seconds, msg))
+      if (state?.id == id) {
+        state = ToastState(id, ToastType.Success, msg, adaptiveDuration(2.seconds, msg))
       }
       return result
     } catch (e: ToastFailureException) {
       val msg = e.toastMessage
-      if (_state.value?.id == id) {
-        _state.value = ToastState(id, ToastType.Error, msg, adaptiveDuration(2.seconds, msg))
+      if (state?.id == id) {
+        state = ToastState(id, ToastType.Error, msg, adaptiveDuration(2.seconds, msg))
       }
       throw e
     } catch (e: CancellationException) {
-      if (_state.value?.id == id) {
-        _state.value = null
+      if (state?.id == id) {
+        state = null
       }
       throw e
     } catch (e: Throwable) {
-      if (_state.value?.id == id) {
-        _state.value =
+      if (state?.id == id) {
+        state =
           ToastState(id, ToastType.Error, errorMessage, adaptiveDuration(2.seconds, errorMessage))
       }
       throw e

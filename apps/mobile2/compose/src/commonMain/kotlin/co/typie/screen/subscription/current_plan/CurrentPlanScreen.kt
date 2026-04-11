@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,7 +45,7 @@ import co.typie.ui.theme.AppTheme
 fun CurrentPlanScreen() {
   val nav = Nav.current
   val scrollState = rememberScrollState()
-  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState = CurrentSubscriptionStore.state
 
   ProvideTopBar(
     leading = { TopBarBackButton() },

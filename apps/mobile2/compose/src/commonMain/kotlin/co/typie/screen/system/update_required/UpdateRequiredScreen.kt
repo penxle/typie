@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
@@ -22,7 +21,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 
 @Composable
 fun UpdateRequiredScreen() {
-  val state = PreflightService.state.collectAsState().value
+  val state = PreflightService.state
   if (state !is PreflightState.UpdateRequired) return
 
   val uriHandler = LocalUriHandler.current

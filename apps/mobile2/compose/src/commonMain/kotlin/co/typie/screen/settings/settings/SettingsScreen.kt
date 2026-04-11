@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -261,8 +260,8 @@ fun SettingsScreen() {
   val deviceInfo = model.deviceInfo
   val scrollState = rememberScrollState()
   val themeModeState = LocalThemeMode.current
-  val devModeEnabled by Preference.devMode.collectAsState()
-  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
+  val devModeEnabled = Preference.devMode
+  val currentSubscriptionState = currentSubscriptionStore.state
   val sections = remember(devModeEnabled) { settingsSections(devModeEnabled = devModeEnabled) }
   var appVersion by remember { mutableStateOf<String?>(null) }
   var devModeTapCount by remember { mutableStateOf(0) }
@@ -305,7 +304,7 @@ fun SettingsScreen() {
             onResult = { result ->
               result.completedOrNull()?.let {
                 // TODO: 테마 변경 트래킹
-                Preference.themeMode.value = it
+                Preference.themeMode = it
               }
             },
           )
@@ -317,12 +316,12 @@ fun SettingsScreen() {
           devModeTapCount = result.nextTapCount
 
           if (result.enableDeveloperMode) {
-            Preference.devMode.value = true
+            Preference.devMode = true
           }
 
           result.message?.let { message -> toast.show(ToastType.Success, message) }
         },
-        onDeveloperModeChange = { next -> Preference.devMode.value = next },
+        onDeveloperModeChange = { next -> Preference.devMode = next },
         onItemClick = { item ->
           val route = settingsRouteFor(item)
 

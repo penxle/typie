@@ -11,7 +11,7 @@ import com.apollographql.apollo.annotations.ApolloExperimental
 @OptIn(ApolloExperimental::class)
 @Composable
 internal fun SiteUpdateStreamEffect() {
-  val siteId = Preference.siteId.value
+  val siteId = Preference.siteId
 
   LaunchedEffect(siteId) {
     if (siteId.isNullOrBlank()) {

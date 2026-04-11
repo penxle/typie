@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,7 +88,7 @@ fun EnrollPlanScreen() {
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   var showTrialStartConfirm by remember { mutableStateOf(false) }
-  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState = CurrentSubscriptionStore.state
 
   LaunchedEffect(model.celebration) {
     val celebration = model.celebration ?: return@LaunchedEffect

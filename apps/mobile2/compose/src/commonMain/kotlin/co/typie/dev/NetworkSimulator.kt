@@ -1,7 +1,8 @@
 package co.typie.dev
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 enum class NetworkPreset {
   Normal,
@@ -12,10 +13,10 @@ enum class NetworkPreset {
 class SimulatedNetworkFailureException : Exception("Simulated network failure")
 
 object NetworkSimulator {
-  private val _preset = MutableStateFlow(NetworkPreset.Normal)
-  val preset: StateFlow<NetworkPreset> = _preset
+  var preset by mutableStateOf(NetworkPreset.Normal)
+    private set
 
   fun select(preset: NetworkPreset) {
-    _preset.value = preset
+    this.preset = preset
   }
 }

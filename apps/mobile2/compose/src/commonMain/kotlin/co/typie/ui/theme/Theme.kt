@@ -6,11 +6,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -176,9 +176,9 @@ internal fun resolveIsDarkTheme(themeMode: ThemeMode, systemIsDark: Boolean): Bo
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-  val startupState = BootstrapService.state.collectAsState().value
+  val startupState = BootstrapService.state
   val isStartupReady = startupState is BootstrapState.Ready
-  val persistedThemeMode by Preference.themeMode.collectAsState()
+  val persistedThemeMode = Preference.themeMode
   val themeMode =
     remember(isStartupReady) {
       mutableStateOf(resolveThemeModeForStartup(startupState, persistedThemeMode))
@@ -186,7 +186,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 
   LaunchedEffect(isStartupReady) {
     if (!isStartupReady) return@LaunchedEffect
-    Preference.themeMode.collect { themeMode.value = it }
+    snapshotFlow { Preference.themeMode }.collect { themeMode.value = it }
   }
 
   val isDark = resolveIsDarkTheme(themeMode = themeMode.value, systemIsDark = isSystemInDarkTheme())

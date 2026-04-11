@@ -1,5 +1,8 @@
 package co.typie.auth
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import co.typie.Konfig
 import co.typie.graphql.Apollo
 import co.typie.network.Http
@@ -17,8 +20,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
 import io.ktor.http.parameters
 import io.ktor.utils.io.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
@@ -27,8 +28,8 @@ import kotlinx.serialization.Serializable
 object AuthService {
   private val mutex = Mutex()
 
-  private val _state = MutableStateFlow<AuthState>(AuthState.Unauthenticated)
-  val state: StateFlow<AuthState> = _state
+  var state by mutableStateOf<AuthState>(AuthState.Unauthenticated)
+    private set
 
   suspend fun login(sessionToken: String) {
     mutex.withLock {
@@ -43,9 +44,9 @@ object AuthService {
 
   suspend fun renew() {
     mutex.withLock {
-      val sessionToken = Vault.authTokens.value?.sessionToken
+      val sessionToken = Vault.authTokens?.sessionToken
       if (sessionToken == null) {
-        _state.value = AuthState.Unauthenticated
+        state = AuthState.Unauthenticated
         return@withLock
       }
 
@@ -60,7 +61,7 @@ object AuthService {
 
   suspend fun logout() {
     mutex.withLock {
-      val sessionToken = Vault.authTokens.value?.sessionToken
+      val sessionToken = Vault.authTokens?.sessionToken
       if (sessionToken != null) {
         try {
           Http.get("${Konfig.AUTH_URL}/logout") {
@@ -82,8 +83,8 @@ object AuthService {
   private suspend fun authenticate(sessionToken: String) {
     val accessToken = exchangeToken(sessionToken)
 
-    Vault.authTokens.value = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
-    _state.value = AuthState.Authenticated(Vault.authTokens.value!!)
+    Vault.authTokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
+    state = AuthState.Authenticated(Vault.authTokens!!)
   }
 
   private suspend fun exchangeToken(sessionToken: String): String {
@@ -141,8 +142,8 @@ object AuthService {
   }
 
   private suspend fun unauthenticate() {
-    Vault.authTokens.value = null
-    _state.value = AuthState.Unauthenticated
+    Vault.authTokens = null
+    state = AuthState.Unauthenticated
 
     Apollo.apolloStore.clearAll()
   }

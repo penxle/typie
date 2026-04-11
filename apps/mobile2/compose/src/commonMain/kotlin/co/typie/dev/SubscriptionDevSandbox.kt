@@ -1,5 +1,8 @@
 package co.typie.dev
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import co.typie.platform.PurchasePlanInterval
@@ -10,8 +13,6 @@ import co.typie.service.SubscriptionSnapshot
 import co.typie.service.SubscriptionState
 import kotlin.time.Clock
 import kotlin.time.Instant
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -30,24 +31,24 @@ enum class SubscriptionDevScenario(val label: String) {
 }
 
 object SubscriptionDevSandbox {
-  private val _scenario = MutableStateFlow(SubscriptionDevScenario.RemoteData)
-  val scenario: StateFlow<SubscriptionDevScenario> = _scenario
+  var scenario by mutableStateOf(SubscriptionDevScenario.RemoteData)
+    private set
 
   val enabled: Boolean
     get() = PlatformModule.platform == Platform.Desktop
 
   val usesSandbox: Boolean
-    get() = enabled && _scenario.value != SubscriptionDevScenario.RemoteData
+    get() = enabled && scenario != SubscriptionDevScenario.RemoteData
 
   val currentSubscription: SubscriptionSnapshot?
-    get() = subscriptionDevSubscription(_scenario.value)
+    get() = subscriptionDevSubscription(scenario)
 
   val canStartTrial: Boolean
-    get() = subscriptionDevCanStartTrial(_scenario.value)
+    get() = subscriptionDevCanStartTrial(scenario)
 
   fun select(next: SubscriptionDevScenario) {
     if (!enabled) return
-    _scenario.value = next
+    scenario = next
   }
 
   fun startTrial() {

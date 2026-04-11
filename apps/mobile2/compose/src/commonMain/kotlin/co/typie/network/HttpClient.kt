@@ -22,7 +22,7 @@ val Http: HttpClient =
     }
     .apply {
       plugin(HttpSend).intercept { context ->
-        when (NetworkSimulator.preset.value) {
+        when (NetworkSimulator.preset) {
           NetworkPreset.Normal -> execute(context)
           NetworkPreset.Slow -> {
             delay(2000L)

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,7 +111,7 @@ fun SpaceSettingsScreen() {
   val sheetHost = LocalSheetHost.current
   val scrollState = rememberScrollState()
   var showLastSiteAlert by remember { mutableStateOf(false) }
-  val currentSubscriptionState by CurrentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState = CurrentSubscriptionStore.state
 
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker

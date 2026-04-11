@@ -37,7 +37,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,7 +70,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ToastOverlay() {
   val toast = LocalToast.current
-  val toastState by toast.state.collectAsState()
+  val toastState = toast.state
 
   val density = LocalDensity.current
   val safeDrawingBottom = WindowInsets.safeDrawing.getBottom(density).toDp(density)

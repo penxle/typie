@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,7 +34,7 @@ import co.typie.ui.theme.AppTheme
 @Composable
 fun LoaderOverlay() {
   val loader = LocalLoader.current
-  val loading by loader.loading.collectAsState()
+  val loading = loader.loading
   var visible by remember { mutableStateOf(false) }
   val alpha = remember { Animatable(0f) }
 

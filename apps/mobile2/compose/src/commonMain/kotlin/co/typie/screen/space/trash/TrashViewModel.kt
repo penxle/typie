@@ -24,9 +24,9 @@ internal class TrashViewModel : ViewModel() {
   val siteQuery =
     Apollo.watchQuery(
       scope = viewModelScope,
-      skip = { entityId != null || Preference.siteId.value == null },
+      skip = { entityId != null || Preference.siteId == null },
     ) {
-      TrashScreen_WithSiteId_Query(siteId = Preference.siteId.value!!)
+      TrashScreen_WithSiteId_Query(siteId = Preference.siteId!!)
     }
 
   val entityQuery =

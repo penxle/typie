@@ -19,15 +19,15 @@ class HomeViewModel : ViewModel() {
   private var hasEnteredScreen = false
 
   val siteId: String?
-    get() = Preference.siteId.value
+    get() = Preference.siteId
 
   val query =
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
-      skip = { Preference.siteId.value == null },
+      skip = { Preference.siteId == null },
     ) {
-      HomeScreen_Query(siteId = Preference.siteId.value!!)
+      HomeScreen_Query(siteId = Preference.siteId!!)
     }
 
   fun refetch() {

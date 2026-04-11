@@ -24,7 +24,8 @@ class SearchViewModel : ViewModel() {
   var query by mutableStateOf("")
     private set
 
-  val recentSearches = Preference.recentSearches
+  val recentSearches
+    get() = Preference.recentSearches
 
   var activeQuery by mutableStateOf("")
     private set
@@ -33,18 +34,18 @@ class SearchViewModel : ViewModel() {
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderSiteData(),
-      skip = { Preference.siteId.value == null },
+      skip = { Preference.siteId == null },
     ) {
-      HomeSearch_Header_Query(siteId = Preference.siteId.value!!)
+      HomeSearch_Header_Query(siteId = Preference.siteId!!)
     }
 
   val searchResults =
     Apollo.watchQuery(
       scope = viewModelScope,
-      skip = { activeQuery.isBlank() || Preference.siteId.value == null },
+      skip = { activeQuery.isBlank() || Preference.siteId == null },
       resetOnChange = false,
     ) {
-      HomeScreen_Search_Query(siteId = Preference.siteId.value!!, query = activeQuery)
+      HomeScreen_Search_Query(siteId = Preference.siteId!!, query = activeQuery)
     }
 
   private var debounceJob: Job? = null
@@ -73,16 +74,16 @@ class SearchViewModel : ViewModel() {
     val trimmed = queryText.trim()
     if (trimmed.isBlank()) return
     val updated =
-      Preference.recentSearches.value.toMutableList().apply {
+      Preference.recentSearches.toMutableList().apply {
         remove(trimmed)
         add(0, trimmed)
         if (size > 10) removeLast()
       }
-    Preference.recentSearches.value = updated
+    Preference.recentSearches = updated
   }
 
   fun removeRecentSearch(queryText: String) {
-    Preference.recentSearches.value = Preference.recentSearches.value - queryText
+    Preference.recentSearches = Preference.recentSearches - queryText
   }
 
   fun onHeaderEnterAnimationConsumed() {

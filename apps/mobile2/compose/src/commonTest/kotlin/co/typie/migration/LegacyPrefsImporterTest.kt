@@ -9,25 +9,24 @@ import kotlin.test.assertEquals
 class LegacyPrefsImporterTest {
   @BeforeTest
   fun resetState() {
-    Preference.legacySiteId.value = ""
-    Preference.devMode.value = Preference.DEFAULT_DEV_MODE
-    Preference.typewriterEnabled.value = Preference.DEFAULT_TYPEWRITER_ENABLED
-    Preference.typewriterPosition.value = Preference.DEFAULT_TYPEWRITER_POSITION
-    Preference.lineHighlightEnabled.value = Preference.DEFAULT_LINE_HIGHLIGHT_ENABLED
-    Preference.autoSurroundEnabled.value = Preference.DEFAULT_AUTO_SURROUND_ENABLED
-    Preference.characterCountFloatingEnabled.value =
-      Preference.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED
-    Preference.widgetAutoFadeEnabled.value = Preference.DEFAULT_WIDGET_AUTO_FADE_ENABLED
-    Preference.themeMode.value = ThemeMode.System
-    Preference.migrationSchemaVersion.value = 0
-    Preference.migrationLastResultName.value = LegacyMigrationPhaseStatus.NotStarted.name
-    Preference.migrationLastAttemptAtMillis.value = 0L
-    Preference.migrationCompletedAtMillis.value = 0L
-    Preference.migrationHandledSession.value = false
-    Preference.migrationImportedSession.value = false
-    Preference.migrationImportedPrefs.value = false
-    Preference.migrationImportedPrefKeys.value = emptyList()
-    Preference.migrationSkippedPrefKeys.value = emptyList()
+    Preference.legacySiteId = ""
+    Preference.devMode = Preference.DEFAULT_DEV_MODE
+    Preference.typewriterEnabled = Preference.DEFAULT_TYPEWRITER_ENABLED
+    Preference.typewriterPosition = Preference.DEFAULT_TYPEWRITER_POSITION
+    Preference.lineHighlightEnabled = Preference.DEFAULT_LINE_HIGHLIGHT_ENABLED
+    Preference.autoSurroundEnabled = Preference.DEFAULT_AUTO_SURROUND_ENABLED
+    Preference.characterCountFloatingEnabled = Preference.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED
+    Preference.widgetAutoFadeEnabled = Preference.DEFAULT_WIDGET_AUTO_FADE_ENABLED
+    Preference.themeMode = ThemeMode.System
+    Preference.migrationSchemaVersion = 0
+    Preference.migrationLastResultName = LegacyMigrationPhaseStatus.NotStarted.name
+    Preference.migrationLastAttemptAtMillis = 0L
+    Preference.migrationCompletedAtMillis = 0L
+    Preference.migrationHandledSession = false
+    Preference.migrationImportedSession = false
+    Preference.migrationImportedPrefs = false
+    Preference.migrationImportedPrefKeys = emptyList()
+    Preference.migrationSkippedPrefKeys = emptyList()
   }
 
   @Test
@@ -35,7 +34,7 @@ class LegacyPrefsImporterTest {
     LegacyPrefsImporter.import(
       LegacyPrefsImportSource(preferenceValues = emptyMap(), themeValues = mapOf("mode" to "dark"))
     )
-    assertEquals(ThemeMode.Dark, Preference.themeMode.value)
+    assertEquals(ThemeMode.Dark, Preference.themeMode)
   }
 
   @Test
@@ -53,17 +52,17 @@ class LegacyPrefsImporterTest {
           themeValues = mapOf("mode" to "dark", "secondary" to "ignored"),
         )
       )
-    assertEquals("site_fixture", Preference.legacySiteId.value)
-    assertEquals(true, Preference.devMode.value)
-    assertEquals(ThemeMode.Dark, Preference.themeMode.value)
+    assertEquals("site_fixture", Preference.legacySiteId)
+    assertEquals(true, Preference.devMode)
+    assertEquals(ThemeMode.Dark, Preference.themeMode)
     assertEquals(listOf("dev_mode", "site_id", "theme_mode"), report.importedKeys)
     assertEquals(emptyList(), report.skippedKeys)
   }
 
   @Test
   fun `import skips keys whose KMP target already has a non-default value`() {
-    Preference.typewriterEnabled.value = true
-    Preference.themeMode.value = ThemeMode.Light
+    Preference.typewriterEnabled = true
+    Preference.themeMode = ThemeMode.Light
 
     val report =
       LegacyPrefsImporter.import(
@@ -72,8 +71,8 @@ class LegacyPrefsImporterTest {
           themeValues = mapOf("mode" to "dark"),
         )
       )
-    assertEquals(true, Preference.typewriterEnabled.value)
-    assertEquals(ThemeMode.Light, Preference.themeMode.value)
+    assertEquals(true, Preference.typewriterEnabled)
+    assertEquals(ThemeMode.Light, Preference.themeMode)
     assertEquals(emptyList(), report.importedKeys)
     assertEquals(
       listOf("theme_mode", Preference.TYPEWRITER_ENABLED_KEY).sorted(),
@@ -83,7 +82,7 @@ class LegacyPrefsImporterTest {
 
   @Test
   fun `import records partial-success state when some keys import and some are skipped`() {
-    Preference.devMode.value = true
+    Preference.devMode = true
 
     val report =
       LegacyPrefsImporter.import(
@@ -100,7 +99,7 @@ class LegacyPrefsImporterTest {
     assertEquals(listOf("site_id", "theme_mode"), state.importedPrefKeys)
     assertEquals(listOf(Preference.DEV_MODE_KEY), state.skippedPrefKeys)
     assertEquals(true, state.importedPrefs)
-    assertEquals(true, Preference.devMode.value)
+    assertEquals(true, Preference.devMode)
   }
 
   @Test
@@ -112,13 +111,13 @@ class LegacyPrefsImporterTest {
       )
 
     LegacyPrefsImporter.import(source)
-    Preference.devMode.value = Preference.DEFAULT_DEV_MODE
-    Preference.themeMode.value = ThemeMode.System
+    Preference.devMode = Preference.DEFAULT_DEV_MODE
+    Preference.themeMode = ThemeMode.System
 
     val report = LegacyPrefsImporter.import(source)
 
-    assertEquals(Preference.DEFAULT_DEV_MODE, Preference.devMode.value)
-    assertEquals(ThemeMode.System, Preference.themeMode.value)
+    assertEquals(Preference.DEFAULT_DEV_MODE, Preference.devMode)
+    assertEquals(ThemeMode.System, Preference.themeMode)
     assertEquals(emptyList(), report.importedKeys)
     assertEquals(listOf(Preference.DEV_MODE_KEY, "theme_mode"), report.skippedKeys.sorted())
   }

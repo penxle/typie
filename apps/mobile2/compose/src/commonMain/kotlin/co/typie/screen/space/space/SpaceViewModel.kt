@@ -16,11 +16,11 @@ class SpaceViewModel : ViewModel() {
   private var hasEnteredScreen = false
 
   val siteId: String?
-    get() = Preference.siteId.value
+    get() = Preference.siteId
 
   val query =
-    Apollo.watchQuery(scope = viewModelScope, skip = { Preference.siteId.value == null }) {
-      SpaceScreen_Query(siteId = Preference.siteId.value!!)
+    Apollo.watchQuery(scope = viewModelScope, skip = { Preference.siteId == null }) {
+      SpaceScreen_Query(siteId = Preference.siteId!!)
     }
 
   fun refetch() {

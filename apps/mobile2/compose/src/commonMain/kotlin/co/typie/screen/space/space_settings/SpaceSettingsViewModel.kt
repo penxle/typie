@@ -97,7 +97,7 @@ class SpaceSettingsViewModel : ViewModel() {
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
-      skip = { Preference.siteId.value == null },
+      skip = { Preference.siteId == null },
       onInitialData = { data ->
         state.form.name.initialValue = data.site.name
         state.form.slug.initialValue = data.site.slug
@@ -105,7 +105,7 @@ class SpaceSettingsViewModel : ViewModel() {
         state.form.dateDisplay.initialValue = data.site.dateDisplay
       },
     ) {
-      SpaceSettingsScreen_Query(siteId = Preference.siteId.value!!)
+      SpaceSettingsScreen_Query(siteId = Preference.siteId!!)
     }
 
   val usersiteHost: String = Konfig.USERSITE_HOST.trim().removePrefix("*.").removePrefix(".")
@@ -140,7 +140,7 @@ class SpaceSettingsViewModel : ViewModel() {
         SpaceSettingsScreen_UpdateSite_Mutation(
           input =
             UpdateSiteInput(
-              siteId = Preference.siteId.value!!,
+              siteId = Preference.siteId!!,
               name = Optional.present(state.form.name.value.trim()),
               logoId = Optional.present(state.form.logoId.value),
               dateDisplay = Optional.present(state.form.dateDisplay.value),
@@ -149,14 +149,14 @@ class SpaceSettingsViewModel : ViewModel() {
       )
 
       if (state.form.slug.isDirty) {
-        when (currentSubscriptionStore.state.value.hasSubscriptionOrNull()) {
+        when (currentSubscriptionStore.state.hasSubscriptionOrNull()) {
           true -> {
             try {
               Apollo.executeMutation(
                 SpaceSettingsScreen_UpdateSiteSlug_Mutation(
                   input =
                     UpdateSiteSlugInput(
-                      siteId = Preference.siteId.value!!,
+                      siteId = Preference.siteId!!,
                       slug = state.form.slug.value.trim().lowercase(),
                     )
                 )
@@ -183,15 +183,14 @@ class SpaceSettingsViewModel : ViewModel() {
     loading({ isDeletingSite = it }) {
       Apollo.executeMutation(
         SpaceSettingsScreen_DeleteSite_Mutation(
-          input = DeleteSiteInput(siteId = Preference.siteId.value!!)
+          input = DeleteSiteInput(siteId = Preference.siteId!!)
         )
       )
 
       Apollo.apolloStore.remove(CacheKey(query.data.me.id))
 
-      val remainingSiteIds =
-        query.data.me.sites.map { it.id }.filter { it != Preference.siteId.value!! }
-      Preference.siteId.value = remainingSiteIds.first()
+      val remainingSiteIds = query.data.me.sites.map { it.id }.filter { it != Preference.siteId!! }
+      Preference.siteId = remainingSiteIds.first()
     }
 }
 

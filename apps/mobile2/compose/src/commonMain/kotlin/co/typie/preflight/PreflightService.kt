@@ -1,5 +1,8 @@
 package co.typie.preflight
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import co.typie.Konfig
 import co.typie.network.Http
 import co.typie.platform.Platform
@@ -14,8 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -26,12 +27,12 @@ object PreflightService {
   private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
   private val mutex = Mutex()
 
-  private val _state = MutableStateFlow<PreflightState>(PreflightState.NotReady)
-  val state: StateFlow<PreflightState> = _state
+  var state by mutableStateOf<PreflightState>(PreflightState.NotReady)
+    private set
 
   fun launch() {
-    if (Preference.preflightCache.value != null) {
-      _state.value = PreflightState.from(Preference.preflightCache.value!!)
+    if (Preference.preflightCache != null) {
+      state = PreflightState.from(Preference.preflightCache!!)
     }
 
     scope.launch {
@@ -39,8 +40,8 @@ object PreflightService {
         try {
           check()
         } catch (e: Exception) {
-          if (_state.value is PreflightState.NotReady) {
-            _state.value = PreflightState.Unavailable
+          if (state is PreflightState.NotReady) {
+            state = PreflightState.Unavailable
           }
 
           throw e
@@ -62,8 +63,8 @@ object PreflightService {
 
   suspend fun check() = mutex.withLock {
     val preflight = Http.get(Konfig.PREFLIGHT_URL).body<Preflight>()
-    Preference.preflightCache.value = preflight
-    _state.value = PreflightState.from(preflight)
+    Preference.preflightCache = preflight
+    state = PreflightState.from(preflight)
   }
 
   fun PreflightState.Companion.from(preflight: Preflight): PreflightState {

@@ -12,7 +12,7 @@ import kotlin.coroutines.cancellation.CancellationException
 object AuthInterceptor : HttpInterceptor {
   override suspend fun intercept(request: HttpRequest, chain: HttpInterceptorChain): HttpResponse {
     val newRequest =
-      when (val authState = AuthService.state.value) {
+      when (val authState = AuthService.state) {
         is AuthState.Authenticated ->
           request
             .newBuilder()

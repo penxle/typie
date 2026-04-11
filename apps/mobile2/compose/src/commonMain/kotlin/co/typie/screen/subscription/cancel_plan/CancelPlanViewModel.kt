@@ -3,6 +3,7 @@ package co.typie.screen.subscription.cancel_plan
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.QueryState
@@ -17,7 +18,6 @@ import co.typie.service.consumeCancelPlanCloseRequest
 import co.typie.service.consumeCancelPlanErrorMessage
 import co.typie.service.reduceCancelPlanFlowOnManagementResult
 import co.typie.service.reduceCancelPlanFlowOnSubscriptionState
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class CancelPlanViewModel : ViewModel() {
@@ -37,15 +37,16 @@ class CancelPlanViewModel : ViewModel() {
 
   init {
     viewModelScope.launch {
-      currentSubscriptionStore.state.collect { state ->
-        val subscriptionState = (state as? QueryState.Success)?.data?.state
-        updateFlowState(
-          reduceCancelPlanFlowOnSubscriptionState(
-            current = flowState,
-            subscriptionState = subscriptionState,
+      snapshotFlow { currentSubscriptionStore.state }
+        .collect { state ->
+          val subscriptionState = (state as? QueryState.Success)?.data?.state
+          updateFlowState(
+            reduceCancelPlanFlowOnSubscriptionState(
+              current = flowState,
+              subscriptionState = subscriptionState,
+            )
           )
-        )
-      }
+        }
     }
   }
 

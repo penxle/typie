@@ -1,7 +1,6 @@
 package co.typie.screen.system.maintenance
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalUriHandler
 import co.typie.datetime.format
 import co.typie.icons.Lucide
@@ -16,7 +15,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 
 @Composable
 fun MaintenanceScreen() {
-  val state = PreflightService.state.collectAsState().value
+  val state = PreflightService.state
   if (state !is PreflightState.UnderMaintenance) return
 
   val uriHandler = LocalUriHandler.current

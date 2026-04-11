@@ -342,16 +342,17 @@ fun SpaceScreen() {
 
                   FolderAction.Copy -> {
                     clipboard.setCopy(
-                      sourceSiteId = Preference.siteId.value!!,
+                      sourceSiteId = Preference.siteId!!,
                       items = listOf(item.toTransferSource()),
                     )
                   }
 
                   FolderAction.Cut -> {
-                    clipboard.setCut(sourceSiteId = Preference.siteId.value!!,
-                    items = listOf(item.toTransferSource()),
-                  )
-                }
+                    clipboard.setCut(
+                      sourceSiteId = Preference.siteId!!,
+                      items = listOf(item.toTransferSource()),
+                    )
+                  }
 
                   FolderAction.Delete -> {
                     deleteRequest =

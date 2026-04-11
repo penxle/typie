@@ -24,9 +24,9 @@ class EntityMoveSheetViewModel : ViewModel() {
   val rootQuery =
     Apollo.watchQuery(
       scope = viewModelScope,
-      skip = { destinationEntityId != null || Preference.siteId.value == null },
+      skip = { destinationEntityId != null || Preference.siteId == null },
     ) {
-      EntityMoveSheet_Root_Query(siteId = Preference.siteId.value!!)
+      EntityMoveSheet_Root_Query(siteId = Preference.siteId!!)
     }
 
   val entityQuery =

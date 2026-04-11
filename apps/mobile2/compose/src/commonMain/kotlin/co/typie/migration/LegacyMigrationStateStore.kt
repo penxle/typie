@@ -1,27 +1,25 @@
 package co.typie.migration
 
 object LegacyMigrationStateStore {
-  //  fun isSessionHandled(): Boolean = Preference.migrationHandledSession.value
-  //
+  //  fun isSessionHandled(): Boolean = Preference.migrationHandledSession  //
   //  fun isPrefHandled(key: String): Boolean =
-  //    key in Preference.migrationImportedPrefKeys.value ||
-  //      key in Preference.migrationSkippedPrefKeys.value
-  //
+  //    key in Preference.migrationImportedPrefKeys ||
+  //      key in Preference.migrationSkippedPrefKeys  //
   //  fun snapshot(): LegacyMigrationState {
   //    val lastResult =
   //      LegacyMigrationPhaseStatus.entries.firstOrNull {
-  //        it.name == Preference.migrationLastResultName.value
-  //      } ?: LegacyMigrationPhaseStatus.NotStarted
+  //        it.name == Preference.migrationLastResultName  //      } ?:
+  // LegacyMigrationPhaseStatus.NotStarted
   //
   //    return LegacyMigrationState(
-  //      schemaVersion = Preference.migrationSchemaVersion.value,
+  //      schemaVersion = Preference.migrationSchemaVersion,
   //      lastResult = lastResult,
-  //      lastAttemptAtMillis = Preference.migrationLastAttemptAtMillis.value,
-  //      completedAtMillis = Preference.migrationCompletedAtMillis.value,
-  //      importedSession = Preference.migrationImportedSession.value,
-  //      importedPrefs = Preference.migrationImportedPrefs.value,
-  //      importedPrefKeys = Preference.migrationImportedPrefKeys.value,
-  //      skippedPrefKeys = Preference.migrationSkippedPrefKeys.value,
+  //      lastAttemptAtMillis = Preference.migrationLastAttemptAtMillis,
+  //      completedAtMillis = Preference.migrationCompletedAtMillis,
+  //      importedSession = Preference.migrationImportedSession,
+  //      importedPrefs = Preference.migrationImportedPrefs,
+  //      importedPrefKeys = Preference.migrationImportedPrefKeys,
+  //      skippedPrefKeys = Preference.migrationSkippedPrefKeys,
   //    )
   //  }
   //
@@ -30,37 +28,37 @@ object LegacyMigrationStateStore {
   //    nowMillis: Long = Clock.System.now().toEpochMilliseconds(),
   //  ) {
   //    val mergedImportedKeys =
-  //      (Preference.migrationImportedPrefKeys.value + report.importedKeys).distinct().sorted()
+  //      (Preference.migrationImportedPrefKeys + report.importedKeys).distinct().sorted()
   //    val mergedSkippedKeys =
-  //      (Preference.migrationSkippedPrefKeys.value + report.skippedKeys)
+  //      (Preference.migrationSkippedPrefKeys + report.skippedKeys)
   //        .distinct()
   //        .filterNot(mergedImportedKeys::contains)
   //        .sorted()
   //
-  //    Preference.migrationSchemaVersion.value = LEGACY_MIGRATION_SCHEMA_VERSION
-  //    Preference.migrationLastAttemptAtMillis.value = nowMillis
-  //    Preference.migrationCompletedAtMillis.value = nowMillis
-  //    Preference.migrationLastResultName.value = report.status.name
-  //    Preference.migrationImportedPrefs.value =
-  //      Preference.migrationImportedPrefs.value || report.importedKeys.isNotEmpty()
-  //    Preference.migrationImportedPrefKeys.value = mergedImportedKeys
-  //    Preference.migrationSkippedPrefKeys.value = mergedSkippedKeys
+  //    Preference.migrationSchemaVersion = LEGACY_MIGRATION_SCHEMA_VERSION
+  //    Preference.migrationLastAttemptAtMillis = nowMillis
+  //    Preference.migrationCompletedAtMillis = nowMillis
+  //    Preference.migrationLastResultName = report.status.name
+  //    Preference.migrationImportedPrefs =
+  //      Preference.migrationImportedPrefs || report.importedKeys.isNotEmpty()
+  //    Preference.migrationImportedPrefKeys = mergedImportedKeys
+  //    Preference.migrationSkippedPrefKeys = mergedSkippedKeys
   //  }
   //
   //  fun recordAuthImported(nowMillis: Long = Clock.System.now().toEpochMilliseconds()) {
-  //    Preference.migrationSchemaVersion.value = LEGACY_MIGRATION_SCHEMA_VERSION
-  //    Preference.migrationLastAttemptAtMillis.value = nowMillis
-  //    Preference.migrationCompletedAtMillis.value = nowMillis
-  //    Preference.migrationLastResultName.value = LegacyMigrationPhaseStatus.Imported.name
-  //    Preference.migrationHandledSession.value = true
-  //    Preference.migrationImportedSession.value = true
+  //    Preference.migrationSchemaVersion = LEGACY_MIGRATION_SCHEMA_VERSION
+  //    Preference.migrationLastAttemptAtMillis = nowMillis
+  //    Preference.migrationCompletedAtMillis = nowMillis
+  //    Preference.migrationLastResultName = LegacyMigrationPhaseStatus.Imported.name
+  //    Preference.migrationHandledSession = true
+  //    Preference.migrationImportedSession = true
   //  }
   //
   //  fun recordAuthSkipped(nowMillis: Long = Clock.System.now().toEpochMilliseconds()) {
-  //    Preference.migrationSchemaVersion.value = LEGACY_MIGRATION_SCHEMA_VERSION
-  //    Preference.migrationLastAttemptAtMillis.value = nowMillis
-  //    Preference.migrationCompletedAtMillis.value = nowMillis
-  //    Preference.migrationLastResultName.value = LegacyMigrationPhaseStatus.Skipped.name
-  //    Preference.migrationHandledSession.value = true
+  //    Preference.migrationSchemaVersion = LEGACY_MIGRATION_SCHEMA_VERSION
+  //    Preference.migrationLastAttemptAtMillis = nowMillis
+  //    Preference.migrationCompletedAtMillis = nowMillis
+  //    Preference.migrationLastResultName = LegacyMigrationPhaseStatus.Skipped.name
+  //    Preference.migrationHandledSession = true
   //  }
 }

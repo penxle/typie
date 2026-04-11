@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,9 +53,9 @@ private enum class RootScreen {
 fun RootShell() {
   LaunchedEffect(Unit) { BootstrapService.launch() }
 
-  val bootstrapState by BootstrapService.state.collectAsState()
-  val preflightState by PreflightService.state.collectAsState()
-  val authState by AuthService.state.collectAsState()
+  val bootstrapState = BootstrapService.state
+  val preflightState = PreflightService.state
+  val authState = AuthService.state
 
   val screen =
     when {

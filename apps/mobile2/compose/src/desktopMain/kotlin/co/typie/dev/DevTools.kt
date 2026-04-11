@@ -1,5 +1,6 @@
 package co.typie.dev
 
+import androidx.compose.runtime.snapshotFlow
 import java.awt.Color
 import java.awt.Cursor
 import java.awt.Dimension
@@ -78,8 +79,8 @@ fun createDevToolsWindow(
         val dotGap = 2.0
         val accents =
           devToolsCollapsedIndicatorAccents(
-            networkPreset = networkSimulator.preset.value,
-            subscriptionScenario = subscriptionDevSandbox.scenario.value,
+            networkPreset = networkSimulator.preset,
+            subscriptionScenario = subscriptionDevSandbox.scenario,
           )
         val totalHeight = accents.size * dotSize + (accents.size - 1) * dotGap
         val x = (32.0 - dotSize) / 2
@@ -219,7 +220,7 @@ fun createDevToolsWindow(
       createOptionItem(
         labelText = option.name,
         accentColor = option.devToolsAccent().accentColor(),
-        selected = { networkSimulator.preset.value == option },
+        selected = { networkSimulator.preset == option },
         onClick = {
           networkSimulator.select(option)
           Preferences.userRoot().node("co/typie").put("networkPreset", option.name)
@@ -235,7 +236,7 @@ fun createDevToolsWindow(
       createOptionItem(
         labelText = option.label,
         accentColor = option.devToolsAccent().accentColor(),
-        selected = { subscriptionDevSandbox.scenario.value == option },
+        selected = { subscriptionDevSandbox.scenario == option },
         onClick = { subscriptionDevSandbox.select(option) },
       )
     )
@@ -278,11 +279,11 @@ fun createDevToolsWindow(
   )
 
   // Repaint on preset change
-  networkSimulator.preset
+  snapshotFlow { networkSimulator.preset }
     .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
     .launchIn(scope)
 
-  subscriptionDevSandbox.scenario
+  snapshotFlow { subscriptionDevSandbox.scenario }
     .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
     .launchIn(scope)
 

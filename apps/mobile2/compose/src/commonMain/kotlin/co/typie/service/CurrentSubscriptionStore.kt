@@ -1,5 +1,10 @@
 package co.typie.service
 
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import co.touchlab.kermit.Logger
 import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.SubscriptionDevScenario
@@ -19,46 +24,29 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 object CurrentSubscriptionStore {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-  private val remoteState = MutableStateFlow<QueryState<SubscriptionSnapshot?>>(QueryState.Loading)
+  private var remoteState by mutableStateOf<QueryState<SubscriptionSnapshot?>>(QueryState.Loading)
   private var remoteWatchJob: Job? = null
 
-  val state: StateFlow<QueryState<SubscriptionSnapshot?>> =
-    combine(SubscriptionDevSandbox.scenario, remoteState) { scenario, currentRemoteState ->
-        effectiveCurrentSubscriptionState(
-          platform = PlatformModule.platform,
-          scenario = scenario,
-          remoteState = currentRemoteState,
-        )
-      }
-      .stateIn(
-        scope = scope,
-        started = SharingStarted.Eagerly,
-        initialValue =
-          effectiveCurrentSubscriptionState(
-            platform = PlatformModule.platform,
-            scenario = SubscriptionDevSandbox.scenario.value,
-            remoteState = remoteState.value,
-          ),
-      )
+  val state: QueryState<SubscriptionSnapshot?> by derivedStateOf {
+    effectiveCurrentSubscriptionState(
+      platform = PlatformModule.platform,
+      scenario = SubscriptionDevSandbox.scenario,
+      remoteState = remoteState,
+    )
+  }
 
   val usesSandbox: Boolean
     get() = PlatformModule.platform == Platform.Desktop && SubscriptionDevSandbox.usesSandbox
 
   init {
     scope.launch {
-      SubscriptionDevSandbox.scenario
+      snapshotFlow { SubscriptionDevSandbox.scenario }
         .map { scenario ->
           PlatformModule.platform == Platform.Desktop &&
             scenario != SubscriptionDevScenario.RemoteData
@@ -85,7 +73,7 @@ object CurrentSubscriptionStore {
         throw e
       } catch (e: Exception) {
         Logger.e(e) { "Failed to refresh current subscription" }
-        remoteState.value = QueryState.Error(e)
+        remoteState = QueryState.Error(e)
       }
     }
   }
@@ -93,8 +81,8 @@ object CurrentSubscriptionStore {
   private fun startRemoteWatch(resetState: Boolean) {
     remoteWatchJob?.cancel()
 
-    if (resetState || remoteState.value !is QueryState.Success) {
-      remoteState.value = QueryState.Loading
+    if (resetState || remoteState !is QueryState.Success) {
+      remoteState = QueryState.Loading
     }
 
     remoteWatchJob = scope.launch {
@@ -103,7 +91,7 @@ object CurrentSubscriptionStore {
           val data = response.data
           if (data != null) {
             val subscription = data.me.subscription?.toSubscriptionSnapshot()
-            remoteState.value = QueryState.Success(subscription)
+            remoteState = QueryState.Success(subscription)
           } else if (response.exception is CacheMissException) {
             // CacheAndNetwork policy can emit an empty cached response before network data arrives.
           } else {
@@ -111,7 +99,7 @@ object CurrentSubscriptionStore {
               response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
             if (error != null) {
               Logger.e(error) { "Failed to watch current subscription" }
-              remoteState.value = QueryState.Error(error)
+              remoteState = QueryState.Error(error)
             }
           }
         }
@@ -119,7 +107,7 @@ object CurrentSubscriptionStore {
         throw e
       } catch (e: Exception) {
         Logger.e(e) { "Failed to watch current subscription" }
-        remoteState.value = QueryState.Error(e)
+        remoteState = QueryState.Error(e)
       }
     }
   }

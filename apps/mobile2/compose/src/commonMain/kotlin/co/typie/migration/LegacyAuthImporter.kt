@@ -6,12 +6,12 @@ object LegacyAuthImporter {
     //      return LegacyMigrationStepResult.Skipped
     //    }
 
-    //    if (Vault.legacyTokens.value != null) {
+    //    if (Vault.legacyTokens != null) {
     //      LegacyMigrationStateStore.recordAuthSkipped()
     //      return LegacyMigrationStepResult.Skipped
     //    }
     //
-    //    Vault.legacyTokens.value = AuthTokens(sessionToken = sessionToken)
+    //    Vault.legacyTokens = AuthTokens(sessionToken = sessionToken)
     //    LegacyMigrationStateStore.recordAuthImported()
     return LegacyMigrationStepResult.Imported
   }

@@ -9,9 +9,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = "site_id",
     //      targetKey = "site_id",
-    //      currentValue = Preference.legacySiteId.value,
+    //      currentValue = Preference.legacySiteId,
     //      defaultValue = "",
-    //      setter = { Preference.legacySiteId.value = it },
+    //      setter = { Preference.legacySiteId = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -19,9 +19,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = Preference.DEV_MODE_KEY,
     //      targetKey = Preference.DEV_MODE_KEY,
-    //      currentValue = Preference.devMode.value,
+    //      currentValue = Preference.devMode,
     //      defaultValue = Preference.DEFAULT_DEV_MODE,
-    //      setter = { Preference.devMode.value = it },
+    //      setter = { Preference.devMode = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -29,9 +29,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = Preference.TYPEWRITER_ENABLED_KEY,
     //      targetKey = Preference.TYPEWRITER_ENABLED_KEY,
-    //      currentValue = Preference.typewriterEnabled.value,
+    //      currentValue = Preference.typewriterEnabled,
     //      defaultValue = Preference.DEFAULT_TYPEWRITER_ENABLED,
-    //      setter = { Preference.typewriterEnabled.value = it },
+    //      setter = { Preference.typewriterEnabled = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -39,9 +39,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = Preference.TYPEWRITER_POSITION_KEY,
     //      targetKey = Preference.TYPEWRITER_POSITION_KEY,
-    //      currentValue = Preference.typewriterPosition.value,
+    //      currentValue = Preference.typewriterPosition,
     //      defaultValue = Preference.DEFAULT_TYPEWRITER_POSITION,
-    //      setter = { Preference.typewriterPosition.value = it },
+    //      setter = { Preference.typewriterPosition = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -49,9 +49,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = Preference.LINE_HIGHLIGHT_ENABLED_KEY,
     //      targetKey = Preference.LINE_HIGHLIGHT_ENABLED_KEY,
-    //      currentValue = Preference.lineHighlightEnabled.value,
+    //      currentValue = Preference.lineHighlightEnabled,
     //      defaultValue = Preference.DEFAULT_LINE_HIGHLIGHT_ENABLED,
-    //      setter = { Preference.lineHighlightEnabled.value = it },
+    //      setter = { Preference.lineHighlightEnabled = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -59,9 +59,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = Preference.AUTO_SURROUND_ENABLED_KEY,
     //      targetKey = Preference.AUTO_SURROUND_ENABLED_KEY,
-    //      currentValue = Preference.autoSurroundEnabled.value,
+    //      currentValue = Preference.autoSurroundEnabled,
     //      defaultValue = Preference.DEFAULT_AUTO_SURROUND_ENABLED,
-    //      setter = { Preference.autoSurroundEnabled.value = it },
+    //      setter = { Preference.autoSurroundEnabled = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -69,9 +69,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = Preference.CHARACTER_COUNT_FLOATING_ENABLED_KEY,
     //      targetKey = Preference.CHARACTER_COUNT_FLOATING_ENABLED_KEY,
-    //      currentValue = Preference.characterCountFloatingEnabled.value,
+    //      currentValue = Preference.characterCountFloatingEnabled,
     //      defaultValue = Preference.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED,
-    //      setter = { Preference.characterCountFloatingEnabled.value = it },
+    //      setter = { Preference.characterCountFloatingEnabled = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -79,9 +79,9 @@ object LegacyPrefsImporter {
     //      source = source.preferenceValues,
     //      sourceKey = Preference.WIDGET_AUTO_FADE_ENABLED_KEY,
     //      targetKey = Preference.WIDGET_AUTO_FADE_ENABLED_KEY,
-    //      currentValue = Preference.widgetAutoFadeEnabled.value,
+    //      currentValue = Preference.widgetAutoFadeEnabled,
     //      defaultValue = Preference.DEFAULT_WIDGET_AUTO_FADE_ENABLED,
-    //      setter = { Preference.widgetAutoFadeEnabled.value = it },
+    //      setter = { Preference.widgetAutoFadeEnabled = it },
     //      importedKeys = importedKeys,
     //      skippedKeys = skippedKeys,
     //    )
@@ -91,11 +91,11 @@ object LegacyPrefsImporter {
       val targetKey = "theme_mode"
       //      if (
       //        LegacyMigrationStateStore.isPrefHandled(targetKey) ||
-      //          Preference.themeMode.value != ThemeMode.System
+      //          Preference.themeMode != ThemeMode.System
       //      ) {
       //        skippedKeys += targetKey
       //      } else {
-      //        Preference.themeMode.value = mappedThemeMode
+      //        Preference.themeMode = mappedThemeMode
       //        importedKeys += targetKey
       //      }
     }

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,7 +78,7 @@ fun FontSettingsScreen() {
   val sheetHost = LocalSheetHost.current
   var pendingFamilyDeletion by remember { mutableStateOf<FontSettingsFamily?>(null) }
   var pendingFontDeletion by remember { mutableStateOf<PendingFontDeletion?>(null) }
-  val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
+  val currentSubscriptionState = currentSubscriptionStore.state
 
   val filePicker =
     rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { files ->

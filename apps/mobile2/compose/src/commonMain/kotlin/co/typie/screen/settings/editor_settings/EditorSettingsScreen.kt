@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -49,10 +48,10 @@ import kotlin.math.roundToInt
 fun EditorSettingsScreen() {
   val scrollState = rememberScrollState()
 
-  val typewriterEnabled by Preference.typewriterEnabled.collectAsState()
-  val typewriterPosition by Preference.typewriterPosition.collectAsState()
-  val lineHighlightEnabled by Preference.lineHighlightEnabled.collectAsState()
-  val autoSurroundEnabled by Preference.autoSurroundEnabled.collectAsState()
+  val typewriterEnabled = Preference.typewriterEnabled
+  val typewriterPosition = Preference.typewriterPosition
+  val lineHighlightEnabled = Preference.lineHighlightEnabled
+  val autoSurroundEnabled = Preference.autoSurroundEnabled
   // TODO: 에디터 설정 트래킹
 
   ProvideTopBar(
@@ -72,11 +71,11 @@ fun EditorSettingsScreen() {
       SettingControlRow(
         label = "타자기 모드",
         description = "현재 작성 중인 줄을 항상 화면의 특정 위치에 고정합니다.",
-        onClick = { Preference.typewriterEnabled.value = !typewriterEnabled },
+        onClick = { Preference.typewriterEnabled = !typewriterEnabled },
         trailing = {
           SettingSwitch(
             checked = typewriterEnabled,
-            onCheckedChange = { next -> Preference.typewriterEnabled.value = next },
+            onCheckedChange = { next -> Preference.typewriterEnabled = next },
           )
         },
       )
@@ -104,7 +103,7 @@ fun EditorSettingsScreen() {
             QuietSlider(
               value = typewriterPosition,
               modifier = Modifier.weight(1f),
-              onValueChange = { next -> Preference.typewriterPosition.value = next },
+              onValueChange = { next -> Preference.typewriterPosition = next },
             )
             Text("화면 하단", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
           }
@@ -116,11 +115,11 @@ fun EditorSettingsScreen() {
       SettingControlRow(
         label = "현재 줄 강조",
         description = "현재 작성 중인 줄을 강조하여 화면에 표시합니다.",
-        onClick = { Preference.lineHighlightEnabled.value = !lineHighlightEnabled },
+        onClick = { Preference.lineHighlightEnabled = !lineHighlightEnabled },
         trailing = {
           SettingSwitch(
             checked = lineHighlightEnabled,
-            onCheckedChange = { next -> Preference.lineHighlightEnabled.value = next },
+            onCheckedChange = { next -> Preference.lineHighlightEnabled = next },
           )
         },
       )
@@ -130,11 +129,11 @@ fun EditorSettingsScreen() {
       SettingControlRow(
         label = "선택 영역 둘러싸기",
         description = "따옴표나 괄호를 입력하면 선택 영역을 둘러쌉니다.",
-        onClick = { Preference.autoSurroundEnabled.value = !autoSurroundEnabled },
+        onClick = { Preference.autoSurroundEnabled = !autoSurroundEnabled },
         trailing = {
           SettingSwitch(
             checked = autoSurroundEnabled,
-            onCheckedChange = { next -> Preference.autoSurroundEnabled.value = next },
+            onCheckedChange = { next -> Preference.autoSurroundEnabled = next },
           )
         },
       )

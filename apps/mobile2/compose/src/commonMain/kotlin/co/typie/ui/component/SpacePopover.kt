@@ -120,10 +120,10 @@ class SpacePopoverViewModel : ViewModel() {
 
 @Composable
 fun SpacePopover() {
-  val sessionKey = Vault.authTokens.value?.sessionToken ?: "no-session"
+  val sessionKey = Vault.authTokens?.sessionToken ?: "no-session"
   val model = viewModel(key = "space-popover:$sessionKey") { SpacePopoverViewModel() }
 
-  val selectedSiteId = Preference.siteId.value
+  val selectedSiteId = Preference.siteId
 
   LaunchedEffect(selectedSiteId) {
     if (!selectedSiteId.isNullOrBlank()) {
@@ -137,7 +137,7 @@ fun SpacePopover() {
         val availableSiteIds = state.data.me.sites.map { it.id }
         val selection =
           resolveSpacePopoverSelection(
-            selectedSiteId = Preference.siteId.value.orEmpty(),
+            selectedSiteId = Preference.siteId.orEmpty(),
             availableSiteIds = availableSiteIds,
           )
 
@@ -154,13 +154,11 @@ fun SpacePopover() {
 
         if (pendingCreatedSiteId != null) {
           LaunchedEffect(pendingCreatedSiteId) {
-            Preference.siteId.value = pendingCreatedSiteId
+            Preference.siteId = pendingCreatedSiteId
             model.consumePendingCreatedSiteSelection(pendingCreatedSiteId)
           }
-        } else if (selection.currentSiteId != Preference.siteId.value) {
-          LaunchedEffect(selection.currentSiteId) {
-            Preference.siteId.value = selection.currentSiteId
-          }
+        } else if (selection.currentSiteId != Preference.siteId) {
+          LaunchedEffect(selection.currentSiteId) { Preference.siteId = selection.currentSiteId }
         }
 
         val currentSite = state.data.me.sites.first { it.id == selection.currentSiteId }
@@ -288,7 +286,7 @@ private fun PopoverScope.SpacePopoverPane(
               PopoverListItem(
                 content = { SpacePopoverSiteItem(site) },
                 onSelected = {
-                  Preference.siteId.value = site.id
+                  Preference.siteId = site.id
                   close()
                 },
               )

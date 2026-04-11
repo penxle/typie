@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -30,8 +29,8 @@ import co.typie.ui.theme.AppTheme
 fun WidgetSettingsScreen() {
   val scrollState = rememberScrollState()
 
-  val characterCountFloatingEnabled by Preference.characterCountFloatingEnabled.collectAsState()
-  val widgetAutoFadeEnabled by Preference.widgetAutoFadeEnabled.collectAsState()
+  val characterCountFloatingEnabled = Preference.characterCountFloatingEnabled
+  val widgetAutoFadeEnabled = Preference.widgetAutoFadeEnabled
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -50,13 +49,11 @@ fun WidgetSettingsScreen() {
       SettingControlRow(
         label = "글자 수 위젯",
         description = "에디터에서 글자 수를 표시합니다.",
-        onClick = {
-          Preference.characterCountFloatingEnabled.value = !characterCountFloatingEnabled
-        },
+        onClick = { Preference.characterCountFloatingEnabled = !characterCountFloatingEnabled },
         trailing = {
           SettingSwitch(
             checked = characterCountFloatingEnabled,
-            onCheckedChange = { next -> Preference.characterCountFloatingEnabled.value = next },
+            onCheckedChange = { next -> Preference.characterCountFloatingEnabled = next },
           )
         },
       )
@@ -66,11 +63,11 @@ fun WidgetSettingsScreen() {
         SettingControlRow(
           label = "위젯 자동 페이드 인/아웃",
           description = "타이핑, 스크롤 시 위젯이 잠시 사라집니다.",
-          onClick = { Preference.widgetAutoFadeEnabled.value = !widgetAutoFadeEnabled },
+          onClick = { Preference.widgetAutoFadeEnabled = !widgetAutoFadeEnabled },
           trailing = {
             SettingSwitch(
               checked = widgetAutoFadeEnabled,
-              onCheckedChange = { next -> Preference.widgetAutoFadeEnabled.value = next },
+              onCheckedChange = { next -> Preference.widgetAutoFadeEnabled = next },
             )
           },
         )
