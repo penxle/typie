@@ -148,15 +148,9 @@ fun EntityContainerReorderListCard(
 
           EntityContainerReorderRow(
             modifier =
-              Modifier.then(
-                  if (isDragging) {
-                    Modifier
-                  } else {
-                    Modifier.animateBounds(
-                      lookaheadScope = this@LookaheadScope,
-                      boundsTransform = boundsTransform,
-                    )
-                  }
+              Modifier.animateBounds(
+                  lookaheadScope = this@LookaheadScope,
+                  boundsTransform = boundsTransform,
                 )
                 .reorderableItem(state = reorderState, key = child.id),
             item = child,

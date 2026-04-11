@@ -1,10 +1,14 @@
 package co.typie.ui.component.reorder
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -42,6 +46,8 @@ private data class ActiveReorderDrag<K : Any>(
   val currentPointerWindowPosition: Offset,
 )
 
+private data class SettlingReorderDrag<K : Any>(val key: K, val initialTranslationY: Float)
+
 @Stable
 class ReorderableListState<K : Any>
 internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScrollState) {
@@ -49,6 +55,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
 
   private var pendingCommittedKeys by mutableStateOf<List<K>?>(null)
   private var activeDrag by mutableStateOf<ActiveReorderDrag<K>?>(null)
+  private var settlingDrag by mutableStateOf<SettlingReorderDrag<K>?>(null)
 
   var displayedKeys by mutableStateOf<List<K>>(emptyList())
     private set
@@ -63,6 +70,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
 
   fun syncKeys(serverKeys: List<K>) {
     itemBounds.keys.retainAll(serverKeys.toSet())
+    settlingDrag = settlingDrag?.takeIf { it.key in serverKeys }
 
     val activeDrag = activeDrag
     if (activeDrag != null) {
@@ -98,6 +106,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
 
   fun resetToServerKeys(serverKeys: List<K>) {
     activeDrag = null
+    settlingDrag = null
     pendingCommittedKeys = null
     displayedKeys = serverKeys
     edgeAutoScrollState.stop()
@@ -116,6 +125,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
     val startIndex = displayedKeys.indexOf(key)
     if (startIndex == -1) return false
 
+    settlingDrag = null
     activeDrag =
       ActiveReorderDrag(
         key = key,
@@ -158,7 +168,12 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
     edgeAutoScrollState.stop()
 
     val activeDrag = activeDrag ?: return null
+    val settlingTranslationY = draggedItemTranslationY(activeDrag.key)
     this.activeDrag = null
+    settlingDrag =
+      settlingTranslationY
+        .takeUnless { it == 0f }
+        ?.let { SettlingReorderDrag(key = activeDrag.key, initialTranslationY = it) }
 
     val orderedKeys = displayedKeys
     if (orderedKeys == activeDrag.startOrderedKeys) {
@@ -177,6 +192,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
 
   fun cancelDrag() {
     activeDrag = null
+    settlingDrag = null
     edgeAutoScrollState.stop()
   }
 
@@ -188,6 +204,17 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
     return activeDrag.currentPointerWindowPosition.y -
       activeDrag.pointerOffsetWithinItemY -
       bounds.top
+  }
+
+  internal fun settlingTranslationY(key: K): Float? {
+    return settlingDrag?.takeIf { it.key == key }?.initialTranslationY
+  }
+
+  internal fun clearSettlingTranslation(key: K) {
+    val settlingDrag = settlingDrag ?: return
+    if (settlingDrag.key == key) {
+      this.settlingDrag = null
+    }
   }
 }
 
@@ -227,13 +254,32 @@ fun Modifier.reorderableListContainer(
 
 fun <K : Any> Modifier.reorderableItem(state: ReorderableListState<K>, key: K): Modifier =
   composed {
+    val settlingTranslation = remember(key) { Animatable(0f) }
+    val settlingTranslationY = state.settlingTranslationY(key)
+
+    LaunchedEffect(key, settlingTranslationY) {
+      if (settlingTranslationY == null) {
+        settlingTranslation.snapTo(0f)
+        return@LaunchedEffect
+      }
+
+      settlingTranslation.snapTo(settlingTranslationY)
+      settlingTranslation.animateTo(
+        targetValue = 0f,
+        animationSpec = spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium),
+      )
+      state.clearSettlingTranslation(key)
+    }
+
     DisposableEffect(state, key) { onDispose { state.registerItemBounds(key, bounds = null) } }
 
     onGloballyPositioned { coordinates ->
         state.registerItemBounds(key, coordinates.boundsInWindow())
       }
       .zIndex(if (state.isDragging(key)) 2f else 0f)
-      .graphicsLayer { translationY = state.draggedItemTranslationY(key) }
+      .graphicsLayer {
+        translationY = settlingTranslation.value + state.draggedItemTranslationY(key)
+      }
   }
 
 fun <K : Any> Modifier.reorderableDragHandle(
