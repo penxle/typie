@@ -5,17 +5,16 @@ import androidx.compose.runtime.LaunchedEffect
 import co.touchlab.kermit.Logger
 import co.typie.graphql.Apollo
 import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
-import co.typie.service.SiteRefreshCoordinator
-import co.typie.service.SiteService
+import co.typie.storage.Preference
 import com.apollographql.apollo.annotations.ApolloExperimental
 
 @OptIn(ApolloExperimental::class)
 @Composable
 internal fun SiteUpdateStreamEffect() {
-  val siteId = SiteService.siteId
+  val siteId = Preference.siteId.value
 
   LaunchedEffect(siteId) {
-    if (siteId.isBlank()) {
+    if (siteId.isNullOrBlank()) {
       return@LaunchedEffect
     }
 
@@ -30,10 +29,6 @@ internal fun SiteUpdateStreamEffect() {
           ?.let { errors ->
             Logger.e { "siteUpdateStream graphql errors=${errors.joinToString { it.message }}" }
           }
-
-        if (response.data?.siteUpdateStream != null) {
-          SiteRefreshCoordinator.notifySiteChanged(siteId)
-        }
       }
   }
 }

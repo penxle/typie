@@ -1,12 +1,13 @@
 package co.typie.platform
 
-data class DeviceInfoSnapshot(
-  val platform: String,
+data class DeviceInfoData(
+  val model: String,
+  val osName: String,
   val osVersion: String,
   val appVersion: String,
-  val deviceName: String? = null,
+  val appBuildNumber: String,
 )
 
 interface DeviceInfo {
-  suspend fun snapshot(): DeviceInfoSnapshot
+  fun retrieve(): DeviceInfoData
 }

@@ -8,19 +8,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import co.typie.bootstrap.BootstrapService
+import co.typie.bootstrap.BootstrapState
 import co.typie.serialization.EnumSerializer
-import co.typie.startup.AppStartupService
-import co.typie.startup.AppStartupState
+import co.typie.storage.Preference
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.LocalHazeStyle
-import kotlinx.coroutines.flow.drop
 import kotlinx.serialization.Serializable
 
 @Serializable(with = ThemeMode.Serializer::class)
@@ -156,10 +156,10 @@ val LocalThemeMode =
   }
 
 internal fun resolveThemeModeForStartup(
-  startupState: AppStartupState,
+  startupState: BootstrapState,
   persistedThemeMode: ThemeMode,
 ): ThemeMode {
-  return if (startupState is AppStartupState.Ready) {
+  return if (startupState is BootstrapState.Ready) {
     persistedThemeMode
   } else {
     ThemeMode.System
@@ -176,25 +176,17 @@ internal fun resolveIsDarkTheme(themeMode: ThemeMode, systemIsDark: Boolean): Bo
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-  val appStartupService = AppStartupService
-  val themeService = ThemeService
-  val startupState = appStartupService.state.collectAsState().value
-  val isStartupReady = startupState is AppStartupState.Ready
+  val startupState = BootstrapService.state.collectAsState().value
+  val isStartupReady = startupState is BootstrapState.Ready
+  val persistedThemeMode by Preference.themeMode.collectAsState()
   val themeMode =
     remember(isStartupReady) {
-      mutableStateOf(
-        if (isStartupReady) {
-          resolveThemeModeForStartup(startupState, themeService.themeMode)
-        } else {
-          ThemeMode.System
-        }
-      )
+      mutableStateOf(resolveThemeModeForStartup(startupState, persistedThemeMode))
     }
 
-  LaunchedEffect(isStartupReady, themeMode) {
+  LaunchedEffect(isStartupReady) {
     if (!isStartupReady) return@LaunchedEffect
-
-    snapshotFlow { themeMode.value }.drop(1).collect { themeService.themeMode = it }
+    Preference.themeMode.collect { themeMode.value = it }
   }
 
   val isDark = resolveIsDarkTheme(themeMode = themeMode.value, systemIsDark = isSystemInDarkTheme())

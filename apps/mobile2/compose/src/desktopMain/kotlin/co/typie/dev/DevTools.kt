@@ -1,7 +1,5 @@
 package co.typie.dev
 
-import co.typie.bootstrap.BootstrapDevSandbox
-import co.typie.bootstrap.BootstrapDevScenario
 import java.awt.Color
 import java.awt.Cursor
 import java.awt.Dimension
@@ -52,7 +50,6 @@ private fun DevToolsAccent.accentColor(): Color =
 fun createDevToolsWindow(
   mainWindow: Window,
   networkSimulator: NetworkSimulator,
-  bootstrapDevSandbox: BootstrapDevSandbox,
   subscriptionDevSandbox: SubscriptionDevSandbox,
 ): JWindow {
   val devWindow = JWindow()
@@ -83,7 +80,6 @@ fun createDevToolsWindow(
           devToolsCollapsedIndicatorAccents(
             networkPreset = networkSimulator.preset.value,
             subscriptionScenario = subscriptionDevSandbox.scenario.value,
-            bootstrapScenario = bootstrapDevSandbox.scenario.value,
           )
         val totalHeight = accents.size * dotSize + (accents.size - 1) * dotGap
         val x = (32.0 - dotSize) / 2
@@ -247,17 +243,6 @@ fun createDevToolsWindow(
 
   dropdownPanel.add(createSectionLabel("Bootstrap"))
 
-  BootstrapDevScenario.entries.forEach { option ->
-    dropdownPanel.add(
-      createOptionItem(
-        labelText = option.label,
-        accentColor = option.devToolsAccent().accentColor(),
-        selected = { bootstrapDevSandbox.scenario.value == option },
-        onClick = { bootstrapDevSandbox.select(option) },
-      )
-    )
-  }
-
   // Toggle dropdown on icon click
   iconButton.addMouseListener(
     object : MouseAdapter() {
@@ -298,10 +283,6 @@ fun createDevToolsWindow(
     .launchIn(scope)
 
   subscriptionDevSandbox.scenario
-    .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
-    .launchIn(scope)
-
-  bootstrapDevSandbox.scenario
     .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
     .launchIn(scope)
 

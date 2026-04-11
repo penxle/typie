@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.auth.AuthService
 import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
 import co.typie.graphql.SpacePopover_CreateSite_Mutation
@@ -50,7 +49,8 @@ import co.typie.result.onOk
 import co.typie.result.result
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.service.SiteService
+import co.typie.storage.Preference
+import co.typie.storage.Vault
 import co.typie.ui.component.bottomsheet.BottomSheetScaffold
 import co.typie.ui.component.bottomsheet.BottomSheetScope
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -120,13 +120,13 @@ class SpacePopoverViewModel : ViewModel() {
 
 @Composable
 fun SpacePopover() {
-  val sessionKey = AuthService.tokens?.sessionToken ?: "no-session"
+  val sessionKey = Vault.authTokens.value?.sessionToken ?: "no-session"
   val model = viewModel(key = "space-popover:$sessionKey") { SpacePopoverViewModel() }
   val presenterScope = rememberCoroutineScope()
-  val selectedSiteId = SiteService.siteId
+  val selectedSiteId = Preference.siteId.value
 
   LaunchedEffect(selectedSiteId) {
-    if (selectedSiteId.isNotBlank()) {
+    if (!selectedSiteId.isNullOrBlank()) {
       model.query.refetch()
     }
   }
@@ -137,7 +137,7 @@ fun SpacePopover() {
         val availableSiteIds = state.data.me.sites.map { it.id }
         val selection =
           resolveSpacePopoverSelection(
-            selectedSiteId = SiteService.siteId,
+            selectedSiteId = Preference.siteId.value.orEmpty(),
             availableSiteIds = availableSiteIds,
           )
 
@@ -154,11 +154,13 @@ fun SpacePopover() {
 
         if (pendingCreatedSiteId != null) {
           LaunchedEffect(pendingCreatedSiteId) {
-            SiteService.siteId = pendingCreatedSiteId
+            Preference.siteId.value = pendingCreatedSiteId
             model.consumePendingCreatedSiteSelection(pendingCreatedSiteId)
           }
-        } else if (selection.currentSiteId != SiteService.siteId) {
-          LaunchedEffect(selection.currentSiteId) { SiteService.siteId = selection.currentSiteId }
+        } else if (selection.currentSiteId != Preference.siteId.value) {
+          LaunchedEffect(selection.currentSiteId) {
+            Preference.siteId.value = selection.currentSiteId
+          }
         }
 
         val currentSite = state.data.me.sites.first { it.id == selection.currentSiteId }
@@ -287,7 +289,7 @@ private fun PopoverScope.SpacePopoverPane(
               PopoverListItem(
                 content = { SpacePopoverSiteItem(site) },
                 onSelected = {
-                  SiteService.siteId = site.id
+                  Preference.siteId.value = site.id
                   close()
                 },
               )

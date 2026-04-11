@@ -10,16 +10,18 @@ import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.service.SiteService
+import co.typie.storage.Preference
 
 class SpaceViewModel : ViewModel() {
   private var hasEnteredScreen = false
 
-  val siteId: String
-    get() = SiteService.siteId
+  val siteId: String?
+    get() = Preference.siteId.value
 
   val query =
-    Apollo.watchQuery(scope = viewModelScope) { SpaceScreen_Query(siteId = SiteService.siteId) }
+    Apollo.watchQuery(scope = viewModelScope, skip = { Preference.siteId.value == null }) {
+      SpaceScreen_Query(siteId = Preference.siteId.value!!)
+    }
 
   fun refetch() {
     query.refetch()

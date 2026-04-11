@@ -1,6 +1,7 @@
 package co.typie.graphql
 
 import co.typie.auth.AuthService
+import co.typie.auth.AuthState
 import com.apollographql.apollo.api.http.HttpRequest
 import com.apollographql.apollo.api.http.HttpResponse
 import com.apollographql.apollo.network.http.HttpInterceptor
@@ -11,9 +12,14 @@ import kotlin.coroutines.cancellation.CancellationException
 object AuthInterceptor : HttpInterceptor {
   override suspend fun intercept(request: HttpRequest, chain: HttpInterceptorChain): HttpResponse {
     val newRequest =
-      AuthService.tokens?.accessToken?.let {
-        request.newBuilder().addHeader("Authorization", "Bearer $it").build()
-      } ?: request
+      when (val authState = AuthService.state.value) {
+        is AuthState.Authenticated ->
+          request
+            .newBuilder()
+            .addHeader("Authorization", "Bearer ${authState.tokens.accessToken}")
+            .build()
+        else -> request
+      }
 
     val response = chain.proceed(newRequest)
 

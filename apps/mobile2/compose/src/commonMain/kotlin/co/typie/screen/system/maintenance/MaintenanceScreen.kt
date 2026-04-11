@@ -1,30 +1,35 @@
 package co.typie.screen.system.maintenance
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalUriHandler
 import co.typie.datetime.format
 import co.typie.icons.Lucide
+import co.typie.preflight.PreflightService
+import co.typie.preflight.PreflightState
 import co.typie.screen.system.AppStateAction
 import co.typie.screen.system.AppStateBadge
 import co.typie.screen.system.AppStateScaffold
 import co.typie.screen.system.SUPPORT_URL
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.topbar.ProvideTopBar
-import kotlin.time.Instant
 
 @Composable
-fun MaintenanceScreen(title: String, message: String, until: Instant?) {
+fun MaintenanceScreen() {
+  val state = PreflightService.state.collectAsState().value
+  if (state !is PreflightState.UnderMaintenance) return
+
   val uriHandler = LocalUriHandler.current
 
   ProvideTopBar(enabled = false)
 
   AppStateScaffold(
     icon = Lucide.Wrench,
-    title = title,
-    message = message.replace("\\n", "\n"),
+    title = state.title,
+    message = state.message.replace("\\n", "\n"),
     detail = {
-      if (until != null) {
-        AppStateBadge("예상 종료: ${until.format("M월 d일 HH시 mm분")}")
+      if (state.until != null) {
+        AppStateBadge("예상 종료: ${state.until.format("M월 d일 HH시 mm분")}")
       }
     },
     primaryAction =

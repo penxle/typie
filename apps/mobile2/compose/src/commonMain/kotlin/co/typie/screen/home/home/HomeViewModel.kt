@@ -13,17 +13,21 @@ import co.typie.graphql.builder.buildSite
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.text
 import co.typie.graphql.watchQuery
-import co.typie.service.SiteService
+import co.typie.storage.Preference
 
 class HomeViewModel : ViewModel() {
   private var hasEnteredScreen = false
 
-  val siteId: String
-    get() = SiteService.siteId
+  val siteId: String?
+    get() = Preference.siteId.value
 
   val query =
-    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
-      HomeScreen_Query(siteId = SiteService.siteId)
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderData(),
+      skip = { Preference.siteId.value == null },
+    ) {
+      HomeScreen_Query(siteId = Preference.siteId.value!!)
     }
 
   fun refetch() {

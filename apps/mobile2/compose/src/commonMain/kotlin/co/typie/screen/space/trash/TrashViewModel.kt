@@ -16,15 +16,17 @@ import co.typie.graphql.type.RecoverEntityInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.service.SiteService
+import co.typie.storage.Preference
 
 internal class TrashViewModel : ViewModel() {
-  val siteService = SiteService
   var entityId: String? by mutableStateOf(null)
 
   val siteQuery =
-    Apollo.watchQuery(scope = viewModelScope, skip = { entityId != null }) {
-      TrashScreen_WithSiteId_Query(siteId = siteService.siteId)
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      skip = { entityId != null || Preference.siteId.value == null },
+    ) {
+      TrashScreen_WithSiteId_Query(siteId = Preference.siteId.value!!)
     }
 
   val entityQuery =

@@ -3,7 +3,7 @@ package co.typie.auth
 import kotlinx.serialization.Serializable
 
 sealed interface AuthState {
-  data object Authenticated : AuthState
+  data class Authenticated(val tokens: AuthTokens) : AuthState
 
   data object Unauthenticated : AuthState
 }

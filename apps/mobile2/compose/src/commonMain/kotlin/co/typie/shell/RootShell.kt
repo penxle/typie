@@ -10,7 +10,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.FrameRateCategory
@@ -19,23 +18,22 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.preferredFrameRate
 import co.typie.auth.AuthService
-import co.typie.bootstrap.BootstrapDevSandbox
+import co.typie.auth.AuthState
 import co.typie.bootstrap.BootstrapService
-import co.typie.bootstrap.effectiveBootstrapState
+import co.typie.bootstrap.BootstrapState
 import co.typie.overlay.Loader
 import co.typie.overlay.LoaderOverlay
 import co.typie.overlay.LocalLoader
 import co.typie.overlay.LocalToast
 import co.typie.overlay.Toast
 import co.typie.overlay.ToastOverlay
+import co.typie.preflight.PreflightService
+import co.typie.preflight.PreflightState
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
-import co.typie.route.Route
 import co.typie.screen.system.maintenance.MaintenanceScreen
-import co.typie.screen.system.offline.OfflineScreen
 import co.typie.screen.system.splash.SplashScreen
 import co.typie.screen.system.update_required.UpdateRequiredScreen
-import co.typie.startup.AppStartupService
 import co.typie.ui.component.bottomsheet.BottomSheetHost
 import co.typie.ui.component.bottomsheet.BottomSheetHostState
 import co.typie.ui.component.bottomsheet.LocalBottomSheetHost
@@ -47,26 +45,31 @@ import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
 
+private enum class RootScreen {
+  Splash,
+  Maintenance,
+  UpdateRequired,
+  Auth,
+  Main,
+}
+
 @Composable
 fun RootShell() {
-  val appStartupService = AppStartupService
-  val authService = AuthService
-  val bootstrapService = BootstrapService
-  val bootstrapDevSandbox = BootstrapDevSandbox
-  val startupState by appStartupService.state.collectAsState()
-  val authState by authService.state.collectAsState()
-  val bootstrapState by bootstrapService.state.collectAsState()
-  val bootstrapScenario by bootstrapDevSandbox.scenario.collectAsState()
+  LaunchedEffect(Unit) { BootstrapService.launch() }
 
-  LaunchedEffect(Unit) { appStartupService.start() }
+  val bootstrapState by BootstrapService.state.collectAsState()
+  val preflightState by PreflightService.state.collectAsState()
+  val authState by AuthService.state.collectAsState()
 
-  val shellTargetState =
-    rootShellTargetState(
-      startupState = startupState,
-      authState = authState,
-      bootstrapState =
-        effectiveBootstrapState(remoteState = bootstrapState, scenario = bootstrapScenario),
-    )
+  val screen =
+    when {
+      bootstrapState !is BootstrapState.Ready -> RootScreen.Splash
+      preflightState is PreflightState.UnderMaintenance -> RootScreen.Maintenance
+      preflightState is PreflightState.UpdateRequired -> RootScreen.UpdateRequired
+      authState is AuthState.Unauthenticated -> RootScreen.Auth
+      else -> RootScreen.Main
+    }
+
   val toast = remember { Toast() }
   val loader = remember { Loader() }
   val bottomSheetHost = remember { BottomSheetHostState() }
@@ -91,36 +94,16 @@ fun RootShell() {
       }
     ) {
       Crossfade(
-        shellTargetState,
+        screen,
         modifier =
           Modifier.background(AppTheme.colors.surfaceDefault).hazeSource(LocalHazeState.current),
-      ) { state ->
-        key(state) {
-          when (val destination = state.destination) {
-            is RootShellDestination.Splash -> SplashScreen()
-            is RootShellDestination.Main -> MainShell { route -> MainRoutes(route) }
-            is RootShellDestination.Auth -> AuthShell { route -> AuthRoutes(route) }
-            is RootShellDestination.System ->
-              when (val route = destination.route) {
-                is Route.Offline -> OfflineScreen(onRetry = {})
-
-                is Route.Maintenance ->
-                  MaintenanceScreen(
-                    title = route.title,
-                    message = route.message,
-                    until = route.until,
-                  )
-
-                is Route.UpdateRequired ->
-                  UpdateRequiredScreen(
-                    storeUrl = route.storeUrl,
-                    currentVersion = route.currentVersion,
-                    requiredVersion = route.requiredVersion,
-                  )
-
-                else -> {}
-              }
-          }
+      ) { target ->
+        when (target) {
+          RootScreen.Splash -> SplashScreen()
+          RootScreen.Maintenance -> MaintenanceScreen()
+          RootScreen.UpdateRequired -> UpdateRequiredScreen()
+          RootScreen.Auth -> AuthShell { route -> AuthRoutes(route) }
+          RootScreen.Main -> MainShell { route -> MainRoutes(route) }
         }
       }
 

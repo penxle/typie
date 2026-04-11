@@ -2,7 +2,6 @@ package co.typie.route
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlin.time.Instant
 
 sealed interface Route {
   data object Home : Route
@@ -64,16 +63,6 @@ sealed interface Route {
   data class Editor(val slug: String) : Route
 
   data object Login : Route
-
-  data object Offline : Route
-
-  data class Maintenance(val title: String, val message: String, val until: Instant?) : Route
-
-  data class UpdateRequired(
-    val storeUrl: String,
-    val currentVersion: String,
-    val requiredVersion: String,
-  ) : Route
 }
 
 enum class RouteTransitionStyle {

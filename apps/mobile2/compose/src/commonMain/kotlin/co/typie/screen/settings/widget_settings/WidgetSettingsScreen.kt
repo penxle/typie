@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
@@ -26,12 +28,10 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 fun WidgetSettingsScreen() {
-  val model = viewModel { WidgetSettingsViewModel() }
-  val editorPreferences = model.editorPreferencesService
   val scrollState = rememberScrollState()
 
-  val characterCountFloatingEnabled = editorPreferences.characterCountFloatingEnabled
-  val widgetAutoFadeEnabled = editorPreferences.widgetAutoFadeEnabled
+  val characterCountFloatingEnabled by Preference.characterCountFloatingEnabled.collectAsState()
+  val widgetAutoFadeEnabled by Preference.widgetAutoFadeEnabled.collectAsState()
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -51,12 +51,12 @@ fun WidgetSettingsScreen() {
         label = "글자 수 위젯",
         description = "에디터에서 글자 수를 표시합니다.",
         onClick = {
-          editorPreferences.characterCountFloatingEnabled = !characterCountFloatingEnabled
+          Preference.characterCountFloatingEnabled.value = !characterCountFloatingEnabled
         },
         trailing = {
           SettingSwitch(
             checked = characterCountFloatingEnabled,
-            onCheckedChange = { next -> editorPreferences.characterCountFloatingEnabled = next },
+            onCheckedChange = { next -> Preference.characterCountFloatingEnabled.value = next },
           )
         },
       )
@@ -66,11 +66,11 @@ fun WidgetSettingsScreen() {
         SettingControlRow(
           label = "위젯 자동 페이드 인/아웃",
           description = "타이핑, 스크롤 시 위젯이 잠시 사라집니다.",
-          onClick = { editorPreferences.widgetAutoFadeEnabled = !widgetAutoFadeEnabled },
+          onClick = { Preference.widgetAutoFadeEnabled.value = !widgetAutoFadeEnabled },
           trailing = {
             SettingSwitch(
               checked = widgetAutoFadeEnabled,
-              onCheckedChange = { next -> editorPreferences.widgetAutoFadeEnabled = next },
+              onCheckedChange = { next -> Preference.widgetAutoFadeEnabled.value = next },
             )
           },
         )

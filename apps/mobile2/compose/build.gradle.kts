@@ -3,7 +3,7 @@
 
 import com.android.build.api.withAndroid
 import com.apollographql.apollo.annotations.ApolloExperimental
-import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
+import com.codingfeline.buildkonfig.compiler.FieldSpec
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -161,17 +161,27 @@ buildkonfig {
   exposeObjectWithName = "Konfig"
 
   defaultConfigs {
-    buildConfigField(STRING, "API_URL", env("API_URL"))
-    buildConfigField(STRING, "WS_URL", env("WS_URL"))
-    buildConfigField(STRING, "AUTH_URL", env("AUTH_URL"))
-    buildConfigField(STRING, "OIDC_CLIENT_ID", env("OIDC_CLIENT_ID"))
-    buildConfigField(STRING, "OIDC_CLIENT_SECRET", env("OIDC_CLIENT_SECRET"))
-    buildConfigField(STRING, "GOOGLE_ANDROID_CLIENT_ID", env("GOOGLE_ANDROID_CLIENT_ID"))
-    buildConfigField(STRING, "GOOGLE_SERVER_CLIENT_ID", env("GOOGLE_SERVER_CLIENT_ID"))
-    buildConfigField(STRING, "KAKAO_NATIVE_APP_KEY", env("KAKAO_NATIVE_APP_KEY"))
-    buildConfigField(STRING, "NAVER_CLIENT_ID", env("NAVER_CLIENT_ID"))
-    buildConfigField(STRING, "NAVER_CLIENT_SECRET", env("NAVER_CLIENT_SECRET"))
-    buildConfigField(STRING, "USERSITE_HOST", env("USERSITE_HOST"))
+    buildConfigField(FieldSpec.Type.STRING, "API_URL", env("API_URL"))
+    buildConfigField(FieldSpec.Type.STRING, "WS_URL", env("WS_URL"))
+    buildConfigField(FieldSpec.Type.STRING, "AUTH_URL", env("AUTH_URL"))
+    buildConfigField(FieldSpec.Type.STRING, "OIDC_CLIENT_ID", env("OIDC_CLIENT_ID"))
+    buildConfigField(FieldSpec.Type.STRING, "OIDC_CLIENT_SECRET", env("OIDC_CLIENT_SECRET"))
+    buildConfigField(
+      FieldSpec.Type.STRING,
+      "GOOGLE_ANDROID_CLIENT_ID",
+      env("GOOGLE_ANDROID_CLIENT_ID"),
+    )
+    buildConfigField(
+      FieldSpec.Type.STRING,
+      "GOOGLE_SERVER_CLIENT_ID",
+      env("GOOGLE_SERVER_CLIENT_ID"),
+    )
+    buildConfigField(FieldSpec.Type.STRING, "KAKAO_NATIVE_APP_KEY", env("KAKAO_NATIVE_APP_KEY"))
+    buildConfigField(FieldSpec.Type.STRING, "NAVER_CLIENT_ID", env("NAVER_CLIENT_ID"))
+    buildConfigField(FieldSpec.Type.STRING, "NAVER_CLIENT_SECRET", env("NAVER_CLIENT_SECRET"))
+    buildConfigField(FieldSpec.Type.STRING, "USERSITE_HOST", env("USERSITE_HOST"))
+    buildConfigField(FieldSpec.Type.STRING, "PREFLIGHT_URL", env("PREFLIGHT_URL"))
+    buildConfigField(FieldSpec.Type.STRING, "STAGE", env("STAGE"))
   }
 }
 

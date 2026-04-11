@@ -15,15 +15,18 @@ import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.service.SiteService
+import co.typie.storage.Preference
 
 class EntityMoveSheetViewModel : ViewModel() {
   var destinationEntityId: String? by mutableStateOf(null)
     private set
 
   val rootQuery =
-    Apollo.watchQuery(scope = viewModelScope, skip = { destinationEntityId != null }) {
-      EntityMoveSheet_Root_Query(siteId = SiteService.siteId)
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      skip = { destinationEntityId != null || Preference.siteId.value == null },
+    ) {
+      EntityMoveSheet_Root_Query(siteId = Preference.siteId.value!!)
     }
 
   val entityQuery =

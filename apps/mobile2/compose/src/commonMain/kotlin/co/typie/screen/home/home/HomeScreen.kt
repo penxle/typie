@@ -36,9 +36,6 @@ import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.graphql.HomeScreen_Query
 import co.typie.graphql.QueryState
-import co.typie.graphql.RefetchOnAppResumeEffect
-import co.typie.graphql.RefetchOnScreenEnterEffect
-import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
@@ -67,10 +64,6 @@ fun HomeScreen() {
   val nav = Nav.current
   val scrollState = rememberScrollState()
   val siteId = model.siteId
-
-  RefetchOnScreenEnterEffect(model::onScreenEntered)
-  RefetchOnAppResumeEffect(model::refetch)
-  RefetchOnSiteUpdateEffect(siteId = siteId, onRefetch = model::refetch)
 
   ProvideTopBar(
     leadingKey = SpacePopoverLeadingKey,

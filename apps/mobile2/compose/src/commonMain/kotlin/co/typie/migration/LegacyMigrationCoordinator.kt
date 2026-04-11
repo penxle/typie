@@ -21,7 +21,7 @@ object LegacyMigrationCoordinator : LegacyMigrationRunner {
 
     val authResult =
       when {
-        LegacyMigrationStateStore.isSessionHandled() -> LegacyMigrationStepResult.Skipped
+        //        LegacyMigrationStateStore.isSessionHandled() -> LegacyMigrationStepResult.Skipped
         else -> source.authBox?.let(::importAuth).orElseNotAttempted()
       }
     val prefsResult =

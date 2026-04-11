@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
-import co.typie.bootstrap.BootstrapDevSandbox
 import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
 import co.typie.dev.SubscriptionDevSandbox
@@ -205,7 +204,6 @@ fun main() {
         createDevToolsWindow(
           mainWindow = mainWindow,
           networkSimulator = networkSimulator,
-          bootstrapDevSandbox = BootstrapDevSandbox,
           subscriptionDevSandbox = SubscriptionDevSandbox,
         )
       }

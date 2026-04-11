@@ -11,13 +11,11 @@ import co.typie.graphql.builder.buildUser
 import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformModule
 import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.DeveloperPreferencesService
 import co.typie.service.SubscriptionService
 
 class SettingsViewModel : ViewModel() {
   val authService = AuthService
   val deviceInfo = PlatformModule.deviceInfo
-  val developerPreferences = DeveloperPreferencesService
   val currentSubscriptionStore = CurrentSubscriptionStore
   val subscriptionService = SubscriptionService
   val query =

@@ -12,7 +12,6 @@ import co.typie.graphql.type.CopyEntitiesInput
 import co.typie.graphql.type.MoveEntitiesInput
 import co.typie.result.Task
 import co.typie.result.task
-import co.typie.service.SiteRefreshCoordinator
 import kotlinx.coroutines.CancellationException
 
 enum class EntityClipboardMode {
@@ -175,11 +174,6 @@ object EntityClipboardService {
 
     if (clipboard.mode == EntityClipboardMode.Cut) {
       clear()
-    }
-
-    SiteRefreshCoordinator.notifySiteChanged(target.siteId)
-    if (clipboard.sourceSiteId != target.siteId) {
-      SiteRefreshCoordinator.notifySiteChanged(clipboard.sourceSiteId)
     }
 
     itemIds.size

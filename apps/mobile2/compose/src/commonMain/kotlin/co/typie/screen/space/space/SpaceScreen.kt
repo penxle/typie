@@ -42,9 +42,6 @@ import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
-import co.typie.graphql.RefetchOnAppResumeEffect
-import co.typie.graphql.RefetchOnScreenEnterEffect
-import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
@@ -67,6 +64,7 @@ import co.typie.screen.space.folder.showFolderItemActionsSheet
 import co.typie.screen.space.folder.toTransferSource
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
+import co.typie.storage.Preference
 import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
@@ -114,10 +112,6 @@ fun SpaceScreen() {
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
   var deleteRequest by remember { mutableStateOf<FolderDeleteRequest?>(null) }
   val siteId = model.siteId
-
-  RefetchOnScreenEnterEffect(model::onScreenEntered)
-  RefetchOnAppResumeEffect(model::refetch)
-  RefetchOnSiteUpdateEffect(siteId = siteId, onRefetch = model::refetch)
 
   val site = (model.query.state as? QueryState.Success)?.data?.site
   val clipboardState = clipboard.state
@@ -348,11 +342,17 @@ fun SpaceScreen() {
                 }
 
                 FolderAction.Copy -> {
-                  clipboard.setCopy(sourceSiteId = siteId, items = listOf(item.toTransferSource()))
+                  clipboard.setCopy(
+                    sourceSiteId = Preference.siteId.value!!,
+                    items = listOf(item.toTransferSource()),
+                  )
                 }
 
                 FolderAction.Cut -> {
-                  clipboard.setCut(sourceSiteId = siteId, items = listOf(item.toTransferSource()))
+                  clipboard.setCut(
+                    sourceSiteId = Preference.siteId.value!!,
+                    items = listOf(item.toTransferSource()),
+                  )
                 }
 
                 FolderAction.Delete -> {

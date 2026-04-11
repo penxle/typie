@@ -12,26 +12,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 internal class DesktopDeviceInfo : DeviceInfo {
-  override suspend fun snapshot(): DeviceInfoSnapshot =
-    withContext(Dispatchers.IO) {
-      val osName = System.getProperty("os.name")?.takeIf { it.isNotBlank() } ?: "Desktop"
-      val osVersion = System.getProperty("os.version")?.takeIf { it.isNotBlank() } ?: "unknown"
-      val appVersion = System.getProperty("app.version")?.takeIf { it.isNotBlank() } ?: "dev"
-      val deviceName =
-        sequenceOf(
-            System.getenv("COMPUTERNAME"),
-            System.getenv("HOSTNAME"),
-            System.getProperty("user.name"),
-          )
-          .firstOrNull { !it.isNullOrBlank() }
+  override fun retrieve(): DeviceInfoData {
+    val osName = System.getProperty("os.name")?.takeIf { it.isNotBlank() } ?: "Desktop"
+    val osVersion = System.getProperty("os.version")?.takeIf { it.isNotBlank() } ?: "unknown"
+    val appVersion = System.getProperty("app.version")?.takeIf { it.isNotBlank() } ?: "dev"
 
-      DeviceInfoSnapshot(
-        platform = osName,
-        osVersion = osVersion,
-        appVersion = appVersion,
-        deviceName = deviceName,
-      )
-    }
+    return DeviceInfoData(
+      model = "Desktop",
+      osName = osName,
+      osVersion = osVersion,
+      appVersion = appVersion,
+      appBuildNumber = "0",
+    )
+  }
 }
 
 internal class DesktopClipboard : Clipboard {

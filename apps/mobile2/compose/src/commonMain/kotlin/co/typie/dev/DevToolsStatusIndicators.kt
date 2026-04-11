@@ -1,7 +1,5 @@
 package co.typie.dev
 
-import co.typie.bootstrap.BootstrapDevScenario
-
 enum class DevToolsAccent {
   Muted,
   Success,
@@ -32,22 +30,9 @@ fun SubscriptionDevScenario.devToolsAccent(): DevToolsAccent =
     SubscriptionDevScenario.Manual -> DevToolsAccent.Highlight
   }
 
-fun BootstrapDevScenario.devToolsAccent(): DevToolsAccent =
-  when (this) {
-    BootstrapDevScenario.RemoteData -> DevToolsAccent.Muted
-    BootstrapDevScenario.Ready -> DevToolsAccent.Success
-    BootstrapDevScenario.Maintenance -> DevToolsAccent.Warning
-    BootstrapDevScenario.UpdateRequired -> DevToolsAccent.Danger
-  }
-
 fun devToolsCollapsedIndicatorAccents(
   networkPreset: NetworkPreset,
   subscriptionScenario: SubscriptionDevScenario,
-  bootstrapScenario: BootstrapDevScenario,
 ): List<DevToolsAccent> {
-  return listOf(
-    networkPreset.devToolsAccent(),
-    subscriptionScenario.devToolsAccent(),
-    bootstrapScenario.devToolsAccent(),
-  )
+  return listOf(networkPreset.devToolsAccent(), subscriptionScenario.devToolsAccent())
 }

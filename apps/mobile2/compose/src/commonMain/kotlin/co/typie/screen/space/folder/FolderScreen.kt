@@ -40,9 +40,6 @@ import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
-import co.typie.graphql.RefetchOnAppResumeEffect
-import co.typie.graphql.RefetchOnScreenEnterEffect
-import co.typie.graphql.RefetchOnSiteUpdateEffect
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
@@ -57,6 +54,7 @@ import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
+import co.typie.storage.Preference
 import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -100,17 +98,12 @@ fun FolderScreen(entityId: String) {
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
   var deleteRequest by remember(entityId) { mutableStateOf<FolderDeleteRequest?>(null) }
-  val siteId = model.siteId
 
   LaunchedEffect(entityId) {
     model.entityId = entityId
     isReordering = false
     isPersistingReorder = false
   }
-
-  RefetchOnScreenEnterEffect(model::onScreenEntered)
-  RefetchOnAppResumeEffect(model::refetch)
-  RefetchOnSiteUpdateEffect(siteId = siteId, onRefetch = model::refetch)
 
   val entity = (model.query.state as? QueryState.Success)?.data?.entity
   val folder = entity?.node?.onFolder
@@ -524,11 +517,17 @@ fun FolderScreen(entityId: String) {
                 }
 
                 FolderAction.Copy -> {
-                  clipboard.setCopy(sourceSiteId = siteId, items = listOf(item.toTransferSource()))
+                  clipboard.setCopy(
+                    sourceSiteId = Preference.siteId.value!!,
+                    items = listOf(item.toTransferSource()),
+                  )
                 }
 
                 FolderAction.Cut -> {
-                  clipboard.setCut(sourceSiteId = siteId, items = listOf(item.toTransferSource()))
+                  clipboard.setCut(
+                    sourceSiteId = Preference.siteId.value!!,
+                    items = listOf(item.toTransferSource()),
+                  )
                 }
 
                 FolderAction.Delete -> {

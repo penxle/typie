@@ -1,36 +1,47 @@
 package co.typie.migration
 
-import co.typie.service.DeveloperPreferencesService
-import co.typie.service.EditorPreferencesService
-import co.typie.storage.Prefs
+import co.typie.storage.Preference
 import co.typie.ui.theme.ThemeMode
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class LegacyPrefsImporterTest {
+  @BeforeTest
+  fun resetState() {
+    Preference.legacySiteId.value = ""
+    Preference.devMode.value = Preference.DEFAULT_DEV_MODE
+    Preference.typewriterEnabled.value = Preference.DEFAULT_TYPEWRITER_ENABLED
+    Preference.typewriterPosition.value = Preference.DEFAULT_TYPEWRITER_POSITION
+    Preference.lineHighlightEnabled.value = Preference.DEFAULT_LINE_HIGHLIGHT_ENABLED
+    Preference.autoSurroundEnabled.value = Preference.DEFAULT_AUTO_SURROUND_ENABLED
+    Preference.characterCountFloatingEnabled.value =
+      Preference.DEFAULT_CHARACTER_COUNT_FLOATING_ENABLED
+    Preference.widgetAutoFadeEnabled.value = Preference.DEFAULT_WIDGET_AUTO_FADE_ENABLED
+    Preference.themeMode.value = ThemeMode.System
+    Preference.migrationSchemaVersion.value = 0
+    Preference.migrationLastResultName.value = LegacyMigrationPhaseStatus.NotStarted.name
+    Preference.migrationLastAttemptAtMillis.value = 0L
+    Preference.migrationCompletedAtMillis.value = 0L
+    Preference.migrationHandledSession.value = false
+    Preference.migrationImportedSession.value = false
+    Preference.migrationImportedPrefs.value = false
+    Preference.migrationImportedPrefKeys.value = emptyList()
+    Preference.migrationSkippedPrefKeys.value = emptyList()
+  }
+
   @Test
   fun `import maps Flutter dark theme to KMP ThemeMode Dark`() {
-    val prefs = createLegacyMigrationTestPrefs()
-    val stateStore = LegacyMigrationStateStore(prefs)
-    val importer = LegacyPrefsImporter(prefs, stateStore)
-    val snapshot = TestPrefsSnapshot(prefs)
-
-    importer.import(
+    LegacyPrefsImporter.import(
       LegacyPrefsImportSource(preferenceValues = emptyMap(), themeValues = mapOf("mode" to "dark"))
     )
-
-    assertEquals(ThemeMode.Dark, snapshot.themeMode)
+    assertEquals(ThemeMode.Dark, Preference.themeMode.value)
   }
 
   @Test
   fun `import only applies whitelisted keys`() {
-    val prefs = createLegacyMigrationTestPrefs()
-    val stateStore = LegacyMigrationStateStore(prefs)
-    val importer = LegacyPrefsImporter(prefs, stateStore)
-    val snapshot = TestPrefsSnapshot(prefs)
-
     val report =
-      importer.import(
+      LegacyPrefsImporter.import(
         LegacyPrefsImportSource(
           preferenceValues =
             mapOf(
@@ -42,105 +53,73 @@ class LegacyPrefsImporterTest {
           themeValues = mapOf("mode" to "dark", "secondary" to "ignored"),
         )
       )
-
-    assertEquals("site_fixture", snapshot.siteId)
-    assertEquals(true, snapshot.devMode)
-    assertEquals(ThemeMode.Dark, snapshot.themeMode)
+    assertEquals("site_fixture", Preference.legacySiteId.value)
+    assertEquals(true, Preference.devMode.value)
+    assertEquals(ThemeMode.Dark, Preference.themeMode.value)
     assertEquals(listOf("dev_mode", "site_id", "theme_mode"), report.importedKeys)
     assertEquals(emptyList(), report.skippedKeys)
   }
 
   @Test
   fun `import skips keys whose KMP target already has a non-default value`() {
-    val prefs = createLegacyMigrationTestPrefs()
-    val stateStore = LegacyMigrationStateStore(prefs)
-    val importer = LegacyPrefsImporter(prefs, stateStore)
-    val snapshot =
-      TestPrefsSnapshot(prefs).apply {
-        typewriterEnabled = true
-        themeMode = ThemeMode.Light
-      }
+    Preference.typewriterEnabled.value = true
+    Preference.themeMode.value = ThemeMode.Light
 
     val report =
-      importer.import(
+      LegacyPrefsImporter.import(
         LegacyPrefsImportSource(
-          preferenceValues = mapOf(EditorPreferencesService.TYPEWRITER_ENABLED_KEY to false),
+          preferenceValues = mapOf(Preference.TYPEWRITER_ENABLED_KEY to false),
           themeValues = mapOf("mode" to "dark"),
         )
       )
-
-    assertEquals(true, snapshot.typewriterEnabled)
-    assertEquals(ThemeMode.Light, snapshot.themeMode)
+    assertEquals(true, Preference.typewriterEnabled.value)
+    assertEquals(ThemeMode.Light, Preference.themeMode.value)
     assertEquals(emptyList(), report.importedKeys)
     assertEquals(
-      listOf("theme_mode", EditorPreferencesService.TYPEWRITER_ENABLED_KEY).sorted(),
+      listOf("theme_mode", Preference.TYPEWRITER_ENABLED_KEY).sorted(),
       report.skippedKeys,
     )
   }
 
   @Test
   fun `import records partial-success state when some keys import and some are skipped`() {
-    val prefs = createLegacyMigrationTestPrefs()
-    val stateStore = LegacyMigrationStateStore(prefs)
-    val importer = LegacyPrefsImporter(prefs, stateStore)
-    val snapshot = TestPrefsSnapshot(prefs).apply { devMode = true }
+    Preference.devMode.value = true
 
     val report =
-      importer.import(
+      LegacyPrefsImporter.import(
         LegacyPrefsImportSource(
-          preferenceValues =
-            mapOf("site_id" to "site_fixture", DeveloperPreferencesService.DEV_MODE_KEY to false),
+          preferenceValues = mapOf("site_id" to "site_fixture", Preference.DEV_MODE_KEY to false),
           themeValues = mapOf("mode" to "dark"),
         )
       )
-
-    val state = stateStore.snapshot()
+    val state = LegacyMigrationStateStore.snapshot()
 
     assertEquals(listOf("site_id", "theme_mode"), report.importedKeys)
-    assertEquals(listOf(DeveloperPreferencesService.DEV_MODE_KEY), report.skippedKeys)
+    assertEquals(listOf(Preference.DEV_MODE_KEY), report.skippedKeys)
     assertEquals(LegacyMigrationPhaseStatus.PartiallyImported, state.lastResult)
     assertEquals(listOf("site_id", "theme_mode"), state.importedPrefKeys)
-    assertEquals(listOf(DeveloperPreferencesService.DEV_MODE_KEY), state.skippedPrefKeys)
+    assertEquals(listOf(Preference.DEV_MODE_KEY), state.skippedPrefKeys)
     assertEquals(true, state.importedPrefs)
-    assertEquals(true, snapshot.devMode)
+    assertEquals(true, Preference.devMode.value)
   }
 
   @Test
   fun `import does not reapply handled prefs after user resets them to defaults`() {
-    val prefs = createLegacyMigrationTestPrefs()
-    val stateStore = LegacyMigrationStateStore(prefs)
-    val importer = LegacyPrefsImporter(prefs, stateStore)
-    val snapshot = TestPrefsSnapshot(prefs)
     val source =
       LegacyPrefsImportSource(
-        preferenceValues = mapOf(DeveloperPreferencesService.DEV_MODE_KEY to true),
+        preferenceValues = mapOf(Preference.DEV_MODE_KEY to true),
         themeValues = mapOf("mode" to "dark"),
       )
 
-    importer.import(source)
-    snapshot.devMode = DeveloperPreferencesService.DEFAULT_DEV_MODE
-    snapshot.themeMode = ThemeMode.System
+    LegacyPrefsImporter.import(source)
+    Preference.devMode.value = Preference.DEFAULT_DEV_MODE
+    Preference.themeMode.value = ThemeMode.System
 
-    val report = importer.import(source)
+    val report = LegacyPrefsImporter.import(source)
 
-    assertEquals(DeveloperPreferencesService.DEFAULT_DEV_MODE, snapshot.devMode)
-    assertEquals(ThemeMode.System, snapshot.themeMode)
+    assertEquals(Preference.DEFAULT_DEV_MODE, Preference.devMode.value)
+    assertEquals(ThemeMode.System, Preference.themeMode.value)
     assertEquals(emptyList(), report.importedKeys)
-    assertEquals(
-      listOf(DeveloperPreferencesService.DEV_MODE_KEY, "theme_mode"),
-      report.skippedKeys.sorted(),
-    )
-  }
-
-  private class TestPrefsSnapshot(prefs: Prefs) {
-    var siteId: String by prefs("site_id", "")
-    var devMode: Boolean by
-      prefs(DeveloperPreferencesService.DEV_MODE_KEY, DeveloperPreferencesService.DEFAULT_DEV_MODE)
-    var typewriterEnabled: Boolean by
-      prefs(
-        EditorPreferencesService.TYPEWRITER_ENABLED_KEY,
-        EditorPreferencesService.DEFAULT_TYPEWRITER_ENABLED,
-      )
-    var themeMode: ThemeMode by prefs("theme_mode", ThemeMode.System)
+    assertEquals(listOf(Preference.DEV_MODE_KEY, "theme_mode"), report.skippedKeys.sorted())
   }
 }

@@ -1,9 +1,6 @@
 package co.typie.ui.theme
 
-import co.typie.migration.LegacyMigrationRunResult
-import co.typie.migration.LegacyMigrationSourceState
-import co.typie.migration.LegacyMigrationStepResult
-import co.typie.startup.AppStartupState
+import co.typie.bootstrap.BootstrapState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -13,24 +10,16 @@ class ThemeStartupTest {
     assertEquals(
       ThemeMode.System,
       resolveThemeModeForStartup(
-        startupState = AppStartupState.Migrating,
+        startupState = BootstrapState.NotReady,
         persistedThemeMode = ThemeMode.Dark,
       ),
     )
     assertEquals(
       ThemeMode.Dark,
       resolveThemeModeForStartup(
-        startupState = AppStartupState.Ready(readyMigrationResult()),
+        startupState = BootstrapState.Ready,
         persistedThemeMode = ThemeMode.Dark,
       ),
-    )
-  }
-
-  private fun readyMigrationResult(): LegacyMigrationRunResult {
-    return LegacyMigrationRunResult(
-      sourceState = LegacyMigrationSourceState.Available,
-      authResult = LegacyMigrationStepResult.Imported,
-      prefsResult = LegacyMigrationStepResult.Imported,
     )
   }
 }

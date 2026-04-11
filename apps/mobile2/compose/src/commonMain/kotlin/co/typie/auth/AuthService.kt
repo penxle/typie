@@ -3,7 +3,7 @@ package co.typie.auth
 import co.typie.Konfig
 import co.typie.graphql.Apollo
 import co.typie.network.Http
-import co.typie.storage.vault
+import co.typie.storage.Vault
 import com.apollographql.cache.normalized.apolloStore
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
@@ -25,13 +25,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 object AuthService {
-  var tokens: AuthTokens? by vault("tokens", null)
-    private set
+  private val mutex = Mutex()
 
   private val _state = MutableStateFlow<AuthState>(AuthState.Unauthenticated)
   val state: StateFlow<AuthState> = _state
-
-  private val mutex = Mutex()
 
   suspend fun login(sessionToken: String) {
     mutex.withLock {
@@ -46,7 +43,7 @@ object AuthService {
 
   suspend fun renew() {
     mutex.withLock {
-      val sessionToken = tokens?.sessionToken
+      val sessionToken = Vault.authTokens.value?.sessionToken
       if (sessionToken == null) {
         _state.value = AuthState.Unauthenticated
         return@withLock
@@ -63,7 +60,7 @@ object AuthService {
 
   suspend fun logout() {
     mutex.withLock {
-      val sessionToken = tokens?.sessionToken
+      val sessionToken = Vault.authTokens.value?.sessionToken
       if (sessionToken != null) {
         try {
           Http.get("${Konfig.AUTH_URL}/logout") {
@@ -85,8 +82,8 @@ object AuthService {
   private suspend fun authenticate(sessionToken: String) {
     val accessToken = exchangeToken(sessionToken)
 
-    tokens = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
-    _state.value = AuthState.Authenticated
+    Vault.authTokens.value = AuthTokens(sessionToken = sessionToken, accessToken = accessToken)
+    _state.value = AuthState.Authenticated(Vault.authTokens.value!!)
   }
 
   private suspend fun exchangeToken(sessionToken: String): String {
@@ -144,7 +141,7 @@ object AuthService {
   }
 
   private suspend fun unauthenticate() {
-    tokens = null
+    Vault.authTokens.value = null
     _state.value = AuthState.Unauthenticated
 
     Apollo.apolloStore.clearAll()

@@ -31,27 +31,24 @@ import platform.UIKit.UIImageWriteToSavedPhotosAlbum
 import platform.UIKit.UIPasteboard
 import platform.UIKit.UIViewController
 
-internal class IOSDeviceInfo : DeviceInfo {
-  override suspend fun snapshot(): DeviceInfoSnapshot =
-    withContext(Dispatchers.Default) {
-      val device = UIDevice.currentDevice
-      val bundle = NSBundle.mainBundle
-      val versionName =
-        (bundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String)?.takeIf {
-          it.isNotBlank()
-        } ?: "unknown"
-      val buildNumber =
-        (bundle.objectForInfoDictionaryKey("CFBundleVersion") as? String)?.takeIf {
-          it.isNotBlank()
-        } ?: "unknown"
+private fun NSBundle.infoString(key: String): String =
+  (objectForInfoDictionaryKey(key) as? String)?.takeIf(String::isNotBlank) ?: "unknown"
 
-      DeviceInfoSnapshot(
-        platform = device.systemName,
-        osVersion = device.systemVersion,
-        appVersion = "$versionName ($buildNumber)",
-        deviceName = device.name,
-      )
-    }
+internal class IOSDeviceInfo : DeviceInfo {
+  override fun retrieve(): DeviceInfoData {
+    val device = UIDevice.currentDevice
+    val bundle = NSBundle.mainBundle
+    val versionName = bundle.infoString("CFBundleShortVersionString")
+    val buildNumber = bundle.infoString("CFBundleVersion")
+
+    return DeviceInfoData(
+      model = device.model,
+      osName = device.systemName,
+      osVersion = device.systemVersion,
+      appVersion = versionName,
+      appBuildNumber = buildNumber,
+    )
+  }
 }
 
 internal class IOSClipboard : Clipboard {

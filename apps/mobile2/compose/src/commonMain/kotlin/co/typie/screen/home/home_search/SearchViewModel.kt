@@ -12,8 +12,7 @@ import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildSite
 import co.typie.graphql.watchQuery
-import co.typie.service.SiteService
-import co.typie.storage.prefs
+import co.typie.storage.Preference
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -25,32 +24,30 @@ class SearchViewModel : ViewModel() {
   var query by mutableStateOf("")
     private set
 
-  var recentSearches by mutableStateOf<List<String>>(emptyList())
-    private set
+  val recentSearches = Preference.recentSearches
 
   var activeQuery by mutableStateOf("")
     private set
 
   val siteQuery =
-    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderSiteData()) {
-      HomeSearch_Header_Query(siteId = SiteService.siteId)
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderSiteData(),
+      skip = { Preference.siteId.value == null },
+    ) {
+      HomeSearch_Header_Query(siteId = Preference.siteId.value!!)
     }
 
   val searchResults =
     Apollo.watchQuery(
       scope = viewModelScope,
-      skip = { activeQuery.isBlank() },
+      skip = { activeQuery.isBlank() || Preference.siteId.value == null },
       resetOnChange = false,
     ) {
-      HomeScreen_Search_Query(siteId = SiteService.siteId, query = activeQuery)
+      HomeScreen_Search_Query(siteId = Preference.siteId.value!!, query = activeQuery)
     }
 
-  private var storedRecentSearches: List<String> by prefs("recent_searches", emptyList())
   private var debounceJob: Job? = null
-
-  init {
-    recentSearches = storedRecentSearches
-  }
 
   fun updateQuery(value: String) {
     query = value
@@ -76,19 +73,16 @@ class SearchViewModel : ViewModel() {
     val trimmed = queryText.trim()
     if (trimmed.isBlank()) return
     val updated =
-      recentSearches.toMutableList().apply {
+      Preference.recentSearches.value.toMutableList().apply {
         remove(trimmed)
         add(0, trimmed)
         if (size > 10) removeLast()
       }
-    recentSearches = updated
-    storedRecentSearches = updated
+    Preference.recentSearches.value = updated
   }
 
   fun removeRecentSearch(queryText: String) {
-    val updated = recentSearches - queryText
-    recentSearches = updated
-    storedRecentSearches = updated
+    Preference.recentSearches.value = Preference.recentSearches.value - queryText
   }
 
   fun onHeaderEnterAnimationConsumed() {

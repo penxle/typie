@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -15,44 +14,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 internal class AndroidDeviceInfo(private val context: Context) : DeviceInfo {
-  override suspend fun snapshot(): DeviceInfoSnapshot =
-    withContext(Dispatchers.IO) {
-      val packageInfo =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          context.packageManager.getPackageInfo(
-            context.packageName,
-            PackageManager.PackageInfoFlags.of(0),
-          )
-        } else {
-          @Suppress("DEPRECATION") context.packageManager.getPackageInfo(context.packageName, 0)
-        }
+  override fun retrieve(): DeviceInfoData {
+    val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+    val versionCode = packageInfo.longVersionCode.toString()
+    val versionName = packageInfo.versionName?.takeIf { it.isNotBlank() } ?: "unknown"
 
-      @Suppress("DEPRECATION")
-      val buildNumber =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-          packageInfo.longVersionCode.toString()
-        } else {
-          packageInfo.versionCode.toString()
-        }
+    val manufacturer = Build.MANUFACTURER?.trim().orEmpty()
+    val model = Build.MODEL?.trim().orEmpty()
+    val modelName = "$manufacturer $model".trim().ifBlank { Build.DEVICE ?: "Android device" }
 
-      val versionName = packageInfo.versionName?.takeIf { it.isNotBlank() } ?: "unknown"
-      val manufacturer = Build.MANUFACTURER?.trim().orEmpty()
-      val model = Build.MODEL?.trim().orEmpty()
-      val deviceName =
-        when {
-          manufacturer.isBlank() -> model
-          model.isBlank() -> manufacturer
-          model.startsWith(manufacturer, ignoreCase = true) -> model
-          else -> "$manufacturer $model"
-        }.ifBlank { Build.DEVICE ?: "Android device" }
-
-      DeviceInfoSnapshot(
-        platform = "Android",
-        osVersion = Build.VERSION.RELEASE ?: "unknown",
-        appVersion = "$versionName ($buildNumber)",
-        deviceName = deviceName,
-      )
-    }
+    return DeviceInfoData(
+      model = modelName,
+      osName = "Android",
+      osVersion = Build.VERSION.RELEASE ?: "unknown",
+      appVersion = versionName,
+      appBuildNumber = versionCode,
+    )
+  }
 }
 
 internal class AndroidClipboard(private val context: Context) : Clipboard {

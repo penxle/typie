@@ -30,6 +30,7 @@ import co.typie.route.Route
 import co.typie.screen.subscription.subscriptionEntryDestination
 import co.typie.screen.subscription.subscriptionRoute
 import co.typie.service.hasSubscriptionOrNull
+import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
@@ -258,10 +259,9 @@ fun SettingsScreen() {
   val subscriptionService = model.subscriptionService
   val authService = model.authService
   val deviceInfo = model.deviceInfo
-  val developerPreferences = model.developerPreferences
   val scrollState = rememberScrollState()
   val themeModeState = LocalThemeMode.current
-  val devModeEnabled = developerPreferences.devMode
+  val devModeEnabled by Preference.devMode.collectAsState()
   val currentSubscriptionState by currentSubscriptionStore.state.collectAsState()
   val sections = remember(devModeEnabled) { settingsSections(devModeEnabled = devModeEnabled) }
   var appVersion by remember { mutableStateOf<String?>(null) }
@@ -274,7 +274,7 @@ fun SettingsScreen() {
 
   LaunchedEffect(deviceInfo) {
     appVersion =
-      runCatching { deviceInfo.snapshot().appVersion.trim().takeIf { it.isNotEmpty() } }.getOrNull()
+      runCatching { deviceInfo.retrieve().appVersion.trim().takeIf { it.isNotEmpty() } }.getOrNull()
   }
 
   ProvideTopBar(
@@ -305,7 +305,7 @@ fun SettingsScreen() {
             onResult = { result ->
               result.completedOrNull()?.let {
                 // TODO: 테마 변경 트래킹
-                themeModeState.value = it
+                Preference.themeMode.value = it
               }
             },
           )
@@ -317,12 +317,12 @@ fun SettingsScreen() {
           devModeTapCount = result.nextTapCount
 
           if (result.enableDeveloperMode) {
-            developerPreferences.devMode = true
+            Preference.devMode.value = true
           }
 
           result.message?.let { message -> toast.show(ToastType.Success, message) }
         },
-        onDeveloperModeChange = { next -> developerPreferences.devMode = next },
+        onDeveloperModeChange = { next -> Preference.devMode.value = next },
         onItemClick = { item ->
           val route = settingsRouteFor(item)
 

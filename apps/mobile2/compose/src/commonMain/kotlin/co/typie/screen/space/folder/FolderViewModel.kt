@@ -26,7 +26,6 @@ import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.service.SiteService
 
 data class FolderThumbnailResult(val id: String, val url: String)
 
@@ -34,9 +33,6 @@ class FolderViewModel : ViewModel() {
   private val blobService = BlobService
   private var hasEnteredScreen = false
   var entityId by mutableStateOf("")
-
-  val siteId: String
-    get() = SiteService.siteId
 
   val query =
     Apollo.watchQuery(scope = viewModelScope, skip = { entityId.isBlank() }) {

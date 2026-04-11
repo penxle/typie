@@ -7,17 +7,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import co.typie.bootstrap.BootstrapService
+import co.typie.bootstrap.BootstrapState
 import co.typie.platform.PurchaseActivityHolder
-import co.typie.startup.AppStartupService
-import co.typie.startup.AppStartupState
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     val splashScreen = installSplashScreen()
-    AppStartupService.startAsync()
-    splashScreen.setKeepOnScreenCondition {
-      AppStartupService.state.value !is AppStartupState.Ready
-    }
+    splashScreen.setKeepOnScreenCondition { BootstrapService.state.value !is BootstrapState.Ready }
 
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)

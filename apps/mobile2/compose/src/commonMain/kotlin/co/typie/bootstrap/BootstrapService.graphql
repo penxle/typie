@@ -1,0 +1,9 @@
+query BootstrapService_Query {
+  me @catch(to: THROW) {
+    id
+
+    sites {
+      id
+    }
+  }
+}

@@ -99,7 +99,7 @@ fun BottomSheetScope<Unit>.FeedbackSheet() {
     isSubmitting = true
 
     try {
-      val deviceSnapshot = runCatching { deviceInfo.snapshot() }.getOrElse { null }
+      val deviceSnapshot = runCatching { deviceInfo.retrieve() }.getOrElse { null }
       val metadata = buildFeedbackMetadata(deviceSnapshot)
 
       Apollo.executeMutation(
@@ -185,12 +185,12 @@ private fun String?.toOptionalInput(): Optional<String> {
   return Optional.present(value)
 }
 
-private fun buildFeedbackMetadata(info: co.typie.platform.DeviceInfoSnapshot?): FeedbackMetadata {
+private fun buildFeedbackMetadata(info: co.typie.platform.DeviceInfoData?): FeedbackMetadata {
   return FeedbackMetadata(
-    platform = info?.platform?.trim()?.takeIf { it.isNotEmpty() },
+    platform = info?.osName?.trim()?.takeIf { it.isNotEmpty() },
     osVersion = info?.osVersion?.trim()?.takeIf { it.isNotEmpty() },
     appVersion = info?.appVersion?.trim()?.takeIf { it.isNotEmpty() },
-    deviceName = info?.deviceName?.trim()?.takeIf { it.isNotEmpty() },
+    deviceName = null,
   )
 }
 
