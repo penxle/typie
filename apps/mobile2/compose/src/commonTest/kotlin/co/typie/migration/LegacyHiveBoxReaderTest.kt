@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class LegacyHiveBoxReaderTest {
-  private val reader = LegacyHiveBoxReader()
+  private val reader = LegacyHiveBoxReader
 
   @Test
   fun `readEncryptedBox decodes auth box session token`() {
@@ -48,7 +48,7 @@ class LegacyHiveBoxReaderTest {
       reader.readEncryptedBox(
         bytes = loadLegacyMigrationFixture("auth_box.hive"),
         keyCrc = calculateLegacyHiveKeyCrc(encryptionKey),
-        decrypt = { payload -> decryptLegacyHiveAesPayload(payload, encryptionKey) },
+        decrypt = { payload: ByteArray -> decryptLegacyHiveAesPayload(payload, encryptionKey) },
       )
 
     assertEquals(mapOf("session_token" to "fixture-session-token"), values)

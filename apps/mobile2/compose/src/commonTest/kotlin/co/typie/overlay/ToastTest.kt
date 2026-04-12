@@ -14,14 +14,14 @@ class ToastTest {
   @Test
   fun initialStateIsNull() {
     val toast = Toast()
-    assertNull(toast.state.value)
+    assertNull(toast.state)
   }
 
   @Test
   fun showSetsState() {
     val toast = Toast()
     toast.show(ToastType.Success, "저장됨")
-    val state = toast.state.value!!
+    val state = toast.state!!
     assertEquals(ToastType.Success, state.type)
     assertEquals("저장됨", state.message)
   }
@@ -31,7 +31,7 @@ class ToastTest {
     val toast = Toast()
     toast.show(ToastType.Error, "오류")
     toast.dismiss()
-    assertNull(toast.state.value)
+    assertNull(toast.state)
   }
 
   @Test
@@ -39,7 +39,7 @@ class ToastTest {
     val toast = Toast()
     toast.show(ToastType.Success, "첫번째")
     toast.show(ToastType.Error, "두번째")
-    val state = toast.state.value!!
+    val state = toast.state!!
     assertEquals(ToastType.Error, state.type)
     assertEquals("두번째", state.message)
   }
@@ -49,7 +49,7 @@ class ToastTest {
     val toast = Toast()
     toast.show(ToastType.Success, "짧은 메시지")
     // "짧은 메시지" is 5 chars, under 18 → no extra duration
-    assertEquals(2.seconds, toast.state.value!!.duration)
+    assertEquals(2.seconds, toast.state!!.duration)
   }
 
   @Test
@@ -60,7 +60,7 @@ class ToastTest {
     val extra = ((longMessage.length - 18).coerceIn(0, 100) * 12).milliseconds
     val maxExtra = 1200.milliseconds
     val expectedExtra = if (extra > maxExtra) maxExtra else extra
-    assertEquals(2.seconds + expectedExtra, toast.state.value!!.duration)
+    assertEquals(2.seconds + expectedExtra, toast.state!!.duration)
   }
 
   @Test
@@ -68,7 +68,7 @@ class ToastTest {
     val toast = Toast()
     toast.show(ToastType.Notification, "알림", duration = 10.seconds)
     // "알림" is 2 chars, under 18 → no extra
-    assertEquals(10.seconds, toast.state.value!!.duration)
+    assertEquals(10.seconds, toast.state!!.duration)
   }
 
   @Test
@@ -80,7 +80,7 @@ class ToastTest {
         42
       }
     assertEquals(42, result)
-    val state = toast.state.value!!
+    val state = toast.state!!
     assertEquals(ToastType.Success, state.type)
     assertEquals("완료", state.message)
   }
@@ -89,7 +89,7 @@ class ToastTest {
   fun withLoadingSuccessDefaultMessage() = runTest {
     val toast = Toast()
     toast.withLoading("작업 완료") { 42 }
-    val state = toast.state.value!!
+    val state = toast.state!!
     assertEquals(ToastType.Success, state.type)
     assertEquals("작업 완료", state.message)
   }
@@ -98,7 +98,7 @@ class ToastTest {
   fun withLoadingFailure() = runTest {
     val toast = Toast()
     assertFailsWith<CancellationException> { toast.withLoading("로딩 중...") { failure("실패했습니다") } }
-    val state = toast.state.value!!
+    val state = toast.state!!
     assertEquals(ToastType.Error, state.type)
     assertEquals("실패했습니다", state.message)
   }
@@ -109,7 +109,7 @@ class ToastTest {
     assertFailsWith<IllegalStateException> {
       toast.withLoading("로딩 중...") { throw IllegalStateException("unexpected") }
     }
-    val state = toast.state.value!!
+    val state = toast.state!!
     assertEquals(ToastType.Error, state.type)
     assertEquals("오류가 발생했습니다", state.message)
   }
@@ -122,7 +122,7 @@ class ToastTest {
       success("완료")
       "result"
     }
-    val state = toast.state.value!!
+    val state = toast.state!!
     assertEquals(ToastType.Notification, state.type)
     assertEquals("새 알림", state.message)
   }

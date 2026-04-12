@@ -5,7 +5,6 @@ import co.typie.dev.SubscriptionDevScenario
 import co.typie.dev.subscriptionDevCanStartTrial
 import co.typie.dev.subscriptionDevSubscription
 import co.typie.graphql.QueryState
-import co.typie.platform.Platform
 import co.typie.platform.PurchasePlanInterval
 import co.typie.service.FULL_ACCESS_MONTHLY_PLAN_ID
 import co.typie.service.FULL_ACCESS_YEARLY_PLAN_ID
@@ -33,24 +32,24 @@ import kotlinx.datetime.toLocalDateTime
 class SubscriptionModelsTest {
   @Test
   fun `desktop subscription sandbox defaults to real data mode`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop)
-
-    assertEquals(SubscriptionDevScenario.RemoteData, sandbox.scenario.value)
-    assertEquals(false, sandbox.usesSandbox)
+    withSubscriptionDevScenario(SubscriptionDevScenario.RemoteData) {
+      assertEquals(SubscriptionDevScenario.RemoteData, SubscriptionDevSandbox.scenario)
+      assertEquals(false, SubscriptionDevSandbox.usesSandbox)
+    }
   }
 
   @Test
   fun `desktop subscription sandbox transitions through trial purchase and cancel states`() {
-    val sandbox = SubscriptionDevSandbox(Platform.Desktop)
+    withSubscriptionDevScenario(SubscriptionDevScenario.RemoteData) {
+      SubscriptionDevSandbox.startTrial()
+      assertEquals(SubscriptionDevScenario.Trial, SubscriptionDevSandbox.scenario)
 
-    sandbox.startTrial()
-    assertEquals(SubscriptionDevScenario.Trial, sandbox.scenario.value)
+      SubscriptionDevSandbox.purchase(PurchasePlanInterval.Yearly)
+      assertEquals(SubscriptionDevScenario.Yearly, SubscriptionDevSandbox.scenario)
 
-    sandbox.purchase(PurchasePlanInterval.Yearly)
-    assertEquals(SubscriptionDevScenario.Yearly, sandbox.scenario.value)
-
-    sandbox.scheduleCancel()
-    assertEquals(SubscriptionDevScenario.CancelScheduled, sandbox.scenario.value)
+      SubscriptionDevSandbox.scheduleCancel()
+      assertEquals(SubscriptionDevScenario.CancelScheduled, SubscriptionDevSandbox.scenario)
+    }
   }
 
   @Test
@@ -322,4 +321,14 @@ class SubscriptionModelsTest {
 
 private fun relativeDate(date: LocalDate, days: Int): LocalDate {
   return LocalDate.fromEpochDays(date.toEpochDays() + days)
+}
+
+private fun <T> withSubscriptionDevScenario(initial: SubscriptionDevScenario, block: () -> T): T {
+  val previous = SubscriptionDevSandbox.scenario
+  SubscriptionDevSandbox.select(initial)
+  return try {
+    block()
+  } finally {
+    SubscriptionDevSandbox.select(previous)
+  }
 }

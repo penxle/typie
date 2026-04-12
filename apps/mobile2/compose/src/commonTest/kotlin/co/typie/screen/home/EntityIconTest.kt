@@ -1,6 +1,7 @@
 package co.typie.screen.home
 
 import co.typie.icons.Lucide
+import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.DarkColors
 import co.typie.ui.theme.LightColors
