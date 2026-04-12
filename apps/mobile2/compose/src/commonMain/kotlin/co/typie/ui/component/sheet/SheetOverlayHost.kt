@@ -279,17 +279,23 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
 
     SideEffect { entry.controller.updateVisibleFraction(visibleFraction) }
 
-    fun settleOrDismiss(velocity: Float) {
+    fun settleOrDismiss(velocity: Float, settleSnapshot: SheetGestureSnapshot) {
       if (isResolving) return
+      val settledDetents = settleSnapshot.resolvedDetents
+      val settledSheetHeightPx = settleSnapshot.sheetState.heightPx
+      val settledDragOffsetPx = settleSnapshot.sheetState.offsetPx
+      val settledCurrentDetentId = settleSnapshot.currentDetentId
       val effectiveSheetHeightPx =
-        (sheetHeightPx - resolveVisualSheetDragOffsetPx(dragOffsetPx)).coerceAtLeast(0f)
+        (settledSheetHeightPx - resolveVisualSheetDragOffsetPx(settledDragOffsetPx)).coerceAtLeast(
+          0f
+        )
       val effectiveSheetHeight = with(density) { effectiveSheetHeightPx.toDp() }
       val shouldDismiss =
         entry.spec.dismissPolicy.dragDown &&
           shouldDismissDraggedSheet(
             policy = entry.spec.sizePolicy,
-            detents = resolvedDetents,
-            currentDetentId = entry.controller.currentDetentId,
+            detents = settledDetents,
+            currentDetentId = settledCurrentDetentId,
             sheetHeight = effectiveSheetHeight,
             velocity = velocity,
           )
@@ -305,8 +311,8 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
       val nearest =
         resolveSheetSettledDetent(
           policy = entry.spec.sizePolicy,
-          detents = resolvedDetents,
-          currentDetentId = entry.controller.currentDetentId,
+          detents = settledDetents,
+          currentDetentId = settledCurrentDetentId,
           sheetHeight = effectiveSheetHeight,
           velocity = velocity,
         )
@@ -315,8 +321,10 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
       }
       if (nearest.id == entry.controller.targetDetentId) {
         coroutineScope.launch {
-          val heightAnimatable = Animatable(sheetHeightPx)
-          val dragOffsetAnimatable = Animatable(dragOffsetPx)
+          sheetHeightPx = settledSheetHeightPx
+          dragOffsetPx = settledDragOffsetPx
+          val heightAnimatable = Animatable(settledSheetHeightPx)
+          val dragOffsetAnimatable = Animatable(settledDragOffsetPx)
           launch {
             heightAnimatable.animateTo(
               with(density) { nearest.height.toPx() },
@@ -348,9 +356,10 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
           lastSettledDetentId = nearest.id
         }
       } else {
-        if (dragOffsetPx > 0f) {
+        if (settledDragOffsetPx > 0f) {
           coroutineScope.launch {
-            val dragOffsetAnimatable = Animatable(dragOffsetPx)
+            dragOffsetPx = settledDragOffsetPx
+            val dragOffsetAnimatable = Animatable(settledDragOffsetPx)
             dragOffsetAnimatable.animateTo(
               0f,
               animationSpec =

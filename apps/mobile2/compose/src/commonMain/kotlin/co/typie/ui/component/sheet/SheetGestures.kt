@@ -31,7 +31,7 @@ internal fun rememberSheetGestureHandler(
   density: Density,
   snapshot: () -> SheetGestureSnapshot,
   onDragStateChange: (SheetDragState) -> Unit,
-  onSettleOrDismiss: (Float) -> Unit,
+  onSettleOrDismiss: (Float, SheetGestureSnapshot) -> Unit,
 ): SheetGestureHandler {
   val currentSnapshot = rememberUpdatedState(snapshot)
   val currentOnDragStateChange = rememberUpdatedState(onDragStateChange)
@@ -42,7 +42,7 @@ internal fun rememberSheetGestureHandler(
       density = density,
       snapshot = { currentSnapshot.value() },
       onDragStateChange = { currentOnDragStateChange.value(it) },
-      onSettleOrDismiss = { currentOnSettleOrDismiss.value(it) },
+      onSettleOrDismiss = { velocity, current -> currentOnSettleOrDismiss.value(velocity, current) },
     )
   }
 }
@@ -51,7 +51,7 @@ internal class SheetGestureHandler(
   private val density: Density,
   private val snapshot: () -> SheetGestureSnapshot,
   private val onDragStateChange: (SheetDragState) -> Unit,
-  private val onSettleOrDismiss: (Float) -> Unit,
+  private val onSettleOrDismiss: (Float, SheetGestureSnapshot) -> Unit,
 ) {
   private var nestedFlingSettledBySheet = false
 
@@ -64,7 +64,7 @@ internal class SheetGestureHandler(
   fun onDragStopped(velocity: Float) {
     val current = snapshot()
     if (!canConsumeScroll(current) || current.resolvedDetents.isEmpty()) return
-    onSettleOrDismiss(velocity)
+    onSettleOrDismiss(velocity, current)
   }
 
   val boundaryFlingHandoff: (Float) -> Boolean = { velocity ->
@@ -73,7 +73,7 @@ internal class SheetGestureHandler(
       false
     } else {
       nestedFlingSettledBySheet = true
-      onSettleOrDismiss(velocity)
+      onSettleOrDismiss(velocity, current)
       true
     }
   }
@@ -124,7 +124,7 @@ internal class SheetGestureHandler(
 
         nestedFlingSettledBySheet = true
         val settledVelocity = available.y
-        onSettleOrDismiss(settledVelocity)
+        onSettleOrDismiss(settledVelocity, current)
         return Velocity(x = 0f, y = settledVelocity)
       }
 
@@ -142,7 +142,8 @@ internal class SheetGestureHandler(
           onSettleOrDismiss(
             available.y.takeIf { abs(it) > NESTED_RELEASE_VELOCITY_EPSILON }
               ?: consumed.y.takeIf { abs(it) > NESTED_RELEASE_VELOCITY_EPSILON }
-              ?: 0f
+              ?: 0f,
+            current,
           )
         }
         return Velocity.Zero
