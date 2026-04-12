@@ -35,6 +35,7 @@ cxzv
 dearmor
 decryptor
 dedup
+detekt
 disablepictureinpicture
 dmarc
 dotenv

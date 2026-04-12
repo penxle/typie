@@ -1,0 +1,41 @@
+complexity:
+  LargeClass:
+    active: false
+  LongMethod:
+    active: false
+  LongParameterList:
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    active: false
+
+coroutines:
+  SuspendFunSwallowedCancellation:
+    active: true
+  SuspendFunWithCoroutineScopeReceiver:
+    active: true
+
+naming:
+  FunctionNaming:
+    functionPattern: '[A-z][a-zA-Z0-9]*'
+  MatchingDeclarationName:
+    multiplatformTargets:
+      - 'ios'
+      - 'android'
+      - 'desktop'
+      - 'jna'
+  ObjectPropertyNaming:
+    constantPattern: '[A-Z][A-Za-z0-9]*'
+
+style:
+  ForbiddenComment:
+    active: false
+  MagicNumber:
+    active: false
+  MayBeConstant:
+    active: true
+  MaxLineLength:
+    active: false
+  ReturnCount:
+    active: false
+  ThrowsCount:
+    active: false

@@ -18,4 +18,5 @@ plugins {
   alias(libs.plugins.apollo) apply false
   alias(libs.plugins.aboutLibraries) apply false
   alias(libs.plugins.buildkonfig) apply false
+  alias(libs.plugins.detekt) apply false
 }

@@ -39,6 +39,7 @@ plugins {
   alias(libs.plugins.apollo)
   alias(libs.plugins.aboutLibraries)
   alias(libs.plugins.buildkonfig)
+  alias(libs.plugins.detekt)
 }
 
 kotlin {
@@ -235,6 +236,13 @@ apollo {
 
     dataBuildersOutputDirConnection { connectToKotlinSourceSet("commonMain") }
   }
+}
+
+detekt {
+  source = files("src/commonMain/kotlin")
+  config.setFrom(file("../detekt.yml"))
+  buildUponDefaultConfig = true
+  parallel = true
 }
 
 compose.resources { packageOfResClass = "co.typie.generated.resources" }
