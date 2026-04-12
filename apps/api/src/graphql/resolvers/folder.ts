@@ -487,7 +487,7 @@ builder.mutationFields((t) => ({
         }
       });
 
-      return folder;
+      return folder.id;
     },
   }),
 
@@ -526,7 +526,7 @@ builder.mutationFields((t) => ({
       }
 
       if (!input.visibility && input.thumbnailId === undefined) {
-        return folders;
+        return folders.map((folder) => folder.id);
       }
 
       const updatedEntities = await db.transaction(async (tx) => {
@@ -581,7 +581,7 @@ builder.mutationFields((t) => ({
         pubsub.publish('site:update', siteId, { scope: 'entity', entityId: entity.id });
       }
 
-      return folders;
+      return folders.map((folder) => folder.id);
     },
   }),
 }));
