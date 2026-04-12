@@ -52,6 +52,7 @@ private fun normalizeSpaceEntity(
       item =
         EntityListItem.Document(
           id = entity.id,
+          documentId = document.id,
           iconName = entity.icon,
           iconColor = entity.iconColor,
           slug = entity.slug,
@@ -59,6 +60,13 @@ private fun normalizeSpaceEntity(
           subtitle = document.subtitle,
           excerpt = document.excerpt,
           updatedAt = document.updatedAt,
+          siteName = siteName,
+          ancestorFolderNames = entity.ancestors.mapNotNull { it.node.onFolder?.name },
+          depth = entity.depth,
+          url = entity.url,
+          visibility = entity.visibility,
+          availability = entity.availability,
+          characterCount = document.characterCount,
         ),
     )
   }

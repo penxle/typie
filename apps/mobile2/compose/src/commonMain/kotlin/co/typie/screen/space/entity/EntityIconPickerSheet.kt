@@ -1,4 +1,4 @@
-package co.typie.screen.space.folder
+package co.typie.screen.space.entity
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,6 +45,7 @@ import co.typie.ext.pressScale
 import co.typie.form.FormState
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
+import co.typie.result.Result
 import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
@@ -76,24 +77,32 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-private const val DEFAULT_ENTITY_ICON_NAME = "folder"
 private const val DEFAULT_ENTITY_ICON_COLOR = "gray"
-private val FolderIconPickerCellSpacing = 2.dp
-private val FolderIconPickerGridIconSize = 18.dp
-private val FolderIconPickerCollapsedHeight = 360.dp
-private val FolderIconPickerExpandedTopGap = 128.dp
-private val FolderIconPickerSelectionDotSize = 4.dp
-private val FolderIconPickerSelectionDotBottomInset = 4.dp
-private val FolderIconPickerGridBottomInset = 12.dp
-private val FolderIconPickerTopFadeHeight = 16.dp
-private val FolderIconPickerCollapsedDetent = SheetDetent.Fixed(FolderIconPickerCollapsedHeight)
-private val FolderIconPickerExpandedDetent = SheetDetent.TopGap(FolderIconPickerExpandedTopGap)
+private val EntityIconPickerCellSpacing = 2.dp
+private val EntityIconPickerGridIconSize = 18.dp
+private val EntityIconPickerCollapsedHeight = 360.dp
+private val EntityIconPickerExpandedTopGap = 128.dp
+private val EntityIconPickerSelectionDotSize = 4.dp
+private val EntityIconPickerSelectionDotBottomInset = 4.dp
+private val EntityIconPickerGridBottomInset = 12.dp
+private val EntityIconPickerTopFadeHeight = 16.dp
+private val EntityIconPickerCollapsedDetent = SheetDetent.Fixed(EntityIconPickerCollapsedHeight)
+private val EntityIconPickerExpandedDetent = SheetDetent.TopGap(EntityIconPickerExpandedTopGap)
 
-internal fun folderIconPickerSheet(
-  model: FolderViewModel,
+internal interface EntityIconSheetModel {
+  suspend fun updateEntityIcon(
+    entityId: String,
+    icon: String,
+    iconColor: String,
+  ): Result<Unit, Nothing>
+}
+
+internal fun entityIconPickerSheet(
+  model: EntityIconSheetModel,
   entityId: String,
   initialIcon: String?,
   initialColor: String?,
+  defaultIconName: String,
   onUpdated: () -> Unit = {},
 ): SheetPresentation<Unit> =
   sheetPresentation(
@@ -102,8 +111,8 @@ internal fun folderIconPickerSheet(
         mode = SheetMode.Modal,
         sizePolicy =
           SheetSizePolicy.Detents(
-            initial = FolderIconPickerCollapsedDetent,
-            available = listOf(FolderIconPickerCollapsedDetent, FolderIconPickerExpandedDetent),
+            initial = EntityIconPickerCollapsedDetent,
+            available = listOf(EntityIconPickerCollapsedDetent, EntityIconPickerExpandedDetent),
             collapsePolicy = SheetCollapsePolicy.ProgrammaticOnly,
             dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
           ),
@@ -111,15 +120,14 @@ internal fun folderIconPickerSheet(
         haptics = SheetHapticPolicy(onPresent = true, onDetentSnap = true),
       )
   ) {
-    val normalizedInitialIcon =
-      initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_NAME
+    val normalizedInitialIcon = initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: defaultIconName
     val normalizedInitialColor =
       initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val form =
       remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
-        FolderIconPickerForm(
+        EntityIconPickerForm(
           scope = scope,
           initialIconName = normalizedInitialIcon,
           initialColor = normalizedInitialColor,
@@ -209,9 +217,9 @@ internal fun folderIconPickerSheet(
             modifier =
               Modifier.fillMaxSize()
                 .desktopDragScroll(state = iconGridState, orientation = Orientation.Vertical),
-            contentPadding = PaddingValues(bottom = FolderIconPickerGridBottomInset + safeBottom),
-            horizontalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
-            verticalArrangement = Arrangement.spacedBy(FolderIconPickerCellSpacing),
+            contentPadding = PaddingValues(bottom = EntityIconPickerGridBottomInset + safeBottom),
+            horizontalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
+            verticalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
           ) {
             items(entityIcons, key = { it.name }) { icon ->
               IconGridCell(
@@ -229,7 +237,7 @@ internal fun folderIconPickerSheet(
               modifier =
                 Modifier.align(Alignment.TopCenter)
                   .fillMaxWidth()
-                  .height(FolderIconPickerTopFadeHeight)
+                  .height(EntityIconPickerTopFadeHeight)
                   .background(
                     Brush.verticalGradient(
                       colors =
@@ -246,7 +254,7 @@ internal fun folderIconPickerSheet(
     }
   }
 
-private class FolderIconPickerForm(
+private class EntityIconPickerForm(
   scope: CoroutineScope,
   initialIconName: String,
   initialColor: String,
@@ -327,14 +335,14 @@ private fun IconGridCell(
           .clickable(enabled = enabled) { onSelect() }
           .pressScale(0.98f),
     ) {
-      Icon(icon = icon.icon, modifier = Modifier.size(FolderIconPickerGridIconSize), tint = tint)
+      Icon(icon = icon.icon, modifier = Modifier.size(EntityIconPickerGridIconSize), tint = tint)
 
       if (selected) {
         Box(
           modifier =
             Modifier.align(Alignment.BottomCenter)
-              .padding(bottom = FolderIconPickerSelectionDotBottomInset)
-              .size(FolderIconPickerSelectionDotSize)
+              .padding(bottom = EntityIconPickerSelectionDotBottomInset)
+              .size(EntityIconPickerSelectionDotSize)
               .clip(CircleShape)
               .background(tint, CircleShape)
         )

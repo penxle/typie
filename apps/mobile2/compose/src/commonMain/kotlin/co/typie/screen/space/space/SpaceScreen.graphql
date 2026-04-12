@@ -51,6 +51,7 @@ query SpaceScreen_Query($siteId: ID!) {
           title
           subtitle
           excerpt
+          characterCount
           updatedAt
         }
       }

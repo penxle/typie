@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.blob.BlobService
 import co.typie.graphql.Apollo
+import co.typie.graphql.DocumentActions_DeleteDocument_Mutation
+import co.typie.graphql.DocumentActions_UpdateDocument_Mutation
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
 import co.typie.graphql.FolderActions_DeleteEntities_Mutation
 import co.typie.graphql.FolderActions_RenameFolder_Mutation
@@ -15,21 +17,25 @@ import co.typie.graphql.FolderScreen_Query
 import co.typie.graphql.FolderShare_PersistBlobAsImage_Mutation
 import co.typie.graphql.FolderShare_UpdateFoldersOption_Mutation
 import co.typie.graphql.executeMutation
+import co.typie.graphql.type.DeleteDocumentInput
 import co.typie.graphql.type.DeleteEntitiesInput
 import co.typie.graphql.type.EntityVisibility
 import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.type.PersistBlobAsImageInput
 import co.typie.graphql.type.RenameFolderInput
+import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.graphql.type.UpdateFoldersOptionInput
 import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.result
+import co.typie.screen.space.document.DocumentRenameSheetModel
+import co.typie.screen.space.entity.EntityIconSheetModel
 
 data class FolderThumbnailResult(val id: String, val url: String)
 
-class FolderViewModel : ViewModel() {
+class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetModel {
   private val blobService = BlobService
   private var hasEnteredScreen = false
   var entityId by mutableStateOf("")
@@ -62,7 +68,6 @@ class FolderViewModel : ViewModel() {
         input = folderOptionsInput(folderId) { visibility(visibility) }
       )
     )
-    refetch()
   }
 
   suspend fun uploadFolderThumbnail(
@@ -88,8 +93,6 @@ class FolderViewModel : ViewModel() {
       )
     )
 
-    refetch()
-
     FolderThumbnailResult(id = image.id, url = image.url)
   }
 
@@ -99,7 +102,6 @@ class FolderViewModel : ViewModel() {
         input = folderOptionsInput(folderId) { thumbnailId(null) }
       )
     )
-    refetch()
   }
 
   suspend fun applyFolderVisibilityRecursively(
@@ -115,7 +117,6 @@ class FolderViewModel : ViewModel() {
           }
       )
     )
-    refetch()
   }
 
   suspend fun renameFolder(
@@ -131,10 +132,24 @@ class FolderViewModel : ViewModel() {
         input = RenameFolderInput(folderId = folderId, name = trimmedName)
       )
     )
-    refetch()
   }
 
-  suspend fun updateEntityIcon(
+  override suspend fun updateDocument(
+    documentId: String,
+    currentTitle: String,
+    title: String,
+  ): Result<Unit, Nothing> = result {
+    val trimmedTitle = title.trim()
+    val normalizedCurrentTitle = currentTitle.trim()
+    if (trimmedTitle.isEmpty() || trimmedTitle == normalizedCurrentTitle) return@result
+    Apollo.executeMutation(
+      DocumentActions_UpdateDocument_Mutation(
+        input = UpdateDocumentInput.Builder().documentId(documentId).title(trimmedTitle).build()
+      )
+    )
+  }
+
+  override suspend fun updateEntityIcon(
     entityId: String,
     icon: String,
     iconColor: String,
@@ -149,7 +164,12 @@ class FolderViewModel : ViewModel() {
           )
       )
     )
-    refetch()
+  }
+
+  suspend fun deleteDocument(documentId: String): Result<Unit, Nothing> = result {
+    Apollo.executeMutation(
+      DocumentActions_DeleteDocument_Mutation(input = DeleteDocumentInput(documentId = documentId))
+    )
   }
 
   suspend fun deleteFolderEntity(entityId: String): Result<Unit, Nothing> = result {
@@ -179,7 +199,6 @@ class FolderViewModel : ViewModel() {
             .build()
       )
     )
-    refetch()
   }
 
   private fun folderOptionsInput(

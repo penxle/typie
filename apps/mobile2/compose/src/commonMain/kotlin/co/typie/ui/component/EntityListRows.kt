@@ -44,6 +44,7 @@ sealed interface EntityListItem {
 
   data class Document(
     override val id: String,
+    val documentId: String,
     override val iconName: String,
     override val iconColor: String,
     val slug: String,
@@ -51,6 +52,13 @@ sealed interface EntityListItem {
     val subtitle: String?,
     val excerpt: String,
     val updatedAt: Instant,
+    val siteName: String? = null,
+    val ancestorFolderNames: List<String> = emptyList(),
+    val depth: Int = 0,
+    val url: String = "",
+    val visibility: EntityVisibility? = null,
+    val availability: EntityAvailability? = null,
+    val characterCount: Int = 0,
   ) : EntityListItem
 
   data class Folder(
@@ -96,6 +104,13 @@ fun EntityListItem.Folder.breadcrumbNames(): List<String> {
   }
 }
 
+fun EntityListItem.Document.breadcrumbNames(): List<String> {
+  return buildList {
+    siteName?.takeIf { it.isNotBlank() }?.let(::add)
+    addAll(ancestorFolderNames)
+  }
+}
+
 fun formatFolderRowSummary(folderCount: Int, documentCount: Int): String {
   if (folderCount == 0 && documentCount == 0) {
     return "빈 폴더"
@@ -115,6 +130,7 @@ fun EntityListCard(
   dimmedItemIds: Set<String> = emptySet(),
   modifier: Modifier = Modifier,
   onDocumentClick: suspend (slug: String) -> Unit,
+  onDocumentLongPress: (suspend (item: EntityListItem.Document) -> Unit)? = null,
   onFolderClick: suspend (entityId: String) -> Unit,
   onFolderLongPress: (suspend (item: EntityListItem.Folder) -> Unit)? = null,
 ) {
@@ -140,6 +156,7 @@ fun EntityListCard(
             EntityListDocumentRow(
               item = item,
               opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
+              onLongPress = onDocumentLongPress?.let { handler -> { handler(item) } },
               onClick = { onDocumentClick(item.slug) },
             )
 
@@ -176,6 +193,7 @@ fun EntityListDocumentRow(
   enabled: Boolean = true,
   interactive: Boolean = enabled,
   opacity: Float = 1f,
+  onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
   DocumentRowContent(
@@ -189,6 +207,7 @@ fun EntityListDocumentRow(
     enabled = enabled,
     interactive = interactive,
     opacity = opacity,
+    onLongPress = onLongPress,
     onClick = onClick,
   )
 }

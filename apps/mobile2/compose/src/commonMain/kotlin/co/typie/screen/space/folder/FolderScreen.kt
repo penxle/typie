@@ -52,6 +52,11 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
+import co.typie.screen.space.document.DocumentDeleteRequest
+import co.typie.screen.space.document.documentItemActionsSheet
+import co.typie.screen.space.document.documentRenameSheet
+import co.typie.screen.space.document.toTransferSource as toDocumentTransferSource
+import co.typie.screen.space.entity.entityIconPickerSheet
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
@@ -95,6 +100,7 @@ fun FolderScreen(entityId: String) {
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
   var deleteRequest by remember(entityId) { mutableStateOf<FolderDeleteRequest?>(null) }
+  var documentDeleteRequest by remember(entityId) { mutableStateOf<DocumentDeleteRequest?>(null) }
 
   LaunchedEffect(entityId) {
     model.entityId = entityId
@@ -213,11 +219,12 @@ fun FolderScreen(entityId: String) {
         }
         closePopover()
         sheetHost.show(
-          folderIconPickerSheet(
+          entityIconPickerSheet(
             model = model,
             entityId = resolvedEntity.id,
             initialIcon = resolvedEntity.icon,
             initialColor = resolvedEntity.iconColor,
+            defaultIconName = "folder",
           )
         )
       }
@@ -258,8 +265,7 @@ fun FolderScreen(entityId: String) {
                 title = resolvedFolder.name,
                 depth = resolvedEntity.depth,
                 maxDescendantFoldersDepth = resolvedFolder.maxDescendantFoldersDepth,
-              ),
-            onMoved = model::refetch,
+              )
           )
         )
       }
@@ -410,13 +416,27 @@ fun FolderScreen(entityId: String) {
           model.deleteFolderEntity(request.entityId).withDefaultExceptionHandler(toast).onOk {
             if (request.shouldPopOnSuccess) {
               nav.pop()
-            } else {
-              model.refetch()
             }
           }
         }
       },
       onDismiss = { deleteRequest = null },
+    )
+  }
+
+  documentDeleteRequest?.let { request ->
+    ConfirmModal(
+      title = "문서 삭제",
+      message = "\"${request.documentTitle}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+      confirmText = "삭제하기",
+      confirmIsDestructive = true,
+      onConfirm = {
+        documentDeleteRequest = null
+        presenterScope.launch {
+          model.deleteDocument(request.documentId).withDefaultExceptionHandler(toast)
+        }
+      },
+      onDismiss = { documentDeleteRequest = null },
     )
   }
 
@@ -459,6 +479,68 @@ fun FolderScreen(entityId: String) {
               .padding(contentPadding)
               .safeBottomPadding(),
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
+          onDocumentLongPress = { item ->
+            sheetHost.show(
+              documentItemActionsSheet(item) { action ->
+                when (action) {
+                  FolderAction.Rename -> {
+                    sheetHost.show(
+                      documentRenameSheet(
+                        model = model,
+                        documentId = item.documentId,
+                        initialTitle = item.title,
+                      )
+                    )
+                  }
+
+                  FolderAction.ChangeIcon -> {
+                    sheetHost.show(
+                      entityIconPickerSheet(
+                        model = model,
+                        entityId = item.id,
+                        initialIcon = item.iconName,
+                        initialColor = item.iconColor,
+                        defaultIconName = "file",
+                      )
+                    )
+                  }
+
+                  FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                  FolderAction.Share -> Unit
+
+                  FolderAction.Move -> {
+                    sheetHost.show(entityMoveSheet(source = item.toDocumentTransferSource()))
+                  }
+
+                  FolderAction.Copy -> {
+                    clipboard.setCopy(
+                      sourceSiteId = Preference.siteId!!,
+                      items = listOf(item.toDocumentTransferSource()),
+                    )
+                  }
+
+                  FolderAction.Cut -> {
+                    clipboard.setCut(
+                      sourceSiteId = Preference.siteId!!,
+                      items = listOf(item.toDocumentTransferSource()),
+                    )
+                  }
+
+                  FolderAction.Delete -> {
+                    documentDeleteRequest =
+                      DocumentDeleteRequest(
+                        documentId = item.documentId,
+                        documentTitle = item.title,
+                      )
+                  }
+
+                  FolderAction.SelectMultiple,
+                  FolderAction.StartReorder -> Unit
+                }
+              }
+            )
+          },
           onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
           onFolderLongPress = { item ->
             sheetHost.show(
@@ -476,11 +558,12 @@ fun FolderScreen(entityId: String) {
 
                   FolderAction.ChangeIcon -> {
                     sheetHost.show(
-                      folderIconPickerSheet(
+                      entityIconPickerSheet(
                         model = model,
                         entityId = item.id,
                         initialIcon = item.iconName,
                         initialColor = item.iconColor,
+                        defaultIconName = "folder",
                       )
                     )
                   }
@@ -500,9 +583,7 @@ fun FolderScreen(entityId: String) {
                   }
 
                   FolderAction.Move -> {
-                    sheetHost.show(
-                      entityMoveSheet(source = item.toTransferSource(), onMoved = model::refetch)
-                    )
+                    sheetHost.show(entityMoveSheet(source = item.toTransferSource()))
                   }
 
                   FolderAction.Copy -> {

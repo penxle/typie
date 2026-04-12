@@ -89,6 +89,7 @@ query FolderScreen_Query($entityId: ID!) {
           title
           subtitle
           excerpt
+          characterCount
           updatedAt
         }
       }

@@ -1,0 +1,20 @@
+mutation DocumentActions_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
+  updateDocument(input: $input) {
+    id
+    title
+  }
+}
+
+mutation DocumentActions_UpdateEntityIcon_Mutation($input: UpdateEntityIconInput!) {
+  updateEntityIcon(input: $input) {
+    id
+    icon
+    iconColor
+  }
+}
+
+mutation DocumentActions_DeleteDocument_Mutation($input: DeleteDocumentInput!) {
+  deleteDocument(input: $input) {
+    id
+  }
+}

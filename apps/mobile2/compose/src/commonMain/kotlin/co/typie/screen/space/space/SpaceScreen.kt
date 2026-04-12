@@ -54,10 +54,15 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
+import co.typie.screen.space.document.DocumentDeleteRequest
+import co.typie.screen.space.document.DocumentViewModel
+import co.typie.screen.space.document.documentItemActionsSheet
+import co.typie.screen.space.document.documentRenameSheet
+import co.typie.screen.space.document.toTransferSource as toDocumentTransferSource
+import co.typie.screen.space.entity.entityIconPickerSheet
 import co.typie.screen.space.folder.FolderAction
 import co.typie.screen.space.folder.FolderDeleteRequest
 import co.typie.screen.space.folder.FolderViewModel
-import co.typie.screen.space.folder.folderIconPickerSheet
 import co.typie.screen.space.folder.folderItemActionsSheet
 import co.typie.screen.space.folder.folderRenameSheet
 import co.typie.screen.space.folder.folderShareSheet
@@ -102,6 +107,7 @@ fun SpaceScreen() {
   val clipboard = EntityClipboardService
   val model = viewModel { SpaceViewModel() }
   val folderActionModel = viewModel(key = "space-folder-actions") { FolderViewModel() }
+  val documentActionModel = viewModel(key = "space-document-actions") { DocumentViewModel() }
   val scrollState = rememberScrollState("space")
   val presenterScope = rememberCoroutineScope()
   var isReordering by remember { mutableStateOf(false) }
@@ -109,6 +115,7 @@ fun SpaceScreen() {
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
   var deleteRequest by remember { mutableStateOf<FolderDeleteRequest?>(null) }
+  var documentDeleteRequest by remember { mutableStateOf<DocumentDeleteRequest?>(null) }
   val siteId = model.siteId
 
   val site = (model.query.state as? QueryState.Success)?.data?.site
@@ -225,13 +232,26 @@ fun SpaceScreen() {
       onConfirm = {
         deleteRequest = null
         presenterScope.launch {
-          folderActionModel
-            .deleteFolderEntity(request.entityId)
-            .withDefaultExceptionHandler(toast)
-            .onOk { model.refetch() }
+          folderActionModel.deleteFolderEntity(request.entityId).withDefaultExceptionHandler(toast)
         }
       },
       onDismiss = { deleteRequest = null },
+    )
+  }
+
+  documentDeleteRequest?.let { request ->
+    ConfirmModal(
+      title = "문서 삭제",
+      message = "\"${request.documentTitle}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+      confirmText = "삭제하기",
+      confirmIsDestructive = true,
+      onConfirm = {
+        documentDeleteRequest = null
+        presenterScope.launch {
+          documentActionModel.deleteDocument(request.documentId).withDefaultExceptionHandler(toast)
+        }
+      },
+      onDismiss = { documentDeleteRequest = null },
     )
   }
 
@@ -291,6 +311,68 @@ fun SpaceScreen() {
             )
           },
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
+          onDocumentLongPress = { item ->
+            sheetHost.show(
+              documentItemActionsSheet(item) { action ->
+                when (action) {
+                  FolderAction.Rename -> {
+                    sheetHost.show(
+                      documentRenameSheet(
+                        model = documentActionModel,
+                        documentId = item.documentId,
+                        initialTitle = item.title,
+                      )
+                    )
+                  }
+
+                  FolderAction.ChangeIcon -> {
+                    sheetHost.show(
+                      entityIconPickerSheet(
+                        model = documentActionModel,
+                        entityId = item.id,
+                        initialIcon = item.iconName,
+                        initialColor = item.iconColor,
+                        defaultIconName = "file",
+                      )
+                    )
+                  }
+
+                  FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                  FolderAction.Share -> Unit
+
+                  FolderAction.Move -> {
+                    sheetHost.show(entityMoveSheet(source = item.toDocumentTransferSource()))
+                  }
+
+                  FolderAction.Copy -> {
+                    clipboard.setCopy(
+                      sourceSiteId = Preference.siteId!!,
+                      items = listOf(item.toDocumentTransferSource()),
+                    )
+                  }
+
+                  FolderAction.Cut -> {
+                    clipboard.setCut(
+                      sourceSiteId = Preference.siteId!!,
+                      items = listOf(item.toDocumentTransferSource()),
+                    )
+                  }
+
+                  FolderAction.Delete -> {
+                    documentDeleteRequest =
+                      DocumentDeleteRequest(
+                        documentId = item.documentId,
+                        documentTitle = item.title,
+                      )
+                  }
+
+                  FolderAction.SelectMultiple,
+                  FolderAction.StartReorder -> Unit
+                }
+              }
+            )
+          },
           onFolderClick = { entityId -> nav.navigate(Route.Folder(entityId)) },
           onFolderLongPress = { item ->
             sheetHost.show(
@@ -302,19 +384,18 @@ fun SpaceScreen() {
                         model = folderActionModel,
                         folderId = item.folderId,
                         initialName = item.name,
-                        onUpdated = model::refetch,
                       )
                     )
                   }
 
                   FolderAction.ChangeIcon -> {
                     sheetHost.show(
-                      folderIconPickerSheet(
+                      entityIconPickerSheet(
                         model = folderActionModel,
                         entityId = item.id,
                         initialIcon = item.iconName,
                         initialColor = item.iconColor,
-                        onUpdated = model::refetch,
+                        defaultIconName = "folder",
                       )
                     )
                   }
@@ -329,15 +410,12 @@ fun SpaceScreen() {
                         folderUrl = item.url,
                         initialVisibility = requireNotNull(item.visibility),
                         initialThumbnailUrl = item.thumbnailUrl,
-                        onUpdated = model::refetch,
                       )
                     )
                   }
 
                   FolderAction.Move -> {
-                    sheetHost.show(
-                      entityMoveSheet(source = item.toTransferSource(), onMoved = model::refetch)
-                    )
+                    sheetHost.show(entityMoveSheet(source = item.toTransferSource()))
                   }
 
                   FolderAction.Copy -> {

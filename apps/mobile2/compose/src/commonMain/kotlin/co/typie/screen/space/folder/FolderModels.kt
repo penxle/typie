@@ -50,6 +50,7 @@ private fun normalizeFolderChild(
       item =
         EntityListItem.Document(
           id = child.id,
+          documentId = document.id,
           iconName = child.icon,
           iconColor = child.iconColor,
           slug = child.slug,
@@ -57,6 +58,13 @@ private fun normalizeFolderChild(
           subtitle = document.subtitle,
           excerpt = document.excerpt,
           updatedAt = document.updatedAt,
+          siteName = siteName,
+          ancestorFolderNames = child.ancestors.mapNotNull { it.node.onFolder?.name },
+          depth = child.depth,
+          url = child.url,
+          visibility = child.visibility,
+          availability = child.availability,
+          characterCount = document.characterCount,
         ),
     )
   }

@@ -53,6 +53,5 @@ class SpaceViewModel : ViewModel() {
             .build()
       )
     )
-    refetch()
   }
 }

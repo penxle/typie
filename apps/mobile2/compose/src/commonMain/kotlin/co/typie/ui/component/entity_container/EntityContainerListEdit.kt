@@ -89,6 +89,7 @@ fun EntityContainerListContent(
   modifier: Modifier = Modifier,
   header: @Composable ColumnScope.() -> Unit = {},
   onDocumentClick: suspend (slug: String) -> Unit,
+  onDocumentLongPress: (suspend (item: EntityListItem.Document) -> Unit)? = null,
   onFolderClick: suspend (entityId: String) -> Unit,
   onFolderLongPress: (suspend (item: EntityListItem.Folder) -> Unit)? = null,
   onDragStarted: () -> Unit,
@@ -115,6 +116,7 @@ fun EntityContainerListContent(
         dimmedItemIds = dimmedItemIds,
         modifier = Modifier.padding(horizontal = 16.dp),
         onDocumentClick = onDocumentClick,
+        onDocumentLongPress = onDocumentLongPress,
         onFolderClick = onFolderClick,
         onFolderLongPress = onFolderLongPress,
       )
