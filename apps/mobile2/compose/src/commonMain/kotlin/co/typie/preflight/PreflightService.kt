@@ -43,8 +43,6 @@ object PreflightService {
           if (state is PreflightState.NotReady) {
             state = PreflightState.Unavailable
           }
-
-          throw e
         }
       }
 

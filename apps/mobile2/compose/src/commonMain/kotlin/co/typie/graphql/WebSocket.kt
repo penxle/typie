@@ -69,7 +69,6 @@ object KtorWebSocketEngine : WebSocketEngine {
           } catch (e: Exception) {
             listener.onClosed(code = 1006, reason = "Network error: ${e.message}")
             sendFrameChannel.close()
-            throw e
           }
         }
       }
