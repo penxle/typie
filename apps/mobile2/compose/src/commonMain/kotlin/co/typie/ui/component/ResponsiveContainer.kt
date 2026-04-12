@@ -103,6 +103,7 @@ private fun ResponsiveContainerGutter(primaryScrollableState: ScrollableState, w
           state = gutterScrollableState,
           orientation = Orientation.Vertical,
           enabled = !isLocked,
+          elasticOverscroll = false,
         )
         .scrollableArea(
           state = gutterScrollableState,

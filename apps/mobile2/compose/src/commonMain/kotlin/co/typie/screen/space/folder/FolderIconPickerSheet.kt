@@ -53,6 +53,7 @@ import co.typie.ui.EntityIconOption
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.SheetChrome
+import co.typie.ui.component.sheet.SheetCollapsePolicy
 import co.typie.ui.component.sheet.SheetDetent
 import co.typie.ui.component.sheet.SheetDragDismissBehavior
 import co.typie.ui.component.sheet.SheetHapticPolicy
@@ -64,6 +65,8 @@ import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.SheetSizePolicy
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.sheet.rememberSheetBoundaryHandoffFlingBehavior
+import co.typie.ui.component.sheet.sheetDragRegion
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.entityIconColors
 import co.typie.ui.entityIcons
@@ -101,6 +104,7 @@ internal fun folderIconPickerSheet(
           SheetSizePolicy.Detents(
             initial = FolderIconPickerCollapsedDetent,
             available = listOf(FolderIconPickerCollapsedDetent, FolderIconPickerExpandedDetent),
+            collapsePolicy = SheetCollapsePolicy.ProgrammaticOnly,
             dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
           ),
         chrome = SheetChrome.Default,
@@ -153,6 +157,10 @@ internal fun folderIconPickerSheet(
     val currentTint =
       resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
     val iconGridState = rememberLazyGridState()
+    val iconGridFlingBehavior =
+      rememberSheetBoundaryHandoffFlingBehavior(
+        isAtSheetDismissBoundary = { !iconGridState.canScrollBackward }
+      )
 
     SheetLayout(
       fillHeight = true,
@@ -183,6 +191,7 @@ internal fun folderIconPickerSheet(
           colors = entityIconColors,
           selectedColor = form.color.value,
           enabled = !isUpdating,
+          modifier = Modifier.sheetDragRegion(),
           onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
         )
 
@@ -196,6 +205,7 @@ internal fun folderIconPickerSheet(
           LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             state = iconGridState,
+            flingBehavior = iconGridFlingBehavior,
             modifier =
               Modifier.fillMaxSize()
                 .desktopDragScroll(state = iconGridState, orientation = Orientation.Vertical),
@@ -250,10 +260,11 @@ private fun IconColorRow(
   colors: List<EntityIconColorOption>,
   selectedColor: String,
   enabled: Boolean,
+  modifier: Modifier = Modifier,
   onColorSelect: (String) -> Unit,
 ) {
   Row(
-    modifier = Modifier.fillMaxWidth(),
+    modifier = modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.SpaceEvenly,
     verticalAlignment = Alignment.CenterVertically,
   ) {

@@ -2,10 +2,8 @@
 
 package co.typie.ext
 
-import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.exponentialDecay
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.ScrollableState
@@ -17,17 +15,10 @@ import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.horizontalScroll as foundationHorizontalScroll
 import androidx.compose.foundation.verticalScroll as foundationVerticalScroll
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -40,24 +31,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.Velocity
 import kotlin.math.abs
-import kotlin.math.min
-import kotlin.math.sign
 import kotlinx.coroutines.launch
-
-private const val DAMPING = 0.4f
-private const val SPRING_STIFFNESS = 400f
-private const val FLING_VELOCITY_MULTIPLIER = 0.72f
-private const val CONSUMPTION_EPSILON = 0.5f
-
-internal enum class DragScrollFlingMode {
-  ScrollableContent,
-  DirectBridge,
-}
 
 actual fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean): Modifier = composed {
   val isLocked = LocalScrollGestureLockState.current.isLocked
   val dragEnabled = enabled && !isLocked
   val overscrollState = rememberElasticOverscrollState()
+
   foundationVerticalScroll(state, enabled = dragEnabled)
     .then(
       if (dragEnabled) {
@@ -72,8 +52,11 @@ actual fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean): Modifi
       }
     )
     .then(
-      if (dragEnabled) Modifier.elasticOverscroll(ElasticAxis.Vertical, overscrollState)
-      else Modifier
+      if (dragEnabled) {
+        Modifier.elasticOverscroll(ElasticAxis.Vertical, overscrollState)
+      } else {
+        Modifier
+      }
     )
 }
 
@@ -84,27 +67,28 @@ actual fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean): Modi
         awaitPointerEventScope {
           while (true) {
             val event = awaitPointerEvent()
-            if (event.type == PointerEventType.Scroll) {
-              val change = event.changes.firstOrNull() ?: continue
-              val scrollDelta = change.scrollDelta
-              val delta = if (scrollDelta.x != 0f) scrollDelta.x else scrollDelta.y
-              if (delta != 0f) {
-                val consumed = state.dispatchRawDelta(delta)
-                if (consumed != 0f) {
-                  change.consume()
-                }
-              }
+            if (event.type != PointerEventType.Scroll) continue
+
+            val change = event.changes.firstOrNull() ?: continue
+            val scrollDelta = change.scrollDelta
+            val delta = if (scrollDelta.x != 0f) scrollDelta.x else scrollDelta.y
+            if (delta == 0f) continue
+
+            val consumed = state.dispatchRawDelta(delta)
+            if (consumed != 0f) {
+              change.consume()
             }
           }
         }
       }
     }
-  } else
+  } else {
     composed {
       val isLocked = LocalScrollGestureLockState.current.isLocked
       if (isLocked) {
         return@composed foundationHorizontalScroll(state, enabled = false)
       }
+
       val overscrollState = rememberElasticOverscrollState()
       foundationHorizontalScroll(state)
         .then(
@@ -117,67 +101,37 @@ actual fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean): Modi
         )
         .then(Modifier.elasticOverscroll(ElasticAxis.Horizontal, overscrollState))
     }
+  }
 
 internal actual fun Modifier.desktopDragScroll(
   state: ScrollableState,
   orientation: Orientation,
   enabled: Boolean,
+  elasticOverscroll: Boolean,
 ): Modifier = composed {
   val isLocked = LocalScrollGestureLockState.current.isLocked
   if (!enabled || isLocked) {
     return@composed this
   }
 
-  this.dragScroll(
-    state = state,
-    axis = orientation.toElasticAxis(),
-    overscrollState = null,
-    invertFlingVelocity = false,
-  )
-}
-
-private enum class ElasticAxis {
-  Horizontal,
-  Vertical,
-}
-
-private class ElasticOverscrollState {
-  var offset by mutableFloatStateOf(0f)
-
-  fun consumePre(delta: Float): Float {
-    if (offset == 0f || delta == 0f) return 0f
-
-    val wouldReduce = (offset > 0f && delta > 0f) || (offset < 0f && delta < 0f)
-    if (!wouldReduce) return 0f
-
-    val maxConsumable = abs(offset) / DAMPING
-    val consumed = min(abs(delta), maxConsumable) * sign(delta)
-    offset -= consumed * DAMPING
-    if (abs(offset) < 0.5f) {
-      offset = 0f
-    }
-
-    return consumed
+  val axis = orientation.toElasticAxis()
+  val overscrollState = rememberElasticOverscrollState()
+  val activeOverscrollState = overscrollState.takeIf {
+    shouldUseElasticOverscrollForDesktopDragScroll(
+      enabled = enabled,
+      isLocked = isLocked,
+      elasticOverscroll = elasticOverscroll,
+    )
   }
 
-  fun applyUnconsumed(delta: Float) {
-    if (delta != 0f) {
-      offset -= delta * DAMPING
-    }
-  }
-
-  suspend fun release() {
-    if (offset != 0f) {
-      animate(offset, 0f, animationSpec = spring(stiffness = SPRING_STIFFNESS)) { value, _ ->
-        offset = value
+  dragScroll(state = state, axis = axis, overscrollState = activeOverscrollState)
+    .then(
+      if (activeOverscrollState != null) {
+        Modifier.elasticOverscroll(axis, activeOverscrollState)
+      } else {
+        Modifier
       }
-    }
-  }
-}
-
-@Composable
-private fun rememberElasticOverscrollState(): ElasticOverscrollState = remember {
-  ElasticOverscrollState()
+    )
 }
 
 private fun Modifier.dragScroll(
@@ -208,10 +162,9 @@ private fun Modifier.dragScroll(
 
       val dragStartChange =
         awaitAxisTouchSlopOrCancellation(axis = axis, pointerId = down.id) { change, overSlop ->
-          // Match touch-like ownership: initial press may be handled by a child,
-          // but actual movement ownership is decided only once drag slop is crossed.
           velocityTracker.addPosition(change.uptimeMillis, change.position)
           change.consume()
+
           val dispatchResult =
             dispatchDragScrollDelta(
               pointerDelta = overSlop,
@@ -220,16 +173,12 @@ private fun Modifier.dragScroll(
               nestedScrollDispatcher = nestedScrollDispatcher,
               overscrollState = overscrollState,
             )
-          if (abs(dispatchResult.ancestorConsumedPointerDelta) > CONSUMPTION_EPSILON) {
-            ancestorParticipated = true
-          }
-          if (abs(dispatchResult.localConsumedPointerDelta) > CONSUMPTION_EPSILON) {
-            localParticipated = true
-          }
           ancestorConsumedLastSample =
             abs(dispatchResult.ancestorConsumedPointerDelta) > CONSUMPTION_EPSILON
           localConsumedLastSample =
             abs(dispatchResult.localConsumedPointerDelta) > CONSUMPTION_EPSILON
+          ancestorParticipated = ancestorParticipated || ancestorConsumedLastSample
+          localParticipated = localParticipated || localConsumedLastSample
         }
 
       if (dragStartChange == null) {
@@ -254,36 +203,28 @@ private fun Modifier.dragScroll(
               nestedScrollDispatcher = nestedScrollDispatcher,
               overscrollState = overscrollState,
             )
-          if (abs(dispatchResult.ancestorConsumedPointerDelta) > CONSUMPTION_EPSILON) {
-            ancestorParticipated = true
-          }
-          if (abs(dispatchResult.localConsumedPointerDelta) > CONSUMPTION_EPSILON) {
-            localParticipated = true
-          }
           ancestorConsumedLastSample =
             abs(dispatchResult.ancestorConsumedPointerDelta) > CONSUMPTION_EPSILON
           localConsumedLastSample =
             abs(dispatchResult.localConsumedPointerDelta) > CONSUMPTION_EPSILON
+          ancestorParticipated = ancestorParticipated || ancestorConsumedLastSample
+          localParticipated = localParticipated || localConsumedLastSample
         }
 
-      val rawPointerVelocity = axis.extract(velocityTracker.calculateVelocity())
       val flingMode =
         if (invertFlingVelocity) {
           DragScrollFlingMode.ScrollableContent
         } else {
           DragScrollFlingMode.DirectBridge
         }
-      val pointerVelocity =
-        resolveDragScrollFlingVelocity(pointerVelocity = rawPointerVelocity, mode = flingMode)
       val ancestorHandoffVelocity =
         resolveDragScrollAncestorHandoffVelocity(
-          pointerVelocity = rawPointerVelocity,
+          pointerVelocity = axis.extract(velocityTracker.calculateVelocity()),
           mode = flingMode,
         )
 
       scope.launch {
         finalizeDragScroll(
-          pointerVelocity = if (dragCompleted) pointerVelocity else 0f,
           ancestorHandoffVelocity = if (dragCompleted) ancestorHandoffVelocity else 0f,
           ancestorParticipated = ancestorParticipated,
           localParticipated = localParticipated,
@@ -300,24 +241,6 @@ private fun Modifier.dragScroll(
   }
 }
 
-internal fun resolveDragScrollFlingVelocity(
-  pointerVelocity: Float,
-  mode: DragScrollFlingMode,
-): Float =
-  when (mode) {
-    DragScrollFlingMode.ScrollableContent -> -pointerVelocity * FLING_VELOCITY_MULTIPLIER
-    DragScrollFlingMode.DirectBridge -> pointerVelocity * FLING_VELOCITY_MULTIPLIER
-  }
-
-internal fun resolveDragScrollAncestorHandoffVelocity(
-  pointerVelocity: Float,
-  mode: DragScrollFlingMode,
-): Float =
-  when (mode) {
-    DragScrollFlingMode.ScrollableContent -> -pointerVelocity
-    DragScrollFlingMode.DirectBridge -> pointerVelocity
-  }
-
 private data class DragScrollDispatchResult(
   val ancestorConsumedPointerDelta: Float,
   val localConsumedPointerDelta: Float,
@@ -330,6 +253,7 @@ private fun dispatchDragScrollDelta(
   axis: ElasticAxis,
   nestedScrollDispatcher: NestedScrollDispatcher,
   overscrollState: ElasticOverscrollState?,
+  allowAncestorDispatch: Boolean = true,
 ): DragScrollDispatchResult {
   val scrollDelta = -pointerDelta
   val overscrollPreConsumed = overscrollState?.consumePre(scrollDelta) ?: 0f
@@ -344,12 +268,16 @@ private fun dispatchDragScrollDelta(
   }
 
   val preConsumedPointerDelta =
-    axis.extract(
-      nestedScrollDispatcher.dispatchPreScroll(
-        available = axis.offset(pointerDeltaAfterOverscroll),
-        source = NestedScrollSource.UserInput,
+    if (allowAncestorDispatch) {
+      axis.extract(
+        nestedScrollDispatcher.dispatchPreScroll(
+          available = axis.offset(pointerDeltaAfterOverscroll),
+          source = NestedScrollSource.UserInput,
+        )
       )
-    )
+    } else {
+      0f
+    }
   val remainingPointerDelta = pointerDeltaAfterOverscroll - preConsumedPointerDelta
   val localConsumedScrollDelta =
     if (remainingPointerDelta != 0f) {
@@ -360,13 +288,17 @@ private fun dispatchDragScrollDelta(
   val localConsumedPointerDelta = -localConsumedScrollDelta
   val postAvailablePointerDelta = remainingPointerDelta - localConsumedPointerDelta
   val postConsumedPointerDelta =
-    axis.extract(
-      nestedScrollDispatcher.dispatchPostScroll(
-        consumed = axis.offset(localConsumedPointerDelta),
-        available = axis.offset(postAvailablePointerDelta),
-        source = NestedScrollSource.UserInput,
+    if (allowAncestorDispatch) {
+      axis.extract(
+        nestedScrollDispatcher.dispatchPostScroll(
+          consumed = axis.offset(localConsumedPointerDelta),
+          available = axis.offset(postAvailablePointerDelta),
+          source = NestedScrollSource.UserInput,
+        )
       )
-    )
+    } else {
+      0f
+    }
   val finalAvailablePointerDelta = postAvailablePointerDelta - postConsumedPointerDelta
   val unconsumedScrollDelta = -finalAvailablePointerDelta
 
@@ -378,12 +310,6 @@ private fun dispatchDragScrollDelta(
     unconsumedScrollDelta = unconsumedScrollDelta,
   )
 }
-
-private fun Orientation.toElasticAxis(): ElasticAxis =
-  when (this) {
-    Orientation.Horizontal -> ElasticAxis.Horizontal
-    Orientation.Vertical -> ElasticAxis.Vertical
-  }
 
 private suspend fun AwaitPointerEventScope.awaitAxisTouchSlopOrCancellation(
   axis: ElasticAxis,
@@ -405,38 +331,7 @@ private suspend fun AwaitPointerEventScope.dragAlongAxis(
     ElasticAxis.Vertical -> verticalDrag(pointerId, onDrag)
   }
 
-private fun ElasticAxis.extract(offset: Offset): Float =
-  when (this) {
-    ElasticAxis.Horizontal -> offset.x
-    ElasticAxis.Vertical -> offset.y
-  }
-
-private fun ElasticAxis.extract(velocity: Velocity): Float =
-  when (this) {
-    ElasticAxis.Horizontal -> velocity.x
-    ElasticAxis.Vertical -> velocity.y
-  }
-
-private fun ElasticAxis.pointerDelta(change: PointerInputChange): Float =
-  when (this) {
-    ElasticAxis.Horizontal -> change.position.x - change.previousPosition.x
-    ElasticAxis.Vertical -> change.position.y - change.previousPosition.y
-  }
-
-private fun ElasticAxis.offset(value: Float): Offset =
-  when (this) {
-    ElasticAxis.Horizontal -> Offset(value, 0f)
-    ElasticAxis.Vertical -> Offset(0f, value)
-  }
-
-private fun ElasticAxis.velocity(value: Float): Velocity =
-  when (this) {
-    ElasticAxis.Horizontal -> Velocity(value, 0f)
-    ElasticAxis.Vertical -> Velocity(0f, value)
-  }
-
 private suspend fun finalizeDragScroll(
-  pointerVelocity: Float,
   ancestorHandoffVelocity: Float,
   ancestorParticipated: Boolean,
   localParticipated: Boolean,
@@ -448,24 +343,84 @@ private suspend fun finalizeDragScroll(
   decay: androidx.compose.animation.core.DecayAnimationSpec<Float>,
   state: ScrollableState,
 ) {
-  val shouldHandOffImmediately =
+  val allowAncestorFlingHandoff =
+    shouldAllowDragScrollFlingAncestorHandoff(
+      ancestorParticipated = ancestorParticipated,
+      ancestorConsumedLastSample = ancestorConsumedLastSample,
+      localConsumedLastSample = localConsumedLastSample,
+    )
+  val preConsumedAncestorVelocity =
+    if (allowAncestorFlingHandoff) {
+      axis.extract(nestedScrollDispatcher.dispatchPreFling(axis.velocity(ancestorHandoffVelocity)))
+    } else {
+      0f
+    }
+  val remainingAncestorVelocity =
+    if (allowAncestorFlingHandoff) {
+      ancestorHandoffVelocity - preConsumedAncestorVelocity
+    } else {
+      ancestorHandoffVelocity
+    }
+
+  if (allowAncestorFlingHandoff) {
+    finalizeAncestorOwnedDragScrollFling(
+      remainingAncestorVelocity = remainingAncestorVelocity,
+      ancestorParticipated = ancestorParticipated,
+      localParticipated = localParticipated,
+      ancestorConsumedLastSample = ancestorConsumedLastSample,
+      localConsumedLastSample = localConsumedLastSample,
+      axis = axis,
+      nestedScrollDispatcher = nestedScrollDispatcher,
+      overscrollState = overscrollState,
+      decay = decay,
+      state = state,
+    )
+  } else {
+    finalizeLocalOwnedDragScrollFling(
+      decayVelocity = remainingAncestorVelocity * FLING_VELOCITY_MULTIPLIER,
+      axis = axis,
+      nestedScrollDispatcher = nestedScrollDispatcher,
+      overscrollState = overscrollState,
+      decay = decay,
+      state = state,
+    )
+  }
+}
+
+private suspend fun finalizeAncestorOwnedDragScrollFling(
+  remainingAncestorVelocity: Float,
+  ancestorParticipated: Boolean,
+  localParticipated: Boolean,
+  ancestorConsumedLastSample: Boolean,
+  localConsumedLastSample: Boolean,
+  axis: ElasticAxis,
+  nestedScrollDispatcher: NestedScrollDispatcher,
+  overscrollState: ElasticOverscrollState?,
+  decay: androidx.compose.animation.core.DecayAnimationSpec<Float>,
+  state: ScrollableState,
+) {
+  if (abs(remainingAncestorVelocity) <= CONSUMPTION_EPSILON) {
+    overscrollState?.release()
+    return
+  }
+
+  if (
     shouldHandOffDragScrollFlingToAncestorImmediately(
       ancestorParticipated = ancestorParticipated,
       localParticipated = localParticipated,
       ancestorConsumedLastSample = ancestorConsumedLastSample,
       localConsumedLastSample = localConsumedLastSample,
     )
-
-  if (shouldHandOffImmediately) {
+  ) {
     nestedScrollDispatcher.dispatchPostFling(
       consumed = Velocity.Zero,
-      available = axis.velocity(ancestorHandoffVelocity),
+      available = axis.velocity(remainingAncestorVelocity),
     )
     overscrollState?.release()
     return
   }
 
-  if (overscrollState != null && abs(overscrollState.offset) > 0.5f) {
+  if (overscrollState != null && abs(overscrollState.offset) > CONSUMPTION_EPSILON) {
     if (ancestorParticipated) {
       nestedScrollDispatcher.dispatchPostFling(consumed = Velocity.Zero, available = Velocity.Zero)
     }
@@ -473,7 +428,8 @@ private suspend fun finalizeDragScroll(
     return
   }
 
-  if (abs(pointerVelocity) <= 0.5f) {
+  val decayVelocity = remainingAncestorVelocity * FLING_VELOCITY_MULTIPLIER
+  if (abs(decayVelocity) <= CONSUMPTION_EPSILON) {
     if (ancestorParticipated) {
       nestedScrollDispatcher.dispatchPostFling(consumed = Velocity.Zero, available = Velocity.Zero)
     }
@@ -481,14 +437,17 @@ private suspend fun finalizeDragScroll(
     return
   }
 
-  var finalAvailableVelocity = axis.velocity(pointerVelocity)
+  var finalAvailableVelocity = Velocity.Zero
+  var ancestorConsumedDuringFling = false
   var previousValue = 0f
+
   try {
     androidx.compose.animation.core
-      .AnimationState(initialValue = 0f, initialVelocity = pointerVelocity)
+      .AnimationState(initialValue = 0f, initialVelocity = decayVelocity)
       .animateDecay(decay) {
         val pointerDelta = value - previousValue
         previousValue = value
+
         val dispatchResult =
           dispatchDragScrollDelta(
             pointerDelta = pointerDelta,
@@ -496,14 +455,32 @@ private suspend fun finalizeDragScroll(
             axis = axis,
             nestedScrollDispatcher = nestedScrollDispatcher,
             overscrollState = overscrollState,
+            allowAncestorDispatch = true,
           )
-        if (abs(dispatchResult.unconsumedScrollDelta) > CONSUMPTION_EPSILON) {
+        if (abs(dispatchResult.ancestorConsumedPointerDelta) > CONSUMPTION_EPSILON) {
+          ancestorConsumedDuringFling = true
+        }
+
+        if (
+          shouldCancelDragScrollDecayForAncestorHandoff(
+            ancestorConsumedPointerDelta = dispatchResult.ancestorConsumedPointerDelta,
+            localConsumedPointerDelta = dispatchResult.localConsumedPointerDelta,
+            unconsumedScrollDelta = dispatchResult.unconsumedScrollDelta,
+          ) || abs(dispatchResult.unconsumedScrollDelta) > CONSUMPTION_EPSILON
+        ) {
           finalAvailableVelocity = axis.velocity(velocity)
           cancelAnimation()
+          return@animateDecay
         }
       }
   } finally {
-    if (ancestorParticipated) {
+    if (
+      shouldDispatchDragScrollPostFlingToAncestor(
+        ancestorParticipated = ancestorParticipated,
+        ancestorConsumedDuringFling = ancestorConsumedDuringFling,
+        availableVelocity = axis.extract(finalAvailableVelocity),
+      )
+    ) {
       nestedScrollDispatcher.dispatchPostFling(
         consumed = Velocity.Zero,
         available = finalAvailableVelocity,
@@ -513,59 +490,85 @@ private suspend fun finalizeDragScroll(
   }
 }
 
-internal fun shouldHandOffDragScrollFlingToAncestorImmediately(
-  ancestorParticipated: Boolean,
-  localParticipated: Boolean,
-  ancestorConsumedLastSample: Boolean,
-  localConsumedLastSample: Boolean,
-): Boolean =
-  when {
-    ancestorConsumedLastSample && !localConsumedLastSample -> true
-    ancestorParticipated && !localParticipated -> true
-    else -> false
+private suspend fun finalizeLocalOwnedDragScrollFling(
+  decayVelocity: Float,
+  axis: ElasticAxis,
+  nestedScrollDispatcher: NestedScrollDispatcher,
+  overscrollState: ElasticOverscrollState?,
+  decay: androidx.compose.animation.core.DecayAnimationSpec<Float>,
+  state: ScrollableState,
+) {
+  if (overscrollState != null && abs(overscrollState.offset) > CONSUMPTION_EPSILON) {
+    overscrollState.release()
+    return
   }
 
-private fun Modifier.elasticOverscroll(
-  axis: ElasticAxis,
-  overscrollState: ElasticOverscrollState,
-): Modifier = composed {
-  val connection =
-    remember(axis, overscrollState) {
-      object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-          if (source != NestedScrollSource.UserInput) return Offset.Zero
+  if (abs(decayVelocity) <= CONSUMPTION_EPSILON) {
+    overscrollState?.release()
+    return
+  }
 
-          val delta = axis.extract(available)
-          if (delta == 0f) return Offset.Zero
-          return axis.offset(overscrollState.consumePre(delta))
+  var finalAvailableVelocity = Velocity.Zero
+  var shouldHandOffToAncestor = false
+  var previousValue = 0f
+
+  try {
+    androidx.compose.animation.core
+      .AnimationState(initialValue = 0f, initialVelocity = decayVelocity)
+      .animateDecay(decay) {
+        val pointerDelta = value - previousValue
+        previousValue = value
+
+        val dispatchResult =
+          dispatchDragScrollDelta(
+            pointerDelta = pointerDelta,
+            state = state,
+            axis = axis,
+            nestedScrollDispatcher = nestedScrollDispatcher,
+            overscrollState = overscrollState,
+            allowAncestorDispatch = false,
+          )
+        if (abs(dispatchResult.unconsumedScrollDelta) <= CONSUMPTION_EPSILON) {
+          return@animateDecay
         }
 
-        override fun onPostScroll(
-          consumed: Offset,
-          available: Offset,
-          source: NestedScrollSource,
-        ): Offset {
-          // Keep elastic overscroll for direct drag gestures handled by dragScroll(),
-          // but do not translate the whole container for trackpad or wheel scrolling.
-          return Offset.Zero
-        }
-
-        override suspend fun onPreFling(available: Velocity): Velocity {
-          overscrollState.release()
-          return Velocity.Zero
-        }
-
-        override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-          overscrollState.release()
-          return Velocity.Zero
+        when (
+          resolveDragScrollBoundaryFlingOutcome(
+            availableVelocity = velocity,
+            boundaryUnconsumedScrollDelta = dispatchResult.unconsumedScrollDelta,
+            overscrollEnabled = overscrollState != null,
+          )
+        ) {
+          DragScrollBoundaryFlingOutcome.HandOffToAncestor -> {
+            shouldHandOffToAncestor = true
+            finalAvailableVelocity = axis.velocity(velocity)
+            overscrollState?.offset = 0f
+            cancelAnimation()
+            return@animateDecay
+          }
+          DragScrollBoundaryFlingOutcome.Stop -> {
+            cancelAnimation()
+            return@animateDecay
+          }
+          DragScrollBoundaryFlingOutcome.ContinueElasticOverscroll -> {
+            overscrollState?.applyUnconsumed(
+              resolveDragScrollBoundaryElasticOverscrollDelta(
+                availableVelocity = velocity,
+                boundaryUnconsumedScrollDelta = dispatchResult.unconsumedScrollDelta,
+              )
+            )
+            cancelAnimation()
+            return@animateDecay
+          }
         }
       }
+  } finally {
+    if (shouldHandOffToAncestor) {
+      nestedScrollDispatcher.dispatchPostFling(
+        consumed = Velocity.Zero,
+        available = finalAvailableVelocity,
+      )
     }
-
-  clipToBounds().nestedScroll(connection).graphicsLayer {
-    when (axis) {
-      ElasticAxis.Horizontal -> translationX = overscrollState.offset
-      ElasticAxis.Vertical -> translationY = overscrollState.offset
-    }
+    overscrollState?.release()
   }
 }

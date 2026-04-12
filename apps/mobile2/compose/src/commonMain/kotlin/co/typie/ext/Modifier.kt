@@ -42,6 +42,7 @@ internal expect fun Modifier.desktopDragScroll(
   state: ScrollableState,
   orientation: Orientation,
   enabled: Boolean = true,
+  elasticOverscroll: Boolean = true,
 ): Modifier
 
 fun Modifier.clickable(onClick: suspend () -> Unit): Modifier =

@@ -7,6 +7,52 @@ import kotlin.test.assertEquals
 
 class SheetOverlayHostTest {
   @Test
+  fun boundaryHandoffIsAttemptedOnlyAtDismissBoundary() {
+    assertEquals(false, shouldAttemptSheetBoundaryHandoff(2400f, isAtDismissBoundary = false))
+    assertEquals(false, shouldAttemptSheetBoundaryHandoff(0f, isAtDismissBoundary = true))
+    assertEquals(true, shouldAttemptSheetBoundaryHandoff(2400f, isAtDismissBoundary = true))
+  }
+
+  @Test
+  fun nestedChildFlingHandoffRequiresStrongDownwardVelocity() {
+    assertEquals(false, shouldHandOffSheetNestedChildFlingToSheet(1800f))
+    assertEquals(false, shouldHandOffSheetNestedChildFlingToSheet(-2400f))
+    assertEquals(true, shouldHandOffSheetNestedChildFlingToSheet(2400f))
+  }
+
+  @Test
+  fun nestedSheetPreFlingIsHandledImmediatelyWhenDraggedAwayFromCurrentDetent() {
+    assertEquals(
+      true,
+      shouldHandleSheetNestedPreFling(
+        currentDetentHeightPx = 672f,
+        sheetHeightPx = 500f,
+        dragOffsetPx = 0f,
+      ),
+    )
+    assertEquals(
+      true,
+      shouldHandleSheetNestedPreFling(
+        currentDetentHeightPx = 672f,
+        sheetHeightPx = 672f,
+        dragOffsetPx = 72f,
+      ),
+    )
+  }
+
+  @Test
+  fun nestedSheetPreFlingIsIgnoredWhenAlreadySettledAtDetent() {
+    assertEquals(
+      false,
+      shouldHandleSheetNestedPreFling(
+        currentDetentHeightPx = 672f,
+        sheetHeightPx = 672.25f,
+        dragOffsetPx = 0.25f,
+      ),
+    )
+  }
+
+  @Test
   fun downwardDragCollapsesToMinHeightBeforeAddingOffset() {
     val nextState =
       consumeSheetDragDelta(
@@ -104,7 +150,7 @@ class SheetOverlayHostTest {
   }
 
   @Test
-  fun nestedScrollOverflowIsRecoveredBeforeSheetCollapses() {
+  fun nestedScrollUpwardOverflowIsLeftForChildElasticOverscroll() {
     val preScrollState =
       consumeSheetDragDelta(
         currentHeightPx = 760f,
@@ -120,23 +166,19 @@ class SheetOverlayHostTest {
         delta = -40f,
         minHeightPx = 480f,
         maxHeightPx = 820f,
-        trackUpperBoundaryOverflow = true,
       )
-    val recoveredState =
-      consumeSheetDragDelta(
-        currentHeightPx = postScrollOverflowState.heightPx,
-        currentOffsetPx = postScrollOverflowState.offsetPx,
-        delta = 25f,
-        minHeightPx = 480f,
-        maxHeightPx = 820f,
+    val consumedY =
+      resolveConsumedSheetScrollDeltaY(
+        currentHeightPx = preScrollState.heightPx,
+        currentOffsetPx = preScrollState.offsetPx,
+        nextState = postScrollOverflowState,
       )
 
     assertEquals(820f, preScrollState.heightPx)
     assertEquals(0f, preScrollState.offsetPx)
     assertEquals(820f, postScrollOverflowState.heightPx)
-    assertEquals(-40f, postScrollOverflowState.offsetPx)
-    assertEquals(820f, recoveredState.heightPx)
-    assertEquals(-15f, recoveredState.offsetPx)
+    assertEquals(0f, postScrollOverflowState.offsetPx)
+    assertEquals(0f, consumedY)
   }
 
   @Test

@@ -21,4 +21,5 @@ internal actual fun Modifier.desktopDragScroll(
   state: ScrollableState,
   orientation: androidx.compose.foundation.gestures.Orientation,
   enabled: Boolean,
+  elasticOverscroll: Boolean,
 ): Modifier = this

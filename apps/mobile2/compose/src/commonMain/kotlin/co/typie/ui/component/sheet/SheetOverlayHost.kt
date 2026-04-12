@@ -43,15 +43,12 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.Velocity
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -287,8 +284,7 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
       val effectiveSheetHeightPx =
         (sheetHeightPx - resolveVisualSheetDragOffsetPx(dragOffsetPx)).coerceAtLeast(0f)
       val effectiveSheetHeight = with(density) { effectiveSheetHeightPx.toDp() }
-
-      if (
+      val shouldDismiss =
         entry.spec.dismissPolicy.dragDown &&
           shouldDismissDraggedSheet(
             policy = entry.spec.sizePolicy,
@@ -297,7 +293,8 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
             sheetHeight = effectiveSheetHeight,
             velocity = velocity,
           )
-      ) {
+
+      if (shouldDismiss) {
         if (entry.spec.haptics.onDismiss) {
           haptics.perform(SheetHapticEvent.Dismiss)
         }
@@ -312,7 +309,10 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
           currentDetentId = entry.controller.currentDetentId,
           sheetHeight = effectiveSheetHeight,
           velocity = velocity,
-        ) ?: return
+        )
+      if (nearest == null) {
+        return
+      }
       if (nearest.id == entry.controller.targetDetentId) {
         coroutineScope.launch {
           val heightAnimatable = Animatable(sheetHeightPx)
@@ -367,94 +367,35 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
       }
     }
 
-    val nestedScrollConnection =
-      remember(entry, entry.isTopOfStack, minDetentHeightPx, maxDetentHeightPx) {
-        object : NestedScrollConnection {
-          override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (
-              !entry.isTopOfStack || isResolving || available.y >= 0f || maxDetentHeightPx <= 0f
-            ) {
-              return Offset.Zero
-            }
-            val nextState =
-              consumeSheetDragDelta(
-                currentHeightPx = sheetHeightPx,
-                currentOffsetPx = dragOffsetPx,
-                delta = available.y,
-                minHeightPx = minDetentHeightPx,
-                maxHeightPx = maxDetentHeightPx,
-              )
-            val consumed =
-              resolveConsumedSheetScrollDeltaY(
-                currentHeightPx = sheetHeightPx,
-                currentOffsetPx = dragOffsetPx,
-                nextState = nextState,
-              )
-            if (abs(consumed) <= 0.5f) return Offset.Zero
-            sheetHeightPx = nextState.heightPx
-            dragOffsetPx = nextState.offsetPx
-            return Offset(0f, consumed)
-          }
-
-          override fun onPostScroll(
-            consumed: Offset,
-            available: Offset,
-            source: NestedScrollSource,
-          ): Offset {
-            if (!entry.isTopOfStack || isResolving || available.y == 0f) {
-              return Offset.Zero
-            }
-            val nextState =
-              consumeSheetDragDelta(
-                currentHeightPx = sheetHeightPx,
-                currentOffsetPx = dragOffsetPx,
-                delta = available.y,
-                minHeightPx = minDetentHeightPx,
-                maxHeightPx = maxDetentHeightPx,
-                trackUpperBoundaryOverflow = available.y < 0f,
-              )
-            val consumedY =
-              resolveConsumedSheetScrollDeltaY(
-                currentHeightPx = sheetHeightPx,
-                currentOffsetPx = dragOffsetPx,
-                nextState = nextState,
-              )
-            if (abs(consumedY) <= 0.5f) return Offset.Zero
-            sheetHeightPx = nextState.heightPx
-            dragOffsetPx = nextState.offsetPx
-            return Offset(0f, consumedY)
-          }
-
-          override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-            if (!entry.isTopOfStack || isResolving || resolvedDetents.isEmpty()) {
-              return Velocity.Zero
-            }
-            settleOrDismiss(velocity = available.y.takeIf { it != 0f } ?: consumed.y)
-            return Velocity.Zero
-          }
-        }
-      }
-
-    val draggableState = rememberDraggableState { delta ->
-      if (!entry.isTopOfStack || isResolving) return@rememberDraggableState
-      val nextState =
-        consumeSheetDragDelta(
-          currentHeightPx = sheetHeightPx,
-          currentOffsetPx = dragOffsetPx,
-          delta = delta,
-          minHeightPx = minDetentHeightPx,
-          maxHeightPx = maxDetentHeightPx.coerceAtLeast(sheetHeightPx),
-          trackUpperBoundaryOverflow = true,
-        )
+    val updateSheetDragState: (SheetDragState) -> Unit = { nextState ->
       sheetHeightPx = nextState.heightPx
       dragOffsetPx = nextState.offsetPx
     }
+    val gestureHandler =
+      rememberSheetGestureHandler(
+        density = density,
+        snapshot = {
+          SheetGestureSnapshot(
+            enabled = entry.isTopOfStack,
+            isResolving = isResolving,
+            resolvedDetents = resolvedDetents,
+            currentDetentId = entry.controller.currentDetentId,
+            sheetState = SheetDragState(heightPx = sheetHeightPx, offsetPx = dragOffsetPx),
+            minDetentHeightPx = minDetentHeightPx,
+            maxDetentHeightPx = maxDetentHeightPx,
+          )
+        },
+        onDragStateChange = updateSheetDragState,
+        onSettleOrDismiss = ::settleOrDismiss,
+      )
+
+    val draggableState = rememberDraggableState(gestureHandler::onDrag)
     val dragRegionModifier =
       Modifier.draggable(
         state = draggableState,
         orientation = Orientation.Vertical,
         enabled = entry.isTopOfStack && !isResolving,
-        onDragStopped = { velocity -> settleOrDismiss(velocity) },
+        onDragStopped = { velocity -> gestureHandler.onDragStopped(velocity) },
       )
 
     PlatformBackHandler(
@@ -593,11 +534,14 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
 
           Box(
             modifier =
-              Modifier.fillMaxWidth().weight(1f, fill = false).nestedScroll(nestedScrollConnection)
+              Modifier.fillMaxWidth()
+                .weight(1f, fill = false)
+                .nestedScroll(gestureHandler.nestedScrollConnection)
           ) {
             CompositionLocalProvider(
               LocalViewModelStoreOwner provides viewModelStoreOwner,
               LocalSheetDragRegionModifier provides dragRegionModifier,
+              LocalSheetBoundaryFlingHandoff provides gestureHandler.boundaryFlingHandoff,
             ) {
               Column(modifier = Modifier.fillMaxWidth()) { entry.content.invoke(sheetScope) }
             }
@@ -619,183 +563,6 @@ private fun <R> SheetOverlayHost(entry: SheetOverlayEntry<R>) {
       }
     }
   }
-}
-
-internal fun resolveInitialSheetHeightPx(
-  density: Density,
-  requiresContentMeasurement: Boolean,
-  initialResolvedDetent: ResolvedSheetDetent?,
-): Float =
-  when {
-    requiresContentMeasurement -> 0f
-    initialResolvedDetent != null -> with(density) { initialResolvedDetent.height.toPx() }
-    else -> 0f
-  }
-
-internal fun resolveRenderedSheetHeightPx(
-  currentSheetHeightPx: Float,
-  requiresContentMeasurement: Boolean,
-  measuredSheetHeightPx: Float,
-  initialSheetHeightPx: Float,
-  targetSheetHeightPx: Float? = null,
-  shouldAnimateTargetHeightChange: Boolean = true,
-): Float =
-  when {
-    targetSheetHeightPx != null && targetSheetHeightPx > 0f && !shouldAnimateTargetHeightChange ->
-      targetSheetHeightPx
-    currentSheetHeightPx > 0f -> currentSheetHeightPx
-    requiresContentMeasurement -> measuredSheetHeightPx
-    else -> initialSheetHeightPx
-  }
-
-internal fun shouldRequestModalSheetFocus(
-  isTopOfStack: Boolean,
-  mode: SheetMode,
-  progress: Float,
-  sheetHasFocus: Boolean,
-): Boolean = isTopOfStack && mode == SheetMode.Modal && progress > 0f && !sheetHasFocus
-
-internal fun resolveSheetSurfaceAlpha(
-  requiresContentMeasurement: Boolean,
-  isContentReady: Boolean,
-): Float =
-  if (requiresContentMeasurement && !isContentReady) {
-    0f
-  } else {
-    1f
-  }
-
-internal fun shouldTreatMeasuredSheetAsConstrained(
-  requiresContentMeasurement: Boolean,
-  measuredSheetHeightPx: Float,
-  renderedSheetHeightPx: Float,
-): Boolean {
-  if (!requiresContentMeasurement || measuredSheetHeightPx <= 0f) {
-    return false
-  }
-  return renderedSheetHeightPx + 0.5f < measuredSheetHeightPx
-}
-
-internal fun shouldApplyRenderedSheetHeight(
-  policy: SheetSizePolicy,
-  targetDetentId: SheetDetentId?,
-  requiresContentMeasurement: Boolean,
-  measuredSheetHeightPx: Float,
-  renderedSheetHeightPx: Float,
-): Boolean {
-  if (renderedSheetHeightPx <= 0f) {
-    return false
-  }
-
-  if (!isContentDrivenSheetDetent(policy = policy, targetDetentId = targetDetentId)) {
-    return true
-  }
-
-  return shouldTreatMeasuredSheetAsConstrained(
-    requiresContentMeasurement = requiresContentMeasurement,
-    measuredSheetHeightPx = measuredSheetHeightPx,
-    renderedSheetHeightPx = renderedSheetHeightPx,
-  )
-}
-
-internal fun isContentDrivenSheetDetent(
-  policy: SheetSizePolicy,
-  targetDetentId: SheetDetentId?,
-): Boolean =
-  when (policy) {
-    is SheetSizePolicy.Intrinsic -> true
-    is SheetSizePolicy.Fixed,
-    is SheetSizePolicy.Max -> false
-
-    is SheetSizePolicy.Detents -> {
-      val detentId = targetDetentId ?: policy.initial.id
-      (listOf(policy.initial) + policy.available)
-        .firstOrNull { it.id == detentId }
-        ?.requiresContentMeasurement() == true
-    }
-  }
-
-internal fun shouldAnimateSheetHeightChange(
-  policy: SheetSizePolicy,
-  targetDetentId: SheetDetentId?,
-  lastSettledDetentId: SheetDetentId?,
-): Boolean =
-  !isContentDrivenSheetDetent(policy = policy, targetDetentId = targetDetentId) ||
-    targetDetentId != lastSettledDetentId
-
-internal data class SheetDragState(val heightPx: Float, val offsetPx: Float)
-
-internal fun resolveVisualSheetDragOffsetPx(dragOffsetPx: Float): Float =
-  dragOffsetPx.coerceAtLeast(0f)
-
-internal fun resolveConsumedSheetScrollDeltaY(
-  currentHeightPx: Float,
-  currentOffsetPx: Float,
-  nextState: SheetDragState,
-): Float = (currentHeightPx - nextState.heightPx) + (nextState.offsetPx - currentOffsetPx)
-
-internal fun consumeSheetDragDelta(
-  currentHeightPx: Float,
-  currentOffsetPx: Float,
-  delta: Float,
-  minHeightPx: Float,
-  maxHeightPx: Float,
-  trackUpperBoundaryOverflow: Boolean = false,
-): SheetDragState {
-  if (delta == 0f) {
-    return SheetDragState(heightPx = currentHeightPx, offsetPx = currentOffsetPx)
-  }
-
-  var nextHeightPx = currentHeightPx
-  var nextOffsetPx = currentOffsetPx
-
-  if (delta > 0f) {
-    var remainingDelta = delta
-
-    if (nextOffsetPx < 0f) {
-      val offsetRecovery = minOf(remainingDelta, -nextOffsetPx)
-      nextOffsetPx += offsetRecovery
-      remainingDelta -= offsetRecovery
-    }
-
-    val collapsibleHeight = (nextHeightPx - minHeightPx).coerceAtLeast(0f)
-    val heightDelta = minOf(remainingDelta, collapsibleHeight)
-    nextHeightPx -= heightDelta
-    remainingDelta -= heightDelta
-
-    if (remainingDelta > 0f) {
-      nextOffsetPx += remainingDelta
-    }
-  } else {
-    var remainingDelta = -delta
-
-    if (nextOffsetPx > 0f) {
-      val offsetRecovery = minOf(remainingDelta, nextOffsetPx)
-      nextOffsetPx -= offsetRecovery
-      remainingDelta -= offsetRecovery
-    }
-
-    if (remainingDelta > 0f) {
-      val expandableHeight = (maxHeightPx - nextHeightPx).coerceAtLeast(0f)
-      val heightDelta = minOf(remainingDelta, expandableHeight)
-      nextHeightPx += heightDelta
-      remainingDelta -= heightDelta
-    }
-
-    if (trackUpperBoundaryOverflow && remainingDelta > 0f) {
-      nextOffsetPx -= remainingDelta
-    }
-  }
-
-  return SheetDragState(
-    heightPx = nextHeightPx.coerceAtLeast(0f),
-    offsetPx =
-      if (trackUpperBoundaryOverflow || currentOffsetPx < 0f || nextOffsetPx >= 0f) {
-        nextOffsetPx
-      } else {
-        0f
-      },
-  )
 }
 
 internal fun resolveSheetOffsetY(

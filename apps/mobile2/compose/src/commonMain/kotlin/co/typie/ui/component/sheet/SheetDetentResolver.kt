@@ -77,7 +77,6 @@ internal fun resolveSheetSettledDetent(
 
   if (
     policy.allowsDragCollapse() &&
-      !policy.skipsDragCollapseToSmallerDetents(currentDetent = current, minDetent = minDetent) &&
       smallerDetents.isNotEmpty() &&
       (velocity >= SheetDefaults.DetentSnapVelocityThreshold ||
         sheetHeight <=
@@ -90,14 +89,6 @@ internal fun resolveSheetSettledDetent(
 
   return current
 }
-
-private fun SheetSizePolicy.skipsDragCollapseToSmallerDetents(
-  currentDetent: ResolvedSheetDetent,
-  minDetent: ResolvedSheetDetent,
-): Boolean =
-  this is SheetSizePolicy.Detents &&
-    dragDismissBehavior == SheetDragDismissBehavior.FromCurrentDetent &&
-    currentDetent.id != minDetent.id
 
 internal fun shouldDismissDraggedSheet(
   policy: SheetSizePolicy,
