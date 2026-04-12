@@ -48,6 +48,8 @@ import co.typie.screen.subscription.planUpgradeRoute
 import co.typie.screen.subscription.showPlanUpgradeSheet
 import co.typie.service.CurrentSubscriptionStore
 import co.typie.service.hasSubscriptionOrNull
+import co.typie.ui.component.AlertBanner
+import co.typie.ui.component.AlertBannerVariant
 import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
@@ -391,7 +393,8 @@ private fun MoreMenu(model: SpaceSettingsViewModel, showLastSiteAlert: () -> Uni
                   } else {
                     sheetHost.show(
                       deleteSiteConfirmSheet(
-                        totalCount = data.site.documentCount + data.site.folderCount,
+                        documentCount = data.site.documentCount,
+                        folderCount = data.site.folderCount,
                         isDeleting = { model.isDeletingSite },
                         onDelete = {
                           if (!model.isDeletingSite) {
@@ -457,19 +460,20 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
 }
 
 private fun deleteSiteConfirmSheet(
-  totalCount: Int,
+  documentCount: Int,
+  folderCount: Int,
   isDeleting: () -> Boolean,
   onDelete: suspend SheetScope<Unit>.() -> Unit,
 ): SheetPresentation<Unit> = sheetPresentation {
   val isDeleting = isDeleting()
   var inputValue by remember { mutableStateOf("") }
-  val confirmText = "$totalCount"
-  val isConfirmed = totalCount == 0 || inputValue == confirmText
+  val confirmText = "$documentCount"
+  val isConfirmed = documentCount == 0 || inputValue == confirmText
 
   SheetLayout(
     bodyInsetPolicy = SheetInsetPolicy.Container,
     padding = SpaceDateDisplaySheetPadding,
-    verticalSpacing = 8.dp,
+    verticalSpacing = 12.dp,
     header = { ActionHeader(title = "스페이스 삭제") },
     footer = {
       Button(
@@ -485,29 +489,33 @@ private fun deleteSiteConfirmSheet(
       )
     },
   ) {
-    Text(
-      text =
-        buildString {
-          append("스페이스의 모든 글과 데이터가 삭제되며, 복구할 수 없어요.")
-          if (totalCount > 0) {
-            append('\n')
-            append("삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수($totalCount)를 입력해주세요.")
-          }
-        },
-      style = AppTheme.typography.body,
-      color = AppTheme.colors.textSecondary,
+    AlertBanner(
+      text = deleteSiteBannerText(documentCount = documentCount, folderCount = folderCount),
+      variant = AlertBannerVariant.Danger,
     )
 
-    if (totalCount > 0) {
+    if (documentCount > 0) {
       TextField(
         value = inputValue,
         onValueChange = { inputValue = it },
-        label = "",
-        labelPosition = LabelPosition.None,
+        label = "확인 숫자",
+        help = "삭제를 진행하려면 스페이스와 함께 삭제되는 문서 수($documentCount)를 입력해주세요.",
+        helpTextStyle = AppTheme.typography.caption,
         placeholder = confirmText,
         autoFocus = true,
         keyboardType = KeyboardType.Number,
       )
     }
+  }
+}
+
+private fun deleteSiteBannerText(documentCount: Int, folderCount: Int): String {
+  val totalCount = documentCount + folderCount
+
+  return when {
+    totalCount == 0 -> "비어있는 스페이스지만 삭제 후 복구할 수 없어요."
+    documentCount > 0 && folderCount > 0 -> "${folderCount}개의 폴더와 ${documentCount}개의 문서가 함께 삭제돼요."
+    documentCount > 0 -> "${documentCount}개의 문서가 함께 삭제돼요."
+    else -> "${folderCount}개의 폴더가 함께 삭제돼요."
   }
 }
