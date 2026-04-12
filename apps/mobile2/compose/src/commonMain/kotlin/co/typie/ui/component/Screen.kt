@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,7 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -33,6 +37,8 @@ import co.typie.ext.plus
 import co.typie.ext.safeDrawing
 import co.typie.ext.statusBars
 import co.typie.ext.verticalScroll
+import co.typie.ui.component.bottombar.BottomBarDefaults
+import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.skeleton.Skeleton
@@ -84,6 +90,34 @@ private fun BaseScreen(
     }
 
     contentContainer { Skeleton(enabled = loading) { content(adjustedContentPadding) } }
+
+    val bottomBarAnimation = LocalBottomBarAnimationSource.current
+    val bgAlpha = bottomBarAnimation?.animatedAlpha ?: 0f
+    val bgTranslationY = bottomBarAnimation?.animatedTranslationY ?: 0f
+    if (bgAlpha > 0f) {
+      val fadeColor = background.copy(alpha = BottomBarDefaults.FadeOpacity)
+      Column(
+        modifier =
+          Modifier.fillMaxWidth().align(Alignment.BottomStart).graphicsLayer {
+            alpha = bgAlpha
+            translationY = bgTranslationY
+          }
+      ) {
+        Spacer(
+          Modifier.fillMaxWidth()
+            .height(BottomBarDefaults.FadeHeight)
+            .background(
+              Brush.verticalGradient(colors = listOf(fadeColor.copy(alpha = 0f), fadeColor))
+            )
+        )
+        Spacer(
+          Modifier.fillMaxWidth()
+            .background(fadeColor)
+            .navigationBarsPadding()
+            .height(BottomBarDefaults.BarAreaHeight)
+        )
+      }
+    }
   }
 }
 

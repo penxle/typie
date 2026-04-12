@@ -37,6 +37,7 @@ import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
 import co.typie.route.transitionStyleTo
 import co.typie.ui.component.bottombar.BottomBarState
+import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
 import co.typie.ui.component.bottombar.LocalBottomBarState
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.topbar.LocalTopBarState
@@ -151,7 +152,12 @@ fun NavigationStack(
     }
   }
 
-  CompositionLocalProvider(Nav provides navigator) {
+  val animationProviders =
+    buildList<ProvidedValue<*>> {
+      add(Nav provides navigator)
+      bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
+    }
+  CompositionLocalProvider(*animationProviders.toTypedArray()) {
     PlatformBackHandler(enabled = navigator.canPop) { scope.launch { navigator.pop() } }
     Box(modifier.fillMaxSize().onSizeChanged { containerWidth = it.width.toFloat() }) {
       val useFadeTransition = transitionStyle == RouteTransitionStyle.Fade

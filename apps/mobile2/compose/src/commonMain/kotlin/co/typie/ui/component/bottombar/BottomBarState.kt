@@ -21,6 +21,8 @@ class BottomBarState {
   var customKey: Any by mutableStateOf(NullKey)
 
   var enabled: Boolean by mutableStateOf(false)
+  var animatedAlpha: Float by mutableStateOf(0f)
+  var animatedTranslationY: Float by mutableStateOf(0f)
 
   fun setPill(key: Any, content: (@Composable () -> Unit)?) {
     if (content != null) pillEntries[key] = content else pillEntries.remove(key)
@@ -49,6 +51,7 @@ class BottomBarState {
 }
 
 val LocalBottomBarState = staticCompositionLocalOf<BottomBarState?> { null }
+val LocalBottomBarAnimationSource = staticCompositionLocalOf<BottomBarState?> { null }
 
 private fun needsImplicitRouteKey(
   enabled: Boolean,

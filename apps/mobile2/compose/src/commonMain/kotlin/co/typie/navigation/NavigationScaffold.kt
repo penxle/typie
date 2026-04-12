@@ -2,7 +2,6 @@ package co.typie.navigation
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -16,10 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import co.typie.ext.navigationBarsPadding
 import co.typie.ui.component.bottombar.BottomBar
-import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.topbar.TopBar
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -45,11 +41,6 @@ fun NavigationScaffold(
       targetValue = if (topBarState.enabled) 1f else 0f,
       animationSpec = tween(200),
     )
-  val bottomEnabledFactor by
-    animateFloatAsState(
-      targetValue = if (bottomBarState?.enabled == true) 1f else 0f,
-      animationSpec = tween(200),
-    )
 
   Box(modifier.fillMaxSize()) {
     Box(Modifier.fillMaxSize().hazeSource(hazeState)) { content() }
@@ -69,24 +60,6 @@ fun NavigationScaffold(
     }
 
     if (bottomBarState != null) {
-      val fadeAlpha = BottomBarDefaults.FadeOpacity * bottomEnabledFactor
-      val fadeColor = colors.surfaceDefault.copy(alpha = fadeAlpha)
-      Column(modifier = Modifier.fillMaxWidth().align(Alignment.BottomStart)) {
-        Spacer(
-          Modifier.fillMaxWidth()
-            .height(BottomBarDefaults.FadeHeight)
-            .background(
-              Brush.verticalGradient(colors = listOf(fadeColor.copy(alpha = 0f), fadeColor))
-            )
-        )
-        Spacer(
-          Modifier.fillMaxWidth()
-            .background(fadeColor)
-            .navigationBarsPadding()
-            .height(BottomBarDefaults.BarAreaHeight)
-        )
-      }
-
       BottomBar(state = bottomBarState)
     }
 

@@ -29,7 +29,7 @@ fun NotesScreen() {
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
 
   Screen(
-    modifier = Modifier.background(AppTheme.colors.surfaceBase),
+    background = AppTheme.colors.surfaceBase,
     body = { _ ->
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Notes", style = AppTheme.typography.display)

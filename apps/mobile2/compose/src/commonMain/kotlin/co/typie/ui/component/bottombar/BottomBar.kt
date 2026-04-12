@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -19,11 +20,16 @@ fun BottomBar(state: BottomBarState, modifier: Modifier = Modifier) {
   val density = LocalDensity.current
   val alpha by
     animateFloatAsState(targetValue = if (state.enabled) 1f else 0f, animationSpec = tween(200))
+  val maxTranslation = 120.dp.toPx(density)
   val translationY by
     animateFloatAsState(
-      targetValue = if (state.enabled) 0f else 120.dp.toPx(density),
+      targetValue = if (state.enabled) 0f else maxTranslation,
       animationSpec = tween(300, easing = EaseOutCubic),
     )
+  SideEffect {
+    state.animatedAlpha = alpha
+    state.animatedTranslationY = translationY
+  }
 
   if (alpha == 0f) return
 
