@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -114,8 +115,10 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
                   .togetherWith(slideOutHorizontally { -it / 2 } + fadeOut(tween(150)))
                   .using(SizeTransform(clip = false) { _, _ -> snap() })
               },
-            ) { key ->
-              state.leadingEntries[key]?.invoke()
+            ) { entryKey ->
+              key(entryKey, state.leadingInstances[entryKey]) {
+                state.leadingEntries[entryKey]?.invoke()
+              }
             }
           }
 
@@ -145,15 +148,17 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
                   }
                 }.using(SizeTransform(clip = false) { _, _ -> snap() })
               },
-            ) { key ->
-              // Per-entry reveal state: updated only while this key is current, frozen on exit.
-              val isCurrentKey = key == state.centerKey
-              var revealed by remember { mutableStateOf(!hasScrollReveal || centerRevealed) }
-              if (isCurrentKey) {
-                revealed = !hasScrollReveal || centerRevealed
-              }
+            ) { entryKey ->
+              key(entryKey, state.centerInstances[entryKey]) {
+                // Per-entry reveal state: updated only while this key is current, frozen on exit.
+                val isCurrentKey = entryKey == state.centerKey
+                var revealed by remember { mutableStateOf(!hasScrollReveal || centerRevealed) }
+                if (isCurrentKey) {
+                  revealed = !hasScrollReveal || centerRevealed
+                }
 
-              TopBarCenterReveal(visible = revealed) { state.centerEntries[key]?.invoke() }
+                TopBarCenterReveal(visible = revealed) { state.centerEntries[entryKey]?.invoke() }
+              }
             }
           }
 
@@ -172,8 +177,10 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
                   .togetherWith(slideOutHorizontally { it / 2 } + fadeOut(tween(150)))
                   .using(SizeTransform(clip = false) { _, _ -> snap() })
               },
-            ) { key ->
-              state.trailingEntries[key]?.invoke()
+            ) { entryKey ->
+              key(entryKey, state.trailingInstances[entryKey]) {
+                state.trailingEntries[entryKey]?.invoke()
+              }
             }
           }
         }
@@ -185,7 +192,7 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
               .padding(horizontal = TopBarDefaults.HorizontalPadding),
           contentAlignment = Alignment.CenterStart,
         ) {
-          state.customEntries[mode]?.invoke()
+          key(mode, state.customInstances[mode]) { state.customEntries[mode]?.invoke() }
         }
       }
     }
