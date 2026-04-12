@@ -23,11 +23,42 @@ import androidx.compose.ui.layout.positionInWindow
 internal val LocalPopoverOutsideTapHostState =
   staticCompositionLocalOf<PopoverOutsideTapHostState?> { null }
 
-private data class PopoverOutsideTapRegistration(
+internal data class PopoverOutsideTapRegistration(
   val token: Any,
   val paneBounds: Rect?,
   val onDismiss: () -> Unit,
+  val onDismissGestureFinished: () -> Unit,
 )
+
+internal data class PopoverOutsideGestureUpdate(
+  val dismiss: Boolean,
+  val consumeChange: Boolean,
+  val keepTracking: Boolean,
+)
+
+internal class PopoverOutsideGestureTracker(
+  private val origin: Offset,
+  private val touchSlop: Float,
+) {
+  private var isTapCandidate = true
+
+  fun start(): PopoverOutsideGestureUpdate {
+    return PopoverOutsideGestureUpdate(dismiss = true, consumeChange = false, keepTracking = true)
+  }
+
+  fun update(currentPosition: Offset, isPressed: Boolean): PopoverOutsideGestureUpdate {
+    if (isTapCandidate && (currentPosition - origin).getDistance() > touchSlop) {
+      isTapCandidate = false
+    }
+
+    val isTapRelease = isTapCandidate && !isPressed
+    return PopoverOutsideGestureUpdate(
+      dismiss = false,
+      consumeChange = isTapRelease,
+      keepTracking = isPressed,
+    )
+  }
+}
 
 @Stable
 class PopoverOutsideTapHostState {
@@ -37,15 +68,24 @@ class PopoverOutsideTapHostState {
     return PopoverOutsideTapHostHandle(state = this, token = Any())
   }
 
-  internal fun currentRegistration(): Pair<Rect, () -> Unit>? {
+  internal fun currentRegistration(): PopoverOutsideTapRegistration? {
     val active = registration ?: return null
-    val paneBounds = active.paneBounds ?: return null
-    return paneBounds to active.onDismiss
+    return if (active.paneBounds == null) null else active
   }
 
-  internal fun update(token: Any, paneBounds: Rect?, onDismiss: () -> Unit) {
+  internal fun update(
+    token: Any,
+    paneBounds: Rect?,
+    onDismiss: () -> Unit,
+    onDismissGestureFinished: () -> Unit,
+  ) {
     registration =
-      PopoverOutsideTapRegistration(token = token, paneBounds = paneBounds, onDismiss = onDismiss)
+      PopoverOutsideTapRegistration(
+        token = token,
+        paneBounds = paneBounds,
+        onDismiss = onDismiss,
+        onDismissGestureFinished = onDismissGestureFinished,
+      )
   }
 
   internal fun clear(token: Any) {
@@ -58,8 +98,13 @@ class PopoverOutsideTapHostState {
 @Stable
 class PopoverOutsideTapHostHandle
 internal constructor(private val state: PopoverOutsideTapHostState, private val token: Any) {
-  fun update(paneBounds: Rect?, onDismiss: () -> Unit) {
-    state.update(token = token, paneBounds = paneBounds, onDismiss = onDismiss)
+  fun update(paneBounds: Rect?, onDismiss: () -> Unit, onDismissGestureFinished: () -> Unit) {
+    state.update(
+      token = token,
+      paneBounds = paneBounds,
+      onDismiss = onDismiss,
+      onDismissGestureFinished = onDismissGestureFinished,
+    )
   }
 
   fun clear() {
@@ -78,22 +123,47 @@ internal fun PopoverOutsideTapHost(content: @Composable () -> Unit) {
         .onGloballyPositioned { coordinates -> rootWindowOffset = coordinates.positionInWindow() }
         .pointerInput(state, rootWindowOffset) {
           awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            val (paneBounds, onDismiss) = state.currentRegistration() ?: return@awaitEachGesture
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+            val registration = state.currentRegistration() ?: return@awaitEachGesture
+            val paneBounds = registration.paneBounds ?: return@awaitEachGesture
             val downPositionInWindow = down.position + rootWindowOffset
             if (paneBounds.contains(downPositionInWindow)) {
               return@awaitEachGesture
             }
 
-            down.consume()
-            onDismiss()
+            val gestureTracker =
+              PopoverOutsideGestureTracker(
+                origin = downPositionInWindow,
+                touchSlop = viewConfiguration.touchSlop,
+              )
+            val startUpdate = gestureTracker.start()
+            if (startUpdate.dismiss) {
+              registration.onDismiss()
+            }
+            if (!startUpdate.keepTracking) {
+              registration.onDismissGestureFinished()
+              return@awaitEachGesture
+            }
 
             var pressed = true
             while (pressed) {
-              val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+              val event = awaitPointerEvent(pass = PointerEventPass.Final)
               val change = event.changes.find { it.id == down.id } ?: break
+              val currentPositionInWindow = change.position + rootWindowOffset
+              val update =
+                gestureTracker.update(
+                  currentPosition = currentPositionInWindow,
+                  isPressed = change.pressed,
+                )
+              if (update.consumeChange) {
+                change.consume()
+              }
+              if (!update.keepTracking) {
+                break
+              }
               pressed = change.pressed
             }
+            registration.onDismissGestureFinished()
           }
         }
   ) {
