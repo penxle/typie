@@ -10,7 +10,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import swiftPMImport.co.typie.compose.KakaoSingleSignOnBridge
 
 actual class KakaoSingleSignOnProvider : SingleSignOnAdapter {
-  context(_: ActivityContext)
+  context(activity: ActivityContext)
   actual override suspend fun authenticate(): SingleSignOnCredential {
     val accessToken = suspendCancellableCoroutine { continuation ->
       KakaoSingleSignOnBridge().authenticateWithCompletion { accessToken, error ->

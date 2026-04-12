@@ -10,7 +10,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import swiftPMImport.co.typie.compose.AppleSingleSignOnBridge
 
 actual class AppleSingleSignOnProvider : SingleSignOnAdapter {
-  context(_: ActivityContext)
+  context(activity: ActivityContext)
   actual override suspend fun authenticate(): SingleSignOnCredential {
     val code = suspendCancellableCoroutine { continuation ->
       AppleSingleSignOnBridge().authenticateWithCompletion { code, error ->

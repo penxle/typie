@@ -14,7 +14,7 @@ import co.typie.platform.PurchaseActivityHolder
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     val splashScreen = installSplashScreen()
-    splashScreen.setKeepOnScreenCondition { BootstrapService.state.value !is BootstrapState.Ready }
+    splashScreen.setKeepOnScreenCondition { BootstrapService.state !is BootstrapState.Ready }
 
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)

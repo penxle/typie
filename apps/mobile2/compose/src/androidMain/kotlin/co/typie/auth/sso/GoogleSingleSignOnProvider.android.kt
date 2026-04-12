@@ -9,7 +9,6 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
 actual class GoogleSingleSignOnProvider : SingleSignOnAdapter {
-
   context(activity: ActivityContext)
   actual override suspend fun authenticate(): SingleSignOnCredential {
     val option = GetSignInWithGoogleOption.Builder(Konfig.GOOGLE_SERVER_CLIENT_ID).build()

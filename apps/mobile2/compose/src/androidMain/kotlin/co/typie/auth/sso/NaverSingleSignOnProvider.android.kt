@@ -9,7 +9,6 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 actual class NaverSingleSignOnProvider : SingleSignOnAdapter {
-
   context(activity: ActivityContext)
   actual override suspend fun authenticate(): SingleSignOnCredential {
     NidOAuth.logout(

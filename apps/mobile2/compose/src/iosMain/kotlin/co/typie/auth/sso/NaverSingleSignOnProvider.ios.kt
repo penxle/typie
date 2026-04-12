@@ -10,7 +10,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import swiftPMImport.co.typie.compose.NaverSingleSignOnBridge
 
 actual class NaverSingleSignOnProvider : SingleSignOnAdapter {
-  context(_: ActivityContext)
+  context(activity: ActivityContext)
   actual override suspend fun authenticate(): SingleSignOnCredential {
     val accessToken = suspendCancellableCoroutine { continuation ->
       NaverSingleSignOnBridge().authenticateWithCompletion { accessToken, error ->

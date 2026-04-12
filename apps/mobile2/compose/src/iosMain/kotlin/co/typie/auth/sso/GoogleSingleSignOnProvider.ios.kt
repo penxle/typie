@@ -10,7 +10,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import swiftPMImport.co.typie.compose.GoogleSingleSignOnBridge
 
 actual class GoogleSingleSignOnProvider : SingleSignOnAdapter {
-  context(_: ActivityContext)
+  context(activity: ActivityContext)
   actual override suspend fun authenticate(): SingleSignOnCredential {
     val code = suspendCancellableCoroutine { continuation ->
       GoogleSingleSignOnBridge().authenticateWithCompletion { code, error ->

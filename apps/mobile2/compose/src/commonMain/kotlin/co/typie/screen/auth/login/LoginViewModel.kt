@@ -28,7 +28,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 class LoginSingleSignOnViewModel : ViewModel() {
-  context(_: ActivityContext)
+  context(activity: ActivityContext)
   suspend fun loginWith(provider: SingleSignOnProvider): Result<Unit, Nothing> = result {
     val ssoProvider =
       when (provider) {

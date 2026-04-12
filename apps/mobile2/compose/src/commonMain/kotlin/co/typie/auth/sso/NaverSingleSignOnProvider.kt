@@ -3,6 +3,6 @@ package co.typie.auth.sso
 import co.typie.platform.ActivityContext
 
 expect class NaverSingleSignOnProvider() : SingleSignOnAdapter {
-  context(_: ActivityContext)
+  context(activity: ActivityContext)
   override suspend fun authenticate(): SingleSignOnCredential
 }
