@@ -52,6 +52,8 @@ class TopBarState {
   var navDirection: NavDirection by mutableStateOf(NavDirection.Switch)
   /** 0f = blur 없음, 1f = full blur. NavigationStack이 전환 progress에 연동하여 업데이트. */
   var blurFactor: Float by mutableStateOf(1f)
+  var animatedVisibilityAlpha: Float by mutableStateOf(0f)
+  var animatedVisibilityOffsetY: Float by mutableStateOf(0f)
 
   fun setLeading(
     key: Any,
@@ -183,6 +185,7 @@ class TopBarState {
 }
 
 val LocalTopBarState = staticCompositionLocalOf<TopBarState?> { null }
+val LocalTopBarAnimationSource = staticCompositionLocalOf<TopBarState?> { null }
 
 internal fun needsImplicitRouteKey(
   enabled: Boolean,

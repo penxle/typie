@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -67,6 +68,10 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
       targetValue = if (state.visible) 0f else -1f,
       animationSpec = tween(TopBarDefaults.VisibilityAnimationDuration, easing = EaseOutCubic),
     )
+  SideEffect {
+    state.animatedVisibilityAlpha = visibilityAlpha
+    state.animatedVisibilityOffsetY = visibilityOffsetY
+  }
 
   Box(
     modifier =

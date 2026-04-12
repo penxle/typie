@@ -40,6 +40,7 @@ import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
 import co.typie.ui.component.bottombar.LocalBottomBarState
 import co.typie.ui.component.bottombar.ProvideBottomBar
+import co.typie.ui.component.topbar.LocalTopBarAnimationSource
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.NavDirection
 import co.typie.ui.component.topbar.TopBarState
@@ -155,6 +156,7 @@ fun NavigationStack(
   val animationProviders =
     buildList<ProvidedValue<*>> {
       add(Nav provides navigator)
+      add(LocalTopBarAnimationSource provides topBarState)
       bottomBarState?.let { add(LocalBottomBarAnimationSource provides it) }
     }
   CompositionLocalProvider(*animationProviders.toTypedArray()) {
