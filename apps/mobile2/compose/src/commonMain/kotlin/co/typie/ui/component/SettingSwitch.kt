@@ -9,6 +9,8 @@ import androidx.compose.foundation.clickable as foundationClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,7 +30,12 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
+import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
+
+internal fun resolveSettingSwitchNextChecked(checked: Boolean, indeterminate: Boolean): Boolean {
+  return if (indeterminate) true else checked.not()
+}
 
 @Composable
 fun SettingSwitch(
@@ -36,25 +43,28 @@ fun SettingSwitch(
   onCheckedChange: (Boolean) -> Unit,
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
+  indeterminate: Boolean = false,
 ) {
   val colors = AppTheme.colors
   val haptic = LocalHapticFeedback.current
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
   val trackColor =
     animateColorAsState(
-      targetValue = if (checked) colors.brand.copy(alpha = 0.92f) else colors.surfaceTinted,
+      targetValue =
+        if (checked && !indeterminate) colors.brand.copy(alpha = 0.92f) else colors.surfaceTinted,
       animationSpec = tween(durationMillis = 180),
       label = "setting-switch-track",
     )
   val borderColor =
     animateColorAsState(
-      targetValue = if (checked) colors.brand.copy(alpha = 0.24f) else colors.borderDefault,
+      targetValue =
+        if (checked && !indeterminate) colors.brand.copy(alpha = 0.24f) else colors.borderDefault,
       animationSpec = tween(durationMillis = 180),
       label = "setting-switch-border",
     )
   val thumbOffset =
     animateDpAsState(
-      targetValue = if (checked) 18.dp else 0.dp,
+      targetValue = if (indeterminate) 9.dp else if (checked) 18.dp else 0.dp,
       animationSpec = tween(durationMillis = 180),
       label = "setting-switch-thumb",
     )
@@ -72,7 +82,7 @@ fun SettingSwitch(
                 interactionSource = interactionSource,
                 indication = null,
               ) {
-                val next = checked.not()
+                val next = resolveSettingSwitchNextChecked(checked, indeterminate)
                 haptic.performHapticFeedback(
                   if (next) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
                 )
@@ -88,6 +98,17 @@ fun SettingSwitch(
           .padding(PaddingValues(3.dp)),
       contentAlignment = Alignment.CenterStart,
     ) {
+      if (indeterminate) {
+        Box(
+          modifier =
+            Modifier.fillMaxHeight()
+              .fillMaxWidth(0.5f)
+              .clip(RoundedCornerShape(topStart = 13.dp, bottomStart = 13.dp))
+              .background(colors.brandSubtle)
+              .align(Alignment.CenterStart)
+        )
+      }
+
       Box(
         modifier =
           Modifier.offset(x = thumbOffset.value)
@@ -101,8 +122,19 @@ fun SettingSwitch(
               offset = Offset(0f, 2f)
               radius = 8f
             }
-            .background(colors.surfaceRaised, CircleShape)
-      )
+            .background(colors.surfaceRaised, CircleShape),
+        contentAlignment = Alignment.Center,
+      ) {
+        if (indeterminate) {
+          Icon(
+            icon = co.typie.icons.Lucide.Minus,
+            modifier = Modifier.size(12.dp),
+            tint = colors.textTertiary,
+            strokeWidth = 2.5f,
+            contentDescription = null,
+          )
+        }
+      }
     }
   }
 }

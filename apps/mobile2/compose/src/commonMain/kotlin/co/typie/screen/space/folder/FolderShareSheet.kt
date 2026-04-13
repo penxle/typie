@@ -1,57 +1,40 @@
 package co.typie.screen.space.folder
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import co.typie.ext.InteractionScope
-import co.typie.ext.clickable
-import co.typie.ext.pressScale
 import co.typie.form.FormState
 import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
+import co.typie.platform.PlatformFile
 import co.typie.platform.PlatformModule
 import co.typie.platform.rememberFilePicker
+import co.typie.result.Result
 import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.screen.space.entity.EntityShareKind
+import co.typie.screen.space.entity.ShareOptionRow
+import co.typie.screen.space.entity.ShareSection
+import co.typie.screen.space.entity.ShareThumbnailControl
+import co.typie.screen.space.entity.ShareThumbnailResult
+import co.typie.screen.space.entity.hasMixedValues
+import co.typie.screen.space.entity.resolveEntityShareText
+import co.typie.screen.space.entity.resolveEntityShareTitle
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
-import co.typie.ui.component.Img
 import co.typie.ui.component.SelectField
 import co.typie.ui.component.SelectFieldItem
-import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
@@ -67,9 +50,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private const val THUMBNAIL_WIDTH_DP = 64
-private const val THUMBNAIL_HEIGHT_DP = 38
 
 private enum class RecursiveApplyPhase {
   Idle,
@@ -93,10 +73,30 @@ private data class FolderVisibilityOption(
   val icon: IconData,
 )
 
+internal interface FolderShareSheetModel {
+  suspend fun updateFoldersVisibility(
+    folderIds: List<String>,
+    visibility: EntityVisibility,
+  ): Result<Unit, Nothing>
+
+  suspend fun uploadFoldersThumbnail(
+    folderIds: List<String>,
+    file: PlatformFile,
+  ): Result<ShareThumbnailResult, Nothing>
+
+  suspend fun removeFoldersThumbnail(folderIds: List<String>): Result<Unit, Nothing>
+
+  suspend fun applyFoldersVisibilityRecursively(
+    folderIds: List<String>,
+    visibility: EntityVisibility,
+  ): Result<Unit, Nothing>
+}
+
 internal data class FolderShareTarget(
   val id: String,
   val url: String,
   val visibility: EntityVisibility,
+  val thumbnailId: String?,
   val thumbnailUrl: String?,
 )
 
@@ -125,33 +125,8 @@ private fun folderVisibilityOptions(): List<FolderVisibilityOption> {
 
 @Composable
 context(_: SheetScope<Unit>)
-fun FolderShareContent(
-  model: FolderViewModel,
-  folderId: String,
-  folderUrl: String,
-  initialVisibility: EntityVisibility,
-  initialThumbnailUrl: String?,
-  onUpdated: () -> Unit = {},
-) {
-  FolderShareContent(
-    model = model,
-    folders =
-      listOf(
-        FolderShareTarget(
-          id = folderId,
-          url = folderUrl,
-          visibility = initialVisibility,
-          thumbnailUrl = initialThumbnailUrl,
-        )
-      ),
-    onUpdated = onUpdated,
-  )
-}
-
-@Composable
-context(_: SheetScope<Unit>)
 internal fun FolderShareContent(
-  model: FolderViewModel,
+  model: FolderShareSheetModel,
   folders: List<FolderShareTarget>,
   onUpdated: () -> Unit = {},
 ) {
@@ -160,18 +135,16 @@ internal fun FolderShareContent(
   val dialog = LocalDialog.current
   val scope = rememberCoroutineScope()
   val folderIds = remember(folders) { folders.map(FolderShareTarget::id) }
-  val folderUrls =
-    remember(folders) { folders.map(FolderShareTarget::url).filter { it.isNotBlank() } }
+  val folderUrls = remember(folders) { folders.map(FolderShareTarget::url) }
   val visibilityValues = remember(folders) { folders.map(FolderShareTarget::visibility) }
   val isSingleFolder = folders.size == 1
   val initialVisibility = folders.firstOrNull()?.visibility ?: EntityVisibility.PRIVATE
-  val hasMixedVisibility =
-    remember(folders) { folders.map(FolderShareTarget::visibility).distinct().size > 1 }
+  val initiallyMixedVisibility = remember(folders) { hasMixedValues(visibilityValues) }
   val initialThumbnailUrl = folders.firstOrNull()?.thumbnailUrl
   val initiallyMixedThumbnail =
-    remember(folders) { folders.map(FolderShareTarget::thumbnailUrl).distinct().size > 1 }
+    remember(folders) { hasMixedValues(folders.map(FolderShareTarget::thumbnailId)) }
   val form =
-    remember(folderIds, initialVisibility, initialThumbnailUrl, initiallyMixedThumbnail) {
+    remember(folderIds) {
       FolderShareForm(
         scope,
         initialVisibility,
@@ -182,7 +155,11 @@ internal fun FolderShareContent(
   var isUploadingThumbnail by remember { mutableStateOf(false) }
   var isRemovingThumbnail by remember { mutableStateOf(false) }
   var isSharing by remember { mutableStateOf(false) }
+  var hasMixedVisibility by remember(folderIds) { mutableStateOf(initiallyMixedVisibility) }
+  var committedHasMixedVisibility by
+    remember(folderIds) { mutableStateOf(initiallyMixedVisibility) }
   var hasMixedThumbnail by remember(folderIds) { mutableStateOf(initiallyMixedThumbnail) }
+  var committedHasMixedThumbnail by remember(folderIds) { mutableStateOf(initiallyMixedThumbnail) }
   var recursiveApplyPhase by remember(folderIds) { mutableStateOf(RecursiveApplyPhase.Idle) }
   var recursiveApplyResetJob by remember(folderIds) { mutableStateOf<Job?>(null) }
   val isApplyingRecursive = recursiveApplyPhase == RecursiveApplyPhase.Inflight
@@ -195,7 +172,6 @@ internal fun FolderShareContent(
 
   fun updateVisibility(nextVisibility: EntityVisibility) {
     if (isUpdatingVisibility) return
-
     if (!hasMixedVisibility && form.visibility.initialValue == nextVisibility) return
 
     isUpdatingVisibility = true
@@ -204,10 +180,15 @@ internal fun FolderShareContent(
         .updateFoldersVisibility(folderIds = folderIds, visibility = nextVisibility)
         .withDefaultExceptionHandler(toast)
         .onOk {
+          hasMixedVisibility = false
+          committedHasMixedVisibility = false
           form.visibility.commit()
           onUpdated()
         }
-        .onException { form.visibility.rollback() }
+        .onException {
+          hasMixedVisibility = committedHasMixedVisibility
+          form.visibility.rollback()
+        }
       isUpdatingVisibility = false
     }
   }
@@ -223,11 +204,12 @@ internal fun FolderShareContent(
         .withDefaultExceptionHandler(toast)
         .onOk {
           hasMixedThumbnail = false
+          committedHasMixedThumbnail = false
           form.thumbnailUrl.commit()
           onUpdated()
         }
         .onException {
-          hasMixedThumbnail = initiallyMixedThumbnail
+          hasMixedThumbnail = committedHasMixedThumbnail
           form.thumbnailUrl.rollback()
         }
       isRemovingThumbnail = false
@@ -265,17 +247,16 @@ internal fun FolderShareContent(
   suspend fun shareFolder() {
     if (isSharing) return
 
-    if (folderUrls.isEmpty()) {
-      toast.show(ToastType.Error, "폴더 링크를 공유할 수 없어요.")
+    val shareText = resolveEntityShareText(folderUrls)
+    if (shareText == null) {
+      toast.show(co.typie.overlay.ToastType.Error, "폴더 링크를 공유할 수 없어요.")
       return
     }
 
     isSharing = true
     try {
-      // TODO: Track folder share action.
-      val shared = share.share(folderUrls.joinToString("\n"))
-      if (!shared) {
-        toast.show(ToastType.Error, "폴더 링크를 공유할 수 없어요.")
+      if (!share.share(shareText)) {
+        toast.show(co.typie.overlay.ToastType.Error, "폴더 링크를 공유할 수 없어요.")
       }
     } finally {
       isSharing = false
@@ -284,7 +265,6 @@ internal fun FolderShareContent(
 
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker
-
     if (isUploadingThumbnail || isRemovingThumbnail) return@rememberFilePicker
 
     isUploadingThumbnail = true
@@ -294,12 +274,13 @@ internal fun FolderShareContent(
         .withDefaultExceptionHandler(toast)
         .onOk { thumbnailResult ->
           hasMixedThumbnail = false
+          committedHasMixedThumbnail = false
           form.thumbnailUrl.setValue(thumbnailResult.url)
           form.thumbnailUrl.commit()
           onUpdated()
         }
         .onException {
-          hasMixedThumbnail = initiallyMixedThumbnail
+          hasMixedThumbnail = committedHasMixedThumbnail
           form.thumbnailUrl.rollback()
         }
       isUploadingThumbnail = false
@@ -309,7 +290,7 @@ internal fun FolderShareContent(
   SheetLayout(
     header = {
       ActionHeader(
-        title = if (isSingleFolder) "이 폴더 공유하기" else "폴더 ${folders.size}개 공유하기",
+        title = resolveEntityShareTitle(EntityShareKind.Folder, folders.size),
         leading = {
           HeaderTextAction(
             text = "완료",
@@ -323,8 +304,8 @@ internal fun FolderShareContent(
     }
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(32.dp)) {
-      FolderShareSection(title = "폴더 조회 권한") {
-        FolderShareOptionRow(
+      ShareSection(title = "폴더 조회 권한") {
+        ShareOptionRow(
           icon = Lucide.Blend,
           label = "공개 범위",
           trailing = {
@@ -341,18 +322,18 @@ internal fun FolderShareContent(
                 },
               values = visibilityValues,
               enabled = !isUpdatingVisibility && !isApplyingRecursive,
-              onSelected = { nextVisibility -> updateVisibility(nextVisibility) },
+              onSelected = ::updateVisibility,
             )
           },
         )
       }
 
-      FolderShareSection(title = "썸네일") {
-        FolderShareOptionRow(
+      ShareSection(title = "썸네일") {
+        ShareOptionRow(
           icon = Lucide.Image,
           label = "미리보기 이미지",
           trailing = {
-            FolderThumbnailControl(
+            ShareThumbnailControl(
               thumbnailUrl = form.thumbnailUrl.value,
               isMixed = hasMixedThumbnail,
               isUploading = isUploadingThumbnail,
@@ -426,176 +407,5 @@ internal fun FolderShareContent(
         )
       }
     }
-  }
-}
-
-@Composable
-private fun FolderShareSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-    content = {
-      Text(text = title, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
-      content()
-    },
-  )
-}
-
-@Composable
-private fun FolderShareOptionRow(icon: IconData, label: String, trailing: @Composable () -> Unit) {
-  Row(
-    modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Icon(icon = icon, modifier = Modifier.size(20.dp), tint = AppTheme.colors.textSecondary)
-
-    Spacer(Modifier.size(8.dp))
-
-    Text(
-      text = label,
-      modifier = Modifier.weight(1f),
-      style = AppTheme.typography.body,
-      color = AppTheme.colors.textSecondary,
-    )
-
-    trailing()
-  }
-}
-
-@Composable
-private fun FolderThumbnailControl(
-  thumbnailUrl: String?,
-  isMixed: Boolean,
-  isUploading: Boolean,
-  isRemoving: Boolean,
-  onUploadClick: () -> Unit,
-  onRemoveClick: () -> Unit,
-) {
-  Row(
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-  ) {
-    FolderThumbnailUploadButton(
-      thumbnailUrl = thumbnailUrl,
-      isMixed = isMixed,
-      isUploading = isUploading,
-      enabled = !isRemoving,
-      onClick = onUploadClick,
-    )
-
-    if (!isMixed && thumbnailUrl != null) {
-      FolderThumbnailRemoveButton(
-        enabled = !isUploading && !isRemoving,
-        isRemoving = isRemoving,
-        onClick = onRemoveClick,
-      )
-    }
-  }
-}
-
-@Composable
-private fun FolderThumbnailUploadButton(
-  thumbnailUrl: String?,
-  isMixed: Boolean,
-  isUploading: Boolean,
-  enabled: Boolean,
-  onClick: () -> Unit,
-) {
-  val shape = RoundedCornerShape(6.dp)
-
-  InteractionScope {
-    Box(
-      modifier =
-        Modifier.then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-          .then(if (enabled) Modifier.pressScale(0.95f) else Modifier),
-      contentAlignment = Alignment.Center,
-    ) {
-      Box(
-        modifier =
-          Modifier.size(width = THUMBNAIL_WIDTH_DP.dp, height = THUMBNAIL_HEIGHT_DP.dp)
-            .clip(shape)
-            .background(AppTheme.colors.surfaceSunken, shape)
-            .border(
-              width = 1.dp,
-              color =
-                if (thumbnailUrl == null) AppTheme.colors.borderStrong
-                else AppTheme.colors.borderSubtle,
-              shape = shape,
-            ),
-        contentAlignment = Alignment.Center,
-      ) {
-        when {
-          isMixed -> {
-            Text(
-              text = "다름",
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
-            )
-          }
-
-          thumbnailUrl != null -> {
-            Img(url = thumbnailUrl, modifier = Modifier.fillMaxSize().clip(shape))
-          }
-
-          isUploading -> {
-            FolderThumbnailSpinner()
-          }
-
-          else -> {
-            Icon(
-              icon = Lucide.Image,
-              modifier = Modifier.size(14.dp),
-              tint = AppTheme.colors.textTertiary,
-            )
-          }
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun FolderThumbnailRemoveButton(
-  enabled: Boolean,
-  isRemoving: Boolean,
-  onClick: () -> Unit,
-) {
-  InteractionScope {
-    Box(
-      modifier =
-        Modifier.heightIn(min = THUMBNAIL_HEIGHT_DP.dp)
-          .clickable(enabled = enabled) { onClick() }
-          .pressScale(0.95f),
-      contentAlignment = Alignment.Center,
-    ) {
-      Text(
-        text = if (isRemoving) "삭제 중..." else "삭제",
-        modifier = Modifier.padding(horizontal = 8.dp),
-        style = AppTheme.typography.caption.copy(fontWeight = FontWeight.W600),
-        color = if (enabled && !isRemoving) AppTheme.colors.danger else AppTheme.colors.textTertiary,
-      )
-    }
-  }
-}
-
-@Composable
-private fun FolderThumbnailSpinner() {
-  val transition = rememberInfiniteTransition()
-  val spinnerColor = AppTheme.colors.textTertiary
-  val rotation by
-    transition.animateFloat(
-      initialValue = 0f,
-      targetValue = 360f,
-      animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
-    )
-
-  Canvas(Modifier.size(14.dp)) {
-    drawArc(
-      color = spinnerColor,
-      startAngle = rotation,
-      sweepAngle = 220f,
-      useCenter = false,
-      style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round),
-    )
   }
 }

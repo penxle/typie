@@ -59,11 +59,10 @@ import co.typie.screen.space.entity.EntityIconPickerContent
 import co.typie.screen.space.entity.EntityIconPickerStops
 import co.typie.screen.space.entity.EntitySelectionActionsContent
 import co.typie.screen.space.entity.EntitySelectionViewModel
+import co.typie.screen.space.entity.EntityShareContent
 import co.typie.screen.space.folder.FolderAction
 import co.typie.screen.space.folder.FolderItemActionsContent
 import co.typie.screen.space.folder.FolderRenameContent
-import co.typie.screen.space.folder.FolderShareContent
-import co.typie.screen.space.folder.FolderShareTarget
 import co.typie.screen.space.folder.FolderViewModel
 import co.typie.screen.space.folder.toTransferSource
 import co.typie.shell.MainBottomBarPill
@@ -206,6 +205,19 @@ fun SpaceScreen() {
     selection.start(initialIds)
   }
 
+  fun presentShare(entityIds: List<String>) {
+    val resolvedEntityIds = entityIds.map(String::trim).filter(String::isNotEmpty)
+    if (resolvedEntityIds.isEmpty()) {
+      return
+    }
+
+    presenterScope.launch {
+      sheet.present {
+        EntityShareContent(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
+      }
+    }
+  }
+
   fun openSelectionActions() {
     if (selectionSummary.selectedItems.isEmpty()) {
       return
@@ -227,26 +239,8 @@ fun SpaceScreen() {
               }
             }
           },
-          onShareFolders = {
-            presenterScope.launch {
-              sheet.present {
-                FolderShareContent(
-                  model = folderActionModel,
-                  folders =
-                    selectionSummary.folderItems.map { folder ->
-                      FolderShareTarget(
-                        id = folder.folderId,
-                        url = folder.url,
-                        visibility =
-                          folder.visibility ?: co.typie.graphql.type.EntityVisibility.PRIVATE,
-                        thumbnailUrl = folder.thumbnailUrl,
-                      )
-                    },
-                )
-              }
-            }
-          },
-          onShareDocuments = { toast.show(ToastType.Notification, "준비 중인 기능이에요.") },
+          onShareFolders = { presentShare(selectionSummary.folderItems.map { it.id }) },
+          onShareDocuments = { presentShare(selectionSummary.documentItems.map { it.id }) },
           onCopy = {
             siteId?.let { sourceSiteId ->
               clipboard.setCopy(
@@ -445,7 +439,7 @@ fun SpaceScreen() {
 
                       FolderAction.OpenExternal -> uriHandler.openUri(item.url)
 
-                      FolderAction.Share -> Unit
+                      FolderAction.Share -> presentShare(listOf(item.id))
 
                       FolderAction.Move -> {
                         presenterScope.launch {
@@ -539,19 +533,7 @@ fun SpaceScreen() {
 
                       FolderAction.OpenExternal -> uriHandler.openUri(item.url)
 
-                      FolderAction.Share -> {
-                        presenterScope.launch {
-                          sheet.present {
-                            FolderShareContent(
-                              model = folderActionModel,
-                              folderId = item.folderId,
-                              folderUrl = item.url,
-                              initialVisibility = requireNotNull(item.visibility),
-                              initialThumbnailUrl = item.thumbnailUrl,
-                            )
-                          }
-                        }
-                      }
+                      FolderAction.Share -> presentShare(listOf(item.id))
 
                       FolderAction.Move -> {
                         presenterScope.launch {

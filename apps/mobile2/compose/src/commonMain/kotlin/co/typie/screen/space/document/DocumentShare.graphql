@@ -1,0 +1,27 @@
+mutation DocumentShare_UpdateDocumentsOption_Mutation($input: UpdateDocumentsOptionInput!) {
+  updateDocumentsOption(input: $input) {
+    id
+    password
+    contentRating
+    allowReaction
+    protectContent
+
+    thumbnail {
+      id
+      url
+    }
+
+    entity {
+      id
+      visibility
+    }
+  }
+}
+
+mutation DocumentShare_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+  persistBlobAsImage(input: $input) {
+    id
+    url
+    ...Img_image
+  }
+}

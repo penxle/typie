@@ -56,6 +56,7 @@ import co.typie.screen.space.entity.EntityIconPickerContent
 import co.typie.screen.space.entity.EntityIconPickerStops
 import co.typie.screen.space.entity.EntitySelectionActionsContent
 import co.typie.screen.space.entity.EntitySelectionViewModel
+import co.typie.screen.space.entity.EntityShareContent
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
@@ -217,6 +218,19 @@ fun FolderScreen(entityId: String) {
     selection.start(initialIds)
   }
 
+  fun presentShare(entityIds: List<String>) {
+    val resolvedEntityIds = entityIds.map(String::trim).filter(String::isNotEmpty)
+    if (resolvedEntityIds.isEmpty()) {
+      return
+    }
+
+    presenterScope.launch {
+      sheet.present {
+        EntityShareContent(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
+      }
+    }
+  }
+
   fun openSelectionActions() {
     if (selectionSummary.selectedItems.isEmpty()) {
       return
@@ -238,26 +252,8 @@ fun FolderScreen(entityId: String) {
               }
             }
           },
-          onShareFolders = {
-            presenterScope.launch {
-              sheet.present {
-                FolderShareContent(
-                  model = model,
-                  folders =
-                    selectionSummary.folderItems.map { folderItem ->
-                      FolderShareTarget(
-                        id = folderItem.folderId,
-                        url = folderItem.url,
-                        visibility =
-                          folderItem.visibility ?: co.typie.graphql.type.EntityVisibility.PRIVATE,
-                        thumbnailUrl = folderItem.thumbnailUrl,
-                      )
-                    },
-                )
-              }
-            }
-          },
-          onShareDocuments = { toast.show(ToastType.Notification, "준비 중인 기능이에요.") },
+          onShareFolders = { presentShare(selectionSummary.folderItems.map { it.id }) },
+          onShareDocuments = { presentShare(selectionSummary.documentItems.map { it.id }) },
           onCopy = {
             entity?.site?.id?.let { sourceSiteId ->
               clipboard.setCopy(
@@ -346,19 +342,8 @@ fun FolderScreen(entityId: String) {
           closePopover()
           return
         }
-        // TODO: Track folder share sheet open.
         closePopover()
-        presenterScope.launch {
-          sheet.present {
-            FolderShareContent(
-              model = model,
-              folderId = resolvedFolder.id,
-              folderUrl = resolvedEntity.url,
-              initialVisibility = resolvedEntity.visibility,
-              initialThumbnailUrl = resolvedFolder.thumbnail?.url,
-            )
-          }
-        }
+        presentShare(listOf(resolvedEntity.id))
       }
 
       FolderAction.Move -> {
@@ -612,7 +597,7 @@ fun FolderScreen(entityId: String) {
 
                       FolderAction.OpenExternal -> uriHandler.openUri(item.url)
 
-                      FolderAction.Share -> Unit
+                      FolderAction.Share -> presentShare(listOf(item.id))
 
                       FolderAction.Move -> {
                         presenterScope.launch {
@@ -704,19 +689,7 @@ fun FolderScreen(entityId: String) {
 
                       FolderAction.OpenExternal -> uriHandler.openUri(item.url)
 
-                      FolderAction.Share -> {
-                        presenterScope.launch {
-                          sheet.present {
-                            FolderShareContent(
-                              model = model,
-                              folderId = item.folderId,
-                              folderUrl = item.url,
-                              initialVisibility = requireNotNull(item.visibility),
-                              initialThumbnailUrl = item.thumbnailUrl,
-                            )
-                          }
-                        }
-                      }
+                      FolderAction.Share -> presentShare(listOf(item.id))
 
                       FolderAction.Move -> {
                         presenterScope.launch {
