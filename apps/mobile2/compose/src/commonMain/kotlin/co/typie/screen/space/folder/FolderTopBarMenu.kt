@@ -396,7 +396,7 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
 context(_: PopoverScope)
 private fun FolderTopBarActionList(onAction: (FolderAction, closePopover: () -> Unit) -> Unit) {
   Column(modifier = Modifier.fillMaxWidth()) {
-    folderPrimaryActionSections().forEachIndexed { index, section ->
+    folderItemActionSections().forEachIndexed { index, section ->
       if (index > 0) {
         FolderActionMenuDivider()
       }

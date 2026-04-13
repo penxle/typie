@@ -127,12 +127,15 @@ fun formatFolderRowSummary(folderCount: Int, documentCount: Int): String {
 fun EntityListCard(
   items: List<EntityListItem>,
   emptyMessage: String,
+  selectionState: co.typie.ui.component.entity_container.EntityContainerSelectionState =
+    co.typie.ui.component.entity_container.EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
   modifier: Modifier = Modifier,
   onDocumentClick: suspend (slug: String) -> Unit,
   onDocumentLongPress: (suspend (item: EntityListItem.Document) -> Unit)? = null,
   onFolderClick: suspend (entityId: String) -> Unit,
   onFolderLongPress: (suspend (item: EntityListItem.Folder) -> Unit)? = null,
+  onSelectionToggle: suspend (itemId: String) -> Unit = {},
 ) {
   if (items.isEmpty()) {
     Box(
@@ -155,17 +158,33 @@ fun EntityListCard(
           is EntityListItem.Document ->
             EntityListDocumentRow(
               item = item,
+              selected = item.id in selectionState.selectedIds,
+              showSelectionControls = selectionState.isSelecting,
               opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
               onLongPress = onDocumentLongPress?.let { handler -> { handler(item) } },
-              onClick = { onDocumentClick(item.slug) },
+              onClick = {
+                if (selectionState.isSelecting) {
+                  onSelectionToggle(item.id)
+                } else {
+                  onDocumentClick(item.slug)
+                }
+              },
             )
 
           is EntityListItem.Folder ->
             EntityListFolderRow(
               item = item,
+              selected = item.id in selectionState.selectedIds,
+              showSelectionControls = selectionState.isSelecting,
               opacity = if (item.id in dimmedItemIds) 0.5f else 1f,
               onLongPress = onFolderLongPress?.let { handler -> { handler(item) } },
-              onClick = { onFolderClick(item.id) },
+              onClick = {
+                if (selectionState.isSelecting) {
+                  onSelectionToggle(item.id)
+                } else {
+                  onFolderClick(item.id)
+                }
+              },
             )
         }
       }
@@ -193,6 +212,8 @@ fun EntityListDocumentRow(
   enabled: Boolean = true,
   interactive: Boolean = enabled,
   opacity: Float = 1f,
+  selected: Boolean = false,
+  showSelectionControls: Boolean = false,
   onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
@@ -207,6 +228,8 @@ fun EntityListDocumentRow(
     enabled = enabled,
     interactive = interactive,
     opacity = opacity,
+    selected = selected,
+    showSelectionControls = showSelectionControls,
     onLongPress = onLongPress,
     onClick = onClick,
   )
@@ -219,6 +242,8 @@ fun EntityListFolderRow(
   enabled: Boolean = true,
   interactive: Boolean = enabled,
   opacity: Float = 1f,
+  selected: Boolean = false,
+  showSelectionControls: Boolean = false,
   onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
@@ -231,6 +256,8 @@ fun EntityListFolderRow(
     enabled = enabled,
     interactive = interactive,
     opacity = opacity,
+    selected = selected,
+    showSelectionControls = showSelectionControls,
     modifier = modifier,
     onLongPress = onLongPress,
     onClick = onClick,
@@ -315,6 +342,8 @@ private fun DocumentRowContent(
   enabled: Boolean = true,
   interactive: Boolean = enabled,
   opacity: Float = 1f,
+  selected: Boolean = false,
+  showSelectionControls: Boolean = false,
   onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
@@ -347,6 +376,8 @@ private fun DocumentRowContent(
     enabled = enabled,
     interactive = interactive,
     opacity = opacity,
+    selected = selected,
+    showSelectionControls = showSelectionControls,
     onLongPress = onLongPress,
     onClick = onClick,
   ) {
@@ -390,6 +421,8 @@ private fun FolderRowContent(
   enabled: Boolean = true,
   interactive: Boolean = enabled,
   opacity: Float = 1f,
+  selected: Boolean = false,
+  showSelectionControls: Boolean = false,
   onLongPress: (suspend () -> Unit)? = null,
   onClick: suspend () -> Unit,
 ) {
@@ -410,15 +443,21 @@ private fun FolderRowContent(
     enabled = enabled,
     interactive = interactive,
     opacity = opacity,
+    selected = selected,
+    showSelectionControls = showSelectionControls,
     onLongPress = onLongPress,
     onClick = onClick,
-    trailing = {
-      Icon(
-        icon = Lucide.ChevronRight,
-        modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.textTertiary,
-      )
-    },
+    trailing =
+      if (showSelectionControls) null
+      else {
+        {
+          Icon(
+            icon = Lucide.ChevronRight,
+            modifier = Modifier.size(18.dp),
+            tint = AppTheme.colors.textTertiary,
+          )
+        }
+      },
   ) {
     Text(
       text = title,
@@ -447,6 +486,8 @@ private fun EntityListRowFrame(
   enabled: Boolean = true,
   interactive: Boolean = enabled,
   opacity: Float = 1f,
+  selected: Boolean = false,
+  showSelectionControls: Boolean = false,
   onLongPress: (suspend () -> Unit)? = null,
   trailing: (@Composable () -> Unit)? = null,
   onClick: suspend () -> Unit,
@@ -460,6 +501,10 @@ private fun EntityListRowFrame(
       modifier =
         modifier
           .fillMaxWidth()
+          .background(
+            if (showSelectionControls && selected) AppTheme.colors.brandSubtle
+            else Color.Transparent
+          )
           .alpha(behavior.alpha)
           .then(
             if (!behavior.isInteractive) {
@@ -475,6 +520,14 @@ private fun EntityListRowFrame(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+      if (showSelectionControls) {
+        Icon(
+          icon = if (selected) Lucide.SquareCheck else Lucide.Square,
+          modifier = Modifier.size(18.dp),
+          tint = if (selected) AppTheme.colors.brand else AppTheme.colors.textTertiary,
+        )
+      }
+
       Icon(icon = icon, modifier = Modifier.size(18.dp), tint = iconTint)
 
       Column(modifier = Modifier.weight(1f), content = content)

@@ -96,7 +96,7 @@ internal fun FolderItemActionsContent(
     },
   ) {
     Column(modifier = Modifier.fillMaxWidth().padding(MenuSheetActionContentPadding)) {
-      folderPrimaryActionSections().forEachIndexed { index, section ->
+      folderItemActionSections().forEachIndexed { index, section ->
         if (index > 0) {
           Divider()
         }

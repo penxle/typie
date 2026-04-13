@@ -80,31 +80,52 @@ internal val EntityIconPickerStops =
     SheetStop.Top(EntityIconPickerExpandedTopGap),
   )
 
-internal interface EntityIconSheetModel {
-  suspend fun updateEntityIcon(
-    entityId: String,
-    icon: String,
-    iconColor: String,
+internal interface EntityIconPickerSheetModel {
+  suspend fun updateEntityIcons(
+    entityIds: List<String>,
+    icon: String?,
+    iconColor: String?,
   ): Result<Unit, Nothing>
 }
 
 @Composable
 context(_: SheetScope<Unit>)
 internal fun EntityIconPickerContent(
-  model: EntityIconSheetModel,
+  model: EntityIconPickerSheetModel,
   entityId: String,
   initialIcon: String?,
   initialColor: String?,
   defaultIconName: String,
   onUpdated: () -> Unit = {},
 ) {
+  EntityIconPickerContent(
+    model = model,
+    entityIds = listOf(entityId),
+    initialIcon = initialIcon,
+    initialColor = initialColor,
+    defaultIconName = defaultIconName,
+    onUpdated = onUpdated,
+  )
+}
+
+@Composable
+context(_: SheetScope<Unit>)
+internal fun EntityIconPickerContent(
+  model: EntityIconPickerSheetModel,
+  entityIds: List<String>,
+  initialIcon: String?,
+  initialColor: String?,
+  defaultIconName: String? = null,
+  onUpdated: () -> Unit = {},
+) {
   val normalizedInitialIcon = initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: defaultIconName
   val normalizedInitialColor =
-    initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
+    initialColor?.trim()?.takeIf { it.isNotEmpty() }
+      ?: defaultIconName?.let { DEFAULT_ENTITY_ICON_COLOR }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form =
-    remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
+    remember(entityIds, normalizedInitialIcon, normalizedInitialColor) {
       EntityIconPickerForm(
         scope = scope,
         initialIconName = normalizedInitialIcon,
@@ -114,12 +135,12 @@ internal fun EntityIconPickerContent(
 
   var isUpdating by remember { mutableStateOf(false) }
 
-  fun updateSelection(nextIconName: String, nextColor: String) {
-    if (isUpdating) {
+  fun updateSelection(nextIconName: String?, nextColor: String?) {
+    if (isUpdating || (nextIconName == null && nextColor == null)) {
       return
     }
 
-    if (form.iconName.initialValue == nextIconName && form.color.initialValue == nextColor) {
+    if (form.iconName.value == nextIconName && form.color.value == nextColor) {
       return
     }
 
@@ -129,7 +150,7 @@ internal fun EntityIconPickerContent(
 
     scope.launch {
       model
-        .updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
+        .updateEntityIcons(entityIds = entityIds, icon = nextIconName, iconColor = nextColor)
         .withDefaultExceptionHandler(toast)
         .onOk {
           form.commit()
@@ -141,7 +162,8 @@ internal fun EntityIconPickerContent(
   }
 
   val currentTint =
-    resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
+    form.color.value?.let { resolveEntityIconTint(it, AppTheme.colors) }
+      ?: AppTheme.colors.textSecondary
   val iconGridState = rememberLazyGridState()
 
   SheetLayout(
@@ -227,8 +249,8 @@ internal fun EntityIconPickerContent(
 
 private class EntityIconPickerForm(
   scope: CoroutineScope,
-  initialIconName: String,
-  initialColor: String,
+  initialIconName: String?,
+  initialColor: String?,
 ) : FormState(scope) {
   val iconName = field(initialIconName) { focusable = false }
   val color = field(initialColor) { focusable = false }
@@ -237,7 +259,7 @@ private class EntityIconPickerForm(
 @Composable
 private fun IconColorRow(
   colors: List<EntityIconColorOption>,
-  selectedColor: String,
+  selectedColor: String?,
   enabled: Boolean,
   modifier: Modifier = Modifier,
   onColorSelect: (String) -> Unit,

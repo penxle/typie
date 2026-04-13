@@ -31,11 +31,11 @@ import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.result
 import co.typie.screen.space.document.DocumentRenameSheetModel
-import co.typie.screen.space.entity.EntityIconSheetModel
+import co.typie.screen.space.entity.EntityIconPickerSheetModel
 
 data class FolderThumbnailResult(val id: String, val url: String)
 
-class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetModel {
+class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconPickerSheetModel {
   private val blobService = BlobService
   private var hasEnteredScreen = false
   var entityId by mutableStateOf("")
@@ -62,10 +62,19 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetMo
   suspend fun updateFolderVisibility(
     folderId: String,
     visibility: EntityVisibility,
+  ): Result<Unit, Nothing> =
+    updateFoldersVisibility(folderIds = listOf(folderId), visibility = visibility)
+
+  suspend fun updateFoldersVisibility(
+    folderIds: List<String>,
+    visibility: EntityVisibility,
   ): Result<Unit, Nothing> = result {
+    if (folderIds.isEmpty()) {
+      return@result
+    }
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
-        input = folderOptionsInput(folderId) { visibility(visibility) }
+        input = folderOptionsInput(folderIds) { visibility(visibility) }
       )
     )
   }
@@ -73,7 +82,16 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetMo
   suspend fun uploadFolderThumbnail(
     folderId: String,
     file: PlatformFile,
+  ): Result<FolderThumbnailResult, Nothing> =
+    uploadFoldersThumbnail(folderIds = listOf(folderId), file = file)
+
+  suspend fun uploadFoldersThumbnail(
+    folderIds: List<String>,
+    file: PlatformFile,
   ): Result<FolderThumbnailResult, Nothing> = result {
+    if (folderIds.isEmpty()) {
+      return@result FolderThumbnailResult(id = "", url = "")
+    }
     val path =
       blobService.uploadBytes(
         bytes = file.bytes,
@@ -89,17 +107,23 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetMo
 
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
-        input = folderOptionsInput(folderId) { thumbnailId(image.id) }
+        input = folderOptionsInput(folderIds) { thumbnailId(image.id) }
       )
     )
 
     FolderThumbnailResult(id = image.id, url = image.url)
   }
 
-  suspend fun removeFolderThumbnail(folderId: String): Result<Unit, Nothing> = result {
+  suspend fun removeFolderThumbnail(folderId: String): Result<Unit, Nothing> =
+    removeFoldersThumbnail(folderIds = listOf(folderId))
+
+  suspend fun removeFoldersThumbnail(folderIds: List<String>): Result<Unit, Nothing> = result {
+    if (folderIds.isEmpty()) {
+      return@result
+    }
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
-        input = folderOptionsInput(folderId) { thumbnailId(null) }
+        input = folderOptionsInput(folderIds) { thumbnailId(null) }
       )
     )
   }
@@ -107,11 +131,20 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetMo
   suspend fun applyFolderVisibilityRecursively(
     folderId: String,
     visibility: EntityVisibility,
+  ): Result<Unit, Nothing> =
+    applyFoldersVisibilityRecursively(folderIds = listOf(folderId), visibility = visibility)
+
+  suspend fun applyFoldersVisibilityRecursively(
+    folderIds: List<String>,
+    visibility: EntityVisibility,
   ): Result<Unit, Nothing> = result {
+    if (folderIds.isEmpty()) {
+      return@result
+    }
     Apollo.executeMutation(
       FolderShare_UpdateFoldersOption_Mutation(
         input =
-          folderOptionsInput(folderId) {
+          folderOptionsInput(folderIds) {
             visibility(visibility)
             recursive(true)
           }
@@ -149,18 +182,21 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetMo
     )
   }
 
-  override suspend fun updateEntityIcon(
-    entityId: String,
-    icon: String,
-    iconColor: String,
+  override suspend fun updateEntityIcons(
+    entityIds: List<String>,
+    icon: String?,
+    iconColor: String?,
   ): Result<Unit, Nothing> = result {
+    val entityId = entityIds.singleOrNull() ?: return@result
+    val resolvedIcon = icon?.trim()?.takeIf { it.isNotEmpty() } ?: return@result
+    val resolvedIconColor = iconColor?.trim()?.takeIf { it.isNotEmpty() } ?: return@result
     Apollo.executeMutation(
       FolderActions_UpdateEntityIcon_Mutation(
         input =
           UpdateEntityIconInput(
             entityId = entityId,
-            icon = icon.trim(),
-            iconColor = iconColor.trim(),
+            icon = resolvedIcon,
+            iconColor = resolvedIconColor,
           )
       )
     )
@@ -172,11 +208,15 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetMo
     )
   }
 
-  suspend fun deleteFolderEntity(entityId: String): Result<Unit, Nothing> = result {
+  suspend fun deleteFolderEntity(entityId: String): Result<Unit, Nothing> =
+    deleteEntities(listOf(entityId))
+
+  suspend fun deleteEntities(entityIds: List<String>): Result<Unit, Nothing> = result {
+    if (entityIds.isEmpty()) {
+      return@result
+    }
     Apollo.executeMutation(
-      FolderActions_DeleteEntities_Mutation(
-        input = DeleteEntitiesInput(entityIds = listOf(entityId))
-      )
+      FolderActions_DeleteEntities_Mutation(input = DeleteEntitiesInput(entityIds = entityIds))
     )
   }
 
@@ -202,8 +242,8 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetMo
   }
 
   private fun folderOptionsInput(
-    folderId: String,
+    folderIds: List<String>,
     block: UpdateFoldersOptionInput.Builder.() -> Unit,
   ): UpdateFoldersOptionInput =
-    UpdateFoldersOptionInput.Builder().folderIds(listOf(folderId)).apply(block).build()
+    UpdateFoldersOptionInput.Builder().folderIds(folderIds).apply(block).build()
 }

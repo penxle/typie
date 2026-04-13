@@ -68,11 +68,15 @@ data class EntityContainerEditAction(
 @Composable
 fun EntityContainerTopBarTrailing(
   isReordering: Boolean,
+  isSelecting: Boolean = false,
   actions: List<EntityContainerEditAction>,
   onDoneClick: suspend () -> Unit,
+  onCloseSelectionClick: suspend () -> Unit = {},
 ) {
   if (isReordering) {
     TopBarButton(icon = Lucide.Check, onClick = onDoneClick)
+  } else if (isSelecting) {
+    TopBarButton(icon = Lucide.X, onClick = onCloseSelectionClick)
   } else {
     EntityContainerEditMenu(actions = actions)
   }
@@ -85,6 +89,7 @@ fun EntityContainerListContent(
   isReordering: Boolean,
   reorderState: ReorderableListState<String>,
   isPersistingReorder: Boolean,
+  selectionState: EntityContainerSelectionState = EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
   bottomSpacerHeight: Dp = 140.dp,
   modifier: Modifier = Modifier,
@@ -93,6 +98,7 @@ fun EntityContainerListContent(
   onDocumentLongPress: (suspend (item: EntityListItem.Document) -> Unit)? = null,
   onFolderClick: suspend (entityId: String) -> Unit,
   onFolderLongPress: (suspend (item: EntityListItem.Folder) -> Unit)? = null,
+  onSelectionToggle: suspend (itemId: String) -> Unit = {},
   onDragStarted: () -> Unit,
   onDragMoved: () -> Unit,
   onDragStopped: (ReorderCommit<String>?) -> Unit,
@@ -114,12 +120,14 @@ fun EntityContainerListContent(
       EntityListCard(
         items = items.map { it.item },
         emptyMessage = emptyMessage,
+        selectionState = selectionState,
         dimmedItemIds = dimmedItemIds,
         modifier = Modifier.padding(horizontal = 16.dp),
         onDocumentClick = onDocumentClick,
         onDocumentLongPress = onDocumentLongPress,
         onFolderClick = onFolderClick,
         onFolderLongPress = onFolderLongPress,
+        onSelectionToggle = onSelectionToggle,
       )
     }
 

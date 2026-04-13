@@ -1,0 +1,13 @@
+mutation EntitySelectionActions_UpdateEntitiesIcon_Mutation($input: UpdateEntitiesIconInput!) {
+  updateEntitiesIcon(input: $input) {
+    id
+    icon
+    iconColor
+  }
+}
+
+mutation EntitySelectionActions_DeleteEntities_Mutation($input: DeleteEntitiesInput!) {
+  deleteEntities(input: $input) @catch(to: THROW) {
+    id
+  }
+}

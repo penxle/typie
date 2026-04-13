@@ -93,6 +93,13 @@ private data class FolderVisibilityOption(
   val icon: IconData,
 )
 
+internal data class FolderShareTarget(
+  val id: String,
+  val url: String,
+  val visibility: EntityVisibility,
+  val thumbnailUrl: String?,
+)
+
 private fun folderVisibilityOptions(): List<FolderVisibilityOption> {
   return listOf(
     FolderVisibilityOption(
@@ -126,20 +133,58 @@ fun FolderShareContent(
   initialThumbnailUrl: String?,
   onUpdated: () -> Unit = {},
 ) {
+  FolderShareContent(
+    model = model,
+    folders =
+      listOf(
+        FolderShareTarget(
+          id = folderId,
+          url = folderUrl,
+          visibility = initialVisibility,
+          thumbnailUrl = initialThumbnailUrl,
+        )
+      ),
+    onUpdated = onUpdated,
+  )
+}
+
+@Composable
+context(_: SheetScope<Unit>)
+internal fun FolderShareContent(
+  model: FolderViewModel,
+  folders: List<FolderShareTarget>,
+  onUpdated: () -> Unit = {},
+) {
   val share = PlatformModule.share
   val toast = LocalToast.current
   val dialog = LocalDialog.current
   val scope = rememberCoroutineScope()
+  val folderIds = remember(folders) { folders.map(FolderShareTarget::id) }
+  val folderUrls =
+    remember(folders) { folders.map(FolderShareTarget::url).filter { it.isNotBlank() } }
+  val visibilityValues = remember(folders) { folders.map(FolderShareTarget::visibility) }
+  val isSingleFolder = folders.size == 1
+  val initialVisibility = folders.firstOrNull()?.visibility ?: EntityVisibility.PRIVATE
+  val hasMixedVisibility =
+    remember(folders) { folders.map(FolderShareTarget::visibility).distinct().size > 1 }
+  val initialThumbnailUrl = folders.firstOrNull()?.thumbnailUrl
+  val initiallyMixedThumbnail =
+    remember(folders) { folders.map(FolderShareTarget::thumbnailUrl).distinct().size > 1 }
   val form =
-    remember(folderId, initialVisibility, initialThumbnailUrl) {
-      FolderShareForm(scope, initialVisibility, initialThumbnailUrl)
+    remember(folderIds, initialVisibility, initialThumbnailUrl, initiallyMixedThumbnail) {
+      FolderShareForm(
+        scope,
+        initialVisibility,
+        if (initiallyMixedThumbnail) null else initialThumbnailUrl,
+      )
     }
   var isUpdatingVisibility by remember { mutableStateOf(false) }
   var isUploadingThumbnail by remember { mutableStateOf(false) }
   var isRemovingThumbnail by remember { mutableStateOf(false) }
   var isSharing by remember { mutableStateOf(false) }
-  var recursiveApplyPhase by remember(folderId) { mutableStateOf(RecursiveApplyPhase.Idle) }
-  var recursiveApplyResetJob by remember(folderId) { mutableStateOf<Job?>(null) }
+  var hasMixedThumbnail by remember(folderIds) { mutableStateOf(initiallyMixedThumbnail) }
+  var recursiveApplyPhase by remember(folderIds) { mutableStateOf(RecursiveApplyPhase.Idle) }
+  var recursiveApplyResetJob by remember(folderIds) { mutableStateOf<Job?>(null) }
   val isApplyingRecursive = recursiveApplyPhase == RecursiveApplyPhase.Inflight
   val isBusy =
     isUpdatingVisibility ||
@@ -151,12 +196,12 @@ fun FolderShareContent(
   fun updateVisibility(nextVisibility: EntityVisibility) {
     if (isUpdatingVisibility) return
 
-    if (form.visibility.initialValue == nextVisibility) return
+    if (!hasMixedVisibility && form.visibility.initialValue == nextVisibility) return
 
     isUpdatingVisibility = true
     scope.launch {
       model
-        .updateFolderVisibility(folderId = folderId, visibility = nextVisibility)
+        .updateFoldersVisibility(folderIds = folderIds, visibility = nextVisibility)
         .withDefaultExceptionHandler(toast)
         .onOk {
           form.visibility.commit()
@@ -174,13 +219,17 @@ fun FolderShareContent(
     isRemovingThumbnail = true
     scope.launch {
       model
-        .removeFolderThumbnail(folderId = folderId)
+        .removeFoldersThumbnail(folderIds = folderIds)
         .withDefaultExceptionHandler(toast)
         .onOk {
+          hasMixedThumbnail = false
           form.thumbnailUrl.commit()
           onUpdated()
         }
-        .onException { form.thumbnailUrl.rollback() }
+        .onException {
+          hasMixedThumbnail = initiallyMixedThumbnail
+          form.thumbnailUrl.rollback()
+        }
       isRemovingThumbnail = false
     }
   }
@@ -192,7 +241,10 @@ fun FolderShareContent(
     recursiveApplyPhase = RecursiveApplyPhase.Inflight
     scope.launch {
       model
-        .applyFolderVisibilityRecursively(folderId = folderId, visibility = form.visibility.value)
+        .applyFoldersVisibilityRecursively(
+          folderIds = folderIds,
+          visibility = form.visibility.value,
+        )
         .withDefaultExceptionHandler(toast)
         .onOk {
           onUpdated()
@@ -213,7 +265,7 @@ fun FolderShareContent(
   suspend fun shareFolder() {
     if (isSharing) return
 
-    if (folderUrl.isBlank()) {
+    if (folderUrls.isEmpty()) {
       toast.show(ToastType.Error, "폴더 링크를 공유할 수 없어요.")
       return
     }
@@ -221,7 +273,7 @@ fun FolderShareContent(
     isSharing = true
     try {
       // TODO: Track folder share action.
-      val shared = share.share(folderUrl)
+      val shared = share.share(folderUrls.joinToString("\n"))
       if (!shared) {
         toast.show(ToastType.Error, "폴더 링크를 공유할 수 없어요.")
       }
@@ -238,12 +290,17 @@ fun FolderShareContent(
     isUploadingThumbnail = true
     scope.launch {
       model
-        .uploadFolderThumbnail(folderId = folderId, file = file)
+        .uploadFoldersThumbnail(folderIds = folderIds, file = file)
         .withDefaultExceptionHandler(toast)
         .onOk { thumbnailResult ->
+          hasMixedThumbnail = false
           form.thumbnailUrl.setValue(thumbnailResult.url)
           form.thumbnailUrl.commit()
           onUpdated()
+        }
+        .onException {
+          hasMixedThumbnail = initiallyMixedThumbnail
+          form.thumbnailUrl.rollback()
         }
       isUploadingThumbnail = false
     }
@@ -252,7 +309,7 @@ fun FolderShareContent(
   SheetLayout(
     header = {
       ActionHeader(
-        title = "이 폴더 공유하기",
+        title = if (isSingleFolder) "이 폴더 공유하기" else "폴더 ${folders.size}개 공유하기",
         leading = {
           HeaderTextAction(
             text = "완료",
@@ -282,6 +339,7 @@ fun FolderShareContent(
                     icon = option.icon,
                   )
                 },
+              values = visibilityValues,
               enabled = !isUpdatingVisibility && !isApplyingRecursive,
               onSelected = { nextVisibility -> updateVisibility(nextVisibility) },
             )
@@ -296,6 +354,7 @@ fun FolderShareContent(
           trailing = {
             FolderThumbnailControl(
               thumbnailUrl = form.thumbnailUrl.value,
+              isMixed = hasMixedThumbnail,
               isUploading = isUploadingThumbnail,
               isRemoving = isRemovingThumbnail,
               onUploadClick = {
@@ -308,7 +367,9 @@ fun FolderShareContent(
                   val result =
                     dialog.confirm(
                       title = "썸네일을 삭제할까요?",
-                      message = "현재 폴더의 미리보기 이미지를 삭제합니다.",
+                      message =
+                        if (isSingleFolder) "현재 폴더의 미리보기 이미지를 삭제합니다."
+                        else "선택한 폴더들의 미리보기 이미지를 삭제합니다.",
                       confirmText = "삭제",
                       confirmIsDestructive = true,
                     )
@@ -404,6 +465,7 @@ private fun FolderShareOptionRow(icon: IconData, label: String, trailing: @Compo
 @Composable
 private fun FolderThumbnailControl(
   thumbnailUrl: String?,
+  isMixed: Boolean,
   isUploading: Boolean,
   isRemoving: Boolean,
   onUploadClick: () -> Unit,
@@ -415,12 +477,13 @@ private fun FolderThumbnailControl(
   ) {
     FolderThumbnailUploadButton(
       thumbnailUrl = thumbnailUrl,
+      isMixed = isMixed,
       isUploading = isUploading,
       enabled = !isRemoving,
       onClick = onUploadClick,
     )
 
-    if (thumbnailUrl != null) {
+    if (!isMixed && thumbnailUrl != null) {
       FolderThumbnailRemoveButton(
         enabled = !isUploading && !isRemoving,
         isRemoving = isRemoving,
@@ -433,6 +496,7 @@ private fun FolderThumbnailControl(
 @Composable
 private fun FolderThumbnailUploadButton(
   thumbnailUrl: String?,
+  isMixed: Boolean,
   isUploading: Boolean,
   enabled: Boolean,
   onClick: () -> Unit,
@@ -461,6 +525,14 @@ private fun FolderThumbnailUploadButton(
         contentAlignment = Alignment.Center,
       ) {
         when {
+          isMixed -> {
+            Text(
+              text = "다름",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textTertiary,
+            )
+          }
+
           thumbnailUrl != null -> {
             Img(url = thumbnailUrl, modifier = Modifier.fillMaxSize().clip(shape))
           }

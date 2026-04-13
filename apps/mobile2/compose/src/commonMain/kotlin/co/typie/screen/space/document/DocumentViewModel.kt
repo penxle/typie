@@ -11,9 +11,9 @@ import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.screen.space.entity.EntityIconSheetModel
+import co.typie.screen.space.entity.EntityIconPickerSheetModel
 
-class DocumentViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheetModel {
+class DocumentViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconPickerSheetModel {
   override suspend fun updateDocument(
     documentId: String,
     currentTitle: String,
@@ -30,18 +30,21 @@ class DocumentViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconSheet
     )
   }
 
-  override suspend fun updateEntityIcon(
-    entityId: String,
-    icon: String,
-    iconColor: String,
+  override suspend fun updateEntityIcons(
+    entityIds: List<String>,
+    icon: String?,
+    iconColor: String?,
   ): Result<Unit, Nothing> = result {
+    val entityId = entityIds.singleOrNull() ?: return@result
+    val resolvedIcon = icon?.trim()?.takeIf { it.isNotEmpty() } ?: return@result
+    val resolvedIconColor = iconColor?.trim()?.takeIf { it.isNotEmpty() } ?: return@result
     Apollo.executeMutation(
       DocumentActions_UpdateEntityIcon_Mutation(
         input =
           UpdateEntityIconInput(
             entityId = entityId,
-            icon = icon.trim(),
-            iconColor = iconColor.trim(),
+            icon = resolvedIcon,
+            iconColor = resolvedIconColor,
           )
       )
     )

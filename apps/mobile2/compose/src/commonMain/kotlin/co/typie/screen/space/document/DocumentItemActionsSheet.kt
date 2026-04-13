@@ -12,7 +12,7 @@ import co.typie.entity_transfer.EntityTransferSource
 import co.typie.ext.comma
 import co.typie.icons.Lucide
 import co.typie.screen.space.folder.FolderAction
-import co.typie.screen.space.folder.folderPrimaryActionSections
+import co.typie.screen.space.folder.folderItemActionSections
 import co.typie.screen.space.folder.folderVisibilityPresentation
 import co.typie.ui.component.Divider
 import co.typie.ui.component.EntityBreadcrumb
@@ -84,7 +84,7 @@ internal fun DocumentItemActionsContent(
     },
   ) {
     Column(modifier = Modifier.fillMaxWidth().padding(MenuSheetActionContentPadding)) {
-      folderPrimaryActionSections().forEachIndexed { index, section ->
+      folderItemActionSections().forEachIndexed { index, section ->
         if (index > 0) {
           Divider()
         }

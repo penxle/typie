@@ -39,7 +39,7 @@ internal data class FolderActionSection(val items: List<FolderActionMenuItem>)
 
 internal data class FolderVisibilityPresentation(val label: String, val isShared: Boolean)
 
-internal fun folderPrimaryActionSections(): List<FolderActionSection> {
+internal fun folderItemActionSections(): List<FolderActionSection> {
   return listOf(
     FolderActionSection(
       items =
