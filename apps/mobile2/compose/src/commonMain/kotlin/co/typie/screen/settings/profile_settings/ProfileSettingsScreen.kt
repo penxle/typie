@@ -22,20 +22,22 @@ import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.platform.PlatformModule
+import co.typie.result.isOk
 import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.ui.component.AlertModal
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingControlRow
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.alert
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -51,6 +53,7 @@ internal fun profileSettingsMarketingConsentMessage(marketingConsent: Boolean): 
 @Composable
 fun ProfileSettingsScreen() {
   val nav = Nav.current
+  val dialog = LocalDialog.current
   val model = viewModel { ProfileSettingsViewModel() }
   val toast = LocalToast.current
   val clipboard = PlatformModule.clipboard
@@ -61,20 +64,24 @@ fun ProfileSettingsScreen() {
   var committedMarketingConsent by
     remember(initialMarketingConsent) { mutableStateOf(initialMarketingConsent) }
   var isUpdatingMarketingConsent by remember { mutableStateOf(false) }
-  var marketingConsentModalMessage by remember { mutableStateOf<String?>(null) }
   var pendingMarketingConsent by remember { mutableStateOf<Boolean?>(null) }
 
   LaunchedEffect(pendingMarketingConsent) {
     val requested = pendingMarketingConsent ?: return@LaunchedEffect
 
-    model
-      .updateMarketingConsent(requested)
-      .withDefaultExceptionHandler(toast)
-      .onOk {
-        committedMarketingConsent = requested
-        marketingConsentModalMessage = profileSettingsMarketingConsentMessage(requested)
-      }
-      .onException { marketingConsent = committedMarketingConsent }
+    val result =
+      model
+        .updateMarketingConsent(requested)
+        .withDefaultExceptionHandler(toast)
+        .onOk { committedMarketingConsent = requested }
+        .onException { marketingConsent = committedMarketingConsent }
+
+    if (result.isOk) {
+      dialog.alert(
+        title = "타이피 마케팅 수신 동의",
+        message = profileSettingsMarketingConsentMessage(requested),
+      )
+    }
 
     isUpdatingMarketingConsent = false
     pendingMarketingConsent = null
@@ -96,8 +103,10 @@ fun ProfileSettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(
@@ -170,14 +179,5 @@ fun ProfileSettingsScreen() {
     }
 
     Spacer(Modifier.height(72.dp))
-  }
-
-  marketingConsentModalMessage?.let { message ->
-    AlertModal(
-      title = "타이피 마케팅 수신 동의",
-      message = message,
-      onConfirm = { marketingConsentModalMessage = null },
-      onDismiss = { marketingConsentModalMessage = null },
-    )
   }
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
@@ -18,13 +19,14 @@ import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.alert
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
@@ -34,24 +36,13 @@ import kotlinx.coroutines.launch
 fun UpdateEmailScreen() {
   val nav = Nav.current
   val model = viewModel { UpdateEmailViewModel() }
+  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val showSuccessModal: suspend () -> Unit = {
-    nav.showModal {
-      AlertModal(
-        title = "이메일 인증",
-        message = "변경할 이메일 주소로 인증 메일을 발송했어요. 메일함을 확인해주세요.",
-        onConfirm = {
-          nav.dismissModal()
-          nav.pop()
-        },
-        onDismiss = {
-          nav.dismissModal()
-          nav.pop()
-        },
-      )
-    }
+    dialog.alert(title = "이메일 인증", message = "변경할 이메일 주소로 인증 메일을 발송했어요. 메일함을 확인해주세요.")
+    nav.pop()
   }
 
   fun submit() {
@@ -73,8 +64,10 @@ fun UpdateEmailScreen() {
 
   ProvideTopBar(center = { Text("이메일 변경", style = AppTheme.typography.title) })
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(

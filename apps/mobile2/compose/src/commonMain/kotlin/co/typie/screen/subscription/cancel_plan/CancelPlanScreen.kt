@@ -28,9 +28,10 @@ import co.typie.service.CurrentSubscriptionStore
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -43,6 +44,7 @@ fun CancelPlanScreen() {
   val nav = Nav.current
   val toast = LocalToast.current
   val model = viewModel { CancelPlanViewModel() }
+  val dialog = LocalDialog.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val lifecycleOwner = LocalLifecycleOwner.current
@@ -54,8 +56,10 @@ fun CancelPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (currentSubscriptionState is QueryState.Error) {
-    ErrorDialog { CurrentSubscriptionStore.refresh() }
+  LaunchedEffect(currentSubscriptionState) {
+    if (currentSubscriptionState is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { CurrentSubscriptionStore.refresh() })
+    }
   }
 
   DisposableEffect(lifecycleOwner) {

@@ -48,16 +48,17 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
-import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.Img
 import co.typie.ui.component.SelectField
 import co.typie.ui.component.SelectFieldItem
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -125,6 +126,7 @@ fun folderShareSheet(
 ): SheetPresentation<Unit> = sheetPresentation {
   val share = PlatformModule.share
   val toast = LocalToast.current
+  val dialog = LocalDialog.current
   val scope = rememberCoroutineScope()
   val form =
     remember(folderId, initialVisibility, initialThumbnailUrl) {
@@ -134,7 +136,6 @@ fun folderShareSheet(
   var isUploadingThumbnail by remember { mutableStateOf(false) }
   var isRemovingThumbnail by remember { mutableStateOf(false) }
   var isSharing by remember { mutableStateOf(false) }
-  var showThumbnailRemoveConfirm by remember { mutableStateOf(false) }
   var recursiveApplyPhase by remember(folderId) { mutableStateOf(RecursiveApplyPhase.Idle) }
   var recursiveApplyResetJob by remember(folderId) { mutableStateOf<Job?>(null) }
   val isApplyingRecursive = recursiveApplyPhase == RecursiveApplyPhase.Inflight
@@ -300,7 +301,20 @@ fun folderShareSheet(
                   filePicker("image/*")
                 }
               },
-              onRemoveClick = { showThumbnailRemoveConfirm = true },
+              onRemoveClick = {
+                scope.launch {
+                  val result =
+                    dialog.confirm(
+                      title = "썸네일을 삭제할까요?",
+                      message = "현재 폴더의 미리보기 이미지를 삭제합니다.",
+                      confirmText = "삭제",
+                      confirmIsDestructive = true,
+                    )
+                  if (result is DialogResult.Resolved) {
+                    removeThumbnail()
+                  }
+                }
+              },
             )
           },
         )
@@ -349,20 +363,6 @@ fun folderShareSheet(
         )
       }
     }
-  }
-
-  if (showThumbnailRemoveConfirm) {
-    ConfirmModal(
-      title = "썸네일을 삭제할까요?",
-      message = "현재 폴더의 미리보기 이미지를 삭제합니다.",
-      confirmText = "삭제",
-      confirmIsDestructive = true,
-      onConfirm = {
-        showThumbnailRemoveConfirm = false
-        removeThumbnail()
-      },
-      onDismiss = { showThumbnailRemoveConfirm = false },
-    )
   }
 }
 

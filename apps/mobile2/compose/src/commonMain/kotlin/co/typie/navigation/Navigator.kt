@@ -1,6 +1,5 @@
 package co.typie.navigation
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -20,10 +19,6 @@ class Navigator(startRoute: Route) {
   val stack: List<Route>
     get() = _stack
 
-  private val _modals = mutableStateListOf<@Composable () -> Unit>()
-  val modals: List<@Composable () -> Unit>
-    get() = _modals
-
   private val viewModelStores = mutableMapOf<Route, ViewModelStore>()
 
   val current: Route
@@ -33,7 +28,7 @@ class Navigator(startRoute: Route) {
     get() = if (_stack.size > 1) _stack[_stack.lastIndex - 1] else null
 
   val canPop: Boolean
-    get() = _stack.size > 1 || _modals.isNotEmpty()
+    get() = _stack.size > 1
 
   var lastOperation: NavOperation = NavOperation.None
     private set
@@ -94,7 +89,6 @@ class Navigator(startRoute: Route) {
   }
 
   internal fun performPop(): Boolean {
-    if (_modals.isNotEmpty()) return dismissModal()
     if (_stack.size <= 1) return false
     val removed = _stack.removeLast()
     viewModelStores.remove(removed)?.clear()
@@ -121,15 +115,5 @@ class Navigator(startRoute: Route) {
   fun clear() {
     viewModelStores.values.forEach { it.clear() }
     viewModelStores.clear()
-  }
-
-  fun showModal(content: @Composable () -> Unit) {
-    _modals.add(content)
-  }
-
-  fun dismissModal(): Boolean {
-    if (_modals.isEmpty()) return false
-    _modals.removeLast()
-    return true
   }
 }

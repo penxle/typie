@@ -21,10 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +35,7 @@ import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.overlay.LocalLoader
 import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
@@ -65,11 +63,13 @@ import co.typie.service.isCurrentFullPlan
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ConfirmModal
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
@@ -81,13 +81,14 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun EnrollPlanScreen() {
+  val nav = Nav.current
+  val dialog = LocalDialog.current
   val sheetHost = LocalSheetHost.current
   val toast = LocalToast.current
   val loader = LocalLoader.current
   val model = viewModel { EnrollPlanViewModel() }
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
-  var showTrialStartConfirm by remember { mutableStateOf(false) }
   val currentSubscriptionState = CurrentSubscriptionStore.state
 
   LaunchedEffect(model.celebration) {
@@ -110,8 +111,10 @@ fun EnrollPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (SubscriptionService.hasQueryError(model.query.state)) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (SubscriptionService.hasQueryError(model.query.state)) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(
@@ -153,7 +156,23 @@ fun EnrollPlanScreen() {
       productsLoaded = model.productsLoaded,
       monthlyProduct = model.products[PurchasePlanInterval.Monthly],
       yearlyProduct = model.products[PurchasePlanInterval.Yearly],
-      onStartTrial = { showTrialStartConfirm = true },
+      onStartTrial = {
+        val result =
+          dialog.confirm(
+            title = TRIAL_START_CONFIRM_TITLE,
+            message = TRIAL_START_CONFIRM_MESSAGE,
+            confirmText = TRIAL_START_CONFIRM_ACTION,
+          )
+        if (result is DialogResult.Resolved) {
+          loader.runWith {
+            model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
+              when (error) {
+                EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+              }
+            }
+          }
+        }
+      },
       onPurchaseMonthly = { product ->
         // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
         scope.launch {
@@ -169,27 +188,6 @@ fun EnrollPlanScreen() {
     )
 
     Spacer(Modifier.height(72.dp))
-  }
-
-  if (showTrialStartConfirm) {
-    ConfirmModal(
-      title = TRIAL_START_CONFIRM_TITLE,
-      message = TRIAL_START_CONFIRM_MESSAGE,
-      confirmText = TRIAL_START_CONFIRM_ACTION,
-      onConfirm = {
-        showTrialStartConfirm = false
-        scope.launch {
-          loader.runWith {
-            model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
-              when (error) {
-                EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-              }
-            }
-          }
-        }
-      },
-      onDismiss = { showTrialStartConfirm = false },
-    )
   }
 }
 

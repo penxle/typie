@@ -33,12 +33,14 @@ import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ConfirmModal
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.sheet.SheetLayout
@@ -252,6 +254,7 @@ fun SettingsScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val model = viewModel { SettingsViewModel() }
+  val dialog = LocalDialog.current
   val sheetHost = LocalSheetHost.current
   val toast = LocalToast.current
   val currentSubscriptionStore = model.currentSubscriptionStore
@@ -265,10 +268,11 @@ fun SettingsScreen() {
   val sections = remember(devModeEnabled) { settingsSections(devModeEnabled = devModeEnabled) }
   var appVersion by remember { mutableStateOf<String?>(null) }
   var devModeTapCount by remember { mutableStateOf(0) }
-  var showLogoutConfirm by remember { mutableStateOf(false) }
 
-  if (subscriptionService.hasQueryError(model.query.state)) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (subscriptionService.hasQueryError(model.query.state)) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   LaunchedEffect(deviceInfo) {
@@ -338,7 +342,16 @@ fun SettingsScreen() {
               toast.show(ToastType.Notification, "이용권 상태를 확인 중이에요.")
             }
           } else if (item.action == SettingsItemAction.Logout) {
-            showLogoutConfirm = true
+            val result =
+              dialog.confirm(
+                title = "로그아웃",
+                message = "정말 로그아웃하시겠어요?",
+                confirmText = "로그아웃",
+                confirmIsDestructive = true,
+              )
+            if (result is DialogResult.Resolved) {
+              authService.logout()
+            }
           } else {
             toast.show(ToastType.Notification, "준비 중인 기능이에요.")
           }
@@ -347,22 +360,6 @@ fun SettingsScreen() {
     }
 
     Spacer(Modifier.size(72.dp))
-  }
-
-  if (showLogoutConfirm) {
-    ConfirmModal(
-      title = "로그아웃",
-      message = "정말 로그아웃하시겠어요?",
-      confirmText = "로그아웃",
-      confirmIsDestructive = true,
-      onConfirm = {
-        confirmSettingsLogout(
-          onDismiss = { showLogoutConfirm = false },
-          onLogout = { authService.logout() },
-        )
-      },
-      onDismiss = { showLogoutConfirm = false },
-    )
   }
 }
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,19 +51,21 @@ import co.typie.service.CurrentSubscriptionStore
 import co.typie.service.hasSubscriptionOrNull
 import co.typie.ui.component.AlertBanner
 import co.typie.ui.component.AlertBannerVariant
-import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Img
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.dialog.Dialog
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.alert
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -107,12 +110,12 @@ private val SpaceDateDisplaySheetPadding =
 @Composable
 fun SpaceSettingsScreen() {
   val nav = Nav.current
+  val dialog = LocalDialog.current
   val model = viewModel { SpaceSettingsViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val sheetHost = LocalSheetHost.current
   val scrollState = rememberScrollState()
-  var showLastSiteAlert by remember { mutableStateOf(false) }
   val currentSubscriptionState = CurrentSubscriptionStore.state
 
   val filePicker = rememberFilePicker { files ->
@@ -133,11 +136,13 @@ fun SpaceSettingsScreen() {
 
   ProvideTopBar(
     center = { Text("스페이스 설정", style = AppTheme.typography.title) },
-    trailing = { MoreMenu(model, showLastSiteAlert = { showLastSiteAlert = true }) },
+    trailing = { MoreMenu(model, dialog = dialog) },
   )
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(
@@ -297,15 +302,6 @@ fun SpaceSettingsScreen() {
       }
     }
   }
-
-  if (showLastSiteAlert) {
-    AlertModal(
-      title = "스페이스를 삭제할 수 없어요",
-      message = "최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
-      onConfirm = { showLastSiteAlert = false },
-      onDismiss = { showLastSiteAlert = false },
-    )
-  }
 }
 
 @Composable
@@ -351,7 +347,7 @@ private fun spaceDateDisplaySheet(selected: SiteDateDisplay): SheetPresentation<
   }
 
 @Composable
-private fun MoreMenu(model: SpaceSettingsViewModel, showLastSiteAlert: () -> Unit) {
+private fun MoreMenu(model: SpaceSettingsViewModel, dialog: Dialog) {
   val nav = Nav.current
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -389,7 +385,12 @@ private fun MoreMenu(model: SpaceSettingsViewModel, showLastSiteAlert: () -> Uni
                   val data = model.query.data
                   val isLastSite = data.me.sites.size <= 1
                   if (isLastSite) {
-                    showLastSiteAlert()
+                    scope.launch {
+                      dialog.alert(
+                        title = "스페이스를 삭제할 수 없어요",
+                        message = "최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
+                      )
+                    }
                   } else {
                     sheetHost.show(
                       deleteSiteConfirmSheet(

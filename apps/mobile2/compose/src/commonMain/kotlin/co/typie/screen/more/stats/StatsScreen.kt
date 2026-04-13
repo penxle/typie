@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.StatsScreen_GenerateActivityImage_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.icons.Lucide
+import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.platform.FileSystemSaveLocation
@@ -41,9 +43,10 @@ import co.typie.ui.component.ActivityGrid
 import co.typie.ui.component.ActivityGridChange
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -61,7 +64,9 @@ import kotlinx.datetime.number
 
 @Composable
 fun StatsScreen() {
+  val nav = Nav.current
   val model = viewModel { StatsViewModel() }
+  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val clipboard = PlatformModule.clipboard
   val fileSystem = PlatformModule.fileSystem
@@ -74,8 +79,10 @@ fun StatsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(

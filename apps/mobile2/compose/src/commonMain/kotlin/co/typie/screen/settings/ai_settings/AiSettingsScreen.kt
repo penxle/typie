@@ -9,11 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
@@ -23,15 +19,18 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.graphql.QueryState
+import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.ui.component.AlertModal
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SettingControlRow
 import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.alert
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.state.rememberScrollState
@@ -41,10 +40,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun AiSettingsScreen() {
   val model = viewModel { AiSettingsViewModel() }
+  val nav = Nav.current
+  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
-  var showEnableConfirm by remember { mutableStateOf(false) }
 
   LaunchedEffect(model.query.state) {
     if (model.query.state is QueryState.Success) {
@@ -54,7 +54,17 @@ fun AiSettingsScreen() {
 
   fun requestAiOptIn(enabled: Boolean) {
     if (enabled) {
-      showEnableConfirm = true
+      scope.launch {
+        val result =
+          dialog.alert(
+            title = "AI 기능을 활성화하시겠어요?",
+            message = "사용자의 글은 AI 모델 학습에 절대 사용되지 않으며, 사용자가 요청할 때만 AI가 사용돼요. 언제든지 설정에서 비활성화할 수 있어요.",
+            confirmText = "활성화",
+          )
+        if (result is DialogResult.Resolved) {
+          model.updateAiOptIn(true).withDefaultExceptionHandler(toast)
+        }
+      }
     } else {
       scope.launch { model.updateAiOptIn(false).withDefaultExceptionHandler(toast) }
     }
@@ -65,8 +75,10 @@ fun AiSettingsScreen() {
     center = { Text("AI", style = AppTheme.typography.title) },
   )
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(
@@ -129,19 +141,6 @@ fun AiSettingsScreen() {
     }
 
     Spacer(Modifier.height(72.dp))
-  }
-
-  if (showEnableConfirm) {
-    AlertModal(
-      title = "AI 기능을 활성화하시겠어요?",
-      message = "사용자의 글은 AI 모델 학습에 절대 사용되지 않으며, 사용자가 요청할 때만 AI가 사용돼요. 언제든지 설정에서 비활성화할 수 있어요.",
-      confirmText = "활성화",
-      onConfirm = {
-        showEnableConfirm = false
-        scope.launch { model.updateAiOptIn(true).withDefaultExceptionHandler(toast) }
-      },
-      onDismiss = { showEnableConfirm = false },
-    )
   }
 }
 

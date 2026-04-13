@@ -7,11 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,8 +27,10 @@ import co.typie.service.TRIAL_START_CONFIRM_TITLE
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardDivider
-import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.SheetHostState
 import co.typie.ui.component.sheet.SheetInsetPolicy
@@ -69,9 +67,9 @@ private fun planUpgradeSheet(
   message: String,
 ): SheetPresentation<PlanUpgradeSheetResult> = sheetPresentation {
   val toast = LocalToast.current
+  val dialog = LocalDialog.current
   val model = viewModel { PlanUpgradeSheetViewModel() }
   val scope = rememberCoroutineScope()
-  var showTrialStartConfirm by remember { mutableStateOf(false) }
   val canStartTrial = SubscriptionService.canStartTrial(model.query.data.me.canStartTrial)
   val dismissResult = planUpgradeDismissResult(model.celebration)
 
@@ -94,7 +92,24 @@ private fun planUpgradeSheet(
             leading = { color -> Icon(icon = Lucide.Zap, tint = color) },
             loading = model.isStartingTrial,
             loadingText = "무료 체험 시작 중...",
-            onClick = { showTrialStartConfirm = true },
+            onClick = {
+              scope.launch {
+                val result =
+                  dialog.confirm(
+                    title = TRIAL_START_CONFIRM_TITLE,
+                    message = TRIAL_START_CONFIRM_MESSAGE,
+                    confirmText = TRIAL_START_CONFIRM_ACTION,
+                  )
+                if (result is DialogResult.Resolved) {
+                  model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
+                    when (error) {
+                      PlanUpgradeTrialError.ServerError ->
+                        toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+                    }
+                  }
+                }
+              }
+            },
           )
         }
 
@@ -128,26 +143,6 @@ private fun planUpgradeSheet(
 
       SubscriptionFeatureList(features = fullPlanFeatures, iconSize = 16.dp, rowSpacing = 8.dp)
     }
-  }
-
-  if (showTrialStartConfirm) {
-    ConfirmModal(
-      title = TRIAL_START_CONFIRM_TITLE,
-      message = TRIAL_START_CONFIRM_MESSAGE,
-      confirmText = TRIAL_START_CONFIRM_ACTION,
-      onConfirm = {
-        showTrialStartConfirm = false
-        scope.launch {
-          model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
-            when (error) {
-              PlanUpgradeTrialError.ServerError ->
-                toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-            }
-          }
-        }
-      },
-      onDismiss = { showTrialStartConfirm = false },
-    )
   }
 }
 

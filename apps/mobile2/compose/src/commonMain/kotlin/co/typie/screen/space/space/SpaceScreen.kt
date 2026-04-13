@@ -54,14 +54,12 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
-import co.typie.screen.space.document.DocumentDeleteRequest
 import co.typie.screen.space.document.DocumentViewModel
 import co.typie.screen.space.document.documentItemActionsSheet
 import co.typie.screen.space.document.documentRenameSheet
 import co.typie.screen.space.document.toTransferSource as toDocumentTransferSource
 import co.typie.screen.space.entity.entityIconPickerSheet
 import co.typie.screen.space.folder.FolderAction
-import co.typie.screen.space.folder.FolderDeleteRequest
 import co.typie.screen.space.folder.FolderViewModel
 import co.typie.screen.space.folder.folderItemActionsSheet
 import co.typie.screen.space.folder.folderRenameSheet
@@ -70,13 +68,15 @@ import co.typie.screen.space.folder.toTransferSource
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
-import co.typie.ui.component.ConfirmModal
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.entity_container.EntityContainerEditAction
 import co.typie.ui.component.entity_container.EntityContainerListContent
 import co.typie.ui.component.entity_container.EntityContainerTopBarTrailing
@@ -103,6 +103,7 @@ fun SpaceScreen() {
   val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
   val sheetHost = LocalSheetHost.current
+  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val clipboard = EntityClipboardService
   val model = viewModel { SpaceViewModel() }
@@ -114,8 +115,6 @@ fun SpaceScreen() {
   var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
-  var deleteRequest by remember { mutableStateOf<FolderDeleteRequest?>(null) }
-  var documentDeleteRequest by remember { mutableStateOf<DocumentDeleteRequest?>(null) }
   val siteId = model.siteId
 
   val site = (model.query.state as? QueryState.Success)?.data?.site
@@ -219,40 +218,10 @@ fun SpaceScreen() {
 
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { SpaceBottomBarActionButton() })
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.refetch() }
-  }
-
-  deleteRequest?.let { request ->
-    ConfirmModal(
-      title = "폴더 삭제",
-      message = "\"${request.folderName}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-      confirmText = "삭제하기",
-      confirmIsDestructive = true,
-      onConfirm = {
-        deleteRequest = null
-        presenterScope.launch {
-          folderActionModel.deleteFolderEntity(request.entityId).withDefaultExceptionHandler(toast)
-        }
-      },
-      onDismiss = { deleteRequest = null },
-    )
-  }
-
-  documentDeleteRequest?.let { request ->
-    ConfirmModal(
-      title = "문서 삭제",
-      message = "\"${request.documentTitle}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-      confirmText = "삭제하기",
-      confirmIsDestructive = true,
-      onConfirm = {
-        documentDeleteRequest = null
-        presenterScope.launch {
-          documentActionModel.deleteDocument(request.documentId).withDefaultExceptionHandler(toast)
-        }
-      },
-      onDismiss = { documentDeleteRequest = null },
-    )
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.refetch() })
+    }
   }
 
   Screen(
@@ -360,11 +329,20 @@ fun SpaceScreen() {
                   }
 
                   FolderAction.Delete -> {
-                    documentDeleteRequest =
-                      DocumentDeleteRequest(
-                        documentId = item.documentId,
-                        documentTitle = item.title,
-                      )
+                    presenterScope.launch {
+                      val result =
+                        dialog.confirm(
+                          title = "문서 삭제",
+                          message = "\"${item.title}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                          confirmText = "삭제하기",
+                          confirmIsDestructive = true,
+                        )
+                      if (result is DialogResult.Resolved) {
+                        documentActionModel
+                          .deleteDocument(item.documentId)
+                          .withDefaultExceptionHandler(toast)
+                      }
+                    }
                   }
 
                   FolderAction.SelectMultiple,
@@ -433,12 +411,20 @@ fun SpaceScreen() {
                   }
 
                   FolderAction.Delete -> {
-                    deleteRequest =
-                      FolderDeleteRequest(
-                        entityId = item.id,
-                        folderName = item.name,
-                        shouldPopOnSuccess = false,
-                      )
+                    presenterScope.launch {
+                      val result =
+                        dialog.confirm(
+                          title = "폴더 삭제",
+                          message = "\"${item.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                          confirmText = "삭제하기",
+                          confirmIsDestructive = true,
+                        )
+                      if (result is DialogResult.Resolved) {
+                        folderActionModel
+                          .deleteFolderEntity(item.id)
+                          .withDefaultExceptionHandler(toast)
+                      }
+                    }
                   }
 
                   FolderAction.SelectMultiple,

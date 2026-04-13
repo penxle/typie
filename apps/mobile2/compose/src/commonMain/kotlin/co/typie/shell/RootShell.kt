@@ -33,6 +33,9 @@ import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
 import co.typie.screen.system.splash.SplashScreen
 import co.typie.screen.system.update_required.UpdateRequiredScreen
+import co.typie.ui.component.dialog.Dialog
+import co.typie.ui.component.dialog.DialogOverlay
+import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.sheet.SheetHostState
 import co.typie.ui.component.sheet.SheetOverlayHosts
@@ -75,10 +78,12 @@ fun RootShell() {
       SheetHostState(sheetOverlayPresenter, sheetHostScope)
     }
 
+  val dialog = remember { Dialog() }
   val focusManager = LocalFocusManager.current
 
   CompositionLocalProvider(
     LocalSheetHost provides sheetHost,
+    LocalDialog provides dialog,
     LocalToast provides toast,
     LocalLoader provides loader,
   ) {
@@ -102,6 +107,7 @@ fun RootShell() {
       }
 
       SheetOverlayHosts(sheetOverlayPresenter)
+      DialogOverlay(dialog)
       LoaderOverlay()
       ToastOverlay()
     }

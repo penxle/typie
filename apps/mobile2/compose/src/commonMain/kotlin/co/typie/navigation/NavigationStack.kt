@@ -387,9 +387,6 @@ fun NavigationStack(
           }
         )
       }
-
-      // Modals
-      navigator.modals.forEach { modalContent -> modalContent() }
     }
   }
 }

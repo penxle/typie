@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,12 +39,13 @@ import co.typie.ui.component.CardActionTile
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
@@ -59,6 +61,7 @@ fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val sheetHost = LocalSheetHost.current
+  val dialog = LocalDialog.current
 
   val model = viewModel { MoreViewModel() }
   val currentSubscriptionState = CurrentSubscriptionStore.state
@@ -74,8 +77,10 @@ fun MoreScreen() {
 
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
 
-  if (SubscriptionService.hasQueryError(model.query.state)) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (SubscriptionService.hasQueryError(model.query.state)) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(

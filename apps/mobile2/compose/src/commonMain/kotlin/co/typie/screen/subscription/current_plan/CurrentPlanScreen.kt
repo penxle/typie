@@ -32,9 +32,10 @@ import co.typie.service.shouldAutoCloseCurrentPlan
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -53,8 +54,12 @@ fun CurrentPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (currentSubscriptionState is QueryState.Error) {
-    ErrorDialog { CurrentSubscriptionStore.refresh() }
+  val dialog = LocalDialog.current
+
+  LaunchedEffect(currentSubscriptionState) {
+    if (currentSubscriptionState is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { CurrentSubscriptionStore.refresh() })
+    }
   }
 
   LaunchedEffect(currentSubscriptionState) {

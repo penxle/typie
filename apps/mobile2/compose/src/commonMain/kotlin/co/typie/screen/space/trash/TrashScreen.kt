@@ -12,11 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,17 +31,19 @@ import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ConfirmModal
 import co.typie.ui.component.Divider
 import co.typie.ui.component.EntityBreadcrumb
 import co.typie.ui.component.EntityHeader
 import co.typie.ui.component.EntitySupportingText
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TrashDocumentRow
 import co.typie.ui.component.TrashFolderRow
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -120,15 +118,6 @@ private data class TrashContent(
     get() = if (isRootTrash) "휴지통 비우기" else "폴더 비우기"
 }
 
-private data class TrashPurgeRequest(
-  val title: String,
-  val message: String,
-  val confirmText: String,
-  val entityIds: List<String>,
-  val successMessage: String,
-  val shouldPop: Boolean = false,
-)
-
 private data class TrashActionItem(
   val label: String,
   val icon: IconData,
@@ -139,13 +128,12 @@ private data class TrashActionItem(
 @Composable
 fun TrashScreen(entityId: String? = null) {
   val nav = Nav.current
+  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val model = viewModel(key = "trash:${entityId ?: "site"}") { TrashViewModel() }
   val sheetHost = LocalSheetHost.current
   val screenScope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
-  var purgeRequest by remember(entityId) { mutableStateOf<TrashPurgeRequest?>(null) }
-
   LaunchedEffect(entityId) {
     model.entityId = entityId
     model.refetch()
@@ -176,14 +164,22 @@ fun TrashScreen(entityId: String? = null) {
               icon = Lucide.Trash2,
               tint = dangerColor,
               onClick = {
-                purgeRequest =
-                  TrashPurgeRequest(
+                val result =
+                  dialog.confirm(
                     title = "${item.type.label} 영구 삭제",
                     message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
                     confirmText = "삭제",
-                    entityIds = listOf(item.id),
-                    successMessage = "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
+                    confirmIsDestructive = true,
                   )
+                if (result is DialogResult.Resolved) {
+                  model.purgeEntities(listOf(item.id)).withDefaultExceptionHandler(toast).onOk {
+                    toast.show(
+                      ToastType.Success,
+                      "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
+                    )
+                    model.refetch()
+                  }
+                }
               },
             ),
           ),
@@ -225,16 +221,25 @@ fun TrashScreen(entityId: String? = null) {
               icon = Lucide.Trash2,
               tint = AppTheme.colors.danger,
               onClick = {
-                purgeRequest =
-                  TrashPurgeRequest(
+                val result =
+                  dialog.confirm(
                     title = "${currentItem.type.label} 영구 삭제",
                     message = "영구 삭제한 ${currentItem.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
                     confirmText = "삭제",
-                    entityIds = listOf(currentItem.id),
-                    successMessage =
-                      "\"${currentItem.title}\" ${currentItem.type.label}가 영구 삭제되었어요.",
-                    shouldPop = true,
+                    confirmIsDestructive = true,
                   )
+                if (result is DialogResult.Resolved) {
+                  model
+                    .purgeEntities(listOf(currentItem.id))
+                    .withDefaultExceptionHandler(toast)
+                    .onOk {
+                      toast.show(
+                        ToastType.Success,
+                        "\"${currentItem.title}\" ${currentItem.type.label}가 영구 삭제되었어요.",
+                      )
+                      nav.pop()
+                    }
+                }
               },
             )
           )
@@ -249,8 +254,8 @@ fun TrashScreen(entityId: String? = null) {
               if (content.items.isEmpty()) {
                 toast.show(ToastType.Notification, content.emptyMessage)
               } else {
-                purgeRequest =
-                  TrashPurgeRequest(
+                val result =
+                  dialog.confirm(
                     title = content.clearActionLabel,
                     message =
                       if (content.isRootTrash) {
@@ -259,9 +264,16 @@ fun TrashScreen(entityId: String? = null) {
                         "이 폴더에 있는 ${content.items.size}개 항목을 모두 영구 삭제할까요? 삭제된 항목은 복원할 수 없어요."
                       },
                     confirmText = "비우기",
-                    entityIds = content.items.map { it.id },
-                    successMessage = if (content.isRootTrash) "휴지통을 비웠어요." else "폴더를 비웠어요.",
+                    confirmIsDestructive = true,
                   )
+                if (result is DialogResult.Resolved) {
+                  val entityIds = content.items.map { it.id }
+                  val successMessage = if (content.isRootTrash) "휴지통을 비웠어요." else "폴더를 비웠어요."
+                  model.purgeEntities(entityIds).withDefaultExceptionHandler(toast).onOk {
+                    toast.show(ToastType.Success, successMessage)
+                    model.refetch()
+                  }
+                }
               }
             },
           )
@@ -282,8 +294,10 @@ fun TrashScreen(entityId: String? = null) {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (queryState is QueryState.Error) {
-    ErrorDialog { model.refetch() }
+  LaunchedEffect(queryState) {
+    if (queryState is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.refetch() })
+    }
   }
 
   Screen(
@@ -358,32 +372,6 @@ fun TrashScreen(entityId: String? = null) {
     }
 
     Spacer(Modifier.height(72.dp))
-  }
-
-  if (purgeRequest != null) {
-    ConfirmModal(
-      title = purgeRequest!!.title,
-      message = purgeRequest!!.message,
-      confirmText = purgeRequest!!.confirmText,
-      confirmIsDestructive = true,
-      onConfirm = {
-        val request = purgeRequest
-        if (request != null) {
-          purgeRequest = null
-          screenScope.launch {
-            model.purgeEntities(request.entityIds).withDefaultExceptionHandler(toast).onOk {
-              toast.show(ToastType.Success, request.successMessage)
-              if (request.shouldPop) {
-                nav.pop()
-              } else {
-                model.refetch()
-              }
-            }
-          }
-        }
-      },
-      onDismiss = { purgeRequest = null },
-    )
   }
 }
 

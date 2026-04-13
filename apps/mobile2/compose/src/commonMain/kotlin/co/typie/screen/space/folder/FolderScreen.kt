@@ -52,7 +52,6 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
-import co.typie.screen.space.document.DocumentDeleteRequest
 import co.typie.screen.space.document.documentItemActionsSheet
 import co.typie.screen.space.document.documentRenameSheet
 import co.typie.screen.space.document.toTransferSource as toDocumentTransferSource
@@ -60,11 +59,13 @@ import co.typie.screen.space.entity.entityIconPickerSheet
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
-import co.typie.ui.component.ConfirmModal
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.bottombar.ProvideBottomBar
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.entity_container.EntityContainerEditAction
 import co.typie.ui.component.entity_container.EntityContainerListContent
 import co.typie.ui.component.entity_container.EntityContainerTopBarTrailing
@@ -90,6 +91,7 @@ fun FolderScreen(entityId: String) {
   val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
   val sheetHost = LocalSheetHost.current
+  val dialog = LocalDialog.current
   val presenterScope = rememberCoroutineScope()
   val toast = LocalToast.current
   val clipboard = EntityClipboardService
@@ -99,9 +101,6 @@ fun FolderScreen(entityId: String) {
   var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   var animatedPasteBarVisible by remember { mutableStateOf(false) }
-  var deleteRequest by remember(entityId) { mutableStateOf<FolderDeleteRequest?>(null) }
-  var documentDeleteRequest by remember(entityId) { mutableStateOf<DocumentDeleteRequest?>(null) }
-
   LaunchedEffect(entityId) {
     model.entityId = entityId
     isReordering = false
@@ -333,12 +332,18 @@ fun FolderScreen(entityId: String) {
           return
         }
         closePopover()
-        deleteRequest =
-          FolderDeleteRequest(
-            entityId = entityId,
-            folderName = resolvedFolder.name,
-            shouldPopOnSuccess = true,
-          )
+        presenterScope.launch {
+          val result =
+            dialog.confirm(
+              title = "폴더 삭제",
+              message = "\"${resolvedFolder.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+              confirmText = "삭제하기",
+              confirmIsDestructive = true,
+            )
+          if (result is DialogResult.Resolved) {
+            model.deleteFolderEntity(entityId).withDefaultExceptionHandler(toast).onOk { nav.pop() }
+          }
+        }
       }
     }
   }
@@ -400,44 +405,10 @@ fun FolderScreen(entityId: String) {
 
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { SpaceBottomBarActionButton() })
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.refetch() }
-  }
-
-  deleteRequest?.let { request ->
-    ConfirmModal(
-      title = "폴더 삭제",
-      message = "\"${request.folderName}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-      confirmText = "삭제하기",
-      confirmIsDestructive = true,
-      onConfirm = {
-        deleteRequest = null
-        presenterScope.launch {
-          model.deleteFolderEntity(request.entityId).withDefaultExceptionHandler(toast).onOk {
-            if (request.shouldPopOnSuccess) {
-              nav.pop()
-            }
-          }
-        }
-      },
-      onDismiss = { deleteRequest = null },
-    )
-  }
-
-  documentDeleteRequest?.let { request ->
-    ConfirmModal(
-      title = "문서 삭제",
-      message = "\"${request.documentTitle}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-      confirmText = "삭제하기",
-      confirmIsDestructive = true,
-      onConfirm = {
-        documentDeleteRequest = null
-        presenterScope.launch {
-          model.deleteDocument(request.documentId).withDefaultExceptionHandler(toast)
-        }
-      },
-      onDismiss = { documentDeleteRequest = null },
-    )
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.refetch() })
+    }
   }
 
   Screen(
@@ -528,11 +499,18 @@ fun FolderScreen(entityId: String) {
                   }
 
                   FolderAction.Delete -> {
-                    documentDeleteRequest =
-                      DocumentDeleteRequest(
-                        documentId = item.documentId,
-                        documentTitle = item.title,
-                      )
+                    presenterScope.launch {
+                      val result =
+                        dialog.confirm(
+                          title = "문서 삭제",
+                          message = "\"${item.title}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                          confirmText = "삭제하기",
+                          confirmIsDestructive = true,
+                        )
+                      if (result is DialogResult.Resolved) {
+                        model.deleteDocument(item.documentId).withDefaultExceptionHandler(toast)
+                      }
+                    }
                   }
 
                   FolderAction.SelectMultiple,
@@ -601,12 +579,18 @@ fun FolderScreen(entityId: String) {
                   }
 
                   FolderAction.Delete -> {
-                    deleteRequest =
-                      FolderDeleteRequest(
-                        entityId = item.id,
-                        folderName = item.name,
-                        shouldPopOnSuccess = false,
-                      )
+                    presenterScope.launch {
+                      val result =
+                        dialog.confirm(
+                          title = "폴더 삭제",
+                          message = "\"${item.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                          confirmText = "삭제하기",
+                          confirmIsDestructive = true,
+                        )
+                      if (result is DialogResult.Resolved) {
+                        model.deleteFolderEntity(item.id).withDefaultExceptionHandler(toast)
+                      }
+                    }
                   }
 
                   FolderAction.SelectMultiple,

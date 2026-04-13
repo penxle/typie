@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +42,6 @@ import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPill
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.ResponsiveContainer
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
@@ -49,6 +49,8 @@ import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.resolveResponsiveContainerMetrics
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -62,6 +64,7 @@ import co.typie.ui.theme.AppTheme
 fun HomeScreen() {
   val model = viewModel { HomeViewModel() }
   val nav = Nav.current
+  val dialog = LocalDialog.current
   val scrollState = rememberScrollState()
   val siteId = model.siteId
 
@@ -74,8 +77,10 @@ fun HomeScreen() {
 
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.refetch() })
+    }
   }
 
   Screen(

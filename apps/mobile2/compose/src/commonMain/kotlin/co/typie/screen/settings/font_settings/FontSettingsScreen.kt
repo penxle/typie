@@ -1,6 +1,5 @@
 package co.typie.screen.settings.font_settings
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,11 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -30,29 +26,31 @@ import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.platform.FilePickerSelectionMode
 import co.typie.platform.rememberFilePicker
+import co.typie.result.Result
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.screen.subscription.planUpgradeRoute
 import co.typie.screen.subscription.showPlanUpgradeSheet
 import co.typie.service.CurrentSubscriptionStore
 import co.typie.service.hasSubscriptionOrNull
-import co.typie.ui.component.AlertModal
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ConfirmModal
-import co.typie.ui.component.ErrorDialog
 import co.typie.ui.component.FontSpecimen
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.alert
+import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.familySpecimenFallbacks
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheetHost
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
@@ -65,19 +63,16 @@ import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
 
-private data class PendingFontDeletion(val familyDisplayName: String, val font: FontSettingsFont)
-
 @Composable
 fun FontSettingsScreen() {
   val model = viewModel { FontSettingsViewModel() }
   val nav = Nav.current
+  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val currentSubscriptionStore = CurrentSubscriptionStore
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
   val sheetHost = LocalSheetHost.current
-  var pendingFamilyDeletion by remember { mutableStateOf<FontSettingsFamily?>(null) }
-  var pendingFontDeletion by remember { mutableStateOf<PendingFontDeletion?>(null) }
   val currentSubscriptionState = currentSubscriptionStore.state
 
   val filePicker =
@@ -96,8 +91,11 @@ fun FontSettingsScreen() {
             },
             onSettled = { result ->
               toast.dismiss()
-              result.withDefaultExceptionHandler(toast).onOk { summary ->
-                model.state.uploadSummary = summary
+              val settled = result.withDefaultExceptionHandler(toast)
+              if (settled is Result.Ok && settled.value != null) {
+                val (title, message) = fontUploadSummaryDisplay(settled.value)
+                dialog.alert(title = title, message = message)
+                model.dismissUploadSummary()
               }
             },
           )
@@ -140,8 +138,10 @@ fun FontSettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  if (model.query.state is QueryState.Error) {
-    ErrorDialog { model.query.refetch() }
+  LaunchedEffect(model.query.state) {
+    if (model.query.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { model.query.refetch() })
+    }
   }
 
   Screen(
@@ -162,62 +162,43 @@ fun FontSettingsScreen() {
           family = family,
           deletingFamilyId = model.state.deletingFamilyId,
           deletingFontId = model.state.deletingFontId,
-          onDeleteFamilyClick = { pendingFamilyDeletion = family },
+          onDeleteFamilyClick = {
+            val result =
+              dialog.confirm(
+                title = "폰트 패밀리 삭제",
+                message = "\"${family.displayName}\" 폰트 패밀리 전체를 삭제하시겠어요?",
+                confirmText = "삭제",
+                confirmIsDestructive = true,
+              )
+            if (result is DialogResult.Resolved) {
+              model.deleteFamily(family).withDefaultExceptionHandler(toast).onOk {
+                toast.show(ToastType.Success, "\"${family.displayName}\" 폰트 패밀리를 삭제했어요.")
+              }
+            }
+          },
           onDeleteFontClick = { font ->
-            pendingFontDeletion =
-              PendingFontDeletion(familyDisplayName = family.displayName, font = font)
+            val result =
+              dialog.confirm(
+                title = "폰트 삭제",
+                message =
+                  "\"${family.displayName} ${fontWeightLabel(font.weight, font.subfamilyDisplayName)}\" 폰트를 삭제하시겠어요?",
+                confirmText = "삭제",
+                confirmIsDestructive = true,
+              )
+            if (result is DialogResult.Resolved) {
+              model.deleteFont(font).withDefaultExceptionHandler(toast).onOk {
+                toast.show(
+                  ToastType.Success,
+                  "\"${family.displayName} ${fontWeightLabel(font.weight, font.subfamilyDisplayName)}\" 폰트를 삭제했어요.",
+                )
+              }
+            }
           },
         )
       }
     }
 
     Spacer(Modifier.height(72.dp))
-  }
-
-  pendingFamilyDeletion?.let { family ->
-    ConfirmModal(
-      title = "폰트 패밀리 삭제",
-      message = "\"${family.displayName}\" 폰트 패밀리 전체를 삭제하시겠어요?",
-      confirmText = "삭제",
-      confirmIsDestructive = true,
-      onConfirm = {
-        pendingFamilyDeletion = null
-        model.deleteFamily(family).withDefaultExceptionHandler(toast).onOk {
-          toast.show(ToastType.Success, "\"${family.displayName}\" 폰트 패밀리를 삭제했어요.")
-        }
-      },
-      onDismiss = { pendingFamilyDeletion = null },
-    )
-  }
-
-  pendingFontDeletion?.let { pending ->
-    ConfirmModal(
-      title = "폰트 삭제",
-      message =
-        "\"${pending.familyDisplayName} ${fontWeightLabel(pending.font.weight, pending.font.subfamilyDisplayName)}\" 폰트를 삭제하시겠어요?",
-      confirmText = "삭제",
-      confirmIsDestructive = true,
-      onConfirm = {
-        pendingFontDeletion = null
-        model.deleteFont(pending.font).withDefaultExceptionHandler(toast).onOk {
-          toast.show(
-            ToastType.Success,
-            "\"${pending.familyDisplayName} ${fontWeightLabel(pending.font.weight, pending.font.subfamilyDisplayName)}\" 폰트를 삭제했어요.",
-          )
-        }
-      },
-      onDismiss = { pendingFontDeletion = null },
-    )
-  }
-
-  model.state.uploadSummary?.let { summary ->
-    val (title, message) = fontUploadSummaryDisplay(summary)
-    AlertModal(
-      title = title,
-      message = message,
-      onConfirm = { model.dismissUploadSummary() },
-      onDismiss = { model.dismissUploadSummary() },
-    )
   }
 }
 
