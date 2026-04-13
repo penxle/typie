@@ -1,4 +1,4 @@
-package co.typie.cache
+package co.typie.storage
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO

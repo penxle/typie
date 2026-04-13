@@ -1,4 +1,4 @@
-package co.typie.cache
+package co.typie.storage
 
 import co.typie.platform.PlatformModule
 import java.io.File

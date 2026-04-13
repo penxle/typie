@@ -1,8 +1,8 @@
 package co.typie.platform
 
-import co.typie.cache.DiskCache
 import co.typie.editor.ffi.EditorHost
 import co.typie.migration.LegacyMigrationPlatformSource
+import co.typie.storage.DiskCache
 import eu.anifantakis.lib.ksafe.KSafe
 
 enum class Platform {

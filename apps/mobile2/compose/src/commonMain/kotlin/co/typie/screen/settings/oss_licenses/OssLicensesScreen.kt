@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.generated.resources.Res
 import co.typie.icons.Lucide
+import co.typie.serialization.json
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
@@ -38,7 +39,6 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
 private sealed interface OssLicensesScreenState {
@@ -64,8 +64,6 @@ private data class AboutLibrariesLibrary(
 @Serializable
 private data class AboutLibrariesLicense(val name: String? = null, val content: String? = null)
 
-private val ossLicensesJson = Json { ignoreUnknownKeys = true }
-
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 fun OssLicensesScreen() {
@@ -80,7 +78,7 @@ fun OssLicensesScreen() {
     state =
       runCatching {
           val payload =
-            ossLicensesJson.decodeFromString<AboutLibrariesPayload>(
+            json.decodeFromString<AboutLibrariesPayload>(
               Res.readBytes("files/aboutlibraries.json").decodeToString()
             )
           OssLicensesScreenState.Loaded(aboutLibrariesPayloadToEntries(payload))

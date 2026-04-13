@@ -1,4 +1,4 @@
-package co.typie.cache
+package co.typie.storage
 
 import okio.Path
 import okio.Path.Companion.toPath

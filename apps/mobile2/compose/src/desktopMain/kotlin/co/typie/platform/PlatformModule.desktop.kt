@@ -1,12 +1,12 @@
 package co.typie.platform
 
-import co.typie.cache.DiskCache
-import co.typie.cache.diskCache
 import co.typie.editor.ffi.BackendKind
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.JnaEditorHost
 import co.typie.migration.DesktopLegacyMigrationPlatformSource
 import co.typie.migration.LegacyMigrationPlatformSource
+import co.typie.storage.DiskCache
+import co.typie.storage.diskCache
 import eu.anifantakis.lib.ksafe.KSafe
 import eu.anifantakis.lib.ksafe.KSafeMemoryPolicy
 import kotlinx.coroutines.runBlocking
