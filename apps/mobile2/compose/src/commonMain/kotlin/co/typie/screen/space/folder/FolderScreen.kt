@@ -571,6 +571,7 @@ fun FolderScreen(entityId: String) {
               .verticalScroll(scrollState)
               .padding(contentPadding)
               .safeBottomPadding(),
+          header = {},
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
           onDocumentLongPress = { item ->
             if (selectionState.isSelecting) {
