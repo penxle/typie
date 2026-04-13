@@ -54,6 +54,7 @@ kotlin {
 
   compilerOptions {
     freeCompilerArgs.add("-Xexpect-actual-classes")
+    freeCompilerArgs.add("-Xcontext-parameters")
     freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
   }
 

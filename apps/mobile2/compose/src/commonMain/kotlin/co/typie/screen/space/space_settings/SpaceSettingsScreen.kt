@@ -45,8 +45,10 @@ import co.typie.platform.rememberFilePicker
 import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.screen.subscription.PlanUpgradeContent
+import co.typie.screen.subscription.PlanUpgradeSheetResult
+import co.typie.screen.subscription.SubscriptionCelebrationContent
 import co.typie.screen.subscription.planUpgradeRoute
-import co.typie.screen.subscription.showPlanUpgradeSheet
 import co.typie.service.CurrentSubscriptionStore
 import co.typie.service.hasSubscriptionOrNull
 import co.typie.ui.component.AlertBanner
@@ -72,16 +74,14 @@ import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
 import co.typie.ui.component.sheet.SheetPadding
-import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.SheetScope
-import co.typie.ui.component.sheet.completedOrNull
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.icon.Icon
@@ -114,7 +114,7 @@ fun SpaceSettingsScreen() {
   val model = viewModel { SpaceSettingsViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val scrollState = rememberScrollState()
   val currentSubscriptionState = CurrentSubscriptionStore.state
 
@@ -220,12 +220,18 @@ fun SpaceSettingsScreen() {
                     if (hasSubscription == false) {
                       Modifier.clickable {
                         scope.launch {
-                          planUpgradeRoute(
-                              sheetHost.showPlanUpgradeSheet(
-                                message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                          val upgradeResult = sheet.present {
+                            PlanUpgradeContent(message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.")
+                          }
+                          if (upgradeResult is PlanUpgradeSheetResult.TrialStarted) {
+                            sheet.present {
+                              SubscriptionCelebrationContent(
+                                title = upgradeResult.celebration.title,
+                                message = upgradeResult.celebration.message,
                               )
-                            )
-                            ?.let { route -> nav.navigate(route) }
+                            }
+                          }
+                          planUpgradeRoute(upgradeResult)?.let { route -> nav.navigate(route) }
                         }
                       }
                     } else {
@@ -269,14 +275,14 @@ fun SpaceSettingsScreen() {
         CardSurface(modifier = Modifier.fillMaxWidth()) {
           CardRow(
             onClick = {
-              sheetHost.show(
-                spaceDateDisplaySheet(selected = model.state.form.dateDisplay.value),
-                onResult = { result ->
-                  result.completedOrNull()?.let { selected ->
-                    model.state.form.dateDisplay.setValue(selected)
-                  }
-                },
-              )
+              scope.launch {
+                val result = sheet.present {
+                  SpaceDateDisplayContent(selected = model.state.form.dateDisplay.value)
+                }
+                if (result != null) {
+                  model.state.form.dateDisplay.setValue(result)
+                }
+              }
             }
           ) {
             SpaceSettingsRowContent(
@@ -324,34 +330,35 @@ private fun RowScope.SpaceSettingsRowContent(
   )
 }
 
-private fun spaceDateDisplaySheet(selected: SiteDateDisplay): SheetPresentation<SiteDateDisplay> =
-  sheetPresentation {
-    SheetLayout(
-      padding = SpaceDateDisplaySheetPadding,
-      verticalSpacing = 8.dp,
-      header = { ActionHeader(title = "글 목록에 표시할 날짜") },
-    ) {
-      SheetOptionList(items = spaceDateDisplayOptions()) { item ->
-        SheetOptionRow(selected = item.value == selected, onClick = { complete(item.value) }) {
-          Text(
-            text = item.label,
-            style = AppTheme.typography.action,
-            modifier = Modifier.fillMaxWidth(),
-            color = AppTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
+@Composable
+context(_: SheetScope<SiteDateDisplay>)
+private fun SpaceDateDisplayContent(selected: SiteDateDisplay) {
+  SheetLayout(
+    padding = SpaceDateDisplaySheetPadding,
+    verticalSpacing = 8.dp,
+    header = { ActionHeader(title = "글 목록에 표시할 날짜") },
+  ) {
+    SheetOptionList(items = spaceDateDisplayOptions()) { item ->
+      SheetOptionRow(selected = item.value == selected, onClick = { complete(item.value) }) {
+        Text(
+          text = item.label,
+          style = AppTheme.typography.action,
+          modifier = Modifier.fillMaxWidth(),
+          color = AppTheme.colors.textPrimary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
       }
     }
   }
+}
 
 @Composable
 private fun MoreMenu(model: SpaceSettingsViewModel, dialog: Dialog) {
   val nav = Nav.current
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
 
   Popover(
     placement = PopoverPlacement.BelowEnd,
@@ -392,24 +399,26 @@ private fun MoreMenu(model: SpaceSettingsViewModel, dialog: Dialog) {
                       )
                     }
                   } else {
-                    sheetHost.show(
-                      deleteSiteConfirmSheet(
-                        documentCount = data.site.documentCount,
-                        folderCount = data.site.folderCount,
-                        isDeleting = { model.isDeletingSite },
-                        onDelete = {
-                          if (!model.isDeletingSite) {
-                            scope.launch {
-                              model.deleteSite().withDefaultExceptionHandler(toast).onOk {
-                                toast.show(ToastType.Success, "스페이스가 삭제되었어요.")
-                                complete(Unit)
-                                nav.pop()
+                    scope.launch {
+                      sheet.present {
+                        DeleteSiteConfirmContent(
+                          documentCount = data.site.documentCount,
+                          folderCount = data.site.folderCount,
+                          isDeleting = { model.isDeletingSite },
+                          onDelete = {
+                            if (!model.isDeletingSite) {
+                              scope.launch {
+                                model.deleteSite().withDefaultExceptionHandler(toast).onOk {
+                                  toast.show(ToastType.Success, "스페이스가 삭제되었어요.")
+                                  complete(Unit)
+                                  nav.pop()
+                                }
                               }
                             }
-                          }
-                        },
-                      )
-                    )
+                          },
+                        )
+                      }
+                    }
                   }
                 },
               )
@@ -460,12 +469,16 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
   }
 }
 
-private fun deleteSiteConfirmSheet(
+@Composable
+context(_: SheetScope<Unit>)
+private fun DeleteSiteConfirmContent(
   documentCount: Int,
   folderCount: Int,
   isDeleting: () -> Boolean,
-  onDelete: suspend SheetScope<Unit>.() -> Unit,
-): SheetPresentation<Unit> = sheetPresentation {
+  onDelete:
+    suspend context(SheetScope<Unit>)
+    () -> Unit,
+) {
   val isDeleting = isDeleting()
   var inputValue by remember { mutableStateOf("") }
   val confirmText = "$documentCount"

@@ -53,22 +53,12 @@ import co.typie.ui.EntityIconColorOption
 import co.typie.ui.EntityIconOption
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
-import co.typie.ui.component.sheet.SheetChrome
-import co.typie.ui.component.sheet.SheetCollapsePolicy
-import co.typie.ui.component.sheet.SheetDetent
-import co.typie.ui.component.sheet.SheetDragDismissBehavior
-import co.typie.ui.component.sheet.SheetHapticPolicy
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetMode
-import co.typie.ui.component.sheet.SheetOverlaySpec
 import co.typie.ui.component.sheet.SheetPadding
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.SheetSizePolicy
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.sheet.rememberSheetBoundaryHandoffFlingBehavior
-import co.typie.ui.component.sheet.sheetDragRegion
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.entityIconColors
 import co.typie.ui.entityIcons
 import co.typie.ui.icon.Icon
@@ -86,8 +76,11 @@ private val EntityIconPickerSelectionDotSize = 4.dp
 private val EntityIconPickerSelectionDotBottomInset = 4.dp
 private val EntityIconPickerGridBottomInset = 12.dp
 private val EntityIconPickerTopFadeHeight = 16.dp
-private val EntityIconPickerCollapsedDetent = SheetDetent.Fixed(EntityIconPickerCollapsedHeight)
-private val EntityIconPickerExpandedDetent = SheetDetent.TopGap(EntityIconPickerExpandedTopGap)
+internal val EntityIconPickerStops =
+  listOf(
+    SheetStop.Bottom(EntityIconPickerCollapsedHeight),
+    SheetStop.Top(EntityIconPickerExpandedTopGap),
+  )
 
 internal interface EntityIconSheetModel {
   suspend fun updateEntityIcon(
@@ -97,162 +90,144 @@ internal interface EntityIconSheetModel {
   ): Result<Unit, Nothing>
 }
 
-internal fun entityIconPickerSheet(
+@Composable
+context(_: SheetScope<Unit>)
+internal fun EntityIconPickerContent(
   model: EntityIconSheetModel,
   entityId: String,
   initialIcon: String?,
   initialColor: String?,
   defaultIconName: String,
   onUpdated: () -> Unit = {},
-): SheetPresentation<Unit> =
-  sheetPresentation(
-    spec =
-      SheetOverlaySpec(
-        mode = SheetMode.Modal,
-        sizePolicy =
-          SheetSizePolicy.Detents(
-            initial = EntityIconPickerCollapsedDetent,
-            available = listOf(EntityIconPickerCollapsedDetent, EntityIconPickerExpandedDetent),
-            collapsePolicy = SheetCollapsePolicy.ProgrammaticOnly,
-            dragDismissBehavior = SheetDragDismissBehavior.FromCurrentDetent,
-          ),
-        chrome = SheetChrome.Default,
-        haptics = SheetHapticPolicy(onPresent = true, onDetentSnap = true),
+) {
+  val normalizedInitialIcon = initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: defaultIconName
+  val normalizedInitialColor =
+    initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
+  val toast = LocalToast.current
+  val scope = rememberCoroutineScope()
+  val form =
+    remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
+      EntityIconPickerForm(
+        scope = scope,
+        initialIconName = normalizedInitialIcon,
+        initialColor = normalizedInitialColor,
       )
-  ) {
-    val normalizedInitialIcon = initialIcon?.trim()?.takeIf { it.isNotEmpty() } ?: defaultIconName
-    val normalizedInitialColor =
-      initialColor?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_ENTITY_ICON_COLOR
-    val toast = LocalToast.current
-    val scope = rememberCoroutineScope()
-    val form =
-      remember(entityId, normalizedInitialIcon, normalizedInitialColor) {
-        EntityIconPickerForm(
-          scope = scope,
-          initialIconName = normalizedInitialIcon,
-          initialColor = normalizedInitialColor,
-        )
-      }
-
-    var isUpdating by remember { mutableStateOf(false) }
-
-    fun updateSelection(nextIconName: String, nextColor: String) {
-      if (isUpdating) {
-        return
-      }
-
-      if (form.iconName.initialValue == nextIconName && form.color.initialValue == nextColor) {
-        return
-      }
-
-      form.iconName.setValue(nextIconName)
-      form.color.setValue(nextColor)
-      isUpdating = true
-
-      scope.launch {
-        model
-          .updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
-          .withDefaultExceptionHandler(toast)
-          .onOk {
-            form.commit()
-            onUpdated()
-          }
-          .onException { form.rollback() }
-        isUpdating = false
-      }
     }
 
-    val currentTint =
-      resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
-    val iconGridState = rememberLazyGridState()
-    val iconGridFlingBehavior =
-      rememberSheetBoundaryHandoffFlingBehavior(
-        isAtSheetDismissBoundary = { !iconGridState.canScrollBackward }
+  var isUpdating by remember { mutableStateOf(false) }
+
+  fun updateSelection(nextIconName: String, nextColor: String) {
+    if (isUpdating) {
+      return
+    }
+
+    if (form.iconName.initialValue == nextIconName && form.color.initialValue == nextColor) {
+      return
+    }
+
+    form.iconName.setValue(nextIconName)
+    form.color.setValue(nextColor)
+    isUpdating = true
+
+    scope.launch {
+      model
+        .updateEntityIcon(entityId = entityId, icon = nextIconName, iconColor = nextColor)
+        .withDefaultExceptionHandler(toast)
+        .onOk {
+          form.commit()
+          onUpdated()
+        }
+        .onException { form.rollback() }
+      isUpdating = false
+    }
+  }
+
+  val currentTint =
+    resolveEntityIconTint(form.color.value, AppTheme.colors) ?: AppTheme.colors.textSecondary
+  val iconGridState = rememberLazyGridState()
+
+  SheetLayout(
+    fillHeight = true,
+    bodyScroll = false,
+    bodyInsetPolicy = SheetInsetPolicy.None,
+    padding =
+      SheetPadding(
+        header = PaddingValues(horizontal = 16.dp),
+        body = PaddingValues(horizontal = 16.dp),
+      ),
+    header = {
+      ActionHeader(
+        title = "아이콘 변경",
+        leading = {
+          HeaderTextAction(
+            text = "완료",
+            color = AppTheme.colors.brand,
+            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
+            enabled = !isUpdating,
+            onClick = { dismiss() },
+          )
+        },
+      )
+    },
+  ) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      IconColorRow(
+        colors = entityIconColors,
+        selectedColor = form.color.value,
+        enabled = !isUpdating,
+        modifier = Modifier,
+        onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
       )
 
-    SheetLayout(
-      fillHeight = true,
-      bodyScroll = false,
-      bodyInsetPolicy = SheetInsetPolicy.None,
-      padding =
-        SheetPadding(
-          header = PaddingValues(horizontal = 16.dp),
-          body = PaddingValues(horizontal = 16.dp),
-        ),
-      header = {
-        ActionHeader(
-          title = "아이콘 변경",
-          leading = {
-            HeaderTextAction(
-              text = "완료",
-              color = AppTheme.colors.brand,
-              textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
+      Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+        val safeBottom =
+          WindowInsets.safeDrawing
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
+
+        LazyVerticalGrid(
+          columns = GridCells.Fixed(7),
+          state = iconGridState,
+          modifier =
+            Modifier.fillMaxSize()
+              .desktopDragScroll(state = iconGridState, orientation = Orientation.Vertical),
+          contentPadding = PaddingValues(bottom = EntityIconPickerGridBottomInset + safeBottom),
+          horizontalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
+          verticalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
+        ) {
+          items(entityIcons, key = { it.name }) { icon ->
+            IconGridCell(
+              icon = icon,
+              tint = currentTint,
+              selected = form.iconName.value == icon.name,
               enabled = !isUpdating,
-              onClick = { dismiss() },
+              onSelect = { updateSelection(icon.name, form.color.value) },
             )
-          },
-        )
-      },
-    ) {
-      Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        IconColorRow(
-          colors = entityIconColors,
-          selectedColor = form.color.value,
-          enabled = !isUpdating,
-          modifier = Modifier.sheetDragRegion(),
-          onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
-        )
+          }
+        }
 
-        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-          val safeBottom =
-            WindowInsets.safeDrawing
-              .only(WindowInsetsSides.Bottom)
-              .asPaddingValues()
-              .calculateBottomPadding()
-
-          LazyVerticalGrid(
-            columns = GridCells.Fixed(7),
-            state = iconGridState,
-            flingBehavior = iconGridFlingBehavior,
+        if (iconGridState.canScrollBackward) {
+          Box(
             modifier =
-              Modifier.fillMaxSize()
-                .desktopDragScroll(state = iconGridState, orientation = Orientation.Vertical),
-            contentPadding = PaddingValues(bottom = EntityIconPickerGridBottomInset + safeBottom),
-            horizontalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
-            verticalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
-          ) {
-            items(entityIcons, key = { it.name }) { icon ->
-              IconGridCell(
-                icon = icon,
-                tint = currentTint,
-                selected = form.iconName.value == icon.name,
-                enabled = !isUpdating,
-                onSelect = { updateSelection(icon.name, form.color.value) },
-              )
-            }
-          }
-
-          if (iconGridState.canScrollBackward) {
-            Box(
-              modifier =
-                Modifier.align(Alignment.TopCenter)
-                  .fillMaxWidth()
-                  .height(EntityIconPickerTopFadeHeight)
-                  .background(
-                    Brush.verticalGradient(
-                      colors =
-                        listOf(
-                          AppTheme.colors.surfaceRaised,
-                          AppTheme.colors.surfaceRaised.copy(alpha = 0f),
-                        )
-                    )
+              Modifier.align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(EntityIconPickerTopFadeHeight)
+                .background(
+                  Brush.verticalGradient(
+                    colors =
+                      listOf(
+                        AppTheme.colors.surfaceRaised,
+                        AppTheme.colors.surfaceRaised.copy(alpha = 0f),
+                      )
                   )
-            )
-          }
+                )
+          )
         }
       }
     }
   }
+}
 
 private class EntityIconPickerForm(
   scope: CoroutineScope,

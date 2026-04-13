@@ -2,6 +2,7 @@ package co.typie.screen.space.folder
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,9 +20,8 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -30,12 +30,14 @@ private class FolderRenameForm(scope: CoroutineScope, initialName: String) : For
   val name = field(initialName) { validateOn(ValidateOn.Change) { required("폴더 이름을 입력해주세요.") } }
 }
 
-fun folderRenameSheet(
+@Composable
+context(_: SheetScope<Unit>)
+fun FolderRenameContent(
   model: FolderViewModel,
   folderId: String,
   initialName: String,
   onUpdated: () -> Unit = {},
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(folderId, initialName) { FolderRenameForm(scope, initialName) }

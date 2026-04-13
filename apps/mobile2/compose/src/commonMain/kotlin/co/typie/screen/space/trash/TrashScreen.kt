@@ -50,13 +50,12 @@ import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
-import co.typie.ui.component.sheet.LocalSheetHost
-import co.typie.ui.component.sheet.SheetDismissReason
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetMenuActionRow
 import co.typie.ui.component.sheet.SheetPadding
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
@@ -131,7 +130,7 @@ fun TrashScreen(entityId: String? = null) {
   val dialog = LocalDialog.current
   val toast = LocalToast.current
   val model = viewModel(key = "trash:${entityId ?: "site"}") { TrashViewModel() }
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val screenScope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   LaunchedEffect(entityId) {
@@ -144,48 +143,50 @@ fun TrashScreen(entityId: String? = null) {
   val dangerColor = AppTheme.colors.danger
 
   fun showItemActionsSheet(item: TrashItem) {
-    sheetHost.show(
-      trashActionsSheet(
-        item = item,
-        actions =
-          listOf(
-            TrashActionItem(
-              label = "복원",
-              icon = Lucide.Undo2,
-              onClick = {
-                model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
-                  toast.show(ToastType.Success, message)
-                  model.refetch()
-                }
-              },
-            ),
-            TrashActionItem(
-              label = "영구 삭제",
-              icon = Lucide.Trash2,
-              tint = dangerColor,
-              onClick = {
-                val result =
-                  dialog.confirm(
-                    title = "${item.type.label} 영구 삭제",
-                    message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
-                    confirmText = "삭제",
-                    confirmIsDestructive = true,
-                  )
-                if (result is DialogResult.Resolved) {
-                  model.purgeEntities(listOf(item.id)).withDefaultExceptionHandler(toast).onOk {
-                    toast.show(
-                      ToastType.Success,
-                      "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
-                    )
+    screenScope.launch {
+      sheet.present {
+        TrashActionsContent(
+          item = item,
+          actions =
+            listOf(
+              TrashActionItem(
+                label = "복원",
+                icon = Lucide.Undo2,
+                onClick = {
+                  model.recoverEntity(item).withDefaultExceptionHandler(toast).onOk { message ->
+                    toast.show(ToastType.Success, message)
                     model.refetch()
                   }
-                }
-              },
+                },
+              ),
+              TrashActionItem(
+                label = "영구 삭제",
+                icon = Lucide.Trash2,
+                tint = dangerColor,
+                onClick = {
+                  val result =
+                    dialog.confirm(
+                      title = "${item.type.label} 영구 삭제",
+                      message = "영구 삭제한 ${item.type.label}는 복원할 수 없어요. 정말 삭제하시겠어요?",
+                      confirmText = "삭제",
+                      confirmIsDestructive = true,
+                    )
+                  if (result is DialogResult.Resolved) {
+                    model.purgeEntities(listOf(item.id)).withDefaultExceptionHandler(toast).onOk {
+                      toast.show(
+                        ToastType.Success,
+                        "\"${item.title}\" ${item.type.label}가 영구 삭제되었어요.",
+                      )
+                      model.refetch()
+                    }
+                  }
+                },
+              ),
             ),
-          ),
-        onAction = { action -> sheetHost.launch { action.onClick() } },
-      )
-    )
+          onAction = { action -> screenScope.launch { action.onClick() } },
+        )
+      }
+    }
   }
 
   LaunchedEffect(queryState, entityId) {
@@ -375,11 +376,13 @@ fun TrashScreen(entityId: String? = null) {
   }
 }
 
-private fun trashActionsSheet(
+@Composable
+context(_: SheetScope<Unit>)
+private fun TrashActionsContent(
   item: TrashItem,
   actions: List<TrashActionItem>,
   onAction: (TrashActionItem) -> Unit,
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val entityIcon =
     resolveEntityIconAppearance(
       iconName = item.iconName,
@@ -422,7 +425,7 @@ private fun trashActionsSheet(
           contentPadding = MenuSheetRowPadding,
           tint = action.tint,
           onClick = {
-            dismiss(SheetDismissReason.Programmatic)
+            dismiss()
             onAction(action)
           },
         )

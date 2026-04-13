@@ -44,13 +44,13 @@ import co.typie.platform.PurchaseProduct
 import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.screen.subscription.SubscriptionCelebrationContent
 import co.typie.screen.subscription.SubscriptionFeature
 import co.typie.screen.subscription.SubscriptionFeatureList
 import co.typie.screen.subscription.SubscriptionProductState
 import co.typie.screen.subscription.SubscriptionStatusBadge
 import co.typie.screen.subscription.basicPlanFeatures
 import co.typie.screen.subscription.fullPlanFeatures
-import co.typie.screen.subscription.subscriptionCelebrationSheet
 import co.typie.screen.subscription.subscriptionProductState
 import co.typie.screen.subscription.subscriptionStatusBadgeLabel
 import co.typie.service.CurrentSubscriptionStore
@@ -70,7 +70,7 @@ import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -83,7 +83,7 @@ import kotlinx.coroutines.launch
 fun EnrollPlanScreen() {
   val nav = Nav.current
   val dialog = LocalDialog.current
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val toast = LocalToast.current
   val loader = LocalLoader.current
   val model = viewModel { EnrollPlanViewModel() }
@@ -93,9 +93,9 @@ fun EnrollPlanScreen() {
 
   LaunchedEffect(model.celebration) {
     val celebration = model.celebration ?: return@LaunchedEffect
-    sheetHost.show(
-      subscriptionCelebrationSheet(title = celebration.title, message = celebration.message)
-    )
+    sheet.present {
+      SubscriptionCelebrationContent(title = celebration.title, message = celebration.message)
+    }
     model.consumeCelebration()
   }
 

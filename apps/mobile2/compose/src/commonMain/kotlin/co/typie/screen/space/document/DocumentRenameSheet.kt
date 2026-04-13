@@ -2,6 +2,7 @@ package co.typie.screen.space.document
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,9 +21,8 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -39,12 +39,14 @@ internal interface DocumentRenameSheetModel {
   ): Result<Unit, Nothing>
 }
 
-internal fun documentRenameSheet(
+@Composable
+context(_: SheetScope<Unit>)
+internal fun DocumentRenameContent(
   model: DocumentRenameSheetModel,
   documentId: String,
   initialTitle: String,
   onUpdated: () -> Unit = {},
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(documentId, initialTitle) { DocumentRenameForm(scope, initialTitle) }

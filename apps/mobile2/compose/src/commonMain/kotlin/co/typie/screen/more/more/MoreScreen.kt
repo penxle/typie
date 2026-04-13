@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,7 +47,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -55,12 +56,14 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun MoreScreen() {
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
+  val scope = rememberCoroutineScope()
   val dialog = LocalDialog.current
 
   val model = viewModel { MoreViewModel() }
@@ -310,7 +313,7 @@ fun MoreScreen() {
       }
 
       CardActionTile(
-        onClick = { sheetHost.show(feedbackSheet()) },
+        onClick = { scope.launch { sheet.present { FeedbackContent() } } },
         modifier = Modifier.weight(1f),
       ) {
         Row(

@@ -58,8 +58,8 @@ import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
@@ -116,14 +116,16 @@ private fun folderVisibilityOptions(): List<FolderVisibilityOption> {
   )
 }
 
-fun folderShareSheet(
+@Composable
+context(_: SheetScope<Unit>)
+fun FolderShareContent(
   model: FolderViewModel,
   folderId: String,
   folderUrl: String,
   initialVisibility: EntityVisibility,
   initialThumbnailUrl: String?,
   onUpdated: () -> Unit = {},
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val share = PlatformModule.share
   val toast = LocalToast.current
   val dialog = LocalDialog.current

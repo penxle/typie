@@ -52,21 +52,20 @@ import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
-import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.TitleHeader
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen() {
-  val sheetHost = LocalSheetHost.current
-  val loginSheet = remember { loginSheet() }
+  val sheet = LocalSheet.current
+  val scope = rememberCoroutineScope()
 
   ProvideTopBar(enabled = false)
 
@@ -97,7 +96,7 @@ fun LoginScreen() {
           verticalArrangement = Arrangement.spacedBy(8.dp),
           horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-          Button(text = "시작하기", onClick = { sheetHost.show(loginSheet) })
+          Button(text = "시작하기", onClick = { scope.launch { sheet.present { LoginContent() } } })
         }
       }
     }
@@ -111,7 +110,9 @@ private enum class LoginStep {
 
 private val LoginStepHorizontalPadding = 16.dp
 
-private fun loginSheet(): SheetPresentation<Unit> = sheetPresentation {
+@Composable
+context(_: SheetScope<Unit>)
+private fun LoginContent() {
   var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
 
   SheetLayout(

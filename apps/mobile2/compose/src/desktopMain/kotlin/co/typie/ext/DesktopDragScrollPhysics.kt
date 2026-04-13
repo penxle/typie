@@ -1,11 +1,11 @@
 package co.typie.ext
 
-import co.typie.ui.component.sheet.SHEET_BOUNDARY_FLING_HANDOFF_VELOCITY_THRESHOLD
 import kotlin.math.abs
 import kotlin.math.sign
 
 internal const val FLING_VELOCITY_MULTIPLIER = 0.72f
 internal const val CONSUMPTION_EPSILON = 0.5f
+private const val SHEET_BOUNDARY_FLING_HANDOFF_VELOCITY_THRESHOLD = 2400f
 
 private const val BOUNDARY_FLING_ELASTIC_OVERSCROLL_IMPULSE_MULTIPLIER = 0.02f
 private const val BOUNDARY_FLING_ELASTIC_OVERSCROLL_MAX_DELTA = 72f

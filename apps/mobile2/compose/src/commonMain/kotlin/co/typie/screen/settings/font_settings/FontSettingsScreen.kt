@@ -29,8 +29,10 @@ import co.typie.platform.rememberFilePicker
 import co.typie.result.Result
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.screen.subscription.PlanUpgradeContent
+import co.typie.screen.subscription.PlanUpgradeSheetResult
+import co.typie.screen.subscription.SubscriptionCelebrationContent
 import co.typie.screen.subscription.planUpgradeRoute
-import co.typie.screen.subscription.showPlanUpgradeSheet
 import co.typie.service.CurrentSubscriptionStore
 import co.typie.service.hasSubscriptionOrNull
 import co.typie.ui.component.Button
@@ -47,11 +49,11 @@ import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.familySpecimenFallbacks
 import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
@@ -72,7 +74,7 @@ fun FontSettingsScreen() {
   val currentSubscriptionStore = CurrentSubscriptionStore
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val currentSubscriptionState = currentSubscriptionStore.state
 
   val filePicker =
@@ -108,22 +110,32 @@ fun FontSettingsScreen() {
 
     when (currentSubscriptionState.hasSubscriptionOrNull()?.let(::fontUploadAction)) {
       FontUploadAction.PickFont -> {
-        sheetHost.show(
-          fontUploadSheet(
-            isUploading = model.state.isUploading,
-            uploadCurrentIndex = model.state.uploadCurrentIndex,
-            uploadTotalCount = model.state.uploadTotalCount,
-            onUploadClick = { filePicker("*/*") },
-          )
-        )
+        scope.launch {
+          sheet.present {
+            FontUploadContent(
+              isUploading = model.state.isUploading,
+              uploadCurrentIndex = model.state.uploadCurrentIndex,
+              uploadTotalCount = model.state.uploadTotalCount,
+              onUploadClick = { filePicker("*/*") },
+            )
+          }
+        }
       }
 
       FontUploadAction.ShowPlanUpgradeSheet -> {
         scope.launch {
-          planUpgradeRoute(
-              sheetHost.showPlanUpgradeSheet(message = "폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.")
-            )
-            ?.let { route -> nav.navigate(route) }
+          val result = sheet.present {
+            PlanUpgradeContent(message = "폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.")
+          }
+          if (result is PlanUpgradeSheetResult.TrialStarted) {
+            sheet.present {
+              SubscriptionCelebrationContent(
+                title = result.celebration.title,
+                message = result.celebration.message,
+              )
+            }
+          }
+          planUpgradeRoute(result)?.let { route -> nav.navigate(route) }
         }
       }
 
@@ -202,12 +214,14 @@ fun FontSettingsScreen() {
   }
 }
 
-private fun fontUploadSheet(
+@Composable
+context(_: SheetScope<Unit>)
+private fun FontUploadContent(
   isUploading: Boolean,
   uploadCurrentIndex: Int,
   uploadTotalCount: Int,
   onUploadClick: suspend () -> Unit,
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val loadingText =
     if (isUploading && uploadTotalCount > 0) {
       "업로드 중... (${uploadCurrentIndex.coerceAtLeast(1)}/$uploadTotalCount)"

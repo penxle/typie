@@ -60,11 +60,10 @@ import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
 import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -223,7 +222,7 @@ private fun PopoverScope.SpacePopoverPane(
   val nav = Nav.current
   val uriHandler = LocalUriHandler.current
   val scope = rememberCoroutineScope()
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val panePadding = PopoverDefaults.PanePadding
 
   Column(modifier = Modifier.padding(panePadding)) {
@@ -297,7 +296,7 @@ private fun PopoverScope.SpacePopoverPane(
               content = { SpacePopoverItem(icon = Lucide.Plus, label = "새 스페이스 생성") },
               onSelected = {
                 close()
-                sheetHost.show(createSpaceSheet(model))
+                scope.launch { sheet.present { CreateSpaceContent(model) } }
               },
             )
           )
@@ -306,51 +305,52 @@ private fun PopoverScope.SpacePopoverPane(
   }
 }
 
-private fun createSpaceSheet(model: SpacePopoverViewModel): SheetPresentation<Unit> =
-  sheetPresentation<Unit> {
-    var name by remember { mutableStateOf("") }
-    val toast = LocalToast.current
+@Composable
+context(_: SheetScope<Unit>)
+private fun CreateSpaceContent(model: SpacePopoverViewModel) {
+  var name by remember { mutableStateOf("") }
+  val toast = LocalToast.current
 
-    SheetLayout(bodyScroll = false, header = { ActionHeader(title = "새 스페이스 생성") }) {
-      Text(
-        text = "스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",
-        style = AppTheme.typography.body,
-        color = AppTheme.colors.textSecondary,
+  SheetLayout(bodyScroll = false, header = { ActionHeader(title = "새 스페이스 생성") }) {
+    Text(
+      text = "스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",
+      style = AppTheme.typography.body,
+      color = AppTheme.colors.textSecondary,
+    )
+
+    TextField(
+      value = name,
+      onValueChange = { name = it },
+      label = "스페이스 이름",
+      labelPosition = LabelPosition.External,
+      placeholder = "새 스페이스",
+      autoFocus = true,
+    )
+
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+      Button(
+        text = "취소",
+        variant = ButtonVariant.Secondary,
+        enabled = !model.isCreatingSite,
+        onClick = { dismiss() },
+        modifier = Modifier.weight(1f),
       )
 
-      TextField(
-        value = name,
-        onValueChange = { name = it },
-        label = "스페이스 이름",
-        labelPosition = LabelPosition.External,
-        placeholder = "새 스페이스",
-        autoFocus = true,
+      Button(
+        text = "생성",
+        loading = model.isCreatingSite,
+        enabled = !model.isCreatingSite,
+        onClick = {
+          model.createSite(name).withDefaultExceptionHandler(toast).onOk {
+            toast.show(ToastType.Success, "새 스페이스가 생성되었어요.")
+            dismiss()
+          }
+        },
+        modifier = Modifier.weight(1f),
       )
-
-      Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Button(
-          text = "취소",
-          variant = ButtonVariant.Secondary,
-          enabled = !model.isCreatingSite,
-          onClick = { dismiss() },
-          modifier = Modifier.weight(1f),
-        )
-
-        Button(
-          text = "생성",
-          loading = model.isCreatingSite,
-          enabled = !model.isCreatingSite,
-          onClick = {
-            model.createSite(name).withDefaultExceptionHandler(toast).onOk {
-              toast.show(ToastType.Success, "새 스페이스가 생성되었어요.")
-              dismiss()
-            }
-          },
-          modifier = Modifier.weight(1f),
-        )
-      }
     }
   }
+}
 
 @Composable
 private fun SpacePopoverHeader(site: SpacePopover_Query.Site) {

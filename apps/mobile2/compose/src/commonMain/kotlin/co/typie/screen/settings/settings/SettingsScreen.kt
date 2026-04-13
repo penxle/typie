@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,14 +43,13 @@ import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
 import co.typie.ui.component.sheet.SheetPadding
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.completedOrNull
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -59,6 +59,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
+import kotlinx.coroutines.launch
 
 data class SettingsItem(
   val label: String,
@@ -255,7 +256,8 @@ fun SettingsScreen() {
   val uriHandler = LocalUriHandler.current
   val model = viewModel { SettingsViewModel() }
   val dialog = LocalDialog.current
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
+  val scope = rememberCoroutineScope()
   val toast = LocalToast.current
   val currentSubscriptionStore = model.currentSubscriptionStore
   val subscriptionService = model.subscriptionService
@@ -303,15 +305,13 @@ fun SettingsScreen() {
         appVersion = appVersion,
         devModeEnabled = devModeEnabled,
         onThemeClick = {
-          sheetHost.show(
-            settingsThemeSheet(themeMode = themeModeState.value),
-            onResult = { result ->
-              result.completedOrNull()?.let {
-                // TODO: 테마 변경 트래킹
-                Preference.themeMode = it
-              }
-            },
-          )
+          scope.launch {
+            val result = sheet.present { SettingsThemeContent(themeMode = themeModeState.value) }
+            if (result != null) {
+              // TODO: 테마 변경 트래킹
+              Preference.themeMode = result
+            }
+          }
         },
         onVersionInfoClick = {
           val result =
@@ -470,37 +470,38 @@ private fun SettingsThemeRow(themeMode: ThemeMode, onClick: suspend () -> Unit) 
   }
 }
 
-private fun settingsThemeSheet(themeMode: ThemeMode): SheetPresentation<ThemeMode> =
-  sheetPresentation {
-    SheetLayout(
-      padding = SettingsThemeSheetPadding,
-      verticalSpacing = 8.dp,
-      header = { ActionHeader(title = "테마") },
-    ) {
-      SheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
-        SheetOptionRow(selected = item.selected, onClick = { complete(item.mode) }) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            Icon(
-              icon = item.icon,
-              modifier = Modifier.size(18.dp),
-              tint = AppTheme.colors.textSecondary,
-            )
-            Text(
-              text = item.label,
-              style = AppTheme.typography.action,
-              modifier = Modifier.weight(1f),
-              color = AppTheme.colors.textPrimary,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
+@Composable
+context(_: SheetScope<ThemeMode>)
+private fun SettingsThemeContent(themeMode: ThemeMode) {
+  SheetLayout(
+    padding = SettingsThemeSheetPadding,
+    verticalSpacing = 8.dp,
+    header = { ActionHeader(title = "테마") },
+  ) {
+    SheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
+      SheetOptionRow(selected = item.selected, onClick = { complete(item.mode) }) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          Icon(
+            icon = item.icon,
+            modifier = Modifier.size(18.dp),
+            tint = AppTheme.colors.textSecondary,
+          )
+          Text(
+            text = item.label,
+            style = AppTheme.typography.action,
+            modifier = Modifier.weight(1f),
+            color = AppTheme.colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
         }
       }
     }
   }
+}
 
 @Composable
 private fun RowScope.SettingsRowContent(label: String, trailing: @Composable () -> Unit) {

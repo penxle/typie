@@ -23,39 +23,10 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.Divider
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
-
-@Composable
-fun SheetActionList(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-  CardSurface(modifier = modifier.fillMaxWidth()) {
-    Column(modifier = Modifier.fillMaxWidth(), content = content)
-  }
-}
-
-@Composable
-fun SheetActionRow(
-  onClick: suspend () -> Unit,
-  modifier: Modifier = Modifier,
-  enabled: Boolean = true,
-  contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
-  content: @Composable RowScope.() -> Unit,
-) {
-  CardRow(
-    onClick = { if (enabled) onClick() },
-    modifier = modifier,
-    contentPadding = contentPadding,
-    content = content,
-  )
-}
-
-@Composable
-fun SheetActionDivider(modifier: Modifier = Modifier) {
-  CardDivider(modifier = modifier)
-}
 
 @Composable
 fun <T> SheetOptionList(
@@ -114,31 +85,6 @@ fun SheetOptionRow(
         content = trailing,
       )
     }
-  }
-}
-
-@Composable
-fun SheetMenu(
-  modifier: Modifier = Modifier,
-  header: (@Composable ColumnScope.() -> Unit)? = null,
-  showHeaderDivider: Boolean = true,
-  content: @Composable ColumnScope.() -> Unit,
-) {
-  Column(modifier = modifier.fillMaxWidth()) {
-    if (header != null) {
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = header,
-      )
-      Spacer(Modifier.size(if (showHeaderDivider) 16.dp else 8.dp))
-      if (showHeaderDivider) {
-        Divider(color = AppTheme.colors.borderDefault)
-        Spacer(Modifier.size(8.dp))
-      }
-    }
-
-    Column(modifier = Modifier.fillMaxWidth(), content = content)
   }
 }
 

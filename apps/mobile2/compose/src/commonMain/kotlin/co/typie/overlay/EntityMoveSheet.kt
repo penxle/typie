@@ -59,11 +59,9 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetOverlaySpec
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.SheetSizePolicy
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
@@ -90,162 +88,157 @@ private data class MoveDestinationContent(
   val lastChildOrder: String?,
 )
 
-fun entityMoveSheet(
-  source: EntityTransferSource,
-  onMoved: () -> Unit = {},
-): SheetPresentation<Unit> =
-  sheetPresentation(spec = SheetOverlaySpec(sizePolicy = SheetSizePolicy.Max())) {
-    val toast = LocalToast.current
-    val model = viewModel(key = "entity-move:${source.id}") { EntityMoveSheetViewModel() }
-    var isMoving by remember(source.id) { mutableStateOf(false) }
-    var displayedContent by remember(source.id) { mutableStateOf<MoveDestinationContent?>(null) }
-    var navigationDirection by
-      remember(source.id) { mutableStateOf(MoveDestinationNavigationDirection.None) }
+internal val EntityMoveStops = listOf(SheetStop.Top(64.dp))
 
-    LaunchedEffect(source.id) { model.showRoot() }
+@Composable
+context(_: SheetScope<Unit>)
+fun EntityMoveContent(source: EntityTransferSource, onMoved: () -> Unit = {}) {
+  val toast = LocalToast.current
+  val model = viewModel(key = "entity-move:${source.id}") { EntityMoveSheetViewModel() }
+  var isMoving by remember(source.id) { mutableStateOf(false) }
+  var displayedContent by remember(source.id) { mutableStateOf<MoveDestinationContent?>(null) }
+  var navigationDirection by
+    remember(source.id) { mutableStateOf(MoveDestinationNavigationDirection.None) }
 
-    val queryState =
-      if (model.destinationEntityId == null) model.rootQuery.state else model.entityQuery.state
-    val destinationContent =
-      when {
-        model.destinationEntityId == null ->
-          (model.rootQuery.state as? QueryState.Success)?.data?.site?.toDestinationContent()
+  LaunchedEffect(source.id) { model.showRoot() }
 
-        else ->
-          (model.entityQuery.state as? QueryState.Success)?.data?.entity?.toDestinationContent()
-      }
-    LaunchedEffect(destinationContent) {
-      if (destinationContent != null) {
-        displayedContent = destinationContent
-      }
+  val queryState =
+    if (model.destinationEntityId == null) model.rootQuery.state else model.entityQuery.state
+  val destinationContent =
+    when {
+      model.destinationEntityId == null ->
+        (model.rootQuery.state as? QueryState.Success)?.data?.site?.toDestinationContent()
+
+      else -> (model.entityQuery.state as? QueryState.Success)?.data?.entity?.toDestinationContent()
+    }
+  LaunchedEffect(destinationContent) {
+    if (destinationContent != null) {
+      displayedContent = destinationContent
+    }
+  }
+
+  val isLoadingDestination = queryState is QueryState.Loading
+  val canSubmit = destinationContent != null && queryState is QueryState.Success && !isMoving
+  val isMoveAllowed =
+    destinationContent?.let { source.canTransferIntoDestinationDepth(it.destinationDepth) } == true
+
+  suspend fun submit() {
+    val resolvedDestination = destinationContent ?: return
+    if (isMoving) return
+
+    if (!isMoveAllowed) {
+      toast.show(ToastType.Error, MOVE_DEPTH_LIMIT_MESSAGE)
+      return
     }
 
-    val isLoadingDestination = queryState is QueryState.Loading
-    val canSubmit = destinationContent != null && queryState is QueryState.Success && !isMoving
-    val isMoveAllowed =
-      destinationContent?.let { source.canTransferIntoDestinationDepth(it.destinationDepth) } ==
-        true
-
-    suspend fun submit() {
-      val resolvedDestination = destinationContent ?: return
-      if (isMoving) return
-
-      if (!isMoveAllowed) {
-        toast.show(ToastType.Error, MOVE_DEPTH_LIMIT_MESSAGE)
-        return
+    isMoving = true
+    model
+      .moveEntity(
+        source = source,
+        parentEntityId = resolvedDestination.destinationEntityId,
+        lowerOrder = resolvedDestination.lastChildOrder,
+        upperOrder = null,
+      )
+      .withDefaultExceptionHandler(toast)
+      .onOk {
+        onMoved()
+        dismiss()
       }
+    isMoving = false
+  }
 
-      isMoving = true
-      model
-        .moveEntity(
-          source = source,
-          parentEntityId = resolvedDestination.destinationEntityId,
-          lowerOrder = resolvedDestination.lastChildOrder,
-          upperOrder = null,
+  fun navigateTo(nextDestinationId: String?) {
+    val currentContent = displayedContent ?: destinationContent ?: return
+    if (isLoadingDestination || isMoving) return
+
+    navigationDirection =
+      resolveMoveDestinationNavigationDirection(
+        currentDestinationId = currentContent.destinationEntityId,
+        nextDestinationId = nextDestinationId,
+        childDestinationIds = currentContent.folders.mapTo(mutableSetOf()) { it.item.id },
+      )
+    model.showDestination(nextDestinationId)
+  }
+
+  SheetLayout(
+    modifier = Modifier.fillMaxHeight(),
+    fillHeight = true,
+    bodyScroll = false,
+    bodyInsetPolicy = SheetInsetPolicy.Container,
+    header = { ActionHeader(title = source.transferActionLabel) },
+    footer = {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(
+          text = "취소",
+          modifier = Modifier.weight(1f),
+          variant = ButtonVariant.Secondary,
+          enabled = !isMoving,
+          onClick = { dismiss() },
         )
-        .withDefaultExceptionHandler(toast)
-        .onOk {
-          onMoved()
-          dismiss()
-        }
-      isMoving = false
-    }
 
-    fun navigateTo(nextDestinationId: String?) {
-      val currentContent = displayedContent ?: destinationContent ?: return
-      if (isLoadingDestination || isMoving) return
-
-      navigationDirection =
-        resolveMoveDestinationNavigationDirection(
-          currentDestinationId = currentContent.destinationEntityId,
-          nextDestinationId = nextDestinationId,
-          childDestinationIds = currentContent.folders.mapTo(mutableSetOf()) { it.item.id },
+        Button(
+          text = "여기에 옮기기",
+          loadingText = "옮기는 중...",
+          modifier = Modifier.weight(1f),
+          enabled = canSubmit && isMoveAllowed,
+          loading = isMoving,
+          onClick = { submit() },
         )
-      model.showDestination(nextDestinationId)
+      }
+    },
+  ) {
+    val content = displayedContent
+    if (content != null) {
+      Text(
+        text = "옮길 위치",
+        style = AppTheme.typography.caption,
+        color = AppTheme.colors.textTertiary,
+      )
+
+      MoveBreadcrumbs(
+        items = content.breadcrumbs,
+        enabled = !isLoadingDestination && !isMoving,
+        backgroundColor = AppTheme.colors.surfaceRaised,
+        onNavigate = ::navigateTo,
+      )
     }
 
-    SheetLayout(
-      modifier = Modifier.fillMaxHeight(),
-      fillHeight = true,
-      bodyScroll = false,
-      bodyInsetPolicy = SheetInsetPolicy.Container,
-      header = { ActionHeader(title = source.transferActionLabel) },
-      footer = {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          Button(
-            text = "취소",
-            modifier = Modifier.weight(1f),
-            variant = ButtonVariant.Secondary,
-            enabled = !isMoving,
-            onClick = { dismiss() },
+    when (queryState) {
+      QueryState.Loading -> {
+        if (content != null) {
+          MoveDestinationAnimatedBody(
+            source = source,
+            content = content,
+            navigationDirection = navigationDirection,
+            navigationEnabled = false,
+            onNavigate = ::navigateTo,
           )
-
-          Button(
-            text = "여기에 옮기기",
-            loadingText = "옮기는 중...",
-            modifier = Modifier.weight(1f),
-            enabled = canSubmit && isMoveAllowed,
-            loading = isMoving,
-            onClick = { submit() },
-          )
+        } else {
+          MoveSheetStatus(message = "폴더를 불러오는 중이에요")
         }
-      },
-    ) {
-      val content = displayedContent
-      if (content != null) {
-        Text(
-          text = "옮길 위치",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
-
-        MoveBreadcrumbs(
-          items = content.breadcrumbs,
-          enabled = !isLoadingDestination && !isMoving,
-          backgroundColor = AppTheme.colors.surfaceRaised,
-          onNavigate = ::navigateTo,
-        )
       }
 
-      when (queryState) {
-        QueryState.Loading -> {
-          if (content != null) {
-            MoveDestinationAnimatedBody(
-              source = source,
-              content = content,
-              navigationDirection = navigationDirection,
-              navigationEnabled = false,
-              onNavigate = ::navigateTo,
-            )
-          } else {
-            MoveSheetStatus(message = "폴더를 불러오는 중이에요")
-          }
-        }
+      is QueryState.Error -> {
+        MoveSheetError(onRetry = { model.refetch() })
+      }
 
-        is QueryState.Error -> {
-          MoveSheetError(onRetry = { model.refetch() })
-        }
-
-        is QueryState.Success -> {
-          if (content != null) {
-            MoveDestinationAnimatedBody(
-              modifier = Modifier.fillMaxWidth().weight(1f),
-              source = source,
-              content = content,
-              navigationDirection = navigationDirection,
-              navigationEnabled = !isMoving,
-              onNavigate = ::navigateTo,
-            )
-          } else {
-            MoveSheetStatus(message = "폴더를 불러오는 중이에요")
-          }
+      is QueryState.Success -> {
+        if (content != null) {
+          MoveDestinationAnimatedBody(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            source = source,
+            content = content,
+            navigationDirection = navigationDirection,
+            navigationEnabled = !isMoving,
+            onNavigate = ::navigateTo,
+          )
+        } else {
+          MoveSheetStatus(message = "폴더를 불러오는 중이에요")
         }
       }
     }
   }
+}
 
 @Composable
 private fun MoveDestinationAnimatedBody(

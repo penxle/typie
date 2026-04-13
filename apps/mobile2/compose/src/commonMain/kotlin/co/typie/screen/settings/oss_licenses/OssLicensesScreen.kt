@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,17 +28,17 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.TitleHeader
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
@@ -68,7 +69,8 @@ private data class AboutLibrariesLicense(val name: String? = null, val content: 
 @Composable
 fun OssLicensesScreen() {
   val model = viewModel { OssLicensesViewModel() }
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
+  val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   var reloadToken by remember { mutableIntStateOf(0) }
   var state by remember { mutableStateOf<OssLicensesScreenState>(OssLicensesScreenState.Loading) }
@@ -121,7 +123,9 @@ fun OssLicensesScreen() {
           CardSurface(modifier = Modifier.fillMaxWidth()) {
             Column {
               current.entries.forEachIndexed { index, entry ->
-                CardRow(onClick = { sheetHost.show(ossLicenseDetailSheet(entry)) }) {
+                CardRow(
+                  onClick = { scope.launch { sheet.present { OssLicenseDetailContent(entry) } } }
+                ) {
                   OssLicenseRowContent(entry)
                 }
 
@@ -216,17 +220,18 @@ private fun RowScope.OssLicenseRowContent(entry: OssLicenseEntry) {
   )
 }
 
-private fun ossLicenseDetailSheet(entry: OssLicenseEntry): SheetPresentation<Unit> =
-  sheetPresentation {
-    SheetLayout(header = { TitleHeader(title = entry.packageName) }) {
-      entry.paragraphs.forEach { paragraph ->
-        Text(
-          text = paragraph,
-          style = AppTheme.typography.body,
-          color = AppTheme.colors.textSecondary,
-        )
-      }
-
-      Spacer(Modifier.size(8.dp))
+@Composable
+context(_: SheetScope<Unit>)
+private fun OssLicenseDetailContent(entry: OssLicenseEntry) {
+  SheetLayout(header = { TitleHeader(title = entry.packageName) }) {
+    entry.paragraphs.forEach { paragraph ->
+      Text(
+        text = paragraph,
+        style = AppTheme.typography.body,
+        color = AppTheme.colors.textSecondary,
+      )
     }
+
+    Spacer(Modifier.size(8.dp))
   }
+}

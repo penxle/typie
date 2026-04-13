@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -25,11 +26,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -50,10 +50,44 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
 
-internal val LocalSheetDragRegionModifier = staticCompositionLocalOf<Modifier> { Modifier }
+sealed interface SheetInsetPolicy {
+  data object Container : SheetInsetPolicy
 
-fun Modifier.sheetDragRegion(): Modifier = composed {
-  this.then(LocalSheetDragRegionModifier.current)
+  data object ContentTail : SheetInsetPolicy
+
+  data object None : SheetInsetPolicy
+}
+
+@Immutable
+data class SheetResolvedInset(val containerBottom: Dp = 0.dp, val contentTailBottom: Dp = 0.dp)
+
+internal fun resolveSheetBottomInset(
+  policy: SheetInsetPolicy,
+  imeBottom: Dp,
+  safeBottom: Dp,
+): SheetResolvedInset {
+  val bottom = maxOf(imeBottom, safeBottom)
+  return when (policy) {
+    SheetInsetPolicy.Container -> SheetResolvedInset(containerBottom = bottom)
+    SheetInsetPolicy.ContentTail -> SheetResolvedInset(contentTailBottom = bottom)
+    SheetInsetPolicy.None -> SheetResolvedInset()
+  }
+}
+
+@Immutable
+data class SheetPadding(
+  val header: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+  val body: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+  val footer: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+) {
+  companion object {
+    val None =
+      SheetPadding(
+        header = PaddingValues(0.dp),
+        body = PaddingValues(0.dp),
+        footer = PaddingValues(0.dp),
+      )
+  }
 }
 
 @Composable
@@ -88,7 +122,7 @@ fun SheetLayout(
   ) {
     if (header != null) {
       Column(
-        modifier = Modifier.sheetDragRegion().fillMaxWidth().padding(padding.header),
+        modifier = Modifier.fillMaxWidth().padding(padding.header),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = header,
       )

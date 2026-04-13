@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import co.typie.entity_transfer.EntityTransferSource
@@ -15,12 +16,11 @@ import co.typie.ui.component.EntityHeader
 import co.typie.ui.component.EntityListItem
 import co.typie.ui.component.EntitySupportingText
 import co.typie.ui.component.breadcrumbNames
-import co.typie.ui.component.sheet.SheetDismissReason
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetMenuActionRow
 import co.typie.ui.component.sheet.SheetPadding
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.theme.AppTheme
 
@@ -44,10 +44,12 @@ internal fun EntityListItem.Folder.toTransferSource(): EntityTransferSource.Fold
   )
 }
 
-internal fun folderItemActionsSheet(
+@Composable
+context(_: SheetScope<Unit>)
+internal fun FolderItemActionsContent(
   item: EntityListItem.Folder,
   onAction: (FolderAction) -> Unit,
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val entityIcon =
     resolveEntityIconAppearance(
       iconName = item.iconName,
@@ -107,7 +109,7 @@ internal fun folderItemActionsSheet(
             tint = if (action.isDanger) AppTheme.colors.danger else null,
             trailingIcon = action.trailingIcon,
             onClick = {
-              dismiss(SheetDismissReason.Programmatic)
+              dismiss()
               onAction(action.action)
             },
           )

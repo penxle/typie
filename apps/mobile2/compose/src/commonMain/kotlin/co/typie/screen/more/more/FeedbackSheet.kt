@@ -37,9 +37,8 @@ import co.typie.ui.component.TextArea
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
+import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.sheet.sheetPresentation
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
@@ -75,7 +74,9 @@ private data class FeedbackMetadata(
 )
 
 @OptIn(ExperimentalLayoutApi::class)
-fun feedbackSheet(): SheetPresentation<Unit> = sheetPresentation {
+@Composable
+context(_: SheetScope<Unit>)
+fun FeedbackContent() {
   val deviceInfo = PlatformModule.deviceInfo
   val toast = LocalToast.current
 

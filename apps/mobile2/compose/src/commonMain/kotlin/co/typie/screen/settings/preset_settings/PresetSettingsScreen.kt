@@ -62,14 +62,14 @@ import co.typie.ui.component.dialog.error
 import co.typie.ui.component.familySpecimenFallbacks
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
 import co.typie.ui.component.sheet.SheetPadding
-import co.typie.ui.component.sheet.SheetPresentation
 import co.typie.ui.component.sheet.SheetScope
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.complete
+import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
@@ -130,21 +130,21 @@ fun PresetSettingsScreen() {
   val nav = Nav.current
   val dialog = LocalDialog.current
   val toast = LocalToast.current
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val scrollState = rememberScrollState()
   suspend fun openEditor(field: PresetEditorField) {
     val template = model.currentTemplate
     try {
       when (field) {
         PresetEditorField.FontFamily ->
-          sheetHost.await(fontFamilySheet(model = model, template = template))
+          sheet.present<Unit> { FontFamilyContent(model = model, template = template) }
         PresetEditorField.FontWeight ->
-          sheetHost.await(fontWeightSheet(model = model, template = template))
+          sheet.present<Unit> { FontWeightContent(model = model, template = template) }
         PresetEditorField.FontSize ->
-          sheetHost.await(fontSizeSheet(model = model, template = template))
+          sheet.present<Unit> { FontSizeContent(model = model, template = template) }
         PresetEditorField.LetterSpacing ->
-          sheetHost.await(
-            presetOptionSheet(
+          sheet.present<Unit> {
+            PresetOptionContent(
               title = "자간",
               initialValue = model.currentTemplate.letterSpacing,
               options = LETTER_SPACING_OPTIONS,
@@ -152,10 +152,10 @@ fun PresetSettingsScreen() {
                 model.saveTemplate(model.currentTemplate.withLetterSpacing(next))
               },
             )
-          )
+          }
         PresetEditorField.LineHeight ->
-          sheetHost.await(
-            presetOptionSheet(
+          sheet.present<Unit> {
+            PresetOptionContent(
               title = "행간",
               initialValue = model.currentTemplate.lineHeight,
               options = LINE_HEIGHT_OPTIONS,
@@ -163,10 +163,10 @@ fun PresetSettingsScreen() {
                 model.saveTemplate(model.currentTemplate.withLineHeight(next))
               },
             )
-          )
+          }
         PresetEditorField.TextColor ->
-          sheetHost.await(
-            presetColorSheet(
+          sheet.present<Unit> {
+            PresetColorContent(
               title = "글자 색",
               initialValue = model.currentTemplate.textColor,
               options = TEXT_COLOR_OPTIONS,
@@ -175,10 +175,10 @@ fun PresetSettingsScreen() {
                 model.saveTemplate(model.currentTemplate.withTextColor(next))
               },
             )
-          )
+          }
         PresetEditorField.BackgroundColor ->
-          sheetHost.await(
-            presetColorSheet(
+          sheet.present<Unit> {
+            PresetColorContent(
               title = "배경 색",
               initialValue = model.currentTemplate.backgroundColor,
               options = BACKGROUND_COLOR_OPTIONS,
@@ -187,18 +187,18 @@ fun PresetSettingsScreen() {
                 model.saveTemplate(model.currentTemplate.withBackgroundColor(next))
               },
             )
-          )
+          }
         PresetEditorField.LayoutMode ->
-          sheetHost.await(layoutModeSheet(model = model, template = template))
+          sheet.present<Unit> { LayoutModeContent(model = model, template = template) }
         PresetEditorField.MaxWidth ->
-          sheetHost.await(maxWidthSheet(model = model, template = template))
+          sheet.present<Unit> { MaxWidthContent(model = model, template = template) }
         PresetEditorField.PageSize ->
-          sheetHost.await(pageSizeSheet(model = model, template = template))
+          sheet.present<Unit> { PageSizeContent(model = model, template = template) }
         PresetEditorField.PageMargin ->
-          sheetHost.await(pageMarginSheet(model = model, template = template))
+          sheet.present<Unit> { PageMarginContent(model = model, template = template) }
         PresetEditorField.ParagraphIndent ->
-          sheetHost.await(
-            presetOptionSheet(
+          sheet.present<Unit> {
+            PresetOptionContent(
               title = "첫 줄 들여쓰기",
               initialValue = model.currentTemplate.paragraphIndent,
               options = PARAGRAPH_INDENT_OPTIONS,
@@ -206,16 +206,16 @@ fun PresetSettingsScreen() {
                 model.saveTemplate(model.currentTemplate.withParagraphIndent(next))
               },
             )
-          )
+          }
         PresetEditorField.BlockGap ->
-          sheetHost.await(
-            presetOptionSheet(
+          sheet.present<Unit> {
+            PresetOptionContent(
               title = "문단 간격",
               initialValue = model.currentTemplate.blockGap,
               options = BLOCK_GAP_OPTIONS,
               onSaveValue = { next -> model.saveTemplate(model.currentTemplate.withBlockGap(next)) },
             )
-          )
+          }
       }
     } catch (_: CancellationException) {
       return
@@ -424,10 +424,9 @@ private fun fontWeightSummaryLabel(
   return presetOptionLabel(options, template.fontWeight, template.fontWeight.toString())
 }
 
-private fun fontFamilySheet(
-  model: PresetSettingsViewModel,
-  template: PresetTemplate,
-): SheetPresentation<Unit> = sheetPresentation {
+@Composable
+context(_: SheetScope<Unit>)
+private fun FontFamilyContent(model: PresetSettingsViewModel, template: PresetTemplate) {
   val toast = LocalToast.current
   var isSaving by remember { mutableStateOf(false) }
   var selectedFamilyName by remember { mutableStateOf(template.fontFamily) }
@@ -498,10 +497,9 @@ private fun fontFamilySheet(
   }
 }
 
-private fun fontWeightSheet(
-  model: PresetSettingsViewModel,
-  template: PresetTemplate,
-): SheetPresentation<Unit> = sheetPresentation {
+@Composable
+context(_: SheetScope<Unit>)
+private fun FontWeightContent(model: PresetSettingsViewModel, template: PresetTemplate) {
   val toast = LocalToast.current
   val family = model.activeDocumentFontFamilies.firstOrNull { it.familyName == template.fontFamily }
   val fonts = family?.fonts.orEmpty().distinctBy { it.weight }.sortedBy { it.weight }
@@ -572,10 +570,9 @@ private fun fontWeightSheet(
   }
 }
 
-private fun fontSizeSheet(
-  model: PresetSettingsViewModel,
-  template: PresetTemplate,
-): SheetPresentation<Unit> = sheetPresentation {
+@Composable
+context(_: SheetScope<Unit>)
+private fun FontSizeContent(model: PresetSettingsViewModel, template: PresetTemplate) {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val form = remember(scope, template.fontSize) { FontSizeSheetForm(scope, template.fontSize) }
@@ -641,17 +638,16 @@ private fun fontSizeSheet(
   }
 }
 
-private fun layoutModeSheet(
-  model: PresetSettingsViewModel,
-  template: PresetTemplate,
-): SheetPresentation<Unit> {
+@Composable
+context(_: SheetScope<Unit>)
+private fun LayoutModeContent(model: PresetSettingsViewModel, template: PresetTemplate) {
   val initialMode =
     when (template.layout) {
       is PresetLayout.Paginated -> "paginated"
       else -> "continuous"
     }
 
-  return presetOptionSheet(
+  PresetOptionContent(
     title = "레이아웃 모드",
     initialValue = initialMode,
     options =
@@ -670,13 +666,12 @@ private fun layoutModeSheet(
   )
 }
 
-private fun maxWidthSheet(
-  model: PresetSettingsViewModel,
-  template: PresetTemplate,
-): SheetPresentation<Unit> {
+@Composable
+context(_: SheetScope<Unit>)
+private fun MaxWidthContent(model: PresetSettingsViewModel, template: PresetTemplate) {
   val layout = template.layout as? PresetLayout.Continuous ?: PresetLayout.Continuous()
 
-  return presetOptionSheet(
+  PresetOptionContent(
     title = "본문 폭",
     initialValue = layout.maxWidth,
     options = MAX_WIDTH_OPTIONS,
@@ -684,10 +679,9 @@ private fun maxWidthSheet(
   )
 }
 
-private fun pageSizeSheet(
-  model: PresetSettingsViewModel,
-  template: PresetTemplate,
-): SheetPresentation<Unit> = sheetPresentation {
+@Composable
+context(_: SheetScope<Unit>)
+private fun PageSizeContent(model: PresetSettingsViewModel, template: PresetTemplate) {
   val toast = LocalToast.current
   val initialLayout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
@@ -819,10 +813,9 @@ private fun PresetQuickSelectButton(label: String, selected: Boolean, onClick: s
   }
 }
 
-private fun pageMarginSheet(
-  model: PresetSettingsViewModel,
-  template: PresetTemplate,
-): SheetPresentation<Unit> = sheetPresentation {
+@Composable
+context(_: SheetScope<Unit>)
+private fun PageMarginContent(model: PresetSettingsViewModel, template: PresetTemplate) {
   val toast = LocalToast.current
   val layout = template.layout as? PresetLayout.Paginated ?: createPaginatedLayout("a4")
   val scope = rememberCoroutineScope()
@@ -910,12 +903,14 @@ private fun pageMarginSheet(
   }
 }
 
-private fun <T> presetOptionSheet(
+@Composable
+context(_: SheetScope<Unit>)
+private fun <T> PresetOptionContent(
   title: String,
   initialValue: T,
   options: List<PresetOption<T>>,
   onSaveValue: suspend (T) -> Result<Unit, Nothing>,
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val toast = LocalToast.current
   var isSaving by remember { mutableStateOf(false) }
   var selectedValue by remember { mutableStateOf(initialValue) }
@@ -952,13 +947,15 @@ private fun <T> presetOptionSheet(
   }
 }
 
-private fun presetColorSheet(
+@Composable
+context(_: SheetScope<Unit>)
+private fun PresetColorContent(
   title: String,
   initialValue: String,
   options: List<PresetOption<String>>,
   background: Boolean,
   onSaveValue: suspend (String) -> Result<Unit, Nothing>,
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val toast = LocalToast.current
   var isSaving by remember { mutableStateOf(false) }
   var selectedValue by remember { mutableStateOf(initialValue) }
@@ -1006,7 +1003,8 @@ private fun presetColorSheet(
 }
 
 @Composable
-private fun <R> SheetScope<R>.PresetSheetLayout(
+context(_: SheetScope<R>)
+private fun <R> PresetSheetLayout(
   title: String,
   isSaving: Boolean,
   saveEnabled: Boolean = true,
@@ -1045,7 +1043,8 @@ private fun <R> SheetScope<R>.PresetSheetLayout(
 }
 
 @Composable
-private fun <R> SheetScope<R>.PresetInstantSheetLayout(
+context(_: SheetScope<R>)
+private fun <R> PresetInstantSheetLayout(
   title: String,
   content: @Composable ColumnScope.() -> Unit,
 ) {

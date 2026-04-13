@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -32,12 +33,10 @@ import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.SheetHostState
 import co.typie.ui.component.sheet.SheetInsetPolicy
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.completedOrNull
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.complete
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
@@ -62,10 +61,9 @@ fun planUpgradeRoute(result: PlanUpgradeSheetResult?): Route? {
   }
 }
 
-private fun planUpgradeSheet(
-  title: String = DEFAULT_PLAN_UPGRADE_TITLE,
-  message: String,
-): SheetPresentation<PlanUpgradeSheetResult> = sheetPresentation {
+@Composable
+context(_: SheetScope<PlanUpgradeSheetResult>)
+fun PlanUpgradeContent(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: String) {
   val toast = LocalToast.current
   val dialog = LocalDialog.current
   val model = viewModel { PlanUpgradeSheetViewModel() }
@@ -144,23 +142,4 @@ private fun planUpgradeSheet(
       SubscriptionFeatureList(features = fullPlanFeatures, iconSize = 16.dp, rowSpacing = 8.dp)
     }
   }
-}
-
-suspend fun SheetHostState.showPlanUpgradeSheet(
-  title: String = DEFAULT_PLAN_UPGRADE_TITLE,
-  message: String,
-): PlanUpgradeSheetResult? {
-  val result =
-    present(planUpgradeSheet(title = title, message = message)).completedOrNull() ?: return null
-
-  if (result is PlanUpgradeSheetResult.TrialStarted) {
-    show(
-      subscriptionCelebrationSheet(
-        title = result.celebration.title,
-        message = result.celebration.message,
-      )
-    )
-  }
-
-  return result
 }

@@ -75,10 +75,11 @@ import co.typie.ui.component.reorder.reorderableItem
 import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.HeaderTextAction
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPresentation
-import co.typie.ui.component.sheet.sheetPresentation
+import co.typie.ui.component.sheet.SheetScope
+import co.typie.ui.component.sheet.complete
+import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
@@ -95,7 +96,7 @@ private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
 fun TextReplacementsScreen() {
   val nav = Nav.current
   val dialog = LocalDialog.current
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val haptic = LocalHapticFeedback.current
   val model = viewModel { TextReplacementsViewModel() }
   val toast = LocalToast.current
@@ -110,13 +111,15 @@ fun TextReplacementsScreen() {
     remember(serverCustomItems) { normalizedCustomItemIds(serverCustomItems) }
 
   fun openForm(editingItem: NormalizedTextReplacement? = null) {
-    sheetHost.show(
-      TextReplacementFormSheet(
-        model = model,
-        editingItem = editingItem,
-        lastCustomOrder = serverCustomItems.lastOrNull()?.order,
-      )
-    )
+    scope.launch {
+      sheet.present {
+        TextReplacementFormContent(
+          model = model,
+          editingItem = editingItem,
+          lastCustomOrder = serverCustomItems.lastOrNull()?.order,
+        )
+      }
+    }
   }
 
   ProvideTopBar(
@@ -655,11 +658,13 @@ private fun TextReplacementRuleToken(text: String, modifier: Modifier = Modifier
   }
 }
 
-private fun TextReplacementFormSheet(
+@Composable
+context(_: SheetScope<Unit>)
+private fun TextReplacementFormContent(
   model: TextReplacementsViewModel,
   editingItem: NormalizedTextReplacement?,
   lastCustomOrder: String?,
-): SheetPresentation<Unit> = sheetPresentation {
+) {
   val isEditing = editingItem != null
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()

@@ -43,19 +43,21 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
+import co.typie.overlay.EntityMoveContent
+import co.typie.overlay.EntityMoveStops
 import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
-import co.typie.overlay.entityMoveSheet
 import co.typie.result.onErr
 import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
-import co.typie.screen.space.document.documentItemActionsSheet
-import co.typie.screen.space.document.documentRenameSheet
+import co.typie.screen.space.document.DocumentItemActionsContent
+import co.typie.screen.space.document.DocumentRenameContent
 import co.typie.screen.space.document.toTransferSource as toDocumentTransferSource
-import co.typie.screen.space.entity.entityIconPickerSheet
+import co.typie.screen.space.entity.EntityIconPickerContent
+import co.typie.screen.space.entity.EntityIconPickerStops
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
@@ -74,7 +76,7 @@ import co.typie.ui.component.entity_container.calculateEntityReorderOrdersFromOr
 import co.typie.ui.component.entity_container.displayOrderedEntityItems
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableListContainer
-import co.typie.ui.component.sheet.LocalSheetHost
+import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -90,7 +92,7 @@ fun FolderScreen(entityId: String) {
   val nav = Nav.current
   val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
-  val sheetHost = LocalSheetHost.current
+  val sheet = LocalSheet.current
   val dialog = LocalDialog.current
   val presenterScope = rememberCoroutineScope()
   val toast = LocalToast.current
@@ -200,13 +202,15 @@ fun FolderScreen(entityId: String) {
       FolderAction.Rename -> {
         val resolvedFolder = folder ?: return closePopover()
         closePopover()
-        sheetHost.show(
-          folderRenameSheet(
-            model = model,
-            folderId = resolvedFolder.id,
-            initialName = resolvedFolder.name,
-          )
-        )
+        presenterScope.launch {
+          sheet.present {
+            FolderRenameContent(
+              model = model,
+              folderId = resolvedFolder.id,
+              initialName = resolvedFolder.name,
+            )
+          }
+        }
       }
 
       FolderAction.ChangeIcon -> {
@@ -217,15 +221,17 @@ fun FolderScreen(entityId: String) {
           return
         }
         closePopover()
-        sheetHost.show(
-          entityIconPickerSheet(
-            model = model,
-            entityId = resolvedEntity.id,
-            initialIcon = resolvedEntity.icon,
-            initialColor = resolvedEntity.iconColor,
-            defaultIconName = "folder",
-          )
-        )
+        presenterScope.launch {
+          sheet.present(stops = EntityIconPickerStops) {
+            EntityIconPickerContent(
+              model = model,
+              entityId = resolvedEntity.id,
+              initialIcon = resolvedEntity.icon,
+              initialColor = resolvedEntity.iconColor,
+              defaultIconName = "folder",
+            )
+          }
+        }
       }
 
       FolderAction.Share -> {
@@ -237,15 +243,17 @@ fun FolderScreen(entityId: String) {
         }
         // TODO: Track folder share sheet open.
         closePopover()
-        sheetHost.show(
-          folderShareSheet(
-            model = model,
-            folderId = resolvedFolder.id,
-            folderUrl = resolvedEntity.url,
-            initialVisibility = resolvedEntity.visibility,
-            initialThumbnailUrl = resolvedFolder.thumbnail?.url,
-          )
-        )
+        presenterScope.launch {
+          sheet.present {
+            FolderShareContent(
+              model = model,
+              folderId = resolvedFolder.id,
+              folderUrl = resolvedEntity.url,
+              initialVisibility = resolvedEntity.visibility,
+              initialThumbnailUrl = resolvedFolder.thumbnail?.url,
+            )
+          }
+        }
       }
 
       FolderAction.Move -> {
@@ -256,17 +264,19 @@ fun FolderScreen(entityId: String) {
           return
         }
         closePopover()
-        sheetHost.show(
-          entityMoveSheet(
-            source =
-              EntityTransferSource.Folder(
-                id = resolvedEntity.id,
-                title = resolvedFolder.name,
-                depth = resolvedEntity.depth,
-                maxDescendantFoldersDepth = resolvedFolder.maxDescendantFoldersDepth,
-              )
-          )
-        )
+        presenterScope.launch {
+          sheet.present(stops = EntityMoveStops) {
+            EntityMoveContent(
+              source =
+                EntityTransferSource.Folder(
+                  id = resolvedEntity.id,
+                  title = resolvedFolder.name,
+                  depth = resolvedEntity.depth,
+                  maxDescendantFoldersDepth = resolvedFolder.maxDescendantFoldersDepth,
+                )
+            )
+          }
+        }
       }
 
       FolderAction.OpenExternal -> {
@@ -451,153 +461,175 @@ fun FolderScreen(entityId: String) {
               .safeBottomPadding(),
           onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
           onDocumentLongPress = { item ->
-            sheetHost.show(
-              documentItemActionsSheet(item) { action ->
-                when (action) {
-                  FolderAction.Rename -> {
-                    sheetHost.show(
-                      documentRenameSheet(
-                        model = model,
-                        documentId = item.documentId,
-                        initialTitle = item.title,
-                      )
-                    )
-                  }
-
-                  FolderAction.ChangeIcon -> {
-                    sheetHost.show(
-                      entityIconPickerSheet(
-                        model = model,
-                        entityId = item.id,
-                        initialIcon = item.iconName,
-                        initialColor = item.iconColor,
-                        defaultIconName = "file",
-                      )
-                    )
-                  }
-
-                  FolderAction.OpenExternal -> uriHandler.openUri(item.url)
-
-                  FolderAction.Share -> Unit
-
-                  FolderAction.Move -> {
-                    sheetHost.show(entityMoveSheet(source = item.toDocumentTransferSource()))
-                  }
-
-                  FolderAction.Copy -> {
-                    clipboard.setCopy(
-                      sourceSiteId = Preference.siteId!!,
-                      items = listOf(item.toDocumentTransferSource()),
-                    )
-                  }
-
-                  FolderAction.Cut -> {
-                    clipboard.setCut(
-                      sourceSiteId = Preference.siteId!!,
-                      items = listOf(item.toDocumentTransferSource()),
-                    )
-                  }
-
-                  FolderAction.Delete -> {
-                    presenterScope.launch {
-                      val result =
-                        dialog.confirm(
-                          title = "문서 삭제",
-                          message = "\"${item.title}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-                          confirmText = "삭제하기",
-                          confirmIsDestructive = true,
-                        )
-                      if (result is DialogResult.Resolved) {
-                        model.deleteDocument(item.documentId).withDefaultExceptionHandler(toast)
+            presenterScope.launch {
+              sheet.present {
+                DocumentItemActionsContent(item) { action ->
+                  when (action) {
+                    FolderAction.Rename -> {
+                      presenterScope.launch {
+                        sheet.present {
+                          DocumentRenameContent(
+                            model = model,
+                            documentId = item.documentId,
+                            initialTitle = item.title,
+                          )
+                        }
                       }
                     }
-                  }
 
-                  FolderAction.SelectMultiple,
-                  FolderAction.StartReorder -> Unit
+                    FolderAction.ChangeIcon -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityIconPickerStops) {
+                          EntityIconPickerContent(
+                            model = model,
+                            entityId = item.id,
+                            initialIcon = item.iconName,
+                            initialColor = item.iconColor,
+                            defaultIconName = "file",
+                          )
+                        }
+                      }
+                    }
+
+                    FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                    FolderAction.Share -> Unit
+
+                    FolderAction.Move -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityMoveStops) {
+                          EntityMoveContent(source = item.toDocumentTransferSource())
+                        }
+                      }
+                    }
+
+                    FolderAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toDocumentTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toDocumentTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Delete -> {
+                      presenterScope.launch {
+                        val result =
+                          dialog.confirm(
+                            title = "문서 삭제",
+                            message = "\"${item.title}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                            confirmText = "삭제하기",
+                            confirmIsDestructive = true,
+                          )
+                        if (result is DialogResult.Resolved) {
+                          model.deleteDocument(item.documentId).withDefaultExceptionHandler(toast)
+                        }
+                      }
+                    }
+
+                    FolderAction.SelectMultiple,
+                    FolderAction.StartReorder -> Unit
+                  }
                 }
               }
-            )
+            }
           },
           onFolderClick = { childEntityId -> nav.navigate(Route.Folder(childEntityId)) },
           onFolderLongPress = { item ->
-            sheetHost.show(
-              folderItemActionsSheet(item) { action ->
-                when (action) {
-                  FolderAction.Rename -> {
-                    sheetHost.show(
-                      folderRenameSheet(
-                        model = model,
-                        folderId = item.folderId,
-                        initialName = item.name,
-                      )
-                    )
-                  }
-
-                  FolderAction.ChangeIcon -> {
-                    sheetHost.show(
-                      entityIconPickerSheet(
-                        model = model,
-                        entityId = item.id,
-                        initialIcon = item.iconName,
-                        initialColor = item.iconColor,
-                        defaultIconName = "folder",
-                      )
-                    )
-                  }
-
-                  FolderAction.OpenExternal -> uriHandler.openUri(item.url)
-
-                  FolderAction.Share -> {
-                    sheetHost.show(
-                      folderShareSheet(
-                        model = model,
-                        folderId = item.folderId,
-                        folderUrl = item.url,
-                        initialVisibility = requireNotNull(item.visibility),
-                        initialThumbnailUrl = item.thumbnailUrl,
-                      )
-                    )
-                  }
-
-                  FolderAction.Move -> {
-                    sheetHost.show(entityMoveSheet(source = item.toTransferSource()))
-                  }
-
-                  FolderAction.Copy -> {
-                    clipboard.setCopy(
-                      sourceSiteId = Preference.siteId!!,
-                      items = listOf(item.toTransferSource()),
-                    )
-                  }
-
-                  FolderAction.Cut -> {
-                    clipboard.setCut(
-                      sourceSiteId = Preference.siteId!!,
-                      items = listOf(item.toTransferSource()),
-                    )
-                  }
-
-                  FolderAction.Delete -> {
-                    presenterScope.launch {
-                      val result =
-                        dialog.confirm(
-                          title = "폴더 삭제",
-                          message = "\"${item.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-                          confirmText = "삭제하기",
-                          confirmIsDestructive = true,
-                        )
-                      if (result is DialogResult.Resolved) {
-                        model.deleteFolderEntity(item.id).withDefaultExceptionHandler(toast)
+            presenterScope.launch {
+              sheet.present {
+                FolderItemActionsContent(item) { action ->
+                  when (action) {
+                    FolderAction.Rename -> {
+                      presenterScope.launch {
+                        sheet.present {
+                          FolderRenameContent(
+                            model = model,
+                            folderId = item.folderId,
+                            initialName = item.name,
+                          )
+                        }
                       }
                     }
-                  }
 
-                  FolderAction.SelectMultiple,
-                  FolderAction.StartReorder -> Unit
+                    FolderAction.ChangeIcon -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityIconPickerStops) {
+                          EntityIconPickerContent(
+                            model = model,
+                            entityId = item.id,
+                            initialIcon = item.iconName,
+                            initialColor = item.iconColor,
+                            defaultIconName = "folder",
+                          )
+                        }
+                      }
+                    }
+
+                    FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+
+                    FolderAction.Share -> {
+                      presenterScope.launch {
+                        sheet.present {
+                          FolderShareContent(
+                            model = model,
+                            folderId = item.folderId,
+                            folderUrl = item.url,
+                            initialVisibility = requireNotNull(item.visibility),
+                            initialThumbnailUrl = item.thumbnailUrl,
+                          )
+                        }
+                      }
+                    }
+
+                    FolderAction.Move -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityMoveStops) {
+                          EntityMoveContent(source = item.toTransferSource())
+                        }
+                      }
+                    }
+
+                    FolderAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
+
+                    FolderAction.Delete -> {
+                      presenterScope.launch {
+                        val result =
+                          dialog.confirm(
+                            title = "폴더 삭제",
+                            message = "\"${item.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                            confirmText = "삭제하기",
+                            confirmIsDestructive = true,
+                          )
+                        if (result is DialogResult.Resolved) {
+                          model.deleteFolderEntity(item.id).withDefaultExceptionHandler(toast)
+                        }
+                      }
+                    }
+
+                    FolderAction.SelectMultiple,
+                    FolderAction.StartReorder -> Unit
+                  }
                 }
               }
-            )
+            }
           },
           onDragStarted = {
             haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)

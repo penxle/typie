@@ -10,7 +10,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -36,10 +35,9 @@ import co.typie.screen.system.update_required.UpdateRequiredScreen
 import co.typie.ui.component.dialog.Dialog
 import co.typie.ui.component.dialog.DialogOverlay
 import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.sheet.LocalSheetHost
-import co.typie.ui.component.sheet.SheetHostState
-import co.typie.ui.component.sheet.SheetOverlayHosts
-import co.typie.ui.component.sheet.SheetOverlayPresenterState
+import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.Sheet
+import co.typie.ui.component.sheet.SheetOverlay
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import dev.chrisbanes.haze.hazeSource
@@ -71,18 +69,12 @@ fun RootShell() {
 
   val toast = remember { Toast() }
   val loader = remember { Loader() }
-  val sheetOverlayPresenter = remember { SheetOverlayPresenterState() }
-  val sheetHostScope = rememberCoroutineScope()
-  val sheetHost =
-    remember(sheetOverlayPresenter, sheetHostScope) {
-      SheetHostState(sheetOverlayPresenter, sheetHostScope)
-    }
-
+  val sheet = remember { Sheet() }
   val dialog = remember { Dialog() }
   val focusManager = LocalFocusManager.current
 
   CompositionLocalProvider(
-    LocalSheetHost provides sheetHost,
+    LocalSheet provides sheet,
     LocalDialog provides dialog,
     LocalToast provides toast,
     LocalLoader provides loader,
@@ -106,7 +98,7 @@ fun RootShell() {
         }
       }
 
-      SheetOverlayHosts(sheetOverlayPresenter)
+      SheetOverlay(sheet)
       DialogOverlay(dialog)
       LoaderOverlay()
       ToastOverlay()
