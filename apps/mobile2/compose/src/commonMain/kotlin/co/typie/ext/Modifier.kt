@@ -6,10 +6,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable as foundationClickable
 import androidx.compose.foundation.combinedClickable as foundationCombinedClickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.horizontalScroll as foundationHorizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.verticalScroll as foundationVerticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -34,16 +34,15 @@ fun InteractionScope(content: @Composable () -> Unit) {
   CompositionLocalProvider(LocalInteractionSource provides interactionSource) { content() }
 }
 
-expect fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier
+fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier = composed {
+  val isLocked = LocalScrollGestureLockState.current.isLocked
+  foundationVerticalScroll(state, enabled = enabled && !isLocked)
+}
 
-expect fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier
-
-internal expect fun Modifier.desktopDragScroll(
-  state: ScrollableState,
-  orientation: Orientation,
-  enabled: Boolean = true,
-  elasticOverscroll: Boolean = true,
-): Modifier
+fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier = composed {
+  val isLocked = LocalScrollGestureLockState.current.isLocked
+  foundationHorizontalScroll(state, enabled = enabled && !isLocked)
+}
 
 fun Modifier.clickable(onClick: suspend () -> Unit): Modifier =
   clickable(enabled = true, onClick = onClick)

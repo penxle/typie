@@ -22,6 +22,7 @@ import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
 import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.createDevToolsWindow
+import co.typie.ext.DesktopScrollTranslation
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
@@ -195,7 +196,9 @@ fun main() {
           Density(density = currentDensity.density * scale, fontScale = currentDensity.fontScale)
         }
 
-      CompositionLocalProvider(LocalDensity provides adjustedDensity) { App() }
+      CompositionLocalProvider(LocalDensity provides adjustedDensity) {
+        DesktopScrollTranslation(window) { App() }
+      }
     }
 
     LaunchedEffect(Unit) {

@@ -2,7 +2,6 @@ package co.typie.screen.space.entity
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.desktopDragScroll
 import co.typie.ext.pressScale
 import co.typie.form.FormState
 import co.typie.icons.Lucide
@@ -189,9 +187,7 @@ internal fun EntityIconPickerContent(
         LazyVerticalGrid(
           columns = GridCells.Fixed(7),
           state = iconGridState,
-          modifier =
-            Modifier.fillMaxSize()
-              .desktopDragScroll(state = iconGridState, orientation = Orientation.Vertical),
+          modifier = Modifier.fillMaxSize(),
           contentPadding = PaddingValues(bottom = EntityIconPickerGridBottomInset + safeBottom),
           horizontalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
           verticalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),

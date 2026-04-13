@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.LocalScrollGestureLockState
-import co.typie.ext.desktopDragScroll
 
 object ResponsiveContainerDefaults {
   val Breakpoint = 600.dp
@@ -99,12 +98,6 @@ private fun ResponsiveContainerGutter(primaryScrollableState: ScrollableState, w
     modifier =
       Modifier.width(width)
         .fillMaxHeight()
-        .desktopDragScroll(
-          state = gutterScrollableState,
-          orientation = Orientation.Vertical,
-          enabled = !isLocked,
-          elasticOverscroll = false,
-        )
         .scrollableArea(
           state = gutterScrollableState,
           orientation = Orientation.Vertical,
