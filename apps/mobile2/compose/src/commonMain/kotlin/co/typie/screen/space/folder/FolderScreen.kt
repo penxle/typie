@@ -52,13 +52,14 @@ import co.typie.route.toastBottomInset
 import co.typie.screen.space.document.DocumentItemActionsContent
 import co.typie.screen.space.document.DocumentRenameContent
 import co.typie.screen.space.document.toTransferSource as toDocumentTransferSource
+import co.typie.screen.space.entity.EntityCreateBottomBarAction
+import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.screen.space.entity.EntityIconPickerContent
 import co.typie.screen.space.entity.EntityIconPickerStops
 import co.typie.screen.space.entity.EntitySelectionActionsContent
 import co.typie.screen.space.entity.EntitySelectionViewModel
 import co.typie.screen.space.entity.EntityShareContent
 import co.typie.shell.MainBottomBarPill
-import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
 import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -99,6 +100,8 @@ fun FolderScreen(entityId: String) {
   val presenterScope = rememberCoroutineScope()
   val toast = LocalToast.current
   val clipboard = EntityClipboardService
+  val createActionModel =
+    viewModel(key = "folder-create-actions:$entityId") { EntityCreateViewModel() }
   val model = viewModel(key = "folder:$entityId") { FolderViewModel() }
   val selectionActionModel =
     viewModel(key = "folder-selection-actions:$entityId") { EntitySelectionViewModel() }
@@ -509,7 +512,19 @@ fun FolderScreen(entityId: String) {
       },
   )
 
-  ProvideBottomBar(pill = { MainBottomBarPill() }, action = { SpaceBottomBarActionButton() })
+  ProvideBottomBar(
+    pill = { MainBottomBarPill() },
+    action = {
+      EntityCreateBottomBarAction(
+        model = createActionModel,
+        siteId = entity?.site?.id ?: Preference.siteId,
+        parentEntityId = entityId,
+        onCreated = { model.refetch() },
+        onFolderCreated = { nav.navigate(Route.Folder(it)) },
+        onDocumentCreated = { nav.navigate(Route.Editor(it)) },
+      )
+    },
+  )
 
   LaunchedEffect(model.query.state) {
     if (model.query.state is QueryState.Error) {

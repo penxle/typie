@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,7 +40,11 @@ import co.typie.graphql.HomeScreen_Query
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.overlay.LocalToast
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
+import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPill
 import co.typie.ui.component.ResponsiveContainer
@@ -59,12 +64,16 @@ import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen() {
   val model = viewModel { HomeViewModel() }
+  val createActionModel = viewModel(key = "home-create-actions") { EntityCreateViewModel() }
   val nav = Nav.current
   val dialog = LocalDialog.current
+  val toast = LocalToast.current
+  val presenterScope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val siteId = model.siteId
 
@@ -75,7 +84,26 @@ fun HomeScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
+  ProvideBottomBar(
+    pill = { MainBottomBarPill() },
+    action = {
+      MainBottomBarActionButton(
+        onClick = {
+          if (createActionModel.isCreating) return@MainBottomBarActionButton
+          val resolvedSiteId = siteId ?: return@MainBottomBarActionButton
+          presenterScope.launch {
+            createActionModel
+              .createDocument(siteId = resolvedSiteId)
+              .withDefaultExceptionHandler(toast)
+              .onOk { createdSlug ->
+                model.refetch()
+                nav.navigate(Route.Editor(createdSlug))
+              }
+          }
+        }
+      )
+    },
+  )
 
   LaunchedEffect(model.query.state) {
     if (model.query.state is QueryState.Error) {

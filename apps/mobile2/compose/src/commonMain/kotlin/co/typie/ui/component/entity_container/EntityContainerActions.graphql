@@ -1,3 +1,24 @@
+mutation EntityContainer_CreateDocument_Mutation($input: CreateDocumentInput!) {
+  createDocument(input: $input) {
+    id
+
+    entity {
+      id
+      slug
+    }
+  }
+}
+
+mutation EntityContainer_CreateFolder_Mutation($input: CreateFolderInput!) {
+  createFolder(input: $input) {
+    id
+
+    entity {
+      id
+    }
+  }
+}
+
 mutation EntityContainer_MoveEntity_Mutation($input: MoveEntityInput!) {
   moveEntity(input: $input) {
     id
