@@ -23,14 +23,15 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
+import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
-internal val EntityPasteBarHeight = 44.dp
 private val EntityPasteBarShape = RoundedCornerShape(999.dp)
 
-internal fun entityPasteBarToastBottomInset(baseInset: Dp): Dp = baseInset + EntityPasteBarHeight
+internal fun entityPasteBarToastBottomInset(baseInset: Dp): Dp =
+  baseInset + EntityBottomOverlayDefaults.BarHeight
 
 @Composable
 fun EntityPasteBar(
@@ -62,7 +63,7 @@ fun EntityPasteBar(
       InteractionScope {
         Box(
           modifier =
-            Modifier.height(EntityPasteBarHeight)
+            Modifier.height(EntityBottomOverlayDefaults.BarHeight)
               .clickable(enabled = enabled, onClick = onPaste)
               .pressScale(0.97f)
               .padding(start = 18.dp, end = 20.dp)
@@ -98,7 +99,7 @@ fun EntityPasteBar(
       InteractionScope {
         Box(
           modifier =
-            Modifier.size(EntityPasteBarHeight)
+            Modifier.size(EntityBottomOverlayDefaults.BarHeight)
               .clickable(enabled = enabled, onClick = onClear)
               .pressScale(0.96f),
           contentAlignment = Alignment.Center,

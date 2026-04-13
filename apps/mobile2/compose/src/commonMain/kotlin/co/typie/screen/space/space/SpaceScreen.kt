@@ -69,6 +69,7 @@ import co.typie.screen.space.folder.toTransferSource
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
+import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
@@ -78,7 +79,6 @@ import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
-import co.typie.ui.component.entity_container.EntityContainerBottomOverlayBarHeight
 import co.typie.ui.component.entity_container.EntityContainerBottomOverlayStack
 import co.typie.ui.component.entity_container.EntityContainerEditAction
 import co.typie.ui.component.entity_container.EntityContainerListContent
@@ -126,9 +126,9 @@ fun SpaceScreen() {
       calculateEntityContainerBottomOverlayMetrics(
         baseBottomInset = Route.Space.toastBottomInset,
         hasPasteBar = false,
-        pasteBarHeight = EntityContainerBottomOverlayBarHeight,
+        pasteBarHeight = EntityBottomOverlayDefaults.BarHeight,
         hasSelectionBar = false,
-        selectionBarHeight = EntityContainerBottomOverlayBarHeight,
+        selectionBarHeight = EntityBottomOverlayDefaults.BarHeight,
       )
     )
   }
@@ -164,12 +164,22 @@ fun SpaceScreen() {
   if (isCurrentRoute) {
     SideEffect { toast.bottomInset = overlayMetrics.toastBottomInset }
   }
+  var lastReservedBottomSpacerTarget by remember {
+    mutableStateOf(overlayMetrics.reservedSpacerHeight)
+  }
+  val reservedBottomSpacerAnimationDuration =
+    if (overlayMetrics.reservedSpacerHeight < lastReservedBottomSpacerTarget) {
+      EntityBottomOverlayDefaults.ExitDurationMillis
+    } else {
+      EntityBottomOverlayDefaults.EnterDurationMillis
+    }
   val reservedBottomSpacerHeight by
     animateDpAsState(
       targetValue = overlayMetrics.reservedSpacerHeight,
-      animationSpec = tween(220),
+      animationSpec = tween(reservedBottomSpacerAnimationDuration),
       label = "space-bottom-spacer-height",
     )
+  SideEffect { lastReservedBottomSpacerTarget = overlayMetrics.reservedSpacerHeight }
 
   LaunchedEffect(shouldShowPasteBar) { animatedPasteBarVisible = shouldShowPasteBar }
 

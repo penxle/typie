@@ -59,6 +59,7 @@ import co.typie.screen.space.entity.EntitySelectionViewModel
 import co.typie.shell.MainBottomBarPill
 import co.typie.shell.SpaceBottomBarActionButton
 import co.typie.storage.Preference
+import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.bottombar.ProvideBottomBar
@@ -66,7 +67,6 @@ import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
-import co.typie.ui.component.entity_container.EntityContainerBottomOverlayBarHeight
 import co.typie.ui.component.entity_container.EntityContainerBottomOverlayStack
 import co.typie.ui.component.entity_container.EntityContainerEditAction
 import co.typie.ui.component.entity_container.EntityContainerListContent
@@ -112,9 +112,9 @@ fun FolderScreen(entityId: String) {
         calculateEntityContainerBottomOverlayMetrics(
           baseBottomInset = Route.Folder(entityId).toastBottomInset,
           hasPasteBar = false,
-          pasteBarHeight = EntityContainerBottomOverlayBarHeight,
+          pasteBarHeight = EntityBottomOverlayDefaults.BarHeight,
           hasSelectionBar = false,
-          selectionBarHeight = EntityContainerBottomOverlayBarHeight,
+          selectionBarHeight = EntityBottomOverlayDefaults.BarHeight,
         )
       )
     }
@@ -187,12 +187,21 @@ fun FolderScreen(entityId: String) {
   val isCurrentRoute = nav.current == LocalRoute.current
   val shouldShowPasteBar = isPasteBarVisible && isCurrentRoute
   val isSelectionBarVisible = selection.isSelectionBarVisible
+  var lastReservedBottomSpacerTarget by
+    remember(entityId) { mutableStateOf(overlayMetrics.reservedSpacerHeight) }
+  val reservedBottomSpacerAnimationDuration =
+    if (overlayMetrics.reservedSpacerHeight < lastReservedBottomSpacerTarget) {
+      EntityBottomOverlayDefaults.ExitDurationMillis
+    } else {
+      EntityBottomOverlayDefaults.EnterDurationMillis
+    }
   val reservedBottomSpacerHeight by
     animateDpAsState(
       targetValue = overlayMetrics.reservedSpacerHeight,
-      animationSpec = tween(220),
+      animationSpec = tween(reservedBottomSpacerAnimationDuration),
       label = "folder-bottom-spacer-height",
     )
+  SideEffect { lastReservedBottomSpacerTarget = overlayMetrics.reservedSpacerHeight }
 
   LaunchedEffect(shouldShowPasteBar) { animatedPasteBarVisible = shouldShowPasteBar }
   if (isCurrentRoute) {

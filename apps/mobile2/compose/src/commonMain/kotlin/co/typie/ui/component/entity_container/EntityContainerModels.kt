@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.entity_transfer.EntityTransferSource
+import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.EntityListItem
 
 data class OrderedEntityItem(val id: String, val order: String, val item: EntityListItem)
@@ -56,11 +57,6 @@ class EntityContainerSelection(
     onStateChange(toggleEntityContainerSelection(state, itemId))
   }
 }
-
-internal val EntityContainerBottomOverlayGap = 8.dp
-internal val EntityContainerBottomOverlayBottomOffset = 44.dp
-internal val EntityContainerBottomOverlayReserveExtra = 12.dp
-internal val EntityContainerDefaultBottomSpacerHeight = 140.dp
 
 @Composable
 fun rememberEntityContainerSelection(items: List<OrderedEntityItem>): EntityContainerSelection {
@@ -169,24 +165,24 @@ fun calculateEntityContainerBottomOverlayMetrics(
   if (visibleHeights.isEmpty()) {
     return EntityContainerBottomOverlayMetrics(
       occupiedHeight = 0.dp,
-      reservedSpacerHeight = EntityContainerDefaultBottomSpacerHeight,
+      reservedSpacerHeight = EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
       toastBottomInset = baseBottomInset,
     )
   }
 
   val stackHeight =
     visibleHeights.fold(0.dp) { total, height -> total + height } +
-      EntityContainerBottomOverlayGap * (visibleHeights.size - 1)
-  val occupiedHeight = baseBottomInset + EntityContainerBottomOverlayBottomOffset + stackHeight
+      EntityBottomOverlayDefaults.Gap * (visibleHeights.size - 1)
+  val occupiedHeight = baseBottomInset + EntityBottomOverlayDefaults.BottomOffset + stackHeight
 
   return EntityContainerBottomOverlayMetrics(
     occupiedHeight = occupiedHeight,
     reservedSpacerHeight =
       maxOf(
-        EntityContainerDefaultBottomSpacerHeight,
-        occupiedHeight + EntityContainerBottomOverlayReserveExtra,
+        EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
+        occupiedHeight + EntityBottomOverlayDefaults.ReserveExtra,
       ),
-    toastBottomInset = baseBottomInset + stackHeight + EntityContainerBottomOverlayGap,
+    toastBottomInset = baseBottomInset + stackHeight + EntityBottomOverlayDefaults.Gap,
   )
 }
 
