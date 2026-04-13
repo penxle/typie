@@ -45,6 +45,7 @@ import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
+import co.typie.ui.component.popover.close
 import co.typie.ui.component.reorder.ReorderCommit
 import co.typie.ui.component.reorder.ReorderableListState
 import co.typie.ui.component.reorder.reorderableDragHandle
@@ -189,7 +190,8 @@ private fun EntityContainerEditMenu(actions: List<EntityContainerEditAction>) {
 }
 
 @Composable
-private fun PopoverScope.EntityContainerEditActionList(actions: List<EntityContainerEditAction>) {
+context(_: PopoverScope)
+private fun EntityContainerEditActionList(actions: List<EntityContainerEditAction>) {
   PopoverList(
     items =
       actions.map { action ->

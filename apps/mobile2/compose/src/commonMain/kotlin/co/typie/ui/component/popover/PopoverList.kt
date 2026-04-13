@@ -39,8 +39,9 @@ import kotlinx.coroutines.launch
 data class PopoverListItem(val content: @Composable () -> Unit, val onSelected: () -> Unit)
 
 @Composable
-fun PopoverScope.PopoverList(items: List<PopoverListItem>) {
-  PopoverList(items = items, pointerState = pointerState, inputEnabled = acceptsInput)
+context(scope: PopoverScope)
+fun PopoverList(items: List<PopoverListItem>) {
+  PopoverList(items = items, pointerState = scope.pointerState, inputEnabled = scope.acceptsInput)
 }
 
 @Composable

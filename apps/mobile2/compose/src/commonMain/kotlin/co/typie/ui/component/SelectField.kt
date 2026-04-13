@@ -27,6 +27,7 @@ import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
+import co.typie.ui.component.popover.close
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme

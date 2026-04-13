@@ -59,6 +59,7 @@ import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
+import co.typie.ui.component.popover.close
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
@@ -214,7 +215,8 @@ private fun SpacePopoverAnchor(site: SpacePopover_Query.Site) {
 }
 
 @Composable
-private fun PopoverScope.SpacePopoverPane(
+context(_: PopoverScope)
+private fun SpacePopoverPane(
   model: SpacePopoverViewModel,
   currentSite: SpacePopover_Query.Site,
   otherSites: List<SpacePopover_Query.Site>,

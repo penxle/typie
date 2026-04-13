@@ -136,23 +136,29 @@ class NavigatorTest {
     assertNotSame(originalStore, recreatedStore)
   }
 
-  private suspend fun TestScope.navigateAndComplete(nav: Navigator, route: Route) {
-    val job = launch { nav.navigate(route) }
-    advanceUntilIdle()
-    nav.completeTransition()
-    advanceUntilIdle()
-    job.join()
+  context(testScope: TestScope)
+  private suspend fun navigateAndComplete(nav: Navigator, route: Route) {
+    with(testScope) {
+      val job = launch { nav.navigate(route) }
+      advanceUntilIdle()
+      nav.completeTransition()
+      advanceUntilIdle()
+      job.join()
+    }
   }
 
-  private suspend fun TestScope.popAndComplete(nav: Navigator) {
-    val job = launch { nav.pop() }
-    advanceUntilIdle()
-    if (nav.popRequested) {
-      nav.performPop()
-      nav.consumePopRequest()
+  context(testScope: TestScope)
+  private suspend fun popAndComplete(nav: Navigator) {
+    with(testScope) {
+      val job = launch { nav.pop() }
+      advanceUntilIdle()
+      if (nav.popRequested) {
+        nav.performPop()
+        nav.consumePopRequest()
+      }
+      nav.completeTransition()
+      advanceUntilIdle()
+      job.join()
     }
-    nav.completeTransition()
-    advanceUntilIdle()
-    job.join()
   }
 }

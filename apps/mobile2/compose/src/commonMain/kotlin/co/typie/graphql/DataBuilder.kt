@@ -45,5 +45,6 @@ object PlaceholderResolver : FakeResolver {
 
 private const val FILLER = '\uAC00'
 
-fun DataBuilderScope.text(length: IntRange, lines: Int = 1): String =
+context(_: DataBuilderScope)
+fun text(length: IntRange, lines: Int = 1): String =
   (1..lines).joinToString("\n") { FILLER.toString().repeat(length.random()) }

@@ -52,6 +52,7 @@ import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
+import co.typie.ui.component.popover.close
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.resolveEntityIconAppearance
@@ -119,7 +120,8 @@ internal fun FolderTopBarCenterMenu(
 }
 
 @Composable
-internal fun PopoverScope.FolderTopBarCenterPane(
+context(_: PopoverScope)
+internal fun FolderTopBarCenterPane(
   title: String,
   subtitle: String,
   breadcrumbNames: List<String>,
@@ -391,9 +393,8 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 @Composable
-private fun PopoverScope.FolderTopBarActionList(
-  onAction: (FolderAction, closePopover: () -> Unit) -> Unit
-) {
+context(_: PopoverScope)
+private fun FolderTopBarActionList(onAction: (FolderAction, closePopover: () -> Unit) -> Unit) {
   Column(modifier = Modifier.fillMaxWidth()) {
     folderPrimaryActionSections().forEachIndexed { index, section ->
       if (index > 0) {
@@ -406,7 +407,8 @@ private fun PopoverScope.FolderTopBarActionList(
 }
 
 @Composable
-private fun PopoverScope.FolderTopBarActionSection(
+context(_: PopoverScope)
+private fun FolderTopBarActionSection(
   items: List<FolderActionMenuItem>,
   onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
 ) {

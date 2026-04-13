@@ -504,11 +504,12 @@ private fun SettingsThemeContent(themeMode: ThemeMode) {
 }
 
 @Composable
-private fun RowScope.SettingsRowContent(label: String, trailing: @Composable () -> Unit) {
+context(rowScope: RowScope)
+private fun SettingsRowContent(label: String, trailing: @Composable () -> Unit) {
   Text(
     text = label,
     style = AppTheme.typography.label,
-    modifier = Modifier.weight(1f),
+    modifier = with(rowScope) { Modifier.weight(1f) },
     maxLines = 1,
     overflow = TextOverflow.Ellipsis,
   )

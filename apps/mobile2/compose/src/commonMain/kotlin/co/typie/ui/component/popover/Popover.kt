@@ -22,7 +22,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,20 +79,6 @@ data class AnchorPointerState(
   val isUp: Boolean,
 )
 
-@Stable
-class PopoverScope internal constructor(private val onClose: () -> Unit) {
-  var pointerState: AnchorPointerState? by mutableStateOf(null)
-    internal set
-
-  var acceptsInput: Boolean by mutableStateOf(true)
-    internal set
-
-  fun close() {
-    acceptsInput = false
-    onClose()
-  }
-}
-
 private enum class PopoverSlot {
   InitialMeasurePane,
   FinalMeasurePane,
@@ -110,7 +95,10 @@ internal data class PopoverScreenPadding(
 @Composable
 fun Popover(
   anchor: @Composable () -> Unit,
-  pane: @Composable PopoverScope.() -> Unit,
+  pane:
+    @Composable
+    context(PopoverScope)
+    () -> Unit,
   placement: PopoverPlacement = PopoverPlacement.BelowEnd,
   maxWidth: Dp? = null,
   minWidth: Dp = 0.dp,
@@ -324,7 +312,7 @@ fun Popover(
           ) {
             PopoverPanePopup(
               anchor = anchor,
-              pane = { scope.pane() },
+              pane = { context(scope) { pane() } },
               anchorBounds = anchorBounds,
               placement = placement,
               progress = progress,

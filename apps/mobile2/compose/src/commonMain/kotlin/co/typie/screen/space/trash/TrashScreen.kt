@@ -50,6 +50,7 @@ import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
+import co.typie.ui.component.popover.close
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetMenuActionRow
@@ -444,10 +445,8 @@ private fun TrashTopBarMenu(actions: List<TrashActionItem>, actionScope: Corouti
 }
 
 @Composable
-private fun PopoverScope.TrashTopBarMenuPane(
-  actions: List<TrashActionItem>,
-  actionScope: CoroutineScope,
-) {
+context(_: PopoverScope)
+private fun TrashTopBarMenuPane(actions: List<TrashActionItem>, actionScope: CoroutineScope) {
   Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
     PopoverList(
       items =

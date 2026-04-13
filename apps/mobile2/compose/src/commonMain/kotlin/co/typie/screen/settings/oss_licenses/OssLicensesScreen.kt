@@ -204,11 +204,12 @@ private fun OssLicensesStatusCard(
 }
 
 @Composable
-private fun RowScope.OssLicenseRowContent(entry: OssLicenseEntry) {
+context(rowScope: RowScope)
+private fun OssLicenseRowContent(entry: OssLicenseEntry) {
   Text(
     text = entry.packageName,
     style = AppTheme.typography.label,
-    modifier = Modifier.weight(1f),
+    modifier = with(rowScope) { Modifier.weight(1f) },
     maxLines = 2,
     overflow = TextOverflow.Ellipsis,
   )

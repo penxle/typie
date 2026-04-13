@@ -45,6 +45,7 @@ import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
+import co.typie.ui.component.popover.close
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton

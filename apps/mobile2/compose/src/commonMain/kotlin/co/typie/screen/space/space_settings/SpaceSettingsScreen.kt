@@ -73,6 +73,7 @@ import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
+import co.typie.ui.component.popover.close
 import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetInsetPolicy
@@ -311,14 +312,12 @@ fun SpaceSettingsScreen() {
 }
 
 @Composable
-private fun RowScope.SpaceSettingsRowContent(
-  label: String,
-  trailing: @Composable RowScope.() -> Unit,
-) {
+context(rowScope: RowScope)
+private fun SpaceSettingsRowContent(label: String, trailing: @Composable RowScope.() -> Unit) {
   Text(
     text = label,
     style = AppTheme.typography.label,
-    modifier = Modifier.weight(1f),
+    modifier = with(rowScope) { Modifier.weight(1f) },
     maxLines = 1,
     overflow = TextOverflow.Ellipsis,
   )
