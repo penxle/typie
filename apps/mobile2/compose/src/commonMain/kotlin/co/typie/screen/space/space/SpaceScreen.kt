@@ -4,7 +4,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -355,10 +354,7 @@ fun SpaceScreen() {
     }
   }
 
-  Screen(
-    loading = model.query.state !is QueryState.Success,
-    contentPadding = PaddingValues(0.dp),
-  ) { contentPadding ->
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
     val reorderViewportTopInset =
       maxOf(
         0.dp,

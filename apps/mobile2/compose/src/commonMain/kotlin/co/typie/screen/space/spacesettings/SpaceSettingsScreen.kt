@@ -144,33 +144,7 @@ fun SpaceSettingsScreen() {
     }
   }
 
-  Screen(
-    loading = model.query.state !is QueryState.Success,
-    imeAware = true,
-    bottomBar = {
-      Button(
-        text = "저장",
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-        loading = model.isSubmitting,
-        loadingText = "저장 중...",
-        onClick = {
-          scope.launch {
-            model
-              .submit()
-              .withDefaultExceptionHandler(toast)
-              .onOk { nav.pop() }
-              .onErr { error ->
-                when (error) {
-                  SubmitError.SlugAlreadyExists -> toast.show(ToastType.Error, "이미 사용 중인 URL이에요.")
-                  SubmitError.SubscriptionUnknown ->
-                    toast.show(ToastType.Error, "이용권 상태를 확인하는 중이에요. 잠시 후 다시 시도해주세요.")
-                }
-              }
-          }
-        },
-      )
-    },
-  ) { contentPadding ->
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -303,6 +277,28 @@ fun SpaceSettingsScreen() {
         }
       }
     }
+
+    Button(
+      text = "저장",
+      modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+      loading = model.isSubmitting,
+      loadingText = "저장 중...",
+      onClick = {
+        scope.launch {
+          model
+            .submit()
+            .withDefaultExceptionHandler(toast)
+            .onOk { nav.pop() }
+            .onErr { error ->
+              when (error) {
+                SubmitError.SlugAlreadyExists -> toast.show(ToastType.Error, "이미 사용 중인 URL이에요.")
+                SubmitError.SubscriptionUnknown ->
+                  toast.show(ToastType.Error, "이용권 상태를 확인하는 중이에요. 잠시 후 다시 시도해주세요.")
+              }
+            }
+        }
+      },
+    )
   }
 }
 

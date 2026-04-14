@@ -3,7 +3,6 @@ package co.typie.screen.space.folder
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -535,8 +534,7 @@ fun FolderScreen(entityId: String) {
     }
   }
 
-  Screen(loading = model.query.state !is QueryState.Success, contentPadding = PaddingValues()) {
-    contentPadding ->
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
     val reorderViewportTopInset =
       maxOf(
         0.dp,

@@ -73,19 +73,7 @@ fun UpdateEmailScreen() {
     }
   }
 
-  Screen(
-    loading = model.query.state !is QueryState.Success,
-    imeAware = true,
-    bottomBar = {
-      Button(
-        text = "변경",
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-        loading = model.isSubmitting,
-        loadingText = "변경 중...",
-        onClick = { submit() },
-      )
-    },
-  ) { contentPadding ->
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
       Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
 
@@ -101,6 +89,14 @@ fun UpdateEmailScreen() {
         contentType = ContentType.EmailAddress,
         keyboardType = KeyboardType.Email,
         onImeAction = { submit() },
+      )
+
+      Button(
+        text = "변경",
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+        loading = model.isSubmitting,
+        loadingText = "변경 중...",
+        onClick = { submit() },
       )
     }
   }

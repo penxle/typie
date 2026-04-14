@@ -42,7 +42,7 @@ fun HomeSearchScreen() {
 
   ProvideTopBar(leading = { TopBarBackButton(onClick = { nav.pop() }) })
 
-  Screen(contentPadding = PaddingValues(0.dp)) { contentPadding ->
+  Screen { contentPadding ->
     val bottomInset =
       maxOf(
         WindowInsets.ime.asPaddingValues().calculateBottomPadding(),

@@ -130,19 +130,7 @@ fun ReferralScreen() {
     }
   }
 
-  Screen(
-    loading = model.query.state !is QueryState.Success,
-    bottomBar = {
-      Button(
-        text = "초대 링크 복사",
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-        loading = isInviteLoading,
-        loadingText = "불러오는 중...",
-        enabled = !isInviteLoading,
-        onClick = ::copyLink,
-      )
-    },
-  ) { contentPadding ->
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -218,6 +206,15 @@ fun ReferralScreen() {
       }
 
       Spacer(Modifier.height(72.dp))
+
+      Button(
+        text = "초대 링크 복사",
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+        loading = isInviteLoading,
+        loadingText = "불러오는 중...",
+        enabled = !isInviteLoading,
+        onClick = ::copyLink,
+      )
     }
   }
 }

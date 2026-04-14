@@ -58,19 +58,20 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
       }
     }
 
-  val visibilityAlpha by
+  val alpha by
     animateFloatAsState(
       targetValue = if (state.visible) 1f else 0f,
       animationSpec = tween(TopBarDefaults.VisibilityFadeDuration),
     )
-  val visibilityOffsetY by
+  val translateY by
     animateFloatAsState(
       targetValue = if (state.visible) 0f else -1f,
       animationSpec = tween(TopBarDefaults.VisibilityAnimationDuration, easing = EaseOutCubic),
     )
+
   SideEffect {
-    state.animatedVisibilityAlpha = visibilityAlpha
-    state.animatedVisibilityOffsetY = visibilityOffsetY
+    state.animatedAlpha = alpha
+    state.animatedTranslationY = translateY
   }
 
   Box(
@@ -78,8 +79,8 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
       modifier
         .fillMaxWidth()
         .graphicsLayer {
-          alpha = visibilityAlpha
-          translationY = visibilityOffsetY * size.height
+          this.alpha = alpha
+          translationY = translateY * size.height
         }
         .windowInsetsPadding(WindowInsets.statusBars)
         .then(

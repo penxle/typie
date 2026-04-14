@@ -67,29 +67,7 @@ fun DeleteUserScreen() {
 
   ProvideTopBar(center = { Text("회원 탈퇴", style = AppTheme.typography.title) })
 
-  Screen(
-    bottomBar = {
-      Column(
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Button(
-          text = "탈퇴하기",
-          variant = ButtonVariant.Danger,
-          loading = model.isSubmitting,
-          loadingText = "탈퇴하는 중...",
-          onClick = { submit() },
-        )
-
-        Button(
-          text = "타이피 계속 이용하기",
-          variant = ButtonVariant.Secondary,
-          enabled = !model.isSubmitting,
-          onClick = { nav.pop() },
-        )
-      }
-    }
-  ) { contentPadding ->
+  Screen { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -131,6 +109,26 @@ fun DeleteUserScreen() {
         checked = isAcknowledged,
         onToggle = { isAcknowledged = !isAcknowledged },
       )
+
+      Column(
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Button(
+          text = "탈퇴하기",
+          variant = ButtonVariant.Danger,
+          loading = model.isSubmitting,
+          loadingText = "탈퇴하는 중...",
+          onClick = { submit() },
+        )
+
+        Button(
+          text = "타이피 계속 이용하기",
+          variant = ButtonVariant.Secondary,
+          enabled = !model.isSubmitting,
+          onClick = { nav.pop() },
+        )
+      }
     }
   }
 }

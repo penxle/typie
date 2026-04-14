@@ -2,7 +2,6 @@ package co.typie.ui.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -12,24 +11,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import co.typie.ext.imeOrNavigationBarsPadding
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
 import co.typie.ext.statusBars
+import co.typie.ext.statusBarsPadding
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
 import co.typie.ui.component.topbar.LocalTopBarAnimationSource
@@ -47,103 +40,68 @@ private val MaxContentWidth = 600.dp
 fun Screen(
   loading: Boolean = false,
   background: Color = AppTheme.colors.surfaceBase,
-  contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
-  imeAware: Boolean = false,
-  bottomBar: (@Composable BoxScope.() -> Unit)? = null,
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
+  val hazeState = remember { HazeState() }
+
   val topBarState = LocalTopBarState.current
   val hasTopBar = topBarState != null && topBarState.enabled && topBarState.visible
-  val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-  val adjustedContentPadding =
+
+  val contentPadding =
     if (hasTopBar) {
-      contentPadding +
-        PaddingValues(
-          top =
-            statusBarTop +
-              TopBarDefaults.Height +
-              TopBarDefaults.BlurFadeHeight +
-              TopBarDefaults.ContentTopSpacing
-        )
+      val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+      PaddingValues(
+        top =
+          statusBarTop +
+            TopBarDefaults.Height +
+            TopBarDefaults.BlurFadeHeight +
+            TopBarDefaults.ContentTopSpacing
+      ) + PaddingValues(horizontal = 16.dp)
     } else {
-      contentPadding
+      PaddingValues(horizontal = 16.dp)
     }
 
   Box(Modifier.fillMaxSize().background(background)) {
-    val hazeState = remember { HazeState() }
-
     Box(
-      modifier = Modifier.fillMaxSize().hazeSource(hazeState),
+      modifier = Modifier.fillMaxSize().hazeSource(hazeState).widthIn(max = MaxContentWidth),
       contentAlignment = Alignment.TopCenter,
     ) {
-      Box(Modifier.widthIn(max = MaxContentWidth).fillMaxSize()) {
-        Skeleton(enabled = loading) {
-          var bottomBarHeight by remember { mutableIntStateOf(0) }
-          val density = LocalDensity.current
-          val bottomBarPadding = PaddingValues(bottom = with(density) { bottomBarHeight.toDp() })
-          val resolvedContentPadding = adjustedContentPadding + bottomBarPadding
-
-          Box(
-            modifier =
-              Modifier.fillMaxSize()
-                .then(if (imeAware) Modifier.imeOrNavigationBarsPadding() else Modifier)
-          ) {
-            content(resolvedContentPadding)
-
-            if (bottomBar != null) {
-              Box(
-                modifier =
-                  Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .then(if (!imeAware) Modifier.navigationBarsPadding() else Modifier)
-                    .onSizeChanged { bottomBarHeight = it.height }
-              ) {
-                bottomBar()
-              }
-            }
-          }
-        }
+      Skeleton(enabled = loading) {
+        Box(modifier = Modifier.fillMaxSize()) { content(contentPadding) }
       }
     }
 
-    val topBarAnimation = LocalTopBarAnimationSource.current
-    val topBarEnabled = topBarState != null && topBarState.enabled
-    val topBarVisAlpha = topBarAnimation?.animatedVisibilityAlpha ?: 0f
-    val topBarVisOffsetY = topBarAnimation?.animatedVisibilityOffsetY ?: 0f
-    if (topBarEnabled && topBarVisAlpha > 0f) {
+    val topBarAlpha = LocalTopBarAnimationSource.current?.animatedAlpha ?: 0f
+    val topBarTranslationY = LocalTopBarAnimationSource.current?.animatedTranslationY ?: 0f
+    if (topBarState?.enabled == true && topBarAlpha > 0f) {
       Column(
         modifier =
           Modifier.fillMaxWidth()
-            .align(Alignment.TopStart)
+            .align(Alignment.TopCenter)
             .graphicsLayer {
-              alpha = topBarVisAlpha
-              translationY = topBarVisOffsetY * size.height
+              alpha = topBarAlpha
+              translationY = topBarTranslationY * size.height
             }
             .hazeEffect(hazeState) {
               backgroundColor = background
-              blurRadius = TopBarDefaults.BlurRadius * (topBarState?.blurFactor ?: 1f)
+              blurRadius = TopBarDefaults.BlurRadius
               progressive = TopBarDefaults.hazeProgressive()
             }
       ) {
-        Spacer(
-          Modifier.fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .height(TopBarDefaults.Height)
-        )
+        Spacer(Modifier.fillMaxWidth().statusBarsPadding().height(TopBarDefaults.Height))
         Spacer(Modifier.height(TopBarDefaults.BlurFadeHeight))
       }
     }
 
-    val bottomBarAnimation = LocalBottomBarAnimationSource.current
-    val bgAlpha = bottomBarAnimation?.animatedAlpha ?: 0f
-    val bgTranslationY = bottomBarAnimation?.animatedTranslationY ?: 0f
-    if (bgAlpha > 0f) {
+    val bottomBarAlpha = LocalBottomBarAnimationSource.current?.animatedAlpha ?: 0f
+    val bottomBarTranslationY = LocalBottomBarAnimationSource.current?.animatedTranslationY ?: 0f
+    if (bottomBarAlpha > 0f) {
       val fadeColor = background.copy(alpha = BottomBarDefaults.FadeOpacity)
       Column(
         modifier =
-          Modifier.fillMaxWidth().align(Alignment.BottomStart).graphicsLayer {
-            alpha = bgAlpha
-            translationY = bgTranslationY
+          Modifier.fillMaxWidth().align(Alignment.BottomCenter).graphicsLayer {
+            alpha = bottomBarAlpha
+            translationY = bottomBarTranslationY
           }
       ) {
         Spacer(

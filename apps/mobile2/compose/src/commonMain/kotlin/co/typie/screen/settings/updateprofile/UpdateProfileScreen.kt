@@ -83,26 +83,7 @@ fun UpdateProfileScreen() {
     }
   }
 
-  Screen(
-    loading = model.query.state !is QueryState.Success,
-    imeAware = true,
-    bottomBar = {
-      Button(
-        text = "변경",
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-        loading = model.isSubmitting,
-        loadingText = "변경 중...",
-        onClick = {
-          scope.launch {
-            model.submit().withDefaultExceptionHandler(toast).onOk {
-              toast.show(ToastType.Success, "프로필이 변경되었어요.")
-              nav.pop()
-            }
-          }
-        },
-      )
-    },
-  ) { contentPadding ->
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
       Column(
         modifier = Modifier.fillMaxWidth(),
@@ -135,6 +116,21 @@ fun UpdateProfileScreen() {
       )
 
       Spacer(Modifier.height(24.dp))
+
+      Button(
+        text = "변경",
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+        loading = model.isSubmitting,
+        loadingText = "변경 중...",
+        onClick = {
+          scope.launch {
+            model.submit().withDefaultExceptionHandler(toast).onOk {
+              toast.show(ToastType.Success, "프로필이 변경되었어요.")
+              nav.pop()
+            }
+          }
+        },
+      )
     }
   }
 }
