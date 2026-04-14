@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,7 @@ import co.typie.domain.subscription.fullPlanFeatures
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.type.PlanAvailability
 import co.typie.icons.Lucide
@@ -123,77 +125,79 @@ fun EnrollPlanScreen() {
   }
 
   Screen(
-    scrollState = scrollState,
     loading =
       model.query.state !is QueryState.Success ||
-        currentSubscriptionState is SubscriptionServiceState.Unknown,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    val currentSubscription =
-      (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
-    val currentPlanId = currentSubscription?.planId
-    val hasSubscription = currentSubscription != null
-    val isOnTrial = currentSubscription?.availability == PlanAvailability.TRIAL
-    val canStartTrial = model.query.data.me.canStartTrial
+        currentSubscriptionState is SubscriptionServiceState.Unknown
+  ) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      val currentSubscription =
+        (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
+      val currentPlanId = currentSubscription?.planId
+      val hasSubscription = currentSubscription != null
+      val isOnTrial = currentSubscription?.availability == PlanAvailability.TRIAL
+      val canStartTrial = model.query.data.me.canStartTrial
 
-    Text(
-      text = "이용권 구매/변경",
-      style = AppTheme.typography.display,
-      modifier = Modifier.padding(top = 4.dp),
-    )
-
-    if (!hasSubscription) {
-      SectionTitle("현재 이용 중인 이용권")
-
-      SubscriptionPlanCard(
-        title = "타이피 BASIC ACCESS",
-        badge = "현재 이용 중",
-        features = basicPlanFeatures,
+      Text(
+        text = "이용권 구매/변경",
+        style = AppTheme.typography.display,
+        modifier = Modifier.padding(top = 4.dp),
       )
-    }
 
-    SectionTitle("FULL ACCESS")
+      if (!hasSubscription) {
+        SectionTitle("현재 이용 중인 이용권")
 
-    FullAccessCard(
-      isOnTrial = isOnTrial,
-      canStartTrial = canStartTrial,
-      currentPlanId = currentPlanId,
-      productsLoaded = model.productsLoaded,
-      monthlyProduct = model.products[PurchasePlanInterval.Monthly],
-      yearlyProduct = model.products[PurchasePlanInterval.Yearly],
-      onStartTrial = {
-        val result =
-          dialog.confirm(
-            title = TRIAL_START_CONFIRM_TITLE,
-            message = TRIAL_START_CONFIRM_MESSAGE,
-            confirmText = TRIAL_START_CONFIRM_ACTION,
-          )
-        if (result is DialogResult.Resolved) {
-          loader.runWith {
-            model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
-              when (error) {
-                EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+        SubscriptionPlanCard(
+          title = "타이피 BASIC ACCESS",
+          badge = "현재 이용 중",
+          features = basicPlanFeatures,
+        )
+      }
+
+      SectionTitle("FULL ACCESS")
+
+      FullAccessCard(
+        isOnTrial = isOnTrial,
+        canStartTrial = canStartTrial,
+        currentPlanId = currentPlanId,
+        productsLoaded = model.productsLoaded,
+        monthlyProduct = model.products[PurchasePlanInterval.Monthly],
+        yearlyProduct = model.products[PurchasePlanInterval.Yearly],
+        onStartTrial = {
+          val result =
+            dialog.confirm(
+              title = TRIAL_START_CONFIRM_TITLE,
+              message = TRIAL_START_CONFIRM_MESSAGE,
+              confirmText = TRIAL_START_CONFIRM_ACTION,
+            )
+          if (result is DialogResult.Resolved) {
+            loader.runWith {
+              model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
+                when (error) {
+                  EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
+                }
               }
             }
           }
-        }
-      },
-      onPurchaseMonthly = { product ->
-        // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-        scope.launch {
-          loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
-        }
-      },
-      onPurchaseYearly = { product ->
-        // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-        scope.launch {
-          loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
-        }
-      },
-    )
+        },
+        onPurchaseMonthly = { product ->
+          // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
+          scope.launch {
+            loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
+          }
+        },
+        onPurchaseYearly = { product ->
+          // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
+          scope.launch {
+            loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
+          }
+        },
+      )
 
-    Spacer(Modifier.height(72.dp))
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

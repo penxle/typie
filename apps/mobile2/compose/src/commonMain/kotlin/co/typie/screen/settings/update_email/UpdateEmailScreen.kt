@@ -1,6 +1,8 @@
 package co.typie.screen.settings.update_email
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -11,6 +13,7 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.result.DEFAULT_ERROR_MESSAGE
@@ -71,7 +74,6 @@ fun UpdateEmailScreen() {
   }
 
   Screen(
-    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     imeAware = true,
     bottomBar = {
@@ -83,21 +85,23 @@ fun UpdateEmailScreen() {
         onClick = { submit() },
       )
     },
-  ) {
-    Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+  ) { contentPadding ->
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+      Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
 
-    Text(model.query.data.me.email, style = AppTheme.typography.action)
+      Text(model.query.data.me.email, style = AppTheme.typography.action)
 
-    Spacer(Modifier.height(8.dp))
+      Spacer(Modifier.height(8.dp))
 
-    TextField(
-      field = model.state.form.email,
-      label = "변경할 이메일 주소",
-      labelPosition = LabelPosition.Internal,
-      placeholder = "me@example.com",
-      contentType = ContentType.EmailAddress,
-      keyboardType = KeyboardType.Email,
-      onImeAction = { submit() },
-    )
+      TextField(
+        field = model.state.form.email,
+        label = "변경할 이메일 주소",
+        labelPosition = LabelPosition.Internal,
+        placeholder = "me@example.com",
+        contentType = ContentType.EmailAddress,
+        keyboardType = KeyboardType.Email,
+        onImeAction = { submit() },
+      )
+    }
   }
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
 import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
@@ -69,33 +71,33 @@ fun SocialAccountsScreen() {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Spacer(Modifier.height(4.dp))
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      Spacer(Modifier.height(4.dp))
 
-    SectionTitle("연결된 계정")
+      SectionTitle("연결된 계정")
 
-    CardSurface(modifier = Modifier.fillMaxWidth()) {
-      if (singleSignOns.isEmpty()) {
-        EmptySocialAccountsState()
-      } else {
-        Column {
-          singleSignOns.forEachIndexed { index, singleSignOn ->
-            SocialAccountRow(provider = singleSignOn.provider, email = singleSignOn.email)
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        if (singleSignOns.isEmpty()) {
+          EmptySocialAccountsState()
+        } else {
+          Column {
+            singleSignOns.forEachIndexed { index, singleSignOn ->
+              SocialAccountRow(provider = singleSignOn.provider, email = singleSignOn.email)
 
-            if (index < singleSignOns.lastIndex) {
-              CardDivider()
+              if (index < singleSignOns.lastIndex) {
+                CardDivider()
+              }
             }
           }
         }
       }
-    }
 
-    Spacer(Modifier.height(72.dp))
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

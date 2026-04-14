@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,7 @@ import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
@@ -139,61 +141,61 @@ fun FontSettingsScreen() {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text("폰트", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text("폰트", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
-    SectionTitle("직접 업로드한 폰트")
+      SectionTitle("직접 업로드한 폰트")
 
-    if (model.userFontFamilies.isEmpty()) {
-      FontSettingsEmptyState()
-    } else {
-      model.userFontFamilies.forEach { family ->
-        FontSettingsFamilySection(
-          family = family,
-          deletingFamilyId = model.state.deletingFamilyId,
-          deletingFontId = model.state.deletingFontId,
-          onDeleteFamilyClick = {
-            val result =
-              dialog.confirm(
-                title = "폰트 패밀리 삭제",
-                message = "\"${family.displayName}\" 폰트 패밀리 전체를 삭제하시겠어요?",
-                confirmText = "삭제",
-                confirmIsDestructive = true,
-              )
-            if (result is DialogResult.Resolved) {
-              model.deleteFamily(family).withDefaultExceptionHandler(toast).onOk {
-                toast.show(ToastType.Success, "\"${family.displayName}\" 폰트 패밀리를 삭제했어요.")
-              }
-            }
-          },
-          onDeleteFontClick = { font ->
-            val result =
-              dialog.confirm(
-                title = "폰트 삭제",
-                message =
-                  "\"${family.displayName} ${fontWeightLabel(font.weight, font.subfamilyDisplayName)}\" 폰트를 삭제하시겠어요?",
-                confirmText = "삭제",
-                confirmIsDestructive = true,
-              )
-            if (result is DialogResult.Resolved) {
-              model.deleteFont(font).withDefaultExceptionHandler(toast).onOk {
-                toast.show(
-                  ToastType.Success,
-                  "\"${family.displayName} ${fontWeightLabel(font.weight, font.subfamilyDisplayName)}\" 폰트를 삭제했어요.",
+      if (model.userFontFamilies.isEmpty()) {
+        FontSettingsEmptyState()
+      } else {
+        model.userFontFamilies.forEach { family ->
+          FontSettingsFamilySection(
+            family = family,
+            deletingFamilyId = model.state.deletingFamilyId,
+            deletingFontId = model.state.deletingFontId,
+            onDeleteFamilyClick = {
+              val result =
+                dialog.confirm(
+                  title = "폰트 패밀리 삭제",
+                  message = "\"${family.displayName}\" 폰트 패밀리 전체를 삭제하시겠어요?",
+                  confirmText = "삭제",
+                  confirmIsDestructive = true,
                 )
+              if (result is DialogResult.Resolved) {
+                model.deleteFamily(family).withDefaultExceptionHandler(toast).onOk {
+                  toast.show(ToastType.Success, "\"${family.displayName}\" 폰트 패밀리를 삭제했어요.")
+                }
               }
-            }
-          },
-        )
+            },
+            onDeleteFontClick = { font ->
+              val result =
+                dialog.confirm(
+                  title = "폰트 삭제",
+                  message =
+                    "\"${family.displayName} ${fontWeightLabel(font.weight, font.subfamilyDisplayName)}\" 폰트를 삭제하시겠어요?",
+                  confirmText = "삭제",
+                  confirmIsDestructive = true,
+                )
+              if (result is DialogResult.Resolved) {
+                model.deleteFont(font).withDefaultExceptionHandler(toast).onOk {
+                  toast.show(
+                    ToastType.Success,
+                    "\"${family.displayName} ${fontWeightLabel(font.weight, font.subfamilyDisplayName)}\" 폰트를 삭제했어요.",
+                  )
+                }
+              }
+            },
+          )
+        }
       }
-    }
 
-    Spacer(Modifier.height(72.dp))
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

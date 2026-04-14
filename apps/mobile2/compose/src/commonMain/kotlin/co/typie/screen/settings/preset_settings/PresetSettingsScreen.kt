@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,6 +37,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.verticalScroll
 import co.typie.form.FormState
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
@@ -246,120 +248,124 @@ fun PresetSettingsScreen() {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text(text = "프리셋", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
-
-    Text(
-      text = "새 문서를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.",
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
-    )
-
-    PresetSettingsSection(title = "기본 스타일") {
-      PresetSettingsRow(
-        label = "폰트 패밀리",
-        value = fontFamilySummaryLabel(template, model.normalizedFontFamilyOptions),
-        onClick = { openEditor(PresetEditorField.FontFamily) },
-      )
-      CardDivider()
-      PresetSettingsRow(
-        label = "폰트 굵기",
-        value = fontWeightSummaryLabel(template, model.selectedFontWeightAvailability),
-        onClick = { openEditor(PresetEditorField.FontWeight) },
-      )
-      CardDivider()
-      PresetSettingsRow(
-        label = "폰트 크기",
-        value = fontSizeSummaryLabel(template.fontSize),
-        onClick = { openEditor(PresetEditorField.FontSize) },
-      )
-      CardDivider()
-      PresetSettingsRow(
-        label = "자간",
-        value = presetOptionLabel(LETTER_SPACING_OPTIONS, template.letterSpacing),
-        onClick = { openEditor(PresetEditorField.LetterSpacing) },
-      )
-      CardDivider()
-      PresetSettingsRow(
-        label = "행간",
-        value = presetOptionLabel(LINE_HEIGHT_OPTIONS, template.lineHeight),
-        onClick = { openEditor(PresetEditorField.LineHeight) },
-      )
-      CardDivider()
-      PresetSettingsRow(
-        label = "글자 색",
-        value = presetOptionLabel(TEXT_COLOR_OPTIONS, template.textColor, template.textColor),
-        onClick = { openEditor(PresetEditorField.TextColor) },
-      )
-      CardDivider()
-      PresetSettingsRow(
-        label = "배경 색",
-        value =
-          presetOptionLabel(
-            BACKGROUND_COLOR_OPTIONS,
-            template.backgroundColor,
-            template.backgroundColor,
-          ),
-        onClick = { openEditor(PresetEditorField.BackgroundColor) },
-      )
-    }
-
-    PresetSettingsSection(title = "레이아웃") {
-      PresetSettingsRow(
-        label = "레이아웃 모드",
-        value = layoutModeSummaryLabel(template.layout),
-        onClick = { openEditor(PresetEditorField.LayoutMode) },
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text(
+        text = "프리셋",
+        style = AppTheme.typography.display,
+        modifier = Modifier.padding(top = 4.dp),
       )
 
-      when (val layout = template.layout) {
-        is PresetLayout.Continuous -> {
-          CardDivider()
-          PresetSettingsRow(
-            label = "본문 폭",
-            value = presetOptionLabel(MAX_WIDTH_OPTIONS, layout.maxWidth, "${layout.maxWidth}px"),
-            onClick = { openEditor(PresetEditorField.MaxWidth) },
-          )
-        }
+      Text(
+        text = "새 문서를 생성할 때 자동으로 적용될 기본 포맷을 설정해요.",
+        style = AppTheme.typography.caption,
+        color = AppTheme.colors.textTertiary,
+      )
 
-        is PresetLayout.Paginated -> {
-          CardDivider()
-          PresetSettingsRow(
-            label = "페이지 크기",
-            value = pageLayoutSummaryLabel(layout),
-            onClick = { openEditor(PresetEditorField.PageSize) },
-          )
-          CardDivider()
-          PresetSettingsRow(
-            label = "여백",
-            value = pageMarginSummaryLabel(layout),
-            onClick = { openEditor(PresetEditorField.PageMargin) },
-          )
-        }
-
-        is PresetLayout.Unknown -> Unit
+      PresetSettingsSection(title = "기본 스타일") {
+        PresetSettingsRow(
+          label = "폰트 패밀리",
+          value = fontFamilySummaryLabel(template, model.normalizedFontFamilyOptions),
+          onClick = { openEditor(PresetEditorField.FontFamily) },
+        )
+        CardDivider()
+        PresetSettingsRow(
+          label = "폰트 굵기",
+          value = fontWeightSummaryLabel(template, model.selectedFontWeightAvailability),
+          onClick = { openEditor(PresetEditorField.FontWeight) },
+        )
+        CardDivider()
+        PresetSettingsRow(
+          label = "폰트 크기",
+          value = fontSizeSummaryLabel(template.fontSize),
+          onClick = { openEditor(PresetEditorField.FontSize) },
+        )
+        CardDivider()
+        PresetSettingsRow(
+          label = "자간",
+          value = presetOptionLabel(LETTER_SPACING_OPTIONS, template.letterSpacing),
+          onClick = { openEditor(PresetEditorField.LetterSpacing) },
+        )
+        CardDivider()
+        PresetSettingsRow(
+          label = "행간",
+          value = presetOptionLabel(LINE_HEIGHT_OPTIONS, template.lineHeight),
+          onClick = { openEditor(PresetEditorField.LineHeight) },
+        )
+        CardDivider()
+        PresetSettingsRow(
+          label = "글자 색",
+          value = presetOptionLabel(TEXT_COLOR_OPTIONS, template.textColor, template.textColor),
+          onClick = { openEditor(PresetEditorField.TextColor) },
+        )
+        CardDivider()
+        PresetSettingsRow(
+          label = "배경 색",
+          value =
+            presetOptionLabel(
+              BACKGROUND_COLOR_OPTIONS,
+              template.backgroundColor,
+              template.backgroundColor,
+            ),
+          onClick = { openEditor(PresetEditorField.BackgroundColor) },
+        )
       }
-    }
 
-    PresetSettingsSection(title = "세부 레이아웃") {
-      PresetSettingsRow(
-        label = "첫 줄 들여쓰기",
-        value = presetOptionLabel(PARAGRAPH_INDENT_OPTIONS, template.paragraphIndent),
-        onClick = { openEditor(PresetEditorField.ParagraphIndent) },
-      )
-      CardDivider()
-      PresetSettingsRow(
-        label = "문단 간격",
-        value = presetOptionLabel(BLOCK_GAP_OPTIONS, template.blockGap),
-        onClick = { openEditor(PresetEditorField.BlockGap) },
-      )
-    }
+      PresetSettingsSection(title = "레이아웃") {
+        PresetSettingsRow(
+          label = "레이아웃 모드",
+          value = layoutModeSummaryLabel(template.layout),
+          onClick = { openEditor(PresetEditorField.LayoutMode) },
+        )
 
-    Spacer(Modifier.height(72.dp))
+        when (val layout = template.layout) {
+          is PresetLayout.Continuous -> {
+            CardDivider()
+            PresetSettingsRow(
+              label = "본문 폭",
+              value = presetOptionLabel(MAX_WIDTH_OPTIONS, layout.maxWidth, "${layout.maxWidth}px"),
+              onClick = { openEditor(PresetEditorField.MaxWidth) },
+            )
+          }
+
+          is PresetLayout.Paginated -> {
+            CardDivider()
+            PresetSettingsRow(
+              label = "페이지 크기",
+              value = pageLayoutSummaryLabel(layout),
+              onClick = { openEditor(PresetEditorField.PageSize) },
+            )
+            CardDivider()
+            PresetSettingsRow(
+              label = "여백",
+              value = pageMarginSummaryLabel(layout),
+              onClick = { openEditor(PresetEditorField.PageMargin) },
+            )
+          }
+
+          is PresetLayout.Unknown -> Unit
+        }
+      }
+
+      PresetSettingsSection(title = "세부 레이아웃") {
+        PresetSettingsRow(
+          label = "첫 줄 들여쓰기",
+          value = presetOptionLabel(PARAGRAPH_INDENT_OPTIONS, template.paragraphIndent),
+          onClick = { openEditor(PresetEditorField.ParagraphIndent) },
+        )
+        CardDivider()
+        PresetSettingsRow(
+          label = "문단 간격",
+          value = presetOptionLabel(BLOCK_GAP_OPTIONS, template.blockGap),
+          onClick = { openEditor(PresetEditorField.BlockGap) },
+        )
+      }
+
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

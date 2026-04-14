@@ -3,6 +3,7 @@ package co.typie.screen.settings.profile_settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
@@ -109,75 +111,75 @@ fun ProfileSettingsScreen() {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text("프로필", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text("프로필", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
-    SectionTitle("프로필")
+      SectionTitle("프로필")
 
-    CardSurface(modifier = Modifier.fillMaxWidth()) {
-      Column {
-        CardRow(onClick = { nav.navigate(Route.UpdateProfile) }) {
-          Text("프로필 변경", style = AppTheme.typography.label)
-        }
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        Column {
+          CardRow(onClick = { nav.navigate(Route.UpdateProfile) }) {
+            Text("프로필 변경", style = AppTheme.typography.label)
+          }
 
-        CardDivider()
+          CardDivider()
 
-        CardRow(onClick = { nav.navigate(Route.UpdateEmail) }) {
-          Text("이메일 변경", style = AppTheme.typography.label)
+          CardRow(onClick = { nav.navigate(Route.UpdateEmail) }) {
+            Text("이메일 변경", style = AppTheme.typography.label)
+          }
         }
       }
-    }
 
-    SectionTitle("알림")
+      SectionTitle("알림")
 
-    CardSurface(modifier = Modifier.fillMaxWidth()) {
-      SettingControlRow(
-        label = "마케팅 수신",
-        description = "새로운 기능과 이벤트 소식을 받아요.",
-        enabled = !isUpdatingMarketingConsent,
-        onClick = null,
-        trailing = {
-          SettingSwitch(
-            checked = marketingConsent,
-            enabled = !isUpdatingMarketingConsent,
-            onCheckedChange = { next ->
-              marketingConsent = next
-              isUpdatingMarketingConsent = true
-              pendingMarketingConsent = next
-            },
-          )
-        },
-      )
-    }
-
-    SectionTitle("지원")
-
-    CardSurface(modifier = Modifier.fillMaxWidth()) {
-      CardRow(onClick = ::copyAccountId) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Text("계정 ID", style = AppTheme.typography.label)
-          Text(
-            "문의나 지원 요청 시 이 ID를 알려주시면 더 빠르게 도와드릴 수 있어요.",
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
-          )
-        }
-
-        Text(
-          text = model.query.data.me.id,
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        SettingControlRow(
+          label = "마케팅 수신",
+          description = "새로운 기능과 이벤트 소식을 받아요.",
+          enabled = !isUpdatingMarketingConsent,
+          onClick = null,
+          trailing = {
+            SettingSwitch(
+              checked = marketingConsent,
+              enabled = !isUpdatingMarketingConsent,
+              onCheckedChange = { next ->
+                marketingConsent = next
+                isUpdatingMarketingConsent = true
+                pendingMarketingConsent = next
+              },
+            )
+          },
         )
       }
-    }
 
-    Spacer(Modifier.height(72.dp))
+      SectionTitle("지원")
+
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        CardRow(onClick = ::copyAccountId) {
+          Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("계정 ID", style = AppTheme.typography.label)
+            Text(
+              "문의나 지원 요청 시 이 ID를 알려주시면 더 빠르게 도와드릴 수 있어요.",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textTertiary,
+            )
+          }
+
+          Text(
+            text = model.query.data.me.id,
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.textTertiary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
+
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import co.typie.ext.verticalScroll
 import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
@@ -38,43 +40,44 @@ fun WidgetSettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(
-    scrollState = scrollState,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text("위젯", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+  Screen { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text("위젯", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
-    WidgetSettingsSection(title = "위젯 설정") {
-      SettingControlRow(
-        label = "글자 수 위젯",
-        description = "에디터에서 글자 수를 표시합니다.",
-        onClick = { Preference.characterCountFloatingEnabled = !characterCountFloatingEnabled },
-        trailing = {
-          SettingSwitch(
-            checked = characterCountFloatingEnabled,
-            onCheckedChange = { next -> Preference.characterCountFloatingEnabled = next },
-          )
-        },
-      )
-
-      if (characterCountFloatingEnabled) {
-        CardDivider(inset = 20.dp)
+      WidgetSettingsSection(title = "위젯 설정") {
         SettingControlRow(
-          label = "위젯 자동 페이드 인/아웃",
-          description = "타이핑, 스크롤 시 위젯이 잠시 사라집니다.",
-          onClick = { Preference.widgetAutoFadeEnabled = !widgetAutoFadeEnabled },
+          label = "글자 수 위젯",
+          description = "에디터에서 글자 수를 표시합니다.",
+          onClick = { Preference.characterCountFloatingEnabled = !characterCountFloatingEnabled },
           trailing = {
             SettingSwitch(
-              checked = widgetAutoFadeEnabled,
-              onCheckedChange = { next -> Preference.widgetAutoFadeEnabled = next },
+              checked = characterCountFloatingEnabled,
+              onCheckedChange = { next -> Preference.characterCountFloatingEnabled = next },
             )
           },
         )
-      }
-    }
 
-    Spacer(Modifier.height(72.dp))
+        if (characterCountFloatingEnabled) {
+          CardDivider(inset = 20.dp)
+          SettingControlRow(
+            label = "위젯 자동 페이드 인/아웃",
+            description = "타이핑, 스크롤 시 위젯이 잠시 사라집니다.",
+            onClick = { Preference.widgetAutoFadeEnabled = !widgetAutoFadeEnabled },
+            trailing = {
+              SettingSwitch(
+                checked = widgetAutoFadeEnabled,
+                onCheckedChange = { next -> Preference.widgetAutoFadeEnabled = next },
+              )
+            },
+          )
+        }
+      }
+
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.auth.AuthService
+import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.result.onOk
@@ -66,9 +68,6 @@ fun DeleteUserScreen() {
   ProvideTopBar(center = { Text("회원 탈퇴", style = AppTheme.typography.title) })
 
   Screen(
-    scrollState = scrollState,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
     bottomBar = {
       Column(
         modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
@@ -89,45 +88,50 @@ fun DeleteUserScreen() {
           onClick = { nav.pop() },
         )
       }
-    },
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-      Text("정말 탈퇴하시겠어요?", style = AppTheme.typography.title.copy(textAlign = TextAlign.Center))
-
-      Text(
-        "탈퇴 전 아래 유의사항을 확인해주세요.",
-        style = AppTheme.typography.caption.copy(textAlign = TextAlign.Center),
-        color = AppTheme.colors.textTertiary,
-      )
     }
+  ) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+      ) {
+        Text("정말 탈퇴하시겠어요?", style = AppTheme.typography.title.copy(textAlign = TextAlign.Center))
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      SectionTitle("유의사항")
+        Text(
+          "탈퇴 전 아래 유의사항을 확인해주세요.",
+          style = AppTheme.typography.caption.copy(textAlign = TextAlign.Center),
+          color = AppTheme.colors.textTertiary,
+        )
+      }
 
-      CardSurface(modifier = Modifier.fillMaxWidth()) {
-        Column(
-          modifier = Modifier.fillMaxWidth().padding(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          deleteUserNoticeItems().forEach { item ->
-            Text(
-              text = item,
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textSecondary,
-            )
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionTitle("유의사항")
+
+        CardSurface(modifier = Modifier.fillMaxWidth()) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            deleteUserNoticeItems().forEach { item ->
+              Text(
+                text = item,
+                style = AppTheme.typography.caption,
+                color = AppTheme.colors.textSecondary,
+              )
+            }
           }
         }
       }
-    }
 
-    DeleteUserAcknowledgeRow(
-      checked = isAcknowledged,
-      onToggle = { isAcknowledged = !isAcknowledged },
-    )
+      DeleteUserAcknowledgeRow(
+        checked = isAcknowledged,
+        onToggle = { isAcknowledged = !isAcknowledged },
+      )
+    }
   }
 }
 

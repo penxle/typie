@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
 import co.typie.icons.Lucide
 import co.typie.serialization.json
@@ -94,52 +96,57 @@ fun OssLicensesScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(
-    scrollState = scrollState,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text("오픈소스 라이센스", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+  Screen { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text(
+        "오픈소스 라이센스",
+        style = AppTheme.typography.display,
+        modifier = Modifier.padding(top = 4.dp),
+      )
 
-    SectionTitle("패키지")
+      SectionTitle("패키지")
 
-    when (val current = state) {
-      OssLicensesScreenState.Loading -> {
-        OssLicensesStatusCard(title = "라이센스 정보를 준비하고 있어요.", description = "잠시만 기다려주세요.")
-      }
+      when (val current = state) {
+        OssLicensesScreenState.Loading -> {
+          OssLicensesStatusCard(title = "라이센스 정보를 준비하고 있어요.", description = "잠시만 기다려주세요.")
+        }
 
-      OssLicensesScreenState.Error -> {
-        OssLicensesStatusCard(
-          title = "라이센스 정보를 불러오지 못했어요.",
-          description = "다시 시도하려면 탭해주세요.",
-          onClick = { reloadToken += 1 },
-        )
-      }
+        OssLicensesScreenState.Error -> {
+          OssLicensesStatusCard(
+            title = "라이센스 정보를 불러오지 못했어요.",
+            description = "다시 시도하려면 탭해주세요.",
+            onClick = { reloadToken += 1 },
+          )
+        }
 
-      is OssLicensesScreenState.Loaded -> {
-        if (current.entries.isEmpty()) {
-          OssLicensesStatusCard(title = "표시할 라이센스가 없어요.", description = "의존성 메타데이터가 비어 있어요.")
-        } else {
-          CardSurface(modifier = Modifier.fillMaxWidth()) {
-            Column {
-              current.entries.forEachIndexed { index, entry ->
-                CardRow(
-                  onClick = { scope.launch { sheet.present { OssLicenseDetailContent(entry) } } }
-                ) {
-                  OssLicenseRowContent(entry)
-                }
+        is OssLicensesScreenState.Loaded -> {
+          if (current.entries.isEmpty()) {
+            OssLicensesStatusCard(title = "표시할 라이센스가 없어요.", description = "의존성 메타데이터가 비어 있어요.")
+          } else {
+            CardSurface(modifier = Modifier.fillMaxWidth()) {
+              Column {
+                current.entries.forEachIndexed { index, entry ->
+                  CardRow(
+                    onClick = { scope.launch { sheet.present { OssLicenseDetailContent(entry) } } }
+                  ) {
+                    OssLicenseRowContent(entry)
+                  }
 
-                if (index < current.entries.lastIndex) {
-                  CardDivider()
+                  if (index < current.entries.lastIndex) {
+                    CardDivider()
+                  }
                 }
               }
             }
           }
         }
       }
-    }
 
-    Spacer(Modifier.size(72.dp))
+      Spacer(Modifier.size(72.dp))
+    }
   }
 }
 

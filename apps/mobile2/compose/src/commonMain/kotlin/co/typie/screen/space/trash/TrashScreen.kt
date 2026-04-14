@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.TrashScreen_WithEntityId_Query
 import co.typie.graphql.TrashScreen_WithSiteId_Query
@@ -302,78 +304,81 @@ fun TrashScreen(entityId: String? = null) {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = queryState !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    extraPadding = PaddingValues(bottom = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text(
-      text = content.title,
-      style = AppTheme.typography.display,
-      modifier = Modifier.padding(top = 4.dp),
-    )
+  Screen(loading = queryState !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding)
+          .padding(bottom = 16.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text(
+        text = content.title,
+        style = AppTheme.typography.display,
+        modifier = Modifier.padding(top = 4.dp),
+      )
 
-    Text(
-      text = content.subtitle,
-      style = AppTheme.typography.body,
-      color = AppTheme.colors.textTertiary,
-    )
+      Text(
+        text = content.subtitle,
+        style = AppTheme.typography.body,
+        color = AppTheme.colors.textTertiary,
+      )
 
-    SectionTitle("삭제된 항목")
+      SectionTitle("삭제된 항목")
 
-    if (content.items.isEmpty()) {
-      CardSurface(modifier = Modifier.fillMaxWidth()) {
-        Box(
-          modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp, horizontal = 20.dp),
-          contentAlignment = Alignment.Center,
-        ) {
-          Text(
-            text = content.emptyMessage,
-            style = AppTheme.typography.label,
-            color = AppTheme.colors.textTertiary,
-          )
+      if (content.items.isEmpty()) {
+        CardSurface(modifier = Modifier.fillMaxWidth()) {
+          Box(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp, horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
+          ) {
+            Text(
+              text = content.emptyMessage,
+              style = AppTheme.typography.label,
+              color = AppTheme.colors.textTertiary,
+            )
+          }
         }
-      }
-    } else {
-      CardSurface(modifier = Modifier.fillMaxWidth()) {
-        Column {
-          content.items.forEachIndexed { index, item ->
-            if (index > 0) {
-              CardDivider()
-            }
-
-            when (item.type) {
-              TrashItemType.Folder -> {
-                TrashFolderRow(
-                  title = item.title,
-                  iconName = item.iconName,
-                  iconColor = item.iconColor,
-                  onLongPress = { showItemActionsSheet(item) },
-                  onClick = { nav.navigate(Route.Trash(item.id)) },
-                )
+      } else {
+        CardSurface(modifier = Modifier.fillMaxWidth()) {
+          Column {
+            content.items.forEachIndexed { index, item ->
+              if (index > 0) {
+                CardDivider()
               }
 
-              TrashItemType.Document -> {
-                TrashDocumentRow(
-                  title = item.title,
-                  subtitle = item.subtitle,
-                  excerpt = item.excerpt,
-                  updatedAt = item.updatedAt,
-                  iconName = item.iconName,
-                  iconColor = item.iconColor,
-                  onLongPress = { showItemActionsSheet(item) },
-                  onClick = { showItemActionsSheet(item) },
-                )
+              when (item.type) {
+                TrashItemType.Folder -> {
+                  TrashFolderRow(
+                    title = item.title,
+                    iconName = item.iconName,
+                    iconColor = item.iconColor,
+                    onLongPress = { showItemActionsSheet(item) },
+                    onClick = { nav.navigate(Route.Trash(item.id)) },
+                  )
+                }
+
+                TrashItemType.Document -> {
+                  TrashDocumentRow(
+                    title = item.title,
+                    subtitle = item.subtitle,
+                    excerpt = item.excerpt,
+                    updatedAt = item.updatedAt,
+                    iconName = item.iconName,
+                    iconColor = item.iconColor,
+                    onLongPress = { showItemActionsSheet(item) },
+                    onClick = { showItemActionsSheet(item) },
+                  )
+                }
               }
             }
           }
         }
       }
-    }
 
-    Spacer(Modifier.height(72.dp))
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

@@ -113,39 +113,33 @@ fun HomeScreen() {
 
   Screen(
     loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
     contentPadding = PaddingValues(0.dp),
-    primaryScrollableState = scrollState,
-    body = { contentPadding ->
-      Column(
-        Modifier.fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .safeBottomPadding()
-      ) {
-        HomeFramedSection {
-          Skeleton.Keep {
-            Text(
-              "홈",
-              style = AppTheme.typography.display,
-              modifier = Modifier.padding(horizontal = 16.dp),
-            )
+  ) { contentPadding ->
+    Column(
+      Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding).safeBottomPadding()
+    ) {
+      HomeFramedSection {
+        Skeleton.Keep {
+          Text(
+            "홈",
+            style = AppTheme.typography.display,
+            modifier = Modifier.padding(horizontal = 16.dp),
+          )
 
-            SearchBar(
-              placeholder = resolveHomeSearchPlaceholder(model.query.data.site.name),
-              onClick = { nav.navigate(Route.HomeSearch) },
-            )
-          }
+          SearchBar(
+            placeholder = resolveHomeSearchPlaceholder(model.query.data.site.name),
+            onClick = { nav.navigate(Route.HomeSearch) },
+          )
         }
-
-        RecentFolders(data = model.query.data)
-
-        HomeFramedSection { RecentDocuments(data = model.query.data) }
-
-        Spacer(Modifier.height(140.dp))
       }
-    },
-  )
+
+      RecentFolders(data = model.query.data)
+
+      HomeFramedSection { RecentDocuments(data = model.query.data) }
+
+      Spacer(Modifier.height(140.dp))
+    }
+  }
 }
 
 @Composable

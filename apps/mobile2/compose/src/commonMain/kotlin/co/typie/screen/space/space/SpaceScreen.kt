@@ -357,333 +357,330 @@ fun SpaceScreen() {
 
   Screen(
     loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
     contentPadding = PaddingValues(0.dp),
-    primaryScrollableState = scrollState,
-    body = { contentPadding ->
-      val reorderViewportTopInset =
-        maxOf(
-          0.dp,
-          contentPadding.calculateTopPadding() -
-            TopBarDefaults.BlurFadeHeight -
-            TopBarDefaults.ContentTopSpacing,
-        )
-      val reorderViewportBottomInset =
-        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
+  ) { contentPadding ->
+    val reorderViewportTopInset =
+      maxOf(
+        0.dp,
+        contentPadding.calculateTopPadding() -
+          TopBarDefaults.BlurFadeHeight -
+          TopBarDefaults.ContentTopSpacing,
+      )
+    val reorderViewportBottomInset =
+      WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
 
-      val reorderState =
-        rememberReorderableListState(keys = serverEntityIds, verticalScrollableState = scrollState)
-      val displayEntities =
-        remember(serverEntities, reorderState.displayedKeys) {
-          displayOrderedEntityItems(serverEntities, reorderState.displayedKeys)
-        }
+    val reorderState =
+      rememberReorderableListState(keys = serverEntityIds, verticalScrollableState = scrollState)
+    val displayEntities =
+      remember(serverEntities, reorderState.displayedKeys) {
+        displayOrderedEntityItems(serverEntities, reorderState.displayedKeys)
+      }
 
-      Box(
+    Box(
+      modifier =
+        Modifier.fillMaxSize()
+          .reorderableListContainer(
+            state = reorderState,
+            viewportTopInset = reorderViewportTopInset,
+            viewportBottomInset = reorderViewportBottomInset,
+          )
+    ) {
+      EntityContainerListContent(
+        items = displayEntities,
+        emptyMessage = "문서와 폴더가 여기 나타나요",
+        isReordering = isReordering,
+        reorderState = reorderState,
+        isPersistingReorder = isPersistingReorder,
+        selectionState = selectionState,
+        dimmedItemIds = cutDimmedItemIds,
+        bottomSpacerHeight = reservedBottomSpacerHeight,
         modifier =
           Modifier.fillMaxSize()
-            .reorderableListContainer(
-              state = reorderState,
-              viewportTopInset = reorderViewportTopInset,
-              viewportBottomInset = reorderViewportBottomInset,
-            )
-      ) {
-        EntityContainerListContent(
-          items = displayEntities,
-          emptyMessage = "문서와 폴더가 여기 나타나요",
-          isReordering = isReordering,
-          reorderState = reorderState,
-          isPersistingReorder = isPersistingReorder,
-          selectionState = selectionState,
-          dimmedItemIds = cutDimmedItemIds,
-          bottomSpacerHeight = reservedBottomSpacerHeight,
-          modifier =
-            Modifier.fillMaxSize()
-              .verticalScroll(scrollState)
-              .padding(contentPadding)
-              .safeBottomPadding(),
-          header = {
-            SpaceHeader(
-              title = site?.name.orEmpty(),
-              summary =
-                formatSpaceSummary(
-                  folderCount = site?.folderCount ?: 0,
-                  documentCount = site?.documentCount ?: 0,
-                ),
-            )
-          },
-          onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
-          onDocumentLongPress = { item ->
-            if (selectionState.isSelecting) {
-              if (item.id in selectionState.selectedIds) {
-                openSelectionActions()
-              } else {
-                selection.toggle(item.id)
-              }
+            .verticalScroll(scrollState)
+            .padding(contentPadding)
+            .safeBottomPadding(),
+        header = {
+          SpaceHeader(
+            title = site?.name.orEmpty(),
+            summary =
+              formatSpaceSummary(
+                folderCount = site?.folderCount ?: 0,
+                documentCount = site?.documentCount ?: 0,
+              ),
+          )
+        },
+        onDocumentClick = { slug -> nav.navigate(Route.Editor(slug)) },
+        onDocumentLongPress = { item ->
+          if (selectionState.isSelecting) {
+            if (item.id in selectionState.selectedIds) {
+              openSelectionActions()
             } else {
-              presenterScope.launch {
-                sheet.present {
-                  DocumentItemActionsSheet(item) { action ->
-                    when (action) {
-                      FolderAction.Rename -> {
-                        presenterScope.launch {
-                          sheet.present {
-                            DocumentRenameSheet(
-                              model = documentActionModel,
-                              documentId = item.documentId,
-                              initialTitle = item.title,
-                            )
-                          }
+              selection.toggle(item.id)
+            }
+          } else {
+            presenterScope.launch {
+              sheet.present {
+                DocumentItemActionsSheet(item) { action ->
+                  when (action) {
+                    FolderAction.Rename -> {
+                      presenterScope.launch {
+                        sheet.present {
+                          DocumentRenameSheet(
+                            model = documentActionModel,
+                            documentId = item.documentId,
+                            initialTitle = item.title,
+                          )
                         }
                       }
+                    }
 
-                      FolderAction.ChangeIcon -> {
-                        presenterScope.launch {
-                          sheet.present(stops = EntityIconPickerStops) {
-                            EntityIconPickerSheet(
-                              model = documentActionModel,
-                              entityId = item.id,
-                              initialIcon = item.iconName,
-                              initialColor = item.iconColor,
-                              defaultIconName = "file",
-                            )
-                          }
+                    FolderAction.ChangeIcon -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityIconPickerStops) {
+                          EntityIconPickerSheet(
+                            model = documentActionModel,
+                            entityId = item.id,
+                            initialIcon = item.iconName,
+                            initialColor = item.iconColor,
+                            defaultIconName = "file",
+                          )
                         }
                       }
+                    }
 
-                      FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+                    FolderAction.OpenExternal -> uriHandler.openUri(item.url)
 
-                      FolderAction.Share -> presentShare(listOf(item.id))
+                    FolderAction.Share -> presentShare(listOf(item.id))
 
-                      FolderAction.Move -> {
-                        presenterScope.launch {
-                          sheet.present(stops = EntityMoveStops) {
-                            EntityMoveSheet(source = item.toTransferSource())
-                          }
+                    FolderAction.Move -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityMoveStops) {
+                          EntityMoveSheet(source = item.toTransferSource())
                         }
                       }
+                    }
 
-                      FolderAction.Copy -> {
-                        clipboard.setCopy(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(item.toTransferSource()),
-                        )
-                      }
+                    FolderAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
 
-                      FolderAction.Cut -> {
-                        clipboard.setCut(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(item.toTransferSource()),
-                        )
-                      }
+                    FolderAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
 
-                      FolderAction.Delete -> {
-                        presenterScope.launch {
-                          val result =
-                            dialog.confirm(
-                              title = "문서 삭제",
-                              message = "\"${item.title}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-                              confirmText = "삭제하기",
-                              confirmIsDestructive = true,
-                            )
-                          if (result is DialogResult.Resolved) {
-                            documentActionModel
-                              .deleteDocument(item.documentId)
-                              .withDefaultExceptionHandler(toast)
-                          }
+                    FolderAction.Delete -> {
+                      presenterScope.launch {
+                        val result =
+                          dialog.confirm(
+                            title = "문서 삭제",
+                            message = "\"${item.title}\" 문서를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                            confirmText = "삭제하기",
+                            confirmIsDestructive = true,
+                          )
+                        if (result is DialogResult.Resolved) {
+                          documentActionModel
+                            .deleteDocument(item.documentId)
+                            .withDefaultExceptionHandler(toast)
                         }
                       }
+                    }
 
-                      FolderAction.SelectMultiple -> Unit
+                    FolderAction.SelectMultiple -> Unit
 
-                      FolderAction.StartReorder -> {
-                        selection.reset()
-                        isReordering = true
-                      }
+                    FolderAction.StartReorder -> {
+                      selection.reset()
+                      isReordering = true
                     }
                   }
                 }
               }
             }
-          },
-          onFolderClick = { entityId -> nav.navigate(Route.Folder(entityId)) },
-          onFolderLongPress = { item ->
-            if (selectionState.isSelecting) {
-              if (item.id in selectionState.selectedIds) {
-                openSelectionActions()
-              } else {
-                selection.toggle(item.id)
-              }
+          }
+        },
+        onFolderClick = { entityId -> nav.navigate(Route.Folder(entityId)) },
+        onFolderLongPress = { item ->
+          if (selectionState.isSelecting) {
+            if (item.id in selectionState.selectedIds) {
+              openSelectionActions()
             } else {
-              presenterScope.launch {
-                sheet.present {
-                  FolderItemActionsSheet(item) { action ->
-                    when (action) {
-                      FolderAction.Rename -> {
-                        presenterScope.launch {
-                          sheet.present {
-                            FolderRenameSheet(
-                              model = folderActionModel,
-                              folderId = item.folderId,
-                              initialName = item.name,
-                            )
-                          }
+              selection.toggle(item.id)
+            }
+          } else {
+            presenterScope.launch {
+              sheet.present {
+                FolderItemActionsSheet(item) { action ->
+                  when (action) {
+                    FolderAction.Rename -> {
+                      presenterScope.launch {
+                        sheet.present {
+                          FolderRenameSheet(
+                            model = folderActionModel,
+                            folderId = item.folderId,
+                            initialName = item.name,
+                          )
                         }
                       }
+                    }
 
-                      FolderAction.ChangeIcon -> {
-                        presenterScope.launch {
-                          sheet.present(stops = EntityIconPickerStops) {
-                            EntityIconPickerSheet(
-                              model = folderActionModel,
-                              entityId = item.id,
-                              initialIcon = item.iconName,
-                              initialColor = item.iconColor,
-                              defaultIconName = "folder",
-                            )
-                          }
+                    FolderAction.ChangeIcon -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityIconPickerStops) {
+                          EntityIconPickerSheet(
+                            model = folderActionModel,
+                            entityId = item.id,
+                            initialIcon = item.iconName,
+                            initialColor = item.iconColor,
+                            defaultIconName = "folder",
+                          )
                         }
                       }
+                    }
 
-                      FolderAction.OpenExternal -> uriHandler.openUri(item.url)
+                    FolderAction.OpenExternal -> uriHandler.openUri(item.url)
 
-                      FolderAction.Share -> presentShare(listOf(item.id))
+                    FolderAction.Share -> presentShare(listOf(item.id))
 
-                      FolderAction.Move -> {
-                        presenterScope.launch {
-                          sheet.present(stops = EntityMoveStops) {
-                            EntityMoveSheet(source = item.toTransferSource())
-                          }
+                    FolderAction.Move -> {
+                      presenterScope.launch {
+                        sheet.present(stops = EntityMoveStops) {
+                          EntityMoveSheet(source = item.toTransferSource())
                         }
                       }
+                    }
 
-                      FolderAction.Copy -> {
-                        clipboard.setCopy(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(item.toTransferSource()),
-                        )
-                      }
+                    FolderAction.Copy -> {
+                      clipboard.setCopy(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
 
-                      FolderAction.Cut -> {
-                        clipboard.setCut(
-                          sourceSiteId = Preference.siteId!!,
-                          items = listOf(item.toTransferSource()),
-                        )
-                      }
+                    FolderAction.Cut -> {
+                      clipboard.setCut(
+                        sourceSiteId = Preference.siteId!!,
+                        items = listOf(item.toTransferSource()),
+                      )
+                    }
 
-                      FolderAction.Delete -> {
-                        presenterScope.launch {
-                          val result =
-                            dialog.confirm(
-                              title = "폴더 삭제",
-                              message = "\"${item.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
-                              confirmText = "삭제하기",
-                              confirmIsDestructive = true,
-                            )
-                          if (result is DialogResult.Resolved) {
-                            folderActionModel
-                              .deleteFolderEntity(item.id)
-                              .withDefaultExceptionHandler(toast)
-                          }
+                    FolderAction.Delete -> {
+                      presenterScope.launch {
+                        val result =
+                          dialog.confirm(
+                            title = "폴더 삭제",
+                            message = "\"${item.name}\" 폴더를 삭제하시겠어요? 삭제 후 30일 동안 휴지통에 보관돼요.",
+                            confirmText = "삭제하기",
+                            confirmIsDestructive = true,
+                          )
+                        if (result is DialogResult.Resolved) {
+                          folderActionModel
+                            .deleteFolderEntity(item.id)
+                            .withDefaultExceptionHandler(toast)
                         }
                       }
+                    }
 
-                      FolderAction.SelectMultiple -> Unit
+                    FolderAction.SelectMultiple -> Unit
 
-                      FolderAction.StartReorder -> {
-                        selection.reset()
-                        isReordering = true
-                      }
+                    FolderAction.StartReorder -> {
+                      selection.reset()
+                      isReordering = true
                     }
                   }
                 }
               }
             }
-          },
-          onSelectionToggle = { selection.toggle(it) },
-          onDragStarted = {
-            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-          },
-          onDragMoved = { haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
-          onDragStopped = onDragStopped@{ commit ->
-              haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-              if (commit == null || commit.orderedKeys == serverEntityIds) {
-                return@onDragStopped
-              }
+          }
+        },
+        onSelectionToggle = { selection.toggle(it) },
+        onDragStarted = {
+          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+        },
+        onDragMoved = { haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
+        onDragStopped = onDragStopped@{ commit ->
+            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+            if (commit == null || commit.orderedKeys == serverEntityIds) {
+              return@onDragStopped
+            }
 
-              val reorderOrders =
-                calculateEntityReorderOrdersFromOrderedKeys(
-                  items = serverEntities,
-                  orderedKeys = commit.orderedKeys,
-                  movedKey = commit.movedKey,
-                )
-                  ?: run {
-                    reorderState.resetToServerKeys(serverEntityIds)
-                    return@onDragStopped
-                  }
-
-              isPersistingReorder = true
-              presenterScope.launch {
-                model
-                  .moveRootEntity(
-                    entityId = commit.movedKey,
-                    lowerOrder = reorderOrders.lowerOrder,
-                    upperOrder = reorderOrders.upperOrder,
-                  )
-                  .withDefaultExceptionHandler(toast)
-                  .onException { reorderState.resetToServerKeys(serverEntityIds) }
-                isPersistingReorder = false
-              }
-            },
-        )
-
-        EntityContainerBottomOverlayStack(
-          baseBottomInset = Route.Space.toastBottomInset,
-          showSelectionBar = isSelectionBarVisible,
-          showPasteBar = animatedPasteBarVisible && pasteTarget != null,
-          modifier = Modifier.align(Alignment.BottomCenter),
-          selectionBar = {
-            EntityContainerSelectionBar(
-              selectedCount = selectionSummary.selectedItems.size,
-              onClearSelection = { selection.clear() },
-              onMoreClick = { openSelectionActions() },
-            )
-          },
-          pasteBar = {
-            pasteTarget?.let { resolvedPasteTarget ->
-              EntityPasteBar(
-                loading = isPasting,
-                onClear = { clipboard.clear() },
-                onPaste = {
-                  if (!isPasting) {
-                    isPasting = true
-                    presenterScope.launch {
-                      clipboard
-                        .pasteInto(resolvedPasteTarget)
-                        .collect(
-                          onPending = { count ->
-                            toast.show(ToastType.Loading, "${count}개의 항목을 붙여넣는 중이에요", Duration.ZERO)
-                          },
-                          onSettled = { result ->
-                            result
-                              .withDefaultExceptionHandler(toast)
-                              .onOk { count ->
-                                toast.show(ToastType.Success, "${count}개의 항목을 붙여넣었어요")
-                              }
-                              .onErr { error -> toast.show(ToastType.Error, error.toMessage()) }
-                          },
-                        )
-                      isPasting = false
-                    }
-                  }
-                },
+            val reorderOrders =
+              calculateEntityReorderOrdersFromOrderedKeys(
+                items = serverEntities,
+                orderedKeys = commit.orderedKeys,
+                movedKey = commit.movedKey,
               )
+                ?: run {
+                  reorderState.resetToServerKeys(serverEntityIds)
+                  return@onDragStopped
+                }
+
+            isPersistingReorder = true
+            presenterScope.launch {
+              model
+                .moveRootEntity(
+                  entityId = commit.movedKey,
+                  lowerOrder = reorderOrders.lowerOrder,
+                  upperOrder = reorderOrders.upperOrder,
+                )
+                .withDefaultExceptionHandler(toast)
+                .onException { reorderState.resetToServerKeys(serverEntityIds) }
+              isPersistingReorder = false
             }
           },
-          onMetricsChanged = { overlayMetrics = it },
-        )
-      }
-    },
-  )
+      )
+
+      EntityContainerBottomOverlayStack(
+        baseBottomInset = Route.Space.toastBottomInset,
+        showSelectionBar = isSelectionBarVisible,
+        showPasteBar = animatedPasteBarVisible && pasteTarget != null,
+        modifier = Modifier.align(Alignment.BottomCenter),
+        selectionBar = {
+          EntityContainerSelectionBar(
+            selectedCount = selectionSummary.selectedItems.size,
+            onClearSelection = { selection.clear() },
+            onMoreClick = { openSelectionActions() },
+          )
+        },
+        pasteBar = {
+          pasteTarget?.let { resolvedPasteTarget ->
+            EntityPasteBar(
+              loading = isPasting,
+              onClear = { clipboard.clear() },
+              onPaste = {
+                if (!isPasting) {
+                  isPasting = true
+                  presenterScope.launch {
+                    clipboard
+                      .pasteInto(resolvedPasteTarget)
+                      .collect(
+                        onPending = { count ->
+                          toast.show(ToastType.Loading, "${count}개의 항목을 붙여넣는 중이에요", Duration.ZERO)
+                        },
+                        onSettled = { result ->
+                          result
+                            .withDefaultExceptionHandler(toast)
+                            .onOk { count ->
+                              toast.show(ToastType.Success, "${count}개의 항목을 붙여넣었어요")
+                            }
+                            .onErr { error -> toast.show(ToastType.Error, error.toMessage()) }
+                        },
+                      )
+                    isPasting = false
+                  }
+                }
+              },
+            )
+          }
+        },
+        onMetricsChanged = { overlayMetrics = it },
+      )
+    }
+  }
 }
 
 @Composable

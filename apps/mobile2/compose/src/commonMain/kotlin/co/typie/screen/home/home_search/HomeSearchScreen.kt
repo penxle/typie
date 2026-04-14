@@ -42,57 +42,51 @@ fun HomeSearchScreen() {
 
   ProvideTopBar(leading = { TopBarBackButton(onClick = { nav.pop() }) })
 
-  Screen(
-    background = AppTheme.colors.surfaceBase,
-    responsive = true,
-    contentPadding = PaddingValues(0.dp),
-    primaryScrollableState = scrollState,
-    body = { contentPadding ->
-      val bottomInset =
-        maxOf(
-          WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
-          WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
+  Screen(contentPadding = PaddingValues(0.dp)) { contentPadding ->
+    val bottomInset =
+      maxOf(
+        WindowInsets.ime.asPaddingValues().calculateBottomPadding(),
+        WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding(),
+      )
+
+    Box(Modifier.fillMaxSize()) {
+      Column(
+        modifier =
+          Modifier.fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(contentPadding + PaddingValues(bottom = bottomInset + 12.dp))
+      ) {
+        SearchContent(
+          searchViewModel = model,
+          headerHeight = SearchScreenHeaderHeight,
+          onDocumentClick = { slug, query ->
+            model.saveRecentSearch(query)
+            nav.navigate(Route.Editor(slug))
+          },
+          onFolderClick = { entityId, query ->
+            model.saveRecentSearch(query)
+            nav.navigate(Route.Folder(entityId))
+          },
         )
-
-      Box(Modifier.fillMaxSize()) {
-        Column(
-          modifier =
-            Modifier.fillMaxSize()
-              .verticalScroll(scrollState)
-              .padding(contentPadding + PaddingValues(bottom = bottomInset + 12.dp))
-        ) {
-          SearchContent(
-            searchViewModel = model,
-            headerHeight = SearchScreenHeaderHeight,
-            onDocumentClick = { slug, query ->
-              model.saveRecentSearch(query)
-              nav.navigate(Route.Editor(slug))
-            },
-            onFolderClick = { entityId, query ->
-              model.saveRecentSearch(query)
-              nav.navigate(Route.Folder(entityId))
-            },
-          )
-        }
-
-        SearchHeaderOverlay(
-          modifier =
-            Modifier.align(Alignment.TopCenter)
-              .fillMaxWidth()
-              .padding(top = contentPadding.calculateTopPadding())
-        ) {
-          SearchHeader(
-            animateOnEnter = model.shouldAnimateHeaderOnEnter,
-            placeholder = resolveHomeSearchPlaceholder(model.siteQuery.data.site.name),
-            query = model.query,
-            onQueryChange = { model.updateQuery(it) },
-            onSubmit = { model.submitQuery() },
-            onEnterAnimationConsumed = { model.onHeaderEnterAnimationConsumed() },
-          )
-        }
       }
-    },
-  )
+
+      SearchHeaderOverlay(
+        modifier =
+          Modifier.align(Alignment.TopCenter)
+            .fillMaxWidth()
+            .padding(top = contentPadding.calculateTopPadding())
+      ) {
+        SearchHeader(
+          animateOnEnter = model.shouldAnimateHeaderOnEnter,
+          placeholder = resolveHomeSearchPlaceholder(model.siteQuery.data.site.name),
+          query = model.query,
+          onQueryChange = { model.updateQuery(it) },
+          onSubmit = { model.submitQuery() },
+          onEnterAnimationConsumed = { model.onHeaderEnterAnimationConsumed() },
+        )
+      }
+    }
+  }
 }
 
 @Composable

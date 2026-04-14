@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionServiceState
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
@@ -286,75 +288,75 @@ fun SettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(
-    scrollState = scrollState,
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    Text("설정", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text("설정", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
-    sections.forEach { section ->
-      SettingsSectionCard(
-        section = section,
-        themeMode = themeModeState.value,
-        appVersion = appVersion,
-        devModeEnabled = devModeEnabled,
-        onThemeClick = {
-          scope.launch {
-            val result = sheet.present { SettingsThemeContent(themeMode = themeModeState.value) }
-            if (result != null) {
-              // TODO: 테마 변경 트래킹
-              Preference.themeMode = result
+      sections.forEach { section ->
+        SettingsSectionCard(
+          section = section,
+          themeMode = themeModeState.value,
+          appVersion = appVersion,
+          devModeEnabled = devModeEnabled,
+          onThemeClick = {
+            scope.launch {
+              val result = sheet.present { SettingsThemeContent(themeMode = themeModeState.value) }
+              if (result != null) {
+                // TODO: 테마 변경 트래킹
+                Preference.themeMode = result
+              }
             }
-          }
-        },
-        onVersionInfoClick = {
-          val result =
-            settingsVersionTapResult(devModeEnabled = devModeEnabled, tapCount = devModeTapCount)
-
-          devModeTapCount = result.nextTapCount
-
-          if (result.enableDeveloperMode) {
-            Preference.devMode = true
-          }
-
-          result.message?.let { message -> toast.show(ToastType.Success, message) }
-        },
-        onDeveloperModeChange = { next -> Preference.devMode = next },
-        onItemClick = { item ->
-          val route = settingsRouteFor(item)
-
-          if (route != null) {
-            nav.navigate(route)
-          } else if (item.externalUrl != null) {
-            uriHandler.openUri(item.externalUrl)
-          } else if (item.action == SettingsItemAction.Plan) {
-            when (subscriptionState) {
-              is SubscriptionServiceState.Subscribed -> nav.navigate(Route.CurrentPlan)
-              is SubscriptionServiceState.NotSubscribed -> nav.navigate(Route.EnrollPlan)
-              is SubscriptionServiceState.Unknown ->
-                toast.show(ToastType.Notification, "이용권 상태를 확인 중이에요.")
-            }
-          } else if (item.action == SettingsItemAction.Logout) {
+          },
+          onVersionInfoClick = {
             val result =
-              dialog.confirm(
-                title = "로그아웃",
-                message = "정말 로그아웃하시겠어요?",
-                confirmText = "로그아웃",
-                confirmIsDestructive = true,
-              )
-            if (result is DialogResult.Resolved) {
-              authService.logout()
-            }
-          } else {
-            toast.show(ToastType.Notification, "준비 중인 기능이에요.")
-          }
-        },
-      )
-    }
+              settingsVersionTapResult(devModeEnabled = devModeEnabled, tapCount = devModeTapCount)
 
-    Spacer(Modifier.size(72.dp))
+            devModeTapCount = result.nextTapCount
+
+            if (result.enableDeveloperMode) {
+              Preference.devMode = true
+            }
+
+            result.message?.let { message -> toast.show(ToastType.Success, message) }
+          },
+          onDeveloperModeChange = { next -> Preference.devMode = next },
+          onItemClick = { item ->
+            val route = settingsRouteFor(item)
+
+            if (route != null) {
+              nav.navigate(route)
+            } else if (item.externalUrl != null) {
+              uriHandler.openUri(item.externalUrl)
+            } else if (item.action == SettingsItemAction.Plan) {
+              when (subscriptionState) {
+                is SubscriptionServiceState.Subscribed -> nav.navigate(Route.CurrentPlan)
+                is SubscriptionServiceState.NotSubscribed -> nav.navigate(Route.EnrollPlan)
+                is SubscriptionServiceState.Unknown ->
+                  toast.show(ToastType.Notification, "이용권 상태를 확인 중이에요.")
+              }
+            } else if (item.action == SettingsItemAction.Logout) {
+              val result =
+                dialog.confirm(
+                  title = "로그아웃",
+                  message = "정말 로그아웃하시겠어요?",
+                  confirmText = "로그아웃",
+                  confirmIsDestructive = true,
+                )
+              if (result is DialogResult.Resolved) {
+                authService.logout()
+              }
+            } else {
+              toast.show(ToastType.Notification, "준비 중인 기능이에요.")
+            }
+          },
+        )
+      }
+
+      Spacer(Modifier.size(72.dp))
+    }
   }
 }
 

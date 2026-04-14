@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
@@ -82,7 +84,6 @@ fun UpdateProfileScreen() {
   }
 
   Screen(
-    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     imeAware = true,
     bottomBar = {
@@ -101,38 +102,40 @@ fun UpdateProfileScreen() {
         },
       )
     },
-  ) {
-    Column(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      ProfileAvatar(
-        image = model.query.data.me.avatar.img_image,
-        previewUrl = model.state.avatarPreviewUrl,
-        onClick = { filePicker("image/*") },
+  ) { contentPadding ->
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        ProfileAvatar(
+          image = model.query.data.me.avatar.img_image,
+          previewUrl = model.state.avatarPreviewUrl,
+          onClick = { filePicker("image/*") },
+        )
+
+        Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+      }
+
+      Spacer(Modifier.height(32.dp))
+
+      TextField(
+        field = model.state.form.name,
+        label = "닉네임",
+        labelPosition = LabelPosition.Internal,
+        onImeAction = {
+          scope.launch {
+            model.submit().withDefaultExceptionHandler(toast).onOk {
+              toast.show(ToastType.Success, "프로필이 변경되었어요.")
+              nav.pop()
+            }
+          }
+        },
       )
 
-      Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+      Spacer(Modifier.height(24.dp))
     }
-
-    Spacer(Modifier.height(32.dp))
-
-    TextField(
-      field = model.state.form.name,
-      label = "닉네임",
-      labelPosition = LabelPosition.Internal,
-      onImeAction = {
-        scope.launch {
-          model.submit().withDefaultExceptionHandler(toast).onOk {
-            toast.show(ToastType.Success, "프로필이 변경되었어요.")
-            nav.pop()
-          }
-        }
-      },
-    )
-
-    Spacer(Modifier.height(24.dp))
   }
 }
 

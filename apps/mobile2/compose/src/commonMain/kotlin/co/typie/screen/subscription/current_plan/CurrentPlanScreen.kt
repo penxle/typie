@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,7 @@ import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.verticalScroll
 import co.typie.graphql.type.PlanAvailability
 import co.typie.graphql.type.SubscriptionState
 import co.typie.navigation.Nav
@@ -55,81 +57,81 @@ fun CurrentPlanScreen() {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = currentSubscriptionState is SubscriptionServiceState.Unknown,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    val subscription =
-      (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
-        ?: return@Screen
+  Screen(loading = currentSubscriptionState is SubscriptionServiceState.Unknown) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      val subscription =
+        (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
+          ?: return@Screen
 
-    val detailLines =
-      if (subscription.availability == PlanAvailability.TRIAL) {
-        listOf("무료 체험이 ${subscription.expiresAt.formatKoreanDate()}에 종료돼요.")
-      } else {
-        listOf(
-          "이용권 가격: ${subscription.fee.formatGrouped()}원",
-          if (subscription.state == SubscriptionState.ACTIVE) {
-            "다음 결제일: ${subscription.expiresAt.formatKoreanDate()}"
-          } else {
-            "해지 예정일: ${subscription.expiresAt.formatKoreanDate()}"
-          },
-        )
-      }
-
-    Text("이용권 정보", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
-
-    CardSurface(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.fillMaxWidth()) {
-        Column(
-          modifier = Modifier.fillMaxWidth().padding(18.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-          ) {
-            Text(
-              "현재 이용권",
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
-            )
-
-            Text(
-              subscription.planName,
-              style = AppTheme.typography.heading,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-
-          Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-          ) {
-            detailLines.forEach { line ->
-              Text(
-                text = line,
-                style = AppTheme.typography.body,
-                color = AppTheme.colors.textTertiary,
-              )
-            }
-          }
+      val detailLines =
+        if (subscription.availability == PlanAvailability.TRIAL) {
+          listOf("무료 체험이 ${subscription.expiresAt.formatKoreanDate()}에 종료돼요.")
+        } else {
+          listOf(
+            "이용권 가격: ${subscription.fee.formatGrouped()}원",
+            if (subscription.state == SubscriptionState.ACTIVE) {
+              "다음 결제일: ${subscription.expiresAt.formatKoreanDate()}"
+            } else {
+              "해지 예정일: ${subscription.expiresAt.formatKoreanDate()}"
+            },
+          )
         }
 
-        CardDivider()
-        CurrentPlanFooterSection(
-          availability = subscription.availability,
-          onCancelClick = { nav.navigate(Route.CancelPlan) },
-          onChangeClick = { nav.navigate(Route.EnrollPlan) },
-          onUpgradeClick = { nav.navigate(Route.EnrollPlan) },
-        )
-      }
-    }
+      Text("이용권 정보", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
-    Spacer(Modifier.height(72.dp))
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            Column(
+              modifier = Modifier.fillMaxWidth(),
+              verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              Text(
+                "현재 이용권",
+                style = AppTheme.typography.caption,
+                color = AppTheme.colors.textTertiary,
+              )
+
+              Text(
+                subscription.planName,
+                style = AppTheme.typography.heading,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+            }
+
+            Column(
+              modifier = Modifier.fillMaxWidth(),
+              verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+              detailLines.forEach { line ->
+                Text(
+                  text = line,
+                  style = AppTheme.typography.body,
+                  color = AppTheme.colors.textTertiary,
+                )
+              }
+            }
+          }
+
+          CardDivider()
+          CurrentPlanFooterSection(
+            availability = subscription.availability,
+            onCancelClick = { nav.navigate(Route.CancelPlan) },
+            onChangeClick = { nav.navigate(Route.EnrollPlan) },
+            onUpgradeClick = { nav.navigate(Route.EnrollPlan) },
+          )
+        }
+      }
+
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

@@ -19,13 +19,11 @@ fun EditorScreen(slug: String) {
 
   val model = viewModel { EditorViewModel() }
 
-  Screen(
-    body = { contentPadding ->
-      CompositionLocalProvider(LocalEditorState provides model.editorState) {
-        Box(Modifier.fillMaxSize().padding(contentPadding)) {
-          EditorView(doc = model.doc, selection = model.selection)
-        }
+  Screen { contentPadding ->
+    CompositionLocalProvider(LocalEditorState provides model.editorState) {
+      Box(Modifier.fillMaxSize().padding(contentPadding)) {
+        EditorView(doc = model.doc, selection = model.selection)
       }
     }
-  )
+  }
 }

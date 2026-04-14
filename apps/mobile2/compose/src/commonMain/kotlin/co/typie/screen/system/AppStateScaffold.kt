@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -50,70 +52,68 @@ internal fun AppStateScaffold(
 ) {
   Screen(
     background = AppTheme.colors.surfaceDefault,
-    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp),
-    responsiveMaxWidth = 480.dp,
-    body = { contentPadding ->
-      Column(modifier = Modifier.fillMaxSize().padding(contentPadding).safeBottomPadding()) {
-        Column(
-          modifier = Modifier.weight(1f).fillMaxWidth(),
-          horizontalAlignment = Alignment.CenterHorizontally,
-          verticalArrangement = Arrangement.Center,
+    contentPadding = PaddingValues(horizontal = 20.dp),
+  ) { contentPadding ->
+    Column(
+      modifier =
+        Modifier.fillMaxSize().padding(contentPadding).widthIn(max = 480.dp).safeBottomPadding()
+    ) {
+      Column(
+        modifier = Modifier.weight(1f).fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+      ) {
+        Img(
+          url = Res.getUri("files/logos/full.svg"),
+          modifier = Modifier.height(32.dp),
+          contentScale = ContentScale.FillHeight,
+          color = AppTheme.colors.textPrimary,
+        )
+
+        Spacer(Modifier.height(28.dp))
+
+        Box(
+          modifier = Modifier.size(56.dp).background(AppTheme.colors.surfaceSunken, CircleShape),
+          contentAlignment = Alignment.Center,
         ) {
-          Img(
-            url = Res.getUri("files/logos/full.svg"),
-            modifier = Modifier.height(32.dp),
-            contentScale = ContentScale.FillHeight,
-            color = AppTheme.colors.textPrimary,
-          )
-
-          Spacer(Modifier.height(28.dp))
-
-          Box(
-            modifier = Modifier.size(56.dp).background(AppTheme.colors.surfaceSunken, CircleShape),
-            contentAlignment = Alignment.Center,
-          ) {
-            Icon(icon = icon, modifier = Modifier.size(24.dp), tint = AppTheme.colors.textTertiary)
-          }
-
-          Spacer(Modifier.height(20.dp))
-
-          Text(
-            text = title,
-            style = AppTheme.typography.heading.copy(textAlign = TextAlign.Center),
-            modifier = Modifier.fillMaxWidth(),
-          )
-
-          Spacer(Modifier.height(8.dp))
-
-          Text(
-            text = message,
-            style = AppTheme.typography.body.copy(textAlign = TextAlign.Center),
-            color = AppTheme.colors.textSecondary,
-            modifier = Modifier.fillMaxWidth(),
-          )
-
-          if (detail != null) {
-            Spacer(Modifier.height(16.dp))
-            detail()
-          }
+          Icon(icon = icon, modifier = Modifier.size(24.dp), tint = AppTheme.colors.textTertiary)
         }
 
-        Column(
+        Spacer(Modifier.height(20.dp))
+
+        Text(
+          text = title,
+          style = AppTheme.typography.heading.copy(textAlign = TextAlign.Center),
           modifier = Modifier.fillMaxWidth(),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          if (secondaryAction != null) {
-            AppStateButton(secondaryAction)
-          }
-          if (primaryAction != null) {
-            AppStateButton(primaryAction)
-          }
-        }
+        )
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+          text = message,
+          style = AppTheme.typography.body.copy(textAlign = TextAlign.Center),
+          color = AppTheme.colors.textSecondary,
+          modifier = Modifier.fillMaxWidth(),
+        )
+
+        if (detail != null) {
+          Spacer(Modifier.height(16.dp))
+          detail()
+        }
       }
-    },
-  )
+
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (secondaryAction != null) {
+          AppStateButton(secondaryAction)
+        }
+        if (primaryAction != null) {
+          AppStateButton(primaryAction)
+        }
+      }
+
+      Spacer(Modifier.height(24.dp))
+    }
+  }
 }
 
 @Composable

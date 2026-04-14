@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.result.withDefaultExceptionHandler
@@ -81,66 +83,69 @@ fun AiSettingsScreen() {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    CardSurface(modifier = Modifier.fillMaxWidth()) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        Text("타이피는 사용자의 글을 절대 학습하지 않아요", style = AppTheme.typography.title)
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text(
-            "타이피는 사용자의 프라이버시를 최우선으로 생각해요. 사용자가 작성한 글은 어떠한 경우에도 AI 모델 학습에 사용되지 않아요.",
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
-          )
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(20.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          Text("타이피는 사용자의 글을 절대 학습하지 않아요", style = AppTheme.typography.title)
 
           Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiSettingsNoticeItem(
-              title = "학습 금지",
-              description = "사용자의 글은 AI 모델 학습이나 개선에 절대 사용되지 않아요.",
+            Text(
+              "타이피는 사용자의 프라이버시를 최우선으로 생각해요. 사용자가 작성한 글은 어떠한 경우에도 AI 모델 학습에 사용되지 않아요.",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textTertiary,
             )
-            AiSettingsNoticeItem(
-              title = "요청 시에만",
-              description = "사용자가 요청하지 않는 한 타이피가 임의로 AI를 사용하지 않아요.",
-            )
-            AiSettingsNoticeItem(
-              title = "투명한 처리",
-              description = "AI가 언제, 어떻게 사용되는지 사용자가 항상 알 수 있어요.",
-            )
-            AiSettingsNoticeItem(
-              title = "완전한 통제",
-              description = "AI 기능은 언제든 끌 수 있고, 비활성화하면 어떤 AI 처리도 일어나지 않아요.",
-            )
-            AiSettingsNoticeItem(title = "권리 보장", description = "타이피는 사용자 창작물에 대한 어떤 권리도 주장하지 않아요.")
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              AiSettingsNoticeItem(
+                title = "학습 금지",
+                description = "사용자의 글은 AI 모델 학습이나 개선에 절대 사용되지 않아요.",
+              )
+              AiSettingsNoticeItem(
+                title = "요청 시에만",
+                description = "사용자가 요청하지 않는 한 타이피가 임의로 AI를 사용하지 않아요.",
+              )
+              AiSettingsNoticeItem(
+                title = "투명한 처리",
+                description = "AI가 언제, 어떻게 사용되는지 사용자가 항상 알 수 있어요.",
+              )
+              AiSettingsNoticeItem(
+                title = "완전한 통제",
+                description = "AI 기능은 언제든 끌 수 있고, 비활성화하면 어떤 AI 처리도 일어나지 않아요.",
+              )
+              AiSettingsNoticeItem(
+                title = "권리 보장",
+                description = "타이피는 사용자 창작물에 대한 어떤 권리도 주장하지 않아요.",
+              )
+            }
           }
         }
       }
-    }
 
-    CardSurface(modifier = Modifier.fillMaxWidth()) {
-      SettingControlRow(
-        label = "AI 기능 활성화",
-        description = "활성화하면 AI 피드백 등 타이피가 제공하는 AI 기능을 사용할 수 있어요.",
-        enabled = !model.isUpdatingAiOptIn,
-        onClick = { requestAiOptIn(!model.aiOptIn) },
-        trailing = {
-          SettingSwitch(
-            checked = model.aiOptIn,
-            enabled = !model.isUpdatingAiOptIn,
-            onCheckedChange = { next -> requestAiOptIn(next) },
-          )
-        },
-      )
-    }
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        SettingControlRow(
+          label = "AI 기능 활성화",
+          description = "활성화하면 AI 피드백 등 타이피가 제공하는 AI 기능을 사용할 수 있어요.",
+          enabled = !model.isUpdatingAiOptIn,
+          onClick = { requestAiOptIn(!model.aiOptIn) },
+          trailing = {
+            SettingSwitch(
+              checked = model.aiOptIn,
+              enabled = !model.isUpdatingAiOptIn,
+              onCheckedChange = { next -> requestAiOptIn(next) },
+            )
+          },
+        )
+      }
 
-    Spacer(Modifier.height(72.dp))
+      Spacer(Modifier.height(72.dp))
+    }
   }
 }
 

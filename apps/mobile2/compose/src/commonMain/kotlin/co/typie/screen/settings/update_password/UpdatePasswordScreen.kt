@@ -1,6 +1,8 @@
 package co.typie.screen.settings.update_password
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -10,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.result.onOk
@@ -59,7 +62,6 @@ fun UpdatePasswordScreen() {
   }
 
   Screen(
-    scrollState = scrollState,
     loading = model.query.state !is QueryState.Success,
     imeAware = true,
     bottomBar = {
@@ -71,37 +73,39 @@ fun UpdatePasswordScreen() {
         onClick = { submit() },
       )
     },
-  ) {
-    if (hasPassword) {
+  ) { contentPadding ->
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+      if (hasPassword) {
+        TextField(
+          field = model.state.form.currentPassword,
+          label = "현재 비밀번호",
+          labelPosition = LabelPosition.Internal,
+          placeholder = "현재 비밀번호를 입력하세요",
+          isPassword = true,
+          contentType = ContentType.Password,
+        )
+      }
+
       TextField(
-        field = model.state.form.currentPassword,
-        label = "현재 비밀번호",
+        field = model.state.form.newPassword,
+        label = "새 비밀번호",
         labelPosition = LabelPosition.Internal,
-        placeholder = "현재 비밀번호를 입력하세요",
+        placeholder = "********",
         isPassword = true,
-        contentType = ContentType.Password,
+        contentType = ContentType.NewPassword,
       )
+
+      TextField(
+        field = model.state.form.confirmPassword,
+        label = "새 비밀번호 확인",
+        labelPosition = LabelPosition.Internal,
+        placeholder = "********",
+        isPassword = true,
+        contentType = ContentType.NewPassword,
+        onImeAction = { submit() },
+      )
+
+      Spacer(Modifier.height(24.dp))
     }
-
-    TextField(
-      field = model.state.form.newPassword,
-      label = "새 비밀번호",
-      labelPosition = LabelPosition.Internal,
-      placeholder = "********",
-      isPassword = true,
-      contentType = ContentType.NewPassword,
-    )
-
-    TextField(
-      field = model.state.form.confirmPassword,
-      label = "새 비밀번호 확인",
-      labelPosition = LabelPosition.Internal,
-      placeholder = "********",
-      isPassword = true,
-      contentType = ContentType.NewPassword,
-      onImeAction = { submit() },
-    )
-
-    Spacer(Modifier.height(24.dp))
   }
 }

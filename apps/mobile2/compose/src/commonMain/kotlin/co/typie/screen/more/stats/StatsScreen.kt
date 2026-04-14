@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.toLocalDate
+import co.typie.ext.verticalScroll
 import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
 import co.typie.graphql.StatsScreen_GenerateActivityImage_Mutation
@@ -86,169 +88,173 @@ fun StatsScreen() {
     }
   }
 
-  Screen(
-    scrollState = scrollState,
-    loading = model.query.state !is QueryState.Success,
-    background = AppTheme.colors.surfaceBase,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    val data = model.query.data
-    val changes =
-      remember(data.me.characterCountChanges) {
-        data.me.characterCountChanges.map { change ->
-          StatsCharacterCountChange(
-            date = change.date.toLocalDate(),
-            additions = change.additions,
-            deletions = change.deletions,
-          )
+  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      val data = model.query.data
+      val changes =
+        remember(data.me.characterCountChanges) {
+          data.me.characterCountChanges.map { change ->
+            StatsCharacterCountChange(
+              date = change.date.toLocalDate(),
+              additions = change.additions,
+              deletions = change.deletions,
+            )
+          }
+        }
+      val totalCharacterCount = data.me.usage.totalCharacterCount
+      val streakData =
+        remember(changes, totalCharacterCount) { calculateStreakData(changes, totalCharacterCount) }
+      val weekdayData = remember(changes) { calculateWeekdayPattern(changes) }
+      val bestWeekday =
+        remember(weekdayData) {
+          weekdayData.maxByOrNull { it.avgAdditions }?.takeIf { it.avgAdditions > 0 }
+        }
+
+      suspend fun fetchActivityImage(): ByteArray? {
+        return runCatching { Apollo.executeMutation(StatsScreen_GenerateActivityImage_Mutation()) }
+          .mapCatching { result -> Base64.decode(result.generateActivityImage.toString()) }
+          .getOrNull()
+      }
+
+      fun copyActivityImage() {
+        scope.launch {
+          val bytes = fetchActivityImage()
+          if (bytes == null) {
+            toast.show(ToastType.Error, "이미지를 복사할 수 없어요.")
+            return@launch
+          }
+
+          val copied = clipboard.copy(bytes = bytes, mimeType = "image/png")
+
+          if (copied) {
+            toast.show(ToastType.Success, "이미지가 클립보드에 복사되었어요.")
+          } else {
+            toast.show(ToastType.Error, "이미지를 복사할 수 없어요.")
+          }
         }
       }
-    val totalCharacterCount = data.me.usage.totalCharacterCount
-    val streakData =
-      remember(changes, totalCharacterCount) { calculateStreakData(changes, totalCharacterCount) }
-    val weekdayData = remember(changes) { calculateWeekdayPattern(changes) }
-    val bestWeekday =
-      remember(weekdayData) {
-        weekdayData.maxByOrNull { it.avgAdditions }?.takeIf { it.avgAdditions > 0 }
-      }
 
-    suspend fun fetchActivityImage(): ByteArray? {
-      return runCatching { Apollo.executeMutation(StatsScreen_GenerateActivityImage_Mutation()) }
-        .mapCatching { result -> Base64.decode(result.generateActivityImage.toString()) }
-        .getOrNull()
-    }
+      fun saveActivityImage() {
+        scope.launch {
+          val bytes = fetchActivityImage()
+          if (bytes == null) {
+            toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
+            return@launch
+          }
 
-    fun copyActivityImage() {
-      scope.launch {
-        val bytes = fetchActivityImage()
-        if (bytes == null) {
-          toast.show(ToastType.Error, "이미지를 복사할 수 없어요.")
-          return@launch
-        }
-
-        val copied = clipboard.copy(bytes = bytes, mimeType = "image/png")
-
-        if (copied) {
-          toast.show(ToastType.Success, "이미지가 클립보드에 복사되었어요.")
-        } else {
-          toast.show(ToastType.Error, "이미지를 복사할 수 없어요.")
+          when (
+            fileSystem.save(
+              bytes = bytes,
+              name = "${data.me.name}-나의-글쓰기-발자취.png",
+              location = FileSystemSaveLocation.Gallery,
+            )
+          ) {
+            FileSystemSaveResult.Success -> toast.show(ToastType.Success, "이미지가 기기에 저장되었어요.")
+            FileSystemSaveResult.PermissionDenied -> toast.show(ToastType.Error, "사진 접근 권한이 필요해요.")
+            FileSystemSaveResult.Error -> toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
+          }
         }
       }
-    }
 
-    fun saveActivityImage() {
-      scope.launch {
-        val bytes = fetchActivityImage()
-        if (bytes == null) {
-          toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
-          return@launch
-        }
-
-        when (
-          fileSystem.save(
-            bytes = bytes,
-            name = "${data.me.name}-나의-글쓰기-발자취.png",
-            location = FileSystemSaveLocation.Gallery,
-          )
-        ) {
-          FileSystemSaveResult.Success -> toast.show(ToastType.Success, "이미지가 기기에 저장되었어요.")
-          FileSystemSaveResult.PermissionDenied -> toast.show(ToastType.Error, "사진 접근 권한이 필요해요.")
-          FileSystemSaveResult.Error -> toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
-        }
-      }
-    }
-
-    Text("나의 글쓰기 통계", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
-
-    SummaryCard(label = "총 글자", value = totalCharacterCount.formatGrouped(), unit = "자")
-
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-      SummaryCard(
-        label = "총 문서",
-        value = data.me.documentCount.toString(),
-        unit = "개",
-        modifier = Modifier.weight(1f),
+      Text(
+        "나의 글쓰기 통계",
+        style = AppTheme.typography.display,
+        modifier = Modifier.padding(top = 4.dp),
       )
-      SummaryCard(
-        label = "활동일",
-        value = streakData.totalDays.toString(),
-        unit = "일",
-        modifier = Modifier.weight(1f),
+
+      SummaryCard(label = "총 글자", value = totalCharacterCount.formatGrouped(), unit = "자")
+
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        SummaryCard(
+          label = "총 문서",
+          value = data.me.documentCount.toString(),
+          unit = "개",
+          modifier = Modifier.weight(1f),
+        )
+        SummaryCard(
+          label = "활동일",
+          value = streakData.totalDays.toString(),
+          unit = "일",
+          modifier = Modifier.weight(1f),
+        )
+      }
+
+      StreakCard(streakData = streakData)
+
+      WeekdayCard(
+        weekdayData = weekdayData,
+        bestWeekdayIndex = bestWeekday?.dayIndex ?: -1,
+        maxWeekdayAverage = bestWeekday?.avgAdditions ?: 0,
       )
-    }
 
-    StreakCard(streakData = streakData)
+      CardSurface(modifier = Modifier.fillMaxWidth(), clipContent = false) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                "지난 1년간의 기록",
+                style = AppTheme.typography.caption,
+                color = AppTheme.colors.textSecondary,
+              )
+            }
 
-    WeekdayCard(
-      weekdayData = weekdayData,
-      bestWeekdayIndex = bestWeekday?.dayIndex ?: -1,
-      maxWeekdayAverage = bestWeekday?.avgAdditions ?: 0,
-    )
-
-    CardSurface(modifier = Modifier.fillMaxWidth(), clipContent = false) {
-      Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              "지난 1년간의 기록",
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textSecondary,
+            Popover(
+              anchor = { StatsActionButton(label = "이미지 받기") },
+              collapsedCornerRadius = 10.dp,
+              pane = {
+                Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
+                  PopoverList(
+                    items =
+                      listOf(
+                        PopoverListItem(
+                          content = { StatsActionItem(icon = Lucide.Copy, label = "클립보드에 복사") },
+                          onSelected = {
+                            close()
+                            copyActivityImage()
+                          },
+                        ),
+                        PopoverListItem(
+                          content = { StatsActionItem(icon = Lucide.Download, label = "기기에 저장") },
+                          onSelected = {
+                            close()
+                            saveActivityImage()
+                          },
+                        ),
+                      )
+                  )
+                }
+              },
             )
           }
 
-          Popover(
-            anchor = { StatsActionButton(label = "이미지 받기") },
-            collapsedCornerRadius = 10.dp,
-            pane = {
-              Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-                PopoverList(
-                  items =
-                    listOf(
-                      PopoverListItem(
-                        content = { StatsActionItem(icon = Lucide.Copy, label = "클립보드에 복사") },
-                        onSelected = {
-                          close()
-                          copyActivityImage()
-                        },
-                      ),
-                      PopoverListItem(
-                        content = { StatsActionItem(icon = Lucide.Download, label = "기기에 저장") },
-                        onSelected = {
-                          close()
-                          saveActivityImage()
-                        },
-                      ),
-                    )
-                )
-              }
-            },
+          ActivityGrid(
+            changes =
+              changes.map { change ->
+                ActivityGridChange(date = change.date, additions = change.additions)
+              },
+            modifier = Modifier.fillMaxWidth(),
+            onVerticalScrollDelta = { delta -> scrollState.dispatchRawDelta(delta) },
           )
         }
-
-        ActivityGrid(
-          changes =
-            changes.map { change ->
-              ActivityGridChange(date = change.date, additions = change.additions)
-            },
-          modifier = Modifier.fillMaxWidth(),
-          onVerticalScrollDelta = { delta -> scrollState.dispatchRawDelta(delta) },
-        )
       }
-    }
 
-    CardSurface(modifier = Modifier.fillMaxWidth(), clipContent = false) {
-      Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-        StatsActivityChart(
-          characterCountChanges = changes,
-          onVerticalScrollDelta = { delta -> scrollState.dispatchRawDelta(delta) },
-        )
+      CardSurface(modifier = Modifier.fillMaxWidth(), clipContent = false) {
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+          StatsActivityChart(
+            characterCountChanges = changes,
+            onVerticalScrollDelta = { delta -> scrollState.dispatchRawDelta(delta) },
+          )
+        }
       }
-    }
 
-    Spacer(Modifier.height(140.dp))
+      Spacer(Modifier.height(140.dp))
+    }
   }
 }
 

@@ -9,7 +9,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,7 +53,6 @@ import co.typie.ui.component.loader.LocalLoader
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
@@ -70,38 +68,36 @@ fun LoginScreen() {
 
   ProvideTopBar(enabled = false)
 
-  Screen(
-    body = { contentPadding ->
-      Column(modifier = Modifier.fillMaxSize().padding(contentPadding).safeBottomPadding()) {
-        Column(
-          modifier = Modifier.weight(1f).fillMaxWidth(),
-          verticalArrangement = Arrangement.Center,
-          horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-          Img(
-            url = Res.getUri("files/logos/full.svg"),
-            modifier = Modifier.height(32.dp),
-            contentScale = ContentScale.FillHeight,
-            color = AppTheme.colors.textPrimary,
-          )
-          Spacer(Modifier.height(24.dp))
-          Text("작성, 정리, 공유까지.", style = AppTheme.typography.label)
-          Spacer(Modifier.height(4.dp))
-          Text("글쓰기의 모든 과정을", style = AppTheme.typography.label)
-          Spacer(Modifier.height(4.dp))
-          Text("타이피 하나로 해결해요.", style = AppTheme.typography.label)
-        }
+  Screen { contentPadding ->
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding).safeBottomPadding()) {
+      Column(
+        modifier = Modifier.weight(1f).fillMaxWidth(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+      ) {
+        Img(
+          url = Res.getUri("files/logos/full.svg"),
+          modifier = Modifier.height(32.dp),
+          contentScale = ContentScale.FillHeight,
+          color = AppTheme.colors.textPrimary,
+        )
+        Spacer(Modifier.height(24.dp))
+        Text("작성, 정리, 공유까지.", style = AppTheme.typography.label)
+        Spacer(Modifier.height(4.dp))
+        Text("글쓰기의 모든 과정을", style = AppTheme.typography.label)
+        Spacer(Modifier.height(4.dp))
+        Text("타이피 하나로 해결해요.", style = AppTheme.typography.label)
+      }
 
-        Column(
-          modifier = Modifier.fillMaxWidth(),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-          horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-          Button(text = "시작하기", onClick = { scope.launch { sheet.present { LoginContent() } } })
-        }
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+      ) {
+        Button(text = "시작하기", onClick = { scope.launch { sheet.present { LoginSheet() } } })
       }
     }
-  )
+  }
 }
 
 private enum class LoginStep {
@@ -109,11 +105,9 @@ private enum class LoginStep {
   Email,
 }
 
-private val LoginStepHorizontalPadding = 16.dp
-
 @Composable
 context(_: SheetScope<Unit>)
-private fun LoginContent() {
+private fun LoginSheet() {
   var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
 
   SheetLayout(
@@ -129,8 +123,7 @@ private fun LoginContent() {
           )
         }
       )
-    },
-    padding = SheetPadding(body = PaddingValues(vertical = 0.dp)),
+    }
   ) {
     AnimatedContent(
       targetState = step,
@@ -147,7 +140,10 @@ private fun LoginContent() {
           LoginSSOContent(onEmailClick = { step = LoginStep.Email }, onSuccess = { dismiss() })
 
         LoginStep.Email ->
-          LoginEmailContent(onBack = { step = LoginStep.SingleSignOn }, onSuccess = { dismiss() })
+          LoginEmailContent(
+            onSingleSignOnClick = { step = LoginStep.SingleSignOn },
+            onSuccess = { dismiss() },
+          )
       }
     }
   }
@@ -173,7 +169,7 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
   }
 
   Column(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = LoginStepHorizontalPadding),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -226,7 +222,7 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
 }
 
 @Composable
-private fun LoginEmailContent(onBack: () -> Unit, onSuccess: () -> Unit) {
+private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> Unit) {
   val model = viewModel { LoginWithEmailViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -253,7 +249,7 @@ private fun LoginEmailContent(onBack: () -> Unit, onSuccess: () -> Unit) {
     }
   }
 
-  Column(modifier = Modifier.fillMaxWidth().padding(horizontal = LoginStepHorizontalPadding)) {
+  Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
     TextField(
       field = form.email,
       label = "이메일",
@@ -288,7 +284,7 @@ private fun LoginEmailContent(onBack: () -> Unit, onSuccess: () -> Unit) {
       color = AppTheme.colors.textSecondary,
       modifier =
         Modifier.align(Alignment.CenterHorizontally).padding(vertical = 16.dp).clickable {
-          onBack()
+          onSingleSignOnClick()
         },
     )
   }
