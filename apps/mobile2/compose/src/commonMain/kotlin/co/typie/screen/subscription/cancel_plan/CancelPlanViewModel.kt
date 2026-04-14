@@ -6,74 +6,65 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.graphql.QueryState
+import co.typie.graphql.type.SubscriptionState
+import co.typie.platform.PlatformModule
 import co.typie.result.Result
 import co.typie.result.loading
-import co.typie.result.result
-import co.typie.service.CancelPlanFlowState
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionManagementResult
-import co.typie.service.SubscriptionService
-import co.typie.service.consumeCancelPlanCloseRequest
-import co.typie.service.consumeCancelPlanErrorMessage
-import co.typie.service.reduceCancelPlanFlowOnManagementResult
-import co.typie.service.reduceCancelPlanFlowOnSubscriptionState
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
 import kotlinx.coroutines.launch
 
 class CancelPlanViewModel : ViewModel() {
-  private val currentSubscriptionStore = CurrentSubscriptionStore
-  private val subscriptionService = SubscriptionService
-  var flowState by mutableStateOf(CancelPlanFlowState())
+  var awaitingStoreResult by mutableStateOf(false)
+    private set
+
+  var shouldClose by mutableStateOf(false)
+    private set
+
+  var errorMessage by mutableStateOf<String?>(null)
     private set
 
   var isOpeningSubscriptionManagement by mutableStateOf(false)
     private set
 
-  val shouldClose: Boolean
-    get() = flowState.shouldClose
-
-  val errorMessage: String?
-    get() = flowState.errorMessage
-
   init {
     viewModelScope.launch {
-      snapshotFlow { currentSubscriptionStore.state }
+      snapshotFlow { SubscriptionService.state }
         .collect { state ->
-          val subscriptionState = (state as? QueryState.Success)?.data?.state
-          updateFlowState(
-            reduceCancelPlanFlowOnSubscriptionState(
-              current = flowState,
-              subscriptionState = subscriptionState,
-            )
-          )
+          if (!awaitingStoreResult) return@collect
+          when (state) {
+            is SubscriptionServiceState.Unknown -> return@collect
+            is SubscriptionServiceState.NotSubscribed -> {}
+            is SubscriptionServiceState.Subscribed ->
+              if (state.subscription.state == SubscriptionState.ACTIVE) return@collect
+          }
+          awaitingStoreResult = false
+          shouldClose = true
         }
     }
   }
 
-  fun onOpenSubscriptionManagementResult(result: SubscriptionManagementResult) {
-    updateFlowState(reduceCancelPlanFlowOnManagementResult(current = flowState, result = result))
-  }
-
   suspend fun openSubscriptionManagement(): Result<Unit, Nothing> =
     loading({ isOpeningSubscriptionManagement = it }) {
-      onOpenSubscriptionManagementResult(subscriptionService.openSubscriptionManagement())
+      val opened = PlatformModule.purchaseService.openSubscriptionManagement()
+      if (opened) {
+        awaitingStoreResult = true
+      } else {
+        errorMessage = "스토어를 열 수 없어요. 잠시 후 다시 시도해주세요."
+      }
     }
 
   fun onResumed() {
-    if (flowState.awaitingStoreResult) {
-      currentSubscriptionStore.refresh()
+    if (awaitingStoreResult) {
+      SubscriptionService.refresh()
     }
   }
 
   fun consumeCloseRequest() {
-    flowState = consumeCancelPlanCloseRequest(flowState)
+    shouldClose = false
   }
 
   fun consumeErrorMessage() {
-    flowState = consumeCancelPlanErrorMessage(flowState)
-  }
-
-  private fun updateFlowState(next: CancelPlanFlowState) {
-    flowState = next
+    errorMessage = null
   }
 }

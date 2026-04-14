@@ -22,17 +22,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.toLocalDate
 import co.typie.generated.resources.Res
+import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
-import co.typie.screen.subscription.subscriptionEntryDestination
-import co.typie.screen.subscription.subscriptionRoute
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionService
-import co.typie.service.hasSubscriptionOrNull
-import co.typie.service.subscriptionSummaryOrNull
 import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPill
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
 import co.typie.ui.component.ActivityGrid
 import co.typie.ui.component.ActivityGridChange
 import co.typie.ui.component.ActivityGridHeight
@@ -67,7 +64,7 @@ fun MoreScreen() {
   val dialog = LocalDialog.current
 
   val model = viewModel { MoreViewModel() }
-  val currentSubscriptionState = CurrentSubscriptionStore.state
+  val subscriptionState = SubscriptionService.state
 
   val scrollState = rememberScrollState()
 
@@ -81,25 +78,24 @@ fun MoreScreen() {
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
 
   LaunchedEffect(model.query.state) {
-    if (SubscriptionService.hasQueryError(model.query.state)) {
+    if (model.query.state is QueryState.Error) {
       dialog.error(nav = nav, onRetry = { model.query.refetch() })
     }
   }
 
   Screen(
     scrollState = scrollState,
-    loading = SubscriptionService.isQueryLoading(model.query.state),
+    loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
     val data = model.query.data
-    val subscriptionSummary = currentSubscriptionState.subscriptionSummaryOrNull()
-    val hasSubscription = currentSubscriptionState.hasSubscriptionOrNull()
+    val subscription = (subscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
     val subscriptionActionLabel =
-      when (hasSubscription) {
-        true -> "이용권 정보"
-        false -> "구매하기"
-        null -> "확인 중"
+      when (subscriptionState) {
+        is SubscriptionServiceState.Subscribed -> "이용권 정보"
+        is SubscriptionServiceState.NotSubscribed -> "구매하기"
+        is SubscriptionServiceState.Unknown -> "확인 중"
       }
 
     val activityChanges =
@@ -203,10 +199,10 @@ fun MoreScreen() {
       Column {
         CardRow(
           onClick = {
-            hasSubscription?.let { resolved ->
-              nav.navigate(
-                subscriptionRoute(subscriptionEntryDestination(hasSubscription = resolved))
-              )
+            when (subscriptionState) {
+              is SubscriptionServiceState.Subscribed -> nav.navigate(Route.CurrentPlan)
+              is SubscriptionServiceState.NotSubscribed -> nav.navigate(Route.EnrollPlan)
+              is SubscriptionServiceState.Unknown -> {}
             }
           }
         ) {
@@ -224,7 +220,7 @@ fun MoreScreen() {
               Text("현재 이용권", style = AppTheme.typography.label)
 
               Text(
-                subscriptionSummary?.subscriptionName ?: "이용권 확인 중...",
+                subscription?.planName ?: "타이피 BASIC ACCESS",
                 style = AppTheme.typography.caption,
                 color = AppTheme.colors.textTertiary,
                 maxLines = 1,
@@ -338,7 +334,7 @@ fun MoreScreen() {
 
     CardSurface(modifier = Modifier.fillMaxWidth()) {
       Column {
-        if (hasSubscription == true) {
+        if (subscriptionState is SubscriptionServiceState.Subscribed) {
           CardRow(onClick = { uriHandler.openUri("https://typie.link/community") }) {
             Skeleton.Unite {
               Img(

@@ -36,9 +36,9 @@ import co.typie.result.Result
 import co.typie.result.Task
 import co.typie.result.loading
 import co.typie.result.task
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.hasSubscriptionOrNull
 import co.typie.storage.Preference
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.api.CacheKey
 import com.apollographql.cache.normalized.apolloStore
@@ -85,7 +85,7 @@ sealed interface SubmitError {
 
 class SpaceSettingsViewModel : ViewModel() {
   private val blobService = BlobService
-  private val currentSubscriptionStore = CurrentSubscriptionStore
+  private val subscriptionService = SubscriptionService
   val state = SpaceSettingsScreenState(viewModelScope)
   var isSubmitting by mutableStateOf(false)
     private set
@@ -149,8 +149,8 @@ class SpaceSettingsViewModel : ViewModel() {
       )
 
       if (state.form.slug.isDirty) {
-        when (currentSubscriptionStore.state.hasSubscriptionOrNull()) {
-          true -> {
+        when (subscriptionService.state) {
+          is SubscriptionServiceState.Subscribed -> {
             try {
               Apollo.executeMutation(
                 SpaceSettingsScreen_UpdateSiteSlug_Mutation(
@@ -167,9 +167,9 @@ class SpaceSettingsViewModel : ViewModel() {
             }
           }
 
-          false -> Unit
+          is SubscriptionServiceState.NotSubscribed -> Unit
 
-          null -> raise(SubmitError.SubscriptionUnknown)
+          is SubscriptionServiceState.Unknown -> raise(SubmitError.SubscriptionUnknown)
         }
       }
 

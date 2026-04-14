@@ -1,11 +1,29 @@
 package co.typie.screen.settings.font_settings
 
+import co.typie.graphql.type.PlanAvailability
+import co.typie.graphql.type.SubscriptionState
+import co.typie.subscription.Subscription
+import co.typie.subscription.SubscriptionServiceState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+
+private fun mockSubscription() =
+  Subscription(
+    id = "sub-1",
+    state = SubscriptionState.ACTIVE,
+    startsAt = Clock.System.now(),
+    expiresAt = Clock.System.now() + 30.days,
+    planId = "plan-1",
+    planName = "FULL ACCESS",
+    fee = 12900,
+    availability = PlanAvailability.IN_APP_PURCHASE,
+  )
 
 class FontSettingsModelsTest {
   @Test
@@ -89,8 +107,15 @@ class FontSettingsModelsTest {
 
   @Test
   fun `fontUploadAction returns plan upgrade sheet for unsubscribed users`() {
-    assertEquals(FontUploadAction.PickFont, fontUploadAction(hasSubscription = true))
-    assertEquals(FontUploadAction.ShowPlanUpgradeSheet, fontUploadAction(hasSubscription = false))
+    assertEquals(
+      FontUploadAction.PickFont,
+      fontUploadAction(SubscriptionServiceState.Subscribed(subscription = mockSubscription())),
+    )
+    assertEquals(
+      FontUploadAction.ShowPlanUpgradeSheet,
+      fontUploadAction(SubscriptionServiceState.NotSubscribed),
+    )
+    assertNull(fontUploadAction(SubscriptionServiceState.Unknown))
   }
 
   @Test

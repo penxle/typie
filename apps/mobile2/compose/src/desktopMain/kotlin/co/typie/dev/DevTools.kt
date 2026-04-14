@@ -48,11 +48,7 @@ private fun DevToolsAccent.accentColor(): Color =
     DevToolsAccent.Highlight -> AccentHighlight
   }
 
-fun createDevToolsWindow(
-  mainWindow: Window,
-  networkSimulator: NetworkSimulator,
-  subscriptionDevSandbox: SubscriptionDevSandbox,
-): JWindow {
+fun createDevToolsWindow(mainWindow: Window, networkSimulator: NetworkSimulator): JWindow {
   val devWindow = JWindow()
   devWindow.isAlwaysOnTop = true
   devWindow.background = Color(0, 0, 0, 0)
@@ -77,11 +73,7 @@ fun createDevToolsWindow(
 
         val dotSize = 6.0
         val dotGap = 2.0
-        val accents =
-          devToolsCollapsedIndicatorAccents(
-            networkPreset = networkSimulator.preset,
-            subscriptionScenario = subscriptionDevSandbox.scenario,
-          )
+        val accents = devToolsCollapsedIndicatorAccents(networkPreset = networkSimulator.preset)
         val totalHeight = accents.size * dotSize + (accents.size - 1) * dotGap
         val x = (32.0 - dotSize) / 2
         var y = (32.0 - totalHeight) / 2
@@ -229,19 +221,6 @@ fun createDevToolsWindow(
     )
   }
 
-  dropdownPanel.add(createSectionLabel("Subscription"))
-
-  SubscriptionDevScenario.entries.forEach { option ->
-    dropdownPanel.add(
-      createOptionItem(
-        labelText = option.label,
-        accentColor = option.devToolsAccent().accentColor(),
-        selected = { subscriptionDevSandbox.scenario == option },
-        onClick = { subscriptionDevSandbox.select(option) },
-      )
-    )
-  }
-
   dropdownPanel.add(createSectionLabel("Bootstrap"))
 
   // Toggle dropdown on icon click
@@ -280,10 +259,6 @@ fun createDevToolsWindow(
 
   // Repaint on preset change
   snapshotFlow { networkSimulator.preset }
-    .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
-    .launchIn(scope)
-
-  snapshotFlow { subscriptionDevSandbox.scenario }
     .onEach { SwingUtilities.invokeLater { devWindow.repaint() } }
     .launchIn(scope)
 

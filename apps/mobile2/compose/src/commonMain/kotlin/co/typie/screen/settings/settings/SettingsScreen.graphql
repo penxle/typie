@@ -1,9 +1,5 @@
 query SettingsScreen_Query {
   me @catch(to: THROW) {
     id
-
-    subscription {
-      id
-    }
   }
 }

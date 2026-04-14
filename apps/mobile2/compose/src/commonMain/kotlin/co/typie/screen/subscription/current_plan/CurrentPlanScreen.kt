@@ -16,26 +16,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.datetime.formatKoreanDate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
-import co.typie.graphql.QueryState
+import co.typie.graphql.type.PlanAvailability
+import co.typie.graphql.type.SubscriptionState
 import co.typie.navigation.Nav
 import co.typie.route.Route
-import co.typie.screen.subscription.CurrentPlanFooter
-import co.typie.screen.subscription.currentPlanDetailLines
-import co.typie.screen.subscription.currentPlanFooter
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionAvailability
-import co.typie.service.SubscriptionState
-import co.typie.service.shouldAutoCloseCurrentPlan
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -46,7 +41,7 @@ import co.typie.ui.theme.AppTheme
 fun CurrentPlanScreen() {
   val nav = Nav.current
   val scrollState = rememberScrollState()
-  val currentSubscriptionState = CurrentSubscriptionStore.state
+  val currentSubscriptionState = SubscriptionService.state
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -54,36 +49,35 @@ fun CurrentPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  val dialog = LocalDialog.current
-
   LaunchedEffect(currentSubscriptionState) {
-    if (currentSubscriptionState is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { CurrentSubscriptionStore.refresh() })
-    }
-  }
-
-  LaunchedEffect(currentSubscriptionState) {
-    if (shouldAutoCloseCurrentPlan(currentSubscriptionState)) {
+    if (currentSubscriptionState is SubscriptionServiceState.NotSubscribed) {
       nav.pop()
     }
   }
 
   Screen(
     scrollState = scrollState,
-    loading = currentSubscriptionState !is QueryState.Success,
+    loading = currentSubscriptionState is SubscriptionServiceState.Unknown,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    val subscription = (currentSubscriptionState as? QueryState.Success)?.data ?: return@Screen
-    val availability = subscription.availability
-    val footer = availability?.let(::currentPlanFooter)
+    val subscription =
+      (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
+        ?: return@Screen
+
     val detailLines =
-      currentPlanDetailLines(
-        availability = availability ?: SubscriptionAvailability.Manual,
-        fee = subscription.fee ?: 0,
-        state = subscription.state ?: SubscriptionState.Active,
-        expiresAt = subscription.expiresAt ?: return@Screen,
-      )
+      if (subscription.availability == PlanAvailability.TRIAL) {
+        listOf("무료 체험이 ${subscription.expiresAt.formatKoreanDate()}에 종료돼요.")
+      } else {
+        listOf(
+          "이용권 가격: ${subscription.fee.formatGrouped()}원",
+          if (subscription.state == SubscriptionState.ACTIVE) {
+            "다음 결제일: ${subscription.expiresAt.formatKoreanDate()}"
+          } else {
+            "해지 예정일: ${subscription.expiresAt.formatKoreanDate()}"
+          },
+        )
+      }
 
     Text("이용권 정보", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
@@ -104,7 +98,7 @@ fun CurrentPlanScreen() {
             )
 
             Text(
-              subscription.planName ?: "",
+              subscription.planName,
               style = AppTheme.typography.heading,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
@@ -125,15 +119,13 @@ fun CurrentPlanScreen() {
           }
         }
 
-        if (footer != null) {
-          CardDivider()
-          CurrentPlanFooterSection(
-            footer = footer,
-            onCancelClick = { nav.navigate(Route.CancelPlan) },
-            onChangeClick = { nav.navigate(Route.EnrollPlan) },
-            onUpgradeClick = { nav.navigate(Route.EnrollPlan) },
-          )
-        }
+        CardDivider()
+        CurrentPlanFooterSection(
+          availability = subscription.availability,
+          onCancelClick = { nav.navigate(Route.CancelPlan) },
+          onChangeClick = { nav.navigate(Route.EnrollPlan) },
+          onUpgradeClick = { nav.navigate(Route.EnrollPlan) },
+        )
       }
     }
 
@@ -143,19 +135,19 @@ fun CurrentPlanScreen() {
 
 @Composable
 private fun CurrentPlanFooterSection(
-  footer: CurrentPlanFooter,
+  availability: PlanAvailability,
   onCancelClick: suspend () -> Unit,
   onChangeClick: suspend () -> Unit,
   onUpgradeClick: suspend () -> Unit,
 ) {
-  when (footer) {
-    is CurrentPlanFooter.Actions -> {
+  when (availability) {
+    PlanAvailability.IN_APP_PURCHASE -> {
       Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
       ) {
         CurrentPlanFooterAction(
-          label = footer.labels.first(),
+          label = "해지하기",
           modifier = Modifier.weight(1f),
           onClick = onCancelClick,
         )
@@ -166,24 +158,42 @@ private fun CurrentPlanFooterSection(
         )
 
         CurrentPlanFooterAction(
-          label = footer.labels.last(),
+          label = "변경하기",
           modifier = Modifier.weight(1f),
           onClick = onChangeClick,
         )
       }
     }
 
-    is CurrentPlanFooter.Note -> {
+    PlanAvailability.BILLING_KEY -> {
       Text(
-        text = footer.text,
+        text = "웹사이트에서 가입한 이용권이에요.\n정보 변경이 필요할 경우 웹사이트에서 진행해주세요.",
         style = AppTheme.typography.body,
         color = AppTheme.colors.textTertiary,
         modifier = Modifier.padding(16.dp),
       )
     }
 
-    is CurrentPlanFooter.Upgrade -> {
-      Button(text = footer.label, onClick = onUpgradeClick, modifier = Modifier.padding(16.dp))
+    PlanAvailability.MANUAL -> {
+      Text(
+        text = "정보 변경을 할 수 없는 이용권이에요.\n정보 변경이 필요할 경우 고객센터에 문의해주세요.",
+        style = AppTheme.typography.body,
+        color = AppTheme.colors.textTertiary,
+        modifier = Modifier.padding(16.dp),
+      )
+    }
+
+    PlanAvailability.TRIAL -> {
+      Button(text = "지금 업그레이드", onClick = onUpgradeClick, modifier = Modifier.padding(16.dp))
+    }
+
+    else -> {
+      Text(
+        text = "정보 변경을 할 수 없는 이용권이에요.\n정보 변경이 필요할 경우 고객센터에 문의해주세요.",
+        style = AppTheme.typography.body,
+        color = AppTheme.colors.textTertiary,
+        modifier = Modifier.padding(16.dp),
+      )
     }
   }
 }
@@ -202,4 +212,18 @@ private fun CurrentPlanFooterAction(
       Text(text = label, style = AppTheme.typography.action, color = AppTheme.colors.textSecondary)
     }
   }
+}
+
+private fun Int.formatGrouped(): String {
+  val text = toString()
+  val builder = StringBuilder()
+
+  text.forEachIndexed { index, char ->
+    if (index > 0 && (text.length - index) % 3 == 0) {
+      builder.append(',')
+    }
+    builder.append(char)
+  }
+
+  return builder.toString()
 }

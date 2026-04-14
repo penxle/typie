@@ -45,12 +45,12 @@ import co.typie.platform.rememberFilePicker
 import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.screen.subscription.PlanUpgradeContent
-import co.typie.screen.subscription.PlanUpgradeSheetResult
-import co.typie.screen.subscription.SubscriptionCelebrationContent
-import co.typie.screen.subscription.planUpgradeRoute
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.hasSubscriptionOrNull
+import co.typie.route.Route
+import co.typie.subscription.PlanUpgradeContent
+import co.typie.subscription.PlanUpgradeSheetResult
+import co.typie.subscription.SubscriptionCelebrationContent
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
 import co.typie.ui.component.AlertBanner
 import co.typie.ui.component.AlertBannerVariant
 import co.typie.ui.component.Button
@@ -116,7 +116,7 @@ fun SpaceSettingsScreen() {
   val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current
   val scrollState = rememberScrollState()
-  val currentSubscriptionState = CurrentSubscriptionStore.state
+  val subscriptionState = SubscriptionService.state
 
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker
@@ -176,7 +176,6 @@ fun SpaceSettingsScreen() {
     },
   ) {
     val data = model.query.data
-    val hasSubscription = currentSubscriptionState.hasSubscriptionOrNull()
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       SectionTitle("일반")
 
@@ -217,7 +216,7 @@ fun SpaceSettingsScreen() {
               modifier =
                 Modifier.fillMaxWidth()
                   .then(
-                    if (hasSubscription == false) {
+                    if (subscriptionState is SubscriptionServiceState.NotSubscribed) {
                       Modifier.clickable {
                         scope.launch {
                           val upgradeResult = sheet.present {
@@ -226,12 +225,13 @@ fun SpaceSettingsScreen() {
                           if (upgradeResult is PlanUpgradeSheetResult.TrialStarted) {
                             sheet.present {
                               SubscriptionCelebrationContent(
-                                title = upgradeResult.celebration.title,
-                                message = upgradeResult.celebration.message,
+                                title = "무료 체험이 시작됐어요!",
+                                message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
                               )
                             }
                           }
-                          planUpgradeRoute(upgradeResult)?.let { route -> nav.navigate(route) }
+                          if (upgradeResult is PlanUpgradeSheetResult.Upgrade)
+                            nav.navigate(Route.EnrollPlan)
                         }
                       }
                     } else {
@@ -243,7 +243,7 @@ fun SpaceSettingsScreen() {
                 field = model.state.form.slug,
                 label = "주소",
                 help =
-                  if (hasSubscription == false) {
+                  if (subscriptionState is SubscriptionServiceState.NotSubscribed) {
                     "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                   } else {
                     null
@@ -251,8 +251,8 @@ fun SpaceSettingsScreen() {
                 helpTextStyle = AppTheme.typography.caption,
                 labelPosition = LabelPosition.Internal,
                 placeholder = "스페이스 주소",
-                enabled = hasSubscription == true,
-                readOnly = hasSubscription != true,
+                enabled = subscriptionState is SubscriptionServiceState.Subscribed,
+                readOnly = subscriptionState !is SubscriptionServiceState.Subscribed,
                 suffix = {
                   Text(
                     ".${model.usersiteHost}",

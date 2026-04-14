@@ -16,23 +16,6 @@ fun NetworkPreset.devToolsAccent(): DevToolsAccent =
     NetworkPreset.Offline -> DevToolsAccent.Danger
   }
 
-fun SubscriptionDevScenario.devToolsAccent(): DevToolsAccent =
-  when (this) {
-    SubscriptionDevScenario.RemoteData -> DevToolsAccent.Muted
-    SubscriptionDevScenario.NoSubscription,
-    SubscriptionDevScenario.TrialExpired -> DevToolsAccent.Muted
-    SubscriptionDevScenario.Trial -> DevToolsAccent.Info
-    SubscriptionDevScenario.Monthly,
-    SubscriptionDevScenario.Yearly -> DevToolsAccent.Success
-
-    SubscriptionDevScenario.CancelScheduled -> DevToolsAccent.Warning
-    SubscriptionDevScenario.BillingKey,
-    SubscriptionDevScenario.Manual -> DevToolsAccent.Highlight
-  }
-
-fun devToolsCollapsedIndicatorAccents(
-  networkPreset: NetworkPreset,
-  subscriptionScenario: SubscriptionDevScenario,
-): List<DevToolsAccent> {
-  return listOf(networkPreset.devToolsAccent(), subscriptionScenario.devToolsAccent())
+fun devToolsCollapsedIndicatorAccents(networkPreset: NetworkPreset): List<DevToolsAccent> {
+  return listOf(networkPreset.devToolsAccent())
 }

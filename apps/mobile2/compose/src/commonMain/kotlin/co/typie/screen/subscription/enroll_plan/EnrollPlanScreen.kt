@@ -34,6 +34,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.graphql.QueryState
+import co.typie.graphql.type.PlanAvailability
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.LocalLoader
@@ -44,22 +45,15 @@ import co.typie.platform.PurchaseProduct
 import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.screen.subscription.SubscriptionCelebrationContent
-import co.typie.screen.subscription.SubscriptionFeature
-import co.typie.screen.subscription.SubscriptionFeatureList
-import co.typie.screen.subscription.SubscriptionProductState
-import co.typie.screen.subscription.SubscriptionStatusBadge
-import co.typie.screen.subscription.basicPlanFeatures
-import co.typie.screen.subscription.fullPlanFeatures
-import co.typie.screen.subscription.subscriptionProductState
-import co.typie.screen.subscription.subscriptionStatusBadgeLabel
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionAvailability
-import co.typie.service.SubscriptionService
-import co.typie.service.TRIAL_START_CONFIRM_ACTION
-import co.typie.service.TRIAL_START_CONFIRM_MESSAGE
-import co.typie.service.TRIAL_START_CONFIRM_TITLE
-import co.typie.service.isCurrentFullPlan
+import co.typie.subscription.FULL_ACCESS_MONTHLY_PLAN_ID
+import co.typie.subscription.FULL_ACCESS_YEARLY_PLAN_ID
+import co.typie.subscription.SubscriptionCelebrationContent
+import co.typie.subscription.SubscriptionFeature
+import co.typie.subscription.SubscriptionFeatureList
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
+import co.typie.subscription.basicPlanFeatures
+import co.typie.subscription.fullPlanFeatures
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
@@ -89,14 +83,25 @@ fun EnrollPlanScreen() {
   val model = viewModel { EnrollPlanViewModel() }
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
-  val currentSubscriptionState = CurrentSubscriptionStore.state
+  val currentSubscriptionState = SubscriptionService.state
 
-  LaunchedEffect(model.celebration) {
-    val celebration = model.celebration ?: return@LaunchedEffect
+  LaunchedEffect(model.showTrialCelebration) {
+    if (!model.showTrialCelebration) return@LaunchedEffect
     sheet.present {
-      SubscriptionCelebrationContent(title = celebration.title, message = celebration.message)
+      SubscriptionCelebrationContent(
+        title = "무료 체험이 시작됐어요!",
+        message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
+      )
     }
-    model.consumeCelebration()
+    model.consumeTrialCelebration()
+  }
+
+  LaunchedEffect(model.showPurchaseCelebration) {
+    if (!model.showPurchaseCelebration) return@LaunchedEffect
+    sheet.present {
+      SubscriptionCelebrationContent(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
+    }
+    model.consumePurchaseCelebration()
   }
 
   LaunchedEffect(model.purchaseError) {
@@ -112,7 +117,7 @@ fun EnrollPlanScreen() {
   )
 
   LaunchedEffect(model.query.state) {
-    if (SubscriptionService.hasQueryError(model.query.state)) {
+    if (model.query.state is QueryState.Error) {
       dialog.error(nav = nav, onRetry = { model.query.refetch() })
     }
   }
@@ -120,16 +125,17 @@ fun EnrollPlanScreen() {
   Screen(
     scrollState = scrollState,
     loading =
-      SubscriptionService.isQueryLoading(model.query.state) ||
-        currentSubscriptionState !is QueryState.Success,
+      model.query.state !is QueryState.Success ||
+        currentSubscriptionState is SubscriptionServiceState.Unknown,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    val currentSubscription = (currentSubscriptionState as? QueryState.Success)?.data
+    val currentSubscription =
+      (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
     val currentPlanId = currentSubscription?.planId
     val hasSubscription = currentSubscription != null
-    val isOnTrial = currentSubscription?.availability == SubscriptionAvailability.Trial
-    val canStartTrial = SubscriptionService.canStartTrial(model.query.data.me.canStartTrial)
+    val isOnTrial = currentSubscription?.availability == PlanAvailability.TRIAL
+    val canStartTrial = model.query.data.me.canStartTrial
 
     Text(
       text = "이용권 구매/변경",
@@ -142,7 +148,7 @@ fun EnrollPlanScreen() {
 
       SubscriptionPlanCard(
         title = "타이피 BASIC ACCESS",
-        badge = SubscriptionStatusBadge.Current,
+        badge = "현재 이용 중",
         features = basicPlanFeatures,
       )
     }
@@ -195,7 +201,7 @@ fun EnrollPlanScreen() {
 private fun SubscriptionPlanCard(
   title: String,
   features: List<SubscriptionFeature>,
-  badge: SubscriptionStatusBadge? = null,
+  badge: String? = null,
 ) {
   CardSurface(modifier = Modifier.fillMaxWidth()) {
     Column(
@@ -253,7 +259,7 @@ private fun FullAccessCard(
           )
 
           if (isOnTrial) {
-            SubscriptionStatusBadgeChip(SubscriptionStatusBadge.Trial)
+            SubscriptionStatusBadgeChip("무료 체험 중")
           }
         }
 
@@ -282,11 +288,7 @@ private fun FullAccessCard(
           label = "1개월 구독하기",
           product = monthlyProduct,
           productsLoaded = productsLoaded,
-          isActive =
-            isCurrentFullPlan(
-              currentPlanId = currentPlanId,
-              interval = PurchasePlanInterval.Monthly,
-            ),
+          isActive = currentPlanId == FULL_ACCESS_MONTHLY_PLAN_ID,
           onClick = onPurchaseMonthly,
         )
 
@@ -294,11 +296,7 @@ private fun FullAccessCard(
           label = "1년 구독하기",
           product = yearlyProduct,
           productsLoaded = productsLoaded,
-          isActive =
-            isCurrentFullPlan(
-              currentPlanId = currentPlanId,
-              interval = PurchasePlanInterval.Yearly,
-            ),
+          isActive = currentPlanId == FULL_ACCESS_YEARLY_PLAN_ID,
           onClick = onPurchaseYearly,
         )
       }
@@ -307,7 +305,7 @@ private fun FullAccessCard(
 }
 
 @Composable
-private fun SubscriptionStatusBadgeChip(status: SubscriptionStatusBadge) {
+private fun SubscriptionStatusBadgeChip(label: String) {
   Box(
     modifier =
       Modifier.clip(RoundedCornerShape(6.dp))
@@ -315,11 +313,7 @@ private fun SubscriptionStatusBadgeChip(status: SubscriptionStatusBadge) {
         .padding(horizontal = 8.dp, vertical = 4.dp),
     contentAlignment = Alignment.Center,
   ) {
-    Text(
-      text = subscriptionStatusBadgeLabel(status),
-      style = AppTheme.typography.micro,
-      color = AppTheme.colors.textOnBrandSubtle,
-    )
+    Text(text = label, style = AppTheme.typography.micro, color = AppTheme.colors.textOnBrandSubtle)
   }
 }
 
@@ -331,8 +325,6 @@ private fun SubscriptionPurchaseRow(
   isActive: Boolean,
   onClick: suspend (PurchaseProduct) -> Unit,
 ) {
-  val productState = subscriptionProductState(product = product, productsLoaded = productsLoaded)
-
   InteractionScope {
     Row(
       modifier =
@@ -351,21 +343,14 @@ private fun SubscriptionPurchaseRow(
       Text(text = label, style = AppTheme.typography.action)
 
       if (isActive) {
-        SubscriptionStatusBadgeChip(SubscriptionStatusBadge.Current)
+        SubscriptionStatusBadgeChip("현재 이용 중")
       }
 
       Spacer(Modifier.weight(1f))
 
-      when (productState) {
-        SubscriptionProductState.Loading -> SubscriptionPriceSpinner()
-        SubscriptionProductState.Unavailable ->
-          Text(
-            text = PRODUCT_UNAVAILABLE_MESSAGE,
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
-          )
-        SubscriptionProductState.Available -> {
-          Text(text = product!!.price, style = AppTheme.typography.action)
+      when {
+        product != null -> {
+          Text(text = product.price, style = AppTheme.typography.action)
 
           Icon(
             icon = Lucide.ChevronRight,
@@ -373,6 +358,13 @@ private fun SubscriptionPurchaseRow(
             tint = AppTheme.colors.textSecondary,
           )
         }
+        productsLoaded ->
+          Text(
+            text = PRODUCT_UNAVAILABLE_MESSAGE,
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.textTertiary,
+          )
+        else -> SubscriptionPriceSpinner()
       }
     }
   }
@@ -406,4 +398,8 @@ private fun SubscriptionPriceSpinner() {
   }
 }
 
+private const val TRIAL_START_CONFIRM_TITLE = "무료 체험을 시작하시겠어요?"
+private const val TRIAL_START_CONFIRM_MESSAGE =
+  "결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요."
+private const val TRIAL_START_CONFIRM_ACTION = "시작하기"
 private const val PRODUCT_UNAVAILABLE_MESSAGE = "불러오지 못했어요"

@@ -2,10 +2,6 @@ query SpaceSettingsScreen_Query($siteId: ID!) {
   me @catch(to: THROW) {
     id
 
-    subscription {
-      id
-    }
-
     sites {
       id
     }

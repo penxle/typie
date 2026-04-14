@@ -1,4 +1,4 @@
-package co.typie.screen.subscription
+package co.typie.subscription
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement

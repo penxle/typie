@@ -20,7 +20,6 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import co.typie.dev.NetworkPreset
 import co.typie.dev.NetworkSimulator
-import co.typie.dev.SubscriptionDevSandbox
 import co.typie.dev.createDevToolsWindow
 import co.typie.ext.DesktopScrollTranslation
 import com.sun.jna.Library
@@ -204,11 +203,7 @@ fun main() {
     LaunchedEffect(Unit) {
       SwingUtilities.invokeLater {
         val mainWindow = java.awt.Window.getWindows().first()
-        createDevToolsWindow(
-          mainWindow = mainWindow,
-          networkSimulator = networkSimulator,
-          subscriptionDevSandbox = SubscriptionDevSandbox,
-        )
+        createDevToolsWindow(mainWindow = mainWindow, networkSimulator = networkSimulator)
       }
     }
   }

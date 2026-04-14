@@ -4,14 +4,6 @@ query MoreScreen_Query {
     name
     email
 
-    subscription {
-      id
-      plan {
-        id
-        name
-      }
-    }
-
     characterCountChanges {
       date
       additions

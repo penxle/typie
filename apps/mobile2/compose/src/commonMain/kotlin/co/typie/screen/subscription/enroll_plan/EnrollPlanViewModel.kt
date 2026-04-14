@@ -17,6 +17,7 @@ import co.typie.graphql.executeMutation
 import co.typie.graphql.type.InAppPurchaseStore
 import co.typie.graphql.type.SubscribeOrChangePlanWithInAppPurchaseInput
 import co.typie.graphql.watchQuery
+import co.typie.platform.PlatformModule
 import co.typie.platform.PurchaseEvent
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
@@ -24,11 +25,7 @@ import co.typie.platform.PurchaseStore
 import co.typie.result.Result
 import co.typie.result.loading
 import co.typie.result.result
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.SubscriptionCelebration
-import co.typie.service.SubscriptionService
-import co.typie.service.purchaseCelebration
-import co.typie.service.shouldShowPurchaseCelebration
+import co.typie.subscription.SubscriptionService
 import kotlinx.coroutines.launch
 
 sealed interface EnrollPlanError {
@@ -42,17 +39,11 @@ sealed interface PurchaseError {
 }
 
 class EnrollPlanViewModel : ViewModel() {
-  private val subscriptionService = SubscriptionService
-  private val currentSubscriptionStore = CurrentSubscriptionStore
   var isStartingTrial by mutableStateOf(false)
     private set
 
   val query =
-    Apollo.watchQuery(
-      scope = viewModelScope,
-      placeholderData = placeholderData(),
-      skip = { subscriptionService.usesSandbox },
-    ) {
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       EnrollPlanScreen_Query()
     }
 
@@ -62,7 +53,10 @@ class EnrollPlanViewModel : ViewModel() {
   var productsLoaded by mutableStateOf(false)
     private set
 
-  var celebration by mutableStateOf<SubscriptionCelebration?>(null)
+  var showTrialCelebration by mutableStateOf(false)
+    private set
+
+  var showPurchaseCelebration by mutableStateOf(false)
     private set
 
   var purchaseError by mutableStateOf<PurchaseError?>(null)
@@ -72,18 +66,17 @@ class EnrollPlanViewModel : ViewModel() {
     viewModelScope.launch { loadProducts() }
 
     viewModelScope.launch {
-      subscriptionService.purchaseEvents.collect { event -> handlePurchaseEvent(event) }
+      PlatformModule.purchaseService.events.collect { event -> handlePurchaseEvent(event) }
     }
   }
 
   suspend fun startTrial(): Result<Unit, EnrollPlanError> =
     loading({ isStartingTrial = it }) {
       try {
-        celebration = subscriptionService.startTrial {
-          Apollo.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
-          currentSubscriptionStore.refresh()
-          query.refetch()
-        }
+        Apollo.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
+        SubscriptionService.refresh()
+        query.refetch()
+        showTrialCelebration = true
         // TODO: Mixpanel start_trial
       } catch (e: TypieError) {
         raise(EnrollPlanError.ServerError)
@@ -91,18 +84,15 @@ class EnrollPlanViewModel : ViewModel() {
     }
 
   suspend fun purchase(product: PurchaseProduct): Result<Unit, Nothing> = result {
-    val purchaseResult =
-      subscriptionService.purchase(product = product, accountId = query.data.me.uuid)
-
-    celebration = purchaseResult.celebration
-
-    if (!purchaseResult.started) {
-      throw IllegalStateException("Purchase not started")
-    }
+    PlatformModule.purchaseService.purchase(product = product, accountId = query.data.me.uuid)
   }
 
-  fun consumeCelebration() {
-    celebration = null
+  fun consumeTrialCelebration() {
+    showTrialCelebration = false
+  }
+
+  fun consumePurchaseCelebration() {
+    showPurchaseCelebration = false
   }
 
   fun consumePurchaseError() {
@@ -111,7 +101,7 @@ class EnrollPlanViewModel : ViewModel() {
 
   private suspend fun loadProducts() {
     try {
-      products = subscriptionService.queryProducts()
+      products = PlatformModule.purchaseService.queryProducts()
     } catch (_: Exception) {
       products = emptyMap()
     } finally {
@@ -137,18 +127,14 @@ class EnrollPlanViewModel : ViewModel() {
         )
 
       query.refetch()
-      currentSubscriptionStore.refresh()
+      SubscriptionService.refresh()
 
       if (
-        shouldShowPurchaseCelebration(
-          originalSubscriptionId = originalSubscriptionId,
-          originalPlanId = originalPlanId,
-          updatedSubscriptionId = response.subscribeOrChangePlanWithInAppPurchase.id,
-          updatedPlanId = response.subscribeOrChangePlanWithInAppPurchase.plan.id,
-        )
+        originalSubscriptionId != response.subscribeOrChangePlanWithInAppPurchase.id ||
+          originalPlanId != response.subscribeOrChangePlanWithInAppPurchase.plan.id
       ) {
         // TODO: Mixpanel enroll_plan / Appsflyer complete_subscription
-        celebration = purchaseCelebration()
+        showPurchaseCelebration = true
       }
     } catch (e: TypieError) {
       purchaseError = PurchaseError.ServerError(e.code)

@@ -30,12 +30,11 @@ import co.typie.platform.rememberFilePicker
 import co.typie.result.Result
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.screen.subscription.PlanUpgradeContent
-import co.typie.screen.subscription.PlanUpgradeSheetResult
-import co.typie.screen.subscription.SubscriptionCelebrationContent
-import co.typie.screen.subscription.planUpgradeRoute
-import co.typie.service.CurrentSubscriptionStore
-import co.typie.service.hasSubscriptionOrNull
+import co.typie.route.Route
+import co.typie.subscription.PlanUpgradeContent
+import co.typie.subscription.PlanUpgradeSheetResult
+import co.typie.subscription.SubscriptionCelebrationContent
+import co.typie.subscription.SubscriptionService
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
@@ -71,11 +70,9 @@ fun FontSettingsScreen() {
   val nav = Nav.current
   val dialog = LocalDialog.current
   val toast = LocalToast.current
-  val currentSubscriptionStore = CurrentSubscriptionStore
   val scrollState = rememberScrollState()
   val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current
-  val currentSubscriptionState = currentSubscriptionStore.state
 
   val filePicker =
     rememberFilePicker(selectionMode = FilePickerSelectionMode.Multiple) { files ->
@@ -108,7 +105,7 @@ fun FontSettingsScreen() {
     if (model.query.state !is QueryState.Success) return
     if (model.state.isUploading) return
 
-    when (currentSubscriptionState.hasSubscriptionOrNull()?.let(::fontUploadAction)) {
+    when (fontUploadAction(SubscriptionService.state)) {
       FontUploadAction.PickFont -> {
         scope.launch {
           sheet.present {
@@ -130,12 +127,12 @@ fun FontSettingsScreen() {
           if (result is PlanUpgradeSheetResult.TrialStarted) {
             sheet.present {
               SubscriptionCelebrationContent(
-                title = result.celebration.title,
-                message = result.celebration.message,
+                title = "무료 체험이 시작됐어요!",
+                message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
               )
             }
           }
-          planUpgradeRoute(result)?.let { route -> nav.navigate(route) }
+          if (result is PlanUpgradeSheetResult.Upgrade) nav.navigate(Route.EnrollPlan)
         }
       }
 

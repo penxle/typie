@@ -1,5 +1,7 @@
 package co.typie.screen.settings.font_settings
 
+import co.typie.subscription.SubscriptionServiceState
+
 internal data class FontSettingsFont(
   val id: String,
   val weight: Int,
@@ -110,8 +112,12 @@ internal fun isSupportedTtfFontFile(filename: String, mimeType: String?): Boolea
     normalizedMimeType == "application/x-truetype-font"
 }
 
-internal fun fontUploadAction(hasSubscription: Boolean): FontUploadAction {
-  return if (hasSubscription) FontUploadAction.PickFont else FontUploadAction.ShowPlanUpgradeSheet
+internal fun fontUploadAction(state: SubscriptionServiceState): FontUploadAction? {
+  return when (state) {
+    is SubscriptionServiceState.Subscribed -> FontUploadAction.PickFont
+    is SubscriptionServiceState.NotSubscribed -> FontUploadAction.ShowPlanUpgradeSheet
+    is SubscriptionServiceState.Unknown -> null
+  }
 }
 
 internal fun summarizeFontUploadResults(

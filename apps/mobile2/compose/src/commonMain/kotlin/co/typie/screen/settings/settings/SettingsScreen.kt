@@ -22,15 +22,15 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.route.Route
-import co.typie.screen.subscription.subscriptionEntryDestination
-import co.typie.screen.subscription.subscriptionRoute
-import co.typie.service.hasSubscriptionOrNull
 import co.typie.storage.Preference
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
@@ -259,20 +259,18 @@ fun SettingsScreen() {
   val sheet = LocalSheet.current
   val scope = rememberCoroutineScope()
   val toast = LocalToast.current
-  val currentSubscriptionStore = model.currentSubscriptionStore
-  val subscriptionService = model.subscriptionService
   val authService = model.authService
   val deviceInfo = model.deviceInfo
   val scrollState = rememberScrollState()
   val themeModeState = LocalThemeMode.current
   val devModeEnabled = Preference.devMode
-  val currentSubscriptionState = currentSubscriptionStore.state
+  val subscriptionState = SubscriptionService.state
   val sections = remember(devModeEnabled) { settingsSections(devModeEnabled = devModeEnabled) }
   var appVersion by remember { mutableStateOf<String?>(null) }
   var devModeTapCount by remember { mutableStateOf(0) }
 
   LaunchedEffect(model.query.state) {
-    if (subscriptionService.hasQueryError(model.query.state)) {
+    if (model.query.state is QueryState.Error) {
       dialog.error(nav = nav, onRetry = { model.query.refetch() })
     }
   }
@@ -290,12 +288,10 @@ fun SettingsScreen() {
 
   Screen(
     scrollState = scrollState,
-    loading = subscriptionService.isQueryLoading(model.query.state),
+    loading = model.query.state !is QueryState.Success,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    val hasSubscription = currentSubscriptionState.hasSubscriptionOrNull()
-
     Text("설정", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
     sections.forEach { section ->
@@ -334,12 +330,11 @@ fun SettingsScreen() {
           } else if (item.externalUrl != null) {
             uriHandler.openUri(item.externalUrl)
           } else if (item.action == SettingsItemAction.Plan) {
-            if (hasSubscription != null) {
-              nav.navigate(
-                subscriptionRoute(subscriptionEntryDestination(hasSubscription = hasSubscription))
-              )
-            } else {
-              toast.show(ToastType.Notification, "이용권 상태를 확인 중이에요.")
+            when (subscriptionState) {
+              is SubscriptionServiceState.Subscribed -> nav.navigate(Route.CurrentPlan)
+              is SubscriptionServiceState.NotSubscribed -> nav.navigate(Route.EnrollPlan)
+              is SubscriptionServiceState.Unknown ->
+                toast.show(ToastType.Notification, "이용권 상태를 확인 중이에요.")
             }
           } else if (item.action == SettingsItemAction.Logout) {
             val result =

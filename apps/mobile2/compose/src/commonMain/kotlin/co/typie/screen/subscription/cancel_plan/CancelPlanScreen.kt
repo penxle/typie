@@ -16,22 +16,20 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.graphql.QueryState
+import co.typie.datetime.formatKoreanDate
 import co.typie.navigation.Nav
 import co.typie.overlay.LocalToast
 import co.typie.overlay.ToastType
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.screen.subscription.SubscriptionFeatureList
-import co.typie.screen.subscription.cancelPlanBodyText
-import co.typie.screen.subscription.fullPlanFeatures
-import co.typie.service.CurrentSubscriptionStore
+import co.typie.subscription.SubscriptionFeatureList
+import co.typie.subscription.SubscriptionService
+import co.typie.subscription.SubscriptionServiceState
+import co.typie.subscription.fullPlanFeatures
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -44,23 +42,16 @@ fun CancelPlanScreen() {
   val nav = Nav.current
   val toast = LocalToast.current
   val model = viewModel { CancelPlanViewModel() }
-  val dialog = LocalDialog.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
   val lifecycleOwner = LocalLifecycleOwner.current
-  val currentSubscriptionState = CurrentSubscriptionStore.state
+  val currentSubscriptionState = SubscriptionService.state
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
     center = { Text("이용권 해지", style = AppTheme.typography.title) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
-
-  LaunchedEffect(currentSubscriptionState) {
-    if (currentSubscriptionState is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { CurrentSubscriptionStore.refresh() })
-    }
-  }
 
   DisposableEffect(lifecycleOwner) {
     val observer = LifecycleEventObserver { _, event ->
@@ -87,11 +78,13 @@ fun CancelPlanScreen() {
 
   Screen(
     scrollState = scrollState,
-    loading = currentSubscriptionState !is QueryState.Success,
+    loading = currentSubscriptionState is SubscriptionServiceState.Unknown,
     background = AppTheme.colors.surfaceBase,
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
-    val subscription = (currentSubscriptionState as? QueryState.Success)?.data ?: return@Screen
+    val subscription =
+      (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
+        ?: return@Screen
     Text("이용권 해지", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
 
     CardSurface(modifier = Modifier.fillMaxWidth()) {
@@ -126,10 +119,7 @@ fun CancelPlanScreen() {
 
     Text(
       text =
-        cancelPlanBodyText(
-          planName = subscription.planName ?: "",
-          expiresAt = subscription.expiresAt ?: return@Screen,
-        ),
+        "지금 해지하더라도 ${subscription.expiresAt.formatKoreanDate()}까지는 계속해서 ${subscription.planName} 혜택을 이용할 수 있어요.",
       style = AppTheme.typography.body,
       color = AppTheme.colors.textTertiary,
     )
