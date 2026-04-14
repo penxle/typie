@@ -26,6 +26,7 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
@@ -65,22 +66,26 @@ fun UpdateEmailScreen() {
   ProvideTopBar(center = { Text("이메일 변경", style = AppTheme.typography.title) })
 
   Screen(query = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
-      Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+      Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
+        Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
 
-      Text(model.query.data.me.email, style = AppTheme.typography.action)
+        Text(model.query.data.me.email, style = AppTheme.typography.action)
 
-      Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(8.dp))
 
-      TextField(
-        field = model.state.form.email,
-        label = "변경할 이메일 주소",
-        labelPosition = LabelPosition.Internal,
-        placeholder = "me@example.com",
-        contentType = ContentType.EmailAddress,
-        keyboardType = KeyboardType.Email,
-        onImeAction = { submit() },
-      )
+        TextField(
+          field = model.state.form.email,
+          label = "변경할 이메일 주소",
+          labelPosition = LabelPosition.Internal,
+          placeholder = "me@example.com",
+          contentType = ContentType.EmailAddress,
+          keyboardType = KeyboardType.Email,
+          onImeAction = { submit() },
+        )
+      }
+
+      ToastAnchor()
 
       Button(
         text = "변경",

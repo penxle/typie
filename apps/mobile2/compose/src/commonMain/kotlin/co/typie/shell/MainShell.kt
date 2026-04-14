@@ -45,14 +45,12 @@ import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
 import co.typie.route.Route
-import co.typie.route.toastBottomInset
 import co.typie.shell.marketing_consent.MarketingConsentGate
 import co.typie.storage.Preference
 import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarActionButton
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.BottomBarState
-import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -70,11 +68,6 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   val bottomBarState = remember { BottomBarState() }
 
   val siteId = Preference.siteId
-
-  val toast = LocalToast.current
-  LaunchedEffect(activeNavigator.current) {
-    toast.bottomInset = activeNavigator.current.toastBottomInset
-  }
 
   DisposableEffect(Unit) { onDispose { navigators.values.forEach { it.clear() } } }
 

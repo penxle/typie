@@ -9,8 +9,8 @@ import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -73,12 +74,17 @@ fun ToastOverlay() {
 
   val density = LocalDensity.current
   val safeDrawingBottom = WindowInsets.safeDrawing.getBottom(density).toDp(density)
-  val animatedBottomInset by
-    animateDpAsState(
-      toast.bottomInset,
+
+  var rootHeight by remember { mutableStateOf(0f) }
+  val fallbackY = rootHeight - with(density) { (safeDrawingBottom + 12.dp).toPx() }
+  val targetY = toast.anchorY ?: fallbackY
+
+  val animatedAnchorY by
+    animateFloatAsState(
+      targetY,
       spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
     )
-  val bottomOffset = safeDrawingBottom + 12.dp + animatedBottomInset
+  val bottomOffset = with(density) { (rootHeight - animatedAnchorY).toDp() } + 12.dp
 
   var visibleState by remember { mutableStateOf<ToastState?>(null) }
 
@@ -86,7 +92,7 @@ fun ToastOverlay() {
     visibleState = toastState
   }
 
-  Box(Modifier.fillMaxSize()) {
+  Box(Modifier.fillMaxSize().onSizeChanged { rootHeight = it.height.toFloat() }) {
     visibleState?.let { state ->
       AnimatedToast(
         state = state,

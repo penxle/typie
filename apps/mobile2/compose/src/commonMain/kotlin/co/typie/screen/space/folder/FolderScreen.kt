@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -55,7 +54,6 @@ import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.route.toastBottomInset
 import co.typie.screen.space.entity.EntityCreateBottomBarAction
 import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.screen.space.entity.EntitySelectionViewModel
@@ -64,6 +62,7 @@ import co.typie.storage.Preference
 import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
+import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
@@ -115,7 +114,7 @@ fun FolderScreen(entityId: String) {
     remember(entityId) {
       mutableStateOf(
         calculateEntityContainerBottomOverlayMetrics(
-          baseBottomInset = Route.Folder(entityId).toastBottomInset,
+          baseBottomInset = BottomBarDefaults.BarAreaHeight,
           hasPasteBar = false,
           pasteBarHeight = EntityBottomOverlayDefaults.BarHeight,
           hasSelectionBar = false,
@@ -209,13 +208,6 @@ fun FolderScreen(entityId: String) {
   SideEffect { lastReservedBottomSpacerTarget = overlayMetrics.reservedSpacerHeight }
 
   LaunchedEffect(shouldShowPasteBar) { animatedPasteBarVisible = shouldShowPasteBar }
-  if (isCurrentRoute) {
-    SideEffect { toast.bottomInset = overlayMetrics.toastBottomInset }
-  }
-
-  DisposableEffect(entityId) {
-    onDispose { toast.bottomInset = Route.Folder(entityId).toastBottomInset }
-  }
 
   fun startSelection(initialIds: Set<String> = emptySet()) {
     isReordering = false
@@ -527,7 +519,7 @@ fun FolderScreen(entityId: String) {
     },
   )
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     val reorderViewportTopInset =
       maxOf(
         0.dp,
@@ -791,7 +783,7 @@ fun FolderScreen(entityId: String) {
       )
 
       EntityContainerBottomOverlayStack(
-        baseBottomInset = Route.Folder(entityId).toastBottomInset,
+        baseBottomInset = BottomBarDefaults.BarAreaHeight,
         showSelectionBar = isSelectionBarVisible,
         showPasteBar = animatedPasteBarVisible && pasteTarget != null,
         modifier = Modifier.align(Alignment.BottomCenter),

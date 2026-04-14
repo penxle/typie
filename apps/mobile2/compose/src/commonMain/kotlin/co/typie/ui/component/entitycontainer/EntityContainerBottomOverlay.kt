@@ -36,6 +36,7 @@ import co.typie.ext.pressScale
 import co.typie.icons.Lucide
 import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.Text
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -148,6 +149,7 @@ fun EntityContainerBottomOverlayStack(
         ),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+      ToastAnchor()
       EntityContainerBottomOverlayAnimatedSlot(
         visible = showPasteBar,
         slotHeight = EntityBottomOverlayDefaults.BarHeight,

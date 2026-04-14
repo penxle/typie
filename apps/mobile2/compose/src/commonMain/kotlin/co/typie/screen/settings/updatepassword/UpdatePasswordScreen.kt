@@ -21,6 +21,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
@@ -50,38 +51,42 @@ fun UpdatePasswordScreen() {
   ProvideTopBar(center = { Text("비밀번호 변경", style = AppTheme.typography.title) })
 
   Screen(query = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
-      if (hasPassword) {
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+      Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
+        if (hasPassword) {
+          TextField(
+            field = model.state.form.currentPassword,
+            label = "현재 비밀번호",
+            labelPosition = LabelPosition.Internal,
+            placeholder = "현재 비밀번호를 입력하세요",
+            isPassword = true,
+            contentType = ContentType.Password,
+          )
+        }
+
         TextField(
-          field = model.state.form.currentPassword,
-          label = "현재 비밀번호",
+          field = model.state.form.newPassword,
+          label = "새 비밀번호",
           labelPosition = LabelPosition.Internal,
-          placeholder = "현재 비밀번호를 입력하세요",
+          placeholder = "********",
           isPassword = true,
-          contentType = ContentType.Password,
+          contentType = ContentType.NewPassword,
         )
+
+        TextField(
+          field = model.state.form.confirmPassword,
+          label = "새 비밀번호 확인",
+          labelPosition = LabelPosition.Internal,
+          placeholder = "********",
+          isPassword = true,
+          contentType = ContentType.NewPassword,
+          onImeAction = { submit() },
+        )
+
+        Spacer(Modifier.height(24.dp))
       }
 
-      TextField(
-        field = model.state.form.newPassword,
-        label = "새 비밀번호",
-        labelPosition = LabelPosition.Internal,
-        placeholder = "********",
-        isPassword = true,
-        contentType = ContentType.NewPassword,
-      )
-
-      TextField(
-        field = model.state.form.confirmPassword,
-        label = "새 비밀번호 확인",
-        labelPosition = LabelPosition.Internal,
-        placeholder = "********",
-        isPassword = true,
-        contentType = ContentType.NewPassword,
-        onImeAction = { submit() },
-      )
-
-      Spacer(Modifier.height(24.dp))
+      ToastAnchor()
 
       Button(
         text = buttonText,

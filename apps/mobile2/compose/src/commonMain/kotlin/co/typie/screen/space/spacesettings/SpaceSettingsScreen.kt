@@ -75,6 +75,7 @@ import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
@@ -134,7 +135,7 @@ fun SpaceSettingsScreen() {
     trailing = { MoreMenu(model, dialog = dialog) },
   )
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -267,6 +268,8 @@ fun SpaceSettingsScreen() {
         }
       }
     }
+
+    ToastAnchor()
 
     Button(
       text = "저장",

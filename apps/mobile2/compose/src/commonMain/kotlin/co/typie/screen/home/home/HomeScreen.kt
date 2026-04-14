@@ -24,6 +24,7 @@ import co.typie.datetime.timeAgo
 import co.typie.domain.entity.EntityIcon
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.ext.separated
 import co.typie.ext.truncate
@@ -41,8 +42,10 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
@@ -82,23 +85,32 @@ fun HomeScreen() {
   )
 
   Screen(query = model.query) { contentPadding ->
-    Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
-      Skeleton.Keep {
-        Text("홈", style = AppTheme.typography.display)
+    Box(Modifier.fillMaxSize()) {
+      Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+        Skeleton.Keep {
+          Text("홈", style = AppTheme.typography.display)
 
-        SearchBar(
-          placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
-          onClick = { nav.navigate(Route.Search) },
-        )
+          SearchBar(
+            placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
+            onClick = { nav.navigate(Route.Search) },
+          )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        RecentFolders(data = model.query.data)
+
+        Spacer(Modifier.height(20.dp))
+
+        RecentDocuments(data = model.query.data)
       }
 
-      Spacer(Modifier.height(20.dp))
-
-      RecentFolders(data = model.query.data)
-
-      Spacer(Modifier.height(20.dp))
-
-      RecentDocuments(data = model.query.data)
+      ToastAnchor(
+        modifier =
+          Modifier.align(Alignment.BottomCenter)
+            .navigationBarsPadding()
+            .padding(bottom = BottomBarDefaults.BarAreaHeight)
+      )
     }
   }
 }

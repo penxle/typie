@@ -28,11 +28,7 @@ data class EntityContainerSelectionSummary(
   val commonIconColor: String?,
 )
 
-data class EntityContainerBottomOverlayMetrics(
-  val occupiedHeight: Dp,
-  val reservedSpacerHeight: Dp,
-  val toastBottomInset: Dp,
-)
+data class EntityContainerBottomOverlayMetrics(val occupiedHeight: Dp, val reservedSpacerHeight: Dp)
 
 class EntityContainerSelection(
   val state: EntityContainerSelectionState,
@@ -166,7 +162,6 @@ fun calculateEntityContainerBottomOverlayMetrics(
     return EntityContainerBottomOverlayMetrics(
       occupiedHeight = 0.dp,
       reservedSpacerHeight = EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
-      toastBottomInset = baseBottomInset,
     )
   }
 
@@ -182,7 +177,6 @@ fun calculateEntityContainerBottomOverlayMetrics(
         EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
         occupiedHeight + EntityBottomOverlayDefaults.ReserveExtra,
       ),
-    toastBottomInset = baseBottomInset + stackHeight + EntityBottomOverlayDefaults.Gap,
   )
 }
 

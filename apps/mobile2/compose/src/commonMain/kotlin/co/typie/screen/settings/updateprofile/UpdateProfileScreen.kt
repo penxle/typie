@@ -35,6 +35,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
@@ -73,38 +74,42 @@ fun UpdateProfileScreen() {
   ProvideTopBar(center = { Text("프로필 변경", style = AppTheme.typography.title) })
 
   Screen(query = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        ProfileAvatar(
-          image = model.query.data.me.avatar.img_image,
-          previewUrl = model.state.avatarPreviewUrl,
-          onClick = { filePicker("image/*") },
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+      Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          ProfileAvatar(
+            image = model.query.data.me.avatar.img_image,
+            previewUrl = model.state.avatarPreviewUrl,
+            onClick = { filePicker("image/*") },
+          )
+
+          Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+        }
+
+        Spacer(Modifier.height(32.dp))
+
+        TextField(
+          field = model.state.form.name,
+          label = "닉네임",
+          labelPosition = LabelPosition.Internal,
+          onImeAction = {
+            scope.launch {
+              model.submit().withDefaultExceptionHandler(toast).onOk {
+                toast.show(ToastType.Success, "프로필이 변경되었어요.")
+                nav.pop()
+              }
+            }
+          },
         )
 
-        Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+        Spacer(Modifier.height(24.dp))
       }
 
-      Spacer(Modifier.height(32.dp))
-
-      TextField(
-        field = model.state.form.name,
-        label = "닉네임",
-        labelPosition = LabelPosition.Internal,
-        onImeAction = {
-          scope.launch {
-            model.submit().withDefaultExceptionHandler(toast).onOk {
-              toast.show(ToastType.Success, "프로필이 변경되었어요.")
-              nav.pop()
-            }
-          }
-        },
-      )
-
-      Spacer(Modifier.height(24.dp))
+      ToastAnchor()
 
       Button(
         text = "변경",

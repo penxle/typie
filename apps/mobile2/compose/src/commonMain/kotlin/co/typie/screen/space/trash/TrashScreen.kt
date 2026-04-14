@@ -297,7 +297,8 @@ fun TrashScreen(entityId: String? = null) {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(query = if (entityId == null) model.siteQuery else model.entityQuery) { contentPadding ->
+  Screen(loadable = if (entityId == null) model.siteQuery else model.entityQuery) { contentPadding
+    ->
     Column(
       modifier =
         Modifier.fillMaxSize()

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -57,7 +56,6 @@ import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.route.toastBottomInset
 import co.typie.screen.space.document.DocumentViewModel
 import co.typie.screen.space.entity.EntityCreateBottomBarAction
 import co.typie.screen.space.entity.EntityCreateViewModel
@@ -70,6 +68,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
@@ -123,7 +122,7 @@ fun SpaceScreen() {
   var overlayMetrics by remember {
     mutableStateOf(
       calculateEntityContainerBottomOverlayMetrics(
-        baseBottomInset = Route.Space.toastBottomInset,
+        baseBottomInset = BottomBarDefaults.BarAreaHeight,
         hasPasteBar = false,
         pasteBarHeight = EntityBottomOverlayDefaults.BarHeight,
         hasSelectionBar = false,
@@ -160,9 +159,6 @@ fun SpaceScreen() {
     clipboardState != null && pasteTarget != null && clipboard.canPaste(requireNotNull(pasteTarget))
   val isCurrentRoute = nav.current == LocalRoute.current
   val shouldShowPasteBar = isPasteBarVisible && isCurrentRoute
-  if (isCurrentRoute) {
-    SideEffect { toast.bottomInset = overlayMetrics.toastBottomInset }
-  }
   var lastReservedBottomSpacerTarget by remember {
     mutableStateOf(overlayMetrics.reservedSpacerHeight)
   }
@@ -181,8 +177,6 @@ fun SpaceScreen() {
   SideEffect { lastReservedBottomSpacerTarget = overlayMetrics.reservedSpacerHeight }
 
   LaunchedEffect(shouldShowPasteBar) { animatedPasteBarVisible = shouldShowPasteBar }
-
-  DisposableEffect(Unit) { onDispose { toast.bottomInset = Route.Space.toastBottomInset } }
 
   val serverEntities =
     remember(site?.entities) {
@@ -624,7 +618,7 @@ fun SpaceScreen() {
       )
 
       EntityContainerBottomOverlayStack(
-        baseBottomInset = Route.Space.toastBottomInset,
+        baseBottomInset = BottomBarDefaults.BarAreaHeight,
         showSelectionBar = isSelectionBarVisible,
         showPasteBar = animatedPasteBarVisible && pasteTarget != null,
         modifier = Modifier.align(Alignment.BottomCenter),

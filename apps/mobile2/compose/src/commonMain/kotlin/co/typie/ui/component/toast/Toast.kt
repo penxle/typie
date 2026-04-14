@@ -4,8 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -32,7 +30,7 @@ class Toast {
   var state by mutableStateOf<ToastState?>(null)
     private set
 
-  var bottomInset: Dp by mutableStateOf(0.dp)
+  var anchorY: Float? by mutableStateOf(null)
 
   fun show(type: ToastType, message: String, duration: Duration = 2.seconds) {
     state = ToastState(nextId++, type, message, adaptiveDuration(duration, message))

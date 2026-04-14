@@ -1,8 +1,5 @@
 package co.typie.route
 
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-
 sealed interface Route {
   data object Home : Route
 
@@ -77,23 +74,3 @@ fun Route.transitionStyleTo(route: Route): RouteTransitionStyle =
 
     else -> RouteTransitionStyle.Slide
   }
-
-val Route.toastBottomInset: Dp
-  get() =
-    when (this) {
-      is Route.Home,
-      is Route.Space,
-      is Route.Folder,
-      is Route.Notes,
-      is Route.More -> 72.dp // nav bar가 있는 스크린
-      is Route.DeleteUser -> 120.dp // 하단 버튼이 2개인 스크린
-      is Route.UpdateEmail,
-      is Route.UpdateProfile,
-      is Route.UpdatePassword,
-      is Route.SocialAccounts,
-      is Route.Referral,
-      is Route.EnrollPlan,
-      is Route.FontSettings,
-      is Route.SpaceSettings -> 64.dp // 하단 버튼이 있는 스크린
-      else -> 0.dp // 그 외
-    }
