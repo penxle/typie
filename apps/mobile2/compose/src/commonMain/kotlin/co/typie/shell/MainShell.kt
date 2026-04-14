@@ -39,6 +39,8 @@ import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.touchShield
+import co.typie.graphql.Apollo
+import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
 import co.typie.icons.Lucide
 import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
@@ -47,6 +49,7 @@ import co.typie.overlay.LocalToast
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.shell.marketing_consent.MarketingConsentGate
+import co.typie.storage.Preference
 import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarActionButton
 import co.typie.ui.component.bottombar.BottomBarDefaults
@@ -54,15 +57,18 @@ import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.flow.collect
 
 @Composable
 fun MainShell(content: @Composable (Route) -> Unit) {
   var currentTab by remember { mutableStateOf(Tab.entries.first()) }
   val navigators = remember { Tab.entries.associateWith { Navigator(it.route) } }
   val activeNavigator = navigators[currentTab]!!
-  val bottomBarState = remember { BottomBarState() }
 
   val topBarState = remember { TopBarState() }
+  val bottomBarState = remember { BottomBarState() }
+
+  val siteId = Preference.siteId
 
   val toast = LocalToast.current
   LaunchedEffect(activeNavigator.current) {
@@ -70,6 +76,17 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   }
 
   DisposableEffect(Unit) { onDispose { navigators.values.forEach { it.clear() } } }
+
+  LaunchedEffect(siteId) {
+    if (siteId.isNullOrBlank()) {
+      return@LaunchedEffect
+    }
+
+    Apollo.subscription(MainShell_SiteUpdateStream_Subscription(siteId = siteId))
+      .retryOnError(true)
+      .toFlow()
+      .collect()
+  }
 
   CompositionLocalProvider(
     LocalTabState provides TabState(currentTab = currentTab, onSelectTab = { currentTab = it })
@@ -79,8 +96,6 @@ fun MainShell(content: @Composable (Route) -> Unit) {
       topBarState = topBarState,
       bottomBarState = bottomBarState,
     ) {
-      SiteUpdateStreamEffect()
-
       Crossfade(
         targetState = currentTab,
         modifier = Modifier.fillMaxSize(),
