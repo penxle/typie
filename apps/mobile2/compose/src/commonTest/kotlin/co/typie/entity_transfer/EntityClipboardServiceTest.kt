@@ -1,12 +1,12 @@
 package co.typie.entity_transfer
 
-import co.typie.domain.entity_transfer.EntityClipboardMode
-import co.typie.domain.entity_transfer.EntityClipboardService
-import co.typie.domain.entity_transfer.EntityClipboardState
-import co.typie.domain.entity_transfer.EntityPasteTarget
-import co.typie.domain.entity_transfer.EntityTransferMaxDepth
-import co.typie.domain.entity_transfer.EntityTransferSource
-import co.typie.domain.entity_transfer.PasteError
+import co.typie.domain.entitytransfer.EntityClipboardMode
+import co.typie.domain.entitytransfer.EntityClipboardService
+import co.typie.domain.entitytransfer.EntityClipboardState
+import co.typie.domain.entitytransfer.EntityPasteTarget
+import co.typie.domain.entitytransfer.EntityTransferMaxDepth
+import co.typie.domain.entitytransfer.EntityTransferSource
+import co.typie.domain.entitytransfer.PasteError
 import co.typie.result.Result
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest

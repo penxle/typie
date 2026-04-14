@@ -214,3 +214,5 @@ zcard
 zeed
 zremrangebyscore
 zstd
+aisettings
+osslicenses

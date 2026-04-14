@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.icons.Lucide
 import co.typie.ui.component.Divider
 import co.typie.ui.component.Text
-import co.typie.ui.component.entity_container.EntityContainerSelectionSummary
+import co.typie.ui.component.entitycontainer.EntityContainerSelectionSummary
 import co.typie.ui.component.sheet.SheetActionRow
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding

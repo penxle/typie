@@ -2,7 +2,7 @@ package co.typie.screen.space.folder
 
 import co.typie.graphql.FolderScreen_Query
 import co.typie.ui.component.EntityListItem
-import co.typie.ui.component.entity_container.OrderedEntityItem
+import co.typie.ui.component.entitycontainer.OrderedEntityItem
 
 fun normalizeFolderChildren(
   siteName: String,

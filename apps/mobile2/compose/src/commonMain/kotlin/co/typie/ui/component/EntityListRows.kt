@@ -127,8 +127,8 @@ fun formatFolderRowSummary(folderCount: Int, documentCount: Int): String {
 fun EntityListCard(
   items: List<EntityListItem>,
   emptyMessage: String,
-  selectionState: co.typie.ui.component.entity_container.EntityContainerSelectionState =
-    co.typie.ui.component.entity_container.EntityContainerSelectionState(),
+  selectionState: co.typie.ui.component.entitycontainer.EntityContainerSelectionState =
+    co.typie.ui.component.entitycontainer.EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
   modifier: Modifier = Modifier,
   onDocumentClick: suspend (slug: String) -> Unit,

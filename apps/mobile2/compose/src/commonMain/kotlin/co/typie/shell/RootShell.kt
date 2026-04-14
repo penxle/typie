@@ -24,7 +24,7 @@ import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
 import co.typie.screen.system.splash.SplashScreen
-import co.typie.screen.system.update_required.UpdateRequiredScreen
+import co.typie.screen.system.updaterequired.UpdateRequiredScreen
 import co.typie.ui.component.dialog.Dialog
 import co.typie.ui.component.dialog.DialogOverlay
 import co.typie.ui.component.dialog.LocalDialog

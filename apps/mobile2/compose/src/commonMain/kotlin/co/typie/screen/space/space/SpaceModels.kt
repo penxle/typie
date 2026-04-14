@@ -2,7 +2,7 @@ package co.typie.screen.space.space
 
 import co.typie.graphql.SpaceScreen_Query
 import co.typie.ui.component.EntityListItem
-import co.typie.ui.component.entity_container.OrderedEntityItem
+import co.typie.ui.component.entitycontainer.OrderedEntityItem
 
 fun normalizeSpaceEntities(
   siteName: String,
