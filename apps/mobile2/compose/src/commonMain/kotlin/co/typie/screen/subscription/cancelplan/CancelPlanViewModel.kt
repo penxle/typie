@@ -8,13 +8,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionServiceState
+import co.typie.graphql.Apollo
+import co.typie.graphql.CancelPlanScreen_Query
+import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildUser
 import co.typie.graphql.type.SubscriptionState
+import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformModule
 import co.typie.result.Result
 import co.typie.result.loading
 import kotlinx.coroutines.launch
 
 class CancelPlanViewModel : ViewModel() {
+  val query =
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
+      CancelPlanScreen_Query()
+    }
+
   var awaitingStoreResult by mutableStateOf(false)
     private set
 
@@ -68,3 +79,6 @@ class CancelPlanViewModel : ViewModel() {
     errorMessage = null
   }
 }
+
+private fun placeholderData() =
+  CancelPlanScreen_Query.Data(PlaceholderResolver) { me = buildUser {} }

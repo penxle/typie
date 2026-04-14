@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,7 +22,6 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
-import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
@@ -36,8 +34,6 @@ import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -52,7 +48,6 @@ import kotlinx.coroutines.launch
 fun UpdateProfileScreen() {
   val nav = Nav.current
   val model = viewModel { UpdateProfileViewModel() }
-  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
@@ -77,13 +72,7 @@ fun UpdateProfileScreen() {
 
   ProvideTopBar(center = { Text("프로필 변경", style = AppTheme.typography.title) })
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
       Column(
         modifier = Modifier.fillMaxWidth(),

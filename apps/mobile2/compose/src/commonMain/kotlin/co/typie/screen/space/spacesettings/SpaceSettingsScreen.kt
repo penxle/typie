@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,7 +36,6 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
-import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.icons.Lucide
@@ -62,7 +60,6 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.Dialog
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -137,13 +134,7 @@ fun SpaceSettingsScreen() {
     trailing = { MoreMenu(model, dialog = dialog) },
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(24.dp),

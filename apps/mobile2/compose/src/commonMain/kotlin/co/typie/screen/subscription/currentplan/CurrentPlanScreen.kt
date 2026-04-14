@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionServiceState
@@ -41,6 +42,7 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 fun CurrentPlanScreen() {
+  val model = viewModel { CurrentPlanViewModel() }
   val nav = Nav.current
   val scrollState = rememberScrollState()
   val currentSubscriptionState = SubscriptionService.state
@@ -57,7 +59,7 @@ fun CurrentPlanScreen() {
     }
   }
 
-  Screen(loading = currentSubscriptionState is SubscriptionServiceState.Unknown) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),

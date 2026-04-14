@@ -43,10 +43,8 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
-import co.typie.graphql.QueryState
 import co.typie.graphql.type.PlanAvailability
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
 import co.typie.result.DEFAULT_ERROR_MESSAGE
@@ -61,7 +59,6 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.loader.LocalLoader
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
@@ -77,7 +74,6 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun EnrollPlanScreen() {
-  val nav = Nav.current
   val dialog = LocalDialog.current
   val sheet = LocalSheet.current
   val toast = LocalToast.current
@@ -118,17 +114,7 @@ fun EnrollPlanScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(
-    loading =
-      model.query.state !is QueryState.Success ||
-        currentSubscriptionState is SubscriptionServiceState.Unknown
-  ) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),

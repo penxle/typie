@@ -46,10 +46,8 @@ import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.verticalScroll
-import co.typie.graphql.QueryState
 import co.typie.graphql.type.TextReplacementState
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.result.onErr
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -66,7 +64,6 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
@@ -94,7 +91,6 @@ private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
 
 @Composable
 fun TextReplacementsScreen() {
-  val nav = Nav.current
   val dialog = LocalDialog.current
   val sheet = LocalSheet.current
   val haptic = LocalHapticFeedback.current
@@ -129,13 +125,7 @@ fun TextReplacementsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     val reorderState =
       rememberReorderableListState(
         keys = serverCustomItemIds,

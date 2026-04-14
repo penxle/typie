@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -30,11 +29,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.toLocalDate
 import co.typie.ext.verticalScroll
 import co.typie.graphql.Apollo
-import co.typie.graphql.QueryState
 import co.typie.graphql.StatsScreen_GenerateActivityImage_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.platform.FileSystemSaveLocation
 import co.typie.platform.FileSystemSaveResult
 import co.typie.platform.PlatformModule
@@ -44,8 +41,6 @@ import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -67,9 +62,7 @@ import kotlinx.datetime.number
 
 @Composable
 fun StatsScreen() {
-  val nav = Nav.current
   val model = viewModel { StatsViewModel() }
-  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val clipboard = PlatformModule.clipboard
   val fileSystem = PlatformModule.fileSystem
@@ -82,13 +75,7 @@ fun StatsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),

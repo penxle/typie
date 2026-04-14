@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
 import co.typie.ext.verticalScroll
-import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.result.isOk
@@ -37,7 +36,6 @@ import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -105,13 +103,7 @@ fun ProfileSettingsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),

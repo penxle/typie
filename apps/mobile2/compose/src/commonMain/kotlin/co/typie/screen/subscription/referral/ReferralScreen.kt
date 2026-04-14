@@ -27,9 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.verticalScroll
-import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.platform.PlatformModule
 import co.typie.result.fold
 import co.typie.ui.component.Button
@@ -37,8 +35,6 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -59,9 +55,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ReferralScreen() {
-  val nav = Nav.current
   val model = viewModel { ReferralViewModel() }
-  val dialog = LocalDialog.current
   val toast = LocalToast.current
   val clipboard = PlatformModule.clipboard
   val share = PlatformModule.share
@@ -124,13 +118,7 @@ fun ReferralScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,7 +24,6 @@ import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
-import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
@@ -43,8 +41,6 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
@@ -63,8 +59,6 @@ fun MoreScreen() {
   val uriHandler = LocalUriHandler.current
   val sheet = LocalSheet.current
   val scope = rememberCoroutineScope()
-  val dialog = LocalDialog.current
-
   val model = viewModel { MoreViewModel() }
   val subscriptionState = SubscriptionService.state
 
@@ -79,13 +73,7 @@ fun MoreScreen() {
 
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),

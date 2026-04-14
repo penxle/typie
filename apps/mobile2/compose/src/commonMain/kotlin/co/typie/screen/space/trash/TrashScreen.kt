@@ -43,7 +43,6 @@ import co.typie.ui.component.TrashFolderRow
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -298,13 +297,7 @@ fun TrashScreen(entityId: String? = null) {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  LaunchedEffect(queryState) {
-    if (queryState is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.refetch() })
-    }
-  }
-
-  Screen(loading = queryState !is QueryState.Success) { contentPadding ->
+  Screen(query = if (entityId == null) model.siteQuery else model.entityQuery) { contentPadding ->
     Column(
       modifier =
         Modifier.fillMaxSize()

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -25,20 +24,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
 import co.typie.graphql.Apollo
-import co.typie.graphql.QueryState
 import co.typie.graphql.SocialAccountsScreen_Query
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
-import co.typie.navigation.Nav
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
@@ -57,21 +52,13 @@ internal fun socialAccountProviderName(provider: SingleSignOnProvider): String {
 
 @Composable
 fun SocialAccountsScreen() {
-  val nav = Nav.current
   val model = viewModel { SocialAccountsViewModel() }
-  val dialog = LocalDialog.current
   val scrollState = rememberScrollState()
   val singleSignOns = model.query.data?.me?.singleSignOns.orEmpty()
 
   ProvideTopBar(center = { Text("연결된 SNS 계정", style = AppTheme.typography.title) })
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(12.dp),

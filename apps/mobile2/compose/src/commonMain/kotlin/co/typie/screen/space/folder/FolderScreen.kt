@@ -68,7 +68,6 @@ import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.entitycontainer.EntityContainerBottomOverlayStack
 import co.typie.ui.component.entitycontainer.EntityContainerEditAction
 import co.typie.ui.component.entitycontainer.EntityContainerListContent
@@ -528,13 +527,7 @@ fun FolderScreen(entityId: String) {
     },
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.refetch() })
-    }
-  }
-
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
+  Screen(query = model.query) { contentPadding ->
     val reorderViewportTopInset =
       maxOf(
         0.dp,
