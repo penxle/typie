@@ -1,6 +1,7 @@
 package co.typie.ui.component.sheet
 
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
@@ -46,7 +47,7 @@ import kotlinx.coroutines.launch
 
 private const val ANCHOR_HIDDEN = -1
 private const val SHEET_CORNER_RADIUS = 22
-private const val SHEET_ANIM_MS = 300
+private val SheetAnimationSpec = spring<Float>(stiffness = 500f)
 
 @Composable
 fun SheetOverlay(state: Sheet) {
@@ -114,12 +115,28 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
       AnchoredDraggableState(initialValue = ANCHOR_HIDDEN, anchors = anchors)
     }
 
-    LaunchedEffect(anchors) { anchoredState.updateAnchors(anchors) }
+    val offsetCorrection = remember { Animatable(0f) }
 
-    LaunchedEffect(visibleOffsets) {
+    LaunchedEffect(anchors) {
+      val prevOffset = anchoredState.offset
+      anchoredState.updateAnchors(anchors, anchoredState.targetValue)
+      val newOffset = anchoredState.offset
+
+      if (
+        !prevOffset.isNaN() &&
+          !newOffset.isNaN() &&
+          prevOffset != newOffset &&
+          anchoredState.currentValue != ANCHOR_HIDDEN
+      ) {
+        offsetCorrection.snapTo(prevOffset - newOffset)
+        offsetCorrection.animateTo(0f, SheetAnimationSpec)
+      }
+    }
+
+    LaunchedEffect(visibleOffsets.isNotEmpty()) {
       if (visibleOffsets.isEmpty()) return@LaunchedEffect
 
-      anchoredState.animateTo(0, tween(SHEET_ANIM_MS))
+      anchoredState.animateTo(0, SheetAnimationSpec)
 
       snapshotFlow { anchoredState.settledValue }
         .filter { it == ANCHOR_HIDDEN }
@@ -129,7 +146,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     val requestDismiss: () -> Unit = {
       if (!dismissed) {
         coroutineScope.launch {
-          anchoredState.animateTo(ANCHOR_HIDDEN, tween(SHEET_ANIM_MS))
+          anchoredState.animateTo(ANCHOR_HIDDEN, SheetAnimationSpec)
           handleDismissed()
         }
       }
@@ -152,7 +169,9 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
 
     PlatformBackHandler(enabled = !dismissed) { requestDismiss() }
 
-    val offset = if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset
+    val offset =
+      (if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset) +
+        offsetCorrection.value
     val minVisibleOffset = visibleOffsets.minOrNull() ?: containerHeightPx
     val scrimAlpha =
       if (containerHeightPx > minVisibleOffset) {
