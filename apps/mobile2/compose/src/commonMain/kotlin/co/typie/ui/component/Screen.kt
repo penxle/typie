@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
 import co.typie.ext.statusBars
@@ -58,16 +59,15 @@ fun Screen(
 
   val contentPadding =
     if (hasTopBar) {
-      val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
       PaddingValues(
         top =
-          statusBarTop +
-            TopBarDefaults.Height +
-            TopBarDefaults.BlurFadeHeight +
-            TopBarDefaults.ContentTopSpacing
-      ) + PaddingValues(horizontal = 16.dp)
+          TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing
+      ) +
+        PaddingValues(horizontal = 16.dp) +
+        WindowInsets.statusBars.asPaddingValues() +
+        WindowInsets.navigationBars.asPaddingValues()
     } else {
-      PaddingValues(horizontal = 16.dp)
+      PaddingValues(horizontal = 16.dp) + WindowInsets.navigationBars.asPaddingValues()
     }
 
   LaunchedEffect(query?.state) {

@@ -47,7 +47,6 @@ import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.FontSpecimen
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
@@ -56,7 +55,6 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.familySpecimenFallbacks
 import co.typie.ui.component.popover.Popover
 import co.typie.ui.component.popover.PopoverDefaults
 import co.typie.ui.component.popover.PopoverList
@@ -80,7 +78,6 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
-import co.typie.ui.component.weightSpecimenFallbacks
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppColor
@@ -514,17 +511,17 @@ private fun FontFamilyContent(model: PresetSettingsViewModel, template: PresetTe
             isSaving = true
           },
         ) {
-          FontSpecimen(
-            text = family.displayName,
-            fontId = specimen?.id,
-            weight = specimen?.weight,
-            style = AppTheme.typography.body,
-            fallbackTexts =
-              familySpecimenFallbacks(
-                displayName = family.displayName,
-                familyName = family.familyName,
-              ),
-          )
+          //          FontSpecimen(
+          //            fontId = specimen.id,
+          //            text = family.displayName,
+          //            weight = specimen?.weight,
+          //            style = AppTheme.typography.body,
+          //            fallbackTexts =
+          //              familySpecimenFallbacks(
+          //                displayName = family.displayName,
+          //                familyName = family.familyName,
+          //              ),
+          //          )
         }
       }
     }
@@ -593,18 +590,18 @@ private fun FontWeightContent(model: PresetSettingsViewModel, template: PresetTe
             isSaving = true
           },
         ) {
-          FontSpecimen(
-            text = fontLabel,
-            fontId = font.id,
-            weight = font.weight,
-            style = AppTheme.typography.body,
-            fallbackTexts =
-              weightSpecimenFallbacks(
-                label = fontLabel,
-                subfamilyDisplayName = font.subfamilyDisplayName,
-                weight = font.weight,
-              ),
-          )
+          //          FontSpecimen(
+          //            text = fontLabel,
+          //            fontId = font.id,
+          //            weight = font.weight,
+          //            style = AppTheme.typography.body,
+          //            fallbackTexts =
+          //              weightSpecimenFallbacks(
+          //                label = fontLabel,
+          //                subfamilyDisplayName = font.subfamilyDisplayName,
+          //                weight = font.weight,
+          //              ),
+          //          )
         }
       }
     }

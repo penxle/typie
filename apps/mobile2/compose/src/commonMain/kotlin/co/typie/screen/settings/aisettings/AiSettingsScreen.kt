@@ -107,11 +107,7 @@ fun AiSettingsScreen() {
           enabled = !model.isSubmitting,
           onClick = { update(!model.aiOptIn) },
           trailing = {
-            SettingSwitch(
-              checked = model.aiOptIn,
-              enabled = !model.isSubmitting,
-              onCheckedChange = { next -> update(next) },
-            )
+            SettingSwitch(checked = model.aiOptIn, onCheckedChange = { next -> update(next) })
           },
         )
       }

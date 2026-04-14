@@ -119,6 +119,9 @@ open class FormState(
   val errors: Map<FieldState<*>, List<String>>
     get() = registeredFields.filter { it.errors.isNotEmpty() }.associateWith { it.errors }
 
+  val errorMessage
+    get() = errors.values.flatten().firstOrNull()
+
   suspend fun validateAll(): Boolean {
     var allValid = true
     for (field in registeredFields) {

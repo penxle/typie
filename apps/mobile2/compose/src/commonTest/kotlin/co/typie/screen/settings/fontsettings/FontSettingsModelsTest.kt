@@ -147,7 +147,7 @@ class FontSettingsModelsTest {
       )
 
     assertNotNull(summary)
-    assertEquals(FontUploadSummaryStatus.Success, summary.status)
+    assertEquals(FontUploadStatus.Success, summary.status)
     assertEquals(3, summary.successes.size)
     assertEquals(0, summary.failures.size)
   }
@@ -170,7 +170,7 @@ class FontSettingsModelsTest {
       )
 
     assertNotNull(summary)
-    assertEquals(FontUploadSummaryStatus.PartialSuccess, summary.status)
+    assertEquals(FontUploadStatus.PartialSuccess, summary.status)
     assertEquals(1, summary.successes.size)
     assertEquals(1, summary.failures.size)
     assertEquals("Italic.ttf", summary.failures.first().name)
@@ -190,7 +190,7 @@ class FontSettingsModelsTest {
       )
 
     assertNotNull(summary)
-    assertEquals(FontUploadSummaryStatus.Failure, summary.status)
+    assertEquals(FontUploadStatus.Failure, summary.status)
     assertEquals(0, summary.successes.size)
     assertEquals(2, summary.failures.size)
     assertEquals("Broken.otf", summary.failures[0].name)

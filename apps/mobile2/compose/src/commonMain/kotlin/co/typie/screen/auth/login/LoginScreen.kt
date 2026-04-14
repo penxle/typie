@@ -38,7 +38,7 @@ import co.typie.ext.thenIfNotNull
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.platform.Platform
-import co.typie.platform.PlatformModule.platform
+import co.typie.platform.PlatformModule
 import co.typie.platform.activityContext
 import co.typie.result.onErr
 import co.typie.result.onOk
@@ -167,10 +167,7 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
     }
   }
 
-  Column(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-    horizontalAlignment = Alignment.CenterHorizontally,
-  ) {
+  Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
       SingleSignOnButton(
         text = "구글로 시작하기",
@@ -199,7 +196,7 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
         onClick = { loginWith(SingleSignOnProvider.NAVER) },
       )
 
-      if (platform != Platform.Android) {
+      if (PlatformModule.platform != Platform.Android) {
         SingleSignOnButton(
           text = "애플로 시작하기",
           svgUri = "files/brands/apple.svg",
@@ -211,11 +208,13 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
       }
     }
 
+    Spacer(Modifier.height(16.dp))
+
     Text(
       "이메일로 가입하셨나요?",
       style = AppTheme.typography.caption,
       color = AppTheme.colors.textSecondary,
-      modifier = Modifier.padding(vertical = 16.dp).clickable { onEmailClick() },
+      modifier = Modifier.clickable { onEmailClick() },
     )
   }
 }
@@ -233,15 +232,11 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
         .submit()
         .withDefaultExceptionHandler(toast)
         .onOk { onSuccess() }
-        .onErr { error ->
-          val message =
-            when (error) {
-              LoginWithEmailError.ValidationFailed -> null
-              LoginWithEmailError.InvalidCredentials -> "이메일 또는 비밀번호가 올바르지 않아요."
-              LoginWithEmailError.PasswordNotSet -> "비밀번호가 설정되지 않았어요."
-            }
-          if (message != null) {
-            toast.error(message)
+        .onErr {
+          when (it) {
+            LoginWithEmailError.InvalidCredentials -> toast.error("이메일 또는 비밀번호가 올바르지 않아요.")
+            LoginWithEmailError.PasswordNotSet -> toast.error("비밀번호가 설정되지 않았어요.")
+            LoginWithEmailError.ValidationFailed -> {}
           }
         }
     }
@@ -304,7 +299,7 @@ private fun SingleSignOnButton(
       modifier =
         Modifier.fillMaxWidth()
           .height(48.dp)
-          .thenIfNotNull(borderColor) { Modifier.border(1.dp, it, shape) }
+          .thenIfNotNull(borderColor) { border(1.dp, it, shape) }
           .background(backgroundColor, shape)
           .clickable(onClick = onClick)
     ) {

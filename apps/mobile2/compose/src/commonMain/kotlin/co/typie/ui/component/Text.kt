@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.SkeletonTextBone
@@ -21,6 +22,7 @@ fun Text(
   overflow: TextOverflow = TextOverflow.Clip,
   softWrap: Boolean = true,
   maxLines: Int = Int.MAX_VALUE,
+  textAlign: TextAlign = TextAlign.Start,
 ) {
   val skeleton = LocalSkeleton.current
   if (skeleton.enabled) {
@@ -31,7 +33,7 @@ fun Text(
   BasicText(
     text = text,
     modifier = modifier,
-    style = style.copy(color = color),
+    style = style.copy(color = color, textAlign = textAlign),
     overflow = overflow,
     softWrap = softWrap,
     maxLines = maxLines,
@@ -47,6 +49,7 @@ fun Text(
   overflow: TextOverflow = TextOverflow.Clip,
   softWrap: Boolean = true,
   maxLines: Int = Int.MAX_VALUE,
+  textAlign: TextAlign = TextAlign.Start,
   inlineContent: Map<String, InlineTextContent> = mapOf(),
 ) {
   val skeleton = LocalSkeleton.current
@@ -58,7 +61,7 @@ fun Text(
   BasicText(
     text = text,
     modifier = modifier,
-    style = style.copy(color = color),
+    style = style.copy(color = color, textAlign = textAlign),
     overflow = overflow,
     softWrap = softWrap,
     maxLines = maxLines,

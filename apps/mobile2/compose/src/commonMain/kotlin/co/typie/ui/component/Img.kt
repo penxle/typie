@@ -20,6 +20,7 @@ import co.typie.ui.skeleton.SkeletonBone
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
+import io.ktor.http.Url
 import kotlin.math.ceil
 import kotlin.math.log2
 import kotlin.math.pow
@@ -99,6 +100,41 @@ object Img {
     } else {
       AsyncImage(
         model = url,
+        contentDescription = null,
+        modifier = modifier,
+        colorFilter = color?.let { ColorFilter.tint(it) },
+        contentScale = contentScale,
+        placeholder = placeholderColor?.let { ColorPainter(it) },
+      )
+    }
+  }
+
+  @Composable
+  operator fun invoke(
+    url: Url,
+    modifier: Modifier = Modifier,
+    color: Color? = null,
+    contentScale: ContentScale = ContentScale.Crop,
+    placeholderColor: Color? = null,
+    placeholder: @Composable (() -> Unit)? = null,
+  ) {
+    val skeleton = LocalSkeleton.current
+    if (skeleton.enabled) {
+      SkeletonBone(modifier)
+      return
+    }
+
+    if (placeholder != null) {
+      PlaceholderAsyncImage(
+        model = url.toString(),
+        modifier = modifier,
+        contentScale = contentScale,
+        colorFilter = color?.let { ColorFilter.tint(it) },
+        placeholder = placeholder,
+      )
+    } else {
+      AsyncImage(
+        model = url.toString(),
         contentDescription = null,
         modifier = modifier,
         colorFilter = color?.let { ColorFilter.tint(it) },

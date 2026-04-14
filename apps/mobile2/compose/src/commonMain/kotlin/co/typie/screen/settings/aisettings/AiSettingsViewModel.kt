@@ -18,12 +18,13 @@ import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
 import co.typie.serialization.json
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 
-@Serializable data class AiPreferences(val aiOptIn: Boolean = false)
+@Serializable data class AiPreferences(@EncodeDefault val aiOptIn: Boolean = false)
 
 class AiSettingsViewModel : ViewModel() {
   val query =

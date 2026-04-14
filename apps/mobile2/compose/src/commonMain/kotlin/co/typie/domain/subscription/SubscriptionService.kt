@@ -59,19 +59,23 @@ private fun SubscriptionService_Query.Subscription.toSubscription(): Subscriptio
   )
 }
 
-suspend fun SubscriptionService.gate(sheet: Sheet, nav: Navigator, message: String) {
-  if (state !is SubscriptionServiceState.NotSubscribed) return
+suspend fun SubscriptionService.gate(sheet: Sheet, nav: Navigator, message: String): Boolean {
+  if (state !is SubscriptionServiceState.NotSubscribed) return true
 
   val result = sheet.present { PlanUpgradeSheet(message = message) }
   when (result) {
-    is PlanUpgradeSheetResult.TrialStarted ->
+    is PlanUpgradeSheetResult.TrialStarted -> {
       sheet.present<Unit> {
         SubscriptionCelebrationSheet(
           title = "무료 체험이 시작됐어요!",
           message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
         )
       }
+      return true
+    }
     is PlanUpgradeSheetResult.Upgrade -> nav.navigate(Route.EnrollPlan)
     null -> {}
   }
+
+  return false
 }
