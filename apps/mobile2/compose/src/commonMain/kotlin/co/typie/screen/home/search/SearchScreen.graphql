@@ -1,17 +1,18 @@
-query HomeSearch_Header_Query($siteId: ID!) {
+query SearchScreen_Query($siteId: ID!) {
   site(siteId: $siteId) @catch(to: THROW) {
     id
     name
   }
 }
 
-query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
+query SearchScreen_Search_Query($siteId: ID!, $query: String!) {
   search(siteId: $siteId, query: $query) {
     hits {
       ... on SearchHitDocument {
         title
         subtitle
         text
+
         document {
           id
           title
@@ -19,11 +20,11 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
           type
           excerpt
           updatedAt
+
           entity {
             id
             slug
-            icon
-            iconColor
+
             parent {
               id
 
@@ -33,27 +34,29 @@ query HomeScreen_Search_Query($siteId: ID!, $query: String!) {
                 ... on Folder {
                   id
                   name
+
                   entity {
-                    id
-                    icon
-                    iconColor
+                    ...EntityIcon_entity
                   }
                 }
               }
             }
+
+            ...EntityIcon_entity
           }
         }
       }
+
       ... on SearchHitFolder {
         name
+
         folder {
           name
           folderCount
           documentCount
+
           entity {
-            id
-            icon
-            iconColor
+            ...EntityIcon_entity
           }
         }
       }

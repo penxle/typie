@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.dp
 sealed interface Route {
   data object Home : Route
 
-  data object HomeSearch : Route
+  data object Search : Route
 
   data object Space : Route
 
@@ -60,7 +60,7 @@ sealed interface Route {
 
   data class Folder(val entityId: String) : Route
 
-  data class Editor(val slug: String) : Route
+  data class Editor(val entityId: String) : Route
 
   data object Login : Route
 }
@@ -72,8 +72,8 @@ enum class RouteTransitionStyle {
 
 fun Route.transitionStyleTo(route: Route): RouteTransitionStyle =
   when {
-    (this is Route.Home && route is Route.HomeSearch) ||
-      (this is Route.HomeSearch && route is Route.Home) -> RouteTransitionStyle.Fade
+    (this is Route.Home && route is Route.Search) ||
+      (this is Route.Search && route is Route.Home) -> RouteTransitionStyle.Fade
 
     else -> RouteTransitionStyle.Slide
   }

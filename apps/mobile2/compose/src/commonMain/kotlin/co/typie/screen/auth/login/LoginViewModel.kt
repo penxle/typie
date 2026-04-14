@@ -30,7 +30,7 @@ import kotlinx.serialization.json.JsonPrimitive
 class LoginSingleSignOnViewModel : ViewModel() {
   context(activity: ActivityContext)
   suspend fun loginWith(provider: SingleSignOnProvider): Result<Unit, Nothing> = result {
-    val ssoProvider =
+    val singleSignOnProvider =
       when (provider) {
         SingleSignOnProvider.GOOGLE -> GoogleSingleSignOnProvider()
         SingleSignOnProvider.KAKAO -> KakaoSingleSignOnProvider()
@@ -39,7 +39,7 @@ class LoginSingleSignOnViewModel : ViewModel() {
         else -> throw IllegalArgumentException("Unknown provider: $provider")
       }
 
-    val credential = ssoProvider.authenticate()
+    val credential = singleSignOnProvider.authenticate()
 
     Apollo.executeMutation(
       LoginScreen_AuthorizeSingleSignOn_Mutation(
@@ -58,8 +58,6 @@ sealed interface LoginWithEmailError {
   data object InvalidCredentials : LoginWithEmailError
 
   data object PasswordNotSet : LoginWithEmailError
-
-  data class Unknown(val code: String) : LoginWithEmailError
 }
 
 class LoginWithEmailForm(scope: CoroutineScope) : FormState(scope) {
@@ -72,33 +70,26 @@ class LoginWithEmailForm(scope: CoroutineScope) : FormState(scope) {
   val password = field("") { required("비밀번호를 입력해주세요.") }
 }
 
-class LoginWithEmailState(scope: CoroutineScope) {
-  val form = LoginWithEmailForm(scope)
-}
-
 class LoginWithEmailViewModel : ViewModel() {
-  val state = LoginWithEmailState(viewModelScope)
+  val form = LoginWithEmailForm(viewModelScope)
   var isSubmitting by mutableStateOf(false)
     private set
 
   suspend fun submit(): Result<Unit, LoginWithEmailError> {
-    if (!state.form.validate()) return Result.Err(LoginWithEmailError.ValidationFailed)
+    if (!form.validate()) return Result.Err(LoginWithEmailError.ValidationFailed)
 
     return loading({ isSubmitting = it }) {
       try {
         Apollo.executeMutation(
           LoginWithEmailScreen_LoginWithEmail_Mutation(
-            LoginWithEmailInput(
-              email = state.form.email.value,
-              password = state.form.password.value,
-            )
+            LoginWithEmailInput(email = form.email.value, password = form.password.value)
           )
         )
       } catch (e: TypieError) {
         when (e.code) {
           "invalid_credentials" -> raise(LoginWithEmailError.InvalidCredentials)
           "password_not_set" -> raise(LoginWithEmailError.PasswordNotSet)
-          else -> raise(LoginWithEmailError.Unknown(e.code))
+          else -> throw e
         }
       }
     }

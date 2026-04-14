@@ -216,6 +216,6 @@ private fun BottomBarPill(
 }
 
 @Composable
-fun MainBottomBarActionButton(onClick: () -> Unit = {}) {
+fun MainBottomBarActionButton(onClick: suspend () -> Unit = {}) {
   BottomBarActionButton(icon = Lucide.SquarePen, onClick = onClick)
 }

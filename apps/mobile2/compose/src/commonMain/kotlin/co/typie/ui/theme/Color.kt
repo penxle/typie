@@ -20,12 +20,24 @@ data class ColorScale(
 
 @Immutable
 data class ColorPalette(
+  val gray: Color,
+  val red: Color,
+  val orange: Color,
+  val yellow: Color,
+  val green: Color,
+  val blue: Color,
+  val purple: Color,
+)
+
+@Immutable
+data class ThemeColors(
   val gray: ColorScale,
   val brand: ColorScale,
   val red: ColorScale,
   val amber: ColorScale,
   val green: ColorScale,
   val blue: ColorScale,
+  val palette: ColorPalette,
 )
 
 object AppColor {
@@ -33,7 +45,7 @@ object AppColor {
   val black = Color(0xFF000000)
 
   val light =
-    ColorPalette(
+    ThemeColors(
       gray =
         ColorScale(
           s50 = Color(0xFFF9FAFD),
@@ -118,10 +130,20 @@ object AppColor {
           s900 = Color(0xFF313389),
           s950 = Color(0xFF1A1B50),
         ),
+      palette =
+        ColorPalette(
+          gray = Color(0xFF71717A),
+          red = Color(0xFFEF4444),
+          orange = Color(0xFFF97316),
+          yellow = Color(0xFFEAB308),
+          green = Color(0xFF22C55E),
+          blue = Color(0xFF3B82F6),
+          purple = Color(0xFF8B5CF6),
+        ),
     )
 
   val dark =
-    ColorPalette(
+    ThemeColors(
       gray =
         ColorScale(
           s50 = Color(0xFFF1F1F7),
@@ -205,6 +227,16 @@ object AppColor {
           s800 = Color(0xFF14185C),
           s900 = Color(0xFF0D123C),
           s950 = Color(0xFF070B29),
+        ),
+      palette =
+        ColorPalette(
+          gray = Color(0xFFB4B4BC),
+          red = Color(0xFFFCA5A5),
+          orange = Color(0xFFFDBA74),
+          yellow = Color(0xFFFDE047),
+          green = Color(0xFF86EFAC),
+          blue = Color(0xFF93C5FD),
+          purple = Color(0xFFC4B5FD),
         ),
     )
 }

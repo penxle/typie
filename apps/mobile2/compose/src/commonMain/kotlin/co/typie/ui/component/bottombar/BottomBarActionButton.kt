@@ -85,12 +85,12 @@ internal const val ACTION_BUTTON_TOTAL_WIDTH = ACTION_SIZE + ACTION_GAP
 fun BottomBarActionButton(
   icon: IconData,
   menus: List<ActionMenuItem> = emptyList(),
-  onClick: () -> Unit = {},
+  onClick: suspend () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val colors = AppTheme.colors
   val density = LocalDensity.current
-  val gestureScope = rememberCoroutineScope()
+  val scope = rememberCoroutineScope()
   val actionInteractionSource = remember { MutableInteractionSource() }
   val actionScale = remember { Animatable(1f) }
   val isActionPressed by actionInteractionSource.collectIsPressedAsState()
@@ -284,7 +284,7 @@ fun BottomBarActionButton(
                       isMenuOpen = true
 
                       selectionArmJob?.cancel()
-                      selectionArmJob = gestureScope.launch {
+                      selectionArmJob = scope.launch {
                         delay(ACTION_SELECTION_ARM_DELAY_MS)
                         isTrackedPointerHoldComplete = true
                         trackedPointerPosition?.let { updateTrackedPointerArmState(it) }

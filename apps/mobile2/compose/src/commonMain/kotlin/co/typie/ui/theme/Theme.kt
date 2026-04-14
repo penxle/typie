@@ -79,6 +79,9 @@ data class AppColors(
 
   // Utility
   val scrim: Color,
+
+  // Palette
+  val palette: ColorPalette,
 )
 
 val LightColors =
@@ -112,6 +115,7 @@ val LightColors =
     skeletonBone = Color(0xFFF8F8FC),
     skeletonHighlight = Color(0XFFf4F5FA),
     scrim = Color(0x52000000),
+    palette = AppColor.light.palette,
   )
 
 val DarkColors =
@@ -145,6 +149,7 @@ val DarkColors =
     skeletonBone = Color(0xFF16161A),
     skeletonHighlight = Color(0xFF1C1C20),
     scrim = Color(0x52000000),
+    palette = AppColor.dark.palette,
   )
 
 val LocalAppColors = staticCompositionLocalOf { LightColors }

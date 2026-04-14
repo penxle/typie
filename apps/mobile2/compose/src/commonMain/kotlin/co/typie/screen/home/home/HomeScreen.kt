@@ -1,11 +1,9 @@
 package co.typie.screen.home.home
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,67 +13,51 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.timeAgo
+import co.typie.domain.entity.EntityIcon
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.horizontalScroll
 import co.typie.ext.pressScale
-import co.typie.ext.safeBottomPadding
 import co.typie.ext.separated
+import co.typie.ext.truncate
 import co.typie.ext.verticalScroll
 import co.typie.graphql.HomeScreen_Query
-import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPill
-import co.typie.storage.Preference.siteId
-import co.typie.ui.component.ResponsiveContainer
-import co.typie.ui.component.ResponsiveContainerDefaults
+import co.typie.ui.component.Divider
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ProvideBottomBar
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
-import co.typie.ui.component.resolveResponsiveContainerMetrics
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
-import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen() {
   val model = viewModel { HomeViewModel() }
-  val createActionModel = viewModel(key = "home-create-actions") { EntityCreateViewModel() }
 
-  val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
 
   val nav = Nav.current
-  val dialog = LocalDialog.current
   val toast = LocalToast.current
 
   ProvideTopBar(
@@ -90,102 +72,51 @@ fun HomeScreen() {
     action = {
       MainBottomBarActionButton(
         onClick = {
-          if (createActionModel.isCreating) return@MainBottomBarActionButton
-          val resolvedSiteId = siteId ?: return@MainBottomBarActionButton
-          scope.launch {
-            createActionModel
-              .createDocument(siteId = resolvedSiteId)
-              .withDefaultExceptionHandler(toast)
-              .onOk { createdSlug ->
-                model.refetch()
-                nav.navigate(Route.Editor(createdSlug))
-              }
+          if (model.isCreatingDocument) return@MainBottomBarActionButton
+          model.createDocument().withDefaultExceptionHandler(toast).onOk {
+            nav.navigate(Route.Editor(it))
           }
         }
       )
     },
   )
 
-  LaunchedEffect(model.query.state) {
-    if (model.query.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { model.refetch() })
-    }
-  }
+  Screen(query = model.query) { contentPadding ->
+    Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+      Skeleton.Keep {
+        Text("홈", style = AppTheme.typography.display)
 
-  Screen(loading = model.query.state !is QueryState.Success) { contentPadding ->
-    Column(
-      Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding).safeBottomPadding()
-    ) {
-      HomeFramedSection {
-        Skeleton.Keep {
-          Text(
-            "홈",
-            style = AppTheme.typography.display,
-            modifier = Modifier.padding(horizontal = 16.dp),
-          )
-
-          SearchBar(
-            placeholder = resolveHomeSearchPlaceholder(model.query.data.site.name),
-            onClick = { nav.navigate(Route.HomeSearch) },
-          )
-        }
+        SearchBar(
+          placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
+          onClick = { nav.navigate(Route.Search) },
+        )
       }
+
+      Spacer(Modifier.height(20.dp))
 
       RecentFolders(data = model.query.data)
 
-      HomeFramedSection { RecentDocuments(data = model.query.data) }
+      Spacer(Modifier.height(20.dp))
 
-      Spacer(Modifier.height(140.dp))
-    }
-  }
-}
-
-@Composable
-private fun HomeFramedSection(content: @Composable ColumnScope.() -> Unit) {
-  ResponsiveContainer(modifier = Modifier.fillMaxWidth()) {
-    Column(modifier = Modifier.fillMaxWidth()) { content() }
-  }
-}
-
-@Composable
-private fun HomeFullBleedRail(
-  scrollState: androidx.compose.foundation.ScrollState,
-  itemSpacing: Dp = 16.dp,
-  content: @Composable () -> Unit,
-) {
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val metrics =
-      resolveResponsiveContainerMetrics(
-        screenWidth = maxWidth.value,
-        maxWidth = ResponsiveContainerDefaults.MaxWidth.value,
-        breakpoint = ResponsiveContainerDefaults.Breakpoint.value,
-      )
-    val edgePadding = metrics.gutterWidth.dp + 16.dp
-
-    Row(
-      modifier =
-        Modifier.horizontalScroll(scrollState).padding(start = edgePadding, end = edgePadding),
-      horizontalArrangement = Arrangement.spacedBy(itemSpacing),
-    ) {
-      content()
+      RecentDocuments(data = model.query.data)
     }
   }
 }
 
 @Composable
 private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
-  HomeSearchFieldFrame(
+  Row(
+    verticalAlignment = Alignment.CenterVertically,
     modifier =
-      Modifier.padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 4.dp).fillMaxWidth(),
-    onClick = onClick,
+      Modifier.height(48.dp)
+        .border(1.dp, AppTheme.colors.borderSubtle, AppShapes.rounded(AppShapes.md))
+        .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
+        .clickable(onClick = onClick)
+        .padding(horizontal = 16.dp),
   ) {
-    Icon(
-      icon = Lucide.Search,
-      modifier = Modifier.size(HomeSearchFieldDefaults.IconSize),
-      tint = AppTheme.colors.textMuted,
-    )
+    Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textMuted)
 
-    Spacer(Modifier.width(HomeSearchFieldDefaults.IconGap))
+    Spacer(Modifier.width(12.dp))
 
     Text(
       placeholder,
@@ -204,78 +135,55 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
   val folders = data.me.recentlyViewedEntities.mapNotNull { it.node.onFolder }
 
   Column {
-    HomeFramedSection {
-      Skeleton.Keep {
-        Text(
-          "최근 폴더",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-          modifier = Modifier.padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 12.dp),
-        )
-      }
+    Skeleton.Keep {
+      Text("최근 폴더", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
     }
 
+    Spacer(Modifier.height(12.dp))
+
     if (folders.isEmpty()) {
-      HomeFramedSection {
-        Box(
-          modifier =
-            Modifier.padding(horizontal = 16.dp)
-              .fillMaxWidth()
-              .height(110.dp)
-              .clip(AppShapes.rounded(AppShapes.md))
-              .background(AppTheme.colors.surfaceDefault),
-          contentAlignment = Alignment.Center,
-        ) {
-          Text(
-            "최근 사용한 폴더가 여기 나타나요",
-            style = AppTheme.typography.action,
-            color = AppTheme.colors.textTertiary,
-          )
-        }
+      Box(
+        modifier =
+          Modifier.fillMaxWidth()
+            .height(110.dp)
+            .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md)),
+        contentAlignment = Alignment.Center,
+      ) {
+        Text(
+          "최근 사용한 폴더가 여기 나타나요",
+          style = AppTheme.typography.action,
+          color = AppTheme.colors.textTertiary,
+        )
       }
     } else {
-      val scrollState = rememberScrollState("recent-folders")
+      for (folder in folders) {
+        InteractionScope {
+          Column(
+            modifier =
+              Modifier.width(140.dp)
+                .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
+                .pressScale()
+                .clickable { nav.navigate(Route.Folder(folder.entity.id)) }
+                .padding(16.dp)
+          ) {
+            EntityIcon(folder.entity.entityIcon_entity, modifier = Modifier.size(18.dp))
 
-      HomeFullBleedRail(scrollState = scrollState) {
-        for (folder in folders) {
-          InteractionScope {
-            val entityIcon =
-              resolveEntityIconAppearance(
-                iconName = folder.entity.icon,
-                iconColor = folder.entity.iconColor,
-                fallbackIcon = Lucide.Folder,
-                fallbackTint = AppTheme.colors.brand,
-                colors = AppTheme.colors,
-              )
+            Spacer(Modifier.height(6.dp))
 
-            Column(
-              modifier =
-                Modifier.width(140.dp)
-                  .clip(AppShapes.rounded(AppShapes.md))
-                  .background(AppTheme.colors.surfaceDefault)
-                  .clickable { nav.navigate(Route.Folder(folder.entity.id)) }
-                  .pressScale()
-                  .padding(16.dp)
-            ) {
-              Icon(icon = entityIcon.icon, modifier = Modifier.size(18.dp), tint = entityIcon.tint)
+            Text(
+              folder.name,
+              style = AppTheme.typography.label,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
 
-              Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
 
-              Text(
-                folder.name,
-                style = AppTheme.typography.label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-              )
-
-              Spacer(Modifier.height(2.dp))
-
-              Text(
-                if (folder.documentCount == 0) "빈 폴더" else "문서 ${folder.documentCount}개",
-                style = AppTheme.typography.caption,
-                color = AppTheme.colors.textMuted,
-              )
-            }
+            Text(
+              if (folder.documentCount == 0) "빈 폴더" else "문서 ${folder.documentCount}개",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textMuted,
+            )
           }
         }
       }
@@ -290,22 +198,15 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
 
   Column {
     Skeleton.Keep {
-      Text(
-        "최근 문서",
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
-        modifier = Modifier.padding(horizontal = 16.dp).padding(top = 24.dp, bottom = 12.dp),
-      )
+      Text("최근 문서", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
     }
 
     if (documents.isEmpty()) {
       Box(
         modifier =
-          Modifier.padding(horizontal = 16.dp)
-            .fillMaxWidth()
+          Modifier.fillMaxWidth()
             .height(110.dp)
-            .clip(AppShapes.rounded(AppShapes.md))
-            .background(AppTheme.colors.surfaceDefault),
+            .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md)),
         contentAlignment = Alignment.Center,
       ) {
         Text(
@@ -317,96 +218,55 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
     } else {
       Column(
         modifier =
-          Modifier.padding(horizontal = 16.dp)
-            .clip(AppShapes.rounded(AppShapes.md))
-            .background(AppTheme.colors.surfaceDefault)
+          Modifier.background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
       ) {
-        documents.separated(
-          separator = {
-            Box(
-              Modifier.fillMaxWidth()
-                .height(1.dp)
-                .padding(horizontal = 16.dp)
-                .background(AppTheme.colors.borderSubtle)
-            )
-          }
-        ) { document ->
+        documents.separated(separator = { Divider(inset = 16.dp) }) { document ->
           InteractionScope {
             val parentFolder = document.entity.parent?.node?.onFolder
-            val folderName = parentFolder?.name
-            val metaColor = AppTheme.colors.textMuted
-            val entityIcon =
-              resolveEntityIconAppearance(
-                iconName = document.entity.icon,
-                iconColor = document.entity.iconColor,
-                fallbackIcon = Lucide.File,
-                fallbackTint = metaColor,
-                colors = AppTheme.colors,
-              )
-            val folderIcon =
-              resolveEntityIconAppearance(
-                iconName = parentFolder?.entity?.icon,
-                iconColor = parentFolder?.entity?.iconColor,
-                fallbackIcon = Lucide.Folder,
-                fallbackTint = metaColor,
-                colors = AppTheme.colors,
-              )
 
             Column(
               modifier =
                 Modifier.fillMaxWidth()
-                  .clickable { nav.navigate(Route.Editor(document.entity.slug)) }
                   .pressScale()
+                  .clickable { nav.navigate(Route.Editor(document.entity.id)) }
                   .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-              if (folderName != null) {
+              if (parentFolder != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                  Icon(
-                    icon = folderIcon.icon,
-                    modifier = Modifier.size(12.dp),
-                    tint = folderIcon.tint,
-                  )
+                  EntityIcon(parentFolder.entity.entityIcon_entity, modifier = Modifier.size(12.dp))
 
                   Spacer(Modifier.width(4.dp))
 
                   Text(
-                    folderName,
+                    parentFolder.name,
                     style = AppTheme.typography.caption,
-                    color = metaColor,
+                    color = AppTheme.colors.textMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                   )
                 }
-
-                Spacer(Modifier.height(4.dp))
               }
 
               Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                  icon = entityIcon.icon,
-                  modifier = Modifier.size(18.dp),
-                  tint = entityIcon.tint,
-                )
+                EntityIcon(document.entity.entityIcon_entity, modifier = Modifier.size(18.dp))
 
                 Spacer(Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                  val subtitle = document.subtitle?.takeIf { it.isNotBlank() }
-
                   Row(verticalAlignment = Alignment.CenterVertically) {
-                    val titleText = buildAnnotatedString {
+                    val title = buildAnnotatedString {
                       append(document.title)
 
-                      if (subtitle != null) {
-                        pushStyle(SpanStyle(color = metaColor))
+                      if (document.subtitle != null) {
+                        pushStyle(SpanStyle(color = AppTheme.colors.textMuted))
                         append(" — ")
-                        append(subtitle)
+                        append(document.subtitle)
                         pop()
                       }
                     }
 
                     Text(
-                      titleText,
+                      title,
                       style = AppTheme.typography.label,
                       maxLines = 1,
                       overflow = TextOverflow.Ellipsis,
@@ -425,9 +285,9 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
                   Spacer(Modifier.height(4.dp))
 
                   Text(
-                    if (document.excerpt.isNotEmpty()) document.excerpt else "(내용 없음)",
+                    document.excerpt.ifEmpty { "(내용 없음)" },
                     style = AppTheme.typography.caption,
-                    color = metaColor,
+                    color = AppTheme.colors.textMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                   )

@@ -1,0 +1,5 @@
+fragment EntityIcon_entity on Entity {
+  type
+  icon
+  iconColor
+}

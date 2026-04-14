@@ -28,6 +28,12 @@ import kotlinx.coroutines.launch
 
 val LocalInteractionSource = compositionLocalOf<MutableInteractionSource?> { null }
 
+inline fun <T> Modifier.thenIfNotNull(value: T?, builder: Modifier.(T) -> Modifier): Modifier =
+  if (value != null) builder(value) else this
+
+inline fun Modifier.thenIf(condition: Boolean, builder: Modifier.() -> Modifier): Modifier =
+  if (condition) builder() else this
+
 @Composable
 fun InteractionScope(content: @Composable () -> Unit) {
   val interactionSource = remember { MutableInteractionSource() }
@@ -48,26 +54,14 @@ fun Modifier.clickable(onClick: suspend () -> Unit): Modifier =
   clickable(enabled = true, onClick = onClick)
 
 fun Modifier.clickable(enabled: Boolean = true, onClick: suspend () -> Unit): Modifier = composed {
-  val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
-  var handling by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
+  val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
   focusProperties { canFocus = false }
     .foundationClickable(
       enabled = enabled,
       interactionSource = interactionSource,
       indication = null,
-      onClick = {
-        if (!handling) {
-          handling = true
-          scope.launch {
-            try {
-              onClick()
-            } finally {
-              handling = false
-            }
-          }
-        }
-      },
+      onClick = { scope.launch { onClick() } },
     )
 }
 

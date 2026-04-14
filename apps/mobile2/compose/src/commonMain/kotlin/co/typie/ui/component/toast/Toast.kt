@@ -38,6 +38,19 @@ class Toast {
     state = ToastState(nextId++, type, message, adaptiveDuration(duration, message))
   }
 
+  fun success(message: String, duration: Duration = 2.seconds) {
+    state = ToastState(nextId++, ToastType.Success, message, adaptiveDuration(duration, message))
+  }
+
+  fun error(message: String, duration: Duration = 2.seconds) {
+    state = ToastState(nextId++, ToastType.Error, message, adaptiveDuration(duration, message))
+  }
+
+  fun notification(message: String, duration: Duration = 2.seconds) {
+    state =
+      ToastState(nextId++, ToastType.Notification, message, adaptiveDuration(duration, message))
+  }
+
   fun dismiss() {
     state = null
   }

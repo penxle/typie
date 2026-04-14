@@ -1,22 +1,16 @@
 query HomeScreen_Query($siteId: ID!) {
   site(siteId: $siteId) @catch(to: THROW) {
-    id
     name
   }
 
   me @catch(to: THROW) {
-    id
-
     recentlyViewedEntities(siteId: $siteId) {
-      id
-      slug
       type
 
       node {
         __typename
 
         ... on Document {
-          id
           type
           title
           subtitle
@@ -25,26 +19,21 @@ query HomeScreen_Query($siteId: ID!) {
 
           entity {
             id
-            slug
-            icon
-            iconColor
-            parent {
-              id
 
+            parent {
               node {
                 __typename
 
                 ... on Folder {
-                  id
                   name
                   entity {
-                    id
-                    icon
-                    iconColor
+                    ...EntityIcon_entity
                   }
                 }
               }
             }
+
+            ...EntityIcon_entity
           }
         }
 
@@ -56,8 +45,8 @@ query HomeScreen_Query($siteId: ID!) {
           entity {
             id
             slug
-            icon
-            iconColor
+
+            ...EntityIcon_entity
           }
         }
       }

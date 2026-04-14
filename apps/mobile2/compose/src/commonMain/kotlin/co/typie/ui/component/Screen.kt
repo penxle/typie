@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,8 +24,13 @@ import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
 import co.typie.ext.statusBars
 import co.typie.ext.statusBarsPadding
+import co.typie.graphql.QueryState
+import co.typie.graphql.WatchQuery
+import co.typie.navigation.Nav
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.LocalTopBarAnimationSource
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -33,12 +39,13 @@ import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.serialization.json.JsonNull.content
 
 private val MaxContentWidth = 600.dp
 
 @Composable
 fun Screen(
-  loading: Boolean = false,
+  query: WatchQuery<*, *>? = null,
   background: Color = AppTheme.colors.surfaceBase,
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
@@ -46,6 +53,9 @@ fun Screen(
 
   val topBarState = LocalTopBarState.current
   val hasTopBar = topBarState != null && topBarState.enabled && topBarState.visible
+
+  val nav = Nav.current
+  val dialog = LocalDialog.current
 
   val contentPadding =
     if (hasTopBar) {
@@ -61,12 +71,18 @@ fun Screen(
       PaddingValues(horizontal = 16.dp)
     }
 
+  LaunchedEffect(query?.state) {
+    if (query?.state is QueryState.Error) {
+      dialog.error(nav = nav, onRetry = { query.refetch() })
+    }
+  }
+
   Box(Modifier.fillMaxSize().background(background)) {
     Box(
       modifier = Modifier.fillMaxSize().hazeSource(hazeState).widthIn(max = MaxContentWidth),
       contentAlignment = Alignment.TopCenter,
     ) {
-      Skeleton(enabled = loading) {
+      Skeleton(enabled = query == null || query.state !is QueryState.Success) {
         Box(modifier = Modifier.fillMaxSize()) { content(contentPadding) }
       }
     }

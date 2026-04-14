@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import co.typie.screen.auth.login.LoginScreen
 import co.typie.screen.editor.editor.EditorScreen
 import co.typie.screen.home.home.HomeScreen
-import co.typie.screen.home.homesearch.HomeSearchScreen
+import co.typie.screen.home.search.SearchScreen
 import co.typie.screen.more.more.MoreScreen
 import co.typie.screen.more.stats.StatsScreen
 import co.typie.screen.settings.aisettings.AiSettingsScreen
@@ -36,7 +36,7 @@ import co.typie.screen.subscription.referral.ReferralScreen
 fun MainRoutes(route: Route) {
   when (route) {
     is Route.Home -> HomeScreen()
-    is Route.HomeSearch -> HomeSearchScreen()
+    is Route.Search -> SearchScreen()
     is Route.Space -> SpaceScreen()
     is Route.Notes -> NotesScreen()
     is Route.More -> MoreScreen()
@@ -63,7 +63,7 @@ fun MainRoutes(route: Route) {
     is Route.SpaceSettings -> SpaceSettingsScreen()
     is Route.Trash -> TrashScreen(entityId = route.entityId)
     is Route.Folder -> FolderScreen(entityId = route.entityId)
-    is Route.Editor -> EditorScreen(slug = route.slug)
+    is Route.Editor -> EditorScreen(slug = route.entityId)
     else -> {}
   }
 }

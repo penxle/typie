@@ -2,6 +2,7 @@ package co.typie.ext
 
 import androidx.compose.runtime.Composable
 
+@Suppress("ComposableNaming")
 @Composable
 inline fun <T> Iterable<T>.separated(
   separator: @Composable () -> Unit,

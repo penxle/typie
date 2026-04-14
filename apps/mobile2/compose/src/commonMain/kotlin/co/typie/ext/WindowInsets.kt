@@ -4,16 +4,12 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 
 expect val WindowInsets.Companion.statusBars: WindowInsets
   @Composable get
@@ -37,9 +33,7 @@ fun Modifier.navigationBarsPadding(): Modifier = windowInsetsPadding(WindowInset
 fun Modifier.safeDrawingPadding(): Modifier = windowInsetsPadding(WindowInsets.safeDrawing)
 
 @Composable
-fun Modifier.safeBottomPadding(extraBottom: Dp = 0.dp): Modifier =
-  padding(bottom = extraBottom)
-    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+fun Modifier.safeBottomPadding(): Modifier = windowInsetsPadding(WindowInsets.safeDrawing)
 
 @Composable
 fun Modifier.imePadding(): Modifier {
