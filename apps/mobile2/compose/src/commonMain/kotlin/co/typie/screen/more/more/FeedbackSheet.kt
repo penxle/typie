@@ -28,8 +28,6 @@ import co.typie.graphql.MoreScreen_SubmitFeedback_Mutation
 import co.typie.graphql.executeMutation
 import co.typie.graphql.type.SubmitFeedbackInput
 import co.typie.icons.Lucide
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.platform.PlatformModule
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
@@ -39,6 +37,8 @@ import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme

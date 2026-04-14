@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.domain.subscription.SubscriptionService
 import co.typie.graphql.Apollo
 import co.typie.graphql.EnrollPlanScreen_Query
 import co.typie.graphql.EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation
@@ -25,7 +26,6 @@ import co.typie.platform.PurchaseStore
 import co.typie.result.Result
 import co.typie.result.loading
 import co.typie.result.result
-import co.typie.subscription.SubscriptionService
 import kotlinx.coroutines.launch
 
 sealed interface EnrollPlanError {

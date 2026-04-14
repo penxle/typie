@@ -1,7 +1,7 @@
 package co.typie.platform
 
-import co.typie.subscription.FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID
-import co.typie.subscription.FULL_ACCESS_YEARLY_STORE_PRODUCT_ID
+import co.typie.domain.subscription.FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID
+import co.typie.domain.subscription.FULL_ACCESS_YEARLY_STORE_PRODUCT_ID
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 

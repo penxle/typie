@@ -7,6 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.Konfig
 import co.typie.blob.BlobService
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.form.FormState
 import co.typie.form.ValidateOn
 import co.typie.form.maxLength
@@ -37,8 +39,6 @@ import co.typie.result.Task
 import co.typie.result.loading
 import co.typie.result.task
 import co.typie.storage.Preference
-import co.typie.subscription.SubscriptionService
-import co.typie.subscription.SubscriptionServiceState
 import com.apollographql.apollo.api.Optional
 import com.apollographql.cache.normalized.api.CacheKey
 import com.apollographql.cache.normalized.apolloStore

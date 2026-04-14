@@ -19,8 +19,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.platform.PlatformModule
 import co.typie.result.isOk
 import co.typie.result.onException
@@ -38,6 +36,8 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
 import co.typie.ui.component.dialog.error
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset

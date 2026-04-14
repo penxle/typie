@@ -38,9 +38,6 @@ import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
-import co.typie.overlay.LocalLoader
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import co.typie.platform.activityContext
@@ -53,12 +50,15 @@ import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.loader.LocalLoader
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch

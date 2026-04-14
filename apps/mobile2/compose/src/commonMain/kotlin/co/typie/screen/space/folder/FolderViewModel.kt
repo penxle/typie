@@ -6,6 +6,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.blob.BlobService
+import co.typie.domain.entity.DocumentRenameSheetModel
+import co.typie.domain.entity.EntityIconPickerSheetModel
+import co.typie.domain.entity.FolderRenameSheetModel
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentActions_DeleteDocument_Mutation
 import co.typie.graphql.DocumentActions_UpdateDocument_Mutation
@@ -30,12 +33,11 @@ import co.typie.graphql.watchQuery
 import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.screen.space.document.DocumentRenameSheetModel
-import co.typie.screen.space.entity.EntityIconPickerSheetModel
 
 data class FolderThumbnailResult(val id: String, val url: String)
 
-class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconPickerSheetModel {
+class FolderViewModel :
+  ViewModel(), DocumentRenameSheetModel, EntityIconPickerSheetModel, FolderRenameSheetModel {
   private val blobService = BlobService
   private var hasEnteredScreen = false
   var entityId by mutableStateOf("")
@@ -152,7 +154,7 @@ class FolderViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconPickerS
     )
   }
 
-  suspend fun renameFolder(
+  override suspend fun renameFolder(
     folderId: String,
     currentName: String,
     name: String,

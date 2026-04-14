@@ -1,6 +1,8 @@
 package co.typie.screen.space.document
 
 import androidx.lifecycle.ViewModel
+import co.typie.domain.entity.DocumentRenameSheetModel
+import co.typie.domain.entity.EntityIconPickerSheetModel
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentActions_DeleteDocument_Mutation
 import co.typie.graphql.DocumentActions_UpdateDocument_Mutation
@@ -11,7 +13,6 @@ import co.typie.graphql.type.UpdateDocumentInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.result.Result
 import co.typie.result.result
-import co.typie.screen.space.entity.EntityIconPickerSheetModel
 
 class DocumentViewModel : ViewModel(), DocumentRenameSheetModel, EntityIconPickerSheetModel {
   override suspend fun updateDocument(

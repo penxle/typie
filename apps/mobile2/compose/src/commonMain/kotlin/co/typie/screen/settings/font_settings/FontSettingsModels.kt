@@ -1,6 +1,6 @@
 package co.typie.screen.settings.font_settings
 
-import co.typie.subscription.SubscriptionServiceState
+import co.typie.domain.subscription.SubscriptionServiceState
 
 internal data class FontSettingsFont(
   val id: String,

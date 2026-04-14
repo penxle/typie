@@ -42,8 +42,6 @@ import co.typie.graphql.type.CreateSiteInput
 import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.result.Result
 import co.typie.result.onOk
 import co.typie.result.result
@@ -65,6 +63,8 @@ import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData

@@ -1,6 +1,7 @@
 package co.typie.screen.space.entity
 
 import androidx.lifecycle.ViewModel
+import co.typie.domain.entity.EntityIconPickerSheetModel
 import co.typie.graphql.Apollo
 import co.typie.graphql.EntitySelectionActions_DeleteEntities_Mutation
 import co.typie.graphql.EntitySelectionActions_UpdateEntitiesIcon_Mutation

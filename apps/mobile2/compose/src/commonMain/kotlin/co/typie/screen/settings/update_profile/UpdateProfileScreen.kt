@@ -26,8 +26,6 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.Img_image
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.platform.rememberFilePicker
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
@@ -39,6 +37,8 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.error
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState

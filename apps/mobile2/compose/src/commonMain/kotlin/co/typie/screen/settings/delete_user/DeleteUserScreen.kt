@@ -25,8 +25,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.auth.AuthService
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
@@ -36,6 +34,8 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState

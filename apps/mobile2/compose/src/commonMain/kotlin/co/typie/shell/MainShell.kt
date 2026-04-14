@@ -45,7 +45,6 @@ import co.typie.icons.Lucide
 import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
-import co.typie.overlay.LocalToast
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
 import co.typie.shell.marketing_consent.MarketingConsentGate
@@ -54,6 +53,7 @@ import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarActionButton
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.BottomBarState
+import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme

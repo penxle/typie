@@ -50,7 +50,6 @@ import co.typie.graphql.QueryState
 import co.typie.graphql.type.TextReplacementState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.LocalToast
 import co.typie.result.onErr
 import co.typie.result.onException
 import co.typie.result.onOk
@@ -79,6 +78,7 @@ import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton

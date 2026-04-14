@@ -24,8 +24,6 @@ import co.typie.graphql.TrashScreen_WithSiteId_Query
 import co.typie.graphql.type.EntityState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
@@ -57,6 +55,8 @@ import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton

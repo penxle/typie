@@ -6,12 +6,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.graphql.type.SubscriptionState
 import co.typie.platform.PlatformModule
 import co.typie.result.Result
 import co.typie.result.loading
-import co.typie.subscription.SubscriptionService
-import co.typie.subscription.SubscriptionServiceState
 import kotlinx.coroutines.launch
 
 class CancelPlanViewModel : ViewModel() {

@@ -2,10 +2,10 @@ package co.typie.screen.space.entity
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import co.typie.overlay.LocalToast
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.shell.SpaceBottomBarActionButton
+import co.typie.ui.component.toast.LocalToast
 import kotlinx.coroutines.launch
 
 @Composable

@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.datetime.formatKoreanDate
+import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -24,8 +26,6 @@ import co.typie.graphql.type.PlanAvailability
 import co.typie.graphql.type.SubscriptionState
 import co.typie.navigation.Nav
 import co.typie.route.Route
-import co.typie.subscription.SubscriptionService
-import co.typie.subscription.SubscriptionServiceState
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface

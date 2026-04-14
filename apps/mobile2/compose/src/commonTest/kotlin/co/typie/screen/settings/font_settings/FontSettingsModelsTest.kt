@@ -1,9 +1,9 @@
 package co.typie.screen.settings.font_settings
 
+import co.typie.domain.subscription.Subscription
+import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.graphql.type.PlanAvailability
 import co.typie.graphql.type.SubscriptionState
-import co.typie.subscription.Subscription
-import co.typie.subscription.SubscriptionServiceState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

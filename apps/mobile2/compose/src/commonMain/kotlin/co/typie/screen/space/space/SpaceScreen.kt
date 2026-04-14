@@ -29,6 +29,18 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.entity.DocumentItemActionsSheet
+import co.typie.domain.entity.DocumentRenameSheet
+import co.typie.domain.entity.EntityIconPickerSheet
+import co.typie.domain.entity.EntityIconPickerStops
+import co.typie.domain.entity.EntityMoveSheet
+import co.typie.domain.entity.EntityMoveStops
+import co.typie.domain.entity.EntitySelectionActionsSheet
+import co.typie.domain.entity.EntityShareSheet
+import co.typie.domain.entity.FolderAction
+import co.typie.domain.entity.FolderItemActionsSheet
+import co.typie.domain.entity.FolderRenameSheet
+import co.typie.domain.entity.toTransferSource
 import co.typie.entity_transfer.EntityClipboardMode
 import co.typie.entity_transfer.EntityClipboardService
 import co.typie.entity_transfer.EntityPasteBar
@@ -41,32 +53,17 @@ import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
-import co.typie.overlay.EntityMoveContent
-import co.typie.overlay.EntityMoveStops
-import co.typie.overlay.LocalToast
-import co.typie.overlay.ToastType
 import co.typie.result.onErr
 import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.route.toastBottomInset
-import co.typie.screen.space.document.DocumentItemActionsContent
-import co.typie.screen.space.document.DocumentRenameContent
 import co.typie.screen.space.document.DocumentViewModel
-import co.typie.screen.space.document.toTransferSource as toDocumentTransferSource
 import co.typie.screen.space.entity.EntityCreateBottomBarAction
 import co.typie.screen.space.entity.EntityCreateViewModel
-import co.typie.screen.space.entity.EntityIconPickerContent
-import co.typie.screen.space.entity.EntityIconPickerStops
-import co.typie.screen.space.entity.EntitySelectionActionsContent
 import co.typie.screen.space.entity.EntitySelectionViewModel
-import co.typie.screen.space.entity.EntityShareContent
-import co.typie.screen.space.folder.FolderAction
-import co.typie.screen.space.folder.FolderItemActionsContent
-import co.typie.screen.space.folder.FolderRenameContent
 import co.typie.screen.space.folder.FolderViewModel
-import co.typie.screen.space.folder.toTransferSource
 import co.typie.shell.MainBottomBarPill
 import co.typie.storage.Preference
 import co.typie.ui.component.EntityBottomOverlayDefaults
@@ -94,6 +91,8 @@ import co.typie.ui.component.formatSpaceSummary
 import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -215,7 +214,7 @@ fun SpaceScreen() {
 
     presenterScope.launch {
       sheet.present {
-        EntityShareContent(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
+        EntityShareSheet(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
       }
     }
   }
@@ -227,12 +226,12 @@ fun SpaceScreen() {
 
     presenterScope.launch {
       sheet.present {
-        EntitySelectionActionsContent(
+        EntitySelectionActionsSheet(
           summary = selectionSummary,
           onChangeIcon = {
             presenterScope.launch {
               sheet.present(stops = EntityIconPickerStops) {
-                EntityIconPickerContent(
+                EntityIconPickerSheet(
                   model = selectionActionModel,
                   entityIds = selectionSummary.selectedItems.map { it.id },
                   initialIcon = selectionSummary.commonIconName,
@@ -422,12 +421,12 @@ fun SpaceScreen() {
             } else {
               presenterScope.launch {
                 sheet.present {
-                  DocumentItemActionsContent(item) { action ->
+                  DocumentItemActionsSheet(item) { action ->
                     when (action) {
                       FolderAction.Rename -> {
                         presenterScope.launch {
                           sheet.present {
-                            DocumentRenameContent(
+                            DocumentRenameSheet(
                               model = documentActionModel,
                               documentId = item.documentId,
                               initialTitle = item.title,
@@ -439,7 +438,7 @@ fun SpaceScreen() {
                       FolderAction.ChangeIcon -> {
                         presenterScope.launch {
                           sheet.present(stops = EntityIconPickerStops) {
-                            EntityIconPickerContent(
+                            EntityIconPickerSheet(
                               model = documentActionModel,
                               entityId = item.id,
                               initialIcon = item.iconName,
@@ -457,7 +456,7 @@ fun SpaceScreen() {
                       FolderAction.Move -> {
                         presenterScope.launch {
                           sheet.present(stops = EntityMoveStops) {
-                            EntityMoveContent(source = item.toDocumentTransferSource())
+                            EntityMoveSheet(source = item.toTransferSource())
                           }
                         }
                       }
@@ -465,14 +464,14 @@ fun SpaceScreen() {
                       FolderAction.Copy -> {
                         clipboard.setCopy(
                           sourceSiteId = Preference.siteId!!,
-                          items = listOf(item.toDocumentTransferSource()),
+                          items = listOf(item.toTransferSource()),
                         )
                       }
 
                       FolderAction.Cut -> {
                         clipboard.setCut(
                           sourceSiteId = Preference.siteId!!,
-                          items = listOf(item.toDocumentTransferSource()),
+                          items = listOf(item.toTransferSource()),
                         )
                       }
 
@@ -516,12 +515,12 @@ fun SpaceScreen() {
             } else {
               presenterScope.launch {
                 sheet.present {
-                  FolderItemActionsContent(item) { action ->
+                  FolderItemActionsSheet(item) { action ->
                     when (action) {
                       FolderAction.Rename -> {
                         presenterScope.launch {
                           sheet.present {
-                            FolderRenameContent(
+                            FolderRenameSheet(
                               model = folderActionModel,
                               folderId = item.folderId,
                               initialName = item.name,
@@ -533,7 +532,7 @@ fun SpaceScreen() {
                       FolderAction.ChangeIcon -> {
                         presenterScope.launch {
                           sheet.present(stops = EntityIconPickerStops) {
-                            EntityIconPickerContent(
+                            EntityIconPickerSheet(
                               model = folderActionModel,
                               entityId = item.id,
                               initialIcon = item.iconName,
@@ -551,7 +550,7 @@ fun SpaceScreen() {
                       FolderAction.Move -> {
                         presenterScope.launch {
                           sheet.present(stops = EntityMoveStops) {
-                            EntityMoveContent(source = item.toTransferSource())
+                            EntityMoveSheet(source = item.toTransferSource())
                           }
                         }
                       }
