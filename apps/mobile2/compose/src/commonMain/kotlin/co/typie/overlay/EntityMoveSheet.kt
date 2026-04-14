@@ -56,8 +56,7 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.EntityListFolderRow
 import co.typie.ui.component.EntityListItem
 import co.typie.ui.component.Text
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetStop
@@ -164,8 +163,19 @@ fun EntityMoveContent(source: EntityTransferSource, onMoved: () -> Unit = {}) {
     modifier = Modifier.fillMaxHeight(),
     fillHeight = true,
     bodyScroll = false,
-    bodyInsetPolicy = SheetInsetPolicy.Container,
-    header = { ActionHeader(title = source.transferActionLabel) },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = source.transferActionLabel,
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
     footer = {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(

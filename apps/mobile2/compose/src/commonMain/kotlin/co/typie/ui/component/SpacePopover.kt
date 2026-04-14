@@ -60,8 +60,8 @@ import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
 import co.typie.ui.component.popover.close
-import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -313,7 +313,22 @@ private fun CreateSpaceContent(model: SpacePopoverViewModel) {
   var name by remember { mutableStateOf("") }
   val toast = LocalToast.current
 
-  SheetLayout(bodyScroll = false, header = { ActionHeader(title = "새 스페이스 생성") }) {
+  SheetLayout(
+    bodyScroll = false,
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = "새 스페이스 생성",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
+  ) {
     Text(
       text = "스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",
       style = AppTheme.typography.body,

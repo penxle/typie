@@ -8,17 +8,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.form.FormState
 import co.typie.form.ValidateOn
 import co.typie.overlay.LocalToast
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.HeaderTextAction
+import co.typie.ui.component.sheet.SheetBar
+import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -78,21 +79,28 @@ fun FolderRenameContent(
 
   SheetLayout(
     header = {
-      ActionHeader(
-        title = "이름 변경",
+      SheetBar(
         leading = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "취소",
             color = AppTheme.colors.brand,
             enabled = !isSubmitting,
             onClick = { dismiss() },
           )
         },
+        center = {
+          Text(
+            text = "이름 변경",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        },
         trailing = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "저장",
             color = AppTheme.colors.brand,
-            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
             enabled = canSubmit,
             loading = isSubmitting,
             onClick = { submit() },

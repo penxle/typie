@@ -29,9 +29,9 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
-import co.typie.ui.component.sheet.TitleHeader
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -224,7 +224,21 @@ private fun OssLicenseRowContent(entry: OssLicenseEntry) {
 @Composable
 context(_: SheetScope<Unit>)
 private fun OssLicenseDetailContent(entry: OssLicenseEntry) {
-  SheetLayout(header = { TitleHeader(title = entry.packageName) }) {
+  SheetLayout(
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = entry.packageName,
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    }
+  ) {
     entry.paragraphs.forEach { paragraph ->
       Text(
         text = paragraph,

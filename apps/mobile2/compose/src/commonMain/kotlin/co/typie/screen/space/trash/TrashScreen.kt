@@ -52,8 +52,8 @@ import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.close
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetActionRow
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetMenuActionRow
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -420,7 +420,7 @@ private fun TrashActionsContent(
   ) {
     Column(modifier = Modifier.fillMaxWidth().padding(MenuSheetActionContentPadding)) {
       actions.forEach { action ->
-        SheetMenuActionRow(
+        SheetActionRow(
           icon = action.icon,
           label = action.label,
           contentPadding = MenuSheetRowPadding,

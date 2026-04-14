@@ -74,9 +74,8 @@ import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.close
-import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheet
-import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
@@ -335,7 +334,19 @@ private fun SpaceDateDisplayContent(selected: SiteDateDisplay) {
   SheetLayout(
     padding = SpaceDateDisplaySheetPadding,
     verticalSpacing = 8.dp,
-    header = { ActionHeader(title = "글 목록에 표시할 날짜") },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = "글 목록에 표시할 날짜",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
   ) {
     SheetOptionList(items = spaceDateDisplayOptions()) { item ->
       SheetOptionRow(selected = item.value == selected, onClick = { complete(item.value) }) {
@@ -484,10 +495,21 @@ private fun DeleteSiteConfirmContent(
   val isConfirmed = documentCount == 0 || inputValue == confirmText
 
   SheetLayout(
-    bodyInsetPolicy = SheetInsetPolicy.Container,
     padding = SpaceDateDisplaySheetPadding,
     verticalSpacing = 12.dp,
-    header = { ActionHeader(title = "스페이스 삭제") },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = "스페이스 삭제",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
     footer = {
       Button(
         text = "삭제",

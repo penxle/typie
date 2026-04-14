@@ -29,6 +29,7 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
@@ -53,10 +54,10 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
-import co.typie.ui.component.sheet.TitleHeader
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
@@ -116,7 +117,19 @@ private fun LoginContent() {
   var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
 
   SheetLayout(
-    header = { TitleHeader(title = "로그인") },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = "로그인",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
     padding = SheetPadding(body = PaddingValues(vertical = 0.dp)),
   ) {
     AnimatedContent(

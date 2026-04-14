@@ -37,7 +37,6 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -73,9 +72,9 @@ import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
 import co.typie.ui.component.reorder.reorderableListContainer
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetBar
+import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.complete
@@ -725,21 +724,28 @@ private fun TextReplacementFormContent(
 
   SheetLayout(
     header = {
-      ActionHeader(
-        title = if (isEditing) "대치 규칙 수정" else "대치 규칙 추가",
+      SheetBar(
         leading = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "취소",
             color = AppTheme.colors.brand,
             enabled = !isSaving && !isDeleting,
             onClick = { dismiss() },
           )
         },
+        center = {
+          Text(
+            text = if (isEditing) "대치 규칙 수정" else "대치 규칙 추가",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        },
         trailing = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "저장",
             color = AppTheme.colors.brand,
-            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
             enabled = !isDeleting,
             loading = isSaving,
             onClick = { submit() },

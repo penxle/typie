@@ -89,10 +89,10 @@ fun SheetOptionRow(
 }
 
 @Composable
-fun SheetMenuActionRow(
+fun SheetActionRow(
   icon: IconData,
   label: String,
-  onClick: () -> Unit,
+  onClick: suspend () -> Unit,
   modifier: Modifier = Modifier,
   tint: Color? = null,
   trailingIcon: IconData? = null,
@@ -103,7 +103,7 @@ fun SheetMenuActionRow(
       modifier =
         modifier
           .fillMaxWidth()
-          .clickable { onClick() }
+          .clickable(onClick = onClick)
           .heightIn(min = 44.dp)
           .padding(contentPadding)
           .pressScale(),

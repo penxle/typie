@@ -42,8 +42,8 @@ import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
-import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
@@ -476,7 +476,19 @@ private fun SettingsThemeContent(themeMode: ThemeMode) {
   SheetLayout(
     padding = SettingsThemeSheetPadding,
     verticalSpacing = 8.dp,
-    header = { ActionHeader(title = "테마") },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = "테마",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
   ) {
     SheetOptionList(items = settingsThemeSelectionItems(themeMode)) { item ->
       SheetOptionRow(selected = item.selected, onClick = { complete(item.mode) }) {

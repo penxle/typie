@@ -35,7 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -49,9 +49,9 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.EntityIconColorOption
 import co.typie.ui.EntityIconOption
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.HeaderTextAction
-import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.Text
+import co.typie.ui.component.sheet.SheetBar
+import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
@@ -169,22 +169,28 @@ internal fun EntityIconPickerContent(
   SheetLayout(
     fillHeight = true,
     bodyScroll = false,
-    bodyInsetPolicy = SheetInsetPolicy.None,
     padding =
       SheetPadding(
         header = PaddingValues(horizontal = 16.dp),
         body = PaddingValues(horizontal = 16.dp),
       ),
     header = {
-      ActionHeader(
-        title = "아이콘 변경",
+      SheetBar(
         leading = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "완료",
             color = AppTheme.colors.brand,
-            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
             enabled = !isUpdating,
             onClick = { dismiss() },
+          )
+        },
+        center = {
+          Text(
+            text = "아이콘 변경",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
           )
         },
       )

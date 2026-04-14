@@ -10,7 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.form.FormState
 import co.typie.graphql.type.EntityVisibility
@@ -35,11 +35,12 @@ import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.SelectField
 import co.typie.ui.component.SelectFieldItem
+import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.HeaderTextAction
+import co.typie.ui.component.sheet.SheetBar
+import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -289,15 +290,22 @@ internal fun FolderShareContent(
 
   SheetLayout(
     header = {
-      ActionHeader(
-        title = resolveEntityShareTitle(EntityShareKind.Folder, folders.size),
+      SheetBar(
         leading = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "완료",
             color = AppTheme.colors.brand,
-            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
             enabled = !isBusy,
             onClick = { dismiss() },
+          )
+        },
+        center = {
+          Text(
+            text = resolveEntityShareTitle(EntityShareKind.Folder, folders.size),
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
           )
         },
       )

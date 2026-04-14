@@ -10,12 +10,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.Text
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -25,8 +25,19 @@ import co.typie.ui.theme.AppTheme
 context(_: SheetScope<Unit>)
 fun SubscriptionCelebrationContent(title: String, message: String) {
   SheetLayout(
-    bodyInsetPolicy = SheetInsetPolicy.Container,
-    header = { ActionHeader(title = title) },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = title,
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
     footer = { Button(text = "시작하기", onClick = { dismiss() }) },
   ) {
     SubscriptionBadgeRow()

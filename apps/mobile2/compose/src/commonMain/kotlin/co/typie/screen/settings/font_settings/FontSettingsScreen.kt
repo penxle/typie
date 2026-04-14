@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
@@ -48,9 +49,8 @@ import co.typie.ui.component.dialog.alert
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
 import co.typie.ui.component.familySpecimenFallbacks
-import co.typie.ui.component.sheet.ActionHeader
 import co.typie.ui.component.sheet.LocalSheet
-import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -230,8 +230,19 @@ private fun FontUploadContent(
     }
 
   SheetLayout(
-    bodyInsetPolicy = SheetInsetPolicy.Container,
-    header = { ActionHeader(title = "폰트 업로드하기") },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = "폰트 업로드하기",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
     footer = {
       Button(
         text = "폰트 파일 선택",

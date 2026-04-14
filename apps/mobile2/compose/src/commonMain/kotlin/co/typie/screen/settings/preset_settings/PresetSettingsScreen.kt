@@ -67,9 +67,9 @@ import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.close
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.HeaderTextAction
 import co.typie.ui.component.sheet.LocalSheet
+import co.typie.ui.component.sheet.SheetBar
+import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
@@ -1073,21 +1073,28 @@ private fun <R> PresetSheetLayout(
     padding = PresetSheetPadding,
     verticalSpacing = 8.dp,
     header = {
-      ActionHeader(
-        title = title,
+      SheetBar(
         leading = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "취소",
             color = AppTheme.colors.brand,
             enabled = !isSaving,
             onClick = { dismiss() },
           )
         },
+        center = {
+          Text(
+            text = title,
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        },
         trailing = {
-          HeaderTextAction(
+          SheetBarTextButton(
             text = "저장",
             color = AppTheme.colors.brand,
-            textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
             enabled = saveEnabled,
             loading = isSaving,
             onClick = onSave,
@@ -1109,7 +1116,19 @@ private fun <R> PresetInstantSheetLayout(
   SheetLayout(
     padding = PresetSheetPadding,
     verticalSpacing = 8.dp,
-    header = { ActionHeader(title = title) },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = title,
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
   }

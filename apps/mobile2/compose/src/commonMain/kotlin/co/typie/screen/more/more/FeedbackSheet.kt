@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import co.typie.ext.InteractionScope
@@ -34,8 +35,7 @@ import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextArea
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.SheetInsetPolicy
+import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -135,8 +135,19 @@ fun FeedbackContent() {
   }
 
   SheetLayout(
-    bodyInsetPolicy = SheetInsetPolicy.Container,
-    header = { ActionHeader(title = "의견 보내기") },
+    header = {
+      SheetBar(
+        center = {
+          Text(
+            text = "의견 보내기",
+            style = AppTheme.typography.title,
+            color = AppTheme.colors.textPrimary,
+            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+          )
+        }
+      )
+    },
     footer = {
       Button(
         text = "보내기",

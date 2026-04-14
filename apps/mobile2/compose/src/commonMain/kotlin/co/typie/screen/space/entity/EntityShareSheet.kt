@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.graphql.QueryState
@@ -17,8 +17,8 @@ import co.typie.screen.space.folder.FolderShareContent
 import co.typie.screen.space.folder.FolderShareTarget
 import co.typie.ui.component.Divider
 import co.typie.ui.component.Text
-import co.typie.ui.component.sheet.ActionHeader
-import co.typie.ui.component.sheet.HeaderTextAction
+import co.typie.ui.component.sheet.SheetBar
+import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
@@ -127,14 +127,17 @@ private fun EntityShareStatusContent(message: String) {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        ActionHeader(
-          title = "공유하기",
+        SheetBar(
           leading = {
-            HeaderTextAction(
-              text = "완료",
-              color = AppTheme.colors.brand,
-              textStyle = AppTheme.typography.action.copy(fontWeight = FontWeight.W700),
-              onClick = { dismiss() },
+            SheetBarTextButton(text = "완료", color = AppTheme.colors.brand, onClick = { dismiss() })
+          },
+          center = {
+            Text(
+              text = "공유하기",
+              style = AppTheme.typography.title,
+              color = AppTheme.colors.textPrimary,
+              overflow = TextOverflow.Ellipsis,
+              maxLines = 1,
             )
           },
         )

@@ -15,8 +15,8 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Divider
 import co.typie.ui.component.Text
 import co.typie.ui.component.entity_container.EntityContainerSelectionSummary
+import co.typie.ui.component.sheet.SheetActionRow
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetMenuActionRow
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
@@ -86,7 +86,7 @@ internal fun EntitySelectionActionsContent(
     },
   ) {
     Column(modifier = Modifier.fillMaxWidth().padding(SelectionSheetActionContentPadding)) {
-      SheetMenuActionRow(
+      SheetActionRow(
         icon = Lucide.Palette,
         label = "아이콘 변경",
         contentPadding = SelectionSheetRowPadding,
@@ -97,7 +97,7 @@ internal fun EntitySelectionActionsContent(
       )
 
       if (summary.folderItems.isNotEmpty()) {
-        SheetMenuActionRow(
+        SheetActionRow(
           icon = Lucide.Blend,
           label = "폴더 ${summary.folderItems.size}개 공유 및 게시",
           contentPadding = SelectionSheetRowPadding,
@@ -109,7 +109,7 @@ internal fun EntitySelectionActionsContent(
       }
 
       if (summary.documentItems.isNotEmpty()) {
-        SheetMenuActionRow(
+        SheetActionRow(
           icon = Lucide.Blend,
           label = "문서 ${summary.documentItems.size}개 공유 및 게시",
           contentPadding = SelectionSheetRowPadding,
@@ -120,7 +120,7 @@ internal fun EntitySelectionActionsContent(
         )
       }
 
-      SheetMenuActionRow(
+      SheetActionRow(
         icon = Lucide.ClipboardCopy,
         label = "복사",
         contentPadding = SelectionSheetRowPadding,
@@ -130,7 +130,7 @@ internal fun EntitySelectionActionsContent(
         },
       )
 
-      SheetMenuActionRow(
+      SheetActionRow(
         icon = Lucide.Scissors,
         label = "잘라내기",
         contentPadding = SelectionSheetRowPadding,
@@ -140,7 +140,7 @@ internal fun EntitySelectionActionsContent(
         },
       )
 
-      SheetMenuActionRow(
+      SheetActionRow(
         icon = Lucide.Trash2,
         label = "삭제",
         contentPadding = SelectionSheetRowPadding,
