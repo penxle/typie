@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -43,6 +42,7 @@ import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 internal fun socialAccountProviderName(provider: SingleSignOnProvider): String {
@@ -196,9 +196,10 @@ private fun ProviderIconBadge(
     modifier =
       Modifier.size(28.dp)
         .then(
-          if (border != null) Modifier.border(1.dp, border, RoundedCornerShape(6.dp)) else Modifier
+          if (border != null) Modifier.border(1.dp, border, AppShapes.rounded(AppShapes.sm))
+          else Modifier
         )
-        .background(background, RoundedCornerShape(6.dp)),
+        .background(background, AppShapes.rounded(AppShapes.sm)),
     contentAlignment = Alignment.Center,
     content = content,
   )

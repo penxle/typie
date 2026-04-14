@@ -22,8 +22,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +59,7 @@ import co.typie.ui.entityIconColors
 import co.typie.ui.entityIcons
 import co.typie.ui.icon.Icon
 import co.typie.ui.resolveEntityIconTint
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -298,12 +297,12 @@ private fun IconColorChip(
       contentAlignment = Alignment.Center,
       modifier =
         Modifier.size(20.dp)
-          .clip(CircleShape)
-          .background(color.color, CircleShape)
+          .clip(AppShapes.circle)
+          .background(color.color, AppShapes.circle)
           .border(
             width = if (selected) 1.dp else 0.dp,
             color = if (selected) AppTheme.colors.borderStrong else Color.Transparent,
-            shape = CircleShape,
+            shape = AppShapes.circle,
           )
           .clickable(enabled = enabled) { onClick() }
           .pressScale(0.96f),
@@ -329,7 +328,7 @@ private fun IconGridCell(
       modifier =
         Modifier.fillMaxWidth()
           .aspectRatio(1f)
-          .clip(RoundedCornerShape(4.dp))
+          .clip(AppShapes.rounded(AppShapes.sm))
           .background(if (selected) AppTheme.colors.surfaceSunken else Color.Transparent)
           .clickable(enabled = enabled) { onSelect() }
           .pressScale(0.98f),
@@ -342,8 +341,8 @@ private fun IconGridCell(
             Modifier.align(Alignment.BottomCenter)
               .padding(bottom = EntityIconPickerSelectionDotBottomInset)
               .size(EntityIconPickerSelectionDotSize)
-              .clip(CircleShape)
-              .background(tint, CircleShape)
+              .clip(AppShapes.circle)
+              .background(tint, AppShapes.circle)
         )
       }
     }

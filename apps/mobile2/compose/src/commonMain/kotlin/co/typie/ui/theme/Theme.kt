@@ -208,4 +208,7 @@ object AppTheme {
 
   val typography: AppTypography
     get() = AppTypography
+
+  val shapes: AppShapes
+    get() = AppShapes
 }

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -56,6 +55,7 @@ import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.flow.collect
 
@@ -163,17 +163,17 @@ private fun BottomBarPill(
           Row(
             Modifier.fillMaxWidth()
               .height(BottomBarDefaults.PillHeight)
-              .dropShadow(CircleShape) {
+              .dropShadow(AppShapes.circle) {
                 color = colors.shadowAmbient
                 radius = 3f
               }
-              .dropShadow(CircleShape) {
+              .dropShadow(AppShapes.circle) {
                 color = colors.shadow
                 offset = Offset(0f, 4f)
                 radius = 16f
               }
-              .background(AppTheme.colors.surfaceRaised, CircleShape)
-              .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), CircleShape)
+              .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
+              .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
           ) {
             Tab.entries.forEach { tab ->
               val selected = tab == currentTab
@@ -190,7 +190,7 @@ private fun BottomBarPill(
                   Modifier.weight(1f)
                     .fillMaxHeight()
                     .padding(3.dp)
-                    .background(bgColor, CircleShape)
+                    .background(bgColor, AppShapes.circle)
                     .clickable { onSelectTab(tab) },
                 contentAlignment = Alignment.Center,
               ) {

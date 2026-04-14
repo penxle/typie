@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -30,6 +29,7 @@ import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.close
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 data class SelectFieldItem<T>(
@@ -125,8 +125,8 @@ private fun SelectFieldAnchor(item: SelectFieldDisplayItem, enabled: Boolean) {
     modifier =
       Modifier.heightIn(min = 38.dp)
         .alpha(if (enabled) 1f else 0.5f)
-        .background(AppTheme.colors.surfaceDefault, RoundedCornerShape(8.dp))
-        .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
+        .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
+        .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
         .padding(horizontal = 12.dp, vertical = 8.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(8.dp),

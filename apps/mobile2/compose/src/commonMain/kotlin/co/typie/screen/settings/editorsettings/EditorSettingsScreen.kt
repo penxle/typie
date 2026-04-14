@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -42,6 +41,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
@@ -197,13 +197,13 @@ private fun QuietSlider(
       modifier =
         Modifier.fillMaxWidth()
           .height(8.dp)
-          .background(colors.borderStrong.copy(alpha = 0.55f), CircleShape)
+          .background(colors.borderStrong.copy(alpha = 0.55f), AppShapes.circle)
     ) {
       Box(
         modifier =
           Modifier.fillMaxWidth(filledFraction)
             .height(8.dp)
-            .background(colors.brand.copy(alpha = 0.72f), CircleShape)
+            .background(colors.brand.copy(alpha = 0.72f), AppShapes.circle)
       )
     }
 
@@ -241,17 +241,17 @@ private fun QuietSlider(
       modifier =
         Modifier.offset(x = thumbOffset)
           .size(thumbSize)
-          .dropShadow(CircleShape) {
+          .dropShadow(AppShapes.circle) {
             color = colors.shadowAmbient
             radius = 4f
           }
-          .dropShadow(CircleShape) {
+          .dropShadow(AppShapes.circle) {
             color = colors.shadow
             radius = 8f
             offset = Offset(0f, 1f)
           }
-          .background(colors.surfaceRaised, CircleShape)
-          .border(1.dp, colors.borderDefault, CircleShape)
+          .background(colors.surfaceRaised, AppShapes.circle)
+          .border(1.dp, colors.borderDefault, AppShapes.circle)
     )
   }
 }

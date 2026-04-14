@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +27,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 internal const val SUPPORT_URL = "https://penxle.channel.io/home"
@@ -69,7 +68,8 @@ internal fun AppStateScaffold(
         Spacer(Modifier.height(28.dp))
 
         Box(
-          modifier = Modifier.size(56.dp).background(AppTheme.colors.surfaceSunken, CircleShape),
+          modifier =
+            Modifier.size(56.dp).background(AppTheme.colors.surfaceSunken, AppShapes.circle),
           contentAlignment = Alignment.Center,
         ) {
           Icon(icon = icon, modifier = Modifier.size(24.dp), tint = AppTheme.colors.textTertiary)
@@ -129,7 +129,7 @@ internal fun AppStateButton(action: AppStateAction) {
 internal fun AppStateBadge(text: String) {
   Box(
     modifier =
-      Modifier.background(AppTheme.colors.surfaceSunken, RoundedCornerShape(999.dp))
+      Modifier.background(AppTheme.colors.surfaceSunken, AppShapes.rounded(AppShapes.full))
         .padding(horizontal = 12.dp, vertical = 8.dp)
   ) {
     Text(

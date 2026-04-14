@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.form.FieldState
 import co.typie.ui.skeleton.LocalSkeleton
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -58,7 +58,7 @@ fun TextArea(
   maxLines: Int = 6,
   minHeight: Dp = 112.dp,
 ) {
-  val shape = RoundedCornerShape(12.dp)
+  val shape = AppShapes.rounded(AppShapes.md)
   var isFocused by remember { mutableStateOf(false) }
   val focusRequester = remember { FocusRequester() }
   val hasError = error != null

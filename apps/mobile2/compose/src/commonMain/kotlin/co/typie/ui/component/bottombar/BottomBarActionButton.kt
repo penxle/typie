@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -61,7 +60,7 @@ import co.typie.ui.component.popover.PopoverList
 import co.typie.ui.component.popover.PopoverListItem
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
-import co.typie.ui.shape.SquircleShape
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -199,12 +198,12 @@ fun BottomBarActionButton(
       ) {
         Box(
           modifier =
-            Modifier.dropShadow(SquircleShape(22.dp)) {
+            Modifier.dropShadow(AppShapes.squircle(AppShapes.xl)) {
                 color = colors.shadow.copy(alpha = 0.08f)
                 radius = 8f
               }
-              .background(AppTheme.colors.surfaceRaised, SquircleShape(22.dp))
-              .border(1.dp, AppTheme.colors.borderDefault, SquircleShape(22.dp))
+              .background(AppTheme.colors.surfaceRaised, AppShapes.squircle(AppShapes.xl))
+              .border(1.dp, AppTheme.colors.borderDefault, AppShapes.squircle(AppShapes.xl))
         ) {
           Column(modifier = Modifier.width(IntrinsicSize.Max).padding(6.dp)) {
             PopoverList(
@@ -249,17 +248,17 @@ fun BottomBarActionButton(
               scaleX = actionScale.value
               scaleY = actionScale.value
             }
-            .dropShadow(CircleShape) {
+            .dropShadow(AppShapes.circle) {
               color = colors.shadowAmbient
               radius = 3f
             }
-            .dropShadow(CircleShape) {
+            .dropShadow(AppShapes.circle) {
               color = colors.shadow
               offset = Offset(0f, 4f)
               radius = 16f
             }
-            .background(AppTheme.colors.surfaceRaised, CircleShape)
-            .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), CircleShape)
+            .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
+            .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
             .then(
               if (hasMenu) {
                 Modifier.pointerInput(icon, menus) {

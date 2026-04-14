@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
@@ -19,6 +18,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppColors
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 enum class AlertBannerVariant {
@@ -38,7 +38,7 @@ fun AlertBanner(
   icon: IconData? = defaultAlertBannerIcon(variant),
 ) {
   val colors = AppTheme.colors.alertBannerColors(variant)
-  val shape = RoundedCornerShape(12.dp)
+  val shape = AppShapes.rounded(AppShapes.md)
 
   Row(
     modifier =

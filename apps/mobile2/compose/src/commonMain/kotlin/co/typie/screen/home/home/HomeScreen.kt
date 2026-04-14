@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,6 +44,7 @@ import co.typie.route.Route
 import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPill
+import co.typie.storage.Preference.siteId
 import co.typie.ui.component.ResponsiveContainer
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
@@ -62,6 +62,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -69,12 +70,13 @@ import kotlinx.coroutines.launch
 fun HomeScreen() {
   val model = viewModel { HomeViewModel() }
   val createActionModel = viewModel(key = "home-create-actions") { EntityCreateViewModel() }
+
+  val scope = rememberCoroutineScope()
+  val scrollState = rememberScrollState()
+
   val nav = Nav.current
   val dialog = LocalDialog.current
   val toast = LocalToast.current
-  val presenterScope = rememberCoroutineScope()
-  val scrollState = rememberScrollState()
-  val siteId = model.siteId
 
   ProvideTopBar(
     leadingKey = SpacePopoverLeadingKey,
@@ -90,7 +92,7 @@ fun HomeScreen() {
         onClick = {
           if (createActionModel.isCreating) return@MainBottomBarActionButton
           val resolvedSiteId = siteId ?: return@MainBottomBarActionButton
-          presenterScope.launch {
+          scope.launch {
             createActionModel
               .createDocument(siteId = resolvedSiteId)
               .withDefaultExceptionHandler(toast)
@@ -220,7 +222,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
             Modifier.padding(horizontal = 16.dp)
               .fillMaxWidth()
               .height(110.dp)
-              .clip(RoundedCornerShape(12.dp))
+              .clip(AppShapes.rounded(AppShapes.md))
               .background(AppTheme.colors.surfaceDefault),
           contentAlignment = Alignment.Center,
         ) {
@@ -249,7 +251,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
             Column(
               modifier =
                 Modifier.width(140.dp)
-                  .clip(RoundedCornerShape(12.dp))
+                  .clip(AppShapes.rounded(AppShapes.md))
                   .background(AppTheme.colors.surfaceDefault)
                   .clickable { nav.navigate(Route.Folder(folder.entity.id)) }
                   .pressScale()
@@ -302,7 +304,7 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
           Modifier.padding(horizontal = 16.dp)
             .fillMaxWidth()
             .height(110.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppShapes.rounded(AppShapes.md))
             .background(AppTheme.colors.surfaceDefault),
         contentAlignment = Alignment.Center,
       ) {
@@ -316,7 +318,7 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
       Column(
         modifier =
           Modifier.padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppShapes.rounded(AppShapes.md))
             .background(AppTheme.colors.surfaceDefault)
       ) {
         documents.separated(

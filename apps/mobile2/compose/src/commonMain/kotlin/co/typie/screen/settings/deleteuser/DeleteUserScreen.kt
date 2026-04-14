@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +40,7 @@ import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -144,16 +144,16 @@ private fun DeleteUserAcknowledgeRow(checked: Boolean, onToggle: () -> Unit) {
       Box(
         modifier =
           Modifier.size(20.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(AppShapes.rounded(AppShapes.sm))
             .background(
               if (checked) AppTheme.colors.brand else AppTheme.colors.surfaceTinted,
-              RoundedCornerShape(6.dp),
+              AppShapes.rounded(AppShapes.sm),
             )
             .border(
               1.dp,
               if (checked) AppTheme.colors.brand.copy(alpha = 0.72f)
               else AppTheme.colors.borderDefault,
-              RoundedCornerShape(6.dp),
+              AppShapes.rounded(AppShapes.sm),
             ),
         contentAlignment = Alignment.Center,
       ) {

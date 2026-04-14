@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,10 +23,11 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 object CardDefaults {
-  val Shape: Shape = RoundedCornerShape(12.dp)
+  val Shape: Shape = AppShapes.rounded(AppShapes.md)
   val RowPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
   val TilePadding: PaddingValues = PaddingValues(16.dp)
   val TileMinHeight: Dp = 108.dp

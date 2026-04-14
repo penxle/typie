@@ -1,6 +1,5 @@
 package co.typie.ui.component.topbar
 
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -8,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeProgressive
 
@@ -27,7 +27,7 @@ object TopBarDefaults {
   val VisibilityAnimationDuration: Int = 200
   val VisibilityFadeDuration: Int = 150
 
-  val ButtonShape: Shape = CircleShape
+  val ButtonShape: Shape = AppShapes.circle
   val ButtonSize: Dp = SlotWidth
   val ButtonIconSize: Dp = 18.dp
 
@@ -44,7 +44,7 @@ object TopBarDefaults {
   @Composable fun controlBorderColor(): Color = AppTheme.colors.borderStrong
 
   @Composable
-  fun controlShadowModifier(shape: Shape = CircleShape): Modifier =
+  fun controlShadowModifier(shape: Shape = AppShapes.circle): Modifier =
     Modifier.shadow(
       elevation = 4.dp,
       shape = shape,

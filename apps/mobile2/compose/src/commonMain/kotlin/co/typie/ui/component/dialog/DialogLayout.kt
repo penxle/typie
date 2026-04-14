@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
 import co.typie.ui.component.Text
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -29,7 +29,8 @@ internal fun DialogLayout(
   actions: @Composable RowScope.() -> Unit,
 ) {
   Column(
-    modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(AppTheme.colors.surfaceRaised),
+    modifier =
+      Modifier.clip(AppShapes.rounded(AppShapes.lg)).background(AppTheme.colors.surfaceRaised),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Column(

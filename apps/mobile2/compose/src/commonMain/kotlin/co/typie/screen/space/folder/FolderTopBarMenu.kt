@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -60,7 +59,7 @@ import co.typie.ui.component.popover.close
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.resolveEntityIconAppearance
-import co.typie.ui.shape.SquircleShape
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -171,7 +170,7 @@ internal fun FolderTopBarCapsule(
   iconColor: String?,
   modifier: Modifier = Modifier,
 ) {
-  val shape = SquircleShape(FolderTopBarCollapsedRadius)
+  val shape = AppShapes.squircle(FolderTopBarCollapsedRadius)
   val entityIcon =
     resolveEntityIconAppearance(
       iconName = iconName,
@@ -387,8 +386,8 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
         contentAlignment = Alignment.Center,
         modifier =
           Modifier.size(24.dp)
-            .then(TopBarDefaults.controlShadowModifier(CircleShape))
-            .background(TopBarDefaults.controlBackgroundColor(), CircleShape),
+            .then(TopBarDefaults.controlShadowModifier(AppShapes.circle))
+            .background(TopBarDefaults.controlBackgroundColor(), AppShapes.circle),
       ) {
         Icon(icon = Lucide.X, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textPrimary)
       }

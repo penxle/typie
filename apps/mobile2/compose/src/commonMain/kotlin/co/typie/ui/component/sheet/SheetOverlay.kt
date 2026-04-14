@@ -40,13 +40,13 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.ext.clickable
 import co.typie.navigation.PlatformBackHandler
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 private const val ANCHOR_HIDDEN = -1
-private const val SHEET_CORNER_RADIUS = 22
 private val SheetAnimationSpec = spring<Float>(stiffness = 500f)
 
 @Composable
@@ -208,9 +208,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
             if (isIntrinsic) Modifier.onSizeChanged { contentHeightPx = it.height.toFloat() }
             else Modifier
           )
-          .clip(
-            RoundedCornerShape(topStart = SHEET_CORNER_RADIUS.dp, topEnd = SHEET_CORNER_RADIUS.dp)
-          )
+          .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
           .background(AppTheme.colors.surfaceRaised)
     ) {
       SheetHandle()
@@ -236,7 +234,7 @@ private fun SheetHandle() {
     Box(
       modifier =
         Modifier.size(width = HandleWidth, height = HandleHeight)
-          .clip(RoundedCornerShape(HandleHeight / 2))
+          .clip(AppShapes.rounded(AppShapes.sm))
           .background(AppTheme.colors.borderSubtle)
     )
   }

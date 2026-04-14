@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -59,6 +58,7 @@ import co.typie.form.FieldState
 import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.LocalSkeleton
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 enum class LabelPosition {
@@ -229,7 +229,7 @@ fun TextField(
   leadingIcon: @Composable (() -> Unit)? = null,
   suffix: @Composable (() -> Unit)? = null,
 ) {
-  val shape = RoundedCornerShape(12.dp)
+  val shape = AppShapes.rounded(AppShapes.md)
   var isFocused by remember { mutableStateOf(false) }
   val focusRequester = remember { FocusRequester() }
 

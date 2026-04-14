@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,9 +67,9 @@ import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
-import co.typie.ui.shape.SquircleShape
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -180,8 +179,8 @@ fun SpacePopover() {
 
 @Composable
 fun SpacePopoverSkeleton() {
-  val outerShape = SquircleShape(14.dp)
-  val logoShape = RoundedCornerShape(6.dp)
+  val outerShape = AppShapes.squircle(AppShapes.lg)
+  val logoShape = AppShapes.rounded(AppShapes.sm)
 
   Box(
     contentAlignment = Alignment.Center,
@@ -198,8 +197,8 @@ fun SpacePopoverSkeleton() {
 
 @Composable
 private fun SpacePopoverAnchor(site: SpacePopover_Query.Site) {
-  val outerShape = SquircleShape(14.dp)
-  val logoShape = RoundedCornerShape(6.dp)
+  val outerShape = AppShapes.squircle(AppShapes.lg)
+  val logoShape = AppShapes.rounded(AppShapes.sm)
 
   Box(
     contentAlignment = Alignment.Center,
@@ -407,7 +406,7 @@ private fun SpacePopoverHeader(site: SpacePopover_Query.Site) {
 
 @Composable
 private fun SpacePopoverLogo(logo: Img_image, size: Dp) {
-  val logoShape = RoundedCornerShape(6.dp)
+  val logoShape = AppShapes.rounded(AppShapes.sm)
 
   Img(image = logo, modifier = Modifier.size(size).clip(logoShape))
 }

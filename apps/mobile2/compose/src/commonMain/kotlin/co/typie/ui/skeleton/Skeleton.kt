@@ -8,7 +8,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -24,8 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.unit.dp
 import co.typie.ext.pointerIgnore
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 data class SkeletonColors(val bone: Color, val highlight: Color)
@@ -144,7 +143,7 @@ object Skeleton {
   @Composable
   fun Bone(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(4.dp),
+    shape: Shape = AppShapes.rounded(AppShapes.sm),
     content: @Composable () -> Unit,
   ) {
     val skeleton = LocalSkeleton.current
@@ -176,7 +175,7 @@ object Skeleton {
   }
 
   @Composable
-  fun Unite(shape: Shape = RoundedCornerShape(4.dp), content: @Composable () -> Unit) {
+  fun Unite(shape: Shape = AppShapes.rounded(AppShapes.sm), content: @Composable () -> Unit) {
     val skeleton = LocalSkeleton.current
     if (!skeleton.enabled) {
       content()

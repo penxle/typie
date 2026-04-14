@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +40,7 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CancellationException
@@ -221,11 +221,11 @@ private fun FeedbackTopicChip(label: String, selected: Boolean, onClick: suspend
         Modifier.border(
             width = 1.dp,
             color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
-            shape = CircleShape,
+            shape = AppShapes.circle,
           )
           .background(
             color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceBase,
-            shape = CircleShape,
+            shape = AppShapes.circle,
           )
           .clickable(onClick)
           .padding(horizontal = 12.dp, vertical = 9.dp)
@@ -250,11 +250,11 @@ private fun FeedbackMoodButton(icon: IconData, selected: Boolean, onClick: suspe
           .border(
             width = 1.dp,
             color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
-            shape = CircleShape,
+            shape = AppShapes.circle,
           )
           .background(
             color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceDefault,
-            shape = CircleShape,
+            shape = AppShapes.circle,
           )
           .clickable(onClick)
           .pressScale(),

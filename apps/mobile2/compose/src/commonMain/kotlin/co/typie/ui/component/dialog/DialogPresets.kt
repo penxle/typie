@@ -3,13 +3,13 @@ package co.typie.ui.component.dialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import co.typie.icons.Typie
 import co.typie.navigation.Navigator
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 suspend fun Dialog.alert(
@@ -58,7 +58,8 @@ suspend fun Dialog.error(nav: Navigator, onRetry: () -> Unit) {
       message = "잠시 후 다시 시도해주세요.",
       icon = {
         Box(
-          modifier = Modifier.size(48.dp).background(AppTheme.colors.dangerSubtle, CircleShape),
+          modifier =
+            Modifier.size(48.dp).background(AppTheme.colors.dangerSubtle, AppShapes.circle),
           contentAlignment = Alignment.Center,
         ) {
           Icon(

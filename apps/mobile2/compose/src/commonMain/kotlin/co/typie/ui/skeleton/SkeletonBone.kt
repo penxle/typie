@@ -2,7 +2,6 @@ package co.typie.ui.skeleton
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,9 +25,10 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import co.typie.ui.theme.AppShapes
 
 @Composable
-fun SkeletonBone(modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(4.dp)) {
+fun SkeletonBone(modifier: Modifier = Modifier, shape: Shape = AppShapes.rounded(AppShapes.sm)) {
   val skeleton = LocalSkeleton.current
   val uniteGroup = LocalSkeletonUnite.current
 

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,6 +43,7 @@ import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
@@ -142,15 +142,15 @@ private fun ProfileAvatar(image: Img_image, previewUrl: String?, onClick: () -> 
       Box(
         modifier =
           Modifier.size(104.dp)
-            .clip(CircleShape)
+            .clip(AppShapes.circle)
             .background(AppTheme.colors.surfaceDefault)
-            .border(1.dp, AppTheme.colors.borderDefault, CircleShape),
+            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         if (previewUrl != null) {
-          Img(url = previewUrl, modifier = Modifier.size(104.dp).clip(CircleShape))
+          Img(url = previewUrl, modifier = Modifier.size(104.dp).clip(AppShapes.circle))
         } else {
-          Img(image = image, modifier = Modifier.size(104.dp).clip(CircleShape))
+          Img(image = image, modifier = Modifier.size(104.dp).clip(AppShapes.circle))
         }
       }
 
@@ -158,9 +158,9 @@ private fun ProfileAvatar(image: Img_image, previewUrl: String?, onClick: () -> 
         modifier =
           Modifier.align(Alignment.BottomEnd)
             .size(36.dp)
-            .clip(CircleShape)
+            .clip(AppShapes.circle)
             .background(AppTheme.colors.surfaceRaised)
-            .border(1.dp, AppTheme.colors.borderDefault, CircleShape),
+            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         Icon(

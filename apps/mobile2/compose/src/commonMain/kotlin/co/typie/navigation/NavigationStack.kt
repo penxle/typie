@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -44,6 +43,7 @@ import co.typie.ui.component.topbar.LocalTopBarAnimationSource
 import co.typie.ui.component.topbar.LocalTopBarState
 import co.typie.ui.component.topbar.NavDirection
 import co.typie.ui.component.topbar.TopBarState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -313,7 +313,7 @@ fun NavigationStack(
                 }
               shadowElevation = 12.dp.toPx()
               shape =
-                RoundedCornerShape(
+                AppShapes.rounded(
                   cornerRadius(
                     when (animState) {
                       AnimState.Push -> p
@@ -392,7 +392,7 @@ fun NavigationStack(
 }
 
 private fun cornerRadius(progress: Float): Dp {
-  val maxRadius = 24.dp
+  val maxRadius = AppShapes.xl
   val factor =
     when {
       progress < 0.95f -> 1f

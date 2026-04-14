@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -58,6 +57,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.io.encoding.Base64
 import kotlin.math.max
@@ -400,7 +400,7 @@ private fun WeekdayCard(
               modifier =
                 Modifier.fillMaxWidth()
                   .height(barHeight.dp)
-                  .clip(RoundedCornerShape(3.dp))
+                  .clip(AppShapes.rounded(AppShapes.sm))
                   .background(
                     if (isBest) AppTheme.colors.textPrimary else AppTheme.colors.borderStrong
                   )
@@ -424,9 +424,9 @@ private fun WeekdayCard(
 private fun StatsActionButton(label: String) {
   Box(
     modifier =
-      Modifier.clip(RoundedCornerShape(8.dp))
+      Modifier.clip(AppShapes.rounded(AppShapes.md))
         .background(AppTheme.colors.surfaceDefault)
-        .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
+        .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
         .padding(horizontal = 12.dp, vertical = 7.dp)
   ) {
     Text(label, style = AppTheme.typography.action, color = AppTheme.colors.textSecondary)

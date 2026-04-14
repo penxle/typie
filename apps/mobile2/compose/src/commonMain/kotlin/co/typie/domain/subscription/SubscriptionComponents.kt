@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +18,7 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 data class SubscriptionFeature(val icon: IconData, val label: String)
@@ -78,7 +78,8 @@ private fun CelebrationBadge(icon: IconData) {
   val iconTint = AppTheme.colors.surfaceDefault
 
   Box(
-    modifier = Modifier.size(32.dp).clip(CircleShape).border(2.dp, borderColor, CircleShape),
+    modifier =
+      Modifier.size(32.dp).clip(AppShapes.circle).border(2.dp, borderColor, AppShapes.circle),
     contentAlignment = Alignment.Center,
   ) {
     Canvas(modifier = Modifier.matchParentSize()) { drawCircle(color = backgroundColor) }

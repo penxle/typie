@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -31,6 +30,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 internal fun resolveSettingSwitchNextChecked(checked: Boolean, indeterminate: Boolean): Boolean {
@@ -75,7 +75,7 @@ fun SettingSwitch(
         modifier
           .size(width = 46.dp, height = 28.dp)
           .alpha(if (enabled) 1f else 0.5f)
-          .clip(RoundedCornerShape(16.dp))
+          .clip(AppShapes.rounded(AppShapes.lg))
           .then(
             if (enabled) {
               Modifier.foundationClickable(
@@ -93,8 +93,8 @@ fun SettingSwitch(
             }
           )
           .pressScale(0.97f)
-          .background(trackColor.value, RoundedCornerShape(16.dp))
-          .border(1.dp, borderColor.value, RoundedCornerShape(16.dp))
+          .background(trackColor.value, AppShapes.rounded(AppShapes.lg))
+          .border(1.dp, borderColor.value, AppShapes.rounded(AppShapes.lg))
           .padding(PaddingValues(3.dp)),
       contentAlignment = Alignment.CenterStart,
     ) {
@@ -103,7 +103,7 @@ fun SettingSwitch(
           modifier =
             Modifier.fillMaxHeight()
               .fillMaxWidth(0.5f)
-              .clip(RoundedCornerShape(topStart = 13.dp, bottomStart = 13.dp))
+              .clip(RoundedCornerShape(topStart = AppShapes.lg, bottomStart = AppShapes.lg))
               .background(colors.brandSubtle)
               .align(Alignment.CenterStart)
         )
@@ -113,16 +113,16 @@ fun SettingSwitch(
         modifier =
           Modifier.offset(x = thumbOffset.value)
             .size(22.dp)
-            .dropShadow(CircleShape) {
+            .dropShadow(AppShapes.circle) {
               color = colors.shadowAmbient
               radius = 4f
             }
-            .dropShadow(CircleShape) {
+            .dropShadow(AppShapes.circle) {
               color = colors.shadow
               offset = Offset(0f, 2f)
               radius = 8f
             }
-            .background(colors.surfaceRaised, CircleShape),
+            .background(colors.surfaceRaised, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         if (indeterminate) {

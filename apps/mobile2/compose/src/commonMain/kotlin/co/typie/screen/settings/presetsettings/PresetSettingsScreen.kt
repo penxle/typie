@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,6 +85,7 @@ import co.typie.ui.component.weightSpecimenFallbacks
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppColor
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
@@ -1149,8 +1148,8 @@ private enum class PresetColorSwatchShape {
 private fun PresetColorSwatch(color: Color?, isNone: Boolean, shape: PresetColorSwatchShape) {
   val resolvedShape =
     when (shape) {
-      PresetColorSwatchShape.Circle -> CircleShape
-      PresetColorSwatchShape.Square -> RoundedCornerShape(4.dp)
+      PresetColorSwatchShape.Circle -> AppShapes.circle
+      PresetColorSwatchShape.Square -> AppShapes.rounded(AppShapes.sm)
     }
   val slashColor = AppTheme.colors.textMuted
 

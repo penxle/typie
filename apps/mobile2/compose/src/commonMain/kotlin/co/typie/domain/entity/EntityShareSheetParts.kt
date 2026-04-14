@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -37,6 +36,7 @@ import co.typie.ui.component.Img
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 private const val SHARE_THUMBNAIL_WIDTH_DP = 64
@@ -114,7 +114,7 @@ private fun ShareThumbnailUploadButton(
   enabled: Boolean,
   onClick: () -> Unit,
 ) {
-  val shape = RoundedCornerShape(6.dp)
+  val shape = AppShapes.rounded(AppShapes.sm)
 
   InteractionScope {
     Box(

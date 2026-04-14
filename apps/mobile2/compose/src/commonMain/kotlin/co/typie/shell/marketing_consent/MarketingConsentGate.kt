@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +46,7 @@ import co.typie.ui.component.dialog.resolve
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -117,9 +116,9 @@ private fun MarketingConsentContent(onConsent: suspend (Boolean) -> Unit) {
 
   Column(
     modifier =
-      Modifier.clip(RoundedCornerShape(24.dp))
+      Modifier.clip(AppShapes.rounded(AppShapes.xl))
         .background(AppTheme.colors.surfaceRaised)
-        .border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(24.dp))
+        .border(1.dp, AppTheme.colors.borderSubtle, AppShapes.rounded(AppShapes.xl))
         .padding(24.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
@@ -178,9 +177,9 @@ private fun MarketingConsentIconCluster() {
         modifier =
           Modifier.offset(x = (index * 22).dp)
             .size(32.dp)
-            .clip(CircleShape)
+            .clip(AppShapes.circle)
             .background(AppTheme.colors.surfaceTinted)
-            .border(2.dp, AppTheme.colors.surfaceRaised, CircleShape),
+            .border(2.dp, AppTheme.colors.surfaceRaised, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         Icon(icon = icon, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textPrimary)

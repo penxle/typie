@@ -33,8 +33,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +57,7 @@ import co.typie.icons.Typie
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppColor
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
 import co.typie.ui.theme.ThemeMode
@@ -167,7 +166,7 @@ private fun AnimatedToast(
         Modifier.offset(y = -bottomOffset)
           .padding(horizontal = 16.dp)
           .fillMaxWidth()
-          .clip(RoundedCornerShape(16.dp))
+          .clip(AppShapes.rounded(AppShapes.lg))
           .hazeEffect(LocalHazeState.current)
           .background(toastSurface.copy(alpha = .6f))
           .padding(horizontal = 24.dp, vertical = 16.dp)
@@ -186,7 +185,7 @@ private fun AnimatedToast(
                         ToastType.Error -> AppTheme.colors.danger
                         else -> AppTheme.colors.brand
                       },
-                      CircleShape,
+                      AppShapes.circle,
                     ),
                 contentAlignment = Alignment.Center,
               ) {

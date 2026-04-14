@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +47,7 @@ import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -177,7 +177,7 @@ fun PlanUpgradeSheet(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: String
     Column(
       modifier =
         Modifier.fillMaxWidth()
-          .border(1.dp, AppTheme.colors.borderStrong, RoundedCornerShape(8.dp))
+          .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
           .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

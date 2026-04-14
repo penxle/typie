@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,10 +37,11 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 private val EntityContainerBottomOverlayHorizontalPadding = 16.dp
-private val EntityContainerSelectionBarShape = RoundedCornerShape(999.dp)
+private val EntityContainerSelectionBarShape = AppShapes.rounded(AppShapes.full)
 
 @Composable
 private fun EntityContainerBottomOverlayAnimatedSlot(

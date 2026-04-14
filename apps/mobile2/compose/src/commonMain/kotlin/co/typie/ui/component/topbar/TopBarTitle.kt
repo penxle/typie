@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.sp
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
-import co.typie.ui.shape.SquircleShape
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 @Composable
@@ -32,7 +32,7 @@ fun TopBarTitle(
   icon: IconData? = null,
 ) {
   val hasSubtitle = !subtitle.isNullOrEmpty()
-  val shape = SquircleShape(999.dp)
+  val shape = AppShapes.squircle(AppShapes.full)
   val bg = TopBarDefaults.controlBackgroundColor()
   val borderColor = TopBarDefaults.controlBorderColor()
   val shadowMod = TopBarDefaults.controlShadowModifier(shape)

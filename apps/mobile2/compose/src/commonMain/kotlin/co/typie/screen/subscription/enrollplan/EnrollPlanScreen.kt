@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,6 +71,7 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -312,7 +312,7 @@ private fun FullAccessCard(
 private fun SubscriptionStatusBadgeChip(label: String) {
   Box(
     modifier =
-      Modifier.clip(RoundedCornerShape(6.dp))
+      Modifier.clip(AppShapes.rounded(AppShapes.sm))
         .background(AppTheme.colors.brandSubtle)
         .padding(horizontal = 8.dp, vertical = 4.dp),
     contentAlignment = Alignment.Center,
@@ -333,7 +333,7 @@ private fun SubscriptionPurchaseRow(
     Row(
       modifier =
         Modifier.fillMaxWidth()
-          .clip(RoundedCornerShape(10.dp))
+          .clip(AppShapes.rounded(AppShapes.md))
           .background(AppTheme.colors.surfaceSunken)
           .clickable {
             val currentProduct = product ?: return@clickable

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -19,19 +18,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 object HomeSearchFieldDefaults {
   val Height: Dp = 48.dp
   val HorizontalPadding: Dp = 16.dp
-  val CornerRadius: Dp = 12.dp
   val IconSize: Dp = 16.dp
   val IconGap: Dp = 10.dp
   val ClearIconGap: Dp = 8.dp
   val FocusedBorderWidth: Dp = 1.5.dp
   val UnfocusedBorderWidth: Dp = 1.dp
 
-  val Shape = RoundedCornerShape(CornerRadius)
+  val Shape = AppShapes.rounded(AppShapes.md)
 }
 
 internal fun resolveHomeSearchPlaceholder(spaceName: String?): String {

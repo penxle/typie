@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -34,13 +33,14 @@ import co.typie.ext.pressScale
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 object SheetBarDefaults {
   val SlotWidth: Dp = 44.dp
   val ButtonSize: Dp = SlotWidth
   val ButtonIconSize: Dp = 18.dp
-  val ButtonShape: Shape = CircleShape
+  val ButtonShape: Shape = AppShapes.circle
 
   @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceRaised
 

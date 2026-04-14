@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,9 +25,10 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
-private val EntityPasteBarShape = RoundedCornerShape(999.dp)
+private val EntityPasteBarShape = AppShapes.rounded(AppShapes.full)
 
 internal fun entityPasteBarToastBottomInset(baseInset: Dp): Dp =
   baseInset + EntityBottomOverlayDefaults.BarHeight

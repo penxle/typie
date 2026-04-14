@@ -86,6 +86,7 @@ import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -525,7 +526,7 @@ private fun TextReplacementRegexBadge() {
 private fun TextReplacementOrderBadge(order: Int) {
   Box(
     modifier =
-      Modifier.clip(RoundedCornerShape(4.dp))
+      Modifier.clip(AppShapes.rounded(AppShapes.sm))
         .background(AppTheme.colors.surfaceTinted)
         .padding(horizontal = 6.dp, vertical = 2.dp),
     contentAlignment = Alignment.Center,
@@ -635,7 +636,7 @@ private fun TextReplacementRuleToken(text: String, modifier: Modifier = Modifier
   Box(
     modifier =
       modifier
-        .clip(RoundedCornerShape(4.dp))
+        .clip(AppShapes.rounded(AppShapes.sm))
         .background(AppTheme.colors.surfaceTinted)
         .padding(horizontal = 6.dp, vertical = 2.dp)
   ) {
@@ -850,7 +851,7 @@ private fun TextReplacementRegexRow(
       modifier =
         modifier
           .fillMaxWidth()
-          .clip(RoundedCornerShape(12.dp))
+          .clip(AppShapes.rounded(AppShapes.md))
           .clickable(onClick)
           .pressScale()
           .padding(horizontal = 16.dp, vertical = 4.dp),

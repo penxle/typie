@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -55,6 +54,7 @@ import co.typie.ext.horizontalScroll
 import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppColor
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.resolveIsDarkTheme
 import kotlin.math.abs
@@ -680,7 +680,7 @@ private val BottomPadding = 8.dp
 private val GridContainerHeight = LabelHeight + 12.dp + CellGap + GridHeight + BottomPadding
 private val CellRadius = 2.dp
 private val SelectionStrokeWidth = 1.5.dp
-private val TooltipShape = RoundedCornerShape(6.dp)
+private val TooltipShape = AppShapes.rounded(AppShapes.sm)
 private const val TooltipMinXPx = 8f
 private const val TooltipHorizontalGapPx = 2f
 private const val TooltipVerticalAdjustPx = 2f

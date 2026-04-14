@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,6 +83,7 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
@@ -433,7 +432,7 @@ private fun MoreMenu(model: SpaceSettingsViewModel, dialog: Dialog) {
 
 @Composable
 private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit) {
-  val logoShape = RoundedCornerShape(14.dp)
+  val logoShape = AppShapes.squircle(AppShapes.lg)
 
   InteractionScope {
     Box(modifier = Modifier.clickable(onClick).pressScale()) {
@@ -456,9 +455,9 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
           Modifier.align(Alignment.BottomEnd)
             .offset(x = 6.dp, y = 6.dp)
             .size(36.dp)
-            .clip(CircleShape)
+            .clip(AppShapes.circle)
             .background(AppTheme.colors.surfaceRaised)
-            .border(1.dp, AppTheme.colors.borderDefault, CircleShape),
+            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         Icon(

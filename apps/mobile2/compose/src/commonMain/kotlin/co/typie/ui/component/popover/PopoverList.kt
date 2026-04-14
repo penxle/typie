@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import co.typie.ext.toDp
-import co.typie.ui.shape.SquircleShape
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,7 +166,7 @@ fun PopoverList(
           Modifier.offset { IntOffset(indicatorX.value.toInt(), indicatorY.value.toInt()) }
             .width(indicatorW.value.toDp(density))
             .height(indicatorH.value.toDp(density))
-            .background(AppTheme.colors.surfaceTinted, SquircleShape(itemRadius))
+            .background(AppTheme.colors.surfaceTinted, AppShapes.squircle(itemRadius))
       )
     }
 

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +53,7 @@ import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -279,7 +279,7 @@ private fun ReferralMetricCard(
   value: String,
   modifier: Modifier = Modifier,
 ) {
-  CardSurface(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+  CardSurface(modifier = modifier.fillMaxWidth(), shape = AppShapes.rounded(AppShapes.md)) {
     Column(
       modifier = Modifier.fillMaxWidth().padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -369,7 +369,7 @@ private fun ReferralBulletPoint(text: String) {
       modifier =
         Modifier.padding(top = 9.dp)
           .size(4.dp)
-          .background(color = AppTheme.colors.textTertiary, shape = CircleShape)
+          .background(color = AppTheme.colors.textTertiary, shape = AppShapes.circle)
     )
     Spacer(Modifier.size(8.dp))
     Text(

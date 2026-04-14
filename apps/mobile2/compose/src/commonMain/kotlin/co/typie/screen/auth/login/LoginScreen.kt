@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,12 +34,12 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.safeBottomPadding
+import co.typie.ext.thenIfNotNull
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
 import co.typie.platform.Platform
-import co.typie.platform.PlatformModule
+import co.typie.platform.PlatformModule.platform
 import co.typie.platform.activityContext
-import co.typie.result.DEFAULT_ERROR_MESSAGE
 import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
@@ -56,8 +55,8 @@ import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
-import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -152,11 +151,11 @@ private fun LoginSheet() {
 @Composable
 private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
   val model = viewModel { LoginSingleSignOnViewModel() }
-  val toast = LocalToast.current
-  val loader = LocalLoader.current
-  val platform = PlatformModule.platform
   val scope = rememberCoroutineScope()
   val activity = activityContext()
+
+  val toast = LocalToast.current
+  val loader = LocalLoader.current
 
   fun loginWith(provider: SingleSignOnProvider) {
     scope.launch {
@@ -175,7 +174,7 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
       SingleSignOnButton(
         text = "구글로 시작하기",
-        svgPath = "files/brands/google.svg",
+        svgUri = "files/brands/google.svg",
         foregroundColor = Color(0xFF000000),
         backgroundColor = Color(0xFFFFFFFF),
         borderColor = AppTheme.colors.borderDefault,
@@ -184,8 +183,8 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
 
       SingleSignOnButton(
         text = "카카오로 시작하기",
-        svgPath = "files/brands/kakao.svg",
-        iconTint = Color(0xFF000000),
+        svgUri = "files/brands/kakao.svg",
+        iconColor = Color(0xFF000000),
         foregroundColor = Color(0xFF000000),
         backgroundColor = Color(0xFFFEE500),
         onClick = { loginWith(SingleSignOnProvider.KAKAO) },
@@ -193,8 +192,8 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
 
       SingleSignOnButton(
         text = "네이버로 시작하기",
-        svgPath = "files/brands/naver.svg",
-        iconTint = Color(0xFFFFFFFF),
+        svgUri = "files/brands/naver.svg",
+        iconColor = Color(0xFFFFFFFF),
         foregroundColor = Color(0xFFFFFFFF),
         backgroundColor = Color(0xFF03C75A),
         onClick = { loginWith(SingleSignOnProvider.NAVER) },
@@ -203,8 +202,8 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
       if (platform != Platform.Android) {
         SingleSignOnButton(
           text = "애플로 시작하기",
-          svgPath = "files/brands/apple.svg",
-          iconTint = Color(0xFFFFFFFF),
+          svgUri = "files/brands/apple.svg",
+          iconColor = Color(0xFFFFFFFF),
           foregroundColor = Color(0xFFFFFFFF),
           backgroundColor = Color(0xFF000000),
           onClick = { loginWith(SingleSignOnProvider.APPLE) },
@@ -224,9 +223,9 @@ private fun LoginSSOContent(onEmailClick: () -> Unit, onSuccess: () -> Unit) {
 @Composable
 private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> Unit) {
   val model = viewModel { LoginWithEmailViewModel() }
-  val toast = LocalToast.current
   val scope = rememberCoroutineScope()
-  val form = model.state.form
+
+  val toast = LocalToast.current
 
   fun submit() {
     scope.launch {
@@ -240,10 +239,9 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
               LoginWithEmailError.ValidationFailed -> null
               LoginWithEmailError.InvalidCredentials -> "이메일 또는 비밀번호가 올바르지 않아요."
               LoginWithEmailError.PasswordNotSet -> "비밀번호가 설정되지 않았어요."
-              is LoginWithEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
             }
           if (message != null) {
-            toast.show(ToastType.Error, message)
+            toast.error(message)
           }
         }
     }
@@ -251,7 +249,7 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
 
   Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
     TextField(
-      field = form.email,
+      field = model.form.email,
       label = "이메일",
       placeholder = "me@example.com",
       contentType = ContentType.Username + ContentType.EmailAddress,
@@ -261,7 +259,7 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
     Spacer(Modifier.height(8.dp))
 
     TextField(
-      field = form.password,
+      field = model.form.password,
       label = "비밀번호",
       placeholder = "********",
       isPassword = true,
@@ -278,14 +276,13 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
       loadingText = "로그인 중...",
     )
 
+    Spacer(Modifier.height(16.dp))
+
     Text(
       "다른 방법으로 로그인",
       style = AppTheme.typography.caption,
       color = AppTheme.colors.textSecondary,
-      modifier =
-        Modifier.align(Alignment.CenterHorizontally).padding(vertical = 16.dp).clickable {
-          onSingleSignOnClick()
-        },
+      modifier = Modifier.align(Alignment.CenterHorizontally).clickable { onSingleSignOnClick() },
     )
   }
 }
@@ -293,28 +290,28 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
 @Composable
 private fun SingleSignOnButton(
   text: String,
-  svgPath: String,
+  svgUri: String,
   foregroundColor: Color,
   backgroundColor: Color,
   borderColor: Color? = null,
-  iconTint: Color? = null,
+  iconColor: Color? = null,
   onClick: () -> Unit = {},
 ) {
-  val shape = RoundedCornerShape(16.dp)
+  val shape = AppShapes.rounded(AppShapes.lg)
 
   InteractionScope {
     Box(
       modifier =
         Modifier.fillMaxWidth()
           .height(48.dp)
-          .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
+          .thenIfNotNull(borderColor) { Modifier.border(1.dp, it, shape) }
           .background(backgroundColor, shape)
           .clickable(onClick = onClick)
     ) {
       Img(
-        url = Res.getUri(svgPath),
+        url = Res.getUri(svgUri),
         modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp).size(20.dp),
-        color = iconTint,
+        color = iconColor,
       )
 
       Text(

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,6 +53,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -112,7 +112,10 @@ fun MoreScreen() {
           contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
           spacing = 16.dp,
         ) {
-          Img(image = data.me.avatar.img_image, modifier = Modifier.clip(CircleShape).size(72.dp))
+          Img(
+            image = data.me.avatar.img_image,
+            modifier = Modifier.clip(AppShapes.circle).size(72.dp),
+          )
 
           Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(

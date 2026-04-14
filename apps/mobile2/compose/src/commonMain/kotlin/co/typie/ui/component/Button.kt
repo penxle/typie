@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +36,7 @@ import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppColors
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 
@@ -82,7 +82,7 @@ fun Button(
 
   Skeleton.Bone(
     modifier = modifier.fillMaxWidth().height(48.dp),
-    shape = RoundedCornerShape(16.dp),
+    shape = AppShapes.rounded(AppShapes.lg),
   ) {
     InteractionScope {
       Box(
@@ -91,7 +91,7 @@ fun Button(
             .fillMaxWidth()
             .height(48.dp)
             .alpha(alpha)
-            .background(colors.background, RoundedCornerShape(16.dp))
+            .background(colors.background, AppShapes.rounded(AppShapes.lg))
             .clickable(enabled = interactive, onClick = onClick),
         contentAlignment = Alignment.Center,
       ) {

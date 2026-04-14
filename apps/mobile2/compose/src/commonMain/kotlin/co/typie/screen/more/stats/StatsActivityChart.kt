@@ -62,6 +62,7 @@ import co.typie.ui.component.resolveTooltipGestureAction
 import co.typie.ui.component.resolveTooltipTapGestureAction
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppColor
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.resolveIsDarkTheme
 import kotlin.math.ceil
@@ -679,7 +680,7 @@ fun StatsActivityChart(
             content = {
               Box(
                 modifier =
-                  Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                  Modifier.clip(AppShapes.rounded(AppShapes.sm))
                     .background(tooltipSurface)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
               ) {
@@ -805,7 +806,7 @@ private fun ChartLegendToggle(label: String, color: Color, selected: Boolean, on
       modifier =
         Modifier.width(12.dp)
           .height(12.dp)
-          .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+          .clip(AppShapes.rounded(AppShapes.sm))
           .background(if (selected) color else color.copy(alpha = 0.3f))
     )
     Spacer(Modifier.width(6.dp))

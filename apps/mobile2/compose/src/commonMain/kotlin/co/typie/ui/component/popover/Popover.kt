@@ -61,7 +61,7 @@ import co.typie.ext.toDp
 import co.typie.ext.toPx
 import co.typie.ext.verticalScroll
 import co.typie.navigation.PlatformBackHandler
-import co.typie.ui.shape.SquircleShape
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.max
 import kotlin.math.min
@@ -506,7 +506,7 @@ private fun PopoverPaneSurface(
       PopoverDefaults.ExpandedRadius.toPx(density),
       progress,
     )
-  val shape = SquircleShape(cornerRadius.toDp(density))
+  val shape = AppShapes.squircle(cornerRadius.toDp(density))
   val shadowElevation = (12f * progress).dp
 
   Box(
