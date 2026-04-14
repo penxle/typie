@@ -1,7 +1,7 @@
 package co.typie.graphql
 
-import co.typie.auth.AuthService
-import co.typie.auth.AuthState
+import co.typie.domain.auth.AuthService
+import co.typie.domain.auth.AuthState
 import com.apollographql.apollo.api.http.HttpRequest
 import com.apollographql.apollo.api.http.HttpResponse
 import com.apollographql.apollo.network.http.HttpInterceptor

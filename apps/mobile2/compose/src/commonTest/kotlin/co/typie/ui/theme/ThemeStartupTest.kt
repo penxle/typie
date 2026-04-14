@@ -1,6 +1,6 @@
 package co.typie.ui.theme
 
-import co.typie.bootstrap.BootstrapState
+import co.typie.domain.bootstrap.BootstrapState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

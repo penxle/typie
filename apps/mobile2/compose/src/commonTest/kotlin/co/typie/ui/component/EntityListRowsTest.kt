@@ -1,7 +1,7 @@
 package co.typie.ui.component
 
 import co.typie.domain.entity.toTransferSource
-import co.typie.entity_transfer.EntityTransferSource
+import co.typie.domain.entity_transfer.EntityTransferSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.blob.BlobService
+import co.typie.domain.blob.BlobService
 import co.typie.form.FormState
 import co.typie.form.ValidateOn
 import co.typie.form.maxLength

@@ -2,7 +2,7 @@ package co.typie.storage
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import co.typie.auth.AuthTokens
+import co.typie.domain.auth.AuthTokens
 import co.typie.platform.PlatformModule
 import eu.anifantakis.lib.ksafe.invoke
 

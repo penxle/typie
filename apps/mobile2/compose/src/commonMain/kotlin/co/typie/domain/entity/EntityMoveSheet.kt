@@ -36,7 +36,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.entity_transfer.EntityTransferSource
+import co.typie.domain.entity_transfer.EntityTransferSource
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.horizontalScroll

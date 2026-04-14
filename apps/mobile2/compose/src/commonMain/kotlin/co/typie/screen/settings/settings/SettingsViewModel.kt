@@ -2,7 +2,7 @@ package co.typie.screen.settings.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.auth.AuthService
+import co.typie.domain.auth.AuthService
 import co.typie.graphql.Apollo
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.SettingsScreen_Query

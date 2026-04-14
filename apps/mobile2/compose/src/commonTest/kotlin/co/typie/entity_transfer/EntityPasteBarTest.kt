@@ -1,6 +1,7 @@
 package co.typie.entity_transfer
 
 import androidx.compose.ui.unit.dp
+import co.typie.domain.entity_transfer.entityPasteBarToastBottomInset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

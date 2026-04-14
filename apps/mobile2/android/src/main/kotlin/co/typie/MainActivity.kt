@@ -7,8 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import co.typie.bootstrap.BootstrapService
-import co.typie.bootstrap.BootstrapState
+import co.typie.domain.bootstrap.BootstrapService
+import co.typie.domain.bootstrap.BootstrapState
 import co.typie.platform.PurchaseActivityHolder
 
 class MainActivity : ComponentActivity() {

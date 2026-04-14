@@ -5,10 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.auth.sso.AppleSingleSignOnProvider
-import co.typie.auth.sso.GoogleSingleSignOnProvider
-import co.typie.auth.sso.KakaoSingleSignOnProvider
-import co.typie.auth.sso.NaverSingleSignOnProvider
+import co.typie.domain.auth.sso.AppleSingleSignOnProvider
+import co.typie.domain.auth.sso.GoogleSingleSignOnProvider
+import co.typie.domain.auth.sso.KakaoSingleSignOnProvider
+import co.typie.domain.auth.sso.NaverSingleSignOnProvider
 import co.typie.form.FormState
 import co.typie.form.email
 import co.typie.graphql.Apollo

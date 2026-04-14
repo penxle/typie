@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.entity_transfer.EntityTransferSource
+import co.typie.domain.entity_transfer.EntityTransferSource
 import co.typie.graphql.Apollo
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
 import co.typie.graphql.EntityMoveSheet_Folder_Query

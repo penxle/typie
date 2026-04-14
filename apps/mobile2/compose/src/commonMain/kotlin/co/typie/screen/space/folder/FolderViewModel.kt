@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.blob.BlobService
+import co.typie.domain.blob.BlobService
 import co.typie.domain.entity.DocumentRenameSheetModel
 import co.typie.domain.entity.EntityIconPickerSheetModel
 import co.typie.domain.entity.FolderRenameSheetModel

@@ -7,8 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.editor.LocalEditorState
-import co.typie.editor.compose.EditorView
+import co.typie.domain.editor.LocalEditorState
+import co.typie.domain.editor.compose.EditorView
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarTitle

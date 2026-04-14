@@ -7,7 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import co.typie.entity_transfer.EntityTransferSource
+import co.typie.domain.entity_transfer.EntityTransferSource
 import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.EntityListItem
 

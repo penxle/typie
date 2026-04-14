@@ -22,7 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.auth.AuthService
+import co.typie.domain.auth.AuthService
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.result.onOk

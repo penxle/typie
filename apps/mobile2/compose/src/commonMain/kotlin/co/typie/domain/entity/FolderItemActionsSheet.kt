@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import co.typie.entity_transfer.EntityTransferSource
+import co.typie.domain.entity_transfer.EntityTransferSource
 import co.typie.icons.Lucide
 import co.typie.ui.component.Divider
 import co.typie.ui.component.EntityBreadcrumb

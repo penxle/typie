@@ -7,15 +7,14 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import co.typie.bootstrap.BootstrapService
-import co.typie.bootstrap.BootstrapState
+import co.typie.domain.bootstrap.BootstrapService
+import co.typie.domain.bootstrap.BootstrapState
 import co.typie.serialization.EnumSerializer
 import co.typie.storage.Preference
 import dev.chrisbanes.haze.HazeState

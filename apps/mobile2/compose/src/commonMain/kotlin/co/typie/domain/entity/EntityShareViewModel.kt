@@ -2,7 +2,7 @@ package co.typie.domain.entity
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.blob.BlobService
+import co.typie.domain.blob.BlobService
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentShare_PersistBlobAsImage_Mutation
 import co.typie.graphql.DocumentShare_UpdateDocumentsOption_Mutation

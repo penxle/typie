@@ -3,9 +3,9 @@ package co.typie.screen.system.maintenance
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalUriHandler
 import co.typie.datetime.format
+import co.typie.domain.preflight.PreflightService
+import co.typie.domain.preflight.PreflightState
 import co.typie.icons.Lucide
-import co.typie.preflight.PreflightService
-import co.typie.preflight.PreflightState
 import co.typie.screen.system.AppStateAction
 import co.typie.screen.system.AppStateBadge
 import co.typie.screen.system.AppStateScaffold

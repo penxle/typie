@@ -8,9 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import co.typie.domain.preflight.PreflightService
+import co.typie.domain.preflight.PreflightState
 import co.typie.icons.Lucide
-import co.typie.preflight.PreflightService
-import co.typie.preflight.PreflightState
 import co.typie.screen.system.AppStateAction
 import co.typie.screen.system.AppStateScaffold
 import co.typie.screen.system.AppStateVersionRow

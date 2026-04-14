@@ -1,0 +1,10 @@
+package co.typie.domain.auth.sso
+
+import co.typie.platform.ActivityContext
+
+actual class NaverSingleSignOnProvider : SingleSignOnAdapter {
+  context(activity: ActivityContext)
+  actual override suspend fun authenticate(): SingleSignOnCredential {
+    throw UnsupportedOperationException("Naver SSO is not supported on JVM")
+  }
+}

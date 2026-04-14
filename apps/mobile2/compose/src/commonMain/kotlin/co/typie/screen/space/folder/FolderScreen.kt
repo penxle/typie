@@ -38,12 +38,12 @@ import co.typie.domain.entity.FolderAction
 import co.typie.domain.entity.FolderItemActionsSheet
 import co.typie.domain.entity.FolderRenameSheet
 import co.typie.domain.entity.toTransferSource
-import co.typie.entity_transfer.EntityClipboardMode
-import co.typie.entity_transfer.EntityClipboardService
-import co.typie.entity_transfer.EntityPasteBar
-import co.typie.entity_transfer.EntityPasteTarget
-import co.typie.entity_transfer.EntityTransferSource
-import co.typie.entity_transfer.toMessage
+import co.typie.domain.entity_transfer.EntityClipboardMode
+import co.typie.domain.entity_transfer.EntityClipboardService
+import co.typie.domain.entity_transfer.EntityPasteBar
+import co.typie.domain.entity_transfer.EntityPasteTarget
+import co.typie.domain.entity_transfer.EntityTransferSource
+import co.typie.domain.entity_transfer.toMessage
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
@@ -91,6 +91,7 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+import kotlin.time.Duration
 import kotlinx.coroutines.launch
 
 @Composable
@@ -828,11 +829,7 @@ fun FolderScreen(entityId: String) {
                         .pasteInto(resolvedPasteTarget)
                         .collect(
                           onPending = { count ->
-                            toast.show(
-                              ToastType.Loading,
-                              "${count}개의 항목을 붙여넣는 중이에요",
-                              kotlin.time.Duration.ZERO,
-                            )
+                            toast.show(ToastType.Loading, "${count}개의 항목을 붙여넣는 중이에요", Duration.ZERO)
                           },
                           onSettled = { result ->
                             result

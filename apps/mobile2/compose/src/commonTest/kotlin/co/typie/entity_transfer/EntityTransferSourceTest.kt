@@ -1,5 +1,6 @@
 package co.typie.entity_transfer
 
+import co.typie.domain.entity_transfer.EntityTransferSource
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

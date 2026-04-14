@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import co.typie.blob.BlobService
+import co.typie.domain.blob.BlobService
 import co.typie.graphql.Apollo
 import co.typie.graphql.FontSettingsScreen_ArchiveFontFamily_Mutation
 import co.typie.graphql.FontSettingsScreen_ArchiveFont_Mutation
