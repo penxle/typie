@@ -23,10 +23,17 @@ import com.apollographql.apollo.api.Optional
 import io.ktor.client.request.invoke
 import kotlinx.coroutines.CoroutineScope
 
-class UpdatePasswordForm(scope: CoroutineScope) : FormState(scope) {
-  val currentPassword = field("")
+class UpdatePasswordForm(scope: CoroutineScope, private val hasPassword: () -> Boolean) :
+  FormState(scope) {
+  val currentPassword = field("") { onlyIf(hasPassword) { required("현재 비밀번호를 입력해주세요.") } }
   val newPassword = field("") { required("새 비밀번호를 입력해주세요.") }
   val confirmPassword = field("") { required("비밀번호 확인을 입력해주세요.") }
+
+  init {
+    validate {
+      check(confirmPassword, newPassword.value == confirmPassword.value) { "비밀번호가 일치하지 않아요." }
+    }
+  }
 }
 
 sealed interface UpdatePasswordError {
@@ -43,7 +50,7 @@ class UpdatePasswordViewModel : ViewModel() {
       UpdatePasswordScreen_Query()
     }
 
-  val form = UpdatePasswordForm(viewModelScope)
+  val form = UpdatePasswordForm(viewModelScope, hasPassword = { query.data.me.hasPassword })
   var isSubmitting by mutableStateOf(false)
     private set
 

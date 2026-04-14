@@ -1,5 +1,8 @@
 package co.typie.form
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.input.ImeAction
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -14,9 +17,12 @@ class FieldConfig<V> {
   internal var validateOn: ValidateOn? = null
   var focusable: Boolean = true
   private var blockValidateOn: ValidateOn? = null
+  private var blockCondition: (() -> Boolean)? = null
 
   internal fun addRule(rule: Rule<V>) {
-    taggedRules.add(blockValidateOn to rule)
+    val wrapped =
+      blockCondition?.let { cond -> Rule<V> { if (cond()) rule.validate(it) else null } } ?: rule
+    taggedRules.add(blockValidateOn to wrapped)
   }
 
   fun rules(vararg rules: Rule<V>) {
@@ -32,6 +38,13 @@ class FieldConfig<V> {
     blockValidateOn = timing
     block()
     blockValidateOn = previous
+  }
+
+  fun onlyIf(condition: () -> Boolean, block: FieldConfig<V>.() -> Unit) {
+    val previous = blockCondition
+    blockCondition = condition
+    block()
+    blockCondition = previous
   }
 
   fun required(message: String = "필수 항목입니다") {
@@ -79,6 +92,9 @@ open class FormState(
 ) {
   private val registeredFields = mutableListOf<FieldState<*>>()
   private val debounceJobs = mutableMapOf<FieldState<*>, Job>()
+  private val validators = mutableListOf<suspend FormValidationScope.() -> Unit>()
+  var formErrors: List<String> by mutableStateOf(emptyList())
+    private set
 
   protected fun <V> field(initialValue: V, config: FieldConfig<V>.() -> Unit = {}): FieldState<V> {
     val fieldConfig = FieldConfig<V>().apply(config)
@@ -110,20 +126,26 @@ open class FormState(
     return fieldState
   }
 
+  protected fun validate(block: suspend FormValidationScope.() -> Unit) {
+    validators.add(block)
+  }
+
   val isDirty: Boolean
     get() = registeredFields.any { it.isDirty }
 
   val isValid: Boolean
-    get() = registeredFields.all { it.errors.isEmpty() }
+    get() = registeredFields.all { it.errors.isEmpty() } && formErrors.isEmpty()
 
   val errors: Map<FieldState<*>, List<String>>
     get() = registeredFields.filter { it.errors.isNotEmpty() }.associateWith { it.errors }
 
   val errorMessage
-    get() = errors.values.flatten().firstOrNull()
+    get() = errors.values.flatten().firstOrNull() ?: formErrors.firstOrNull()
 
   suspend fun validateAll(): Boolean {
     var allValid = true
+
+    // Phase 1: field-level validation
     for (field in registeredFields) {
       field.isValidating = true
       val errors = field.validate()
@@ -131,6 +153,24 @@ open class FormState(
       field.isValidating = false
       if (errors.isNotEmpty()) allValid = false
     }
+
+    // Phase 2: cross-field validation
+    if (validators.isNotEmpty()) {
+      val fieldErrors = registeredFields.associateWith { it.errors }
+      val scope = FormValidationScope(fieldErrors)
+      for (validator in validators) {
+        validator(scope)
+      }
+      for ((field, additionalErrors) in scope.collectedFieldErrors) {
+        field.errors = field.errors + additionalErrors
+        if (additionalErrors.isNotEmpty()) allValid = false
+      }
+      formErrors = scope.collectedFormErrors
+      if (formErrors.isNotEmpty()) allValid = false
+    } else {
+      formErrors = emptyList()
+    }
+
     return allValid
   }
 
@@ -151,6 +191,7 @@ open class FormState(
 
     debounceJobs.values.forEach { it.cancel() }
     debounceJobs.clear()
+    formErrors = emptyList()
   }
 
   fun commit() {

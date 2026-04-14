@@ -28,6 +28,17 @@ class TestProfileForm(nickname: String, bio: String, scope: TestScope = TestScop
   val bio = field(bio) { maxLength(500) }
 }
 
+class TestPasswordForm(scope: TestScope = TestScope()) : FormState(scope) {
+  val newPassword = field("") { required("새 비밀번호를 입력해주세요.") }
+  val confirmPassword = field("") { required("비밀번호 확인을 입력해주세요.") }
+
+  init {
+    validate {
+      check(confirmPassword, newPassword.value == confirmPassword.value) { "비밀번호가 일치하지 않아요." }
+    }
+  }
+}
+
 class FormStateTest {
 
   @Test
@@ -438,5 +449,111 @@ class FormStateTest {
     form.nickname.reset()
     assertEquals("서버값", form.nickname.value)
     assertFalse(form.nickname.isDirty)
+  }
+
+  @Test
+  fun crossFieldValidationPassesWhenFieldsMatch() = runTest {
+    val form = TestPasswordForm(this)
+    form.newPassword.setValue("secret123")
+    form.confirmPassword.setValue("secret123")
+    val valid = form.validateAll()
+    assertTrue(valid)
+    assertEquals(emptyList(), form.confirmPassword.errors)
+    assertEquals(emptyList(), form.formErrors)
+  }
+
+  @Test
+  fun crossFieldValidationFailsWhenFieldsMismatch() = runTest {
+    val form = TestPasswordForm(this)
+    form.newPassword.setValue("secret123")
+    form.confirmPassword.setValue("different")
+    val valid = form.validateAll()
+    assertFalse(valid)
+    assertEquals(listOf("비밀번호가 일치하지 않아요."), form.confirmPassword.errors)
+  }
+
+  @Test
+  fun crossFieldValidationSkipsWhenFieldHasErrors() = runTest {
+    val form = TestPasswordForm(this)
+    form.newPassword.setValue("secret123")
+    // confirmPassword is empty → required fails
+    val valid = form.validateAll()
+    assertFalse(valid)
+    // only required error, not cross-field error
+    assertEquals(listOf("비밀번호 확인을 입력해주세요."), form.confirmPassword.errors)
+  }
+
+  @Test
+  fun formLevelErrorCollected() = runTest {
+    val form =
+      object : FormState(this) {
+        val a = field("") { required() }
+
+        init {
+          validate { check(false) { "폼 레벨 에러" } }
+        }
+      }
+    form.a.setValue("value")
+    val valid = form.validateAll()
+    assertFalse(valid)
+    assertEquals(listOf("폼 레벨 에러"), form.formErrors)
+  }
+
+  @Test
+  fun formLevelErrorMakesFormInvalid() = runTest {
+    val form =
+      object : FormState(this) {
+        val a = field("")
+
+        init {
+          validate { check(false) { "에러" } }
+        }
+      }
+    form.a.setValue("value")
+    form.validateAll()
+    assertFalse(form.isValid)
+  }
+
+  @Test
+  fun errorMessageIncludesFormErrors() = runTest {
+    val form =
+      object : FormState(this) {
+        val a = field("")
+
+        init {
+          validate { check(false) { "폼 에러" } }
+        }
+      }
+    form.a.setValue("value")
+    form.validateAll()
+    assertEquals("폼 에러", form.errorMessage)
+  }
+
+  @Test
+  fun rollbackClearsFormErrors() = runTest {
+    val form =
+      object : FormState(this) {
+        val a = field("")
+
+        init {
+          validate { check(false) { "에러" } }
+        }
+      }
+    form.validateAll()
+    assertFalse(form.formErrors.isEmpty())
+
+    form.rollback()
+    assertEquals(emptyList(), form.formErrors)
+    assertTrue(form.isValid)
+  }
+
+  @Test
+  fun formWithoutValidatorsWorksAsBeforeRegression() = runTest {
+    val form = TestLoginForm(this)
+    form.email.setValue("test@test.com")
+    form.password.setValue("secret123")
+    val valid = form.validateAll()
+    assertTrue(valid)
+    assertEquals(emptyList(), form.formErrors)
   }
 }
