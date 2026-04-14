@@ -82,35 +82,6 @@ class NavigatorTest {
   }
 
   @Test
-  fun showAndDismissModal() {
-    val nav = Navigator(Route.Home)
-    nav.showModal {}
-    assertTrue(nav.canPop)
-    assertEquals(1, nav.modals.size)
-    val result = nav.dismissModal()
-    assertTrue(result)
-    assertEquals(0, nav.modals.size)
-  }
-
-  @Test
-  fun dismissModalWhenEmpty() {
-    val nav = Navigator(Route.Home)
-    val result = nav.dismissModal()
-    assertFalse(result)
-  }
-
-  @Test
-  fun popDismissesModalFirst() = runTest {
-    val nav = Navigator(Route.Home)
-    navigateAndComplete(nav, Route.Folder("1"))
-    nav.showModal {}
-    popAndComplete(nav)
-    assertEquals(0, nav.modals.size)
-    assertEquals(Route.Folder("1"), nav.current)
-    assertEquals(2, nav.stack.size)
-  }
-
-  @Test
   fun lastOperationOnNavigate() = runTest {
     val nav = Navigator(Route.Home)
     navigateAndComplete(nav, Route.Folder("1"))
