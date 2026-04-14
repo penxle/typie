@@ -65,7 +65,7 @@ fun UpdateEmailScreen() {
 
   ProvideTopBar(center = { Text("이메일 변경", style = AppTheme.typography.title) })
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
         Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)

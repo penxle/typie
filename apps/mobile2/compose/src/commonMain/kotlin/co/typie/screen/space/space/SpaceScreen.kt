@@ -341,7 +341,7 @@ fun SpaceScreen() {
     },
   )
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     val reorderViewportTopInset =
       maxOf(
         0.dp,

@@ -77,7 +77,7 @@ fun MoreScreen() {
 
   ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Box(Modifier.fillMaxSize()) {
       Column(
         modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),

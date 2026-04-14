@@ -20,13 +20,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import co.typie.contract.Loadable
+import co.typie.contract.LoadableState
 import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
 import co.typie.ext.statusBars
 import co.typie.ext.statusBarsPadding
-import co.typie.graphql.QueryState
-import co.typie.graphql.WatchQuery
 import co.typie.navigation.Nav
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
@@ -45,7 +45,7 @@ private val MaxContentWidth = 600.dp
 
 @Composable
 fun Screen(
-  query: WatchQuery<*, *>? = null,
+  loadable: Loadable<*>? = null,
   background: Color = AppTheme.colors.surfaceBase,
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
@@ -70,9 +70,9 @@ fun Screen(
       PaddingValues(horizontal = 16.dp) + WindowInsets.navigationBars.asPaddingValues()
     }
 
-  LaunchedEffect(query?.state) {
-    if (query?.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { query.refetch() })
+  LaunchedEffect(loadable?.state) {
+    if (loadable?.state is LoadableState.Error) {
+      dialog.error(nav = nav, onRetry = { loadable.refetch() })
     }
   }
 
@@ -81,7 +81,7 @@ fun Screen(
       modifier = Modifier.fillMaxSize().hazeSource(hazeState).widthIn(max = MaxContentWidth),
       contentAlignment = Alignment.TopCenter,
     ) {
-      Skeleton(enabled = query != null && query.state !is QueryState.Success) {
+      Skeleton(enabled = loadable != null && loadable.state !is LoadableState.Success) {
         Box(modifier = Modifier.fillMaxSize()) { content(contentPadding) }
       }
     }

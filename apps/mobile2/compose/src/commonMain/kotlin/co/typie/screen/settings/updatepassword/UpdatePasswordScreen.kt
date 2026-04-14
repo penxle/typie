@@ -50,7 +50,7 @@ fun UpdatePasswordScreen() {
 
   ProvideTopBar(center = { Text("비밀번호 변경", style = AppTheme.typography.title) })
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
         if (hasPassword) {

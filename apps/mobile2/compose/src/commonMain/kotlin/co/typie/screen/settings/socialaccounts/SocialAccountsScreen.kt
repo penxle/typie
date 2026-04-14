@@ -58,7 +58,7 @@ fun SocialAccountsScreen() {
 
   ProvideTopBar(center = { Text("연결된 SNS 계정", style = AppTheme.typography.title) })
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(12.dp),

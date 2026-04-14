@@ -119,7 +119,7 @@ fun ReferralScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(
         modifier = Modifier.weight(1f).verticalScroll(scrollState),

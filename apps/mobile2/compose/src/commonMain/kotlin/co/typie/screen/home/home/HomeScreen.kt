@@ -84,7 +84,7 @@ fun HomeScreen() {
     },
   )
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Box(Modifier.fillMaxSize()) {
       Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
         Skeleton.Keep {

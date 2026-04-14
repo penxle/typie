@@ -125,7 +125,7 @@ fun TextReplacementsScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     val reorderState =
       rememberReorderableListState(
         keys = serverCustomItemIds,

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import co.touchlab.kermit.Logger
+import co.typie.contract.Loadable
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Query
 import com.apollographql.apollo.exception.CacheMissException
@@ -24,8 +25,8 @@ private constructor(
   private val onInitialData: ((D) -> Unit)?,
   private val skip: () -> Boolean = { false },
   private val resetOnChange: Boolean = true,
-) {
-  var state: QueryState<D> by mutableStateOf(QueryState.Loading)
+) : Loadable<D> {
+  override var state: QueryState<D> by mutableStateOf(QueryState.Loading)
     private set
 
   @Suppress("UNCHECKED_CAST")
@@ -112,7 +113,7 @@ private constructor(
     }
   }
 
-  fun refetch() {
+  override fun refetch() {
     execute(query())
   }
 }

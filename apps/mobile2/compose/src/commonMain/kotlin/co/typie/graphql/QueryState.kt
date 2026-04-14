@@ -1,9 +1,11 @@
 package co.typie.graphql
 
-sealed interface QueryState<out D> {
-  data object Loading : QueryState<Nothing>
+import co.typie.contract.LoadableState
 
-  data class Success<D>(val data: D) : QueryState<D>
+sealed interface QueryState<out D> : LoadableState<D> {
+  data object Loading : QueryState<Nothing>, LoadableState.Loading
 
-  data class Error(val exception: Throwable) : QueryState<Nothing>
+  data class Success<D>(override val data: D) : QueryState<D>, LoadableState.Success<D>
+
+  data class Error(override val exception: Throwable) : QueryState<Nothing>, LoadableState.Error
 }

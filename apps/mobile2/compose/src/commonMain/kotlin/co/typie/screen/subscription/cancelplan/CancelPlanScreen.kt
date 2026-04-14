@@ -78,7 +78,7 @@ fun CancelPlanScreen() {
     model.consumeErrorMessage()
   }
 
-  Screen(query = model.query) { contentPadding ->
+  Screen(loadable = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
