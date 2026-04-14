@@ -34,6 +34,20 @@ class PopoverPlacementProviderTest {
     )
   }
 
+  private fun resolveGeometry(
+    anchorBounds: IntRect,
+    placement: PopoverPlacement,
+    popupContentSize: IntSize = popupSize,
+  ): ResolvedPopoverGeometry {
+    return resolvePopoverGeometry(
+      anchorBounds = anchorBounds,
+      windowSize = windowSize,
+      placement = placement,
+      popupContentSize = popupContentSize,
+      screenPadding = screenPadding,
+    )
+  }
+
   @Test
   fun shouldShowBelow_prefersBottom_enoughSpace() {
     assertTrue(shouldShowBelow(PopoverPlacement.BelowEnd, 200, 844, topAnchor, screenPadding))
@@ -83,5 +97,16 @@ class PopoverPlacementProviderTest {
     val rightAnchor = IntRect(300, 100, 370, 144)
     val offset = calculate(rightAnchor, PopoverPlacement.BelowStart)
     assertEquals(300, offset.x)
+  }
+
+  @Test
+  fun resolvePopoverGeometry_tracksActualAnchorRect_whenCenteredPopupClampsToRightEdge() {
+    val rightAnchor = IntRect(320, 100, 360, 144)
+
+    val geometry = resolveGeometry(rightAnchor, PopoverPlacement.BelowCenter)
+
+    assertEquals(IntOffset(142, 100), geometry.popupOffset)
+    assertEquals(PopoverPlacement.BelowCenter, geometry.placement)
+    assertEquals(IntRect(178, 0, 218, 44), geometry.anchorBoundsInPopup)
   }
 }

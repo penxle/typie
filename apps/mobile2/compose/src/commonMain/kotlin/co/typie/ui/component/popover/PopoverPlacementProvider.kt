@@ -28,6 +28,12 @@ data class PopoverPlacement(val side: PopoverSide, val align: PopoverAlign) {
   }
 }
 
+internal data class ResolvedPopoverGeometry(
+  val popupOffset: IntOffset,
+  val placement: PopoverPlacement,
+  val anchorBoundsInPopup: IntRect,
+)
+
 internal class PopoverPlacementProvider(
   private val placement: PopoverPlacement,
   private val screenPadding: PopoverScreenPadding,
@@ -39,45 +45,51 @@ internal class PopoverPlacementProvider(
     layoutDirection: LayoutDirection,
     popupContentSize: IntSize,
   ): IntOffset {
-    val showBelow =
-      shouldShowBelow(
+    return resolvePopoverGeometry(
+        anchorBounds = anchorBounds,
+        windowSize = windowSize,
         placement = placement,
-        childHeight = popupContentSize.height,
-        windowHeight = windowSize.height,
-        anchorRect = anchorBounds,
+        popupContentSize = popupContentSize,
         screenPadding = screenPadding,
       )
-
-    val unclampedX =
-      when (placement.align) {
-        PopoverAlign.Start -> anchorBounds.left
-        PopoverAlign.Center -> anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
-        PopoverAlign.End -> anchorBounds.right - popupContentSize.width
-      }
-
-    val unclampedY =
-      if (showBelow) anchorBounds.top else anchorBounds.bottom - popupContentSize.height
-
-    val minX =
-      when (placement.align) {
-        PopoverAlign.Start -> anchorBounds.left
-        else -> screenPadding.left
-      }
-    val maxX =
-      when (placement.align) {
-        PopoverAlign.End -> anchorBounds.right - popupContentSize.width
-        else -> windowSize.width - screenPadding.right - popupContentSize.width
-      }
-    val minY = if (showBelow) anchorBounds.top else screenPadding.top
-    val maxY =
-      if (showBelow) {
-        windowSize.height - screenPadding.bottom - popupContentSize.height
-      } else {
-        anchorBounds.bottom - popupContentSize.height
-      }
-
-    return IntOffset(x = clamp(unclampedX, minX, maxX), y = clamp(unclampedY, minY, maxY))
+      .popupOffset
   }
+}
+
+internal fun resolvePopoverGeometry(
+  anchorBounds: IntRect,
+  windowSize: IntSize,
+  placement: PopoverPlacement,
+  popupContentSize: IntSize,
+  screenPadding: PopoverScreenPadding,
+): ResolvedPopoverGeometry {
+  val showBelow =
+    shouldShowBelow(
+      placement = placement,
+      childHeight = popupContentSize.height,
+      windowHeight = windowSize.height,
+      anchorRect = anchorBounds,
+      screenPadding = screenPadding,
+    )
+  val popupOffset =
+    calculatePopoverOffset(
+      anchorBounds = anchorBounds,
+      windowSize = windowSize,
+      placement = placement,
+      popupContentSize = popupContentSize,
+      screenPadding = screenPadding,
+      showBelow = showBelow,
+    )
+
+  return ResolvedPopoverGeometry(
+    popupOffset = popupOffset,
+    placement = resolvedPlacement(placement, showBelow),
+    anchorBoundsInPopup =
+      IntRect(
+        IntOffset(x = anchorBounds.left - popupOffset.x, y = anchorBounds.top - popupOffset.y),
+        anchorBounds.size,
+      ),
+  )
 }
 
 internal fun shouldShowBelow(
@@ -104,6 +116,45 @@ internal fun shouldShowBelow(
 
 internal fun resolvedPlacement(placement: PopoverPlacement, showBelow: Boolean): PopoverPlacement {
   return placement.copy(side = if (showBelow) PopoverSide.Below else PopoverSide.Above)
+}
+
+private fun calculatePopoverOffset(
+  anchorBounds: IntRect,
+  windowSize: IntSize,
+  placement: PopoverPlacement,
+  popupContentSize: IntSize,
+  screenPadding: PopoverScreenPadding,
+  showBelow: Boolean,
+): IntOffset {
+  val unclampedX =
+    when (placement.align) {
+      PopoverAlign.Start -> anchorBounds.left
+      PopoverAlign.Center -> anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
+      PopoverAlign.End -> anchorBounds.right - popupContentSize.width
+    }
+
+  val unclampedY =
+    if (showBelow) anchorBounds.top else anchorBounds.bottom - popupContentSize.height
+
+  val minX =
+    when (placement.align) {
+      PopoverAlign.Start -> anchorBounds.left
+      else -> screenPadding.left
+    }
+  val maxX =
+    when (placement.align) {
+      PopoverAlign.End -> anchorBounds.right - popupContentSize.width
+      else -> windowSize.width - screenPadding.right - popupContentSize.width
+    }
+  val minY = if (showBelow) anchorBounds.top else screenPadding.top
+  val maxY =
+    if (showBelow) {
+      windowSize.height - screenPadding.bottom - popupContentSize.height
+    } else {
+      anchorBounds.bottom - popupContentSize.height
+    }
+
+  return IntOffset(x = clamp(unclampedX, minX, maxX), y = clamp(unclampedY, minY, maxY))
 }
 
 private fun clamp(value: Int, min: Int, max: Int): Int {

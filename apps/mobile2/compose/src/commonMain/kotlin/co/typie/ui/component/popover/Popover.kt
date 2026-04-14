@@ -412,12 +412,24 @@ private fun PopoverPanePopup(
         paneWidth.coerceAtLeast(minWidthPx).coerceAtMost(finalPaneConstraints.maxWidth)
       }
     val paneSize = IntSize(resolvedPaneWidth, paneHeight)
-    val anchorSize = anchorBounds.size
-    val resolvedPlacement = resolvedPlacement(placement, showBelow)
+    val geometry =
+      resolvePopoverGeometry(
+        anchorBounds = anchorBounds,
+        windowSize = IntSize(constraints.maxWidth, constraints.maxHeight),
+        placement = placement,
+        popupContentSize = paneSize,
+        screenPadding = screenPadding,
+      )
     val transition =
       PopoverPaneTransition(
         progress = progress,
-        anchorContentRect = anchorContentRect(paneSize, anchorSize, resolvedPlacement),
+        anchorContentRect =
+          Rect(
+            left = geometry.anchorBoundsInPopup.left.toFloat(),
+            top = geometry.anchorBoundsInPopup.top.toFloat(),
+            right = geometry.anchorBoundsInPopup.right.toFloat(),
+            bottom = geometry.anchorBoundsInPopup.bottom.toFloat(),
+          ),
       )
 
     val surfacePlaceable =
@@ -427,8 +439,7 @@ private fun PopoverPanePopup(
               anchor = anchor,
               pane = { ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane) },
               paneSize = paneSize,
-              anchorSize = anchorSize,
-              resolvedPlacement = resolvedPlacement,
+              anchorContentRect = geometry.anchorBoundsInPopup,
               progress = progress,
               interactive = interactive,
               collapsedCornerRadius = collapsedCornerRadius,
@@ -470,13 +481,13 @@ private fun PopoverPaneSurface(
   anchor: @Composable () -> Unit,
   pane: @Composable () -> Unit,
   paneSize: IntSize,
-  anchorSize: IntSize,
-  resolvedPlacement: PopoverPlacement,
+  anchorContentRect: IntRect,
   progress: Float,
   interactive: Boolean,
   collapsedCornerRadius: Dp,
 ) {
   val density = LocalDensity.current
+  val anchorSize = anchorContentRect.size
   val animatedWidth =
     sizeForProgress(anchorSize.width.toFloat(), paneSize.width.toFloat(), progress)
   val animatedHeight =
@@ -486,9 +497,9 @@ private fun PopoverPaneSurface(
       width = max(1, animatedWidth.roundToInt()),
       height = max(1, animatedHeight.roundToInt()),
     )
-  val surfaceOffset = alignedOffset(paneSize, animatedSurfaceSize, resolvedPlacement)
-  val paneOffset = alignedOffset(animatedSurfaceSize, paneSize, resolvedPlacement)
-  val anchorOffset = anchorContentOffset(paneSize, anchorSize, resolvedPlacement)
+  val surfaceOffset = surfaceOffsetForProgress(anchorContentRect, progress)
+  val paneOffset = IntOffset(x = -surfaceOffset.x, y = -surfaceOffset.y)
+  val anchorOffset = IntOffset(x = anchorContentRect.left, y = anchorContentRect.top)
   val cornerRadius =
     lerp(
       collapsedCornerRadius.toPx(density),
@@ -576,48 +587,6 @@ private fun sizeForProgress(start: Float, end: Float, progress: Float): Float {
   }
 }
 
-private fun anchorContentRect(
-  paneSize: IntSize,
-  anchorSize: IntSize,
-  placement: PopoverPlacement,
-): Rect {
-  val offset = anchorContentOffset(paneSize, anchorSize, placement)
-  return Rect(
-    left = offset.x.toFloat(),
-    top = offset.y.toFloat(),
-    right = offset.x + anchorSize.width.toFloat(),
-    bottom = offset.y + anchorSize.height.toFloat(),
-  )
-}
-
-private fun anchorContentOffset(
-  paneSize: IntSize,
-  anchorSize: IntSize,
-  placement: PopoverPlacement,
-): IntOffset {
-  return alignedOffset(paneSize, anchorSize, placement)
-}
-
-private fun alignedOffset(
-  containerSize: IntSize,
-  childSize: IntSize,
-  placement: PopoverPlacement,
-): IntOffset {
-  val x =
-    when (placement.align) {
-      PopoverAlign.Start -> 0
-      PopoverAlign.Center -> (containerSize.width - childSize.width) / 2
-      PopoverAlign.End -> containerSize.width - childSize.width
-    }
-  val y =
-    when (placement.side) {
-      PopoverSide.Below -> 0
-      PopoverSide.Above -> containerSize.height - childSize.height
-    }
-
-  return IntOffset(x, y)
-}
-
 private fun shrinkBounded(value: Int, inset: Int): Int {
   if (value == Constraints.Infinity) {
     return value
@@ -641,6 +610,13 @@ private fun availableHeightForPlacement(
   } else {
     max(0, anchorBounds.bottom - screenPadding.top)
   }
+}
+
+private fun surfaceOffsetForProgress(anchorContentRect: IntRect, progress: Float): IntOffset {
+  return IntOffset(
+    x = lerp(anchorContentRect.left.toFloat(), 0f, progress).roundToInt(),
+    y = lerp(anchorContentRect.top.toFloat(), 0f, progress).roundToInt(),
+  )
 }
 
 private fun availableWidthForPlacement(
