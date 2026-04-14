@@ -12,7 +12,7 @@ import kotlinx.coroutines.test.runTest
 
 class ReorderableListTest {
   @Test
-  fun `drag comparison window y follows dragged item center instead of touch hotspot`() {
+  fun `drag comparison window y follows dragged item center`() {
     assertEquals(
       110f,
       calculateDragComparisonWindowY(
@@ -29,12 +29,44 @@ class ReorderableListTest {
       calculateReorderedKeys(
         orderedKeys = listOf("a", "c", "b", "d"),
         draggedKey = "b",
-        comparisonWindowY = 160f,
+        comparisonWindowY = 125f,
         itemBounds =
           mapOf(
             "a" to Rect(left = 0f, top = 0f, right = 100f, bottom = 50f),
             "c" to Rect(left = 0f, top = 200f, right = 100f, bottom = 250f),
             "d" to Rect(left = 0f, top = 100f, right = 100f, bottom = 150f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 50f),
+            1 to Rect(left = 0f, top = 50f, right = 100f, bottom = 100f),
+            2 to Rect(left = 0f, top = 100f, right = 100f, bottom = 150f),
+            3 to Rect(left = 0f, top = 150f, right = 100f, bottom = 200f),
+          ),
+      )
+
+    assertEquals(listOf("a", "c", "b", "d"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys does not oscillate when drag pauses after swap`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("a", "c", "b", "d"),
+        draggedKey = "b",
+        comparisonWindowY = 100f,
+        itemBounds =
+          mapOf(
+            "a" to Rect(left = 0f, top = 0f, right = 100f, bottom = 50f),
+            "c" to Rect(left = 0f, top = 100f, right = 100f, bottom = 150f),
+            "d" to Rect(left = 0f, top = 150f, right = 100f, bottom = 200f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 50f),
+            1 to Rect(left = 0f, top = 50f, right = 100f, bottom = 100f),
+            2 to Rect(left = 0f, top = 100f, right = 100f, bottom = 150f),
+            3 to Rect(left = 0f, top = 150f, right = 100f, bottom = 200f),
           ),
       )
 
@@ -56,9 +88,204 @@ class ReorderableListTest {
             "d" to Rect(left = 0f, top = 0f, right = 0f, bottom = 0f),
             "e" to Rect(left = 0f, top = 0f, right = 0f, bottom = 0f),
           ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 460f, right = 100f, bottom = 587f),
+            1 to Rect(left = 0f, top = 587f, right = 100f, bottom = 714f),
+            2 to Rect(left = 0f, top = 714f, right = 100f, bottom = 841f),
+          ),
       )
 
     assertEquals(listOf("dragged", "a", "b", "c", "d", "e"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys waits until dragged item covers half of next slot`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("dragged", "next", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 70f,
+        itemBounds =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = 40f, right = 100f, bottom = 100f),
+            "next" to Rect(left = 0f, top = 60f, right = 100f, bottom = 160f),
+            "tail" to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 60f),
+            1 to Rect(left = 0f, top = 60f, right = 100f, bottom = 160f),
+            2 to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+      )
+
+    assertEquals(listOf("dragged", "next", "tail"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys swaps once dragged item covers half of next slot`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("dragged", "next", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 80f,
+        movementDirection = 1,
+        itemBounds =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = 50f, right = 100f, bottom = 110f),
+            "next" to Rect(left = 0f, top = 60f, right = 100f, bottom = 160f),
+            "tail" to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 60f),
+            1 to Rect(left = 0f, top = 60f, right = 100f, bottom = 160f),
+            2 to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+      )
+
+    assertEquals(listOf("next", "dragged", "tail"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys waits until dragged item covers half of previous slot`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("head", "dragged", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 100f,
+        itemBounds =
+          mapOf(
+            "head" to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            "dragged" to Rect(left = 0f, top = 70f, right = 100f, bottom = 130f),
+            "tail" to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            1 to Rect(left = 0f, top = 100f, right = 100f, bottom = 160f),
+            2 to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+      )
+
+    assertEquals(listOf("head", "dragged", "tail"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys swaps once dragged item covers half of previous slot`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("head", "dragged", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 80f,
+        movementDirection = -1,
+        itemBounds =
+          mapOf(
+            "head" to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            "dragged" to Rect(left = 0f, top = 50f, right = 100f, bottom = 110f),
+            "tail" to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            1 to Rect(left = 0f, top = 100f, right = 100f, bottom = 160f),
+            2 to Rect(left = 0f, top = 160f, right = 100f, bottom = 200f),
+          ),
+      )
+
+    assertEquals(listOf("dragged", "head", "tail"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys uses adjacent item height when returning over larger original slot`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("dragged", "small", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 0f,
+        movementDirection = 1,
+        itemBounds =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = -25f, right = 100f, bottom = 175f),
+            "small" to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            "tail" to Rect(left = 0f, top = 300f, right = 100f, bottom = 400f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            1 to Rect(left = 0f, top = 100f, right = 100f, bottom = 300f),
+            2 to Rect(left = 0f, top = 300f, right = 100f, bottom = 400f),
+          ),
+        referenceItemBoundsByKey =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = 100f, right = 100f, bottom = 300f),
+            "small" to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            "tail" to Rect(left = 0f, top = 300f, right = 100f, bottom = 400f),
+          ),
+      )
+
+    assertEquals(listOf("small", "dragged", "tail"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys does not reverse upward swap while pointer pauses`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("dragged", "small", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 100f,
+        itemBounds =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = -50f, right = 100f, bottom = 250f),
+            "small" to Rect(left = 0f, top = 100f, right = 100f, bottom = 200f),
+            "tail" to Rect(left = 0f, top = 300f, right = 100f, bottom = 400f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            1 to Rect(left = 0f, top = 100f, right = 100f, bottom = 400f),
+            2 to Rect(left = 0f, top = 400f, right = 100f, bottom = 500f),
+          ),
+        referenceItemBoundsByKey =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = 100f, right = 100f, bottom = 400f),
+            "small" to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            "tail" to Rect(left = 0f, top = 400f, right = 100f, bottom = 500f),
+          ),
+      )
+
+    assertEquals(listOf("dragged", "small", "tail"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys does not reverse downward swap while pointer pauses`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("head", "small", "dragged"),
+        draggedKey = "dragged",
+        comparisonWindowY = 400f,
+        itemBounds =
+          mapOf(
+            "head" to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            "small" to Rect(left = 0f, top = 300f, right = 100f, bottom = 400f),
+            "dragged" to Rect(left = 0f, top = 250f, right = 100f, bottom = 550f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            1 to Rect(left = 0f, top = 100f, right = 100f, bottom = 200f),
+            2 to Rect(left = 0f, top = 200f, right = 100f, bottom = 500f),
+          ),
+        referenceItemBoundsByKey =
+          mapOf(
+            "head" to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            "small" to Rect(left = 0f, top = 100f, right = 100f, bottom = 200f),
+            "dragged" to Rect(left = 0f, top = 200f, right = 100f, bottom = 500f),
+          ),
+      )
+
+    assertEquals(listOf("head", "small", "dragged"), reordered)
   }
 
   @Test

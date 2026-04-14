@@ -42,8 +42,12 @@ private data class ActiveReorderDrag<K : Any>(
   val key: K,
   val startIndex: Int,
   val startOrderedKeys: List<K>,
+  val referenceSlotBoundsByIndex: Map<Int, Rect>,
+  val referenceItemBoundsByKey: Map<K, Rect>,
   val pointerOffsetWithinItemY: Float,
   val currentPointerWindowPosition: Offset,
+  val currentComparisonWindowY: Float,
+  val movementDirection: Int,
 )
 
 private data class SettlingReorderDrag<K : Any>(val key: K, val initialTranslationY: Float)
@@ -124,6 +128,21 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
     val bounds = itemBounds[key] ?: return false
     val startIndex = displayedKeys.indexOf(key)
     if (startIndex == -1) return false
+    val referenceSlotBoundsByIndex =
+      displayedKeys
+        .mapIndexedNotNull { index, displayedKey ->
+          itemBounds[displayedKey]?.takeIf { it.isValidReorderTargetBounds }?.let { index to it }
+        }
+        .toMap()
+    val referenceItemBoundsByKey = displayedKeys.associateWithNotNull { displayedKey ->
+      itemBounds[displayedKey]?.takeIf { it.isValidReorderTargetBounds }
+    }
+    val initialComparisonWindowY =
+      calculateDragComparisonWindowY(
+        pointerWindowY = pointerWindowPosition.y,
+        pointerOffsetWithinItemY = pointerWindowPosition.y - bounds.top,
+        itemHeight = bounds.height,
+      )
 
     settlingDrag = null
     activeDrag =
@@ -131,21 +150,41 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
         key = key,
         startIndex = startIndex,
         startOrderedKeys = displayedKeys,
+        referenceSlotBoundsByIndex = referenceSlotBoundsByIndex,
+        referenceItemBoundsByKey = referenceItemBoundsByKey,
         pointerOffsetWithinItemY = pointerWindowPosition.y - bounds.top,
         currentPointerWindowPosition = pointerWindowPosition,
+        currentComparisonWindowY = initialComparisonWindowY,
+        movementDirection = 0,
       )
     return true
   }
 
   fun updateDrag(pointerWindowPosition: Offset): Boolean {
     val activeDrag = activeDrag ?: return false
-    this.activeDrag = activeDrag.copy(currentPointerWindowPosition = pointerWindowPosition)
-    val draggedItemHeight = itemBounds[activeDrag.key]?.height
+    val draggedItemBounds =
+      calculateDraggedItemWindowBounds(
+        itemBounds = itemBounds[activeDrag.key],
+        pointerWindowY = pointerWindowPosition.y,
+        pointerOffsetWithinItemY = activeDrag.pointerOffsetWithinItemY,
+      )
     val comparisonWindowY =
       calculateDragComparisonWindowY(
         pointerWindowY = pointerWindowPosition.y,
         pointerOffsetWithinItemY = activeDrag.pointerOffsetWithinItemY,
-        itemHeight = draggedItemHeight,
+        itemHeight = draggedItemBounds?.height,
+      )
+    val movementDirection =
+      when {
+        comparisonWindowY > activeDrag.currentComparisonWindowY + ReorderDirectionEpsilonPx -> 1
+        comparisonWindowY < activeDrag.currentComparisonWindowY - ReorderDirectionEpsilonPx -> -1
+        else -> activeDrag.movementDirection
+      }
+    this.activeDrag =
+      activeDrag.copy(
+        currentPointerWindowPosition = pointerWindowPosition,
+        currentComparisonWindowY = comparisonWindowY,
+        movementDirection = movementDirection,
       )
 
     val reorderedKeys =
@@ -153,7 +192,10 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
         orderedKeys = displayedKeys,
         draggedKey = activeDrag.key,
         comparisonWindowY = comparisonWindowY,
-        itemBounds = itemBounds,
+        movementDirection = movementDirection,
+        itemBounds = draggedItemBounds?.let { itemBounds + (activeDrag.key to it) } ?: itemBounds,
+        referenceSlotBoundsByIndex = activeDrag.referenceSlotBoundsByIndex,
+        referenceItemBoundsByKey = activeDrag.referenceItemBoundsByKey,
       ) ?: return false
 
     if (reorderedKeys == displayedKeys) {
@@ -254,8 +296,8 @@ fun Modifier.reorderableListContainer(
 
 fun <K : Any> Modifier.reorderableItem(state: ReorderableListState<K>, key: K): Modifier =
   composed {
-    val settlingTranslation = remember(key) { Animatable(0f) }
     val settlingTranslationY = state.settlingTranslationY(key)
+    val settlingTranslation = remember(key) { Animatable(settlingTranslationY ?: 0f) }
 
     LaunchedEffect(key, settlingTranslationY) {
       if (settlingTranslationY == null) {
@@ -352,49 +394,92 @@ internal fun <K : Any> calculateReorderedKeys(
   orderedKeys: List<K>,
   draggedKey: K,
   comparisonWindowY: Float,
+  movementDirection: Int = 0,
   itemBounds: Map<K, Rect>,
+  referenceSlotBoundsByIndex: Map<Int, Rect> = emptyMap(),
+  referenceItemBoundsByKey: Map<K, Rect> = emptyMap(),
 ): List<K>? {
   if (orderedKeys.size < 2) return null
 
-  val orderedWithoutDragged = orderedKeys.filterNot { it == draggedKey }
-  val visibleTargetsInLogicalOrder = orderedWithoutDragged.mapIndexedNotNull { index, key ->
-    val bounds = itemBounds[key] ?: return@mapIndexedNotNull null
-    if (!bounds.isValidReorderTargetBounds) {
-      return@mapIndexedNotNull null
-    }
-    IndexedItemBounds(index = index, bounds = bounds)
-  }
-  if (visibleTargetsInLogicalOrder.isEmpty()) return null
+  val currentIndex = orderedKeys.indexOf(draggedKey)
+  if (currentIndex == -1) return null
 
-  // animateBounds can temporarily leave a key's visual position behind its new logical order.
-  // Reorder thresholds should follow the visible slots top-to-bottom, not the lagging key
-  // positions,
-  // otherwise the list can flip-flop while rows are animating.
-  val visibleSlotBounds = visibleTargetsInLogicalOrder.map { it.bounds }.sortedBy { it.top }
+  val draggedBounds = itemBounds[draggedKey]?.takeIf { it.isValidReorderTargetBounds }
+  var insertionIndex = currentIndex
 
-  val visibleTargets = visibleTargetsInLogicalOrder.mapIndexed { visibleIndex, target ->
-    target.copy(bounds = visibleSlotBounds[visibleIndex])
-  }
+  if (movementDirection < 0) {
+    while (insertionIndex > 0) {
+      val previousIndex = insertionIndex - 1
+      val previousKey = orderedKeys[previousIndex]
+      val previousBounds =
+        adjacentBoundsFor(
+          key = previousKey,
+          index = previousIndex,
+          itemBounds = itemBounds,
+          referenceItemBoundsByKey = referenceItemBoundsByKey,
+          referenceSlotBoundsByIndex = referenceSlotBoundsByIndex,
+        ) ?: break
+      val previousThresholdHeight =
+        adjacentThresholdHeight(
+          key = previousKey,
+          adjacentBounds = previousBounds,
+          itemBounds = itemBounds,
+          referenceItemBoundsByKey = referenceItemBoundsByKey,
+        ) ?: break
 
-  val firstVisible = visibleTargets.first()
-  val lastVisible = visibleTargets.last()
-
-  val insertionIndex =
-    when {
-      comparisonWindowY < firstVisible.bounds.top -> firstVisible.index
-      comparisonWindowY > lastVisible.bounds.bottom -> lastVisible.index + 1
-      else -> {
-        visibleTargets.firstOrNull { comparisonWindowY < it.bounds.centerY }?.index
-          ?: orderedWithoutDragged.size
+      if (
+        shouldSwapTowardsPrevious(
+          draggedBounds = draggedBounds,
+          comparisonWindowY = comparisonWindowY,
+          previousBounds = previousBounds,
+          previousThresholdHeight = previousThresholdHeight,
+        )
+      ) {
+        insertionIndex -= 1
+      } else {
+        break
       }
     }
+  } else if (movementDirection > 0) {
+    while (insertionIndex < orderedKeys.lastIndex) {
+      val nextIndex = insertionIndex + 1
+      val nextKey = orderedKeys[nextIndex]
+      val nextBounds =
+        adjacentBoundsFor(
+          key = nextKey,
+          index = nextIndex,
+          itemBounds = itemBounds,
+          referenceItemBoundsByKey = referenceItemBoundsByKey,
+          referenceSlotBoundsByIndex = referenceSlotBoundsByIndex,
+        ) ?: break
+      val nextThresholdHeight =
+        adjacentThresholdHeight(
+          key = nextKey,
+          adjacentBounds = nextBounds,
+          itemBounds = itemBounds,
+          referenceItemBoundsByKey = referenceItemBoundsByKey,
+        ) ?: break
 
-  val reordered = orderedWithoutDragged.toMutableList()
+      if (
+        shouldSwapTowardsNext(
+          draggedBounds = draggedBounds,
+          comparisonWindowY = comparisonWindowY,
+          nextBounds = nextBounds,
+          nextThresholdHeight = nextThresholdHeight,
+        )
+      ) {
+        insertionIndex += 1
+      } else {
+        break
+      }
+    }
+  }
+
+  val reordered = orderedKeys.toMutableList()
+  reordered.remove(draggedKey)
   reordered.add(insertionIndex.coerceIn(0, reordered.size), draggedKey)
   return reordered
 }
-
-private data class IndexedItemBounds(val index: Int, val bounds: Rect)
 
 internal fun calculateDragComparisonWindowY(
   pointerWindowY: Float,
@@ -408,8 +493,81 @@ internal fun calculateDragComparisonWindowY(
   return pointerWindowY - pointerOffsetWithinItemY + itemHeight / 2f
 }
 
-private val Rect.centerY: Float
-  get() = (top + bottom) / 2f
+private fun calculateDraggedItemWindowBounds(
+  itemBounds: Rect?,
+  pointerWindowY: Float,
+  pointerOffsetWithinItemY: Float,
+): Rect? {
+  val bounds = itemBounds?.takeIf { it.isValidReorderTargetBounds } ?: return null
+  val top = pointerWindowY - pointerOffsetWithinItemY
+  return Rect(left = bounds.left, top = top, right = bounds.right, bottom = top + bounds.height)
+}
+
+private fun Rect.verticalOverlap(other: Rect): Float {
+  return (minOf(bottom, other.bottom) - maxOf(top, other.top)).coerceAtLeast(0f)
+}
+
+private fun <K : Any> adjacentBoundsFor(
+  key: K,
+  index: Int,
+  itemBounds: Map<K, Rect>,
+  referenceItemBoundsByKey: Map<K, Rect>,
+  referenceSlotBoundsByIndex: Map<Int, Rect>,
+): Rect? {
+  return itemBounds[key]?.takeIf { it.isValidReorderTargetBounds }
+    ?: referenceItemBoundsByKey[key]
+    ?: referenceSlotBoundsByIndex[index]
+}
+
+private fun <K : Any> adjacentThresholdHeight(
+  key: K,
+  adjacentBounds: Rect?,
+  itemBounds: Map<K, Rect>,
+  referenceItemBoundsByKey: Map<K, Rect>,
+): Float? {
+  return referenceItemBoundsByKey[key]?.height
+    ?: itemBounds[key]?.takeIf { it.isValidReorderTargetBounds }?.height
+    ?: adjacentBounds?.height
+}
+
+private fun shouldSwapTowardsPrevious(
+  draggedBounds: Rect?,
+  comparisonWindowY: Float,
+  previousBounds: Rect,
+  previousThresholdHeight: Float,
+): Boolean {
+  if (draggedBounds == null) {
+    return comparisonWindowY <= previousBounds.bottom
+  }
+
+  return draggedBounds.verticalOverlap(previousBounds) >= previousThresholdHeight / 2f ||
+    draggedBounds.bottom <= previousBounds.top
+}
+
+private fun shouldSwapTowardsNext(
+  draggedBounds: Rect?,
+  comparisonWindowY: Float,
+  nextBounds: Rect,
+  nextThresholdHeight: Float,
+): Boolean {
+  if (draggedBounds == null) {
+    return comparisonWindowY >= nextBounds.top
+  }
+
+  return draggedBounds.verticalOverlap(nextBounds) >= nextThresholdHeight / 2f ||
+    draggedBounds.top >= nextBounds.bottom
+}
+
+private inline fun <K, V> Iterable<K>.associateWithNotNull(valueTransform: (K) -> V?): Map<K, V> {
+  return buildMap {
+    for (key in this@associateWithNotNull) {
+      val value = valueTransform(key) ?: continue
+      put(key, value)
+    }
+  }
+}
+
+private const val ReorderDirectionEpsilonPx = 0.5f
 
 private val Rect.isValidReorderTargetBounds: Boolean
   get() = width > 0f && height > 0f
