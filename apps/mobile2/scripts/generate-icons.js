@@ -299,7 +299,7 @@ async function loadTypieIcons() {
   for (const file of files) {
     if (!file.endsWith('.svg')) continue;
     const svgContent = await fs.readFile(path.join(TYPIE_SVG_DIR, file), 'utf8');
-    const icon = await processIcon(file, svgContent);
+    const icon = await processIcon(path.parse(file).name, svgContent);
     if (icon) icons.push(icon);
   }
   return icons;

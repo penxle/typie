@@ -32,6 +32,7 @@ import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.graphql.type.NoteStatus
 import co.typie.icons.Lucide
+import co.typie.icons.Typie
 import co.typie.navigation.Nav
 import co.typie.result.Result
 import co.typie.route.Route
@@ -351,7 +352,12 @@ fun NotesScreen() {
 
   ProvideBottomBar(
     pill = { MainBottomBarPill() },
-    action = { MainBottomBarActionButton(onClick = { scope.launch { handleCreateNote() } }) },
+    action = {
+      MainBottomBarActionButton(
+        icon = Typie.StickyNotePlus,
+        onClick = { scope.launch { handleCreateNote() } },
+      )
+    },
   )
 
   Screen(background = AppTheme.colors.surfaceBase) { contentPadding ->

@@ -55,6 +55,7 @@ import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.icon.Icon
+import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.flow.collect
@@ -216,6 +217,6 @@ private fun BottomBarPill(
 }
 
 @Composable
-fun MainBottomBarActionButton(onClick: suspend () -> Unit = {}) {
-  BottomBarActionButton(icon = Lucide.SquarePen, onClick = onClick)
+fun MainBottomBarActionButton(icon: IconData = Lucide.SquarePen, onClick: suspend () -> Unit = {}) {
+  BottomBarActionButton(icon = icon, onClick = onClick)
 }

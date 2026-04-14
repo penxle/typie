@@ -63,7 +63,7 @@ suspend fun Dialog.error(nav: Navigator, onRetry: () -> Unit) {
           contentAlignment = Alignment.Center,
         ) {
           Icon(
-            Typie.ExclamationSvg,
+            Typie.Exclamation,
             modifier = Modifier.size(20.dp),
             tint = AppTheme.colors.textOnDangerSubtle,
           )

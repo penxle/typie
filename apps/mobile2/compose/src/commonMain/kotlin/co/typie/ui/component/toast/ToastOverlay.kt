@@ -193,7 +193,7 @@ private fun AnimatedToast(
                   icon =
                     when (type) {
                       ToastType.Success -> Lucide.Check
-                      ToastType.Error -> Typie.ExclamationSvg
+                      ToastType.Error -> Typie.Exclamation
                       else -> Lucide.Bell
                     },
                   strokeWidth =

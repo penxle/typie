@@ -12,7 +12,7 @@ import co.typie.ui.icon.IconPath
 import co.typie.ui.icon.PathStyle
 
 object Typie {
-  val BellFilledSvg =
+  val BellFilled =
     IconData(
       listOf(
         IconPath(
@@ -33,7 +33,16 @@ object Typie {
         ),
       )
     )
-  val BookmarkFilledSvg =
+  val BlockquoteQuote =
+    IconData(
+      listOf(
+        IconPath(
+          "M9 11.25H4.58A6.75 6.75 0 0 1 7.5 6.65l1.34-.9-.81-1.35-1.34.9A8.25 8.25 0 0 0 3 12.26V17.25a1.5 1.5 0 0 0 1.5 1.5h4.5a1.5 1.5 0 0 0 1.5-1.5v-4.5a1.5 1.5 0 0 0-1.5-1.5Zm10.5 0h-4.42A6.75 6.75 0 0 1 18 6.65l1.34-.9-.81-1.35-1.35.9a8.25 8.25 0 0 0-3.68 6.86v5a1.5 1.5 0 0 0 1.5 1.5h4.5a1.5 1.5 0 0 0 1.5-1.5v-4.5a1.5 1.5 0 0 0-1.5-1.5Z",
+          PathStyle.Fill,
+        )
+      )
+    )
+  val BookmarkFilled =
     IconData(
       listOf(
         IconPath(
@@ -48,7 +57,7 @@ object Typie {
         ),
       )
     )
-  val CircleUserRoundFilledSvg =
+  val CircleUserRoundFilled =
     IconData(
       listOf(
         IconPath(
@@ -58,7 +67,7 @@ object Typie {
         )
       )
     )
-  val ExclamationSvg =
+  val Exclamation =
     IconData(
       listOf(
         IconPath(
@@ -71,7 +80,7 @@ object Typie {
       viewportWidth = 12f,
       viewportHeight = 12f,
     )
-  val FileDocxSvg =
+  val FileDocx =
     IconData(
       listOf(
         IconPath(
@@ -80,7 +89,7 @@ object Typie {
         )
       )
     )
-  val FileEpubSvg =
+  val FileEpub =
     IconData(
       listOf(
         IconPath(
@@ -89,7 +98,7 @@ object Typie {
         )
       )
     )
-  val FileHwpSvg =
+  val FileHwp =
     IconData(
       listOf(
         IconPath(
@@ -98,7 +107,7 @@ object Typie {
         )
       )
     )
-  val FilePdfSvg =
+  val FilePdf =
     IconData(
       listOf(
         IconPath(
@@ -107,7 +116,7 @@ object Typie {
         )
       )
     )
-  val FolderFilledSvg =
+  val FolderFilled =
     IconData(
       listOf(
         IconPath(
@@ -122,7 +131,7 @@ object Typie {
         ),
       )
     )
-  val FolderOpenFilledSvg =
+  val FolderOpenFilled =
     IconData(
       listOf(
         IconPath(
@@ -132,7 +141,7 @@ object Typie {
         )
       )
     )
-  val HorizontalRuleSvg =
+  val HorizontalRule =
     IconData(
       listOf(
         IconPath(
@@ -142,7 +151,7 @@ object Typie {
         )
       )
     )
-  val InboxFilledSvg =
+  val InboxFilled =
     IconData(
       listOf(
         IconPath(
@@ -152,7 +161,7 @@ object Typie {
         )
       )
     )
-  val KakaoSvg =
+  val Kakao =
     IconData(
       listOf(
         IconPath(
@@ -164,7 +173,7 @@ object Typie {
       viewportWidth = 36f,
       viewportHeight = 36f,
     )
-  val LetterSpacingSvg =
+  val LetterSpacing =
     IconData(
       listOf(
         IconPath(
@@ -174,7 +183,7 @@ object Typie {
         )
       )
     )
-  val LineHeightSvg =
+  val LineHeight =
     IconData(
       listOf(
         IconPath(
@@ -184,7 +193,7 @@ object Typie {
         )
       )
     )
-  val RubySvg =
+  val Ruby =
     IconData(
       listOf(
         IconPath(
@@ -195,7 +204,7 @@ object Typie {
         )
       )
     )
-  val SearchFilledSvg =
+  val SearchFilled =
     IconData(
       listOf(
         IconPath(
@@ -206,6 +215,29 @@ object Typie {
         ),
         IconPath(
           "M11 19c4.4183 0 8-3.5817 8-8s-3.5817-8-8-8-8 3.5817-8 8 3.5817 8 8 8Z",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+      )
+    )
+  val StickyNotePlus =
+    IconData(
+      listOf(
+        IconPath(
+          "M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6.35M21 9v3.35",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M15 3v5a1 1 0 0 0 1 1h5",
+          PathStyle.Stroke,
+          strokeLineCap = StrokeCap.Round,
+          strokeLineJoin = StrokeJoin.Round,
+        ),
+        IconPath(
+          "M14 18h6m-3-3v6",
           PathStyle.Stroke,
           strokeLineCap = StrokeCap.Round,
           strokeLineJoin = StrokeJoin.Round,
