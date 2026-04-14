@@ -13,12 +13,12 @@ class LoginViewModelTest {
   fun `invalid email submission returns error without hitting network`() = runTest {
     val model = LoginWithEmailViewModel()
 
-    model.state.form.email.setValue("invalid-email")
-    model.state.form.password.setValue("password123")
+    model.form.email.setValue("invalid-email")
+    model.form.password.setValue("password123")
 
     val result = model.submit()
 
     assertIs<Result.Err<LoginWithEmailError>>(result)
-    assertEquals(listOf("올바른 이메일 형식을 입력해주세요."), model.state.form.email.errors)
+    assertEquals(listOf("올바른 이메일 형식을 입력해주세요."), model.form.email.errors)
   }
 }

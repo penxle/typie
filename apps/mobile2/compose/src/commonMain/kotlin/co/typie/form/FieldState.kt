@@ -79,6 +79,26 @@ class FieldState<V>(
     _initialValue = value
   }
 
+  fun syncFromSource(newValue: V, preserveDirty: Boolean = true) {
+    val wasDirty = isDirty
+    _initialValue = newValue
+
+    when {
+      !preserveDirty || !wasDirty -> {
+        value = newValue
+        errors = emptyList()
+        isTouched = false
+        isValidating = false
+      }
+
+      value == newValue -> {
+        errors = emptyList()
+        isTouched = false
+        isValidating = false
+      }
+    }
+  }
+
   internal suspend fun validate(): List<String> {
     val result = mutableListOf<String>()
     for (rules in rulesByTiming.values) {

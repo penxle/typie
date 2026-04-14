@@ -1,0 +1,148 @@
+fragment NoteLinkedEntity_entity on Entity {
+  id
+  slug
+  icon
+  iconColor
+
+  node {
+    __typename
+
+    ... on Document {
+      id
+      title
+    }
+
+    ... on Folder {
+      id
+      name
+    }
+  }
+}
+
+fragment NoteEntityPicker_entity on Entity {
+  id
+  slug
+  icon
+  iconColor
+
+  node {
+    __typename
+
+    ... on Document {
+      id
+      title
+      type
+      subtitle
+      excerpt
+      entity {
+        id
+        parent {
+          id
+
+          node {
+            __typename
+
+            ... on Folder {
+              id
+              name
+              entity {
+                id
+                icon
+                iconColor
+              }
+            }
+          }
+        }
+      }
+    }
+
+    ... on Folder {
+      id
+      name
+    }
+  }
+}
+
+fragment NoteCard_note on Note {
+  id
+  content
+  order
+  color
+  status
+  updatedAt
+
+  entities {
+    ...NoteLinkedEntity_entity
+  }
+}
+
+query NoteEntityPicker_Recent_Query($siteId: ID!) {
+  me @catch(to: THROW) {
+    id
+
+    recentlyViewedEntities(siteId: $siteId) {
+      ...NoteEntityPicker_entity
+    }
+  }
+}
+
+query NoteEntityPicker_Search_Query($siteId: ID!, $query: String!) {
+  search(siteId: $siteId, query: $query) @catch(to: THROW) {
+    hits {
+      __typename
+
+      ... on SearchHitDocument {
+        document {
+          entity {
+            ...NoteEntityPicker_entity
+          }
+        }
+      }
+
+      ... on SearchHitFolder {
+        folder {
+          entity {
+            ...NoteEntityPicker_entity
+          }
+        }
+      }
+    }
+  }
+}
+
+mutation Note_Create_Mutation($input: CreateNoteInput!) {
+  createNote(input: $input) {
+    ...NoteCard_note
+  }
+}
+
+mutation Note_Update_Mutation($input: UpdateNoteInput!) {
+  updateNote(input: $input) {
+    ...NoteCard_note
+  }
+}
+
+mutation Note_Delete_Mutation($input: DeleteNoteInput!) {
+  deleteNote(input: $input) {
+    id
+  }
+}
+
+mutation Note_Move_Mutation($input: MoveNoteInput!) {
+  moveNote(input: $input) {
+    id
+    order
+  }
+}
+
+mutation Note_AddEntity_Mutation($input: AddNoteEntityInput!) {
+  addNoteEntity(input: $input) {
+    ...NoteCard_note
+  }
+}
+
+mutation Note_RemoveEntity_Mutation($input: RemoveNoteEntityInput!) {
+  removeNoteEntity(input: $input) {
+    ...NoteCard_note
+  }
+}

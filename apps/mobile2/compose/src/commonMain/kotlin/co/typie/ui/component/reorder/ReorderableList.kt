@@ -219,7 +219,6 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
 
     val orderedKeys = displayedKeys
     if (orderedKeys == activeDrag.startOrderedKeys) {
-      pendingCommittedKeys = null
       return null
     }
 
@@ -297,15 +296,15 @@ fun Modifier.reorderableListContainer(
 fun <K : Any> Modifier.reorderableItem(state: ReorderableListState<K>, key: K): Modifier =
   composed {
     val settlingTranslationY = state.settlingTranslationY(key)
-    val settlingTranslation = remember(key) { Animatable(settlingTranslationY ?: 0f) }
+    val isSettling = settlingTranslationY != null
+    val settlingTranslation = remember(key, isSettling) { Animatable(settlingTranslationY ?: 0f) }
 
-    LaunchedEffect(key, settlingTranslationY) {
-      if (settlingTranslationY == null) {
+    LaunchedEffect(key, isSettling) {
+      if (!isSettling) {
         settlingTranslation.snapTo(0f)
         return@LaunchedEffect
       }
 
-      settlingTranslation.snapTo(settlingTranslationY)
       settlingTranslation.animateTo(
         targetValue = 0f,
         animationSpec = spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium),
@@ -357,6 +356,15 @@ fun <K : Any> Modifier.reorderableDragHandle(
           currentWindowPosition =
             handleCoordinates?.localToWindow(change.position) ?: currentWindowPosition
 
+          if (!change.pressed) {
+            if (startedDrag) {
+              onDragStopped(state.endDrag())
+            } else {
+              state.cancelDrag()
+            }
+            break
+          }
+
           if (startedDrag) {
             change.consume()
             if (state.updateDrag(currentWindowPosition)) {
@@ -370,15 +378,6 @@ fun <K : Any> Modifier.reorderableDragHandle(
                 }
               },
             )
-          }
-
-          if (!change.pressed) {
-            if (startedDrag) {
-              onDragStopped(state.endDrag())
-            } else {
-              state.cancelDrag()
-            }
-            break
           }
         }
 
@@ -540,7 +539,8 @@ private fun shouldSwapTowardsPrevious(
     return comparisonWindowY <= previousBounds.bottom
   }
 
-  return draggedBounds.verticalOverlap(previousBounds) >= previousThresholdHeight / 2f ||
+  val requiredOverlap = minOf(draggedBounds.height, previousThresholdHeight) / 2f
+  return draggedBounds.verticalOverlap(previousBounds) >= requiredOverlap ||
     draggedBounds.bottom <= previousBounds.top
 }
 
@@ -554,7 +554,8 @@ private fun shouldSwapTowardsNext(
     return comparisonWindowY >= nextBounds.top
   }
 
-  return draggedBounds.verticalOverlap(nextBounds) >= nextThresholdHeight / 2f ||
+  val requiredOverlap = minOf(draggedBounds.height, nextThresholdHeight) / 2f
+  return draggedBounds.verticalOverlap(nextBounds) >= requiredOverlap ||
     draggedBounds.top >= nextBounds.bottom
 }
 

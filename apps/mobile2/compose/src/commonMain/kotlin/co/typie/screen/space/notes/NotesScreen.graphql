@@ -1,5 +1,5 @@
-query NotesScreen_Query {
-  me @catch(to: THROW) {
-    id
+query NotesScreen_Query($siteId: ID!, $status: NoteStatus!) {
+  notes(siteId: $siteId, status: $status) @catch(to: THROW) {
+    ...NoteCard_note
   }
 }

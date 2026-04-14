@@ -198,6 +198,68 @@ class ReorderableListTest {
   }
 
   @Test
+  fun `calculateReorderedKeys swaps when small dragged item covers half of larger next item relative to smaller height`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("dragged", "large", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 100f,
+        movementDirection = 1,
+        itemBounds =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = 70f, right = 100f, bottom = 130f),
+            "large" to Rect(left = 0f, top = 100f, right = 100f, bottom = 300f),
+            "tail" to Rect(left = 0f, top = 300f, right = 100f, bottom = 360f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 100f),
+            1 to Rect(left = 0f, top = 100f, right = 100f, bottom = 300f),
+            2 to Rect(left = 0f, top = 300f, right = 100f, bottom = 360f),
+          ),
+        referenceItemBoundsByKey =
+          mapOf(
+            "dragged" to Rect(left = 0f, top = 0f, right = 100f, bottom = 60f),
+            "large" to Rect(left = 0f, top = 100f, right = 100f, bottom = 300f),
+            "tail" to Rect(left = 0f, top = 300f, right = 100f, bottom = 360f),
+          ),
+      )
+
+    assertEquals(listOf("large", "dragged", "tail"), reordered)
+  }
+
+  @Test
+  fun `calculateReorderedKeys swaps when small dragged item covers half of larger previous item relative to smaller height`() {
+    val reordered =
+      calculateReorderedKeys(
+        orderedKeys = listOf("head", "dragged", "tail"),
+        draggedKey = "dragged",
+        comparisonWindowY = 200f,
+        movementDirection = -1,
+        itemBounds =
+          mapOf(
+            "head" to Rect(left = 0f, top = 0f, right = 100f, bottom = 200f),
+            "dragged" to Rect(left = 0f, top = 170f, right = 100f, bottom = 230f),
+            "tail" to Rect(left = 0f, top = 260f, right = 100f, bottom = 320f),
+          ),
+        referenceSlotBoundsByIndex =
+          mapOf(
+            0 to Rect(left = 0f, top = 0f, right = 100f, bottom = 200f),
+            1 to Rect(left = 0f, top = 200f, right = 100f, bottom = 260f),
+            2 to Rect(left = 0f, top = 260f, right = 100f, bottom = 320f),
+          ),
+        referenceItemBoundsByKey =
+          mapOf(
+            "head" to Rect(left = 0f, top = 0f, right = 100f, bottom = 200f),
+            "dragged" to Rect(left = 0f, top = 200f, right = 100f, bottom = 260f),
+            "tail" to Rect(left = 0f, top = 260f, right = 100f, bottom = 320f),
+          ),
+      )
+
+    assertEquals(listOf("dragged", "head", "tail"), reordered)
+  }
+
+  @Test
   fun `calculateReorderedKeys uses adjacent item height when returning over larger original slot`() {
     val reordered =
       calculateReorderedKeys(
@@ -321,6 +383,35 @@ class ReorderableListTest {
 
     assertNull(commit)
     assertEquals(15f, state.settlingTranslationY("a"))
+  }
+
+  @Test
+  fun `noop drag does not discard pending committed order before server catches up`() = runTest {
+    val state = createReorderableListState<String>()
+    val serverKeys = listOf("a", "b", "c")
+    val reorderedKeys = listOf("b", "c", "a")
+
+    state.syncKeys(serverKeys)
+    state.registerItemBounds("a", Rect(left = 0f, top = 0f, right = 100f, bottom = 50f))
+    state.registerItemBounds("b", Rect(left = 0f, top = 50f, right = 100f, bottom = 100f))
+    state.registerItemBounds("c", Rect(left = 0f, top = 100f, right = 100f, bottom = 150f))
+
+    state.beginDrag(key = "a", pointerWindowPosition = Offset(x = 0f, y = 25f))
+    state.updateDrag(pointerWindowPosition = Offset(x = 0f, y = 140f))
+    state.registerItemBounds("a", Rect(left = 0f, top = 100f, right = 100f, bottom = 150f))
+    assertEquals(reorderedKeys, state.endDrag()?.orderedKeys)
+
+    state.syncKeys(serverKeys)
+    assertEquals(reorderedKeys, state.displayedKeys)
+
+    state.registerItemBounds("b", Rect(left = 0f, top = 0f, right = 100f, bottom = 50f))
+    state.registerItemBounds("c", Rect(left = 0f, top = 50f, right = 100f, bottom = 100f))
+    state.registerItemBounds("a", Rect(left = 0f, top = 100f, right = 100f, bottom = 150f))
+    state.beginDrag(key = "a", pointerWindowPosition = Offset(x = 0f, y = 125f))
+    assertNull(state.endDrag())
+
+    state.syncKeys(serverKeys)
+    assertEquals(reorderedKeys, state.displayedKeys)
   }
 }
 

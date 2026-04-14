@@ -39,7 +39,6 @@ import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
-import kotlinx.serialization.json.JsonNull.content
 
 private val MaxContentWidth = 600.dp
 
@@ -82,7 +81,7 @@ fun Screen(
       modifier = Modifier.fillMaxSize().hazeSource(hazeState).widthIn(max = MaxContentWidth),
       contentAlignment = Alignment.TopCenter,
     ) {
-      Skeleton(enabled = query == null || query.state !is QueryState.Success) {
+      Skeleton(enabled = query != null && query.state !is QueryState.Success) {
         Box(modifier = Modifier.fillMaxSize()) { content(contentPadding) }
       }
     }

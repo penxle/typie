@@ -127,6 +127,41 @@ class FieldStateTest {
   }
 
   @Test
+  fun syncFromSource_updates_pristine_field_value_and_initial() {
+    val field = stringField(initialValue = "init")
+
+    field.syncFromSource("server")
+
+    assertEquals("server", field.initialValue)
+    assertEquals("server", field.value)
+    assertFalse(field.isDirty)
+  }
+
+  @Test
+  fun syncFromSource_preserves_dirty_value_while_updating_initial() {
+    val field = stringField(initialValue = "init")
+    field.setValue("draft")
+
+    field.syncFromSource("server")
+
+    assertEquals("server", field.initialValue)
+    assertEquals("draft", field.value)
+    assertTrue(field.isDirty)
+  }
+
+  @Test
+  fun syncFromSource_clears_dirty_when_source_catches_up() {
+    val field = stringField(initialValue = "init")
+    field.setValue("draft")
+
+    field.syncFromSource("draft")
+
+    assertEquals("draft", field.initialValue)
+    assertEquals("draft", field.value)
+    assertFalse(field.isDirty)
+  }
+
+  @Test
   fun destructuring() {
     val field = stringField(initialValue = "hello")
     field.setErrors(listOf("에러"))

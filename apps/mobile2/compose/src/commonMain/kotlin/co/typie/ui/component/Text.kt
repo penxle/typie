@@ -19,6 +19,7 @@ fun Text(
   style: TextStyle = AppTheme.typography.body,
   color: Color = AppTheme.colors.textPrimary,
   overflow: TextOverflow = TextOverflow.Clip,
+  softWrap: Boolean = true,
   maxLines: Int = Int.MAX_VALUE,
 ) {
   val skeleton = LocalSkeleton.current
@@ -32,6 +33,7 @@ fun Text(
     modifier = modifier,
     style = style.copy(color = color),
     overflow = overflow,
+    softWrap = softWrap,
     maxLines = maxLines,
   )
 }
@@ -43,6 +45,7 @@ fun Text(
   style: TextStyle = AppTheme.typography.body,
   color: Color = AppTheme.colors.textPrimary,
   overflow: TextOverflow = TextOverflow.Clip,
+  softWrap: Boolean = true,
   maxLines: Int = Int.MAX_VALUE,
   inlineContent: Map<String, InlineTextContent> = mapOf(),
 ) {
@@ -57,6 +60,7 @@ fun Text(
     modifier = modifier,
     style = style.copy(color = color),
     overflow = overflow,
+    softWrap = softWrap,
     maxLines = maxLines,
     inlineContent = inlineContent,
   )
