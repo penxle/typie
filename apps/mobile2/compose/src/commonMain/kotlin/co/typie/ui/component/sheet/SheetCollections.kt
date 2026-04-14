@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key.Companion.T
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -30,7 +31,7 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 fun <T> SheetOptionList(
-  items: List<T>,
+  items: Iterable<T>,
   modifier: Modifier = Modifier,
   itemContent: @Composable (T) -> Unit,
 ) {

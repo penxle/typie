@@ -65,10 +65,7 @@ fun UpdateProfileScreen() {
         .collect(
           onPending = { toast.show(ToastType.Loading, "프로필 사진 업로드 중...", Duration.ZERO) },
           onSettled = { result ->
-            result.withDefaultExceptionHandler(toast).onOk { avatarId ->
-              toast.show(ToastType.Success, "프로필 사진이 업로드되었어요.")
-              model.form.avatarId.value = avatarId
-            }
+            result.withDefaultExceptionHandler(toast).onOk { toast.success("프로필 사진이 업로드되었어요.") }
           },
         )
     }

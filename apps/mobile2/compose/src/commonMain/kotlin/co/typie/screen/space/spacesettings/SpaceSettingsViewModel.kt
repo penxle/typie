@@ -7,8 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.Konfig
 import co.typie.domain.blob.BlobService
-import co.typie.domain.subscription.SubscriptionService
-import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.form.FormState
 import co.typie.form.ValidateOn
 import co.typie.form.maxLength
@@ -72,50 +70,44 @@ class SpaceSettingsForm(scope: CoroutineScope) : FormState(scope) {
   val dateDisplay = field(SiteDateDisplay.UPDATED_AT) { focusable = false }
 }
 
-class SpaceSettingsScreenState(scope: CoroutineScope) {
-  val form = SpaceSettingsForm(scope)
-  var logoPreviewUrl: String? by mutableStateOf(null)
-}
+sealed interface SpaceSettingsError {
+  data object ValidationFailed : SpaceSettingsError
 
-sealed interface SubmitError {
-  data object SlugAlreadyExists : SubmitError
-
-  data object SubscriptionUnknown : SubmitError
+  data object SlugAlreadyExists : SpaceSettingsError
 }
 
 class SpaceSettingsViewModel : ViewModel() {
-  private val blobService = BlobService
-  private val subscriptionService = SubscriptionService
-  val state = SpaceSettingsScreenState(viewModelScope)
-  var isSubmitting by mutableStateOf(false)
-    private set
-
-  var isDeletingSite by mutableStateOf(false)
-    private set
-
   val query =
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
       skip = { Preference.siteId == null },
       onInitialData = { data ->
-        state.form.name.initialValue = data.site.name
-        state.form.slug.initialValue = data.site.slug
-        state.form.logoId.initialValue = data.site.logo.id
-        state.form.dateDisplay.initialValue = data.site.dateDisplay
+        form.name.initialValue = data.site.name
+        form.slug.initialValue = data.site.slug
+        form.logoId.initialValue = data.site.logo.id
+        form.dateDisplay.initialValue = data.site.dateDisplay
       },
     ) {
       SpaceSettingsScreen_Query(siteId = Preference.siteId!!)
     }
 
-  val usersiteHost: String = Konfig.USERSITE_HOST.trim().removePrefix("*.").removePrefix(".")
+  val form = SpaceSettingsForm(viewModelScope)
+  var logoPreviewUrl: String? by mutableStateOf(null)
 
-  // TODO: 로고 변경 트래킹
+  var isSubmitting by mutableStateOf(false)
+    private set
+
+  var isDeleting by mutableStateOf(false)
+    private set
+
+  val usersiteHost: String = Konfig.USERSITE_HOST.removePrefix("*.").removePrefix(".")
+
   fun uploadLogo(file: PlatformFile): Task<Unit, Unit, Nothing> = task {
     emit(Unit)
 
     val path =
-      blobService.uploadBytes(
+      BlobService.uploadBytes(
         bytes = file.bytes,
         filename = file.filename,
         mimeType = file.mimeType,
@@ -128,12 +120,12 @@ class SpaceSettingsViewModel : ViewModel() {
         )
       )
 
-    state.logoPreviewUrl = image.persistBlobAsImage.img_image.url
-    state.form.logoId.value = image.persistBlobAsImage.id
+    logoPreviewUrl = image.persistBlobAsImage.img_image.url
+    form.logoId.value = image.persistBlobAsImage.id
   }
 
-  suspend fun submit(): Result<Unit, SubmitError> {
-    if (!state.form.validate()) return Result.Ok(Unit)
+  suspend fun submit(): Result<Unit, SpaceSettingsError> {
+    if (!form.validate()) return Result.Err(SpaceSettingsError.ValidationFailed)
 
     return loading({ isSubmitting = it }) {
       Apollo.executeMutation(
@@ -141,46 +133,38 @@ class SpaceSettingsViewModel : ViewModel() {
           input =
             UpdateSiteInput(
               siteId = Preference.siteId!!,
-              name = Optional.present(state.form.name.value.trim()),
-              logoId = Optional.present(state.form.logoId.value),
-              dateDisplay = Optional.present(state.form.dateDisplay.value),
+              name = Optional.present(form.name.value),
+              logoId = Optional.present(form.logoId.value),
+              dateDisplay = Optional.present(form.dateDisplay.value),
             )
         )
       )
 
-      if (state.form.slug.isDirty) {
-        when (subscriptionService.state) {
-          is SubscriptionServiceState.Subscribed -> {
-            try {
-              Apollo.executeMutation(
-                SpaceSettingsScreen_UpdateSiteSlug_Mutation(
-                  input =
-                    UpdateSiteSlugInput(
-                      siteId = Preference.siteId!!,
-                      slug = state.form.slug.value.trim().lowercase(),
-                    )
-                )
-              )
-            } catch (e: TypieError) {
-              if (e.code == "site_slug_already_exists") raise(SubmitError.SlugAlreadyExists)
-              throw e
-            }
+      if (form.slug.isDirty) {
+        try {
+          Apollo.executeMutation(
+            SpaceSettingsScreen_UpdateSiteSlug_Mutation(
+              input = UpdateSiteSlugInput(siteId = Preference.siteId!!, slug = form.slug.value)
+            )
+          )
+        } catch (e: TypieError) {
+          if (e.code == "site_slug_already_exists") {
+            form.slug.errors = listOf("이미 사용 중인 URL이에요.")
+            form.focusFirstError()
+            raise(SpaceSettingsError.ValidationFailed)
           }
 
-          is SubscriptionServiceState.NotSubscribed -> Unit
-
-          is SubscriptionServiceState.Unknown -> raise(SubmitError.SubscriptionUnknown)
+          throw e
         }
       }
 
-      state.form.commit()
-      query.refetch()
+      form.commit()
     }
   }
 
   // TODO: 스페이스 삭제 트래킹
   suspend fun deleteSite(): Result<Unit, Nothing> =
-    loading({ isDeletingSite = it }) {
+    loading({ isDeleting = it }) {
       Apollo.executeMutation(
         SpaceSettingsScreen_DeleteSite_Mutation(
           input = DeleteSiteInput(siteId = Preference.siteId!!)

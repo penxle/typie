@@ -65,7 +65,7 @@ class UpdateProfileViewModel : ViewModel() {
   var isSubmitting by mutableStateOf(false)
     private set
 
-  fun uploadAvatar(file: PlatformFile): Task<Unit, String, Nothing> = task {
+  fun uploadAvatar(file: PlatformFile): Task<Unit, Unit, Nothing> = task {
     emit(Unit)
 
     val path =
@@ -83,7 +83,7 @@ class UpdateProfileViewModel : ViewModel() {
       )
 
     avatarPreviewUrl = result.persistBlobAsImage.url
-    result.persistBlobAsImage.id
+    form.avatarId.value = result.persistBlobAsImage.id
   }
 
   suspend fun submit(): Result<Unit, UpdateProfileError> {
@@ -92,7 +92,7 @@ class UpdateProfileViewModel : ViewModel() {
     return loading({ isSubmitting = it }) {
       Apollo.executeMutation(
         UpdateProfileScreen_UpdateUser_Mutation(
-          UpdateUserInput(avatarId = form.avatarId.value, name = form.name.value.trim())
+          UpdateUserInput(avatarId = form.avatarId.value, name = form.name.value)
         )
       )
 

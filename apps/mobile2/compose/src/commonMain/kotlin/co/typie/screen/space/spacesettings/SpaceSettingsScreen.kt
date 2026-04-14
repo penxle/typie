@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -35,13 +34,13 @@ import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
 import co.typie.graphql.fragment.Img_image
 import co.typie.graphql.type.SiteDateDisplay
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.platform.rememberFilePicker
-import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.AlertBanner
@@ -57,7 +56,6 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
-import co.typie.ui.component.dialog.Dialog
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
 import co.typie.ui.component.popover.Popover
@@ -71,7 +69,6 @@ import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetOptionList
 import co.typie.ui.component.sheet.SheetOptionRow
-import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.toast.LocalToast
@@ -86,33 +83,23 @@ import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
 import kotlinx.coroutines.launch
 
-private data class SpaceDateDisplayOption(val value: SiteDateDisplay, val label: String)
-
-private fun spaceDateDisplayOptions(): List<SpaceDateDisplayOption> {
-  return listOf(
-    SpaceDateDisplayOption(SiteDateDisplay.CREATED_AT, "최초 생성 시각"),
-    SpaceDateDisplayOption(SiteDateDisplay.UPDATED_AT, "마지막 수정 시각"),
-    SpaceDateDisplayOption(SiteDateDisplay.NONE, "미표시"),
+private val SpaceDateDisplayOptions =
+  mapOf(
+    SiteDateDisplay.CREATED_AT to "최초 생성 시각",
+    SiteDateDisplay.UPDATED_AT to "마지막 수정 시각",
+    SiteDateDisplay.NONE to "미표시",
   )
-}
-
-private fun spaceDateDisplayLabel(value: SiteDateDisplay): String {
-  return spaceDateDisplayOptions().firstOrNull { it.value == value }?.label ?: "미표시"
-}
-
-private val SpaceDateDisplaySheetPadding =
-  SheetPadding(header = PaddingValues(horizontal = 16.dp), body = PaddingValues(horizontal = 16.dp))
 
 @Composable
 fun SpaceSettingsScreen() {
-  val nav = Nav.current
-  val dialog = LocalDialog.current
   val model = viewModel { SpaceSettingsViewModel() }
-  val toast = LocalToast.current
+
   val scope = rememberCoroutineScope()
-  val sheet = LocalSheet.current
   val scrollState = rememberScrollState()
-  val subscriptionState = SubscriptionService.state
+
+  val nav = Nav.current
+  val toast = LocalToast.current
+  val sheet = LocalSheet.current
 
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker
@@ -132,7 +119,7 @@ fun SpaceSettingsScreen() {
 
   ProvideTopBar(
     center = { Text("스페이스 설정", style = AppTheme.typography.title) },
-    trailing = { MoreMenu(model, dialog = dialog) },
+    trailing = { MoreMenu(model) },
   )
 
   Screen(loadable = model.query) { contentPadding ->
@@ -140,9 +127,8 @@ fun SpaceSettingsScreen() {
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-      val data = model.query.data
       Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().weight(1f),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         SectionTitle("일반")
@@ -155,8 +141,8 @@ fun SpaceSettingsScreen() {
               verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
               SpaceLogo(
-                image = data.site.logo.img_image,
-                previewUrl = model.state.logoPreviewUrl,
+                image = model.query.data.site.logo.img_image,
+                previewUrl = model.logoPreviewUrl,
                 onClick = { filePicker("image/*") },
               )
 
@@ -174,7 +160,7 @@ fun SpaceSettingsScreen() {
               verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
               TextField(
-                field = model.state.form.name,
+                field = model.form.name,
                 label = "이름",
                 labelPosition = LabelPosition.Internal,
                 placeholder = "스페이스 이름",
@@ -182,28 +168,23 @@ fun SpaceSettingsScreen() {
 
               Box(
                 modifier =
-                  Modifier.fillMaxWidth()
-                    .then(
-                      if (subscriptionState is SubscriptionServiceState.NotSubscribed) {
-                        Modifier.clickable {
-                          scope.launch {
-                            SubscriptionService.gate(
-                              sheet,
-                              nav,
-                              message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.",
-                            )
-                          }
-                        }
-                      } else {
-                        Modifier
-                      }
-                    )
+                  Modifier.fillMaxWidth().thenIf(
+                    SubscriptionService.state is SubscriptionServiceState.NotSubscribed
+                  ) {
+                    clickable {
+                      SubscriptionService.gate(
+                        sheet,
+                        nav,
+                        message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.",
+                      )
+                    }
+                  }
               ) {
                 TextField(
-                  field = model.state.form.slug,
+                  field = model.form.slug,
                   label = "주소",
                   help =
-                    if (subscriptionState is SubscriptionServiceState.NotSubscribed) {
+                    if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
                       "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                     } else {
                       null
@@ -211,8 +192,8 @@ fun SpaceSettingsScreen() {
                   helpTextStyle = AppTheme.typography.caption,
                   labelPosition = LabelPosition.Internal,
                   placeholder = "스페이스 주소",
-                  enabled = subscriptionState is SubscriptionServiceState.Subscribed,
-                  readOnly = subscriptionState !is SubscriptionServiceState.Subscribed,
+                  enabled = SubscriptionService.state is SubscriptionServiceState.Subscribed,
+                  readOnly = SubscriptionService.state !is SubscriptionServiceState.Subscribed,
                   suffix = {
                     Text(
                       ".${model.usersiteHost}",
@@ -235,13 +216,12 @@ fun SpaceSettingsScreen() {
           CardSurface(modifier = Modifier.fillMaxWidth()) {
             CardRow(
               onClick = {
-                scope.launch {
-                  val result = sheet.present {
-                    SpaceDateDisplayContent(selected = model.state.form.dateDisplay.value)
-                  }
-                  if (result != null) {
-                    model.state.form.dateDisplay.setValue(result)
-                  }
+                val result = sheet.present {
+                  SpaceDateDisplaySheet(selected = model.form.dateDisplay.value)
+                }
+
+                if (result != null) {
+                  model.form.dateDisplay.setValue(result)
                 }
               }
             ) {
@@ -249,13 +229,15 @@ fun SpaceSettingsScreen() {
                 label = "글 목록에 표시할 날짜",
                 trailing = {
                   Text(
-                    text = spaceDateDisplayLabel(model.state.form.dateDisplay.value),
+                    text = SpaceDateDisplayOptions[model.form.dateDisplay.value] ?: "(알 수 없음)",
                     style = AppTheme.typography.caption,
                     color = AppTheme.colors.textTertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                   )
+
                   Spacer(Modifier.width(4.dp))
+
                   Icon(
                     icon = Lucide.ChevronRight,
                     modifier = Modifier.size(16.dp),
@@ -267,31 +249,21 @@ fun SpaceSettingsScreen() {
           }
         }
       }
+
+      ToastAnchor()
+
+      Button(
+        text = "저장",
+        loading = model.isSubmitting,
+        loadingText = "저장 중...",
+        onClick = {
+          model.submit().withDefaultExceptionHandler(toast).onOk {
+            toast.success("스페이스 설정이 변경되었어요.")
+            nav.pop()
+          }
+        },
+      )
     }
-
-    ToastAnchor()
-
-    Button(
-      text = "저장",
-      modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-      loading = model.isSubmitting,
-      loadingText = "저장 중...",
-      onClick = {
-        scope.launch {
-          model
-            .submit()
-            .withDefaultExceptionHandler(toast)
-            .onOk { nav.pop() }
-            .onErr { error ->
-              when (error) {
-                SubmitError.SlugAlreadyExists -> toast.show(ToastType.Error, "이미 사용 중인 URL이에요.")
-                SubmitError.SubscriptionUnknown ->
-                  toast.show(ToastType.Error, "이용권 상태를 확인하는 중이에요. 잠시 후 다시 시도해주세요.")
-              }
-            }
-        }
-      },
-    )
   }
 }
 
@@ -315,10 +287,8 @@ private fun SpaceSettingsRowContent(label: String, trailing: @Composable RowScop
 
 @Composable
 context(_: SheetScope<SiteDateDisplay>)
-private fun SpaceDateDisplayContent(selected: SiteDateDisplay) {
+private fun SpaceDateDisplaySheet(selected: SiteDateDisplay) {
   SheetLayout(
-    padding = SpaceDateDisplaySheetPadding,
-    verticalSpacing = 8.dp,
     header = {
       SheetBar(
         center = {
@@ -331,12 +301,12 @@ private fun SpaceDateDisplayContent(selected: SiteDateDisplay) {
           )
         }
       )
-    },
+    }
   ) {
-    SheetOptionList(items = spaceDateDisplayOptions()) { item ->
-      SheetOptionRow(selected = item.value == selected, onClick = { complete(item.value) }) {
+    SheetOptionList(items = SpaceDateDisplayOptions.entries) { (value, label) ->
+      SheetOptionRow(selected = value == selected, onClick = { complete(value) }) {
         Text(
-          text = item.label,
+          text = label,
           style = AppTheme.typography.action,
           modifier = Modifier.fillMaxWidth(),
           color = AppTheme.colors.textPrimary,
@@ -349,11 +319,13 @@ private fun SpaceDateDisplayContent(selected: SiteDateDisplay) {
 }
 
 @Composable
-private fun MoreMenu(model: SpaceSettingsViewModel, dialog: Dialog) {
+private fun MoreMenu(model: SpaceSettingsViewModel) {
+  val scope = rememberCoroutineScope()
+
   val nav = Nav.current
   val toast = LocalToast.current
-  val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current
+  val dialog = LocalDialog.current
 
   Popover(
     placement = PopoverPlacement.BelowEnd,
@@ -374,7 +346,9 @@ private fun MoreMenu(model: SpaceSettingsViewModel, dialog: Dialog) {
                       modifier = Modifier.size(18.dp),
                       tint = AppTheme.colors.danger,
                     )
+
                     Spacer(Modifier.width(12.dp))
+
                     Text(
                       "스페이스 삭제",
                       style = AppTheme.typography.action,
@@ -384,31 +358,26 @@ private fun MoreMenu(model: SpaceSettingsViewModel, dialog: Dialog) {
                 },
                 onSelected = {
                   close()
-                  val data = model.query.data
-                  val isLastSite = data.me.sites.size <= 1
-                  if (isLastSite) {
+
+                  if (model.query.data.me.sites.size <= 1) {
                     scope.launch {
                       dialog.alert(
                         title = "스페이스를 삭제할 수 없어요",
-                        message = "최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
+                        message = "계정에는 최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
                       )
                     }
                   } else {
                     scope.launch {
                       sheet.present {
-                        DeleteSiteConfirmContent(
-                          documentCount = data.site.documentCount,
-                          folderCount = data.site.folderCount,
-                          isDeleting = { model.isDeletingSite },
+                        DeleteSiteSheet(
+                          documentCount = model.query.data.site.documentCount,
+                          folderCount = model.query.data.site.folderCount,
+                          isDeleting = model.isDeleting,
                           onDelete = {
-                            if (!model.isDeletingSite) {
-                              scope.launch {
-                                model.deleteSite().withDefaultExceptionHandler(toast).onOk {
-                                  toast.show(ToastType.Success, "스페이스가 삭제되었어요.")
-                                  complete(Unit)
-                                  nav.pop()
-                                }
-                              }
+                            model.deleteSite().withDefaultExceptionHandler(toast).onOk {
+                              toast.success("스페이스가 삭제되었어요.")
+                              complete(Unit)
+                              nav.pop()
                             }
                           },
                         )
@@ -433,14 +402,15 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
       Box(
         modifier =
           Modifier.size(104.dp)
-            .background(AppTheme.colors.surfaceDefault, logoShape)
-            .border(1.dp, AppTheme.colors.borderDefault, logoShape),
+            .clip(logoShape)
+            .border(1.dp, AppTheme.colors.borderDefault, logoShape)
+            .background(AppTheme.colors.surfaceDefault, logoShape),
         contentAlignment = Alignment.Center,
       ) {
         if (previewUrl != null) {
-          Img(url = previewUrl, modifier = Modifier.size(104.dp).clip(logoShape))
+          Img(url = previewUrl, modifier = Modifier.fillMaxSize())
         } else {
-          Img(image = image, modifier = Modifier.size(104.dp).clip(logoShape))
+          Img(image = image, modifier = Modifier.fillMaxSize())
         }
       }
 
@@ -449,8 +419,7 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
           Modifier.align(Alignment.BottomEnd)
             .offset(x = 6.dp, y = 6.dp)
             .size(36.dp)
-            .clip(AppShapes.circle)
-            .background(AppTheme.colors.surfaceRaised)
+            .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
             .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
@@ -466,22 +435,20 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
 
 @Composable
 context(_: SheetScope<Unit>)
-private fun DeleteSiteConfirmContent(
+private fun DeleteSiteSheet(
   documentCount: Int,
   folderCount: Int,
-  isDeleting: () -> Boolean,
+  isDeleting: Boolean,
   onDelete:
     suspend context(SheetScope<Unit>)
     () -> Unit,
 ) {
-  val isDeleting = isDeleting()
   var inputValue by remember { mutableStateOf("") }
+
   val confirmText = "$documentCount"
   val isConfirmed = documentCount == 0 || inputValue == confirmText
 
   SheetLayout(
-    padding = SpaceDateDisplaySheetPadding,
-    verticalSpacing = 12.dp,
     header = {
       SheetBar(
         center = {
@@ -498,8 +465,8 @@ private fun DeleteSiteConfirmContent(
     footer = {
       Button(
         text = "삭제",
-        variant = if (isConfirmed) ButtonVariant.Danger else ButtonVariant.Secondary,
-        enabled = isConfirmed && !isDeleting,
+        variant = ButtonVariant.Danger,
+        enabled = isConfirmed,
         loading = isDeleting,
         loadingText = "삭제 중...",
         onClick = {
@@ -510,8 +477,17 @@ private fun DeleteSiteConfirmContent(
     },
   ) {
     AlertBanner(
-      text = deleteSiteBannerText(documentCount = documentCount, folderCount = folderCount),
-      variant = AlertBannerVariant.Danger,
+      text =
+        when {
+          folderCount > 0 && documentCount > 0 ->
+            "${folderCount}개의 폴더와 ${documentCount}개의 문서가 함께 삭제돼요."
+          folderCount > 0 -> "${folderCount}개의 폴더가 함께 삭제돼요."
+          documentCount > 0 -> "${documentCount}개의 문서가 함께 삭제돼요."
+          else -> "스페이스가 비어있어요."
+        },
+      variant =
+        if (folderCount == 0 && documentCount == 0) AlertBannerVariant.Default
+        else AlertBannerVariant.Danger,
     )
 
     if (documentCount > 0) {
@@ -526,16 +502,5 @@ private fun DeleteSiteConfirmContent(
         keyboardType = KeyboardType.Number,
       )
     }
-  }
-}
-
-private fun deleteSiteBannerText(documentCount: Int, folderCount: Int): String {
-  val totalCount = documentCount + folderCount
-
-  return when {
-    totalCount == 0 -> "비어있는 스페이스지만 삭제 후 복구할 수 없어요."
-    documentCount > 0 && folderCount > 0 -> "${folderCount}개의 폴더와 ${documentCount}개의 문서가 함께 삭제돼요."
-    documentCount > 0 -> "${documentCount}개의 문서가 함께 삭제돼요."
-    else -> "${folderCount}개의 폴더가 함께 삭제돼요."
   }
 }

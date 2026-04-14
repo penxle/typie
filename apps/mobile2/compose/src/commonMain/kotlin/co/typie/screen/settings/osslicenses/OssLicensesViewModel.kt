@@ -26,12 +26,10 @@ internal class OssLicensesViewModel : ViewModel(), Loadable<List<OssLicenseEntry
   override fun refetch() {
     viewModelScope.launch {
       try {
-
         val aboutLibraries =
           json.decodeFromString<AboutLibraries>(
             Res.readBytes("files/aboutlibraries.json").decodeToString()
           )
-
         state = LoadableState.Success(aboutLibraries.toEntry())
       } catch (e: CancellationException) {
         throw e
