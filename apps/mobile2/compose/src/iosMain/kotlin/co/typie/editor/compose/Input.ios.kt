@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Rect
@@ -16,8 +16,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextEditingScope
 import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
-import co.typie.domain.editor.Editor
-import co.typie.domain.editor.InputEditCommandHandler
+import co.typie.editor.Editor
+import co.typie.editor.InputEditCommandHandler
 import kotlinx.cinterop.ExperimentalForeignApi
 
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(

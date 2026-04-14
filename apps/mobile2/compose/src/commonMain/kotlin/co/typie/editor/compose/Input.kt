@@ -1,4 +1,4 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -14,13 +14,13 @@ import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputModifierNode
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
-import co.typie.domain.editor.Editor
-import co.typie.domain.editor.createBindings
-import co.typie.domain.editor.handleKeyDown
+import co.typie.editor.Editor
+import co.typie.editor.createBindings
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.InsertionOp
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StateField
+import co.typie.editor.handleKeyDown
 import co.typie.platform.Platform
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation

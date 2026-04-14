@@ -1,4 +1,4 @@
-package co.typie.domain.editor
+package co.typie.editor
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Size

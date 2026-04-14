@@ -1,7 +1,7 @@
 package co.typie.screen.editor.editor
 
 import androidx.lifecycle.ViewModel
-import co.typie.domain.editor.EditorState
+import co.typie.editor.EditorState
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.LayoutMode

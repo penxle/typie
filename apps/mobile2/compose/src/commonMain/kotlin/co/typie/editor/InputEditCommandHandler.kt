@@ -1,4 +1,4 @@
-package co.typie.domain.editor
+package co.typie.editor
 
 import androidx.compose.ui.text.input.BackspaceCommand
 import androidx.compose.ui.text.input.CommitTextCommand

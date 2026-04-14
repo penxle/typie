@@ -4,7 +4,7 @@
   ExperimentalContracts::class,
 )
 
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember

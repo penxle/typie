@@ -1,4 +1,4 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -9,7 +9,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import co.typie.domain.editor.Editor
+import co.typie.editor.Editor
 import co.typie.editor.ffi.EditorEvent
 import co.typie.ui.theme.AppTheme
 

@@ -1,4 +1,4 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import java.io.File
 

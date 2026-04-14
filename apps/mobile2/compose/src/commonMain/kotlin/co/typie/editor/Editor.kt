@@ -1,4 +1,4 @@
-package co.typie.domain.editor
+package co.typie.editor
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf

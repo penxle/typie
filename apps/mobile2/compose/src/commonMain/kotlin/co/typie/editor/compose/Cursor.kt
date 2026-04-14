@@ -1,4 +1,4 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background

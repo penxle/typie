@@ -1,4 +1,4 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -20,8 +20,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
-import co.typie.domain.editor.Editor
-import co.typie.domain.editor.LocalEditorState
+import co.typie.editor.Editor
+import co.typie.editor.LocalEditorState
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Viewport

@@ -1,9 +1,9 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import co.typie.domain.editor.Editor
+import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent
 

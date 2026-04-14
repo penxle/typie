@@ -1,4 +1,4 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -16,7 +16,7 @@ import android.view.inputmethod.SurroundingText
 import android.view.inputmethod.TextAttribute
 import android.view.inputmethod.TextSnapshot
 import androidx.annotation.RequiresApi
-import co.typie.domain.editor.Editor
+import co.typie.editor.Editor
 import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.DeletionOp
 import co.typie.editor.ffi.Key

@@ -1,3 +1,3 @@
-package co.typie.domain.editor
+package co.typie.editor
 
 typealias EditorEventListener<T> = (Editor, T) -> Unit

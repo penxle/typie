@@ -1,4 +1,4 @@
-package co.typie.domain.editor
+package co.typie.editor
 
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FontData

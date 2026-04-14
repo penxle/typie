@@ -1,4 +1,4 @@
-package co.typie.domain.editor
+package co.typie.editor
 
 import androidx.compose.ui.input.key.Key as ComposeKey
 import androidx.compose.ui.input.key.KeyEvent

@@ -1,4 +1,4 @@
-package co.typie.domain.editor.compose
+package co.typie.editor.compose
 
 import android.content.Context
 import android.text.InputType
@@ -7,7 +7,7 @@ import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
-import co.typie.domain.editor.Editor
+import co.typie.editor.Editor
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
