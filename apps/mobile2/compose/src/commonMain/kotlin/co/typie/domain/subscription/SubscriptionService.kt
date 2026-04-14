@@ -6,6 +6,9 @@ import co.typie.graphql.Apollo
 import co.typie.graphql.QueryState
 import co.typie.graphql.SubscriptionService_Query
 import co.typie.graphql.watchQuery
+import co.typie.navigation.Navigator
+import co.typie.route.Route
+import co.typie.ui.component.sheet.Sheet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -54,4 +57,21 @@ private fun SubscriptionService_Query.Subscription.toSubscription(): Subscriptio
     fee = plan.fee,
     availability = plan.availability,
   )
+}
+
+suspend fun SubscriptionService.gate(sheet: Sheet, nav: Navigator, message: String) {
+  if (state !is SubscriptionServiceState.NotSubscribed) return
+
+  val result = sheet.present { PlanUpgradeSheet(message = message) }
+  when (result) {
+    is PlanUpgradeSheetResult.TrialStarted ->
+      sheet.present<Unit> {
+        SubscriptionCelebrationSheet(
+          title = "무료 체험이 시작됐어요!",
+          message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
+        )
+      }
+    is PlanUpgradeSheetResult.Upgrade -> nav.navigate(Route.EnrollPlan)
+    null -> {}
+  }
 }

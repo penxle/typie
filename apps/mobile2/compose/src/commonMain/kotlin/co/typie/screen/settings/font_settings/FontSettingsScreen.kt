@@ -17,10 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.subscription.PlanUpgradeContent
-import co.typie.domain.subscription.PlanUpgradeSheetResult
-import co.typie.domain.subscription.SubscriptionCelebrationContent
 import co.typie.domain.subscription.SubscriptionService
+import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -32,7 +30,6 @@ import co.typie.platform.rememberFilePicker
 import co.typie.result.Result
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.route.Route
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
@@ -121,18 +118,7 @@ fun FontSettingsScreen() {
 
       FontUploadAction.ShowPlanUpgradeSheet -> {
         scope.launch {
-          val result = sheet.present {
-            PlanUpgradeContent(message = "폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.")
-          }
-          if (result is PlanUpgradeSheetResult.TrialStarted) {
-            sheet.present {
-              SubscriptionCelebrationContent(
-                title = "무료 체험이 시작됐어요!",
-                message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
-              )
-            }
-          }
-          if (result is PlanUpgradeSheetResult.Upgrade) nav.navigate(Route.EnrollPlan)
+          SubscriptionService.gate(sheet, nav, message = "폰트 업로드 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.")
         }
       }
 

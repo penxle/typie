@@ -31,11 +31,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.subscription.PlanUpgradeContent
-import co.typie.domain.subscription.PlanUpgradeSheetResult
-import co.typie.domain.subscription.SubscriptionCelebrationContent
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionServiceState
+import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -48,7 +46,6 @@ import co.typie.platform.rememberFilePicker
 import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.route.Route
 import co.typie.ui.component.AlertBanner
 import co.typie.ui.component.AlertBannerVariant
 import co.typie.ui.component.Button
@@ -219,19 +216,11 @@ fun SpaceSettingsScreen() {
                     if (subscriptionState is SubscriptionServiceState.NotSubscribed) {
                       Modifier.clickable {
                         scope.launch {
-                          val upgradeResult = sheet.present {
-                            PlanUpgradeContent(message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.")
-                          }
-                          if (upgradeResult is PlanUpgradeSheetResult.TrialStarted) {
-                            sheet.present {
-                              SubscriptionCelebrationContent(
-                                title = "무료 체험이 시작됐어요!",
-                                message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
-                              )
-                            }
-                          }
-                          if (upgradeResult is PlanUpgradeSheetResult.Upgrade)
-                            nav.navigate(Route.EnrollPlan)
+                          SubscriptionService.gate(
+                            sheet,
+                            nav,
+                            message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.",
+                          )
                         }
                       }
                     } else {

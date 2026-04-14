@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.domain.subscription.FULL_ACCESS_MONTHLY_PLAN_ID
 import co.typie.domain.subscription.FULL_ACCESS_YEARLY_PLAN_ID
-import co.typie.domain.subscription.SubscriptionCelebrationContent
+import co.typie.domain.subscription.SubscriptionCelebrationSheet
 import co.typie.domain.subscription.SubscriptionFeature
 import co.typie.domain.subscription.SubscriptionFeatureList
 import co.typie.domain.subscription.SubscriptionService
@@ -88,7 +88,7 @@ fun EnrollPlanScreen() {
   LaunchedEffect(model.showTrialCelebration) {
     if (!model.showTrialCelebration) return@LaunchedEffect
     sheet.present {
-      SubscriptionCelebrationContent(
+      SubscriptionCelebrationSheet(
         title = "무료 체험이 시작됐어요!",
         message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
       )
@@ -99,7 +99,7 @@ fun EnrollPlanScreen() {
   LaunchedEffect(model.showPurchaseCelebration) {
     if (!model.showPurchaseCelebration) return@LaunchedEffect
     sheet.present {
-      SubscriptionCelebrationContent(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
+      SubscriptionCelebrationSheet(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
     }
     model.consumePurchaseCelebration()
   }

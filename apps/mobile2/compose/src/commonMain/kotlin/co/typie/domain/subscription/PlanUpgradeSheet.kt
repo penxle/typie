@@ -98,7 +98,7 @@ private fun placeholderData() =
 
 @Composable
 context(_: SheetScope<PlanUpgradeSheetResult>)
-fun PlanUpgradeContent(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: String) {
+fun PlanUpgradeSheet(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: String) {
   val toast = LocalToast.current
   val dialog = LocalDialog.current
   val model = viewModel { PlanUpgradeSheetViewModel() }

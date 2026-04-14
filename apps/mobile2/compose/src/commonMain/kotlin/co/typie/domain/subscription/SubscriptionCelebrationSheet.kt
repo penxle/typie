@@ -23,7 +23,7 @@ import co.typie.ui.theme.AppTheme
 
 @Composable
 context(_: SheetScope<Unit>)
-fun SubscriptionCelebrationContent(title: String, message: String) {
+fun SubscriptionCelebrationSheet(title: String, message: String) {
   SheetLayout(
     header = {
       SheetBar(

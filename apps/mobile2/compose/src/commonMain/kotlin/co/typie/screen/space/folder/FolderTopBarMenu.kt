@@ -29,6 +29,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.typie.domain.entity.FolderAction
+import co.typie.domain.entity.FolderActionMenuItem
+import co.typie.domain.entity.folderItemActionSections
+import co.typie.domain.entity.folderVisibilityPresentation
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
