@@ -1,5 +1,6 @@
 package co.typie.screen.settings.editorsettings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -28,14 +29,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
+import co.typie.domain.settings.SettingControlRow
+import co.typie.domain.settings.SettingSwitch
 import co.typie.ext.verticalScroll
 import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
-import co.typie.ui.component.SettingControlRow
-import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
@@ -73,7 +74,7 @@ fun EditorSettingsScreen() {
           },
         )
 
-        if (Preference.typewriterEnabled) {
+        AnimatedVisibility(visible = Preference.typewriterEnabled) {
           CardDivider(inset = 20.dp)
 
           Column(

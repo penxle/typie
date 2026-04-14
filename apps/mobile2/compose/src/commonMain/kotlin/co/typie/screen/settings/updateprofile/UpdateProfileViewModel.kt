@@ -28,6 +28,10 @@ import co.typie.result.loading
 import co.typie.result.task
 import kotlinx.coroutines.CoroutineScope
 
+sealed interface UpdateProfileError {
+  data object ValidationFailed : UpdateProfileError
+}
+
 class UpdateProfileForm(scope: CoroutineScope) : FormState(scope) {
   val name =
     field("") {
@@ -42,34 +46,30 @@ class UpdateProfileForm(scope: CoroutineScope) : FormState(scope) {
     }
 }
 
-class UpdateProfileScreenState(scope: CoroutineScope) {
-  val form = UpdateProfileForm(scope)
-  var avatarPreviewUrl: String? by mutableStateOf(null)
-}
-
 class UpdateProfileViewModel : ViewModel() {
-  private val blobService = BlobService
-  val state = UpdateProfileScreenState(viewModelScope)
-  var isSubmitting by mutableStateOf(false)
-    private set
-
   val query =
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
       onInitialData = { data ->
-        state.form.name.initialValue = data.me.name
-        state.form.avatarId.initialValue = data.me.avatar.id
+        form.name.initialValue = data.me.name
+        form.avatarId.initialValue = data.me.avatar.id
       },
     ) {
       UpdateProfileScreen_Query()
     }
 
+  val form = UpdateProfileForm(viewModelScope)
+  var avatarPreviewUrl: String? by mutableStateOf(null)
+
+  var isSubmitting by mutableStateOf(false)
+    private set
+
   fun uploadAvatar(file: PlatformFile): Task<Unit, String, Nothing> = task {
     emit(Unit)
 
     val path =
-      blobService.uploadBytes(
+      BlobService.uploadBytes(
         bytes = file.bytes,
         filename = file.filename,
         mimeType = file.mimeType,
@@ -82,21 +82,21 @@ class UpdateProfileViewModel : ViewModel() {
         )
       )
 
-    state.avatarPreviewUrl = result.persistBlobAsImage.url
+    avatarPreviewUrl = result.persistBlobAsImage.url
     result.persistBlobAsImage.id
   }
 
-  suspend fun submit(): Result<Unit, Nothing> {
-    if (!state.form.validate()) return Result.Ok(Unit)
+  suspend fun submit(): Result<Unit, UpdateProfileError> {
+    if (!form.validate()) return Result.Err(UpdateProfileError.ValidationFailed)
 
     return loading({ isSubmitting = it }) {
       Apollo.executeMutation(
         UpdateProfileScreen_UpdateUser_Mutation(
-          UpdateUserInput(avatarId = state.form.avatarId.value, name = state.form.name.value.trim())
+          UpdateUserInput(avatarId = form.avatarId.value, name = form.name.value.trim())
         )
       )
 
-      state.form.commit()
+      form.commit()
     }
   }
 }

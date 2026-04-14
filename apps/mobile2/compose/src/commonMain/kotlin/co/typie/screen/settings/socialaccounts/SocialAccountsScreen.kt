@@ -18,15 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.separated
+import co.typie.ext.thenIfNotNull
 import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
-import co.typie.graphql.Apollo
-import co.typie.graphql.SocialAccountsScreen_Query
 import co.typie.graphql.type.SingleSignOnProvider
-import co.typie.graphql.watchQuery
 import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
@@ -40,21 +37,10 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
-internal fun socialAccountProviderName(provider: SingleSignOnProvider): String {
-  return when (provider) {
-    SingleSignOnProvider.GOOGLE -> "Google"
-    SingleSignOnProvider.NAVER -> "Naver"
-    SingleSignOnProvider.KAKAO -> "Kakao"
-    SingleSignOnProvider.APPLE -> "Apple"
-    SingleSignOnProvider.UNKNOWN__ -> provider.rawValue
-  }
-}
-
 @Composable
 fun SocialAccountsScreen() {
   val model = viewModel { SocialAccountsViewModel() }
   val scrollState = rememberScrollState()
-  val singleSignOns = model.query.data?.me?.singleSignOns.orEmpty()
 
   ProvideTopBar(center = { Text("연결된 SNS 계정", style = AppTheme.typography.title) })
 
@@ -68,40 +54,35 @@ fun SocialAccountsScreen() {
       SectionTitle("연결된 계정")
 
       CardSurface(modifier = Modifier.fillMaxWidth()) {
-        if (singleSignOns.isEmpty()) {
-          EmptySocialAccountsState()
+        if (model.query.data.me.singleSignOns.isEmpty()) {
+          Column(
+            modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+          ) {
+            Icon(
+              icon = Lucide.UserRoundX,
+              modifier = Modifier.size(48.dp),
+              tint = AppTheme.colors.textTertiary,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+              "연결된 SNS 계정이 없어요",
+              style = AppTheme.typography.label,
+              color = AppTheme.colors.textTertiary,
+            )
+          }
         } else {
           Column {
-            singleSignOns.forEachIndexed { index, singleSignOn ->
-              SocialAccountRow(provider = singleSignOn.provider, email = singleSignOn.email)
-
-              if (index < singleSignOns.lastIndex) {
-                CardDivider()
-              }
+            model.query.data.me.singleSignOns.separated(separator = { CardDivider() }) {
+              SocialAccountRow(provider = it.provider, email = it.email)
             }
           }
         }
       }
-
-      Spacer(Modifier.height(72.dp))
     }
-  }
-}
-
-@Composable
-private fun EmptySocialAccountsState() {
-  Column(
-    modifier = Modifier.fillMaxWidth().height(220.dp).padding(horizontal = 16.dp),
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.Center,
-  ) {
-    Icon(
-      icon = Lucide.UserRoundX,
-      modifier = Modifier.size(48.dp),
-      tint = AppTheme.colors.textTertiary,
-    )
-    Spacer(Modifier.height(12.dp))
-    Text("연결된 SNS 계정이 없어요", style = AppTheme.typography.label, color = AppTheme.colors.textTertiary)
   }
 }
 
@@ -115,7 +96,7 @@ private fun SocialAccountRow(provider: SingleSignOnProvider, email: String) {
     ProviderIcon(provider = provider)
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-      Text(socialAccountProviderName(provider), style = AppTheme.typography.action)
+      Text(provider.toProviderName(), style = AppTheme.typography.action)
       Text(email, style = AppTheme.typography.body, color = AppTheme.colors.textTertiary)
     }
   }
@@ -182,17 +163,15 @@ private fun ProviderIconBadge(
   Box(
     modifier =
       Modifier.size(28.dp)
-        .then(
-          if (border != null) Modifier.border(1.dp, border, AppShapes.rounded(AppShapes.sm))
-          else Modifier
-        )
+        .thenIfNotNull(border) { border(1.dp, it, AppShapes.rounded(AppShapes.sm)) }
         .background(background, AppShapes.rounded(AppShapes.sm)),
     contentAlignment = Alignment.Center,
     content = content,
   )
 }
 
-internal class SocialAccountsViewModel : ViewModel() {
-
-  val query = Apollo.watchQuery(scope = viewModelScope) { SocialAccountsScreen_Query() }
-}
+private fun SingleSignOnProvider.toProviderName() =
+  when (this) {
+    SingleSignOnProvider.UNKNOWN__ -> rawValue
+    else -> this.name.lowercase().replaceFirstChar { it.uppercase() }
+  }

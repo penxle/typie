@@ -1,4 +1,4 @@
-package co.typie.ui.component
+package co.typie.domain.settings
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
+import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -127,7 +128,7 @@ fun SettingSwitch(
       ) {
         if (indeterminate) {
           Icon(
-            icon = co.typie.icons.Lucide.Minus,
+            icon = Lucide.Minus,
             modifier = Modifier.size(12.dp),
             tint = colors.textTertiary,
             strokeWidth = 2.5f,

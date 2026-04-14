@@ -23,9 +23,7 @@ import co.typie.result.loading
 import kotlinx.coroutines.CoroutineScope
 
 sealed interface UpdateEmailError {
-  data object EmailAlreadyExists : UpdateEmailError
-
-  data class Unknown(val code: String) : UpdateEmailError
+  data object ValidationFailed : UpdateEmailError
 }
 
 class UpdateEmailForm(scope: CoroutineScope) : FormState(scope) {
@@ -36,39 +34,38 @@ class UpdateEmailForm(scope: CoroutineScope) : FormState(scope) {
     }
 }
 
-class UpdateEmailScreenState(scope: CoroutineScope) {
-  val form = UpdateEmailForm(scope)
-}
-
 class UpdateEmailViewModel : ViewModel() {
-  val state = UpdateEmailScreenState(viewModelScope)
-  var isSubmitting by mutableStateOf(false)
-    private set
-
   val query =
     Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       UpdateEmailScreen_Query()
     }
 
+  val form = UpdateEmailForm(viewModelScope)
+  var isSubmitting by mutableStateOf(false)
+    private set
+
   suspend fun submit(): Result<Unit, UpdateEmailError> {
-    if (!state.form.validate()) return Result.Ok(Unit)
+    if (!form.validate()) return Result.Err(UpdateEmailError.ValidationFailed)
 
     return loading({ isSubmitting = it }) {
       try {
         Apollo.executeMutation(
           UpdateEmailScreen_SendEmailUpdateEmail_Mutation(
-            input = SendEmailUpdateEmailInput(email = state.form.email.value.trim())
+            input = SendEmailUpdateEmailInput(email = form.email.value)
           )
         )
       } catch (e: TypieError) {
         when (e.code) {
-          "user_email_exists" -> raise(UpdateEmailError.EmailAlreadyExists)
-          else -> raise(UpdateEmailError.Unknown(e.code))
+          "user_email_exists" -> {
+            form.email.errors = listOf("이미 사용중인 이메일이에요.")
+            form.focusFirstError()
+            raise(UpdateEmailError.ValidationFailed)
+          }
+          else -> throw e
         }
       }
 
-      // TODO: 이메일 변경 트래킹
-      state.form.commit()
+      form.commit()
     }
   }
 }

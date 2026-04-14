@@ -16,12 +16,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.settings.SettingControlRow
+import co.typie.domain.settings.SettingSwitch
 import co.typie.ext.verticalScroll
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
-import co.typie.ui.component.SettingControlRow
-import co.typie.ui.component.SettingSwitch
 import co.typie.ui.component.Text
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog

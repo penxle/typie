@@ -38,6 +38,7 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
@@ -47,11 +48,13 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun UpdateProfileScreen() {
-  val nav = Nav.current
   val model = viewModel { UpdateProfileViewModel() }
-  val toast = LocalToast.current
+
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
+
+  val nav = Nav.current
+  val toast = LocalToast.current
 
   val filePicker = rememberFilePicker { files ->
     val file = files.firstOrNull() ?: return@rememberFilePicker
@@ -64,14 +67,26 @@ fun UpdateProfileScreen() {
           onSettled = { result ->
             result.withDefaultExceptionHandler(toast).onOk { avatarId ->
               toast.show(ToastType.Success, "프로필 사진이 업로드되었어요.")
-              model.state.form.avatarId.setValue(avatarId)
+              model.form.avatarId.value = avatarId
             }
           },
         )
     }
   }
 
-  ProvideTopBar(center = { Text("프로필 변경", style = AppTheme.typography.title) })
+  fun submit() {
+    scope.launch {
+      model.submit().withDefaultExceptionHandler(toast).onOk {
+        toast.success("프로필이 변경되었어요.")
+        nav.pop()
+      }
+    }
+  }
+
+  ProvideTopBar(
+    center = { Text("프로필 변경", style = AppTheme.typography.title) },
+    scrollOffset = scrollState.topBarScrollOffset(),
+  )
 
   Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
@@ -83,7 +98,7 @@ fun UpdateProfileScreen() {
         ) {
           ProfileAvatar(
             image = model.query.data.me.avatar.img_image,
-            previewUrl = model.state.avatarPreviewUrl,
+            previewUrl = model.avatarPreviewUrl,
             onClick = { filePicker("image/*") },
           )
 
@@ -93,37 +108,20 @@ fun UpdateProfileScreen() {
         Spacer(Modifier.height(32.dp))
 
         TextField(
-          field = model.state.form.name,
+          field = model.form.name,
           label = "닉네임",
           labelPosition = LabelPosition.Internal,
-          onImeAction = {
-            scope.launch {
-              model.submit().withDefaultExceptionHandler(toast).onOk {
-                toast.show(ToastType.Success, "프로필이 변경되었어요.")
-                nav.pop()
-              }
-            }
-          },
+          onImeAction = { submit() },
         )
-
-        Spacer(Modifier.height(24.dp))
       }
 
       ToastAnchor()
 
       Button(
         text = "변경",
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
         loading = model.isSubmitting,
         loadingText = "변경 중...",
-        onClick = {
-          scope.launch {
-            model.submit().withDefaultExceptionHandler(toast).onOk {
-              toast.show(ToastType.Success, "프로필이 변경되었어요.")
-              nav.pop()
-            }
-          }
-        },
+        onClick = { submit() },
       )
     }
   }
@@ -132,19 +130,19 @@ fun UpdateProfileScreen() {
 @Composable
 private fun ProfileAvatar(image: Img_image, previewUrl: String?, onClick: () -> Unit) {
   InteractionScope {
-    Box(modifier = Modifier.clickable(onClick).pressScale()) {
+    Box(modifier = Modifier.pressScale().clickable(onClick)) {
       Box(
         modifier =
           Modifier.size(104.dp)
             .clip(AppShapes.circle)
-            .background(AppTheme.colors.surfaceDefault)
-            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle),
+            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
+            .background(AppTheme.colors.surfaceDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         if (previewUrl != null) {
-          Img(url = previewUrl, modifier = Modifier.size(104.dp).clip(AppShapes.circle))
+          Img(url = previewUrl, modifier = Modifier.fillMaxSize())
         } else {
-          Img(image = image, modifier = Modifier.size(104.dp).clip(AppShapes.circle))
+          Img(image = image, modifier = Modifier.fillMaxSize())
         }
       }
 
@@ -152,9 +150,8 @@ private fun ProfileAvatar(image: Img_image, previewUrl: String?, onClick: () -> 
         modifier =
           Modifier.align(Alignment.BottomEnd)
             .size(36.dp)
-            .clip(AppShapes.circle)
-            .background(AppTheme.colors.surfaceRaised)
-            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle),
+            .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
+            .background(AppTheme.colors.surfaceRaised, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         Icon(

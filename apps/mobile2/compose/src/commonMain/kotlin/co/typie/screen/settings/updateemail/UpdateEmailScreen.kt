@@ -14,8 +14,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
-import co.typie.result.DEFAULT_ERROR_MESSAGE
-import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
@@ -27,7 +25,6 @@ import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
-import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
@@ -35,31 +32,21 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun UpdateEmailScreen() {
-  val nav = Nav.current
   val model = viewModel { UpdateEmailViewModel() }
-  val dialog = LocalDialog.current
-  val toast = LocalToast.current
+
   val scope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
-  val showSuccessModal: suspend () -> Unit = {
-    dialog.alert(title = "이메일 인증", message = "변경할 이메일 주소로 인증 메일을 발송했어요. 메일함을 확인해주세요.")
-    nav.pop()
-  }
+
+  val nav = Nav.current
+  val toast = LocalToast.current
+  val dialog = LocalDialog.current
 
   fun submit() {
     scope.launch {
-      model
-        .submit()
-        .withDefaultExceptionHandler(toast)
-        .onOk { showSuccessModal() }
-        .onErr { error ->
-          val message =
-            when (error) {
-              UpdateEmailError.EmailAlreadyExists -> "이미 사용중인 이메일이에요."
-              is UpdateEmailError.Unknown -> DEFAULT_ERROR_MESSAGE
-            }
-          toast.show(ToastType.Error, message)
-        }
+      model.submit().withDefaultExceptionHandler(toast).onOk {
+        dialog.alert(title = "이메일 인증", message = "변경할 이메일 주소로 인증 메일을 발송했어요. 메일함을 확인해주세요.")
+        nav.pop()
+      }
     }
   }
 
@@ -68,16 +55,22 @@ fun UpdateEmailScreen() {
   Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
-        Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
-
-        Text(model.query.data.me.email, style = AppTheme.typography.action)
+        Text(
+          "현재 이메일 주소",
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textSecondary,
+        )
 
         Spacer(Modifier.height(8.dp))
 
+        Text(model.query.data.me.email, style = AppTheme.typography.action)
+
+        Spacer(Modifier.height(20.dp))
+
         TextField(
-          field = model.state.form.email,
+          field = model.form.email,
           label = "변경할 이메일 주소",
-          labelPosition = LabelPosition.Internal,
+          labelPosition = LabelPosition.External,
           placeholder = "me@example.com",
           contentType = ContentType.EmailAddress,
           keyboardType = KeyboardType.Email,
@@ -89,7 +82,6 @@ fun UpdateEmailScreen() {
 
       Button(
         text = "변경",
-        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
         loading = model.isSubmitting,
         loadingText = "변경 중...",
         onClick = { submit() },

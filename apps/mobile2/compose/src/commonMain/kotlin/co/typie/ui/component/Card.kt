@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.icons.Lucide
+import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -88,6 +92,34 @@ fun CardRow(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(spacing),
       content = content,
+    )
+  }
+}
+
+@Composable
+fun CardChevronRow(
+  onClick: suspend () -> Unit,
+  modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = CardDefaults.RowPadding,
+  spacing: Dp = 10.dp,
+  content: @Composable RowScope.() -> Unit,
+) {
+  InteractionScope {
+    Row(
+      modifier = modifier.fillMaxWidth().clickable(onClick).padding(contentPadding).pressScale(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(spacing),
+      content = {
+        content()
+
+        Spacer(Modifier.weight(1f))
+
+        Icon(
+          icon = Lucide.ChevronRight,
+          modifier = Modifier.size(16.dp),
+          tint = AppTheme.colors.textTertiary,
+        )
+      },
     )
   }
 }

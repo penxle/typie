@@ -1,4 +1,4 @@
-package co.typie.ui.component
+package co.typie.domain.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ui.component.Text
 import co.typie.ui.theme.AppTheme
 
 @Composable

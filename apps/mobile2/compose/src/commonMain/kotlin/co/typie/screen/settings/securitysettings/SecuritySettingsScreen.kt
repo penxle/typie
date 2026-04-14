@@ -2,43 +2,32 @@ package co.typie.screen.settings.securitysettings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.settings.SettingsCardRow
 import co.typie.ext.verticalScroll
-import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.ui.component.CardDivider
-import co.typie.ui.component.CardRow
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
-import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 
-private fun securityPasswordItemLabel(hasPassword: Boolean): String {
-  return if (hasPassword) "비밀번호 변경" else "비밀번호 설정"
-}
-
 @Composable
 fun SecuritySettingsScreen() {
-  val nav = Nav.current
   val model = viewModel { SecuritySettingsViewModel() }
   val scrollState = rememberScrollState()
-  val hasPassword = model.query.data.me.hasPassword
+  val nav = Nav.current
 
   ProvideTopBar(
     leading = { TopBarBackButton() },
@@ -51,52 +40,24 @@ fun SecuritySettingsScreen() {
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      Text("보안", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))
+      Text("보안", style = AppTheme.typography.display)
 
       CardSurface(modifier = Modifier.fillMaxWidth()) {
         Column {
-          CardRow(onClick = { nav.navigate(Route.UpdatePassword) }) {
-            SecurityRowContent(label = securityPasswordItemLabel(hasPassword))
-          }
+          SettingsCardRow(
+            label = if (model.query.data.me.hasPassword) "비밀번호 변경" else "비밀번호 설정",
+            onClick = { nav.navigate(Route.UpdatePassword) },
+          )
 
           CardDivider()
 
-          CardRow(onClick = { nav.navigate(Route.SocialAccounts) }) {
-            SecurityRowContent(label = "연결된 SNS 계정")
-          }
+          SettingsCardRow(label = "연결된 SNS 계정", onClick = { nav.navigate(Route.SocialAccounts) })
 
           CardDivider()
 
-          CardRow(onClick = { nav.navigate(Route.DeleteUser) }) {
-            SecurityRowContent(label = "회원 탈퇴")
-          }
+          SettingsCardRow(label = "회원 탈퇴", onClick = { nav.navigate(Route.DeleteUser) })
         }
       }
-
-      Spacer(Modifier.height(72.dp))
     }
-  }
-}
-
-@Composable
-private fun SecurityRowContent(label: String) {
-  androidx.compose.foundation.layout.Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    Text(
-      text = label,
-      style = AppTheme.typography.label,
-      modifier = Modifier.weight(1f),
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
-
-    Icon(
-      icon = Lucide.ChevronRight,
-      modifier = Modifier.size(16.dp),
-      tint = AppTheme.colors.textTertiary,
-    )
   }
 }
