@@ -25,8 +25,8 @@
 
   const [persistBlobAsFont] = createMutation(
     graphql(`
-      mutation FontUploadModal_PersistBlobAsFont_Mutation($input: PersistBlobAsFontInput!) {
-        persistBlobAsFont(input: $input) {
+      mutation FontUploadModal_PersistBlobAsFontLegacy_Mutation($input: PersistBlobAsFontLegacyInput!) {
+        persistBlobAsFontLegacy(input: $input) {
           id
           subfamilyDisplayName
           weight
@@ -79,11 +79,11 @@
         );
 
         results.push({
-          name: resp.persistBlobAsFont.family.displayName,
-          familyId: resp.persistBlobAsFont.family.id,
-          familyDisplayName: resp.persistBlobAsFont.family.displayName,
-          weight: resp.persistBlobAsFont.weight,
-          subfamilyDisplayName: resp.persistBlobAsFont.subfamilyDisplayName,
+          name: resp.persistBlobAsFontLegacy.family.displayName,
+          familyId: resp.persistBlobAsFontLegacy.family.id,
+          familyDisplayName: resp.persistBlobAsFontLegacy.family.displayName,
+          weight: resp.persistBlobAsFontLegacy.weight,
+          subfamilyDisplayName: resp.persistBlobAsFontLegacy.subfamilyDisplayName,
           success: true,
         });
       } catch (err) {

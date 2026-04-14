@@ -731,6 +731,7 @@ type Mutation {
   moveWidget(input: MoveWidgetInput!): Widget!
   persistBlobAsFile(input: PersistBlobAsFileInput!): File!
   persistBlobAsFont(input: PersistBlobAsFontInput!): Font!
+  persistBlobAsFontLegacy(input: PersistBlobAsFontLegacyInput!): Font!
   persistBlobAsImage(input: PersistBlobAsImageInput!): Image!
   purchasePaywall(input: PurchasePaywallInput!): Boolean!
   purgeEntities(input: PurgeEntitiesInput!): Site!
@@ -845,6 +846,10 @@ input PersistBlobAsFileInput {
 }
 
 input PersistBlobAsFontInput {
+  path: String!
+}
+
+input PersistBlobAsFontLegacyInput {
   path: String!
 }
 

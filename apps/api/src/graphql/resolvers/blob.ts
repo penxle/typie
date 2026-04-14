@@ -15,6 +15,7 @@ import { stack } from '#/env.ts';
 import * as aws from '#/external/aws.ts';
 import { compressZstd } from '#/utils/compression.ts';
 import { processFont } from '#/utils/font.ts';
+import { processFont as processFontLegacy } from '#/utils/font-legacy.ts';
 import { wasm } from '#/utils/wasm.ts';
 import { builder } from '../builder.ts';
 import { Blob, File, Font, Image, isTypeOf } from '../objects.ts';
@@ -510,6 +511,157 @@ builder.mutationFields((t) => ({
           .then(first);
 
         let familyId: string;
+
+        if (fontFamily) {
+          familyId = fontFamily.id;
+
+          if (fontFamily.state === FontFamilyState.ARCHIVED) {
+            await tx.update(FontFamilies).set({ state: FontFamilyState.ACTIVE }).where(eq(FontFamilies.id, familyId));
+          }
+        } else {
+          const fontFamily = await tx
+            .insert(FontFamilies)
+            .values({
+              userId: ctx.session.userId,
+              familyName,
+            })
+            .returning({ id: FontFamilies.id })
+            .then(firstOrThrow);
+
+          familyId = fontFamily.id;
+        }
+
+        const existingFont = await tx
+          .select({ id: Fonts.id })
+          .from(Fonts)
+          .where(and(eq(Fonts.familyId, familyId), eq(Fonts.postScriptName, postScriptName)))
+          .then(first);
+
+        if (existingFont) {
+          await tx.delete(Fonts).where(eq(Fonts.id, existingFont.id));
+        }
+
+        const font = await tx
+          .insert(Fonts)
+          .values({
+            familyId,
+            postScriptName,
+            weight: metadata.weight,
+            size: buffer.length,
+            path: filePath,
+          })
+          .returning()
+          .then(firstOrThrow);
+
+        if (metadata.names.length > 0) {
+          await tx.insert(FontNames).values(
+            metadata.names.map((name) => ({
+              fontId: font.id,
+              nameId: name.nameId,
+              platformId: name.platformId,
+              languageId: name.languageId,
+              value: name.value,
+            })),
+          );
+        }
+
+        return font;
+      });
+    },
+  }),
+
+  persistBlobAsFontLegacy: t.withAuth({ session: true }).fieldWithInput({
+    type: Font,
+    input: { path: t.input.string() },
+    resolve: async (_, { input }, ctx) => {
+      const object = await aws.s3.send(
+        new GetObjectCommand({
+          Bucket: 'typie-uploads',
+          Key: input.path,
+        }),
+      );
+
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const buffer = await object.Body!.transformToByteArray();
+
+      const metadata = await wasm.getFontMetadata(buffer);
+
+      if (metadata.style !== 'normal') {
+        throw new TypieError({ code: 'invalid_font_style' });
+      }
+
+      const findName = (nameId: number) =>
+        metadata.names.find((n) => n.nameId === nameId && n.platformId === 3 && n.languageId === 0x04_09)?.value ??
+        metadata.names.find((n) => n.nameId === nameId)?.value;
+
+      const postScriptName = findName(6);
+      if (!postScriptName) {
+        throw new TypieError({ code: 'invalid_font_style' });
+      }
+
+      const familyName = findName(16) ?? findName(1) ?? findName(4) ?? postScriptName;
+      const filePath = path.join(path.dirname(input.path), path.basename(input.path, path.extname(input.path)));
+
+      const tagging = qs.stringify({
+        UserId: ctx.session.userId,
+        Environment: stack,
+      });
+
+      const fontName = postScriptName;
+      const { manifest, base, chunks } = await processFontLegacy(fontName, buffer);
+
+      const s3Base = `fonts/${filePath}`;
+      const compressed = await compressZstd(buffer);
+
+      await Promise.all([
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/original.bin`,
+            Body: compressed,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/manifest.json`,
+            Body: JSON.stringify(manifest),
+            ContentType: 'application/json',
+            Tagging: tagging,
+          }),
+        ),
+        aws.s3.send(
+          new PutObjectCommand({
+            Bucket: 'typie-usercontents',
+            Key: `${s3Base}/${manifest.hash}/base.bin`,
+            Body: base,
+            ContentType: 'application/octet-stream',
+            Tagging: tagging,
+          }),
+        ),
+        ...chunks.map((chunk, i) =>
+          aws.s3.send(
+            new PutObjectCommand({
+              Bucket: 'typie-usercontents',
+              Key: `${s3Base}/${manifest.hash}/chunks/${i}.bin`,
+              Body: chunk,
+              ContentType: 'application/octet-stream',
+              Tagging: tagging,
+            }),
+          ),
+        ),
+      ]);
+
+      return await db.transaction(async (tx) => {
+        const fontFamily = await tx
+          .select({ id: FontFamilies.id, state: FontFamilies.state })
+          .from(FontFamilies)
+          .where(and(eq(FontFamilies.userId, ctx.session.userId), eq(FontFamilies.familyName, familyName)))
+          .then(first);
+
+        let familyId: string | null;
 
         if (fontFamily) {
           familyId = fontFamily.id;
