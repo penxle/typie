@@ -78,7 +78,18 @@ fun PlanUpgradeContent(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: Stri
 
   SheetLayout(
     bodyInsetPolicy = SheetInsetPolicy.Container,
-    header = { ActionHeader(title = title) },
+    header = {
+      Column {
+        SubscriptionBadgeRow()
+        ActionHeader(title = title)
+        Text(
+          text = message,
+          style = AppTheme.typography.caption.copy(textAlign = TextAlign.Center),
+          color = AppTheme.colors.textTertiary,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    },
     footer = {
       Column(
         modifier = Modifier.fillMaxWidth(),
@@ -119,15 +130,6 @@ fun PlanUpgradeContent(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: Stri
       }
     },
   ) {
-    SubscriptionBadgeRow()
-
-    Text(
-      text = message,
-      style = AppTheme.typography.caption.copy(textAlign = TextAlign.Center),
-      color = AppTheme.colors.textTertiary,
-      modifier = Modifier.fillMaxWidth(),
-    )
-
     Column(
       modifier =
         Modifier.fillMaxWidth()
