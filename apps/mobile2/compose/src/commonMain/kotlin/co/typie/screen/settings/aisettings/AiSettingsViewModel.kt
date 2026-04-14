@@ -1,5 +1,6 @@
 package co.typie.screen.settings.aisettings
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,11 +17,13 @@ import co.typie.graphql.type.UpdatePreferencesInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
-import kotlinx.serialization.json.JsonElement
+import co.typie.serialization.json
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
+
+@Serializable data class AiPreferences(val aiOptIn: Boolean = false)
 
 class AiSettingsViewModel : ViewModel() {
   val query =
@@ -28,45 +31,27 @@ class AiSettingsViewModel : ViewModel() {
       AiSettingsScreen_Query()
     }
 
-  var aiOptIn by mutableStateOf(false)
+  var isSubmitting by mutableStateOf(false)
     private set
 
-  var isUpdatingAiOptIn by mutableStateOf(false)
-    private set
-
-  private var hasInitializedAiOptIn by mutableStateOf(false)
-
-  fun initializeAiOptIn(enabled: Boolean) {
-    if (hasInitializedAiOptIn) return
-    aiOptIn = enabled
-    hasInitializedAiOptIn = true
+  val aiOptIn by derivedStateOf {
+    json.decodeFromJsonElement<AiPreferences>(query.data.me.preferences).aiOptIn
   }
 
   suspend fun updateAiOptIn(enabled: Boolean): Result<Unit, Nothing> {
-    if (isUpdatingAiOptIn || aiOptIn == enabled) return Result.Ok(Unit)
+    if (isSubmitting || aiOptIn == enabled) return Result.Ok(Unit)
 
-    val previous = aiOptIn
-    aiOptIn = enabled
-    return loading<Unit, Nothing>({ isUpdatingAiOptIn = it }) {
-        Apollo.executeMutation(
-          AiSettingsScreen_UpdatePreferences_Mutation(
-            input =
-              UpdatePreferencesInput(value = JsonObject(mapOf("aiOptIn" to JsonPrimitive(enabled))))
-          )
+    return loading({ isSubmitting = it }) {
+      Apollo.executeMutation(
+        AiSettingsScreen_UpdatePreferences_Mutation(
+          input =
+            UpdatePreferencesInput(
+              value = json.encodeToJsonElement(AiPreferences(aiOptIn = enabled))
+            )
         )
-        query.refetch()
-      }
-      .also { result ->
-        if (result is Result.Exception) {
-          aiOptIn = previous
-        }
-      }
+      )
+    }
   }
-}
-
-internal fun JsonElement.aiOptIn(): Boolean {
-  val json = this as? JsonObject ?: return false
-  return json["aiOptIn"]?.jsonPrimitive?.booleanOrNull ?: false
 }
 
 private fun placeholderData() =
