@@ -2,14 +2,13 @@ package co.typie.screen.subscription.cancelplan
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.formatKoreanDate
@@ -19,6 +18,7 @@ import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.domain.subscription.fullPlanFeatures
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
+import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
@@ -33,8 +33,11 @@ import co.typie.ui.theme.AppTheme
 @Composable
 fun CancelPlanScreen() {
   val model = viewModel { CancelPlanViewModel() }
+
   val scrollState = rememberScrollState()
+
   val nav = Nav.current
+  val uriHandler = LocalUriHandler.current
 
   LaunchedEffect(SubscriptionService.state) {
     if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
@@ -100,12 +103,19 @@ fun CancelPlanScreen() {
       Button(
         text = "스토어로 이동해서 해지하기",
         variant = ButtonVariant.Danger,
-        onClick = { PlatformModule.purchaseService.openSubscriptionManagement() },
+        onClick = {
+          when (PlatformModule.platform) {
+            Platform.Android ->
+              uriHandler.openUri(
+                "https://play.google.com/store/account/subscriptions?package=co.typie&sku=plan.full"
+              )
+            Platform.iOS -> uriHandler.openUri("https://apps.apple.com/account/subscriptions")
+            Platform.Desktop -> {}
+          }
+        },
       )
 
       Button(text = "계속 이용하기", variant = ButtonVariant.Secondary, onClick = { nav.pop() })
-
-      Spacer(Modifier.height(72.dp))
     }
   }
 }

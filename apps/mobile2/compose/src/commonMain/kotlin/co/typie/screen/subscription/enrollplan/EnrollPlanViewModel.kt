@@ -1,5 +1,6 @@
 package co.typie.screen.subscription.enrollplan
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,101 +19,84 @@ import co.typie.graphql.executeMutation
 import co.typie.graphql.type.InAppPurchaseStore
 import co.typie.graphql.type.SubscribeOrChangePlanWithInAppPurchaseInput
 import co.typie.graphql.watchQuery
+import co.typie.platform.ActivityContext
+import co.typie.platform.Platform
 import co.typie.platform.PlatformModule
 import co.typie.platform.PurchaseEvent
-import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
-import co.typie.platform.PurchaseStore
 import co.typie.result.Result
 import co.typie.result.loading
 import co.typie.result.result
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
-sealed interface EnrollPlanError {
-  data object ServerError : EnrollPlanError
+internal sealed interface EnrollPlanEvent {
+  data object PurchaseCompleted : EnrollPlanEvent
 }
 
-sealed interface PurchaseError {
-  data class ServerError(val code: String?) : PurchaseError
+internal sealed interface EnrollPlanError {
+  data object SubscriptionHistoryExists : EnrollPlanError
 
-  data object Unknown : PurchaseError
+  data object TrialAlreadyUsed : EnrollPlanError
 }
 
-class EnrollPlanViewModel : ViewModel() {
-  var isStartingTrial by mutableStateOf(false)
-    private set
+internal class EnrollPlanViewModel : ViewModel() {
+  private val _events = Channel<EnrollPlanEvent>(Channel.BUFFERED)
+  val events = _events.receiveAsFlow()
 
   val query =
     Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       EnrollPlanScreen_Query()
     }
 
-  var products by mutableStateOf<Map<PurchasePlanInterval, PurchaseProduct>>(emptyMap())
+  var isEnrollingTrial by mutableStateOf(false)
     private set
 
-  var productsLoaded by mutableStateOf(false)
+  var products by mutableStateOf<List<PurchaseProduct>>(emptyList())
     private set
 
-  var showTrialCelebration by mutableStateOf(false)
-    private set
-
-  var showPurchaseCelebration by mutableStateOf(false)
-    private set
-
-  var purchaseError by mutableStateOf<PurchaseError?>(null)
-    private set
+  val monthlyProduct by derivedStateOf { products.firstOrNull { it.planId == "pl0fl1map" } }
+  val yearlyProduct by derivedStateOf { products.firstOrNull { it.planId == "pl0fl1yap" } }
 
   init {
-    viewModelScope.launch { loadProducts() }
-
     viewModelScope.launch {
-      PlatformModule.purchaseService.events.collect { event -> handlePurchaseEvent(event) }
+      launch { PlatformModule.purchaseService.events.collect { handlePurchaseEvent(it) } }
+
+      when (PlatformModule.platform) {
+        Platform.iOS -> {
+          products = PlatformModule.purchaseService.queryProducts(listOf("pl0fl1map", "pl0fl1yap"))
+        }
+        Platform.Android -> {
+          products = PlatformModule.purchaseService.queryProducts(listOf("plan.full"))
+        }
+        else -> {}
+      }
     }
   }
 
-  suspend fun startTrial(): Result<Unit, EnrollPlanError> =
-    loading({ isStartingTrial = it }) {
+  suspend fun enrollTrial(): Result<Unit, EnrollPlanError> =
+    loading({ isEnrollingTrial = it }) {
       try {
         Apollo.executeMutation(EnrollPlanScreen_SubscribePlanWithTrial_Mutation())
         SubscriptionService.refresh()
-        query.refetch()
-        showTrialCelebration = true
-        // TODO: Mixpanel start_trial
       } catch (e: TypieError) {
-        raise(EnrollPlanError.ServerError)
+        when (e.code) {
+          "subscription_history_exists" -> raise(EnrollPlanError.SubscriptionHistoryExists)
+          "trial_already_used" -> raise(EnrollPlanError.TrialAlreadyUsed)
+          else -> throw e
+        }
       }
     }
 
+  context(_: ActivityContext)
   suspend fun purchase(product: PurchaseProduct): Result<Unit, Nothing> = result {
     PlatformModule.purchaseService.purchase(product = product, accountId = query.data.me.uuid)
   }
 
-  fun consumeTrialCelebration() {
-    showTrialCelebration = false
-  }
-
-  fun consumePurchaseCelebration() {
-    showPurchaseCelebration = false
-  }
-
-  fun consumePurchaseError() {
-    purchaseError = null
-  }
-
-  private suspend fun loadProducts() {
-    try {
-      products = PlatformModule.purchaseService.queryProducts()
-    } catch (_: Exception) {
-      products = emptyMap()
-    } finally {
-      productsLoaded = true
-    }
-  }
-
   private suspend fun handlePurchaseEvent(event: PurchaseEvent) {
     val originalSubscriptionId = query.data.me.subscription?.id
-    val originalPlanId = query.data.me.subscription?.plan?.id
-    val verificationData = event.verificationData()
 
     try {
       val response =
@@ -120,48 +104,37 @@ class EnrollPlanViewModel : ViewModel() {
           EnrollPlanScreen_SubscribeOrChangePlanWithInAppPurchase_Mutation(
             input =
               SubscribeOrChangePlanWithInAppPurchaseInput(
-                data = verificationData,
-                store = event.store.toGraphqlStore(),
+                data = event.subscriptionId,
+                store =
+                  when (PlatformModule.platform) {
+                    Platform.Android -> InAppPurchaseStore.GOOGLE_PLAY
+                    Platform.iOS -> InAppPurchaseStore.APP_STORE
+                    else ->
+                      throw IllegalArgumentException(
+                        "Unsupported platform: ${PlatformModule.platform}"
+                      )
+                  },
               )
           )
         )
 
-      query.refetch()
+      PlatformModule.purchaseService.finishTransaction(event.subscriptionId)
       SubscriptionService.refresh()
 
-      if (
-        originalSubscriptionId != response.subscribeOrChangePlanWithInAppPurchase.id ||
-          originalPlanId != response.subscribeOrChangePlanWithInAppPurchase.plan.id
-      ) {
-        // TODO: Mixpanel enroll_plan / Appsflyer complete_subscription
-        showPurchaseCelebration = true
+      if (originalSubscriptionId != response.subscribeOrChangePlanWithInAppPurchase.id) {
+        _events.send(EnrollPlanEvent.PurchaseCompleted)
       }
-    } catch (e: TypieError) {
-      purchaseError = PurchaseError.ServerError(e.code)
+    } catch (e: CancellationException) {
+      throw e
     } catch (_: Exception) {
-      purchaseError = PurchaseError.Unknown
+      // best effort
     }
-  }
-}
-
-private fun PurchaseEvent.verificationData(): String {
-  return when (this) {
-    is PurchaseEvent.Purchased -> verificationData
-    is PurchaseEvent.Restored -> verificationData
-  }
-}
-
-private fun PurchaseStore.toGraphqlStore(): InAppPurchaseStore {
-  return when (this) {
-    PurchaseStore.AppStore -> InAppPurchaseStore.APP_STORE
-    PurchaseStore.GooglePlay -> InAppPurchaseStore.GOOGLE_PLAY
   }
 }
 
 private fun placeholderData() =
   EnrollPlanScreen_Query.Data(PlaceholderResolver) {
     me = buildUser {
-      uuid = ""
       canStartTrial = false
       subscription = null
     }

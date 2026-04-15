@@ -8,72 +8,56 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import swiftPMImport.co.typie.compose.PurchaseEventPayload
 import swiftPMImport.co.typie.compose.PurchaseProductPayload
 import swiftPMImport.co.typie.compose.SubscriptionPurchaseBridge
 
 internal class IOSPurchaseService : PurchaseService {
-  override val events: SharedFlow<PurchaseEvent> =
-    MutableSharedFlow(replay = 0, extraBufferCapacity = 8)
-
-  private val mutableEvents: MutableSharedFlow<PurchaseEvent>
-    get() = events as MutableSharedFlow<PurchaseEvent>
-
-  private val bridgeMutex = Mutex()
   private var bridge: SubscriptionPurchaseBridge? = null
 
-  private suspend fun bridge(): SubscriptionPurchaseBridge {
-    bridge?.let {
-      return it
-    }
+  private val _events = MutableSharedFlow<PurchaseEvent>(extraBufferCapacity = 8)
+  override val events: SharedFlow<PurchaseEvent> = _events
 
-    return bridgeMutex.withLock {
-      bridge?.let {
-        return it
+  override suspend fun launch() {
+    withContext(Dispatchers.Main) {
+      val b = SubscriptionPurchaseBridge()
+      b.startObservingPurchasesWithCompletion { payload ->
+        payload?.toPurchaseEvent()?.let { _events.tryEmit(it) }
       }
-
-      withContext(Dispatchers.Main) {
-        SubscriptionPurchaseBridge().also { createdBridge ->
-          createdBridge.startObservingPurchasesWithCompletion { payload ->
-            payload?.toPurchaseEvent()?.let(mutableEvents::tryEmit)
-          }
-          bridge = createdBridge
-        }
-      }
+      bridge = b
     }
   }
 
-  override suspend fun queryProducts(): Map<PurchasePlanInterval, PurchaseProduct> {
-    val bridge = bridge()
+  override suspend fun queryProducts(productIds: List<String>): List<PurchaseProduct> {
+    val bridge = bridge ?: return emptyList()
 
     return withContext(Dispatchers.Main) {
       suspendCancellableCoroutine { continuation ->
-        bridge.queryProductsWithCompletion { payloads, error ->
+        bridge.queryProductsWithProductIds(productIds) { payloads, error ->
           if (error != null) {
             continuation.resumeWithException(IllegalStateException(error.toString()))
-            return@queryProductsWithCompletion
+            return@queryProductsWithProductIds
           }
 
           val products =
-            payloads.orEmpty().filterIsInstance<PurchaseProductPayload>().mapNotNull { payload ->
-              payload.toPurchaseProduct()
+            payloads.orEmpty().filterIsInstance<PurchaseProductPayload>().map {
+              it.toPurchaseProduct()
             }
 
-          continuation.resume(products.associateBy { it.interval })
+          continuation.resume(products)
         }
       }
     }
   }
 
+  context(_: ActivityContext)
   override suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean {
-    val bridge = bridge()
+    val bridge = bridge ?: return false
 
     return withContext(Dispatchers.Main) {
       suspendCancellableCoroutine { continuation ->
-        bridge.purchaseProductWithProductId(productId = product.id, accountId = accountId) {
+        bridge.purchaseProductWithProductId(productId = product.productId, accountId = accountId) {
           success: Boolean,
           _: Any? ->
           continuation.resume(success)
@@ -82,12 +66,12 @@ internal class IOSPurchaseService : PurchaseService {
     }
   }
 
-  override suspend fun openSubscriptionManagement(): Boolean {
-    val bridge = bridge()
+  override suspend fun finishTransaction(subscriptionId: String) {
+    val bridge = bridge ?: return
 
-    return withContext(Dispatchers.Main) {
+    withContext(Dispatchers.Main) {
       suspendCancellableCoroutine { continuation ->
-        bridge.openSubscriptionManagementWithCompletion { success -> continuation.resume(success) }
+        bridge.finishTransactionWithTransactionId(subscriptionId) { _ -> continuation.resume(Unit) }
       }
     }
   }
@@ -96,37 +80,23 @@ internal class IOSPurchaseService : PurchaseService {
 private fun PurchaseEventPayload.toPurchaseEvent(): PurchaseEvent {
   return when (type) {
     "restored" ->
-      PurchaseEvent.Restored(
+      PurchaseEvent(
+        kind = PurchaseEventKind.Restored,
         productId = productId,
-        store = PurchaseStore.AppStore,
-        verificationData = verificationData,
-        purchaseId = purchaseId,
+        subscriptionId = subscriptionId,
+        transactionId = transactionId,
       )
 
     else ->
-      PurchaseEvent.Purchased(
+      PurchaseEvent(
+        kind = PurchaseEventKind.Purchased,
         productId = productId,
-        store = PurchaseStore.AppStore,
-        verificationData = verificationData,
-        purchaseId = purchaseId,
+        subscriptionId = subscriptionId,
+        transactionId = transactionId,
       )
   }
 }
 
-private fun PurchaseProductPayload.toPurchaseProduct(): PurchaseProduct? {
-  val interval =
-    when (interval) {
-      "monthly" -> PurchasePlanInterval.Monthly
-      "yearly" -> PurchasePlanInterval.Yearly
-      else -> return null
-    }
-
-  return PurchaseProduct(
-    id = productId,
-    interval = interval,
-    price = price,
-    title = title,
-    rawPrice = rawPrice,
-    currencyCode = currencyCode,
-  )
+private fun PurchaseProductPayload.toPurchaseProduct(): PurchaseProduct {
+  return PurchaseProduct(productId = productId, planId = productId, name = name, price = price)
 }

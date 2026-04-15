@@ -1,241 +1,169 @@
 import Foundation
-@preconcurrency import StoreKit
-import UIKit
+import StoreKit
 
 @objcMembers public class PurchaseProductPayload: NSObject {
-  public let productId: String
-  public let interval: String
-  public let price: String
-  public let title: String?
-  public let rawPrice: Double
-  public let currencyCode: String?
+    public let productId: String
+    public let name: String
+    public let price: String
 
-  init(
-    productId: String,
-    interval: String,
-    price: String,
-    title: String?,
-    rawPrice: Double,
-    currencyCode: String?
-  ) {
-    self.productId = productId
-    self.interval = interval
-    self.price = price
-    self.title = title
-    self.rawPrice = rawPrice
-    self.currencyCode = currencyCode
-  }
+    init(productId: String, name: String, price: String) {
+        self.productId = productId
+        self.name = name
+        self.price = price
+    }
 }
 
 @objcMembers public class PurchaseEventPayload: NSObject {
-  public let type: String
-  public let productId: String
-  public let verificationData: String
-  public let purchaseId: String?
+    public let type: String
+    public let productId: String
+    public let subscriptionId: String
+    public let transactionId: String
 
-  init(
-    type: String,
-    productId: String,
-    verificationData: String,
-    purchaseId: String?
-  ) {
-    self.type = type
-    self.productId = productId
-    self.verificationData = verificationData
-    self.purchaseId = purchaseId
-  }
+    init(
+        type: String,
+        productId: String,
+        subscriptionId: String,
+        transactionId: String,
+    ) {
+        self.type = type
+        self.productId = productId
+        self.subscriptionId = subscriptionId
+        self.transactionId = transactionId
+    }
 }
 
-@MainActor @objcMembers public final class SubscriptionPurchaseBridge: NSObject, SKProductsRequestDelegate, SKPaymentTransactionObserver {
-  private var productsRequest: SKProductsRequest?
-  private var productsCompletion: (([PurchaseProductPayload]?, NSError?) -> Void)?
-  private var productsById: [String: SKProduct] = [:]
-  private var purchaseObserver: ((PurchaseEventPayload?) -> Void)?
-  private var isQueueObserverAttached = false
+@MainActor @objcMembers public final class SubscriptionPurchaseBridge: NSObject {
+    private var purchaseObserver: ((PurchaseEventPayload?) -> Void)?
+    private var updatesTask: Task<Void, Never>?
+    private var pendingTransactions: [UInt64: Transaction] = [:]
 
-  override public init() {
-    super.init()
-  }
-
-  deinit {
-    if isQueueObserverAttached {
-      SKPaymentQueue.default().remove(self)
-    }
-  }
-
-  public func startObservingPurchases(
-    completion: @escaping (PurchaseEventPayload?) -> Void
-  ) {
-    ensureQueueObserverAttached()
-    purchaseObserver = completion
-  }
-
-  public func queryProducts(
-    completion: @escaping ([PurchaseProductPayload]?, NSError?) -> Void
-  ) {
-    ensureQueueObserverAttached()
-    productsCompletion = completion
-
-    let request = SKProductsRequest(
-      productIdentifiers: [
-        "pl0fl1map",
-        "pl0fl1yap",
-      ]
-    )
-    request.delegate = self
-    productsRequest = request
-    request.start()
-  }
-
-  public func purchaseProduct(
-    productId: String,
-    accountId: String?,
-    completion: @escaping (Bool, NSError?) -> Void
-  ) {
-    ensureQueueObserverAttached()
-
-    guard SKPaymentQueue.canMakePayments() else {
-      completion(
-        false,
-        NSError(
-          domain: "co.typie.ios.bridge",
-          code: -1,
-          userInfo: [NSLocalizedDescriptionKey: "Payments are not available"],
-        )
-      )
-      return
+    override public init() {
+        super.init()
     }
 
-    guard let product = productsById[productId] else {
-      completion(
-        false,
-        NSError(
-          domain: "co.typie.ios.bridge",
-          code: -2,
-          userInfo: [NSLocalizedDescriptionKey: "Product not loaded"],
-        )
-      )
-      return
+    deinit {
+        updatesTask?.cancel()
     }
 
-    let payment = SKMutablePayment(product: product)
-    payment.applicationUsername = accountId
-    SKPaymentQueue.default().add(payment)
-    completion(true, nil)
-  }
+    public func startObservingPurchases(
+        completion: @escaping (PurchaseEventPayload?) -> Void
+    ) {
+        purchaseObserver = completion
 
-  public func openSubscriptionManagement(
-    completion: @escaping @Sendable (Bool) -> Void
-  ) {
-    guard let url = URL(string: "https://apps.apple.com/account/subscriptions") else {
-      completion(false)
-      return
+        updatesTask?.cancel()
+        updatesTask = Task { [weak self] in
+            for await result in Transaction.updates {
+                guard let self else { break }
+                self.handleTransactionUpdate(result)
+            }
+        }
     }
 
-    UIApplication.shared.open(url, options: [:], completionHandler: completion)
-  }
-
-  nonisolated public func productsRequest(_ request: SKProductsRequest, didReceive response: SKProductsResponse) {
-    Task { @MainActor in
-      handleProductsResponse(response)
-    }
-  }
-
-  nonisolated public func request(_ request: SKRequest, didFailWithError error: Error) {
-    Task { @MainActor in
-      handleProductsRequestFailure(error)
-    }
-  }
-
-  nonisolated public func paymentQueue(
-    _ queue: SKPaymentQueue,
-    updatedTransactions transactions: [SKPaymentTransaction]
-  ) {
-    Task { @MainActor in
-      handleUpdatedTransactions(queue, transactions: transactions)
-    }
-  }
-
-  private func ensureQueueObserverAttached() {
-    guard !isQueueObserverAttached else {
-      return
+    public func queryProducts(
+        productIds: [String],
+        completion: @escaping ([PurchaseProductPayload]?, NSError?) -> Void
+    ) {
+        Task {
+            do {
+                let products = try await Product.products(for: productIds)
+                let payloads = products.map { product in
+                    PurchaseProductPayload(
+                        productId: product.id,
+                        name: product.displayName,
+                        price: product.displayPrice,
+                    )
+                }
+                completion(payloads, nil)
+            } catch {
+                completion(nil, error as NSError)
+            }
+        }
     }
 
-    SKPaymentQueue.default().add(self)
-    isQueueObserverAttached = true
-  }
+    public func purchaseProduct(
+        productId: String,
+        accountId: String?,
+        completion: @escaping (Bool, NSError?) -> Void
+    ) {
+        Task {
+            do {
+                let products = try await Product.products(for: [productId])
+                guard let product = products.first else {
+                    completion(
+                        false,
+                        NSError(
+                            domain: "co.typie.ios.bridge",
+                            code: -2,
+                            userInfo: [NSLocalizedDescriptionKey: "Product not found"]
+                        ))
+                    return
+                }
 
-  private func handleProductsResponse(_ response: SKProductsResponse) {
-    productsById = Dictionary(uniqueKeysWithValues: response.products.map { ($0.productIdentifier, $0) })
+                var options: Set<Product.PurchaseOption> = []
+                if let accountId, let uuid = UUID(uuidString: accountId) {
+                    options.insert(.appAccountToken(uuid))
+                }
 
-    let payloads = response.products.compactMap { product -> PurchaseProductPayload? in
-      let interval: String
-      switch product.productIdentifier {
-      case "pl0fl1map":
-        interval = "monthly"
-      case "pl0fl1yap":
-        interval = "yearly"
-      default:
-        return nil
-      }
-
-      return PurchaseProductPayload(
-        productId: product.productIdentifier,
-        interval: interval,
-        price: product.formattedPrice,
-        title: product.localizedTitle,
-        rawPrice: product.price.doubleValue,
-        currencyCode: product.priceLocale.currencyCode
-      )
+                let result = try await product.purchase(options: options)
+                switch result {
+                case .success(let verification):
+                    switch verification {
+                    case .verified(let transaction):
+                        pendingTransactions[transaction.originalID] = transaction
+                        let payload = PurchaseEventPayload(
+                            type: "purchased",
+                            productId: transaction.productID,
+                            subscriptionId: String(transaction.originalID),
+                            transactionId: String(transaction.id),
+                        )
+                        purchaseObserver?(payload)
+                        completion(true, nil)
+                    case .unverified:
+                        completion(false, nil)
+                    }
+                case .pending:
+                    completion(false, nil)
+                case .userCancelled:
+                    completion(false, nil)
+                @unknown default:
+                    completion(false, nil)
+                }
+            } catch {
+                completion(false, error as NSError)
+            }
+        }
     }
 
-    productsCompletion?(payloads, nil)
-    productsCompletion = nil
-    productsRequest = nil
-  }
+    public func finishTransaction(
+        transactionId: String,
+        completion: @escaping (Bool) -> Void
+    ) {
+        guard let id = UInt64(transactionId),
+            let transaction = pendingTransactions.removeValue(forKey: id)
+        else {
+            completion(false)
+            return
+        }
 
-  private func handleProductsRequestFailure(_ error: Error) {
-    productsCompletion?(nil, error as NSError)
-    productsCompletion = nil
-    productsRequest = nil
-  }
-
-  private func handleUpdatedTransactions(
-    _ queue: SKPaymentQueue,
-    transactions: [SKPaymentTransaction]
-  ) {
-    for transaction in transactions {
-      switch transaction.transactionState {
-      case .purchased:
-        emitEvent(type: "purchased", transaction: transaction)
-        queue.finishTransaction(transaction)
-      case .restored:
-        emitEvent(type: "restored", transaction: transaction)
-        queue.finishTransaction(transaction)
-      case .failed:
-        queue.finishTransaction(transaction)
-      default:
-        break
-      }
+        Task {
+            await transaction.finish()
+            completion(true)
+        }
     }
-  }
 
-  private func emitEvent(type: String, transaction: SKPaymentTransaction) {
-    let payload = PurchaseEventPayload(
-      type: type,
-      productId: transaction.payment.productIdentifier,
-      verificationData: transaction.transactionIdentifier ?? "",
-      purchaseId: transaction.transactionIdentifier
-    )
-    purchaseObserver?(payload)
-  }
-}
-
-private extension SKProduct {
-  var formattedPrice: String {
-    let formatter = NumberFormatter()
-    formatter.numberStyle = .currency
-    formatter.locale = priceLocale
-    return formatter.string(from: price) ?? ""
-  }
+    private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) {
+        switch result {
+        case .verified(let transaction):
+            let payload = PurchaseEventPayload(
+                type: "restored",
+                productId: transaction.productID,
+                subscriptionId: String(transaction.originalID),
+                transactionId: String(transaction.id),
+            )
+            purchaseObserver?(payload)
+            Task { await transaction.finish() }
+        case .unverified:
+            break
+        }
+    }
 }

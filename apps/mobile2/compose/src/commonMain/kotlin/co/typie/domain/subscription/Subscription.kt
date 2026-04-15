@@ -14,9 +14,3 @@ data class Subscription(
   val fee: Int,
   val availability: PlanAvailability,
 )
-
-const val FULL_ACCESS_MONTHLY_PLAN_ID = "PL0FL1MAP"
-const val FULL_ACCESS_YEARLY_PLAN_ID = "PL0FL1YAP"
-const val FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID = "pl0fl1map"
-const val FULL_ACCESS_YEARLY_STORE_PRODUCT_ID = "pl0fl1yap"
-const val FULL_ACCESS_GOOGLE_PLAY_PRODUCT_ID = "plan.full"

@@ -1,38 +1,33 @@
 package co.typie.platform
 
-import co.typie.domain.subscription.FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID
-import co.typie.domain.subscription.FULL_ACCESS_YEARLY_STORE_PRODUCT_ID
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
 internal class DesktopPurchaseService : PurchaseService {
-  override val events: SharedFlow<PurchaseEvent> =
-    MutableSharedFlow(replay = 0, extraBufferCapacity = 8)
+  private val _events = MutableSharedFlow<PurchaseEvent>()
+  override val events: SharedFlow<PurchaseEvent> = _events
 
-  override suspend fun queryProducts(): Map<PurchasePlanInterval, PurchaseProduct> {
-    return mapOf(
-      PurchasePlanInterval.Monthly to
-        PurchaseProduct(
-          id = FULL_ACCESS_MONTHLY_STORE_PRODUCT_ID,
-          interval = PurchasePlanInterval.Monthly,
-          price = "월 12,900원",
-          title = "타이피 FULL ACCESS 월간",
-          rawPrice = 12_900.0,
-          currencyCode = "KRW",
-        ),
-      PurchasePlanInterval.Yearly to
-        PurchaseProduct(
-          id = FULL_ACCESS_YEARLY_STORE_PRODUCT_ID,
-          interval = PurchasePlanInterval.Yearly,
-          price = "연 129,000원",
-          title = "타이피 FULL ACCESS 연간",
-          rawPrice = 129_000.0,
-          currencyCode = "KRW",
-        ),
+  override suspend fun launch() = Unit
+
+  override suspend fun queryProducts(productIds: List<String>): List<PurchaseProduct> {
+    return listOf(
+      PurchaseProduct(
+        productId = "",
+        planId = "pl0fl1map",
+        name = "타이피 FULL ACCESS 월간",
+        price = "6,900원",
+      ),
+      PurchaseProduct(
+        productId = "",
+        planId = "pl0fl1yap",
+        name = "타이피 FULL ACCESS 연간",
+        price = "69,000원",
+      ),
     )
   }
 
+  context(_: ActivityContext)
   override suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean = false
 
-  override suspend fun openSubscriptionManagement(): Boolean = false
+  override suspend fun finishTransaction(subscriptionId: String) = Unit
 }

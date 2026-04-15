@@ -10,6 +10,7 @@ import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.graphql.Apollo
 import co.typie.graphql.BootstrapService_Query
+import co.typie.platform.PlatformModule
 import co.typie.storage.Preference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -41,6 +42,8 @@ object BootstrapService {
         }
       }
     }
+
+    PlatformModule.purchaseService.launch()
 
     state = BootstrapState.Ready
   }

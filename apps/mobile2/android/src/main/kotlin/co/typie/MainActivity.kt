@@ -9,7 +9,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import co.typie.domain.bootstrap.BootstrapService
 import co.typie.domain.bootstrap.BootstrapState
-import co.typie.platform.PurchaseActivityHolder
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,16 +19,6 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
 
     setContent { App() }
-  }
-
-  override fun onResume() {
-    super.onResume()
-    PurchaseActivityHolder.attach(this)
-  }
-
-  override fun onPause() {
-    PurchaseActivityHolder.detach(this)
-    super.onPause()
   }
 }
 

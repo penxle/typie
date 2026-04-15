@@ -15,40 +15,34 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.subscription.FULL_ACCESS_MONTHLY_PLAN_ID
-import co.typie.domain.subscription.FULL_ACCESS_YEARLY_PLAN_ID
 import co.typie.domain.subscription.SubscriptionCelebrationSheet
-import co.typie.domain.subscription.SubscriptionFeature
 import co.typie.domain.subscription.SubscriptionFeatureList
 import co.typie.domain.subscription.SubscriptionService
-import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.domain.subscription.basicPlanFeatures
 import co.typie.domain.subscription.fullPlanFeatures
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.thenIfNotNull
 import co.typie.ext.verticalScroll
 import co.typie.graphql.type.PlanAvailability
 import co.typie.icons.Lucide
-import co.typie.platform.PurchasePlanInterval
 import co.typie.platform.PurchaseProduct
-import co.typie.result.DEFAULT_ERROR_MESSAGE
+import co.typie.platform.activityContext
 import co.typie.result.onErr
+import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
 import co.typie.ui.component.CardDivider
@@ -62,54 +56,39 @@ import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.loader.LocalLoader
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
-import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.launch
 
 @Composable
 fun EnrollPlanScreen() {
+  val model = viewModel { EnrollPlanViewModel() }
+
+  val scrollState = rememberScrollState()
+
   val dialog = LocalDialog.current
   val sheet = LocalSheet.current
   val toast = LocalToast.current
   val loader = LocalLoader.current
-  val model = viewModel { EnrollPlanViewModel() }
-  val scope = rememberCoroutineScope()
-  val scrollState = rememberScrollState()
-  val currentSubscriptionState = SubscriptionService.state
 
-  LaunchedEffect(model.showTrialCelebration) {
-    if (!model.showTrialCelebration) return@LaunchedEffect
-    sheet.present {
-      SubscriptionCelebrationSheet(
-        title = "무료 체험이 시작됐어요!",
-        message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
-      )
+  val context = activityContext()
+
+  LaunchedEffect(model) {
+    model.events.collect { event ->
+      when (event) {
+        EnrollPlanEvent.PurchaseCompleted -> {
+          sheet.present {
+            SubscriptionCelebrationSheet(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
+          }
+        }
+      }
     }
-    model.consumeTrialCelebration()
-  }
-
-  LaunchedEffect(model.showPurchaseCelebration) {
-    if (!model.showPurchaseCelebration) return@LaunchedEffect
-    sheet.present {
-      SubscriptionCelebrationSheet(title = "구독이 시작됐어요!", message = "타이피의 모든 기능을 자유롭게 이용해보세요.")
-    }
-    model.consumePurchaseCelebration()
-  }
-
-  LaunchedEffect(model.purchaseError) {
-    model.purchaseError ?: return@LaunchedEffect
-    toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-    model.consumePurchaseError()
   }
 
   ProvideTopBar(
-    leading = { TopBarBackButton() },
     center = { Text("이용권 구매/변경", style = AppTheme.typography.title) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
@@ -119,12 +98,7 @@ fun EnrollPlanScreen() {
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      val currentSubscription =
-        (currentSubscriptionState as? SubscriptionServiceState.Subscribed)?.subscription
-      val currentPlanId = currentSubscription?.planId
-      val hasSubscription = currentSubscription != null
-      val isOnTrial = currentSubscription?.availability == PlanAvailability.TRIAL
-      val canStartTrial = model.query.data.me.canStartTrial
+      val subscription = SubscriptionService.subscription
 
       Text(
         text = "이용권 구매/변경",
@@ -132,174 +106,138 @@ fun EnrollPlanScreen() {
         modifier = Modifier.padding(top = 4.dp),
       )
 
-      if (!hasSubscription) {
+      if (subscription == null) {
         SectionTitle("현재 이용 중인 이용권")
 
-        SubscriptionPlanCard(
-          title = "타이피 BASIC ACCESS",
-          badge = "현재 이용 중",
-          features = basicPlanFeatures,
-        )
+        CardSurface(modifier = Modifier.fillMaxWidth()) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Text(
+                text = "타이피 BASIC ACCESS",
+                style = AppTheme.typography.title,
+                modifier = Modifier.weight(1f),
+              )
+
+              StatusBadge("현재 이용 중")
+            }
+
+            CardDivider(inset = 0.dp)
+
+            SubscriptionFeatureList(features = basicPlanFeatures)
+          }
+        }
       }
 
       SectionTitle("FULL ACCESS")
 
-      FullAccessCard(
-        isOnTrial = isOnTrial,
-        canStartTrial = canStartTrial,
-        currentPlanId = currentPlanId,
-        productsLoaded = model.productsLoaded,
-        monthlyProduct = model.products[PurchasePlanInterval.Monthly],
-        yearlyProduct = model.products[PurchasePlanInterval.Yearly],
-        onStartTrial = {
-          val result =
-            dialog.confirm(
-              title = TRIAL_START_CONFIRM_TITLE,
-              message = TRIAL_START_CONFIRM_MESSAGE,
-              confirmText = TRIAL_START_CONFIRM_ACTION,
-            )
-          if (result is DialogResult.Resolved) {
-            loader.runWith {
-              model.startTrial().withDefaultExceptionHandler(toast).onErr { error ->
-                when (error) {
-                  EnrollPlanError.ServerError -> toast.show(ToastType.Error, DEFAULT_ERROR_MESSAGE)
-                }
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Text(
+                text = "타이피 FULL ACCESS",
+                style = AppTheme.typography.title,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+
+              if (subscription?.availability == PlanAvailability.TRIAL) {
+                StatusBadge("무료 체험 중")
               }
             }
+
+            CardDivider(inset = 0.dp)
+
+            SubscriptionFeatureList(features = fullPlanFeatures)
           }
-        },
-        onPurchaseMonthly = { product ->
-          // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-          scope.launch {
-            loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
-          }
-        },
-        onPurchaseYearly = { product ->
-          // TODO: Mixpanel enroll_plan_try / Appsflyer initiate_subscription
-          scope.launch {
-            loader.runWith { model.purchase(product).withDefaultExceptionHandler(toast) }
-          }
-        },
-      )
 
-      Spacer(Modifier.height(72.dp))
-    }
-  }
-}
+          CardDivider()
 
-@Composable
-private fun SubscriptionPlanCard(
-  title: String,
-  features: List<SubscriptionFeature>,
-  badge: String? = null,
-) {
-  CardSurface(modifier = Modifier.fillMaxWidth()) {
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(18.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Text(text = title, style = AppTheme.typography.title, modifier = Modifier.weight(1f))
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            if (model.query.data.me.canStartTrial) {
+              Button(
+                text = "2주 무료 체험하기",
+                leading = { color ->
+                  Icon(icon = Lucide.Zap, modifier = Modifier.size(16.dp), tint = color)
+                },
+                onClick = {
+                  val result =
+                    dialog.confirm(
+                      title = "무료 체험을 시작하시겠어요?",
+                      message = "결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요.",
+                      confirmText = "시작하기",
+                    )
 
-        if (badge != null) {
-          SubscriptionStatusBadgeChip(badge)
-        }
-      }
+                  if (result is DialogResult.Resolved) {
+                    loader.runWith {
+                      model
+                        .enrollTrial()
+                        .withDefaultExceptionHandler(toast)
+                        .onOk {
+                          sheet.present {
+                            SubscriptionCelebrationSheet(
+                              title = "무료 체험이 시작됐어요!",
+                              message = "2주간 타이피의 모든 기능을 자유롭게 이용해보세요.",
+                            )
+                          }
+                        }
+                        .onErr {
+                          when (it) {
+                            EnrollPlanError.SubscriptionHistoryExists ->
+                              toast.error("이미 구독 기록이 존재해요.")
 
-      CardDivider(inset = 0.dp)
+                            EnrollPlanError.TrialAlreadyUsed -> toast.error("이미 무료 체험을 사용한 적이 있어요.")
+                          }
+                        }
+                    }
+                  }
+                },
+              )
+            }
 
-      SubscriptionFeatureList(features = features)
-    }
-  }
-}
+            SubscriptionPurchaseRow(
+              label = "1개월 구독하기",
+              product = model.monthlyProduct,
+              isActive = subscription?.planId == "PL0FL1MAP",
+              onClick = { loader.runWith { context(context) { model.purchase(it) } } },
+            )
 
-@Composable
-private fun FullAccessCard(
-  isOnTrial: Boolean,
-  canStartTrial: Boolean,
-  currentPlanId: String?,
-  productsLoaded: Boolean,
-  monthlyProduct: PurchaseProduct?,
-  yearlyProduct: PurchaseProduct?,
-  onStartTrial: suspend () -> Unit,
-  onPurchaseMonthly: suspend (PurchaseProduct) -> Unit,
-  onPurchaseYearly: suspend (PurchaseProduct) -> Unit,
-) {
-  CardSurface(modifier = Modifier.fillMaxWidth()) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(
-            text = "타이피 FULL ACCESS",
-            style = AppTheme.typography.title,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-
-          if (isOnTrial) {
-            SubscriptionStatusBadgeChip("무료 체험 중")
+            SubscriptionPurchaseRow(
+              label = "1년 구독하기",
+              product = model.yearlyProduct,
+              isActive = subscription?.planId == "PL0FL1YAP",
+              onClick = { loader.runWith { context(context) { model.purchase(it) } } },
+            )
           }
         }
-
-        CardDivider(inset = 0.dp)
-
-        SubscriptionFeatureList(features = fullPlanFeatures)
-      }
-
-      CardDivider()
-
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        if (canStartTrial) {
-          Button(
-            text = "2주 무료 체험하기",
-            leading = { color ->
-              Icon(icon = Lucide.Zap, modifier = Modifier.size(16.dp), tint = color)
-            },
-            onClick = onStartTrial,
-          )
-        }
-
-        SubscriptionPurchaseRow(
-          label = "1개월 구독하기",
-          product = monthlyProduct,
-          productsLoaded = productsLoaded,
-          isActive = currentPlanId == FULL_ACCESS_MONTHLY_PLAN_ID,
-          onClick = onPurchaseMonthly,
-        )
-
-        SubscriptionPurchaseRow(
-          label = "1년 구독하기",
-          product = yearlyProduct,
-          productsLoaded = productsLoaded,
-          isActive = currentPlanId == FULL_ACCESS_YEARLY_PLAN_ID,
-          onClick = onPurchaseYearly,
-        )
       }
     }
   }
 }
 
 @Composable
-private fun SubscriptionStatusBadgeChip(label: String) {
+private fun StatusBadge(label: String) {
   Box(
     modifier =
-      Modifier.clip(AppShapes.rounded(AppShapes.sm))
-        .background(AppTheme.colors.brandSubtle)
+      Modifier.background(AppTheme.colors.brandSubtle, AppShapes.rounded(AppShapes.sm))
         .padding(horizontal = 8.dp, vertical = 4.dp),
     contentAlignment = Alignment.Center,
   ) {
@@ -311,7 +249,6 @@ private fun SubscriptionStatusBadgeChip(label: String) {
 private fun SubscriptionPurchaseRow(
   label: String,
   product: PurchaseProduct?,
-  productsLoaded: Boolean,
   isActive: Boolean,
   onClick: suspend (PurchaseProduct) -> Unit,
 ) {
@@ -319,13 +256,9 @@ private fun SubscriptionPurchaseRow(
     Row(
       modifier =
         Modifier.fillMaxWidth()
-          .clip(AppShapes.rounded(AppShapes.md))
-          .background(AppTheme.colors.surfaceSunken)
-          .clickable {
-            val currentProduct = product ?: return@clickable
-            onClick(currentProduct)
-          }
-          .padding(13.dp)
+          .background(AppTheme.colors.surfaceSunken, AppShapes.rounded(AppShapes.md))
+          .thenIfNotNull(product) { clickable { onClick(it) } }
+          .padding(12.dp)
           .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -333,37 +266,31 @@ private fun SubscriptionPurchaseRow(
       Text(text = label, style = AppTheme.typography.action)
 
       if (isActive) {
-        SubscriptionStatusBadgeChip("현재 이용 중")
+        StatusBadge("현재 이용 중")
       }
 
       Spacer(Modifier.weight(1f))
 
-      when {
-        product != null -> {
-          Text(text = product.price, style = AppTheme.typography.action)
+      if (product != null) {
+        Text(text = product.price, style = AppTheme.typography.action)
 
-          Icon(
-            icon = Lucide.ChevronRight,
-            modifier = Modifier.size(16.dp),
-            tint = AppTheme.colors.textSecondary,
-          )
-        }
-        productsLoaded ->
-          Text(
-            text = PRODUCT_UNAVAILABLE_MESSAGE,
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
-          )
-        else -> SubscriptionPriceSpinner()
+        Icon(
+          icon = Lucide.ChevronRight,
+          modifier = Modifier.size(16.dp),
+          tint = AppTheme.colors.textSecondary,
+        )
+      } else {
+        Spinner()
       }
     }
   }
 }
 
 @Composable
-private fun SubscriptionPriceSpinner() {
+private fun Spinner() {
   val transition = rememberInfiniteTransition()
-  val color = AppTheme.colors.textSecondary
+  val colors = AppTheme.colors
+
   val rotation by
     transition.animateFloat(
       initialValue = 0f,
@@ -378,7 +305,7 @@ private fun SubscriptionPriceSpinner() {
   Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
     Canvas(Modifier.size(14.dp)) {
       drawArc(
-        color = color,
+        color = colors.textSecondary,
         startAngle = rotation,
         sweepAngle = 270f,
         useCenter = false,
@@ -387,9 +314,3 @@ private fun SubscriptionPriceSpinner() {
     }
   }
 }
-
-private const val TRIAL_START_CONFIRM_TITLE = "무료 체험을 시작하시겠어요?"
-private const val TRIAL_START_CONFIRM_MESSAGE =
-  "결제 수단 등록 없이 2주간 타이피의 모든 기능을 무료로 이용할 수 있어요. 체험 종료 후 자동 결제되지 않아요."
-private const val TRIAL_START_CONFIRM_ACTION = "시작하기"
-private const val PRODUCT_UNAVAILABLE_MESSAGE = "불러오지 못했어요"
