@@ -1,9 +1,12 @@
 package co.typie.ui.component.popover
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -14,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import co.typie.ui.component.CardDivider
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
@@ -94,7 +96,14 @@ fun PopoverMenu(
         val segments = segmentEntries(entries)
         segments.forEachIndexed { index, segment ->
           if (index > 0 && segment is MenuSegment.Divider) {
-            CardDivider(inset = 16.dp, color = AppTheme.colors.borderDefault)
+            Spacer(Modifier.height(12.dp))
+            Box(
+              Modifier.fillMaxWidth()
+                .height(1.dp)
+                .padding(horizontal = 8.dp)
+                .background(AppTheme.colors.borderSubtle)
+            )
+            Spacer(Modifier.height(12.dp))
           }
           when (segment) {
             is MenuSegment.Items -> {

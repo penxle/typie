@@ -166,7 +166,10 @@ fun SpacePopover() {
           collapsedCornerRadius = 14.dp,
           anchor = { SpacePopoverAnchor(currentSite) },
         ) {
-          static { SpacePopoverHeader(currentSite) }
+          static {
+            SpacePopoverHeader(currentSite)
+            Spacer(Modifier.height(4.dp))
+          }
           item(icon = Lucide.Settings, label = "스페이스 설정") {
             scope.launch { nav.navigate(Route.SpaceSettings) }
           }
@@ -182,6 +185,7 @@ fun SpacePopover() {
               color = AppTheme.colors.textTertiary,
               modifier = Modifier.padding(horizontal = 8.dp),
             )
+            Spacer(Modifier.height(8.dp))
           }
           for (site in otherSites) {
             item(content = { SpacePopoverSiteItem(site) }) { Preference.siteId = site.id }
