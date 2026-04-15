@@ -53,24 +53,21 @@ private enum class RootScreen {
 fun RootShell() {
   LaunchedEffect(Unit) { BootstrapService.launch() }
 
-  val bootstrapState = BootstrapService.state
-  val preflightState = PreflightService.state
-  val authState = AuthService.state
-
-  val screen =
-    when {
-      bootstrapState !is BootstrapState.Ready -> RootScreen.Splash
-      preflightState is PreflightState.UnderMaintenance -> RootScreen.Maintenance
-      preflightState is PreflightState.UpdateRequired -> RootScreen.UpdateRequired
-      authState is AuthState.Unauthenticated -> RootScreen.Auth
-      else -> RootScreen.Main
-    }
-
   val toast = remember { Toast() }
   val loader = remember { Loader() }
   val sheet = remember { Sheet() }
   val dialog = remember { Dialog() }
+
   val focusManager = LocalFocusManager.current
+
+  val screen =
+    when {
+      BootstrapService.state !is BootstrapState.Ready -> RootScreen.Splash
+      PreflightService.state is PreflightState.UnderMaintenance -> RootScreen.Maintenance
+      PreflightService.state is PreflightState.UpdateRequired -> RootScreen.UpdateRequired
+      AuthService.state is AuthState.Unauthenticated -> RootScreen.Auth
+      else -> RootScreen.Main
+    }
 
   CompositionLocalProvider(
     LocalSheet provides sheet,

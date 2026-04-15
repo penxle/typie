@@ -2,9 +2,11 @@ package co.typie.screen.space.entity
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import co.typie.icons.Lucide
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
-import co.typie.shell.SpaceBottomBarActionButton
+import co.typie.ui.component.bottombar.ActionMenuItem
+import co.typie.ui.component.bottombar.BottomBarActionButton
 import co.typie.ui.component.toast.LocalToast
 import kotlinx.coroutines.launch
 
@@ -47,5 +49,20 @@ fun EntityCreateBottomBarAction(
           }
       }
     },
+  )
+}
+
+@Composable
+private fun SpaceBottomBarActionButton(
+  onCreateFolder: () -> Unit = {},
+  onCreateDocument: () -> Unit = {},
+) {
+  BottomBarActionButton(
+    icon = Lucide.SquarePlus,
+    menus =
+      listOf(
+        ActionMenuItem(icon = Lucide.FolderPlus, label = "여기에 폴더 만들기", onClick = onCreateFolder),
+        ActionMenuItem(icon = Lucide.SquarePen, label = "여기에 문서 만들기", onClick = onCreateDocument),
+      ),
   )
 }

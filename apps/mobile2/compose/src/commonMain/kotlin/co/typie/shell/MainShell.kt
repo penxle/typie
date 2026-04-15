@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
-import co.typie.ext.touchShield
+import co.typie.ext.pointerIgnore
 import co.typie.graphql.Apollo
 import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
 import co.typie.icons.Lucide
@@ -45,7 +46,6 @@ import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
 import co.typie.route.Route
-import co.typie.shell.marketing_consent.MarketingConsentGate
 import co.typie.storage.Preference
 import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarActionButton
@@ -72,7 +72,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   DisposableEffect(Unit) { onDispose { navigators.values.forEach { it.clear() } } }
 
   LaunchedEffect(siteId) {
-    if (siteId.isNullOrBlank()) {
+    if (siteId == null) {
       return@LaunchedEffect
     }
 
@@ -104,107 +104,96 @@ fun MainShell(content: @Composable (Route) -> Unit) {
       }
     }
   }
-
-  MarketingConsentGate()
 }
 
 @Composable
 fun MainBottomBarPill() {
   val tabState = LocalTabState.current
+
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-    BottomBarPill(currentTab = tabState.currentTab, onSelectTab = tabState.onSelectTab)
-  }
-}
+    val pillInteractionSource = remember { MutableInteractionSource() }
+    val pillScale = remember { Animatable(1f) }
+    val isPillPressed by pillInteractionSource.collectIsPressedAsState()
 
-@Composable
-private fun BottomBarPill(
-  currentTab: Tab,
-  onSelectTab: (Tab) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  val colors = AppTheme.colors
-  val pillInteractionSource = remember { MutableInteractionSource() }
-  val pillScale = remember { Animatable(1f) }
-  val isPillPressed by pillInteractionSource.collectIsPressedAsState()
+    val colors = AppTheme.colors
 
-  LaunchedEffect(isPillPressed) {
-    if (isPillPressed) {
-      pillScale.animateTo(1.01f, tween(150, easing = EaseOutCubic))
-    } else {
-      pillScale.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 300f))
+    LaunchedEffect(isPillPressed) {
+      if (isPillPressed) {
+        pillScale.animateTo(1.01f, tween(150, easing = EaseOutCubic))
+      } else {
+        pillScale.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 300f))
+      }
     }
-  }
 
-  Box(
-    modifier
-      .fillMaxWidth()
-      .navigationBarsPadding()
-      .padding(horizontal = 24.dp)
-      .padding(bottom = BottomBarDefaults.BottomPadding),
-    contentAlignment = Alignment.Center,
-  ) {
-    Row(
-      Modifier.widthIn(max = 488.dp).fillMaxWidth(),
-      verticalAlignment = Alignment.CenterVertically,
+    Box(
+      Modifier.fillMaxWidth()
+        .navigationBarsPadding()
+        .padding(horizontal = 24.dp)
+        .padding(bottom = BottomBarDefaults.BottomPadding),
+      contentAlignment = Alignment.Center,
     ) {
-      Box(
-        Modifier.weight(1f).touchShield().graphicsLayer {
-          scaleX = pillScale.value
-          scaleY = pillScale.value
-        }
+      Row(
+        Modifier.widthIn(max = 488.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
       ) {
-        CompositionLocalProvider(LocalInteractionSource provides pillInteractionSource) {
-          Row(
-            Modifier.fillMaxWidth()
-              .height(BottomBarDefaults.PillHeight)
-              .dropShadow(AppShapes.circle) {
-                color = colors.shadowAmbient
-                radius = 3f
-              }
-              .dropShadow(AppShapes.circle) {
-                color = colors.shadow
-                offset = Offset(0f, 4f)
-                radius = 16f
-              }
-              .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
-              .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
-          ) {
-            Tab.entries.forEach { tab ->
-              val selected = tab == currentTab
-              val bgColor by
-                animateColorAsState(
-                  targetValue =
-                    if (selected) AppTheme.colors.surfaceTinted
-                    else AppTheme.colors.surfaceBase.copy(alpha = 0f),
-                  animationSpec = tween(200),
-                )
+        Box(
+          Modifier.weight(1f).pointerIgnore().graphicsLayer {
+            scaleX = pillScale.value
+            scaleY = pillScale.value
+          }
+        ) {
+          CompositionLocalProvider(LocalInteractionSource provides pillInteractionSource) {
+            Row(
+              Modifier.fillMaxWidth()
+                .height(BottomBarDefaults.PillHeight)
+                .dropShadow(AppShapes.circle) {
+                  color = colors.shadowAmbient
+                  radius = 3f
+                }
+                .dropShadow(AppShapes.circle) {
+                  color = colors.shadow
+                  offset = Offset(0f, 4f)
+                  radius = 16f
+                }
+                .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
+                .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
+            ) {
+              Tab.entries.forEach { tab ->
+                val bgColor by
+                  animateColorAsState(
+                    targetValue =
+                      if (tab == tabState.currentTab) AppTheme.colors.surfaceTinted
+                      else AppTheme.colors.surfaceBase.copy(alpha = 0f),
+                    animationSpec = tween(200),
+                  )
 
-              Box(
-                modifier =
-                  Modifier.weight(1f)
-                    .fillMaxHeight()
-                    .padding(3.dp)
-                    .background(bgColor, AppShapes.circle)
-                    .clickable { onSelectTab(tab) },
-                contentAlignment = Alignment.Center,
-              ) {
-                Icon(
-                  icon =
-                    when (tab) {
-                      Tab.Home -> Lucide.House
-                      Tab.Space -> Lucide.FolderOpen
-                      Tab.Notes -> Lucide.StickyNote
-                      Tab.More -> Lucide.Ellipsis
-                    },
-                  tint = AppTheme.colors.textSecondary,
-                )
+                Box(
+                  modifier =
+                    Modifier.weight(1f)
+                      .fillMaxHeight()
+                      .padding(2.dp)
+                      .background(bgColor, AppShapes.circle)
+                      .clickable { tabState.onSelectTab(tab) },
+                  contentAlignment = Alignment.Center,
+                ) {
+                  Icon(
+                    icon =
+                      when (tab) {
+                        Tab.Home -> Lucide.House
+                        Tab.Space -> Lucide.FolderOpen
+                        Tab.Notes -> Lucide.StickyNote
+                        Tab.More -> Lucide.Ellipsis
+                      },
+                    tint = AppTheme.colors.textSecondary,
+                  )
+                }
               }
             }
           }
         }
-      }
 
-      Spacer(Modifier.width(ACTION_BUTTON_TOTAL_WIDTH.dp))
+        Spacer(Modifier.width(ACTION_BUTTON_TOTAL_WIDTH.dp))
+      }
     }
   }
 }
@@ -213,3 +202,14 @@ private fun BottomBarPill(
 fun MainBottomBarActionButton(icon: IconData = Lucide.SquarePen, onClick: suspend () -> Unit = {}) {
   BottomBarActionButton(icon = icon, onClick = onClick)
 }
+
+enum class Tab(val route: Route) {
+  Home(Route.Home),
+  Space(Route.Space),
+  Notes(Route.Notes),
+  More(Route.More),
+}
+
+class TabState(val currentTab: Tab, val onSelectTab: (Tab) -> Unit)
+
+val LocalTabState = compositionLocalOf<TabState> { error("LocalTabState not provided") }
