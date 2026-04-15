@@ -3,8 +3,6 @@ package co.typie.ui.component.popover
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.window.PopupPositionProvider
 
 enum class PopoverAlign {
   Start,
@@ -28,33 +26,18 @@ data class PopoverPlacement(val side: PopoverSide, val align: PopoverAlign) {
   }
 }
 
+internal data class PopoverScreenPadding(
+  val left: Int,
+  val top: Int,
+  val right: Int,
+  val bottom: Int,
+)
+
 internal data class ResolvedPopoverGeometry(
   val popupOffset: IntOffset,
   val placement: PopoverPlacement,
   val anchorBoundsInPopup: IntRect,
 )
-
-internal class PopoverPlacementProvider(
-  private val placement: PopoverPlacement,
-  private val screenPadding: PopoverScreenPadding,
-) : PopupPositionProvider {
-
-  override fun calculatePosition(
-    anchorBounds: IntRect,
-    windowSize: IntSize,
-    layoutDirection: LayoutDirection,
-    popupContentSize: IntSize,
-  ): IntOffset {
-    return resolvePopoverGeometry(
-        anchorBounds = anchorBounds,
-        windowSize = windowSize,
-        placement = placement,
-        popupContentSize = popupContentSize,
-        screenPadding = screenPadding,
-      )
-      .popupOffset
-  }
-}
 
 internal fun resolvePopoverGeometry(
   anchorBounds: IntRect,

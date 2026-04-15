@@ -31,6 +31,9 @@ import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.loader.Loader
 import co.typie.ui.component.loader.LoaderOverlay
 import co.typie.ui.component.loader.LocalLoader
+import co.typie.ui.component.popover.LocalPopoverOverlayState
+import co.typie.ui.component.popover.PopoverOverlay
+import co.typie.ui.component.popover.PopoverOverlayState
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.Sheet
 import co.typie.ui.component.sheet.SheetOverlay
@@ -57,6 +60,7 @@ fun RootShell() {
   val loader = remember { Loader() }
   val sheet = remember { Sheet() }
   val dialog = remember { Dialog() }
+  val popover = remember { PopoverOverlayState() }
 
   val focusManager = LocalFocusManager.current
 
@@ -74,6 +78,7 @@ fun RootShell() {
     LocalDialog provides dialog,
     LocalToast provides toast,
     LocalLoader provides loader,
+    LocalPopoverOverlayState provides popover,
   ) {
     Box(
       Modifier.fillMaxSize().preferredFrameRate(FrameRateCategory.High).pointerInput(Unit) {
@@ -95,6 +100,7 @@ fun RootShell() {
       }
 
       SheetOverlay(sheet)
+      PopoverOverlay(popover)
       DialogOverlay(dialog)
       LoaderOverlay()
       ToastOverlay()
