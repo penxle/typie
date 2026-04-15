@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
@@ -41,17 +40,12 @@ import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.close
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
-import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.io.encoding.Base64
@@ -191,33 +185,13 @@ fun StatsScreen() {
               )
             }
 
-            Popover(
+            PopoverMenu(
               anchor = { StatsActionButton(label = "이미지 받기") },
               collapsedCornerRadius = 10.dp,
-              pane = {
-                Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-                  PopoverList(
-                    items =
-                      listOf(
-                        PopoverListItem(
-                          content = { StatsActionItem(icon = Lucide.Copy, label = "클립보드에 복사") },
-                          onSelected = {
-                            close()
-                            copyActivityImage()
-                          },
-                        ),
-                        PopoverListItem(
-                          content = { StatsActionItem(icon = Lucide.Download, label = "기기에 저장") },
-                          onSelected = {
-                            close()
-                            saveActivityImage()
-                          },
-                        ),
-                      )
-                  )
-                }
-              },
-            )
+            ) {
+              item(icon = Lucide.Copy, label = "클립보드에 복사") { copyActivityImage() }
+              item(icon = Lucide.Download, label = "기기에 저장") { saveActivityImage() }
+            }
           }
 
           ActivityGrid(
@@ -417,19 +391,6 @@ private fun StatsActionButton(label: String) {
         .padding(horizontal = 12.dp, vertical = 7.dp)
   ) {
     Text(label, style = AppTheme.typography.action, color = AppTheme.colors.textSecondary)
-  }
-}
-
-@Composable
-private fun StatsActionItem(icon: co.typie.ui.icon.IconData, label: String) {
-  Row(
-    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Icon(icon = icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textPrimary)
-
-    Text(label, style = AppTheme.typography.action, color = AppTheme.colors.textPrimary)
   }
 }
 

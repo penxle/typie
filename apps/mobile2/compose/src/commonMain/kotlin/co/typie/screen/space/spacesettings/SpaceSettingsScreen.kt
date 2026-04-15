@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -58,12 +57,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.alert
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.close
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
@@ -326,71 +320,37 @@ private fun MoreMenu(model: SpaceSettingsViewModel) {
   val toast = LocalToast.current
   val sheet = LocalSheet.current
   val dialog = LocalDialog.current
+  val colors = AppTheme.colors
 
-  Popover(
-    placement = PopoverPlacement.BelowEnd,
-    anchor = { TopBarButton(icon = Lucide.Ellipsis) },
-    pane = {
-      Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-        PopoverList(
-          items =
-            listOf(
-              PopoverListItem(
-                content = {
-                  Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-                  ) {
-                    Icon(
-                      icon = Lucide.Trash2,
-                      modifier = Modifier.size(18.dp),
-                      tint = AppTheme.colors.danger,
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-
-                    Text(
-                      "스페이스 삭제",
-                      style = AppTheme.typography.action,
-                      color = AppTheme.colors.danger,
-                    )
-                  }
-                },
-                onSelected = {
-                  close()
-
-                  if (model.query.data.me.sites.size <= 1) {
-                    scope.launch {
-                      dialog.alert(
-                        title = "스페이스를 삭제할 수 없어요",
-                        message = "계정에는 최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
-                      )
-                    }
-                  } else {
-                    scope.launch {
-                      sheet.present {
-                        DeleteSiteSheet(
-                          documentCount = model.query.data.site.documentCount,
-                          folderCount = model.query.data.site.folderCount,
-                          isDeleting = model.isDeleting,
-                          onDelete = {
-                            model.deleteSite().withDefaultExceptionHandler(toast).onOk {
-                              toast.success("스페이스가 삭제되었어요.")
-                              complete(Unit)
-                              nav.pop()
-                            }
-                          },
-                        )
-                      }
-                    }
-                  }
-                },
-              )
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+    item(icon = Lucide.Trash2, label = "스페이스 삭제", color = colors.danger) {
+      if (model.query.data.me.sites.size <= 1) {
+        scope.launch {
+          dialog.alert(
+            title = "스페이스를 삭제할 수 없어요",
+            message = "계정에는 최소 1개의 스페이스가 필요해요.\n새 스페이스를 만든 후 삭제할 수 있어요.",
+          )
+        }
+      } else {
+        scope.launch {
+          sheet.present {
+            DeleteSiteSheet(
+              documentCount = model.query.data.site.documentCount,
+              folderCount = model.query.data.site.folderCount,
+              isDeleting = model.isDeleting,
+              onDelete = {
+                model.deleteSite().withDefaultExceptionHandler(toast).onOk {
+                  toast.success("스페이스가 삭제되었어요.")
+                  complete(Unit)
+                  nav.pop()
+                }
+              },
             )
-        )
+          }
+        }
       }
-    },
-  )
+    }
+  }
 }
 
 @Composable

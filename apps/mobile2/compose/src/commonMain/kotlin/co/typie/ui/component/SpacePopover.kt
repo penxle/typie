@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,15 +47,10 @@ import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.storage.Preference
 import co.typie.storage.Vault
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.PopoverScope
 import co.typie.ui.component.popover.PopoverTransitionElement
 import co.typie.ui.component.popover.PopoverTransitionFrame
-import co.typie.ui.component.popover.close
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
@@ -65,8 +59,6 @@ import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.TopBarDefaults
-import co.typie.ui.icon.Icon
-import co.typie.ui.icon.IconData
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppShapes
@@ -163,13 +155,41 @@ fun SpacePopover() {
         val currentSite = state.data.me.sites.first { it.id == selection.currentSiteId }
         val otherSites = state.data.me.sites.filter { it.id in selection.otherSiteIds }
 
-        Popover(
+        val nav = Nav.current
+        val uriHandler = LocalUriHandler.current
+        val scope = rememberCoroutineScope()
+        val sheet = LocalSheet.current
+
+        PopoverMenu(
           placement = PopoverPlacement.BelowStart,
           screenPadding = SpacePopoverScreenPadding,
           collapsedCornerRadius = 14.dp,
           anchor = { SpacePopoverAnchor(currentSite) },
-          pane = { SpacePopoverPane(model, currentSite, otherSites) },
-        )
+        ) {
+          static { SpacePopoverHeader(currentSite) }
+          item(icon = Lucide.Settings, label = "스페이스 설정") {
+            scope.launch { nav.navigate(Route.SpaceSettings) }
+          }
+          item(icon = Lucide.ExternalLink, label = "스페이스 열기") {
+            uriHandler.openUri(currentSite.url)
+          }
+          item(icon = Lucide.Trash2, label = "휴지통") { scope.launch { nav.navigate(Route.Trash()) } }
+          divider()
+          static {
+            Text(
+              "다른 스페이스",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textTertiary,
+              modifier = Modifier.padding(horizontal = 8.dp),
+            )
+          }
+          for (site in otherSites) {
+            item(content = { SpacePopoverSiteItem(site) }) { Preference.siteId = site.id }
+          }
+          item(icon = Lucide.Plus, label = "새 스페이스 생성") {
+            scope.launch { sheet.present { CreateSpaceContent(model) } }
+          }
+        }
       }
 
       else -> SpacePopoverSkeleton()
@@ -210,99 +230,6 @@ private fun SpacePopoverAnchor(site: SpacePopover_Query.Site) {
         .border(1.dp, TopBarDefaults.controlBorderColor(), outerShape),
   ) {
     Img(image = site.logo.img_image, modifier = Modifier.size(26.dp).clip(logoShape))
-  }
-}
-
-@Composable
-context(_: PopoverScope)
-private fun SpacePopoverPane(
-  model: SpacePopoverViewModel,
-  currentSite: SpacePopover_Query.Site,
-  otherSites: List<SpacePopover_Query.Site>,
-) {
-  val nav = Nav.current
-  val uriHandler = LocalUriHandler.current
-  val scope = rememberCoroutineScope()
-  val sheet = LocalSheet.current
-  val panePadding = PopoverDefaults.PanePadding
-
-  Column(modifier = Modifier.padding(panePadding)) {
-    SpacePopoverHeader(currentSite)
-
-    Spacer(Modifier.height(4.dp))
-
-    PopoverList(
-      items =
-        listOf(
-          PopoverListItem(
-            content = { SpacePopoverItem(icon = Lucide.Settings, label = "스페이스 설정") },
-            onSelected = {
-              close()
-              scope.launch { nav.navigate(Route.SpaceSettings) }
-            },
-          ),
-          PopoverListItem(
-            content = { SpacePopoverItem(icon = Lucide.ExternalLink, label = "스페이스 열기") },
-            onSelected = {
-              close()
-              uriHandler.openUri(currentSite.url)
-            },
-          ),
-          PopoverListItem(
-            content = { SpacePopoverItem(icon = Lucide.Trash2, label = "휴지통") },
-            onSelected = {
-              close()
-              scope.launch { nav.navigate(Route.Trash()) }
-            },
-          ),
-        )
-    )
-
-    Spacer(Modifier.height(12.dp))
-
-    Box(
-      Modifier.fillMaxWidth()
-        .height(1.dp)
-        .padding(horizontal = 8.dp)
-        .background(AppTheme.colors.borderSubtle)
-    )
-
-    Spacer(Modifier.height(12.dp))
-
-    Text(
-      "다른 스페이스",
-      style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
-      modifier = Modifier.padding(horizontal = 8.dp),
-    )
-
-    Spacer(Modifier.height(8.dp))
-
-    PopoverList(
-      items =
-        buildList {
-          for (site in otherSites) {
-            add(
-              PopoverListItem(
-                content = { SpacePopoverSiteItem(site) },
-                onSelected = {
-                  Preference.siteId = site.id
-                  close()
-                },
-              )
-            )
-          }
-          add(
-            PopoverListItem(
-              content = { SpacePopoverItem(icon = Lucide.Plus, label = "새 스페이스 생성") },
-              onSelected = {
-                close()
-                scope.launch { sheet.present { CreateSpaceContent(model) } }
-              },
-            )
-          )
-        }
-    )
   }
 }
 
@@ -425,17 +352,5 @@ private fun SpacePopoverSiteItem(site: SpacePopover_Query.Site) {
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
-  }
-}
-
-@Composable
-private fun SpacePopoverItem(icon: IconData, label: String) {
-  Row(
-    verticalAlignment = Alignment.CenterVertically,
-    modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-  ) {
-    Icon(icon = icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textPrimary)
-    Spacer(Modifier.width(12.dp))
-    Text(label, style = AppTheme.typography.action, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }

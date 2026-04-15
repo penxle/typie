@@ -88,7 +88,7 @@ internal fun FolderTopBarCenterMenu(
   availabilityName: EntityAvailability?,
   iconName: String?,
   iconColor: String?,
-  onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
+  onAction: (FolderAction) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Popover(
@@ -132,7 +132,7 @@ internal fun FolderTopBarCenterPane(
   availabilityName: EntityAvailability?,
   iconName: String?,
   iconColor: String?,
-  onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
+  onAction: (FolderAction) -> Unit,
 ) {
   Column(
     modifier =
@@ -397,7 +397,7 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
 
 @Composable
 context(_: PopoverScope)
-private fun FolderTopBarActionList(onAction: (FolderAction, closePopover: () -> Unit) -> Unit) {
+private fun FolderTopBarActionList(onAction: (FolderAction) -> Unit) {
   Column(modifier = Modifier.fillMaxWidth()) {
     folderItemActionSections().forEachIndexed { index, section ->
       if (index > 0) {
@@ -413,7 +413,7 @@ private fun FolderTopBarActionList(onAction: (FolderAction, closePopover: () -> 
 context(_: PopoverScope)
 private fun FolderTopBarActionSection(
   items: List<FolderActionMenuItem>,
-  onAction: (FolderAction, closePopover: () -> Unit) -> Unit,
+  onAction: (FolderAction) -> Unit,
 ) {
   PopoverList(
     items =
@@ -425,7 +425,10 @@ private fun FolderTopBarActionSection(
               modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
             )
           },
-          onSelected = { onAction(action.action) { close() } },
+          onSelected = {
+            close()
+            onAction(action.action)
+          },
         )
       }
   )

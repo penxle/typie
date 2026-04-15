@@ -55,13 +55,7 @@ import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.PopoverScope
-import co.typie.ui.component.popover.close
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetBarTextButton
@@ -363,65 +357,27 @@ private fun PresetTopBarMenu(
   model: PresetSettingsViewModel,
   actionScope: kotlinx.coroutines.CoroutineScope,
 ) {
-  Popover(
-    placement = PopoverPlacement.BelowEnd,
-    anchor = { TopBarButton(icon = Lucide.Ellipsis) },
-    pane = { PresetTopBarMenuPane(model = model, actionScope = actionScope) },
-  )
-}
-
-@Composable
-context(_: PopoverScope)
-private fun PresetTopBarMenuPane(
-  model: PresetSettingsViewModel,
-  actionScope: kotlinx.coroutines.CoroutineScope,
-) {
   val dialog = LocalDialog.current
   val toast = LocalToast.current
+  val colors = AppTheme.colors
 
-  Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-    PopoverList(
-      items =
-        listOf(
-          PopoverListItem(
-            content = {
-              Row(
-                modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-              ) {
-                Icon(
-                  icon = Lucide.RotateCcw,
-                  modifier = Modifier.size(18.dp),
-                  tint = AppTheme.colors.danger,
-                )
-                Text(
-                  text = "프리셋 초기화",
-                  style = AppTheme.typography.action,
-                  color = AppTheme.colors.danger,
-                )
-              }
-            },
-            onSelected = {
-              close()
-              if (model.query.state is QueryState.Success) {
-                actionScope.launch {
-                  val result =
-                    dialog.confirm(
-                      title = "프리셋 초기화",
-                      message = "모든 프리셋 설정을 기본값으로 되돌려요. 이 작업은 되돌릴 수 없어요.",
-                      confirmText = "초기화",
-                      confirmIsDestructive = true,
-                    )
-                  if (result is DialogResult.Resolved) {
-                    model.resetTemplate().withDefaultExceptionHandler(toast)
-                  }
-                }
-              }
-            },
-          )
-        )
-    )
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+    item(icon = Lucide.RotateCcw, label = "프리셋 초기화", color = colors.danger) {
+      if (model.query.state is QueryState.Success) {
+        actionScope.launch {
+          val result =
+            dialog.confirm(
+              title = "프리셋 초기화",
+              message = "모든 프리셋 설정을 기본값으로 되돌려요. 이 작업은 되돌릴 수 없어요.",
+              confirmText = "초기화",
+              confirmIsDestructive = true,
+            )
+          if (result is DialogResult.Resolved) {
+            model.resetTemplate().withDefaultExceptionHandler(toast)
+          }
+        }
+      }
+    }
   }
 }
 

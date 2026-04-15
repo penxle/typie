@@ -21,12 +21,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import co.typie.form.FieldState
 import co.typie.icons.Lucide
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.close
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
@@ -66,32 +62,24 @@ fun <T> SelectField(
     return
   }
 
-  Popover(
+  PopoverMenu(
     placement = placement,
     maxWidth = 320.dp,
     screenPadding = PaddingValues(20.dp),
     collapsedCornerRadius = 8.dp,
     anchor = anchor,
-    pane = {
-      Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-        PopoverList(
-          items =
-            items.map { item ->
-              PopoverListItem(
-                content = {
-                  SelectFieldPopoverItem(item = item, selected = item.value == field.value)
-                },
-                onSelected = {
-                  field.setValue(item.value)
-                  close()
-                  onSelected(item.value)
-                },
-              )
-            }
-        )
+  ) {
+    items.forEach { selectItem ->
+      item(
+        content = {
+          SelectFieldPopoverItem(item = selectItem, selected = selectItem.value == field.value)
+        }
+      ) {
+        field.setValue(selectItem.value)
+        onSelected(selectItem.value)
       }
-    },
-  )
+    }
+  }
 }
 
 private fun <T> resolveSelectFieldDisplayItem(

@@ -284,16 +284,12 @@ fun SpaceScreen() {
       EntityContainerEditAction(
         icon = Lucide.SquareCheck,
         label = "여러 항목 선택하기",
-        onClick = { closePopover ->
-          closePopover()
-          startSelection()
-        },
+        onClick = { startSelection() },
       ),
       EntityContainerEditAction(
         icon = Lucide.ChevronsUpDown,
         label = "순서 변경하기",
-        onClick = { closePopover ->
-          closePopover()
+        onClick = {
           selection.reset()
           isReordering = true
         },

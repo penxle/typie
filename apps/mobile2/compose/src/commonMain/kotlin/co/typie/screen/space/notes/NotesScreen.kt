@@ -4,7 +4,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -47,12 +46,7 @@ import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
 import co.typie.ui.component.dialog.error
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.close
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -421,54 +415,41 @@ fun NotesScreen() {
 
 @Composable
 private fun NotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus) -> Unit) {
-  Popover(
-    placement = PopoverPlacement.BelowEnd,
-    anchor = { TopBarButton(icon = Lucide.ListFilter) },
-    pane = {
-      val items =
-        listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).map { status ->
-          PopoverListItem(
-            content = {
-              Row(
-                modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-              ) {
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.ListFilter) }) {
+    listOf(NoteStatus.OPEN, NoteStatus.RESOLVED).forEach { status ->
+      item(
+        content = {
+          Row(
+            modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Icon(
+              icon = if (status == NoteStatus.RESOLVED) Lucide.CircleCheck else Lucide.Circle,
+              modifier = Modifier.size(18.dp),
+              tint = AppTheme.colors.textSecondary,
+            )
+            Text(
+              text = status.filterLabel(),
+              modifier = Modifier.weight(1f),
+              style = AppTheme.typography.action,
+            )
+            Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.CenterEnd) {
+              if (selectedStatus == status) {
                 Icon(
-                  icon = if (status == NoteStatus.RESOLVED) Lucide.CircleCheck else Lucide.Circle,
-                  modifier = Modifier.size(18.dp),
-                  tint = AppTheme.colors.textSecondary,
+                  icon = Lucide.Check,
+                  modifier = Modifier.size(16.dp),
+                  tint = AppTheme.colors.brand,
                 )
-
-                Text(
-                  text = status.filterLabel(),
-                  modifier = Modifier.weight(1f),
-                  style = AppTheme.typography.action,
-                )
-
-                Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.CenterEnd) {
-                  if (selectedStatus == status) {
-                    Icon(
-                      icon = Lucide.Check,
-                      modifier = Modifier.size(16.dp),
-                      tint = AppTheme.colors.brand,
-                    )
-                  }
-                }
               }
-            },
-            onSelected = {
-              close()
-              onSelect(status)
-            },
-          )
+            }
+          }
         }
-
-      Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-        PopoverList(items = items)
+      ) {
+        onSelect(status)
       }
-    },
-  )
+    }
+  }
 }
 
 internal fun NoteStatus.filterLabel(): String =

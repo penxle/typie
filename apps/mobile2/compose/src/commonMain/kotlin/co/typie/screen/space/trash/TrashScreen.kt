@@ -4,13 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,13 +41,7 @@ import co.typie.ui.component.TrashFolderRow
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.PopoverScope
-import co.typie.ui.component.popover.close
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetActionRow
 import co.typie.ui.component.sheet.SheetLayout
@@ -62,7 +54,6 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
-import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.state.rememberScrollState
@@ -436,54 +427,12 @@ private fun TrashActionsContent(
 
 @Composable
 private fun TrashTopBarMenu(actions: List<TrashActionItem>, actionScope: CoroutineScope) {
-  Popover(
-    placement = PopoverPlacement.BelowEnd,
-    anchor = { TopBarButton(icon = Lucide.Ellipsis) },
-    pane = { TrashTopBarMenuPane(actions = actions, actionScope = actionScope) },
-  )
-}
-
-@Composable
-context(_: PopoverScope)
-private fun TrashTopBarMenuPane(actions: List<TrashActionItem>, actionScope: CoroutineScope) {
-  Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-    PopoverList(
-      items =
-        actions.map { action ->
-          PopoverListItem(
-            content = {
-              TrashActionLabel(
-                action = action,
-                modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-              )
-            },
-            onSelected = {
-              close()
-              actionScope.launch { action.onClick() }
-            },
-          )
-        }
-    )
-  }
-}
-
-@Composable
-private fun TrashActionLabel(action: TrashActionItem, modifier: Modifier = Modifier) {
-  Row(
-    modifier = modifier,
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Icon(
-      icon = action.icon,
-      modifier = Modifier.size(18.dp),
-      tint = action.tint ?: AppTheme.colors.textPrimary,
-    )
-    Text(
-      text = action.label,
-      style = AppTheme.typography.action,
-      color = action.tint ?: AppTheme.colors.textPrimary,
-    )
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+    actions.forEach { action ->
+      item(icon = action.icon, label = action.label, color = action.tint) {
+        actionScope.launch { action.onClick() }
+      }
+    }
   }
 }
 

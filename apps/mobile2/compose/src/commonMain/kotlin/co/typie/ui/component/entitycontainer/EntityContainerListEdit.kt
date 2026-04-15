@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,14 +37,7 @@ import co.typie.ui.component.EntityListCard
 import co.typie.ui.component.EntityListDocumentRow
 import co.typie.ui.component.EntityListFolderRow
 import co.typie.ui.component.EntityListItem
-import co.typie.ui.component.Text
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.PopoverScope
-import co.typie.ui.component.popover.close
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.reorder.ReorderCommit
 import co.typie.ui.component.reorder.ReorderableListState
 import co.typie.ui.component.reorder.reorderableDragHandle
@@ -62,7 +54,7 @@ private val EntityContainerReorderHandleWidth = 44.dp
 data class EntityContainerEditAction(
   val icon: IconData,
   val label: String,
-  val onClick: (closePopover: () -> Unit) -> Unit = { closePopover -> closePopover() },
+  val onClick: () -> Unit = {},
 )
 
 @Composable
@@ -186,52 +178,10 @@ fun EntityContainerReorderListCard(
 
 @Composable
 private fun EntityContainerEditMenu(actions: List<EntityContainerEditAction>) {
-  Popover(
-    placement = PopoverPlacement.BelowEnd,
-    anchor = { TopBarButton(icon = Lucide.LayoutList) },
-    pane = {
-      Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-        EntityContainerEditActionList(actions = actions)
-      }
-    },
-  )
-}
-
-@Composable
-context(_: PopoverScope)
-private fun EntityContainerEditActionList(actions: List<EntityContainerEditAction>) {
-  PopoverList(
-    items =
-      actions.map { action ->
-        PopoverListItem(
-          content = {
-            EntityContainerEditActionRow(
-              action = action,
-              modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-            )
-          },
-          onSelected = { action.onClick { close() } },
-        )
-      }
-  )
-}
-
-@Composable
-private fun EntityContainerEditActionRow(
-  action: EntityContainerEditAction,
-  modifier: Modifier = Modifier,
-) {
-  Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-    Icon(icon = action.icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textPrimary)
-
-    Spacer(Modifier.width(12.dp))
-
-    Text(
-      text = action.label,
-      modifier = Modifier.weight(1f),
-      style = AppTheme.typography.action,
-      color = AppTheme.colors.textPrimary,
-    )
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.LayoutList) }) {
+    actions.forEach { action ->
+      item(icon = action.icon, label = action.label) { action.onClick() }
+    }
   }
 }
 

@@ -294,11 +294,10 @@ fun FolderScreen(entityId: String) {
     }
   }
 
-  fun onCenterAction(action: FolderAction, closePopover: () -> Unit) {
+  fun onCenterAction(action: FolderAction) {
     when (action) {
       FolderAction.Rename -> {
-        val resolvedFolder = folder ?: return closePopover()
-        closePopover()
+        val resolvedFolder = folder ?: return
         presenterScope.launch {
           sheet.present {
             FolderRenameSheet(
@@ -314,10 +313,8 @@ fun FolderScreen(entityId: String) {
         val resolvedEntity = entity
         val resolvedFolder = folder
         if (resolvedEntity == null || resolvedFolder == null) {
-          closePopover()
           return
         }
-        closePopover()
         presenterScope.launch {
           sheet.present(stops = EntityIconPickerStops) {
             EntityIconPickerSheet(
@@ -335,10 +332,8 @@ fun FolderScreen(entityId: String) {
         val resolvedEntity = entity
         val resolvedFolder = folder
         if (resolvedEntity == null || resolvedFolder == null) {
-          closePopover()
           return
         }
-        closePopover()
         presentShare(listOf(resolvedEntity.id))
       }
 
@@ -346,10 +341,8 @@ fun FolderScreen(entityId: String) {
         val resolvedEntity = entity
         val resolvedFolder = folder
         if (resolvedEntity == null || resolvedFolder == null) {
-          closePopover()
           return
         }
-        closePopover()
         presenterScope.launch {
           sheet.present(stops = EntityMoveStops) {
             EntityMoveSheet(
@@ -366,18 +359,15 @@ fun FolderScreen(entityId: String) {
       }
 
       FolderAction.OpenExternal -> {
-        closePopover()
         entity?.url?.let(uriHandler::openUri)
       }
 
       FolderAction.StartReorder -> {
-        closePopover()
         selection.reset()
         isReordering = true
       }
 
       FolderAction.SelectMultiple -> {
-        closePopover()
         startSelection()
       }
 
@@ -385,7 +375,6 @@ fun FolderScreen(entityId: String) {
         val resolvedEntity = entity
         val resolvedFolder = folder
         if (resolvedEntity == null || resolvedFolder == null) {
-          closePopover()
           return
         }
         clipboard.setCopy(
@@ -400,14 +389,12 @@ fun FolderScreen(entityId: String) {
               )
             ),
         )
-        closePopover()
       }
 
       FolderAction.Cut -> {
         val resolvedEntity = entity
         val resolvedFolder = folder
         if (resolvedEntity == null || resolvedFolder == null) {
-          closePopover()
           return
         }
         clipboard.setCut(
@@ -422,16 +409,10 @@ fun FolderScreen(entityId: String) {
               )
             ),
         )
-        closePopover()
       }
 
       FolderAction.Delete -> {
-        val resolvedFolder = folder
-        if (resolvedFolder == null) {
-          closePopover()
-          return
-        }
-        closePopover()
+        val resolvedFolder = folder ?: return
         presenterScope.launch {
           val result =
             dialog.confirm(
@@ -453,12 +434,12 @@ fun FolderScreen(entityId: String) {
       EntityContainerEditAction(
         icon = Lucide.SquareCheck,
         label = "여러 항목 선택하기",
-        onClick = { closePopover -> onCenterAction(FolderAction.SelectMultiple, closePopover) },
+        onClick = { onCenterAction(FolderAction.SelectMultiple) },
       ),
       EntityContainerEditAction(
         icon = Lucide.ChevronsUpDown,
         label = "순서 변경하기",
-        onClick = { closePopover -> onCenterAction(FolderAction.StartReorder, closePopover) },
+        onClick = { onCenterAction(FolderAction.StartReorder) },
       ),
     )
 

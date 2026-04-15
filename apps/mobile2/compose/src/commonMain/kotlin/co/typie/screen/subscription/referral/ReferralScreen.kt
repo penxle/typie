@@ -35,12 +35,7 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.popover.Popover
-import co.typie.ui.component.popover.PopoverDefaults
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
-import co.typie.ui.component.popover.PopoverPlacement
-import co.typie.ui.component.popover.close
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
@@ -219,33 +214,10 @@ fun ReferralScreen() {
 private fun ReferralActionsMenu(onCopyLink: suspend () -> Unit, onShareLink: suspend () -> Unit) {
   val scope = rememberCoroutineScope()
 
-  Popover(
-    placement = PopoverPlacement.BelowEnd,
-    anchor = { TopBarButton(icon = Lucide.Ellipsis) },
-    pane = {
-      Column(modifier = Modifier.padding(PopoverDefaults.PanePadding)) {
-        PopoverList(
-          items =
-            listOf(
-              PopoverListItem(
-                content = { ReferralActionItem(icon = Lucide.Copy, label = "초대 링크 복사") },
-                onSelected = {
-                  close()
-                  scope.launch { onCopyLink() }
-                },
-              ),
-              PopoverListItem(
-                content = { ReferralActionItem(icon = Lucide.Share2, label = "공유하기") },
-                onSelected = {
-                  close()
-                  scope.launch { onShareLink() }
-                },
-              ),
-            )
-        )
-      }
-    },
-  )
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.Ellipsis) }) {
+    item(icon = Lucide.Copy, label = "초대 링크 복사") { scope.launch { onCopyLink() } }
+    item(icon = Lucide.Share2, label = "초대 링크 공유") { scope.launch { onShareLink() } }
+  }
 }
 
 private fun formatReferralBenefitText(compensatedCount: Int): String {
@@ -253,18 +225,6 @@ private fun formatReferralBenefitText(compensatedCount: Int): String {
     "${compensatedCount}개월 무료"
   } else {
     "없음"
-  }
-}
-
-@Composable
-private fun ReferralActionItem(icon: IconData, label: String) {
-  Row(
-    verticalAlignment = Alignment.CenterVertically,
-    modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-  ) {
-    Icon(icon = icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textSecondary)
-    Spacer(Modifier.size(12.dp))
-    Text(label, style = AppTheme.typography.action, color = AppTheme.colors.textPrimary)
   }
 }
 
