@@ -11,13 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.generated.resources.Res
 import co.typie.ui.component.Img
 
 @Composable
 fun SplashScreen() {
-  val model = viewModel { SplashViewModel() }
   val isDark = isSystemInDarkTheme()
   val backgroundColor = if (isDark) Color.Black else Color.White
   val iconTint = if (isDark) Color.White else Color(0xFFFAAD00)
