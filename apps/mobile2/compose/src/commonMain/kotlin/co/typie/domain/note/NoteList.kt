@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -54,6 +53,7 @@ import co.typie.ui.component.toast.Toast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.skeleton.Skeleton
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -313,7 +313,7 @@ private fun NoteEmptyState(message: String) {
     modifier =
       Modifier.fillMaxWidth()
         .height(110.dp)
-        .clip(RoundedCornerShape(12.dp))
+        .clip(AppShapes.rounded(AppShapes.md))
         .background(AppTheme.colors.surfaceDefault),
     contentAlignment = Alignment.Center,
   ) {

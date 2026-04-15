@@ -19,14 +19,10 @@ class ReferralViewModel : ViewModel() {
       ReferralScreen_Query()
     }
 
-  suspend fun issueReferralInviteMessage(): Result<String, Nothing> = result {
+  suspend fun issueReferralUrl(): Result<String, Nothing> = result {
     val data = Apollo.executeMutation(ReferralScreen_IssueReferralUrl_Mutation())
-    buildReferralInviteMessage(data.issueReferralUrl)
+    data.issueReferralUrl
   }
-}
-
-private fun buildReferralInviteMessage(url: String): String {
-  return "📝 타이피 가입하고 한달 무료 혜택 받아가세요! $url"
 }
 
 private fun placeholderData() =

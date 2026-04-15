@@ -382,22 +382,22 @@ private fun TextReplacementCustomRow(
 ) {
   val topStartRadius by
     animateDpAsState(
-      targetValue = if (isFirst) 12.dp else 0.dp,
+      targetValue = if (isFirst) AppShapes.md else 0.dp,
       animationSpec = tween(durationMillis = 140),
     )
   val topEndRadius by
     animateDpAsState(
-      targetValue = if (isFirst) 12.dp else 0.dp,
+      targetValue = if (isFirst) AppShapes.md else 0.dp,
       animationSpec = tween(durationMillis = 140),
     )
   val bottomStartRadius by
     animateDpAsState(
-      targetValue = if (isLast) 12.dp else 0.dp,
+      targetValue = if (isLast) AppShapes.md else 0.dp,
       animationSpec = tween(durationMillis = 140),
     )
   val bottomEndRadius by
     animateDpAsState(
-      targetValue = if (isLast) 12.dp else 0.dp,
+      targetValue = if (isLast) AppShapes.md else 0.dp,
       animationSpec = tween(durationMillis = 140),
     )
   val shape =

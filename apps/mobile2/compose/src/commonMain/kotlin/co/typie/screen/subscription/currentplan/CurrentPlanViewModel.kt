@@ -1,7 +1,5 @@
 package co.typie.screen.subscription.currentplan
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.Apollo

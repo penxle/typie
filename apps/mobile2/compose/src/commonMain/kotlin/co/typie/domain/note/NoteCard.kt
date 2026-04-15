@@ -30,8 +30,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -84,11 +82,12 @@ import co.typie.ui.icon.IconData
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppColor
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.DarkColors
 import kotlin.math.abs
 
-private val NoteCardShape = RoundedCornerShape(10.dp)
+private val NoteCardShape = AppShapes.rounded(AppShapes.md)
 private val NoteActionButtonSize = 24.dp
 private val NoteStatusHitTargetSize = 28.dp
 private val NoteGripHitTargetSize = 28.dp
@@ -355,7 +354,7 @@ private fun NoteCollapsedContent(
         modifier =
           Modifier.weight(1f)
             .padding(end = 12.dp, top = 12.dp, bottom = 12.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(AppShapes.rounded(AppShapes.md))
             .clickable { onExpand() }
             .pressScale(0.985f),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -493,7 +492,7 @@ private fun NoteStatusToggleButton(
   val skeleton = LocalSkeleton.current
 
   if (skeleton.enabled) {
-    Skeleton.Bone(modifier = Modifier.size(NoteStatusHitTargetSize), shape = CircleShape) {}
+    Skeleton.Bone(modifier = Modifier.size(NoteStatusHitTargetSize), shape = AppShapes.circle) {}
     return
   }
 
@@ -505,12 +504,12 @@ private fun NoteStatusToggleButton(
       Box(
         modifier =
           Modifier.size(18.dp)
-            .clip(CircleShape)
-            .background(if (resolved) colorOption.stroke else Color.Transparent, CircleShape)
+            .clip(AppShapes.circle)
+            .background(if (resolved) colorOption.stroke else Color.Transparent, AppShapes.circle)
             .border(
               width = if (resolved) 0.dp else 2.dp,
               color = colorOption.stroke,
-              shape = CircleShape,
+              shape = AppShapes.circle,
             ),
         contentAlignment = Alignment.Center,
       ) {
@@ -536,7 +535,7 @@ private fun NoteActionIconButton(
     Box(
       modifier =
         Modifier.size(NoteActionButtonSize)
-          .clip(RoundedCornerShape(6.dp))
+          .clip(AppShapes.rounded(AppShapes.sm))
           .clickable { onClick() }
           .pressScale(0.95f),
       contentAlignment = Alignment.Center,
@@ -729,8 +728,8 @@ private fun NoteLinkedEntityChip(
     Row(
       modifier =
         chipModifier
-          .clip(RoundedCornerShape(6.dp))
-          .background(AppTheme.colors.surfaceSunken, RoundedCornerShape(6.dp))
+          .clip(AppShapes.rounded(AppShapes.sm))
+          .background(AppTheme.colors.surfaceSunken, AppShapes.rounded(AppShapes.sm))
           .padding(horizontal = 6.dp, vertical = 4.dp),
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalAlignment = Alignment.CenterVertically,
@@ -768,12 +767,12 @@ private fun NoteColorDot(option: NoteColorOption, selected: Boolean, onClick: ()
       Box(
         modifier =
           Modifier.size(14.dp)
-            .clip(CircleShape)
-            .background(if (selected) option.stroke else Color.Transparent, CircleShape)
+            .clip(AppShapes.circle)
+            .background(if (selected) option.stroke else Color.Transparent, AppShapes.circle)
             .border(
               width = if (selected) 0.dp else 1.5.dp,
               color = option.stroke,
-              shape = CircleShape,
+              shape = AppShapes.circle,
             )
       )
     }

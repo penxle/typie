@@ -41,6 +41,13 @@ object SubscriptionService {
     }
   }
 
+  val subscription: Subscription? by derivedStateOf {
+    when (val state = state) {
+      is SubscriptionServiceState.Subscribed -> state.subscription
+      else -> null
+    }
+  }
+
   fun refresh() {
     query.refetch()
   }
