@@ -55,7 +55,6 @@ import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
-import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
@@ -96,10 +95,15 @@ fun HomeScreen() {
       Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
         Skeleton.Keep { Text("홈", style = AppTheme.typography.display) }
 
-        SearchBar(
-          placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
-          onClick = { nav.navigate(Route.Search) },
-        )
+        Skeleton.Bone(
+          modifier = Modifier.fillMaxWidth().height(48.dp),
+          shape = AppShapes.rounded(AppShapes.md),
+        ) {
+          SearchBar(
+            placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
+            onClick = { nav.navigate(Route.Search) },
+          )
+        }
 
         Spacer(Modifier.height(20.dp))
 
@@ -122,16 +126,6 @@ fun HomeScreen() {
 
 @Composable
 private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
-  val skeleton = LocalSkeleton.current
-
-  if (skeleton.enabled) {
-    Skeleton.Bone(
-      modifier = Modifier.fillMaxWidth().height(48.dp),
-      shape = AppShapes.rounded(AppShapes.md),
-    ) {}
-    return
-  }
-
   Row(
     verticalAlignment = Alignment.CenterVertically,
     modifier =
