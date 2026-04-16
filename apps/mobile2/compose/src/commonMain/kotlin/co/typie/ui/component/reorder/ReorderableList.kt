@@ -21,10 +21,12 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -37,6 +39,18 @@ data class ReorderCommit<K : Any>(
   val toIndex: Int,
   val orderedKeys: List<K>,
 )
+
+@Stable
+data class ReorderableDragHaptics(
+  val dragStarted: HapticFeedbackType? = HapticFeedbackType.GestureThresholdActivate,
+  val dragMoved: HapticFeedbackType? = HapticFeedbackType.SegmentFrequentTick,
+  val dragStopped: HapticFeedbackType? = HapticFeedbackType.GestureEnd,
+) {
+  companion object {
+    val Default = ReorderableDragHaptics()
+    val None = ReorderableDragHaptics(dragStarted = null, dragMoved = null, dragStopped = null)
+  }
+}
 
 private data class ActiveReorderDrag<K : Any>(
   val key: K,
@@ -327,11 +341,13 @@ fun <K : Any> Modifier.reorderableDragHandle(
   state: ReorderableListState<K>,
   key: K,
   enabled: Boolean = true,
+  haptics: ReorderableDragHaptics = ReorderableDragHaptics.Default,
   onDragStarted: () -> Unit = {},
   onDragMoved: () -> Unit = {},
   onDragStopped: (ReorderCommit<K>?) -> Unit = {},
 ): Modifier = composed {
   var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+  val hapticFeedback = LocalHapticFeedback.current
 
   onGloballyPositioned { coordinates -> handleCoordinates = coordinates }
     .pointerInput(state, key, enabled) {
@@ -347,6 +363,7 @@ fun <K : Any> Modifier.reorderableDragHandle(
 
         if (startedDrag) {
           down.consume()
+          haptics.dragStarted?.let(hapticFeedback::performHapticFeedback)
           onDragStarted()
         }
 
@@ -358,7 +375,9 @@ fun <K : Any> Modifier.reorderableDragHandle(
 
           if (!change.pressed) {
             if (startedDrag) {
-              onDragStopped(state.endDrag())
+              val commit = state.endDrag()
+              haptics.dragStopped?.let(hapticFeedback::performHapticFeedback)
+              onDragStopped(commit)
             } else {
               state.cancelDrag()
             }
@@ -368,12 +387,14 @@ fun <K : Any> Modifier.reorderableDragHandle(
           if (startedDrag) {
             change.consume()
             if (state.updateDrag(currentWindowPosition)) {
+              haptics.dragMoved?.let(hapticFeedback::performHapticFeedback)
               onDragMoved()
             }
             state.edgeAutoScrollState.update(
               pointerPosition = currentWindowPosition,
               onAutoScroll = {
                 if (state.updateDrag(currentWindowPosition)) {
+                  haptics.dragMoved?.let(hapticFeedback::performHapticFeedback)
                   onDragMoved()
                 }
               },

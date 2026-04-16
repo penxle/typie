@@ -65,8 +65,8 @@ fun EntityContainerListContent(
   onFolderClick: suspend (entityId: String) -> Unit,
   onFolderLongPress: (suspend (item: EntityRow_entity) -> Unit)? = null,
   onSelectionToggle: suspend (itemId: String) -> Unit = {},
-  onDragStarted: () -> Unit,
-  onDragMoved: () -> Unit,
+  onDragStarted: () -> Unit = {},
+  onDragMoved: () -> Unit = {},
   onDragStopped: (ReorderCommit<String>?) -> Unit,
 ) {
   Column(modifier = modifier.fillMaxSize()) {
@@ -134,8 +134,8 @@ fun EntityContainerReorderListCard(
   items: List<EntityRow_entity>,
   reorderState: ReorderableListState<String>,
   isPersistingReorder: Boolean,
-  onDragStarted: () -> Unit,
-  onDragMoved: () -> Unit,
+  onDragStarted: () -> Unit = {},
+  onDragMoved: () -> Unit = {},
   onDragStopped: (ReorderCommit<String>?) -> Unit,
   modifier: Modifier = Modifier,
 ) {

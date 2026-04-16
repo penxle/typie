@@ -31,11 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -93,7 +91,6 @@ private const val CUSTOM_ROW_DRAG_GUTTER_WIDTH_DP = 44
 fun TextReplacementsScreen() {
   val dialog = LocalDialog.current
   val sheet = LocalSheet.current
-  val haptic = LocalHapticFeedback.current
   val model = viewModel { TextReplacementsViewModel() }
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
@@ -248,16 +245,7 @@ fun TextReplacementsScreen() {
                           state = reorderState,
                           key = item.textReplacementId,
                           enabled = !isPersistingCustomReorder,
-                          onDragStarted = {
-                            haptic.performHapticFeedback(
-                              HapticFeedbackType.GestureThresholdActivate
-                            )
-                          },
-                          onDragMoved = {
-                            haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                          },
                           onDragStopped = { commit ->
-                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
                             if (commit == null || commit.orderedKeys == serverCustomItemIds) {
                               return@reorderableDragHandle
                             }

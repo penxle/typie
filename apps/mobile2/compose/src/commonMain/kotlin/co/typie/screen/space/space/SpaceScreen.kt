@@ -18,8 +18,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -102,7 +100,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun SpaceScreen() {
   val nav = Nav.current
-  val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
   val sheet = LocalSheet.current
   val dialog = LocalDialog.current
@@ -627,12 +624,7 @@ fun SpaceScreen() {
             }
           },
         onSelectionToggle = { selection.toggle(it) },
-        onDragStarted = {
-          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-        },
-        onDragMoved = { haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
         onDragStopped = onDragStopped@{ commit ->
-            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
             if (commit == null || commit.orderedKeys == serverEntityIds) {
               return@onDragStopped
             }

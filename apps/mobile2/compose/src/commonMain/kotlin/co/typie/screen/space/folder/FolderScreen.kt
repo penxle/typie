@@ -16,8 +16,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -94,7 +92,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun FolderScreen(entityId: String) {
   val nav = Nav.current
-  val haptic = LocalHapticFeedback.current
   val uriHandler = LocalUriHandler.current
   val sheet = LocalSheet.current
   val dialog = LocalDialog.current
@@ -737,12 +734,7 @@ fun FolderScreen(entityId: String) {
             }
           },
         onSelectionToggle = { selection.toggle(it) },
-        onDragStarted = {
-          haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-        },
-        onDragMoved = { haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick) },
         onDragStopped = onDragStopped@{ commit ->
-            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
             if (commit == null || commit.orderedKeys == serverChildIds) {
               return@onDragStopped
             }
