@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.entity.DocumentEntityShareSheet
 import co.typie.domain.entity.DocumentItemActionsSheet
 import co.typie.domain.entity.DocumentRenameSheet
 import co.typie.domain.entity.EntityAction
@@ -38,7 +39,7 @@ import co.typie.domain.entity.EntityIconPickerStops
 import co.typie.domain.entity.EntityMoveSheet
 import co.typie.domain.entity.EntityMoveStops
 import co.typie.domain.entity.EntitySelectionActionsSheet
-import co.typie.domain.entity.EntityShareSheet
+import co.typie.domain.entity.FolderEntityShareSheet
 import co.typie.domain.entity.FolderItemActionsSheet
 import co.typie.domain.entity.FolderRenameSheet
 import co.typie.domain.entity.calculateEntityReorderOrdersFromOrderedKeys
@@ -183,7 +184,7 @@ fun SpaceScreen() {
     selection.start(initialIds)
   }
 
-  fun presentShare(entityIds: List<String>) {
+  fun presentFolderShare(entityIds: List<String>) {
     val resolvedEntityIds = entityIds.map(String::trim).filter(String::isNotEmpty)
     if (resolvedEntityIds.isEmpty()) {
       return
@@ -191,7 +192,20 @@ fun SpaceScreen() {
 
     presenterScope.launch {
       sheet.present {
-        EntityShareSheet(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
+        FolderEntityShareSheet(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
+      }
+    }
+  }
+
+  fun presentDocumentShare(entityIds: List<String>) {
+    val resolvedEntityIds = entityIds.map(String::trim).filter(String::isNotEmpty)
+    if (resolvedEntityIds.isEmpty()) {
+      return
+    }
+
+    presenterScope.launch {
+      sheet.present {
+        DocumentEntityShareSheet(entityIds = resolvedEntityIds, onUpdated = { model.refetch() })
       }
     }
   }
@@ -217,8 +231,8 @@ fun SpaceScreen() {
               }
             }
           },
-          onShareFolders = { presentShare(selectionSummary.folderItems.map { it.id }) },
-          onShareDocuments = { presentShare(selectionSummary.documentItems.map { it.id }) },
+          onShareFolders = { presentFolderShare(selectionSummary.folderItems.map { it.id }) },
+          onShareDocuments = { presentDocumentShare(selectionSummary.documentItems.map { it.id }) },
           onCopy = {
             siteId?.let { sourceSiteId ->
               clipboard.setCopy(
@@ -456,12 +470,15 @@ fun SpaceScreen() {
 
                       EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
 
-                      EntityAction.Share -> presentShare(listOf(entity.id))
+                      EntityAction.Share -> presentDocumentShare(listOf(entity.id))
 
                       EntityAction.Move -> {
                         presenterScope.launch {
                           sheet.present(stops = EntityMoveStops) {
-                            EntityMoveSheet(source = entity.toTransferSource())
+                            EntityMoveSheet(
+                              source = entity.toTransferSource(),
+                              initialDestinationId = null,
+                            )
                           }
                         }
                       }
@@ -552,12 +569,15 @@ fun SpaceScreen() {
 
                       EntityAction.OpenExternal -> uriHandler.openUri(entity.url)
 
-                      EntityAction.Share -> presentShare(listOf(entity.id))
+                      EntityAction.Share -> presentFolderShare(listOf(entity.id))
 
                       EntityAction.Move -> {
                         presenterScope.launch {
                           sheet.present(stops = EntityMoveStops) {
-                            EntityMoveSheet(source = entity.toTransferSource())
+                            EntityMoveSheet(
+                              source = entity.toTransferSource(),
+                              initialDestinationId = null,
+                            )
                           }
                         }
                       }

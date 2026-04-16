@@ -49,6 +49,7 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
@@ -150,6 +151,7 @@ context(_: SheetScope<Unit>)
 internal fun DocumentShareSheet(
   model: DocumentShareSheetModel,
   documents: List<DocumentShare_entity>,
+  loading: Boolean = false,
   onUpdated: () -> Unit = {},
 ) {
   val share = PlatformModule.share
@@ -231,6 +233,7 @@ internal fun DocumentShareSheet(
       isSharing
 
   fun updateVisibility(nextVisibility: EntityVisibility) {
+    if (loading) return
     if (isUpdatingVisibility) return
     if (!hasMixedVisibility && form.visibility.initialValue == nextVisibility) return
 
@@ -254,6 +257,7 @@ internal fun DocumentShareSheet(
   }
 
   fun updateContentRating(nextContentRating: DocumentContentRating) {
+    if (loading) return
     if (isUpdatingContentRating) return
     if (!hasMixedContentRating && form.contentRating.initialValue == nextContentRating) return
 
@@ -277,6 +281,7 @@ internal fun DocumentShareSheet(
   }
 
   fun updateAllowReaction(nextAllowReaction: Boolean) {
+    if (loading) return
     if (isUpdatingAllowReaction) return
     if (!hasMixedAllowReaction && form.allowReaction.initialValue == nextAllowReaction) return
 
@@ -300,6 +305,7 @@ internal fun DocumentShareSheet(
   }
 
   fun updateProtectContent(nextProtectContent: Boolean) {
+    if (loading) return
     if (isUpdatingProtectContent) return
 
     form.protectContent.setValue(nextProtectContent)
@@ -327,6 +333,7 @@ internal fun DocumentShareSheet(
   }
 
   fun commitPassword(password: String) {
+    if (loading) return
     if (isUpdatingPassword) return
 
     val nextPassword = password.trim()
@@ -368,6 +375,7 @@ internal fun DocumentShareSheet(
   }
 
   fun updatePasswordProtection(nextEnabled: Boolean) {
+    if (loading) return
     if (isUpdatingPassword) return
 
     form.hasPassword.setValue(nextEnabled)
@@ -404,6 +412,7 @@ internal fun DocumentShareSheet(
   }
 
   fun removeThumbnail() {
+    if (loading) return
     if (isUploadingThumbnail || isRemovingThumbnail) return
 
     form.thumbnailUrl.setValue(null)
@@ -427,6 +436,7 @@ internal fun DocumentShareSheet(
   }
 
   suspend fun shareDocument() {
+    if (loading) return
     if (isSharing) return
 
     val shareText = resolveEntityShareText(documentUrls)
@@ -446,6 +456,7 @@ internal fun DocumentShareSheet(
   }
 
   val filePicker = rememberFilePicker { files ->
+    if (loading) return@rememberFilePicker
     val file = files.firstOrNull() ?: return@rememberFilePicker
     if (isUploadingThumbnail || isRemovingThumbnail) return@rememberFilePicker
 
@@ -498,33 +509,35 @@ internal fun DocumentShareSheet(
           icon = Lucide.Blend,
           label = "공개 범위",
           trailing = {
-            SelectField(
-              field = form.visibility,
-              items =
-                listOf(
-                  SelectFieldItem(
-                    value = EntityVisibility.PUBLIC,
-                    label = "공개",
-                    description = "누구나 볼 수 있고 스페이스에 노출돼요.",
-                    icon = Lucide.Globe,
+            Skeleton(enabled = loading) {
+              SelectField(
+                field = form.visibility,
+                items =
+                  listOf(
+                    SelectFieldItem(
+                      value = EntityVisibility.PUBLIC,
+                      label = "공개",
+                      description = "누구나 볼 수 있고 스페이스에 노출돼요.",
+                      icon = Lucide.Globe,
+                    ),
+                    SelectFieldItem(
+                      value = EntityVisibility.UNLISTED,
+                      label = "링크가 있는 사람",
+                      description = "링크가 있는 누구나 볼 수 있어요.",
+                      icon = Lucide.Link,
+                    ),
+                    SelectFieldItem(
+                      value = EntityVisibility.PRIVATE,
+                      label = "비공개",
+                      description = "나만 볼 수 있어요.",
+                      icon = Lucide.Lock,
+                    ),
                   ),
-                  SelectFieldItem(
-                    value = EntityVisibility.UNLISTED,
-                    label = "링크가 있는 사람",
-                    description = "링크가 있는 누구나 볼 수 있어요.",
-                    icon = Lucide.Link,
-                  ),
-                  SelectFieldItem(
-                    value = EntityVisibility.PRIVATE,
-                    label = "비공개",
-                    description = "나만 볼 수 있어요.",
-                    icon = Lucide.Lock,
-                  ),
-                ),
-              values = visibilityValues,
-              enabled = !isUpdatingVisibility,
-              onSelected = ::updateVisibility,
-            )
+                values = visibilityValues,
+                enabled = !loading && !isUpdatingVisibility,
+                onSelected = ::updateVisibility,
+              )
+            }
           },
         )
 
@@ -532,16 +545,18 @@ internal fun DocumentShareSheet(
           icon = Lucide.IdCard,
           label = "연령 제한",
           trailing = {
-            SelectField(
-              field = form.contentRating,
-              items =
-                documentContentRatingOptions().map { option ->
-                  SelectFieldItem(value = option.rating, label = option.label, icon = option.icon)
-                },
-              values = contentRatingValues,
-              enabled = !isUpdatingContentRating,
-              onSelected = ::updateContentRating,
-            )
+            Skeleton(enabled = loading) {
+              SelectField(
+                field = form.contentRating,
+                items =
+                  documentContentRatingOptions().map { option ->
+                    SelectFieldItem(value = option.rating, label = option.label, icon = option.icon)
+                  },
+                values = contentRatingValues,
+                enabled = !loading && !isUpdatingContentRating,
+                onSelected = ::updateContentRating,
+              )
+            }
           },
         )
 
@@ -549,16 +564,18 @@ internal fun DocumentShareSheet(
           icon = Lucide.LockKeyhole,
           label = "비밀번호 보호",
           trailing = {
-            SettingSwitch(
-              checked = form.hasPassword.value,
-              indeterminate = hasMixedPasswordProtection,
-              enabled = !isUpdatingPassword,
-              onCheckedChange = ::updatePasswordProtection,
-            )
+            Skeleton(enabled = loading) {
+              SettingSwitch(
+                checked = form.hasPassword.value,
+                indeterminate = hasMixedPasswordProtection,
+                enabled = !loading && !isUpdatingPassword,
+                onCheckedChange = ::updatePasswordProtection,
+              )
+            }
           },
         )
 
-        if (form.hasPassword.value) {
+        if (!loading && form.hasPassword.value) {
           TextField(
             value = form.password.value,
             onValueChange = { form.password.setValue(it) },
@@ -573,7 +590,7 @@ internal fun DocumentShareSheet(
                 Box(
                   modifier =
                     Modifier.size(28.dp)
-                      .clickable(enabled = !isUpdatingPassword) {
+                      .clickable(enabled = !loading && !isUpdatingPassword) {
                         commitPassword(generateDocumentSharePassword())
                       }
                       .pressScale(0.95f),
@@ -596,33 +613,35 @@ internal fun DocumentShareSheet(
           icon = Lucide.Image,
           label = "미리보기 이미지",
           trailing = {
-            ShareThumbnailControl(
-              thumbnailUrl = form.thumbnailUrl.value,
-              isMixed = hasMixedThumbnail,
-              isUploading = isUploadingThumbnail,
-              isRemoving = isRemovingThumbnail,
-              onUploadClick = {
-                if (!isUploadingThumbnail && !isRemovingThumbnail) {
-                  filePicker("image/*")
-                }
-              },
-              onRemoveClick = {
-                scope.launch {
-                  val result =
-                    dialog.confirm(
-                      title = "썸네일을 삭제할까요?",
-                      message =
-                        if (isSingleDocument) "현재 문서의 미리보기 이미지를 삭제합니다."
-                        else "선택한 문서들의 미리보기 이미지를 삭제합니다.",
-                      confirmText = "삭제",
-                      confirmIsDestructive = true,
-                    )
-                  if (result is DialogResult.Resolved) {
-                    removeThumbnail()
+            Skeleton(enabled = loading) {
+              ShareThumbnailControl(
+                thumbnailUrl = form.thumbnailUrl.value,
+                isMixed = hasMixedThumbnail,
+                isUploading = isUploadingThumbnail,
+                isRemoving = isRemovingThumbnail,
+                onUploadClick = {
+                  if (!loading && !isUploadingThumbnail && !isRemovingThumbnail) {
+                    filePicker("image/*")
                   }
-                }
-              },
-            )
+                },
+                onRemoveClick = {
+                  scope.launch {
+                    val result =
+                      dialog.confirm(
+                        title = "썸네일을 삭제할까요?",
+                        message =
+                          if (isSingleDocument) "현재 문서의 미리보기 이미지를 삭제합니다."
+                          else "선택한 문서들의 미리보기 이미지를 삭제합니다.",
+                        confirmText = "삭제",
+                        confirmIsDestructive = true,
+                      )
+                    if (result is DialogResult.Resolved) {
+                      removeThumbnail()
+                    }
+                  }
+                },
+              )
+            }
           },
         )
       }
@@ -632,20 +651,22 @@ internal fun DocumentShareSheet(
           icon = Lucide.Smile,
           label = "이모지 반응",
           trailing = {
-            SelectField(
-              field = form.allowReaction,
-              items =
-                documentReactionOptions().map { option ->
-                  SelectFieldItem(
-                    value = option.allowReaction,
-                    label = option.label,
-                    icon = option.icon,
-                  )
-                },
-              values = allowReactionValues,
-              enabled = !isUpdatingAllowReaction,
-              onSelected = ::updateAllowReaction,
-            )
+            Skeleton(enabled = loading) {
+              SelectField(
+                field = form.allowReaction,
+                items =
+                  documentReactionOptions().map { option ->
+                    SelectFieldItem(
+                      value = option.allowReaction,
+                      label = option.label,
+                      icon = option.icon,
+                    )
+                  },
+                values = allowReactionValues,
+                enabled = !loading && !isUpdatingAllowReaction,
+                onSelected = ::updateAllowReaction,
+              )
+            }
           },
         )
       }
@@ -655,19 +676,21 @@ internal fun DocumentShareSheet(
           icon = Lucide.Shield,
           label = "내용 보호",
           trailing = {
-            SettingSwitch(
-              checked = form.protectContent.value,
-              indeterminate = hasMixedProtectContent,
-              enabled = !isUpdatingProtectContent,
-              onCheckedChange = ::updateProtectContent,
-            )
+            Skeleton(enabled = loading) {
+              SettingSwitch(
+                checked = form.protectContent.value,
+                indeterminate = hasMixedProtectContent,
+                enabled = !loading && !isUpdatingProtectContent,
+                onCheckedChange = ::updateProtectContent,
+              )
+            }
           },
         )
       }
 
       Button(
         text = "공유하기",
-        enabled = !isSharing,
+        enabled = !loading && !isSharing,
         loading = isSharing,
         onClick = { shareDocument() },
       )

@@ -1,8 +1,5 @@
 package co.typie.domain.note
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,16 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState as foundationRememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,8 +47,10 @@ import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.LabelPosition
+import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.scrollFog
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
@@ -62,7 +58,9 @@ import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.toPaddingValues
 import co.typie.ui.icon.Icon
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 
 internal val NoteEntityPickerStops = listOf(SheetStop.Top(64.dp))
@@ -85,9 +83,17 @@ internal fun NoteEntityPickerSheet(
 
   LaunchedEffect(model) { model.clearSearch() }
 
+  val showRecentSkeleton =
+    model.inputKeyword.isBlank() && model.recentQuery.state is QueryState.Loading
   val visibleEntities =
     if (model.inputKeyword.isBlank()) {
-      model.recentEntities.map(::recentNotePickerItem)
+      resolveRecentNotePickerEntities(
+          inputKeyword = model.inputKeyword,
+          recentQueryState = model.recentQuery.state,
+          settledEntities = model.recentEntities,
+          placeholderEntities = model.recentPlaceholderEntities,
+        )
+        .map(::recentNotePickerItem)
     } else {
       model.searchHits
         .mapNotNull { searchNotePickerItem(it, highlightColor, mutedTextColor) }
@@ -160,96 +166,52 @@ internal fun NoteEntityPickerSheet(
             NotePickerEmptyState(message = emptyMessage)
           }
         } else {
-          val showTopFade by
-            remember(listScrollState) { derivedStateOf { listScrollState.value > 0 } }
-          val showBottomFade by
-            remember(listScrollState) {
-              derivedStateOf { listScrollState.value < listScrollState.maxValue }
-            }
-          val topFadeAlpha by
-            animateFloatAsState(
-              targetValue = if (showTopFade) 1f else 0f,
-              animationSpec = tween(250),
+          val listFogInsets = remember {
+            ScrollFogInsets(
+              top = NoteEntityPickerListFadeHeight,
+              bottom = NoteEntityPickerListFadeHeight,
             )
-          val bottomFadeAlpha by
-            animateFloatAsState(
-              targetValue = if (showBottomFade) 1f else 0f,
-              animationSpec = tween(250),
-            )
+          }
 
-          Box(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize().verticalScroll(listScrollState)) {
-              Column(Modifier.fillMaxWidth()) {
-                visibleEntities.forEachIndexed { index, item ->
-                  if (index > 0) {
-                    CardDivider()
+          Box(
+            modifier =
+              Modifier.fillMaxSize()
+                .scrollFog(insets = listFogInsets, color = AppTheme.colors.surfaceSunken)
+          ) {
+            Skeleton(enabled = showRecentSkeleton) {
+              Column(
+                modifier =
+                  Modifier.fillMaxSize()
+                    .verticalScroll(listScrollState)
+                    .padding(listFogInsets.toPaddingValues())
+              ) {
+                Column(Modifier.fillMaxWidth()) {
+                  visibleEntities.forEachIndexed { index, item ->
+                    if (index > 0) {
+                      CardDivider()
+                    }
+
+                    NotePickerRow(
+                      item = item,
+                      selected = item.id in selectedEntityIds,
+                      updating = updatingEntityId == item.id,
+                      enabled = updatingEntityId == null,
+                      onClick = {
+                        val selected = item.id in selectedEntityIds
+                        updatingEntityId = item.id
+                        val didToggle =
+                          if (selected) onRemoveEntity(item.id) else onAddEntity(item.id)
+                        if (didToggle) {
+                          selectedEntityIds =
+                            if (selected) selectedEntityIds - item.id
+                            else selectedEntityIds + item.id
+                        }
+                        updatingEntityId = null
+                      },
+                    )
                   }
-
-                  NotePickerRow(
-                    item = item,
-                    selected = item.id in selectedEntityIds,
-                    updating = updatingEntityId == item.id,
-                    enabled = updatingEntityId == null,
-                    onClick = {
-                      val selected = item.id in selectedEntityIds
-                      updatingEntityId = item.id
-                      val didToggle =
-                        if (selected) onRemoveEntity(item.id) else onAddEntity(item.id)
-                      if (didToggle) {
-                        selectedEntityIds =
-                          if (selected) selectedEntityIds - item.id else selectedEntityIds + item.id
-                      }
-                      updatingEntityId = null
-                    },
-                  )
                 }
               }
-            }
-
-            Box(
-              modifier =
-                Modifier.align(Alignment.TopCenter)
-                  .fillMaxWidth()
-                  .height(NoteEntityPickerListFadeHeight)
-            ) {
-              Box(
-                modifier =
-                  Modifier.fillMaxSize()
-                    .graphicsLayer { alpha = topFadeAlpha }
-                    .background(
-                      brush =
-                        Brush.verticalGradient(
-                          colorStops =
-                            arrayOf(
-                              0.3f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
-                              1f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
-                            )
-                        )
-                    )
-              )
-            }
-
-            Box(
-              modifier =
-                Modifier.align(Alignment.BottomCenter)
-                  .fillMaxWidth()
-                  .height(NoteEntityPickerListFadeHeight)
-            ) {
-              Box(
-                modifier =
-                  Modifier.fillMaxSize()
-                    .graphicsLayer { alpha = bottomFadeAlpha }
-                    .background(
-                      brush =
-                        Brush.verticalGradient(
-                          colorStops =
-                            arrayOf(
-                              0f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
-                              0.7f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
-                            )
-                        )
-                    )
-              )
             }
           }
         }
@@ -306,6 +268,23 @@ private data class NotePickerItem(
 ) {
   val id: String
     get() = entity.id
+}
+
+internal fun <T> resolveRecentNotePickerEntities(
+  inputKeyword: String,
+  recentQueryState: QueryState<*>,
+  settledEntities: List<T>,
+  placeholderEntities: List<T>,
+): List<T> {
+  if (inputKeyword.isNotBlank()) {
+    return emptyList()
+  }
+
+  return when (recentQueryState) {
+    QueryState.Loading -> placeholderEntities
+    is QueryState.Success<*> -> settledEntities
+    is QueryState.Error -> emptyList()
+  }
 }
 
 private fun recentNotePickerItem(entity: NoteEntityPicker_entity): NotePickerItem {

@@ -10,6 +10,8 @@ import co.typie.graphql.EntityShareFolder_PersistBlobAsImage_Mutation
 import co.typie.graphql.EntityShareFolder_UpdateFoldersOption_Mutation
 import co.typie.graphql.EntityShare_Query
 import co.typie.graphql.executeMutation
+import co.typie.graphql.fragment.DocumentShare_entity
+import co.typie.graphql.fragment.FolderShare_entity
 import co.typie.graphql.type.DocumentContentRating
 import co.typie.graphql.type.EntityVisibility
 import co.typie.graphql.type.PersistBlobAsImageInput
@@ -20,13 +22,19 @@ import co.typie.platform.PlatformFile
 import co.typie.result.Result
 import co.typie.result.result
 
-internal class EntityShareViewModel(entityIds: List<String>) :
-  ViewModel(), FolderShareSheetModel, DocumentShareSheetModel {
+internal class EntityShareViewModel(
+  entityIds: List<String>,
+  placeholderData: EntityShare_Query.Data,
+) : ViewModel(), FolderShareSheetModel, DocumentShareSheetModel {
   private val blobService = BlobService
   private val resolvedEntityIds = entityIds.map(String::trim).filter(String::isNotEmpty).distinct()
 
   val query =
-    Apollo.watchQuery(scope = viewModelScope, skip = { resolvedEntityIds.isEmpty() }) {
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderData,
+      skip = { resolvedEntityIds.isEmpty() },
+    ) {
       EntityShare_Query(entityIds = resolvedEntityIds)
     }
 
@@ -244,4 +252,112 @@ internal class EntityShareViewModel(entityIds: List<String>) :
   ): UpdateDocumentsOptionInput {
     return UpdateDocumentsOptionInput.Builder().documentIds(documentIds).apply(block).build()
   }
+}
+
+internal fun folderEntitySharePlaceholderData(entityIds: List<String>): EntityShare_Query.Data {
+  val placeholderIds =
+    if (entityIds.isEmpty()) {
+      listOf("placeholder-entity")
+    } else {
+      entityIds
+    }
+
+  return EntityShare_Query.Data(
+    entities =
+      placeholderIds.mapIndexed { index, entityId ->
+        folderPlaceholderEntity(
+          entityId = entityId.ifBlank { "placeholder-folder-entity-$index" },
+          index = index,
+        )
+      }
+  )
+}
+
+internal fun documentEntitySharePlaceholderData(entityIds: List<String>): EntityShare_Query.Data {
+  val placeholderIds =
+    if (entityIds.isEmpty()) {
+      listOf("placeholder-entity")
+    } else {
+      entityIds
+    }
+
+  return EntityShare_Query.Data(
+    entities =
+      placeholderIds.mapIndexed { index, entityId ->
+        documentPlaceholderEntity(
+          entityId = entityId.ifBlank { "placeholder-document-entity-$index" },
+          index = index,
+        )
+      }
+  )
+}
+
+private fun folderPlaceholderEntity(entityId: String, index: Int): EntityShare_Query.Entity {
+  val visibility = EntityVisibility.PRIVATE
+  val url = ""
+  return EntityShare_Query.Entity(
+    __typename = "Entity",
+    documentShare_entity =
+      DocumentShare_entity(
+        __typename = "Entity",
+        id = entityId,
+        url = url,
+        visibility = visibility,
+        node = DocumentShare_entity.Node(__typename = "Folder", onDocument = null),
+      ),
+    folderShare_entity =
+      FolderShare_entity(
+        __typename = "Entity",
+        id = entityId,
+        url = url,
+        visibility = visibility,
+        node =
+          FolderShare_entity.Node(
+            __typename = "Folder",
+            onFolder =
+              FolderShare_entity.OnFolder(
+                id = entityId,
+                name = "가".repeat(6 + (index % 3)),
+                thumbnail = null,
+              ),
+          ),
+      ),
+  )
+}
+
+private fun documentPlaceholderEntity(entityId: String, index: Int): EntityShare_Query.Entity {
+  val visibility = EntityVisibility.PRIVATE
+  val url = ""
+  return EntityShare_Query.Entity(
+    __typename = "Entity",
+    documentShare_entity =
+      DocumentShare_entity(
+        __typename = "Entity",
+        id = entityId,
+        url = url,
+        visibility = visibility,
+        node =
+          DocumentShare_entity.Node(
+            __typename = "Document",
+            onDocument =
+              DocumentShare_entity.OnDocument(
+                id = entityId,
+                title = "가".repeat(6 + (index % 3)),
+                password = null,
+                contentRating = DocumentContentRating.ALL,
+                allowReaction = true,
+                protectContent = true,
+                thumbnail = null,
+              ),
+          ),
+      ),
+    folderShare_entity =
+      FolderShare_entity(
+        __typename = "Entity",
+        id = entityId,
+        url = url,
+        visibility = visibility,
+        node = FolderShare_entity.Node(__typename = "Document", onFolder = null),
+      ),
+  )
 }

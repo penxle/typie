@@ -35,9 +35,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -104,7 +102,12 @@ fun ActivityGrid(
   var manualScrollActive by remember { mutableStateOf(false) }
 
   BoxWithConstraints(modifier = modifier) {
-    val viewportWidth = maxWidth - (HorizontalPadding * 2)
+    val fogInsets = remember {
+      ScrollFogInsets(left = ActivityGridFogDepth, right = ActivityGridFogDepth)
+    }
+    val contentStartPadding = fogInsets.left
+    val contentEndPadding = fogInsets.right
+    val viewportWidth = maxWidth - contentStartPadding - contentEndPadding
     val cellStridePx = with(density) { (CellSize + CellGap).toPx() }
     val initialScrollOffsetPx =
       remember(totalWidth, viewportWidth, density) {
@@ -448,8 +451,12 @@ fun ActivityGrid(
         Box(
           modifier =
             Modifier.fillMaxSize()
+              .scrollFog(
+                insets = fogInsets,
+                color = AppTheme.colors.surfaceDefault.copy(alpha = 0.8f),
+              )
               .horizontalScroll(scrollState, enabled = !tooltipVisible && !manualScrollActive)
-              .padding(horizontal = HorizontalPadding)
+              .padding(fogInsets.toPaddingValues())
               .padding(bottom = BottomPadding)
         ) {
           Column(modifier = Modifier.width(totalWidth)) {
@@ -524,51 +531,43 @@ fun ActivityGrid(
           }
         }
 
-        Box(modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(36.dp)) {
+        Box(
+          modifier =
+            Modifier.align(Alignment.CenterStart).fillMaxHeight().width(ActivityGridArrowHitWidth)
+        ) {
           Box(
             modifier =
               Modifier.fillMaxSize()
-                .graphicsLayer { alpha = leftArrowAlpha }
-                .background(
-                  brush =
-                    Brush.horizontalGradient(
-                      colorStops =
-                        arrayOf(
-                          0.3f to AppTheme.colors.surfaceDefault.copy(alpha = 0.8f),
-                          1f to AppTheme.colors.surfaceDefault.copy(alpha = 0f),
-                        )
-                    )
-                )
                 .then(if (canScrollLeft) Modifier.clickable { scrollByMonths(-2) } else Modifier)
           ) {
             Icon(
               icon = Lucide.ChevronLeft,
-              modifier = Modifier.align(Alignment.Center).padding(horizontal = 8.dp).width(20.dp),
+              modifier =
+                Modifier.align(Alignment.Center)
+                  .padding(horizontal = 8.dp)
+                  .width(20.dp)
+                  .alpha(leftArrowAlpha),
               tint = AppTheme.colors.textSecondary,
             )
           }
         }
 
-        Box(modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(36.dp)) {
+        Box(
+          modifier =
+            Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(ActivityGridArrowHitWidth)
+        ) {
           Box(
             modifier =
               Modifier.fillMaxSize()
-                .graphicsLayer { alpha = rightArrowAlpha }
-                .background(
-                  brush =
-                    Brush.horizontalGradient(
-                      colorStops =
-                        arrayOf(
-                          0f to AppTheme.colors.surfaceDefault.copy(alpha = 0f),
-                          0.7f to AppTheme.colors.surfaceDefault.copy(alpha = 0.8f),
-                        )
-                    )
-                )
                 .then(if (canScrollRight) Modifier.clickable { scrollByMonths(2) } else Modifier)
           ) {
             Icon(
               icon = Lucide.ChevronRight,
-              modifier = Modifier.align(Alignment.Center).padding(horizontal = 8.dp).width(20.dp),
+              modifier =
+                Modifier.align(Alignment.Center)
+                  .padding(horizontal = 8.dp)
+                  .width(20.dp)
+                  .alpha(rightArrowAlpha),
               tint = AppTheme.colors.textSecondary,
             )
           }
@@ -631,7 +630,7 @@ fun ActivityGrid(
               cellOffset =
                 Offset(
                   x =
-                    with(density) { HorizontalPadding.toPx() } +
+                    with(density) { contentStartPadding.toPx() } +
                       (tooltip.weekIndex * cellStridePx) - scrollState.value,
                   y =
                     with(density) { (LabelHeight + CellGap).toPx() } +
@@ -671,7 +670,8 @@ private val CellSize = 13.dp
 private val CellGap = 3.dp
 private val GridHeight = (CellSize * 7) + (CellGap * 6)
 private val LabelHeight = 16.dp
-private val HorizontalPadding = 16.dp
+private val ActivityGridFogDepth = 20.dp
+private val ActivityGridArrowHitWidth = 36.dp
 private val BottomPadding = 8.dp
 private val GridContainerHeight = LabelHeight + 12.dp + CellGap + GridHeight + BottomPadding
 private val CellRadius = 2.dp

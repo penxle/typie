@@ -1,8 +1,5 @@
 package co.typie.domain.entity
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.domain.entitytransfer.EntityTransferSource
@@ -17,9 +14,8 @@ import co.typie.result.Result
 import co.typie.result.result
 import co.typie.storage.Preference
 
-class EntityMoveSheetViewModel : ViewModel() {
-  var destinationEntityId: String? by mutableStateOf(null)
-    private set
+class EntityMoveSheetViewModel(initialDestinationEntityId: String?) : ViewModel() {
+  val destinationEntityId: String? = initialDestinationEntityId
 
   val rootQuery =
     Apollo.watchQuery(
@@ -33,14 +29,6 @@ class EntityMoveSheetViewModel : ViewModel() {
     Apollo.watchQuery(scope = viewModelScope, skip = { destinationEntityId == null }) {
       EntityMoveSheet_Folder_Query(entityId = requireNotNull(destinationEntityId))
     }
-
-  fun showRoot() {
-    destinationEntityId = null
-  }
-
-  fun showDestination(entityId: String?) {
-    destinationEntityId = entityId
-  }
 
   fun refetch() {
     if (destinationEntityId == null) {

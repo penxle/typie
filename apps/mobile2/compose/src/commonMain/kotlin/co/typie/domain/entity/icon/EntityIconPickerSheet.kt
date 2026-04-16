@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -31,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -46,7 +44,9 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.EntityIconColorOption
 import co.typie.ui.EntityIconOption
+import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
+import co.typie.ui.component.scrollFog
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetBarTextButton
 import co.typie.ui.component.sheet.SheetLayout
@@ -195,7 +195,7 @@ internal fun EntityIconPickerSheet(
       )
     },
   ) {
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       IconColorRow(
         colors = entityIconColors,
         selectedColor = form.color.value,
@@ -204,7 +204,14 @@ internal fun EntityIconPickerSheet(
         onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
       )
 
-      Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+      val gridFogInsets = remember { ScrollFogInsets(top = EntityIconPickerTopFadeHeight) }
+
+      Box(
+        modifier =
+          Modifier.fillMaxWidth()
+            .weight(1f)
+            .scrollFog(insets = gridFogInsets, color = AppTheme.colors.surfaceRaised)
+      ) {
         val safeBottom =
           WindowInsets.safeDrawing
             .only(WindowInsetsSides.Bottom)
@@ -215,7 +222,11 @@ internal fun EntityIconPickerSheet(
           columns = GridCells.Fixed(7),
           state = iconGridState,
           modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(bottom = EntityIconPickerGridBottomInset + safeBottom),
+          contentPadding =
+            PaddingValues(
+              top = gridFogInsets.top,
+              bottom = EntityIconPickerGridBottomInset + safeBottom,
+            ),
           horizontalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
           verticalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),
         ) {
@@ -228,24 +239,6 @@ internal fun EntityIconPickerSheet(
               onSelect = { updateSelection(icon.name, form.color.value) },
             )
           }
-        }
-
-        if (iconGridState.canScrollBackward) {
-          Box(
-            modifier =
-              Modifier.align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(EntityIconPickerTopFadeHeight)
-                .background(
-                  Brush.verticalGradient(
-                    colors =
-                      listOf(
-                        AppTheme.colors.surfaceRaised,
-                        AppTheme.colors.surfaceRaised.copy(alpha = 0f),
-                      )
-                  )
-                )
-          )
         }
       }
     }

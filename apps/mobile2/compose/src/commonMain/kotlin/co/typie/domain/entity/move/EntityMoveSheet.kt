@@ -1,14 +1,11 @@
 package co.typie.domain.entity
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,11 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState as foundationRememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,8 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -54,12 +47,19 @@ import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardDefaults
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
+import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
+import co.typie.ui.component.bleedingScrollFog
+import co.typie.ui.component.dialog.DialogResult
+import co.typie.ui.component.dialog.LocalDialog
+import co.typie.ui.component.dialog.confirm
+import co.typie.ui.component.scrollFog
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
+import co.typie.ui.component.toPaddingValues
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
@@ -118,25 +118,40 @@ private fun moveDestinationScrollStateKey(sourceId: String, destinationEntityId:
   return "entity-move:$sourceId:${destinationEntityId ?: "root"}"
 }
 
+internal fun moveSheetViewModelKey(sourceId: String, destinationEntityId: String?): String {
+  return "entity-move:$sourceId:${destinationEntityId ?: "root"}"
+}
+
 internal val EntityMoveStops = listOf(SheetStop.Top(64.dp))
 
 @Composable
 context(_: SheetScope<Unit>)
-fun EntityMoveSheet(source: EntityTransferSource, onMoved: () -> Unit = {}) {
+fun EntityMoveSheet(
+  source: EntityTransferSource,
+  initialDestinationId: String? = null,
+  onMoved: () -> Unit = {},
+) {
   val toast = LocalToast.current
-  val model = viewModel(key = "entity-move:${source.id}") { EntityMoveSheetViewModel() }
-  var isMoving by remember(source.id) { mutableStateOf(false) }
-  var displayedContent by remember(source.id) { mutableStateOf<MoveDestinationContent?>(null) }
+  val dialog = LocalDialog.current
+  var destinationEntityId by
+    remember(source.id, initialDestinationId) { mutableStateOf(initialDestinationId) }
+  val model =
+    viewModel(key = moveSheetViewModelKey(source.id, destinationEntityId)) {
+      EntityMoveSheetViewModel(destinationEntityId)
+    }
+  var isMoving by remember(source.id, initialDestinationId) { mutableStateOf(false) }
+  var displayedContent by
+    remember(source.id, initialDestinationId) { mutableStateOf<MoveDestinationContent?>(null) }
   var navigationDirection by
-    remember(source.id) { mutableStateOf(MoveDestinationNavigationDirection.None) }
-
-  LaunchedEffect(source.id) { model.showRoot() }
+    remember(source.id, initialDestinationId) {
+      mutableStateOf(MoveDestinationNavigationDirection.None)
+    }
 
   val queryState =
-    if (model.destinationEntityId == null) model.rootQuery.state else model.entityQuery.state
+    if (destinationEntityId == null) model.rootQuery.state else model.entityQuery.state
   val destinationContent =
     when {
-      model.destinationEntityId == null ->
+      destinationEntityId == null ->
         (model.rootQuery.state as? QueryState.Success)?.data?.site?.toDestinationContent()
 
       else -> (model.entityQuery.state as? QueryState.Success)?.data?.entity?.toDestinationContent()
@@ -150,6 +165,23 @@ fun EntityMoveSheet(source: EntityTransferSource, onMoved: () -> Unit = {}) {
   val isLoadingDestination = queryState is QueryState.Loading
   val canSubmit = destinationContent != null && queryState is QueryState.Success && !isMoving
   val isMoveAllowed = destinationContent?.let { source.canMoveToDepth(it.destinationDepth) } == true
+
+  if (queryState is QueryState.Error) {
+    LaunchedEffect(queryState.exception) {
+      val result =
+        dialog.confirm(
+          title = "폴더를 불러오지 못했어요",
+          message = "잠시 후 다시 시도해주세요.",
+          confirmText = "다시 시도",
+          cancelText = "닫기",
+        )
+      if (result is DialogResult.Resolved) {
+        model.refetch()
+      } else {
+        dismiss()
+      }
+    }
+  }
 
   suspend fun submit() {
     val resolvedDestination = destinationContent ?: return
@@ -186,7 +218,7 @@ fun EntityMoveSheet(source: EntityTransferSource, onMoved: () -> Unit = {}) {
         nextDestinationId = nextDestinationId,
         childDestinationIds = currentContent.folders.mapTo(mutableSetOf()) { it.id },
       )
-    model.showDestination(nextDestinationId)
+    destinationEntityId = nextDestinationId
   }
 
   SheetLayout(
@@ -228,52 +260,75 @@ fun EntityMoveSheet(source: EntityTransferSource, onMoved: () -> Unit = {}) {
     },
   ) {
     val content = displayedContent
-    if (content != null) {
-      Text(
-        text = "옮길 위치",
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
-      )
 
-      MoveBreadcrumbs(
-        items = content.breadcrumbs,
-        enabled = !isLoadingDestination && !isMoving,
-        backgroundColor = AppTheme.colors.surfaceRaised,
-        onNavigate = ::navigateTo,
-      )
-    }
+    Column(
+      modifier = Modifier.fillMaxWidth().weight(1f),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      if (content != null) {
+        Text(
+          text = "옮길 위치",
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textTertiary,
+        )
 
-    when (queryState) {
-      QueryState.Loading -> {
-        if (content != null) {
-          MoveDestinationAnimatedBody(
-            source = source,
-            content = content,
-            navigationDirection = navigationDirection,
-            navigationEnabled = false,
-            onNavigate = ::navigateTo,
-          )
-        } else {
-          MoveSheetStatus(message = "폴더를 불러오는 중이에요")
-        }
+        MoveBreadcrumbs(
+          items = content.breadcrumbs,
+          enabled = !isLoadingDestination && !isMoving,
+          backgroundColor = AppTheme.colors.surfaceRaised,
+          onNavigate = ::navigateTo,
+        )
       }
 
-      is QueryState.Error -> {
-        MoveSheetError(onRetry = { model.refetch() })
-      }
+      CardSurface(
+        modifier = Modifier.fillMaxWidth().weight(1f),
+        color = AppTheme.colors.surfaceSunken,
+      ) {
+        when (queryState) {
+          QueryState.Loading -> {
+            if (content != null) {
+              MoveDestinationAnimatedBody(
+                modifier = Modifier.fillMaxSize(),
+                source = source,
+                content = content,
+                navigationDirection = navigationDirection,
+                navigationEnabled = false,
+                onNavigate = ::navigateTo,
+              )
+            } else {
+              MoveSheetCardStatus(message = "폴더를 불러오는 중이에요")
+            }
+          }
 
-      is QueryState.Success -> {
-        if (content != null) {
-          MoveDestinationAnimatedBody(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            source = source,
-            content = content,
-            navigationDirection = navigationDirection,
-            navigationEnabled = !isMoving,
-            onNavigate = ::navigateTo,
-          )
-        } else {
-          MoveSheetStatus(message = "폴더를 불러오는 중이에요")
+          is QueryState.Error -> {
+            if (content != null) {
+              MoveDestinationAnimatedBody(
+                modifier = Modifier.fillMaxSize(),
+                source = source,
+                content = content,
+                navigationDirection = navigationDirection,
+                navigationEnabled = false,
+                onNavigate = ::navigateTo,
+              )
+            } else {
+              MoveSheetCardStatus(message = "폴더를 불러오는 중이에요")
+            }
+          }
+
+          is QueryState.Success -> {
+            if (content != null) {
+              MoveDestinationAnimatedBody(
+                modifier = Modifier.fillMaxSize(),
+                source = source,
+                content = content,
+                navigationDirection = navigationDirection,
+                navigationEnabled = !isMoving,
+                onNavigate = ::navigateTo,
+              )
+            } else {
+              MoveSheetCardStatus(message = "폴더를 불러오는 중이에요")
+            }
+          }
         }
       }
     }
@@ -303,8 +358,10 @@ private fun MoveDestinationAnimatedBody(
         MoveDestinationNavigationDirection.None -> fadeIn() togetherWith fadeOut()
       }
     },
+    label = "entity-move-destination",
   ) { currentContent ->
     MoveDestinationBody(
+      modifier = Modifier.fillMaxSize(),
       source = source,
       content = currentContent,
       navigationEnabled = navigationEnabled,
@@ -315,104 +372,65 @@ private fun MoveDestinationAnimatedBody(
 
 @Composable
 private fun MoveDestinationBody(
+  modifier: Modifier = Modifier,
   source: EntityTransferSource,
   content: MoveDestinationContent,
   navigationEnabled: Boolean,
   onNavigate: (String?) -> Unit,
 ) {
-  CardSurface(modifier = Modifier.fillMaxSize(), color = AppTheme.colors.surfaceSunken) {
-    val scrollState =
-      rememberScrollState(
-        key =
-          moveDestinationScrollStateKey(
-            sourceId = source.id,
-            destinationEntityId = content.destinationEntityId,
-          )
-      )
-    val showTopFade by remember(scrollState) { derivedStateOf { scrollState.value > 0 } }
-    val showBottomFade by
-      remember(scrollState) { derivedStateOf { scrollState.value < scrollState.maxValue } }
-    val topFadeAlpha by
-      animateFloatAsState(targetValue = if (showTopFade) 1f else 0f, animationSpec = tween(250))
-    val bottomFadeAlpha by
-      animateFloatAsState(targetValue = if (showBottomFade) 1f else 0f, animationSpec = tween(250))
+  val listFogInsets = remember {
+    ScrollFogInsets(top = MoveListFadeHeight, bottom = MoveListFadeHeight)
+  }
+  val scrollState =
+    rememberScrollState(
+      key =
+        moveDestinationScrollStateKey(
+          sourceId = source.id,
+          destinationEntityId = content.destinationEntityId,
+        )
+    )
+  val visibleFolders = content.folders.filter { it.folder != null }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-      Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
-        var hasRow = false
+  Box(
+    modifier =
+      modifier
+        .fillMaxSize()
+        .scrollFog(insets = listFogInsets, color = AppTheme.colors.surfaceSunken)
+  ) {
+    Column(
+      modifier =
+        Modifier.fillMaxSize().verticalScroll(scrollState).padding(listFogInsets.toPaddingValues())
+    ) {
+      var hasRow = false
 
-        if (content.canNavigateUp) {
-          MoveNavigateUpRow(
-            enabled = navigationEnabled,
-            onClick = { onNavigate(content.parentDestinationId) },
-          )
-          hasRow = true
-        }
-
-        content.folders.forEach { folder ->
-          if (hasRow) {
-            CardDivider(color = AppTheme.colors.borderDefault)
-          }
-
-          MoveDestinationFolderRow(
-            folder = folder,
-            enabled =
-              navigationEnabled && folder.id != source.id && source.canMoveToDepth(folder.depth),
-            onClick = { onNavigate(folder.id) },
-          )
-          hasRow = true
-        }
-
-        if (content.folders.isEmpty()) {
-          if (hasRow) {
-            CardDivider(color = AppTheme.colors.borderDefault)
-          }
-
-          MoveSheetStatus(message = "하위 폴더가 없어요")
-        }
+      if (content.canNavigateUp) {
+        MoveNavigateUpRow(
+          enabled = navigationEnabled,
+          onClick = { onNavigate(content.parentDestinationId) },
+        )
+        hasRow = true
       }
 
-      Box(modifier = Modifier.matchParentSize()) {
-        Box(
-          modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(MoveListFadeHeight)
-        ) {
-          Box(
-            modifier =
-              Modifier.matchParentSize()
-                .graphicsLayer { alpha = topFadeAlpha }
-                .background(
-                  brush =
-                    Brush.verticalGradient(
-                      colorStops =
-                        arrayOf(
-                          0.3f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
-                          1f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
-                        )
-                    )
-                )
-          )
+      visibleFolders.forEach { folder ->
+        if (hasRow) {
+          CardDivider(color = AppTheme.colors.borderDefault)
         }
 
-        Box(
-          modifier =
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(MoveListFadeHeight)
-        ) {
-          Box(
-            modifier =
-              Modifier.matchParentSize()
-                .graphicsLayer { alpha = bottomFadeAlpha }
-                .background(
-                  brush =
-                    Brush.verticalGradient(
-                      colorStops =
-                        arrayOf(
-                          0f to AppTheme.colors.surfaceSunken.copy(alpha = 0f),
-                          0.7f to AppTheme.colors.surfaceSunken.copy(alpha = 0.92f),
-                        )
-                    )
-                )
-          )
+        MoveDestinationFolderRow(
+          folder = folder,
+          enabled =
+            navigationEnabled && folder.id != source.id && source.canMoveToDepth(folder.depth),
+          onClick = { onNavigate(folder.id) },
+        )
+        hasRow = true
+      }
+
+      if (visibleFolders.isEmpty()) {
+        if (hasRow) {
+          CardDivider(color = AppTheme.colors.borderDefault)
         }
+
+        MoveSheetStatus(message = "하위 폴더가 없어요")
       }
     }
   }
@@ -425,14 +443,10 @@ private fun MoveBreadcrumbs(
   backgroundColor: androidx.compose.ui.graphics.Color,
   onNavigate: (String?) -> Unit,
 ) {
+  val breadcrumbFogInsets = remember {
+    ScrollFogInsets(left = BreadcrumbFadeWidth, right = BreadcrumbFadeWidth)
+  }
   val scrollState = foundationRememberScrollState()
-  val showLeftFade by remember(scrollState) { derivedStateOf { scrollState.value > 0 } }
-  val showRightFade by
-    remember(scrollState) { derivedStateOf { scrollState.value < scrollState.maxValue } }
-  val leftFadeAlpha by
-    animateFloatAsState(targetValue = if (showLeftFade) 1f else 0f, animationSpec = tween(250))
-  val rightFadeAlpha by
-    animateFloatAsState(targetValue = if (showRightFade) 1f else 0f, animationSpec = tween(250))
 
   LaunchedEffect(items, scrollState.maxValue) {
     if (scrollState.maxValue > 0 && scrollState.value != scrollState.maxValue) {
@@ -440,9 +454,16 @@ private fun MoveBreadcrumbs(
     }
   }
 
-  Box(modifier = Modifier.fillMaxWidth()) {
+  Box(
+    modifier =
+      Modifier.fillMaxWidth()
+        .bleedingScrollFog(insets = breadcrumbFogInsets, color = backgroundColor)
+  ) {
     Row(
-      modifier = Modifier.horizontalScroll(scrollState),
+      modifier =
+        Modifier.fillMaxWidth()
+          .horizontalScroll(scrollState)
+          .padding(breadcrumbFogInsets.toPaddingValues()),
       horizontalArrangement = Arrangement.spacedBy(6.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -456,47 +477,6 @@ private fun MoveBreadcrumbs(
         }
 
         MoveBreadcrumbChip(item = item, enabled = enabled, onClick = { onNavigate(item.entityId) })
-      }
-    }
-
-    Box(modifier = Modifier.matchParentSize()) {
-      Box(
-        modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(BreadcrumbFadeWidth)
-      ) {
-        Box(
-          modifier =
-            Modifier.matchParentSize()
-              .graphicsLayer { alpha = leftFadeAlpha }
-              .background(
-                brush =
-                  Brush.horizontalGradient(
-                    colorStops =
-                      arrayOf(
-                        0.3f to backgroundColor.copy(alpha = 0.92f),
-                        1f to backgroundColor.copy(alpha = 0f),
-                      )
-                  )
-              )
-        )
-      }
-      Box(
-        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(BreadcrumbFadeWidth)
-      ) {
-        Box(
-          modifier =
-            Modifier.matchParentSize()
-              .graphicsLayer { alpha = rightFadeAlpha }
-              .background(
-                brush =
-                  Brush.horizontalGradient(
-                    colorStops =
-                      arrayOf(
-                        0f to backgroundColor.copy(alpha = 0f),
-                        0.7f to backgroundColor.copy(alpha = 0.92f),
-                      )
-                  )
-              )
-        )
       }
     }
   }
@@ -594,6 +574,13 @@ private fun MoveDestinationFolderRow(
 private fun MoveSheetStatus(message: String) {
   Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
     Text(text = message, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
+  }
+}
+
+@Composable
+private fun MoveSheetCardStatus(message: String) {
+  Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    MoveSheetStatus(message = message)
   }
 }
 

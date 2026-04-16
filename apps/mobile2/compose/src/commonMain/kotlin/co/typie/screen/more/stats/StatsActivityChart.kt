@@ -37,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -54,10 +53,12 @@ import androidx.compose.ui.unit.dp
 import co.typie.ext.clickable
 import co.typie.ext.horizontalScroll
 import co.typie.icons.Lucide
+import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
 import co.typie.ui.component.TooltipGestureAction
 import co.typie.ui.component.TooltipGesturePhase
 import co.typie.ui.component.TooltipTapGestureAction
+import co.typie.ui.component.bleedingScrollFog
 import co.typie.ui.component.resolveTooltipGestureAction
 import co.typie.ui.component.resolveTooltipTapGestureAction
 import co.typie.ui.icon.Icon
@@ -76,7 +77,8 @@ import kotlinx.datetime.number
 
 private val ChartHeight = 100.dp
 private val ChartAxisHeight = 24.dp
-private val ChartArrowWidth = 24.dp
+private val ChartFogDepth = 20.dp
+private val ChartArrowHitWidth = 24.dp
 
 @Composable
 fun StatsActivityChart(
@@ -124,8 +126,11 @@ fun StatsActivityChart(
     Spacer(Modifier.height(24.dp))
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(ChartHeight + ChartAxisHeight)) {
-      val horizontalPaddingPx = with(density) { horizontalPadding.dp.toPx() }
-      val viewportWidthDp = maxWidth - (horizontalPadding * 2).dp
+      val chartFogInsets = remember { ScrollFogInsets(left = ChartFogDepth, right = ChartFogDepth) }
+      val contentStartPaddingDp = chartFogInsets.left
+      val contentEndPaddingDp = chartFogInsets.right
+      val contentStartPaddingPx = with(density) { contentStartPaddingDp.toPx() }
+      val viewportWidthDp = maxWidth - contentStartPaddingDp - contentEndPaddingDp
       val viewportWidthPx = with(density) { viewportWidthDp.coerceAtLeast(1.dp).toPx() }
       val contentWidthPx = viewportWidthPx * zoom
       val contentWidthDp = with(density) { contentWidthPx.toDp() }
@@ -560,7 +565,7 @@ fun StatsActivityChart(
                     !manualScrollActive &&
                     !isPinching,
               )
-              .padding(horizontal = horizontalPadding.dp)
+              .padding(start = contentStartPaddingDp, end = contentEndPaddingDp)
         ) {
           Column(
             modifier =
@@ -666,10 +671,17 @@ fun StatsActivityChart(
           }
         }
 
+        Box(
+          modifier =
+            Modifier.fillMaxWidth()
+              .height(ChartHeight + ChartAxisHeight)
+              .bleedingScrollFog(insets = chartFogInsets, color = colors.surfaceBase)
+        )
+
         val selectedDay = selectedIndex?.let { daysData.getOrNull(it) }
         if (selectedDay != null && selectedIndex != null) {
           val anchorCenterX =
-            horizontalPaddingPx + (selectedIndex!! * barWidthPx) + (barWidthPx / 2f) -
+            contentStartPaddingPx + (selectedIndex!! * barWidthPx) + (barWidthPx / 2f) -
               currentScrollOffset
           Layout(
             modifier = Modifier.align(Alignment.TopStart).fillMaxSize(),
@@ -726,17 +738,8 @@ fun StatsActivityChart(
           Box(
             modifier =
               Modifier.align(Alignment.CenterStart)
-                .width(ChartArrowWidth)
+                .width(ChartArrowHitWidth)
                 .height(ChartHeight)
-                .background(
-                  Brush.horizontalGradient(
-                    colors =
-                      listOf(
-                        colors.surfaceBase.copy(alpha = 0.88f),
-                        colors.surfaceBase.copy(alpha = 0f),
-                      )
-                  )
-                )
                 .clickable {
                   scope.launch { scrollState.animateScrollBy(-(viewportWidthPx * 0.75f)) }
                 },
@@ -750,17 +753,8 @@ fun StatsActivityChart(
           Box(
             modifier =
               Modifier.align(Alignment.CenterEnd)
-                .width(ChartArrowWidth)
+                .width(ChartArrowHitWidth)
                 .height(ChartHeight)
-                .background(
-                  Brush.horizontalGradient(
-                    colors =
-                      listOf(
-                        colors.surfaceBase.copy(alpha = 0f),
-                        colors.surfaceBase.copy(alpha = 0.88f),
-                      )
-                  )
-                )
                 .clickable {
                   scope.launch { scrollState.animateScrollBy(viewportWidthPx * 0.75f) }
                 },

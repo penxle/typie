@@ -9,6 +9,7 @@ import co.typie.graphql.Apollo
 import co.typie.graphql.NoteEntityPicker_Recent_Query
 import co.typie.graphql.NoteEntityPicker_Search_Query
 import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.QueryState
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildDocument
 import co.typie.graphql.builder.buildEntity
@@ -25,6 +26,8 @@ class NoteEntityPickerViewModel : ViewModel() {
   private val currentSiteId: String?
     get() = Preference.siteId
 
+  private val recentPlaceholder = recentPlaceholderData()
+
   var inputKeyword: String by mutableStateOf("")
     private set
 
@@ -34,7 +37,7 @@ class NoteEntityPickerViewModel : ViewModel() {
   val recentQuery =
     Apollo.watchQuery(
       scope = viewModelScope,
-      placeholderData = recentPlaceholderData(),
+      placeholderData = recentPlaceholder,
       skip = { currentSiteId == null },
     ) {
       NoteEntityPicker_Recent_Query(siteId = currentSiteId!!)
@@ -50,7 +53,10 @@ class NoteEntityPickerViewModel : ViewModel() {
     }
 
   val recentEntities: List<NoteEntityPicker_entity>
-    get() = recentQuery.data.linkedEntities()
+    get() = (recentQuery.state as? QueryState.Success)?.data?.linkedEntities().orEmpty()
+
+  val recentPlaceholderEntities: List<NoteEntityPicker_entity>
+    get() = recentPlaceholder.linkedEntities()
 
   val searchHits: List<NoteEntityPicker_Search_Query.Hit>
     get() = searchQuery.data?.search?.hits.orEmpty()

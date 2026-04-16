@@ -39,6 +39,7 @@ import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -121,6 +122,7 @@ context(_: SheetScope<Unit>)
 internal fun FolderShareSheet(
   model: FolderShareSheetModel,
   folders: List<FolderShare_entity>,
+  loading: Boolean = false,
   onUpdated: () -> Unit = {},
 ) {
   val share = PlatformModule.share
@@ -164,6 +166,7 @@ internal fun FolderShareSheet(
       isSharing
 
   fun updateVisibility(nextVisibility: EntityVisibility) {
+    if (loading) return
     if (isUpdatingVisibility) return
     if (!hasMixedVisibility && form.visibility.initialValue == nextVisibility) return
 
@@ -187,6 +190,7 @@ internal fun FolderShareSheet(
   }
 
   fun removeThumbnail() {
+    if (loading) return
     if (isUploadingThumbnail || isRemovingThumbnail) return
 
     form.thumbnailUrl.setValue(null)
@@ -210,6 +214,7 @@ internal fun FolderShareSheet(
   }
 
   fun applyRecursiveVisibility() {
+    if (loading) return
     if (isApplyingRecursive || isUpdatingVisibility) return
 
     recursiveApplyResetJob?.cancel()
@@ -238,6 +243,7 @@ internal fun FolderShareSheet(
   }
 
   suspend fun shareFolder() {
+    if (loading) return
     if (isSharing) return
 
     val shareText = resolveEntityShareText(folderUrls)
@@ -257,6 +263,7 @@ internal fun FolderShareSheet(
   }
 
   val filePicker = rememberFilePicker { files ->
+    if (loading) return@rememberFilePicker
     val file = files.firstOrNull() ?: return@rememberFilePicker
     if (isUploadingThumbnail || isRemovingThumbnail) return@rememberFilePicker
 
@@ -309,21 +316,23 @@ internal fun FolderShareSheet(
           icon = Lucide.Blend,
           label = "공개 범위",
           trailing = {
-            SelectField(
-              field = form.visibility,
-              items =
-                folderVisibilityOptions().map { option ->
-                  SelectFieldItem(
-                    value = option.visibility,
-                    label = option.label,
-                    description = option.description,
-                    icon = option.icon,
-                  )
-                },
-              values = visibilityValues,
-              enabled = !isUpdatingVisibility && !isApplyingRecursive,
-              onSelected = ::updateVisibility,
-            )
+            Skeleton(enabled = loading) {
+              SelectField(
+                field = form.visibility,
+                items =
+                  folderVisibilityOptions().map { option ->
+                    SelectFieldItem(
+                      value = option.visibility,
+                      label = option.label,
+                      description = option.description,
+                      icon = option.icon,
+                    )
+                  },
+                values = visibilityValues,
+                enabled = !loading && !isUpdatingVisibility && !isApplyingRecursive,
+                onSelected = ::updateVisibility,
+              )
+            }
           },
         )
       }
@@ -333,33 +342,35 @@ internal fun FolderShareSheet(
           icon = Lucide.Image,
           label = "미리보기 이미지",
           trailing = {
-            ShareThumbnailControl(
-              thumbnailUrl = form.thumbnailUrl.value,
-              isMixed = hasMixedThumbnail,
-              isUploading = isUploadingThumbnail,
-              isRemoving = isRemovingThumbnail,
-              onUploadClick = {
-                if (!isUploadingThumbnail && !isRemovingThumbnail) {
-                  filePicker("image/*")
-                }
-              },
-              onRemoveClick = {
-                scope.launch {
-                  val result =
-                    dialog.confirm(
-                      title = "썸네일을 삭제할까요?",
-                      message =
-                        if (isSingleFolder) "현재 폴더의 미리보기 이미지를 삭제합니다."
-                        else "선택한 폴더들의 미리보기 이미지를 삭제합니다.",
-                      confirmText = "삭제",
-                      confirmIsDestructive = true,
-                    )
-                  if (result is DialogResult.Resolved) {
-                    removeThumbnail()
+            Skeleton(enabled = loading) {
+              ShareThumbnailControl(
+                thumbnailUrl = form.thumbnailUrl.value,
+                isMixed = hasMixedThumbnail,
+                isUploading = isUploadingThumbnail,
+                isRemoving = isRemovingThumbnail,
+                onUploadClick = {
+                  if (!loading && !isUploadingThumbnail && !isRemovingThumbnail) {
+                    filePicker("image/*")
                   }
-                }
-              },
-            )
+                },
+                onRemoveClick = {
+                  scope.launch {
+                    val result =
+                      dialog.confirm(
+                        title = "썸네일을 삭제할까요?",
+                        message =
+                          if (isSingleFolder) "현재 폴더의 미리보기 이미지를 삭제합니다."
+                          else "선택한 폴더들의 미리보기 이미지를 삭제합니다.",
+                        confirmText = "삭제",
+                        confirmIsDestructive = true,
+                      )
+                    if (result is DialogResult.Resolved) {
+                      removeThumbnail()
+                    }
+                  }
+                },
+              )
+            }
           },
         )
       }
@@ -370,7 +381,7 @@ internal fun FolderShareSheet(
             Button(
               text = "하위 항목에 동일한 설정 적용하기",
               variant = ButtonVariant.Secondary,
-              enabled = !isUpdatingVisibility && !isApplyingRecursive,
+              enabled = !loading && !isUpdatingVisibility && !isApplyingRecursive,
               loading = true,
               loadingText = "적용 중...",
               onClick = { applyRecursiveVisibility() },
@@ -383,7 +394,7 @@ internal fun FolderShareSheet(
                 Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = color)
               },
               variant = ButtonVariant.Secondary,
-              enabled = !isUpdatingVisibility && !isApplyingRecursive,
+              enabled = !loading && !isUpdatingVisibility && !isApplyingRecursive,
               onClick = { applyRecursiveVisibility() },
             )
 
@@ -394,14 +405,14 @@ internal fun FolderShareSheet(
                 Icon(icon = Lucide.Layers2, modifier = Modifier.size(16.dp), tint = color)
               },
               variant = ButtonVariant.Secondary,
-              enabled = !isUpdatingVisibility && !isApplyingRecursive,
+              enabled = !loading && !isUpdatingVisibility && !isApplyingRecursive,
               onClick = { applyRecursiveVisibility() },
             )
         }
 
         Button(
           text = "공유하기",
-          enabled = !isSharing,
+          enabled = !loading && !isSharing,
           loading = isSharing,
           onClick = { shareFolder() },
         )

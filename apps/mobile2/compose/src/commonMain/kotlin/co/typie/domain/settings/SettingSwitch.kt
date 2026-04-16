@@ -31,6 +31,8 @@ import co.typie.ext.LocalInteractionSource
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
+import co.typie.ui.skeleton.LocalSkeleton
+import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
@@ -46,6 +48,13 @@ fun SettingSwitch(
   enabled: Boolean = true,
   indeterminate: Boolean = false,
 ) {
+  val switchModifier = modifier.size(width = 46.dp, height = 28.dp)
+
+  if (LocalSkeleton.current.enabled) {
+    SkeletonBone(modifier = switchModifier, shape = AppShapes.rounded(AppShapes.lg))
+    return
+  }
+
   val colors = AppTheme.colors
   val haptic = LocalHapticFeedback.current
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
@@ -73,8 +82,7 @@ fun SettingSwitch(
   InteractionScope {
     Box(
       modifier =
-        modifier
-          .size(width = 46.dp, height = 28.dp)
+        switchModifier
           .alpha(if (enabled) 1f else 0.5f)
           .clip(AppShapes.rounded(AppShapes.lg))
           .then(
