@@ -63,6 +63,7 @@ import co.typie.ui.component.toPaddingValues
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
+import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 
@@ -115,11 +116,11 @@ private fun resolveMoveDestinationNavigationDirection(
 }
 
 private fun moveDestinationScrollStateKey(sourceId: String, destinationEntityId: String?): String {
-  return "entity-move:$sourceId:${destinationEntityId ?: "root"}"
+  return "entity-move-scroll:$sourceId:${destinationEntityId ?: "root"}"
 }
 
 internal fun moveSheetViewModelKey(sourceId: String, destinationEntityId: String?): String {
-  return "entity-move:$sourceId:${destinationEntityId ?: "root"}"
+  return "entity-move-sheet:$sourceId:${destinationEntityId ?: "root"}"
 }
 
 internal val EntityMoveStops = listOf(SheetStop.Top(64.dp))
@@ -151,20 +152,33 @@ fun EntityMoveSheet(
     if (destinationEntityId == null) model.rootQuery.state else model.entityQuery.state
   val destinationContent =
     when {
-      destinationEntityId == null ->
-        (model.rootQuery.state as? QueryState.Success)?.data?.site?.toDestinationContent()
-
-      else -> (model.entityQuery.state as? QueryState.Success)?.data?.entity?.toDestinationContent()
+      destinationEntityId == null -> model.rootQuery.data.site.toDestinationContent()
+      else -> model.entityQuery.data.entity.toDestinationContent()
     }
-  LaunchedEffect(destinationContent) {
-    if (destinationContent != null) {
-      displayedContent = destinationContent
+  val settledDestinationContent =
+    if (queryState is QueryState.Success) {
+      destinationContent
+    } else {
+      null
+    }
+  LaunchedEffect(settledDestinationContent) {
+    if (settledDestinationContent != null) {
+      displayedContent = settledDestinationContent
     }
   }
 
   val isLoadingDestination = queryState is QueryState.Loading
-  val canSubmit = destinationContent != null && queryState is QueryState.Success && !isMoving
-  val isMoveAllowed = destinationContent?.let { source.canMoveToDepth(it.destinationDepth) } == true
+  val visibleContent =
+    when {
+      settledDestinationContent != null -> settledDestinationContent
+      displayedContent != null -> displayedContent
+      isLoadingDestination -> destinationContent
+      else -> null
+    }
+  val showLoadingSkeleton = isLoadingDestination && displayedContent == null
+  val canSubmit = queryState is QueryState.Success && !isMoving
+  val isMoveAllowed =
+    settledDestinationContent?.let { source.canMoveToDepth(it.destinationDepth) } == true
 
   if (queryState is QueryState.Error) {
     LaunchedEffect(queryState.exception) {
@@ -184,7 +198,7 @@ fun EntityMoveSheet(
   }
 
   suspend fun submit() {
-    val resolvedDestination = destinationContent ?: return
+    val resolvedDestination = settledDestinationContent ?: return
     if (isMoving) return
 
     if (!isMoveAllowed) {
@@ -209,7 +223,7 @@ fun EntityMoveSheet(
   }
 
   fun navigateTo(nextDestinationId: String?) {
-    val currentContent = displayedContent ?: destinationContent ?: return
+    val currentContent = visibleContent ?: return
     if (isLoadingDestination || isMoving) return
 
     navigationDirection =
@@ -259,7 +273,7 @@ fun EntityMoveSheet(
       }
     },
   ) {
-    val content = displayedContent
+    val content = visibleContent
 
     Column(
       modifier = Modifier.fillMaxWidth().weight(1f),
@@ -272,62 +286,46 @@ fun EntityMoveSheet(
           color = AppTheme.colors.textTertiary,
         )
 
-        MoveBreadcrumbs(
-          items = content.breadcrumbs,
-          enabled = !isLoadingDestination && !isMoving,
-          backgroundColor = AppTheme.colors.surfaceRaised,
-          onNavigate = ::navigateTo,
-        )
+        Skeleton(enabled = showLoadingSkeleton) {
+          MoveBreadcrumbs(
+            items = content.breadcrumbs,
+            enabled = !isLoadingDestination && !isMoving,
+            backgroundColor = AppTheme.colors.surfaceRaised,
+            onNavigate = ::navigateTo,
+          )
+        }
       }
 
       CardSurface(
         modifier = Modifier.fillMaxWidth().weight(1f),
         color = AppTheme.colors.surfaceSunken,
       ) {
-        when (queryState) {
-          QueryState.Loading -> {
-            if (content != null) {
-              MoveDestinationAnimatedBody(
+        when {
+          showLoadingSkeleton && content != null -> {
+            Skeleton(enabled = true) {
+              MoveDestinationBody(
                 modifier = Modifier.fillMaxSize(),
                 source = source,
                 content = content,
-                navigationDirection = navigationDirection,
-                navigationEnabled = false,
+                navigationEnabled = true,
                 onNavigate = ::navigateTo,
               )
-            } else {
-              MoveSheetCardStatus(message = "폴더를 불러오는 중이에요")
             }
           }
 
-          is QueryState.Error -> {
-            if (content != null) {
-              MoveDestinationAnimatedBody(
-                modifier = Modifier.fillMaxSize(),
-                source = source,
-                content = content,
-                navigationDirection = navigationDirection,
-                navigationEnabled = false,
-                onNavigate = ::navigateTo,
-              )
-            } else {
-              MoveSheetCardStatus(message = "폴더를 불러오는 중이에요")
-            }
+          content != null -> {
+            MoveDestinationAnimatedBody(
+              modifier = Modifier.fillMaxSize(),
+              source = source,
+              content = content,
+              navigationDirection = navigationDirection,
+              navigationEnabled = queryState is QueryState.Success && !isMoving,
+              onNavigate = ::navigateTo,
+            )
           }
 
-          is QueryState.Success -> {
-            if (content != null) {
-              MoveDestinationAnimatedBody(
-                modifier = Modifier.fillMaxSize(),
-                source = source,
-                content = content,
-                navigationDirection = navigationDirection,
-                navigationEnabled = !isMoving,
-                onNavigate = ::navigateTo,
-              )
-            } else {
-              MoveSheetCardStatus(message = "폴더를 불러오는 중이에요")
-            }
+          else -> {
+            Box(modifier = Modifier.fillMaxSize())
           }
         }
       }
@@ -574,13 +572,6 @@ private fun MoveDestinationFolderRow(
 private fun MoveSheetStatus(message: String) {
   Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
     Text(text = message, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
-  }
-}
-
-@Composable
-private fun MoveSheetCardStatus(message: String) {
-  Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-    MoveSheetStatus(message = message)
   }
 }
 

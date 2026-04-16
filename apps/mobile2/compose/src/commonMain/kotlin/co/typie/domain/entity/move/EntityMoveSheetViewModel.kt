@@ -7,7 +7,13 @@ import co.typie.graphql.Apollo
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
 import co.typie.graphql.EntityMoveSheet_Folder_Query
 import co.typie.graphql.EntityMoveSheet_Root_Query
+import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildEntity
+import co.typie.graphql.builder.buildFolder
+import co.typie.graphql.builder.buildSite
 import co.typie.graphql.executeMutation
+import co.typie.graphql.text
 import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
@@ -20,13 +26,18 @@ class EntityMoveSheetViewModel(initialDestinationEntityId: String?) : ViewModel(
   val rootQuery =
     Apollo.watchQuery(
       scope = viewModelScope,
+      placeholderData = moveRootPlaceholderData(),
       skip = { destinationEntityId != null || Preference.siteId == null },
     ) {
       EntityMoveSheet_Root_Query(siteId = Preference.siteId!!)
     }
 
   val entityQuery =
-    Apollo.watchQuery(scope = viewModelScope, skip = { destinationEntityId == null }) {
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = moveFolderPlaceholderData(),
+      skip = { destinationEntityId == null },
+    ) {
       EntityMoveSheet_Folder_Query(entityId = requireNotNull(destinationEntityId))
     }
 
@@ -60,3 +71,75 @@ class EntityMoveSheetViewModel(initialDestinationEntityId: String?) : ViewModel(
     )
   }
 }
+
+private fun moveRootPlaceholderData() =
+  EntityMoveSheet_Root_Query.Data(PlaceholderResolver) {
+    site = buildSite {
+      id = "placeholder-site"
+      name = text(4..8)
+      entities =
+        List(5) { index ->
+          buildEntity {
+            id = "placeholder-root-folder-$index"
+            depth = 0
+            order = index.toString()
+            slug = "placeholder-root-folder-$index"
+            url = ""
+            icon = "folder"
+            iconColor = "gray"
+            node = buildFolder {
+              id = "placeholder-root-folder-node-$index"
+              name = text(5..10)
+              maxDescendantFoldersDepth = 0
+              folderCount = 0
+              documentCount = 0
+            }
+          }
+        }
+    }
+  }
+
+private fun moveFolderPlaceholderData() =
+  EntityMoveSheet_Folder_Query.Data(PlaceholderResolver) {
+    entity = buildEntity {
+      id = "placeholder-folder"
+      depth = 2
+      site = buildSite {
+        id = "placeholder-site"
+        name = text(4..8)
+      }
+      ancestors =
+        List(2) { index ->
+          buildEntity {
+            id = "placeholder-ancestor-$index"
+            node = buildFolder {
+              id = "placeholder-ancestor-node-$index"
+              name = text(5..10)
+            }
+          }
+        }
+      node = buildFolder {
+        id = "placeholder-folder-node"
+        name = text(5..10)
+      }
+      children =
+        List(5) { index ->
+          buildEntity {
+            id = "placeholder-child-folder-$index"
+            depth = 3
+            order = index.toString()
+            slug = "placeholder-child-folder-$index"
+            url = ""
+            icon = "folder"
+            iconColor = "gray"
+            node = buildFolder {
+              id = "placeholder-child-folder-node-$index"
+              name = text(5..10)
+              maxDescendantFoldersDepth = 0
+              folderCount = 0
+              documentCount = 0
+            }
+          }
+        }
+    }
+  }
