@@ -24,12 +24,12 @@ class StatsCalculatorTest {
       )
 
     assertEquals(
-      StreakData(
+      ActivityData(
         currentStreak = 3,
         longestStreak = 3,
-        thisMonthDays = 4,
-        totalDays = 4,
-        avgCharactersPerDay = 250,
+        thisMonthActiveDays = 4,
+        totalActiveDays = 4,
+        averageCharacterCountPerDay = 250,
       ),
       result,
     )
@@ -71,13 +71,55 @@ class StatsCalculatorTest {
 
     assertEquals(
       listOf(
-        WeekdayData(dayIndex = 0, label = "일", totalAdditions = 120, avgAdditions = 120, count = 1),
-        WeekdayData(dayIndex = 1, label = "월", totalAdditions = 100, avgAdditions = 50, count = 2),
-        WeekdayData(dayIndex = 2, label = "화", totalAdditions = 0, avgAdditions = 0, count = 0),
-        WeekdayData(dayIndex = 3, label = "수", totalAdditions = 0, avgAdditions = 0, count = 0),
-        WeekdayData(dayIndex = 4, label = "목", totalAdditions = 0, avgAdditions = 0, count = 0),
-        WeekdayData(dayIndex = 5, label = "금", totalAdditions = 0, avgAdditions = 0, count = 0),
-        WeekdayData(dayIndex = 6, label = "토", totalAdditions = 0, avgAdditions = 0, count = 0),
+        WeekdayActivityData(
+          dayIndex = 0,
+          label = "일",
+          totalAdditions = 120,
+          averageAdditions = 120,
+          activeDays = 1,
+        ),
+        WeekdayActivityData(
+          dayIndex = 1,
+          label = "월",
+          totalAdditions = 100,
+          averageAdditions = 50,
+          activeDays = 2,
+        ),
+        WeekdayActivityData(
+          dayIndex = 2,
+          label = "화",
+          totalAdditions = 0,
+          averageAdditions = 0,
+          activeDays = 0,
+        ),
+        WeekdayActivityData(
+          dayIndex = 3,
+          label = "수",
+          totalAdditions = 0,
+          averageAdditions = 0,
+          activeDays = 0,
+        ),
+        WeekdayActivityData(
+          dayIndex = 4,
+          label = "목",
+          totalAdditions = 0,
+          averageAdditions = 0,
+          activeDays = 0,
+        ),
+        WeekdayActivityData(
+          dayIndex = 5,
+          label = "금",
+          totalAdditions = 0,
+          averageAdditions = 0,
+          activeDays = 0,
+        ),
+        WeekdayActivityData(
+          dayIndex = 6,
+          label = "토",
+          totalAdditions = 0,
+          averageAdditions = 0,
+          activeDays = 0,
+        ),
       ),
       result,
     )

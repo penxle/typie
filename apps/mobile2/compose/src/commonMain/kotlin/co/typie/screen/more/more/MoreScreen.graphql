@@ -4,14 +4,12 @@ query MoreScreen_Query {
     name
     email
 
-    characterCountChanges {
-      date
-      additions
-    }
-
     avatar {
       id
+
       ...Img_image
     }
+
+    ...ActivityGrid_user
   }
 }

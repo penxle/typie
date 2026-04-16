@@ -3,14 +3,18 @@ query StatsScreen_Query {
     id
     name
     documentCount
+
     usage {
       totalCharacterCount
     }
+
     characterCountChanges {
       date
       additions
       deletions
     }
+
+    ...ActivityGrid_user
   }
 }
 

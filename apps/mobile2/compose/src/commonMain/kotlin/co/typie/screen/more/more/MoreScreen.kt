@@ -18,7 +18,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.datetime.toLocalDate
+import co.typie.domain.stats.ActivityGrid
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionService.subscription
 import co.typie.domain.subscription.SubscriptionServiceState
@@ -30,9 +30,6 @@ import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPill
-import co.typie.ui.component.ActivityGrid
-import co.typie.ui.component.ActivityGridChange
-import co.typie.ui.component.ActivityGridHeight
 import co.typie.ui.component.CardActionTile
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
@@ -49,7 +46,6 @@ import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
-import co.typie.ui.skeleton.SkeletonBone
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -132,22 +128,10 @@ fun MoreScreen() {
             )
           }
 
-          Skeleton.Replace(
-            replacement = {
-              SkeletonBone(
-                Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(ActivityGridHeight)
-              )
-            }
-          ) {
-            ActivityGrid(
-              changes =
-                model.query.data.me.characterCountChanges.map { change ->
-                  ActivityGridChange(date = change.date.toLocalDate(), additions = change.additions)
-                },
-              modifier = Modifier.fillMaxWidth(),
-              onVerticalScrollDelta = { delta -> scrollState.dispatchRawDelta(delta) },
-            )
-          }
+          ActivityGrid(
+            user = model.query.data.me.activityGrid_user,
+            modifier = Modifier.fillMaxWidth(),
+          )
 
           CardDivider()
 

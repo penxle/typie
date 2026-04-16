@@ -1,5 +1,3 @@
-@file:OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-
 package co.typie.screen.more.stats
 
 import androidx.compose.foundation.background
@@ -16,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,46 +22,36 @@ import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.datetime.toLocalDate
+import co.typie.domain.stats.ActivityGrid
+import co.typie.ext.comma
 import co.typie.ext.verticalScroll
-import co.typie.graphql.Apollo
-import co.typie.graphql.StatsScreen_GenerateActivityImage_Mutation
-import co.typie.graphql.executeMutation
 import co.typie.icons.Lucide
 import co.typie.platform.FileSystemSaveLocation
 import co.typie.platform.FileSystemSaveResult
 import co.typie.platform.PlatformModule
-import co.typie.ui.component.ActivityGrid
-import co.typie.ui.component.ActivityGridChange
+import co.typie.result.onOk
+import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.toast.LocalToast
-import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import kotlin.io.encoding.Base64
-import kotlin.math.max
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.number
 
 @Composable
 fun StatsScreen() {
   val model = viewModel { StatsViewModel() }
   val toast = LocalToast.current
-  val clipboard = PlatformModule.clipboard
-  val fileSystem = PlatformModule.fileSystem
-  val scrollState = rememberScrollState()
+
   val scope = rememberCoroutineScope()
+  val scrollState = rememberScrollState()
 
   ProvideTopBar(
-    leading = { TopBarBackButton() },
     center = { Text("나의 글쓰기 통계", style = AppTheme.typography.title) },
     scrollOffset = scrollState.topBarScrollOffset(),
   )
@@ -74,102 +61,36 @@ fun StatsScreen() {
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      val data = model.query.data
-      val changes =
-        remember(data.me.characterCountChanges) {
-          data.me.characterCountChanges.map { change ->
-            StatsCharacterCountChange(
-              date = change.date.toLocalDate(),
-              additions = change.additions,
-              deletions = change.deletions,
-            )
-          }
-        }
-      val totalCharacterCount = data.me.usage.totalCharacterCount
-      val streakData =
-        remember(changes, totalCharacterCount) { calculateStreakData(changes, totalCharacterCount) }
-      val weekdayData = remember(changes) { calculateWeekdayPattern(changes) }
-      val bestWeekday =
-        remember(weekdayData) {
-          weekdayData.maxByOrNull { it.avgAdditions }?.takeIf { it.avgAdditions > 0 }
-        }
-
-      suspend fun fetchActivityImage(): ByteArray? {
-        return runCatching { Apollo.executeMutation(StatsScreen_GenerateActivityImage_Mutation()) }
-          .mapCatching { result -> Base64.decode(result.generateActivityImage.toString()) }
-          .getOrNull()
-      }
-
-      fun copyActivityImage() {
-        scope.launch {
-          val bytes = fetchActivityImage()
-          if (bytes == null) {
-            toast.show(ToastType.Error, "이미지를 복사할 수 없어요.")
-            return@launch
-          }
-
-          val copied = clipboard.copy(bytes = bytes, mimeType = "image/png")
-
-          if (copied) {
-            toast.show(ToastType.Success, "이미지가 클립보드에 복사되었어요.")
-          } else {
-            toast.show(ToastType.Error, "이미지를 복사할 수 없어요.")
-          }
-        }
-      }
-
-      fun saveActivityImage() {
-        scope.launch {
-          val bytes = fetchActivityImage()
-          if (bytes == null) {
-            toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
-            return@launch
-          }
-
-          when (
-            fileSystem.save(
-              bytes = bytes,
-              name = "${data.me.name}-나의-글쓰기-발자취.png",
-              location = FileSystemSaveLocation.Gallery,
-            )
-          ) {
-            FileSystemSaveResult.Success -> toast.show(ToastType.Success, "이미지가 기기에 저장되었어요.")
-            FileSystemSaveResult.PermissionDenied -> toast.show(ToastType.Error, "사진 접근 권한이 필요해요.")
-            FileSystemSaveResult.Error -> toast.show(ToastType.Error, "이미지를 저장할 수 없어요.")
-          }
-        }
-      }
-
       Text(
         "나의 글쓰기 통계",
         style = AppTheme.typography.display,
         modifier = Modifier.padding(top = 4.dp),
       )
 
-      SummaryCard(label = "총 글자", value = totalCharacterCount.formatGrouped(), unit = "자")
+      SummaryCard(
+        label = "총 글자",
+        value = model.query.data.me.usage.totalCharacterCount.comma,
+        unit = "자",
+      )
 
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         SummaryCard(
           label = "총 문서",
-          value = data.me.documentCount.toString(),
+          value = model.query.data.me.documentCount.toString(),
           unit = "개",
           modifier = Modifier.weight(1f),
         )
         SummaryCard(
           label = "활동일",
-          value = streakData.totalDays.toString(),
+          value = model.activity.totalActiveDays.toString(),
           unit = "일",
           modifier = Modifier.weight(1f),
         )
       }
 
-      StreakCard(streakData = streakData)
+      StreakCard(activity = model.activity)
 
-      WeekdayCard(
-        weekdayData = weekdayData,
-        bestWeekdayIndex = bestWeekday?.dayIndex ?: -1,
-        maxWeekdayAverage = bestWeekday?.avgAdditions ?: 0,
-      )
+      WeekdayCard(activity = model.activity)
 
       CardSurface(modifier = Modifier.fillMaxWidth(), clipContent = false) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -186,35 +107,64 @@ fun StatsScreen() {
             }
 
             PopoverMenu(
-              anchor = { StatsActionButton(label = "이미지 받기") },
-              collapsedCornerRadius = 10.dp,
+              anchor = {
+                Box(
+                  modifier =
+                    Modifier.border(
+                        1.dp,
+                        AppTheme.colors.borderStrong,
+                        AppShapes.rounded(AppShapes.md),
+                      )
+                      .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
+                      .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                  Text(
+                    "이미지 받기",
+                    style = AppTheme.typography.action,
+                    color = AppTheme.colors.textSecondary,
+                  )
+                }
+              },
+              collapsedCornerRadius = AppShapes.md,
             ) {
-              item(icon = Lucide.Copy, label = "클립보드에 복사") { copyActivityImage() }
-              item(icon = Lucide.Download, label = "기기에 저장") { saveActivityImage() }
+              item(icon = Lucide.Copy, label = "클립보드에 복사") {
+                scope.launch {
+                  model.generateActivityImage().withDefaultExceptionHandler(toast).onOk {
+                    val copied = PlatformModule.clipboard.copy(bytes = it, mimeType = "image/png")
+                    if (copied) {
+                      toast.success("이미지가 클립보드에 복사되었어요.")
+                    } else {
+                      toast.error("이미지를 복사할 수 없어요.")
+                    }
+                  }
+                }
+              }
+              item(icon = Lucide.Download, label = "기기에 저장") {
+                scope.launch {
+                  model.generateActivityImage().withDefaultExceptionHandler(toast).onOk {
+                    when (
+                      PlatformModule.fileSystem.save(
+                        bytes = it,
+                        name = "${model.query.data.me.name}-나의-글쓰기-발자취.png",
+                        location = FileSystemSaveLocation.Gallery,
+                      )
+                    ) {
+                      FileSystemSaveResult.Success -> toast.success("이미지가 기기에 저장되었어요.")
+                      FileSystemSaveResult.PermissionDenied -> toast.error("사진 접근 권한이 필요해요.")
+                      FileSystemSaveResult.Error -> toast.error("이미지를 저장할 수 없어요.")
+                    }
+                  }
+                }
+              }
             }
           }
 
           ActivityGrid(
-            changes =
-              changes.map { change ->
-                ActivityGridChange(date = change.date, additions = change.additions)
-              },
+            user = model.query.data.me.activityGrid_user,
             modifier = Modifier.fillMaxWidth(),
-            onVerticalScrollDelta = { delta -> scrollState.dispatchRawDelta(delta) },
           )
         }
       }
-
-      CardSurface(modifier = Modifier.fillMaxWidth(), clipContent = false) {
-        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-          StatsActivityChart(
-            characterCountChanges = changes,
-            onVerticalScrollDelta = { delta -> scrollState.dispatchRawDelta(delta) },
-          )
-        }
-      }
-
-      Spacer(Modifier.height(140.dp))
     }
   }
 }
@@ -251,7 +201,7 @@ private fun SummaryCard(label: String, value: String, unit: String, modifier: Mo
 }
 
 @Composable
-private fun StreakCard(streakData: StreakData) {
+private fun StreakCard(activity: ActivityData) {
   CardSurface(modifier = Modifier.fillMaxWidth()) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
       Text("연속 기록", style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
@@ -260,7 +210,7 @@ private fun StreakCard(streakData: StreakData) {
 
       Row(verticalAlignment = Alignment.Bottom) {
         Text(
-          streakData.currentStreak.toString(),
+          activity.currentStreak.toString(),
           style = AppTheme.typography.display,
           color = AppTheme.colors.textPrimary,
           modifier = Modifier.alignBy(FirstBaseline),
@@ -290,7 +240,7 @@ private fun StreakCard(streakData: StreakData) {
         )
 
         Text(
-          "${streakData.longestStreak}일",
+          "${activity.longestStreak}일",
           style = AppTheme.typography.action,
           color = AppTheme.colors.textSecondary,
           modifier = Modifier.alignBy(FirstBaseline),
@@ -306,7 +256,7 @@ private fun StreakCard(streakData: StreakData) {
         )
 
         Text(
-          "${streakData.thisMonthDays}일",
+          "${activity.thisMonthActiveDays}일",
           style = AppTheme.typography.action,
           color = AppTheme.colors.textSecondary,
           modifier = Modifier.alignBy(FirstBaseline),
@@ -317,11 +267,7 @@ private fun StreakCard(streakData: StreakData) {
 }
 
 @Composable
-private fun WeekdayCard(
-  weekdayData: List<WeekdayData>,
-  bestWeekdayIndex: Int,
-  maxWeekdayAverage: Int,
-) {
+private fun WeekdayCard(activity: ActivityData) {
   CardSurface(modifier = Modifier.fillMaxWidth()) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
       Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -329,9 +275,9 @@ private fun WeekdayCard(
 
         Spacer(Modifier.weight(1f))
 
-        if (bestWeekdayIndex >= 0) {
+        if (activity.mostActiveWeekdayIndex != null) {
           Text(
-            "${weekdayLabels[bestWeekdayIndex]}요일 최다",
+            "${WeekdayNames[activity.mostActiveWeekdayIndex]}요일 최다",
             style = AppTheme.typography.micro,
             color = AppTheme.colors.textTertiary,
           )
@@ -345,10 +291,12 @@ private fun WeekdayCard(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom,
       ) {
-        weekdayData.forEach { day ->
-          val isBest = day.dayIndex == bestWeekdayIndex
-          val safeMax = max(maxWeekdayAverage, 1)
-          val barHeight = max((day.avgAdditions / safeMax.toFloat()) * 32f, 2f)
+        val maxAverageAdditions =
+          activity.weekdayActivities.maxOf { it.averageAdditions }.coerceAtLeast(1)
+        for (weekdayActivity in activity.weekdayActivities) {
+          val isMostActiveWeekday = weekdayActivity.dayIndex == activity.mostActiveWeekdayIndex
+          val barHeight =
+            (weekdayActivity.averageAdditions / maxAverageAdditions) * 32f.coerceAtLeast(2f)
 
           Column(
             modifier = Modifier.weight(1f),
@@ -363,16 +311,19 @@ private fun WeekdayCard(
                   .height(barHeight.dp)
                   .clip(AppShapes.rounded(AppShapes.sm))
                   .background(
-                    if (isBest) AppTheme.colors.textPrimary else AppTheme.colors.borderStrong
+                    if (isMostActiveWeekday) AppTheme.colors.textPrimary
+                    else AppTheme.colors.borderStrong
                   )
             )
 
             Spacer(Modifier.height(6.dp))
 
             Text(
-              day.label,
+              WeekdayNames[weekdayActivity.dayIndex],
               style = AppTheme.typography.micro,
-              color = if (isBest) AppTheme.colors.textPrimary else AppTheme.colors.textTertiary,
+              color =
+                if (isMostActiveWeekday) AppTheme.colors.textPrimary
+                else AppTheme.colors.textTertiary,
             )
           }
         }
@@ -381,33 +332,4 @@ private fun WeekdayCard(
   }
 }
 
-@Composable
-private fun StatsActionButton(label: String) {
-  Box(
-    modifier =
-      Modifier.clip(AppShapes.rounded(AppShapes.md))
-        .background(AppTheme.colors.surfaceDefault)
-        .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
-        .padding(horizontal = 12.dp, vertical = 7.dp)
-  ) {
-    Text(label, style = AppTheme.typography.action, color = AppTheme.colors.textSecondary)
-  }
-}
-
-internal fun Int.formatGrouped(): String {
-  val text = toString()
-  val builder = StringBuilder()
-
-  text.forEachIndexed { index, char ->
-    if (index > 0 && (text.length - index) % 3 == 0) {
-      builder.append(',')
-    }
-    builder.append(char)
-  }
-
-  return builder.toString()
-}
-
-internal fun formatFullDate(date: LocalDate): String {
-  return "${date.year}년 ${date.month.number}월 ${date.day}일"
-}
+val WeekdayNames = listOf("일", "월", "화", "수", "목", "금", "토")

@@ -1,0 +1,7 @@
+fragment ActivityGrid_user on User {
+  characterCountChanges {
+    date
+    additions
+    deletions
+  }
+}
