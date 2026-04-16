@@ -2,6 +2,7 @@ package co.typie.ui.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +50,7 @@ fun Screen(
   loadable: Loadable<*>? = null,
   background: Color = AppTheme.colors.surfaceBase,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
+  foregroundOverlay: (@Composable BoxScope.() -> Unit)? = null,
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
   val hazeState = remember { HazeState() }
@@ -136,5 +138,7 @@ fun Screen(
         )
       }
     }
+
+    foregroundOverlay?.invoke(this)
   }
 }

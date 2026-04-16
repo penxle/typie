@@ -452,7 +452,56 @@ fun FolderScreen(entityId: String) {
     },
   )
 
-  Screen(loadable = model.query) { contentPadding ->
+  Screen(
+    loadable = model.query,
+    foregroundOverlay = {
+      EntityContainerBottomOverlayStack(
+        baseBottomInset = BottomBarDefaults.BarAreaHeight,
+        showSelectionBar = isSelectionBarVisible,
+        showPasteBar = overlayState.animatedPasteBarVisible && pasteTarget != null,
+        modifier = Modifier.align(Alignment.BottomCenter),
+        selectionBar = {
+          EntityContainerSelectionBar(
+            selectedCount = selectionSummary.selectedItems.size,
+            onClearSelection = { selection.clear() },
+            onMoreClick = { openSelectionActions() },
+          )
+        },
+        pasteBar = {
+          pasteTarget?.let { resolvedPasteTarget ->
+            EntityPasteBar(
+              loading = isPasting,
+              onClear = { clipboard.clear() },
+              onPaste = {
+                if (!isPasting) {
+                  isPasting = true
+                  presenterScope.launch {
+                    clipboard
+                      .pasteInto(resolvedPasteTarget)
+                      .collect(
+                        onPending = { count ->
+                          toast.show(ToastType.Loading, "${count}개의 항목을 붙여넣는 중이에요", Duration.ZERO)
+                        },
+                        onSettled = { result ->
+                          result
+                            .withDefaultExceptionHandler(toast)
+                            .onOk { count ->
+                              toast.show(ToastType.Success, "${count}개의 항목을 붙여넣었어요")
+                            }
+                            .onErr { error -> toast.show(ToastType.Error, error.toMessage()) }
+                        },
+                      )
+                    isPasting = false
+                  }
+                }
+              },
+            )
+          }
+        },
+        onMetricsChanged = overlayState::onMetricsChanged,
+      )
+    },
+  ) { contentPadding ->
     val reorderViewportTopInset =
       maxOf(
         0.dp,
@@ -717,52 +766,6 @@ fun FolderScreen(entityId: String) {
               isPersistingReorder = false
             }
           },
-      )
-
-      EntityContainerBottomOverlayStack(
-        baseBottomInset = BottomBarDefaults.BarAreaHeight,
-        showSelectionBar = isSelectionBarVisible,
-        showPasteBar = overlayState.animatedPasteBarVisible && pasteTarget != null,
-        modifier = Modifier.align(Alignment.BottomCenter),
-        selectionBar = {
-          EntityContainerSelectionBar(
-            selectedCount = selectionSummary.selectedItems.size,
-            onClearSelection = { selection.clear() },
-            onMoreClick = { openSelectionActions() },
-          )
-        },
-        pasteBar = {
-          pasteTarget?.let { resolvedPasteTarget ->
-            EntityPasteBar(
-              loading = isPasting,
-              onClear = { clipboard.clear() },
-              onPaste = {
-                if (!isPasting) {
-                  isPasting = true
-                  presenterScope.launch {
-                    clipboard
-                      .pasteInto(resolvedPasteTarget)
-                      .collect(
-                        onPending = { count ->
-                          toast.show(ToastType.Loading, "${count}개의 항목을 붙여넣는 중이에요", Duration.ZERO)
-                        },
-                        onSettled = { result ->
-                          result
-                            .withDefaultExceptionHandler(toast)
-                            .onOk { count ->
-                              toast.show(ToastType.Success, "${count}개의 항목을 붙여넣었어요")
-                            }
-                            .onErr { error -> toast.show(ToastType.Error, error.toMessage()) }
-                        },
-                      )
-                    isPasting = false
-                  }
-                }
-              },
-            )
-          }
-        },
-        onMetricsChanged = overlayState::onMetricsChanged,
       )
     }
   }
