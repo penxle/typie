@@ -127,7 +127,7 @@ object EntityClipboardService {
         is EntityTransferSource.Folder -> {
           target.destinationEntityId != item.id &&
             item.id !in target.ancestorFolderIds &&
-            item.canTransferIntoDestinationDepth(target.destinationDepth)
+            item.canMoveToDepth(target.destinationDepth)
         }
       }
     }

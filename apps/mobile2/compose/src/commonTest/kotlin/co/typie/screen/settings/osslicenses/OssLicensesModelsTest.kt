@@ -5,17 +5,21 @@ import kotlin.test.assertEquals
 
 class OssLicensesModelsTest {
   @Test
-  fun `normalizeOssLicenseEntries trims text and sorts packages by name`() {
+  fun `toEntry trims text and sorts packages by name`() {
     val entries =
-      normalizeOssLicenseEntries(
-        listOf(
-          OssLicenseEntry(
-            packageName = "zeta",
-            paragraphs = listOf(" Apache License 2.0 ", "", " Copyright"),
-          ),
-          OssLicenseEntry(packageName = "Alpha", paragraphs = listOf(" MIT License ")),
+      AboutLibraries(
+          libraries =
+            listOf(
+              AboutLibrariesLibrary(uniqueId = "zeta", licenses = listOf("apache")),
+              AboutLibrariesLibrary(uniqueId = "Alpha", licenses = listOf("mit")),
+            ),
+          licenses =
+            mapOf(
+              "apache" to AboutLibrariesLicense(content = " Apache License 2.0 \n\n Copyright"),
+              "mit" to AboutLibrariesLicense(name = " MIT License "),
+            ),
         )
-      )
+        .toEntry()
 
     assertEquals(listOf("Alpha", "zeta"), entries.map { it.packageName })
     assertEquals(listOf("MIT License"), entries.first().paragraphs)
@@ -23,14 +27,21 @@ class OssLicensesModelsTest {
   }
 
   @Test
-  fun `normalizeOssLicenseEntries drops packages with no usable license text`() {
+  fun `toEntry drops packages with no usable license text`() {
     val entries =
-      normalizeOssLicenseEntries(
-        listOf(
-          OssLicenseEntry(packageName = "empty", paragraphs = listOf("", "   ")),
-          OssLicenseEntry(packageName = "valid", paragraphs = listOf("BSD-3-Clause")),
+      AboutLibraries(
+          libraries =
+            listOf(
+              AboutLibrariesLibrary(uniqueId = "empty", licenses = listOf("blank")),
+              AboutLibrariesLibrary(uniqueId = "valid", licenses = listOf("bsd")),
+            ),
+          licenses =
+            mapOf(
+              "blank" to AboutLibrariesLicense(content = "   "),
+              "bsd" to AboutLibrariesLicense(name = "BSD-3-Clause"),
+            ),
         )
-      )
+        .toEntry()
 
     assertEquals(listOf("valid"), entries.map { it.packageName })
   }

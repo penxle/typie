@@ -1,5 +1,11 @@
 package co.typie.domain.note
 
+import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.SpaceScreen_Query
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildDocument
+import co.typie.graphql.builder.buildEntity
+import co.typie.graphql.builder.buildSite
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.graphql.type.NoteStatus
@@ -29,14 +35,26 @@ internal fun notesNote(
 internal fun notesDocumentEntity(id: String, title: String = "문서") =
   NoteLinkedEntity_entity(
     __typename = "Entity",
-    id = id,
-    slug = id,
-    icon = "file",
-    iconColor = "gray",
-    node =
-      NoteLinkedEntity_entity.Node(
-        __typename = "Document",
-        onDocument = NoteLinkedEntity_entity.OnDocument(id = "$id-document", title = title),
-        onFolder = null,
-      ),
+    entityRow_entity =
+      SpaceScreen_Query.Data(PlaceholderResolver) {
+          site = buildSite {
+            entities =
+              listOf(
+                buildEntity {
+                  this.id = id
+                  slug = id
+                  icon = "file"
+                  iconColor = "gray"
+                  node = buildDocument {
+                    this.id = "$id-document"
+                    this.title = title
+                  }
+                }
+              )
+          }
+        }
+        .site
+        .entities
+        .first()
+        .entityRow_entity,
   )

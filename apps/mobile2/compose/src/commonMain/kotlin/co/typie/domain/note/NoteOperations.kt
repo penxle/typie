@@ -2,7 +2,6 @@ package co.typie.domain.note
 
 import co.typie.graphql.Apollo
 import co.typie.graphql.NoteEntityPicker_Recent_Query
-import co.typie.graphql.NoteEntityPicker_Search_Query
 import co.typie.graphql.Note_AddEntity_Mutation
 import co.typie.graphql.Note_Create_Mutation
 import co.typie.graphql.Note_Delete_Mutation
@@ -113,13 +112,3 @@ suspend fun removeNoteEntity(noteId: String, entityId: String): Result<NoteCard_
 
 internal fun NoteEntityPicker_Recent_Query.Data.linkedEntities(): List<NoteEntityPicker_entity> =
   me.recentlyViewedEntities.map { it.noteEntityPicker_entity }.distinctBy { it.id }
-
-internal fun NoteEntityPicker_Search_Query.Hit.linkedEntityOrNull(): NoteEntityPicker_entity? {
-  onSearchHitDocument?.document?.entity?.noteEntityPicker_entity?.let {
-    return it
-  }
-  onSearchHitFolder?.folder?.entity?.noteEntityPicker_entity?.let {
-    return it
-  }
-  return null
-}

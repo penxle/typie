@@ -1,0 +1,38 @@
+fragment EntityDetailsDocument_document on Document {
+  characterCount
+}
+
+fragment EntityDetailsFolder_folder on Folder {
+  characterCount
+}
+
+fragment EntityDetails_entity on Entity {
+  ...EntityRow_entity
+  visibility
+  availability
+
+  node {
+    __typename
+
+    ... on Document {
+      ...EntityDetailsDocument_document
+    }
+
+    ... on Folder {
+      ...EntityDetailsFolder_folder
+    }
+  }
+
+  ancestors {
+    id
+
+    node {
+      __typename
+
+      ... on Folder {
+        id
+        name
+      }
+    }
+  }
+}

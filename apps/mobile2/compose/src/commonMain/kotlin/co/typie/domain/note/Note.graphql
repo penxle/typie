@@ -1,66 +1,10 @@
 fragment NoteLinkedEntity_entity on Entity {
-  id
-  slug
-  icon
-  iconColor
-
-  node {
-    __typename
-
-    ... on Document {
-      id
-      title
-    }
-
-    ... on Folder {
-      id
-      name
-    }
-  }
+  ...EntityRow_entity
 }
 
 fragment NoteEntityPicker_entity on Entity {
-  id
-  slug
-  icon
-  iconColor
-
-  node {
-    __typename
-
-    ... on Document {
-      id
-      title
-      type
-      subtitle
-      excerpt
-      entity {
-        id
-        parent {
-          id
-
-          node {
-            __typename
-
-            ... on Folder {
-              id
-              name
-              entity {
-                id
-                icon
-                iconColor
-              }
-            }
-          }
-        }
-      }
-    }
-
-    ... on Folder {
-      id
-      name
-    }
-  }
+  ...EntityRow_entity
+  ...EntityRowParent_entity
 }
 
 fragment NoteCard_note on Note {
@@ -92,6 +36,10 @@ query NoteEntityPicker_Search_Query($siteId: ID!, $query: String!) {
       __typename
 
       ... on SearchHitDocument {
+        title
+        subtitle
+        text
+
         document {
           entity {
             ...NoteEntityPicker_entity
@@ -100,6 +48,8 @@ query NoteEntityPicker_Search_Query($siteId: ID!, $query: String!) {
       }
 
       ... on SearchHitFolder {
+        name
+
         folder {
           entity {
             ...NoteEntityPicker_entity

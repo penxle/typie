@@ -1,0 +1,6 @@
+query EntityShare_Query($entityIds: [ID!]!) {
+  entities(entityIds: $entityIds) {
+    ...DocumentShare_entity
+    ...FolderShare_entity
+  }
+}

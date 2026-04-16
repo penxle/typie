@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import co.typie.domain.entity.displayTitle
+import co.typie.domain.entity.iconAppearance
+import co.typie.domain.entity.isFolder
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.icons.Lucide
 import co.typie.ui.component.Divider
@@ -25,11 +28,12 @@ private val NoteLinkedEntityActionsSheetHorizontalPadding = 24.dp
 @Composable
 context(_: SheetScope<Unit>)
 internal fun NoteLinkedEntityActionsSheet(
-  entity: NoteLinkedEntity_entity,
+  linkedEntity: NoteLinkedEntity_entity,
   onOpen: () -> Unit,
   onUnlink: () -> Unit,
 ) {
-  val iconAppearance = entity.iconAppearance()
+  val entity = linkedEntity.entity
+  val iconAppearance = entity.entityIcon_entity.iconAppearance
   val openLabel = if (entity.isFolder()) "이 폴더 열기" else "이 문서 열기"
   val openIcon = if (entity.isFolder()) Lucide.FolderInput else Lucide.FileInput
 

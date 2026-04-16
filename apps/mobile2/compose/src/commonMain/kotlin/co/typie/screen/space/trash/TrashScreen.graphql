@@ -4,97 +4,22 @@ query TrashScreen_WithSiteId_Query($siteId: ID!) {
     name
 
     deletedEntities {
-      id
-      icon
-      iconColor
-      ancestors {
-        id
-        node {
-          ... on Folder {
-            id
-            name
-          }
-        }
-      }
-      node {
-        ... on Folder {
-          id
-          name
-        }
-
-        ... on Document {
-          id
-          title
-          subtitle
-          excerpt
-          updatedAt
-        }
-      }
+      ...EntityDetails_entity
     }
   }
 }
 
 query TrashScreen_WithEntityId_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
-    id
-    icon
-    iconColor
+    ...EntityDetails_entity
     state
     site {
       id
       name
     }
-    ancestors {
-      id
-      node {
-        ... on Folder {
-          id
-          name
-        }
-      }
-    }
-    node {
-      ... on Folder {
-        id
-        name
-      }
-
-      ... on Document {
-        id
-        title
-        subtitle
-        excerpt
-        updatedAt
-      }
-    }
 
     deletedChildren {
-      id
-      icon
-      iconColor
-      ancestors {
-        id
-        node {
-          ... on Folder {
-            id
-            name
-          }
-        }
-      }
-      node {
-        ... on Folder {
-          id
-          name
-        }
-
-        ... on Document {
-          id
-          title
-          subtitle
-          excerpt
-          updatedAt
-        }
-      }
+      ...EntityDetails_entity
     }
   }
 }

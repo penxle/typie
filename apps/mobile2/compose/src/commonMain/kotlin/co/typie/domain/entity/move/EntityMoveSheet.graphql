@@ -1,0 +1,48 @@
+query EntityMoveSheet_Root_Query($siteId: ID!) {
+  site(siteId: $siteId) @catch(to: THROW) {
+    id
+    name
+
+    entities {
+      ...EntityRow_entity
+    }
+  }
+}
+
+query EntityMoveSheet_Folder_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+    depth
+
+    site {
+      id
+      name
+    }
+
+    ancestors {
+      id
+
+      node {
+        __typename
+
+        ... on Folder {
+          id
+          name
+        }
+      }
+    }
+
+    node {
+      __typename
+
+      ... on Folder {
+        id
+        name
+      }
+    }
+
+    children {
+      ...EntityRow_entity
+    }
+  }
+}

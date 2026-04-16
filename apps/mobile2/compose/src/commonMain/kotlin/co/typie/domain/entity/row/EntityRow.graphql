@@ -1,0 +1,63 @@
+fragment EntityParentMeta_folder on Folder {
+  id
+  name
+
+  entity {
+    ...EntityIcon_entity
+  }
+}
+
+fragment EntityRowParent_entity on Entity {
+  parent {
+    id
+
+    node {
+      __typename
+
+      ... on Folder {
+        ...EntityParentMeta_folder
+      }
+    }
+  }
+}
+
+fragment EntityRowDocument_document on Document {
+  id
+  title
+  subtitle
+  excerpt
+  updatedAt
+}
+
+fragment EntityRowFolder_folder on Folder {
+  id
+  name
+  maxDescendantFoldersDepth
+  thumbnail {
+    id
+    url
+  }
+  folderCount
+  documentCount
+}
+
+fragment EntityRow_entity on Entity {
+  id
+  depth
+  order
+  slug
+  url
+  ...EntityIcon_entity
+
+  node {
+    __typename
+
+    ... on Folder {
+      ...EntityRowFolder_folder
+    }
+
+    ... on Document {
+      ...EntityRowDocument_document
+    }
+  }
+}

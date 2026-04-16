@@ -11,42 +11,15 @@ query HomeScreen_Query($siteId: ID!) {
         __typename
 
         ... on Document {
-          type
-          title
-          subtitle
-          excerpt
-          updatedAt
-
           entity {
-            id
-
-            parent {
-              node {
-                __typename
-
-                ... on Folder {
-                  name
-                  entity {
-                    ...EntityIcon_entity
-                  }
-                }
-              }
-            }
-
-            ...EntityIcon_entity
+            ...EntityRow_entity
+            ...EntityRowParent_entity
           }
         }
 
         ... on Folder {
-          id
-          name
-          documentCount
-
           entity {
-            id
-            slug
-
-            ...EntityIcon_entity
+            ...EntityRow_entity
           }
         }
       }

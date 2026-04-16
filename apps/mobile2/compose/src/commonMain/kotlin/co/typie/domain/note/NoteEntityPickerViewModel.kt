@@ -52,14 +52,8 @@ class NoteEntityPickerViewModel : ViewModel() {
   val recentEntities: List<NoteEntityPicker_entity>
     get() = recentQuery.data.linkedEntities()
 
-  val searchResults: List<NoteEntityPicker_entity>
-    get() =
-      searchQuery.data
-        ?.search
-        ?.hits
-        ?.mapNotNull { it.linkedEntityOrNull() }
-        ?.distinctBy { it.id }
-        .orEmpty()
+  val searchHits: List<NoteEntityPicker_Search_Query.Hit>
+    get() = searchQuery.data?.search?.hits.orEmpty()
 
   private var debounceJob: Job? = null
 

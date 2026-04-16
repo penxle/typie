@@ -17,13 +17,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.entity.isFolder
 import co.typie.domain.note.NoteEntityPickerSheet
 import co.typie.domain.note.NoteEntityPickerStops
 import co.typie.domain.note.NoteLinkedEntityActionsSheet
 import co.typie.domain.note.NoteList
 import co.typie.domain.note.NoteListActions
 import co.typie.domain.note.NoteListItem
-import co.typie.domain.note.isFolder
+import co.typie.domain.note.entity
+import co.typie.domain.note.id
 import co.typie.domain.note.linkedEntities
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.graphql.QueryState
@@ -313,18 +315,18 @@ fun NotesScreen() {
     }
   }
 
-  fun presentLinkedEntityActions(note: NoteCard_note, entity: NoteLinkedEntity_entity) {
+  fun presentLinkedEntityActions(note: NoteCard_note, linkedEntity: NoteLinkedEntity_entity) {
     scope.launch {
       sheet.present {
         NoteLinkedEntityActionsSheet(
-          entity = entity,
+          linkedEntity = linkedEntity,
           onOpen = {
             scope.launch {
-              if (entity.isFolder()) nav.navigate(Route.Folder(entity.id))
-              else nav.navigate(Route.Editor(entity.slug))
+              if (linkedEntity.entity.isFolder()) nav.navigate(Route.Folder(linkedEntity.id))
+              else nav.navigate(Route.Editor(linkedEntity.id))
             }
           },
-          onUnlink = { scope.launch { handleRemoveEntity(note.id, entity.id) } },
+          onUnlink = { scope.launch { handleRemoveEntity(note.id, linkedEntity.id) } },
         )
       }
     }

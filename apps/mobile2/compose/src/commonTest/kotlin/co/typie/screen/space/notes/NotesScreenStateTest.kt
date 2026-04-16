@@ -1,5 +1,6 @@
 package co.typie.screen.space.notes
 
+import co.typie.domain.note.id
 import co.typie.domain.note.linkedEntities
 import co.typie.domain.note.notesDocumentEntity
 import co.typie.domain.note.notesNote

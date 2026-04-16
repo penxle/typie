@@ -1,0 +1,51 @@
+fragment DocumentShare_entity on Entity {
+  id
+  url
+  visibility
+
+  node {
+    __typename
+
+    ... on Document {
+      id
+      title
+      password
+      contentRating
+      allowReaction
+      protectContent
+
+      thumbnail {
+        id
+        url
+      }
+    }
+  }
+}
+
+mutation DocumentShare_UpdateDocumentsOption_Mutation($input: UpdateDocumentsOptionInput!) {
+  updateDocumentsOption(input: $input) {
+    id
+    password
+    contentRating
+    allowReaction
+    protectContent
+
+    thumbnail {
+      id
+      url
+    }
+
+    entity {
+      id
+      visibility
+    }
+  }
+}
+
+mutation DocumentShare_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+  persistBlobAsImage(input: $input) {
+    id
+    url
+    ...Img_image
+  }
+}

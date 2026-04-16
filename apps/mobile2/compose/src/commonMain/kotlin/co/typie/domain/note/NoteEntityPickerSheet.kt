@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState as foundationRememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,15 +25,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.ext.InteractionScope
-import co.typie.ext.clickable
-import co.typie.ext.pressScale
+import co.typie.domain.entity.EntityRow
+import co.typie.domain.entity.buildSearchHighlightedText
+import co.typie.domain.entity.displayPreviewText
+import co.typie.domain.entity.displayTitle
+import co.typie.domain.entity.document
+import co.typie.domain.entity.folder
+import co.typie.domain.entity.formatDocumentTitle
+import co.typie.domain.entity.formatEntityExcerpt
+import co.typie.domain.entity.formatFolderName
+import co.typie.domain.entity.formatFolderRowSummary
 import co.typie.ext.verticalScroll
+import co.typie.graphql.NoteEntityPicker_Search_Query
 import co.typie.graphql.QueryState
+import co.typie.graphql.fragment.EntityParentMeta_folder
+import co.typie.graphql.fragment.EntityRow_entity
 import co.typie.graphql.fragment.NoteEntityPicker_entity
 import co.typie.icons.Lucide
 import co.typie.storage.Preference
@@ -52,7 +62,6 @@ import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.icon.Icon
-import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.theme.AppTheme
 
 internal val NoteEntityPickerStops = listOf(SheetStop.Top(64.dp))
@@ -70,14 +79,18 @@ internal fun NoteEntityPickerSheet(
   val listScrollState = foundationRememberScrollState()
   var updatingEntityId by remember { mutableStateOf<String?>(null) }
   var selectedEntityIds by remember(linkedEntityIds) { mutableStateOf(linkedEntityIds) }
+  val highlightColor = AppTheme.colors.brand
+  val mutedTextColor = AppTheme.colors.textMuted
 
   LaunchedEffect(model) { model.clearSearch() }
 
   val visibleEntities =
     if (model.inputKeyword.isBlank()) {
-      model.recentEntities
+      model.recentEntities.map(::recentNotePickerItem)
     } else {
-      model.searchResults
+      model.searchHits
+        .mapNotNull { searchNotePickerItem(it, highlightColor, mutedTextColor) }
+        .distinctBy { it.id }
     }
 
   val emptyMessage =
@@ -166,25 +179,24 @@ internal fun NoteEntityPickerSheet(
           Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(listScrollState)) {
               Column(Modifier.fillMaxWidth()) {
-                visibleEntities.forEachIndexed { index, entity ->
+                visibleEntities.forEachIndexed { index, item ->
                   if (index > 0) {
                     CardDivider()
                   }
 
                   NotePickerRow(
-                    entity = entity,
-                    selected = entity.id in selectedEntityIds,
-                    updating = updatingEntityId == entity.id,
+                    item = item,
+                    selected = item.id in selectedEntityIds,
+                    updating = updatingEntityId == item.id,
                     enabled = updatingEntityId == null,
                     onClick = {
-                      val selected = entity.id in selectedEntityIds
-                      updatingEntityId = entity.id
+                      val selected = item.id in selectedEntityIds
+                      updatingEntityId = item.id
                       val didToggle =
-                        if (selected) onRemoveEntity(entity.id) else onAddEntity(entity.id)
+                        if (selected) onRemoveEntity(item.id) else onAddEntity(item.id)
                       if (didToggle) {
                         selectedEntityIds =
-                          if (selected) selectedEntityIds - entity.id
-                          else selectedEntityIds + entity.id
+                          if (selected) selectedEntityIds - item.id else selectedEntityIds + item.id
                       }
                       updatingEntityId = null
                     },
@@ -254,94 +266,97 @@ private fun NotePickerEmptyState(message: String, modifier: Modifier = Modifier)
 
 @Composable
 private fun NotePickerRow(
-  entity: NoteEntityPicker_entity,
+  item: NotePickerItem,
   selected: Boolean,
   updating: Boolean,
   enabled: Boolean,
   onClick: suspend () -> Unit,
 ) {
-  val iconAppearance = entity.iconAppearance()
   val metaColor = AppTheme.colors.textMuted
-  val parentFolder = entity.parentFolder()
-  val parentFolderIconAppearance =
-    resolveEntityIconAppearance(
-      iconName = parentFolder?.icon,
-      iconColor = parentFolder?.iconColor,
-      fallbackIcon = Lucide.Folder,
-      fallbackTint = metaColor,
-      colors = AppTheme.colors,
-    )
 
-  InteractionScope {
-    Column(
-      modifier =
-        Modifier.fillMaxWidth()
-          .clickable { if (enabled) onClick() }
-          .pressScale()
-          .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-      if (parentFolder != null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            icon = parentFolderIconAppearance.icon,
-            modifier = Modifier.size(12.dp),
-            tint = parentFolderIconAppearance.tint,
-          )
-
-          Spacer(Modifier.width(4.dp))
-
-          Text(
-            text = parentFolder.name,
-            style = AppTheme.typography.caption,
-            color = metaColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
-
-        Spacer(Modifier.height(4.dp))
+  EntityRow(
+    entity = item.entity,
+    interactive = enabled,
+    trailing = {
+      when {
+        updating -> Text("...", style = AppTheme.typography.caption, color = metaColor)
+        selected ->
+          Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = AppTheme.colors.brand)
+        else -> Spacer(Modifier.size(16.dp))
       }
-
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          icon = iconAppearance.icon,
-          modifier = Modifier.size(18.dp),
-          tint = iconAppearance.tint,
-        )
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = entity.displayTitle(),
-            style = AppTheme.typography.label,
-            color = AppTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-
-          entity.displayPreviewText()?.let { previewText ->
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-              text = previewText,
-              style = AppTheme.typography.caption,
-              color = metaColor,
-              maxLines = 2,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-        }
-
-        Spacer(Modifier.width(8.dp))
-
-        when {
-          updating -> Text("...", style = AppTheme.typography.caption, color = metaColor)
-          selected ->
-            Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = AppTheme.colors.brand)
-          else -> Spacer(Modifier.size(16.dp))
-        }
-      }
+    },
+    onClick = onClick,
+  ) {
+    parentMeta(item.parentFolder)
+    title(title = item.title, subtitle = item.subtitle)
+    item.previewText?.let { previewText ->
+      supporting(text = previewText, maxLines = item.previewMaxLines)
     }
   }
+}
+
+private data class NotePickerItem(
+  val entity: EntityRow_entity,
+  val title: AnnotatedString,
+  val subtitle: AnnotatedString? = null,
+  val previewText: AnnotatedString? = null,
+  val previewMaxLines: Int = 1,
+  val parentFolder: EntityParentMeta_folder? = null,
+) {
+  val id: String
+    get() = entity.id
+}
+
+private fun recentNotePickerItem(entity: NoteEntityPicker_entity): NotePickerItem {
+  return NotePickerItem(
+    entity = entity.entity,
+    title = AnnotatedString(entity.entity.displayTitle()),
+    previewText = entity.entity.displayPreviewText()?.let(::AnnotatedString),
+    previewMaxLines = 2,
+    parentFolder = entity.parentFolder(),
+  )
+}
+
+private fun searchNotePickerItem(
+  hit: NoteEntityPicker_Search_Query.Hit,
+  highlightColor: Color,
+  mutedTextColor: Color,
+): NotePickerItem? {
+  hit.onSearchHitDocument?.let { documentHit ->
+    val entity = documentHit.document.entity.noteEntityPicker_entity
+    val document = entity.entity.document ?: return null
+    val title = formatDocumentTitle(documentHit.title ?: document.title)
+    val subtitle = documentHit.subtitle ?: document.subtitle
+    val previewText = documentHit.text ?: formatEntityExcerpt(document.excerpt)
+
+    return NotePickerItem(
+      entity = entity.entity,
+      title = buildSearchHighlightedText(title, highlightColor),
+      subtitle = subtitle?.let { buildSearchHighlightedText(it, highlightColor, mutedTextColor) },
+      previewText = buildSearchHighlightedText(previewText, highlightColor),
+      previewMaxLines = if (documentHit.text != null) 2 else 1,
+      parentFolder = entity.parentFolder(),
+    )
+  }
+
+  hit.onSearchHitFolder?.let { folderHit ->
+    val entity = folderHit.folder.entity.noteEntityPicker_entity
+    val folder = entity.entity.folder ?: return null
+    val title = formatFolderName(folderHit.name ?: folder.name)
+
+    return NotePickerItem(
+      entity = entity.entity,
+      title = buildSearchHighlightedText(title, highlightColor),
+      previewText =
+        AnnotatedString(
+          formatFolderRowSummary(
+            folderCount = folder.folderCount,
+            documentCount = folder.documentCount,
+          )
+        ),
+      parentFolder = entity.parentFolder(),
+    )
+  }
+
+  return null
 }

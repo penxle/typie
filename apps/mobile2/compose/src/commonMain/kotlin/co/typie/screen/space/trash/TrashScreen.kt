@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,10 +18,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.datetime.timeAgo
+import co.typie.domain.entity.EntityRow
+import co.typie.domain.entity.EntityRowChevron
+import co.typie.domain.entity.breadcrumbNames
+import co.typie.domain.entity.displayTitle
+import co.typie.domain.entity.document
+import co.typie.domain.entity.entity
+import co.typie.domain.entity.formatEntityExcerpt
+import co.typie.domain.entity.iconAppearance
+import co.typie.domain.entity.isFolder
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.TrashScreen_WithEntityId_Query
 import co.typie.graphql.TrashScreen_WithSiteId_Query
+import co.typie.graphql.fragment.EntityDetails_entity
 import co.typie.graphql.type.EntityState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
@@ -36,8 +48,6 @@ import co.typie.ui.component.EntitySupportingText
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.TrashDocumentRow
-import co.typie.ui.component.TrashFolderRow
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
@@ -55,10 +65,8 @@ import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.IconData
-import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -72,28 +80,30 @@ internal enum class TrashItemType(val label: String) {
   Document("문서"),
 }
 
-internal data class TrashItem(
-  val id: String,
-  val title: String,
-  val type: TrashItemType,
-  val iconName: String,
-  val iconColor: String,
-  val subtitle: String? = null,
-  val excerpt: String? = null,
-  val updatedAt: Instant? = null,
-  val siteName: String,
-  val ancestorFolderNames: List<String>,
-) {
-  val breadcrumbSegments: List<String>
-    get() =
-      buildList {
-          add(siteName)
-          addAll(ancestorFolderNames)
-        }
-        .filter { it.isNotBlank() }
+internal data class TrashItem(val details: EntityDetails_entity, val siteName: String) {
+  val entity
+    get() = details.entity
 
-  val breadcrumb: String
-    get() = breadcrumbSegments.joinToString(" › ")
+  val id: String
+    get() = entity.id
+
+  val title: String
+    get() = entity.displayTitle()
+
+  val type: TrashItemType
+    get() = if (entity.isFolder()) TrashItemType.Folder else TrashItemType.Document
+
+  val subtitle: String?
+    get() = entity.document?.subtitle
+
+  val excerpt: String?
+    get() = entity.document?.excerpt
+
+  val updatedAt
+    get() = entity.document?.updatedAt
+
+  val breadcrumbSegments: List<String>
+    get() = details.breadcrumbNames(siteName)
 }
 
 private data class TrashContent(
@@ -335,23 +345,16 @@ fun TrashScreen(entityId: String? = null) {
 
               when (item.type) {
                 TrashItemType.Folder -> {
-                  TrashFolderRow(
-                    title = item.title,
-                    iconName = item.iconName,
-                    iconColor = item.iconColor,
+                  TrashEntityRow(
+                    item = item,
                     onLongPress = { showItemActionsSheet(item) },
                     onClick = { nav.navigate(Route.Trash(item.id)) },
                   )
                 }
 
                 TrashItemType.Document -> {
-                  TrashDocumentRow(
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    excerpt = item.excerpt,
-                    updatedAt = item.updatedAt,
-                    iconName = item.iconName,
-                    iconColor = item.iconColor,
+                  TrashEntityRow(
+                    item = item,
                     onLongPress = { showItemActionsSheet(item) },
                     onClick = { showItemActionsSheet(item) },
                   )
@@ -368,22 +371,48 @@ fun TrashScreen(entityId: String? = null) {
 }
 
 @Composable
+private fun TrashEntityRow(
+  item: TrashItem,
+  onLongPress: suspend () -> Unit,
+  onClick: suspend () -> Unit,
+) {
+  EntityRow(
+    entity = item.entity,
+    trailing =
+      if (item.type == TrashItemType.Folder) {
+        { EntityRowChevron() }
+      } else {
+        null
+      },
+    onLongPress = onLongPress,
+    onClick = onClick,
+  ) {
+    when (item.type) {
+      TrashItemType.Folder -> {
+        title(title = item.title)
+        supporting(text = "삭제된 폴더")
+      }
+
+      TrashItemType.Document -> {
+        title(
+          title = item.title,
+          subtitle = item.subtitle,
+          trailingText = item.updatedAt?.timeAgo(),
+        )
+        supporting(text = formatEntityExcerpt(item.excerpt.orEmpty()))
+      }
+    }
+  }
+}
+
+@Composable
 context(_: SheetScope<Unit>)
 private fun TrashActionsContent(
   item: TrashItem,
   actions: List<TrashActionItem>,
   onAction: (TrashActionItem) -> Unit,
 ) {
-  val entityIcon =
-    resolveEntityIconAppearance(
-      iconName = item.iconName,
-      iconColor = item.iconColor,
-      fallbackIcon = if (item.type == TrashItemType.Folder) Lucide.Folder else Lucide.File,
-      fallbackTint =
-        if (item.type == TrashItemType.Folder) AppTheme.colors.brand
-        else AppTheme.colors.textSecondary,
-      colors = AppTheme.colors,
-    )
+  val entityIcon = item.entity.entityIcon_entity.iconAppearance
 
   SheetLayout(
     bodyScroll = false,
@@ -484,123 +513,15 @@ private fun trashContent(queryState: QueryState<*>): TrashContent {
 }
 
 private fun TrashScreen_WithEntityId_Query.Entity.toTrashItem(): TrashItem {
-  return when {
-    node.onFolder != null ->
-      TrashItem(
-        id = id,
-        title = node.onFolder.name,
-        type = TrashItemType.Folder,
-        iconName = icon,
-        iconColor = iconColor,
-        siteName = site.name,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-
-    node.onDocument != null ->
-      TrashItem(
-        id = id,
-        title = node.onDocument.title,
-        type = TrashItemType.Document,
-        iconName = icon,
-        iconColor = iconColor,
-        subtitle = node.onDocument.subtitle,
-        excerpt = node.onDocument.excerpt,
-        updatedAt = node.onDocument.updatedAt,
-        siteName = site.name,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-
-    else ->
-      TrashItem(
-        id = id,
-        title = "삭제된 항목",
-        type = TrashItemType.Document,
-        iconName = "",
-        iconColor = "",
-        siteName = site.name,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-  }
+  return TrashItem(details = entityDetails_entity, siteName = site.name)
 }
 
 private fun TrashScreen_WithSiteId_Query.DeletedEntity.toTrashItem(siteName: String): TrashItem {
-  return when {
-    node.onFolder != null ->
-      TrashItem(
-        id = id,
-        title = node.onFolder.name,
-        type = TrashItemType.Folder,
-        iconName = icon,
-        iconColor = iconColor,
-        siteName = siteName,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-
-    node.onDocument != null ->
-      TrashItem(
-        id = id,
-        title = node.onDocument.title,
-        type = TrashItemType.Document,
-        iconName = icon,
-        iconColor = iconColor,
-        subtitle = node.onDocument.subtitle,
-        excerpt = node.onDocument.excerpt,
-        updatedAt = node.onDocument.updatedAt,
-        siteName = siteName,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-
-    else ->
-      TrashItem(
-        id = id,
-        title = "삭제된 항목",
-        type = TrashItemType.Document,
-        iconName = "",
-        iconColor = "",
-        siteName = siteName,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-  }
+  return TrashItem(details = entityDetails_entity, siteName = siteName)
 }
 
 private fun TrashScreen_WithEntityId_Query.DeletedChildren.toTrashItem(
   siteName: String
 ): TrashItem {
-  return when {
-    node.onFolder != null ->
-      TrashItem(
-        id = id,
-        title = node.onFolder.name,
-        type = TrashItemType.Folder,
-        iconName = icon,
-        iconColor = iconColor,
-        siteName = siteName,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-
-    node.onDocument != null ->
-      TrashItem(
-        id = id,
-        title = node.onDocument.title,
-        type = TrashItemType.Document,
-        iconName = icon,
-        iconColor = iconColor,
-        subtitle = node.onDocument.subtitle,
-        excerpt = node.onDocument.excerpt,
-        updatedAt = node.onDocument.updatedAt,
-        siteName = siteName,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-
-    else ->
-      TrashItem(
-        id = id,
-        title = "삭제된 항목",
-        type = TrashItemType.Document,
-        iconName = "",
-        iconColor = "",
-        siteName = siteName,
-        ancestorFolderNames = ancestors.mapNotNull { it.node.onFolder?.name },
-      )
-  }
+  return TrashItem(details = entityDetails_entity, siteName = siteName)
 }

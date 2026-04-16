@@ -28,16 +28,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import co.typie.domain.entity.FolderAction
-import co.typie.domain.entity.FolderActionMenuItem
-import co.typie.domain.entity.folderItemActionSections
-import co.typie.domain.entity.folderVisibilityPresentation
+import co.typie.domain.entity.EntityAction
+import co.typie.domain.entity.EntityActionMenuItem
+import co.typie.domain.entity.breadcrumbNames
+import co.typie.domain.entity.entity
+import co.typie.domain.entity.entityItemActionSections
+import co.typie.domain.entity.entityVisibilityPresentation
+import co.typie.domain.entity.iconAppearance
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
-import co.typie.graphql.type.EntityAvailability
-import co.typie.graphql.type.EntityVisibility
+import co.typie.graphql.fragment.EntityDetails_entity
+import co.typie.graphql.fragment.EntityIcon_entity
 import co.typie.icons.Lucide
+import co.typie.ui.EntityIconAppearance
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.EntityBreadcrumb
 import co.typie.ui.component.EntityBreadcrumbLayout
@@ -58,7 +62,6 @@ import co.typie.ui.component.popover.PopoverTransitionFrame
 import co.typie.ui.component.popover.close
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
-import co.typie.ui.resolveEntityIconAppearance
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.max
@@ -80,15 +83,18 @@ private val FolderPaneHeaderSourceIconGap = 10.dp
 private val FolderPaneHeaderCloseButtonSize = 44.dp
 
 @Composable
+private fun folderTopBarIconAppearance(iconEntity: EntityIcon_entity?): EntityIconAppearance {
+  return iconEntity?.iconAppearance
+    ?: EntityIconAppearance(icon = Lucide.Folder, tint = AppTheme.colors.textSecondary)
+}
+
+@Composable
 internal fun FolderTopBarCenterMenu(
   title: String,
   subtitle: String,
-  breadcrumbNames: List<String>,
-  visibilityName: EntityVisibility?,
-  availabilityName: EntityAvailability?,
-  iconName: String?,
-  iconColor: String?,
-  onAction: (FolderAction) -> Unit,
+  details: EntityDetails_entity?,
+  siteName: String?,
+  onAction: (EntityAction) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Popover(
@@ -102,8 +108,7 @@ internal fun FolderTopBarCenterMenu(
       FolderTopBarCapsule(
         title = title,
         subtitle = subtitle,
-        iconName = iconName,
-        iconColor = iconColor,
+        iconEntity = details?.entity?.entityIcon_entity,
         modifier = modifier,
       )
     },
@@ -111,11 +116,8 @@ internal fun FolderTopBarCenterMenu(
       FolderTopBarCenterPane(
         title = title,
         subtitle = subtitle,
-        breadcrumbNames = breadcrumbNames,
-        visibilityName = visibilityName,
-        availabilityName = availabilityName,
-        iconName = iconName,
-        iconColor = iconColor,
+        details = details,
+        siteName = siteName,
         onAction = onAction,
       )
     },
@@ -127,12 +129,9 @@ context(_: PopoverScope)
 internal fun FolderTopBarCenterPane(
   title: String,
   subtitle: String,
-  breadcrumbNames: List<String>,
-  visibilityName: EntityVisibility?,
-  availabilityName: EntityAvailability?,
-  iconName: String?,
-  iconColor: String?,
-  onAction: (FolderAction) -> Unit,
+  details: EntityDetails_entity?,
+  siteName: String?,
+  onAction: (EntityAction) -> Unit,
 ) {
   Column(
     modifier =
@@ -148,11 +147,8 @@ internal fun FolderTopBarCenterPane(
     FolderTopBarPaneHeader(
       title = title,
       subtitle = subtitle,
-      breadcrumbNames = breadcrumbNames,
-      visibilityName = visibilityName,
-      availabilityName = availabilityName,
-      iconName = iconName,
-      iconColor = iconColor,
+      details = details,
+      siteName = siteName,
       onClose = { close() },
     )
 
@@ -166,19 +162,11 @@ internal fun FolderTopBarCenterPane(
 internal fun FolderTopBarCapsule(
   title: String,
   subtitle: String,
-  iconName: String?,
-  iconColor: String?,
+  iconEntity: EntityIcon_entity?,
   modifier: Modifier = Modifier,
 ) {
   val shape = AppShapes.squircle(FolderTopBarCollapsedRadius)
-  val entityIcon =
-    resolveEntityIconAppearance(
-      iconName = iconName,
-      iconColor = iconColor,
-      fallbackIcon = Lucide.Folder,
-      fallbackTint = AppTheme.colors.textSecondary,
-      colors = AppTheme.colors,
-    )
+  val entityIcon = folderTopBarIconAppearance(iconEntity)
 
   Row(
     verticalAlignment = Alignment.CenterVertically,
@@ -222,23 +210,13 @@ internal fun FolderTopBarCapsule(
 private fun FolderTopBarPaneHeader(
   title: String,
   subtitle: String,
-  breadcrumbNames: List<String>,
-  visibilityName: EntityVisibility?,
-  availabilityName: EntityAvailability?,
-  iconName: String?,
-  iconColor: String?,
+  details: EntityDetails_entity?,
+  siteName: String?,
   onClose: () -> Unit,
 ) {
-  val entityIcon =
-    resolveEntityIconAppearance(
-      iconName = iconName,
-      iconColor = iconColor,
-      fallbackIcon = Lucide.Folder,
-      fallbackTint = AppTheme.colors.textSecondary,
-      colors = AppTheme.colors,
-    )
-  val visibility =
-    folderVisibilityPresentation(visibility = visibilityName, availability = availabilityName)
+  val breadcrumbNames = details?.breadcrumbNames(siteName).orEmpty()
+  val entityIcon = folderTopBarIconAppearance(details?.entity?.entityIcon_entity)
+  val visibility = entityVisibilityPresentation(details)
 
   EntityHeader(
     topContentModifier = Modifier.fillMaxWidth().height(FolderPaneHeaderTopHeight),
@@ -397,9 +375,9 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
 
 @Composable
 context(_: PopoverScope)
-private fun FolderTopBarActionList(onAction: (FolderAction) -> Unit) {
+private fun FolderTopBarActionList(onAction: (EntityAction) -> Unit) {
   Column(modifier = Modifier.fillMaxWidth()) {
-    folderItemActionSections().forEachIndexed { index, section ->
+    entityItemActionSections().forEachIndexed { index, section ->
       if (index > 0) {
         FolderActionMenuDivider()
       }
@@ -412,8 +390,8 @@ private fun FolderTopBarActionList(onAction: (FolderAction) -> Unit) {
 @Composable
 context(_: PopoverScope)
 private fun FolderTopBarActionSection(
-  items: List<FolderActionMenuItem>,
-  onAction: (FolderAction) -> Unit,
+  items: List<EntityActionMenuItem>,
+  onAction: (EntityAction) -> Unit,
 ) {
   PopoverList(
     items =
@@ -440,7 +418,7 @@ internal fun FolderActionMenuDivider() {
 }
 
 @Composable
-private fun FolderTopBarActionRow(action: FolderActionMenuItem, modifier: Modifier = Modifier) {
+private fun FolderTopBarActionRow(action: EntityActionMenuItem, modifier: Modifier = Modifier) {
   val tint = if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textPrimary
   val trailingTint = if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textTertiary
 

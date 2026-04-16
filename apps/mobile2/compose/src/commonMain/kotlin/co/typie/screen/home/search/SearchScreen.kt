@@ -6,23 +6,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.timeAgo
-import co.typie.domain.entity.EntityIcon
+import co.typie.domain.entity.EntityRow
+import co.typie.domain.entity.buildSearchHighlightedText
+import co.typie.domain.entity.document
+import co.typie.domain.entity.folder
+import co.typie.domain.entity.formatDocumentTitle
+import co.typie.domain.entity.formatEntityExcerpt
+import co.typie.domain.entity.formatFolderName
+import co.typie.domain.entity.formatFolderRowSummary
+import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -170,7 +172,7 @@ private fun SearchResults(data: SearchScreen_Search_Query.Data, onClick: () -> U
             }
 
             hit.onSearchHitFolder != null -> {
-              FolderRow(folder = hit.onSearchHitFolder, onClick = onClick)
+              FolderRow(hit = hit.onSearchHitFolder, onClick = onClick)
             }
           }
         }
@@ -186,150 +188,62 @@ private fun DocumentRow(
 ) {
   val nav = Nav.current
 
-  val title = hit.title ?: hit.document.title
-  val subtitle = hit.subtitle ?: hit.document.subtitle
-  val parentFolder = hit.document.entity.parent?.node?.onFolder
+  val entity = hit.document.entity.entityRow_entity
+  val document = entity.document ?: return
+  val title = formatDocumentTitle(hit.title ?: document.title)
+  val subtitle = hit.subtitle ?: document.subtitle
+  val parentFolder = hit.document.entity.entityRowParent_entity.parentFolderMeta()
+  val highlightedTitle = buildSearchHighlightedText(title, AppTheme.colors.brand)
+  val highlightedSubtitle = subtitle?.let {
+    buildSearchHighlightedText(it, AppTheme.colors.brand, AppTheme.colors.textMuted)
+  }
+  val previewText = hit.text ?: formatEntityExcerpt(document.excerpt)
+  val highlightedPreview = buildSearchHighlightedText(previewText, AppTheme.colors.brand)
 
-  InteractionScope {
-    Column(
-      modifier =
-        Modifier.fillMaxWidth()
-          .pressScale()
-          .clickable(onClick)
-          .clickable { nav.navigate(Route.Editor(hit.document.entity.id)) }
-          .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-      if (parentFolder != null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          EntityIcon(parentFolder.entity.entityIcon_entity, modifier = Modifier.size(12.dp))
-
-          Spacer(Modifier.width(4.dp))
-
-          Text(
-            parentFolder.name,
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textMuted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
-
-        Spacer(Modifier.height(4.dp))
-      }
-
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        EntityIcon(hit.document.entity.entityIcon_entity, modifier = Modifier.size(18.dp))
-
-        Spacer(Modifier.width(12.dp))
-
-        Column(Modifier.weight(1f)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            val text = buildAnnotatedString {
-              append(buildEmHighlightedAnnotatedString(title, AppTheme.colors.brand))
-
-              if (subtitle != null) {
-                appendWithColor(" — ", AppTheme.colors.textMuted)
-                append(
-                  buildEmHighlightedAnnotatedString(
-                    subtitle,
-                    AppTheme.colors.brand,
-                    AppTheme.colors.textMuted,
-                  )
-                )
-              }
-            }
-
-            Text(
-              text,
-              style = AppTheme.typography.label,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              modifier = Modifier.weight(1f),
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            Text(
-              hit.document.updatedAt.timeAgo(),
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textMuted,
-            )
-          }
-
-          if (hit.text != null) {
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-              buildEmHighlightedAnnotatedString(hit.text, AppTheme.colors.brand),
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textMuted,
-              maxLines = 2,
-              overflow = TextOverflow.Ellipsis,
-            )
-          } else {
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-              hit.document.excerpt.ifEmpty { "(내용 없음)" },
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textMuted,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-        }
-      }
-    }
+  EntityRow(
+    entity = entity,
+    onClick = {
+      onClick()
+      nav.navigate(Route.Editor(entity.id))
+    },
+  ) {
+    parentMeta(parentFolder)
+    title(
+      title = highlightedTitle,
+      subtitle = highlightedSubtitle,
+      trailingText = document.updatedAt.timeAgo(),
+    )
+    supporting(text = highlightedPreview, maxLines = if (hit.text != null) 2 else 1)
   }
 }
 
 @Composable
 private fun FolderRow(
-  folder: SearchScreen_Search_Query.OnSearchHitFolder,
+  hit: SearchScreen_Search_Query.OnSearchHitFolder,
   onClick: suspend () -> Unit,
-) {}
+) {
+  val nav = Nav.current
+  val entity = hit.folder.entity.entityRow_entity
+  val folder = entity.folder ?: return
+  val title = formatFolderName(hit.name ?: folder.name)
+  val parentFolder = hit.folder.entity.entityRowParent_entity.parentFolderMeta()
+  val highlightedTitle = buildSearchHighlightedText(title, AppTheme.colors.brand)
 
-private fun buildEmHighlightedAnnotatedString(
-  text: String,
-  highlightColor: Color,
-  baseColor: Color? = null,
-): AnnotatedString {
-  return buildAnnotatedString {
-    var remaining = text
-    while (remaining.isNotEmpty()) {
-      val startIdx = remaining.indexOf("<em>")
-      if (startIdx == -1) {
-        appendWithColor(remaining, baseColor)
-        break
-      }
-
-      appendWithColor(remaining.substring(0, startIdx), baseColor)
-
-      val endIdx = remaining.indexOf("</em>", startIdx)
-      if (endIdx == -1) {
-        appendWithColor(remaining.substring(startIdx), baseColor)
-        break
-      }
-
-      val highlighted = remaining.substring(startIdx + 4, endIdx)
-      pushStyle(SpanStyle(color = highlightColor))
-      append(highlighted)
-      pop()
-
-      remaining = remaining.substring(endIdx + 5)
-    }
+  EntityRow(
+    entity = entity,
+    onClick = {
+      onClick()
+      nav.navigate(Route.Folder(entity.id))
+    },
+  ) {
+    parentMeta(parentFolder)
+    title(title = highlightedTitle)
+    supporting(
+      text =
+        formatFolderRowSummary(
+          folderCount = folder.folderCount,
+          documentCount = folder.documentCount,
+        )
+    )
   }
-}
-
-private fun AnnotatedString.Builder.appendWithColor(text: String, color: Color?) {
-  if (text.isEmpty()) return
-
-  if (color == null) {
-    append(text)
-    return
-  }
-
-  pushStyle(SpanStyle(color = color))
-  append(text)
-  pop()
 }

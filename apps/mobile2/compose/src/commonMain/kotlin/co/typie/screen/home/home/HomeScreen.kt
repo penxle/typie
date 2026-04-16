@@ -15,13 +15,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.timeAgo
-import co.typie.domain.entity.EntityIcon
+import co.typie.domain.entity.EntityRow
+import co.typie.domain.entity.document
+import co.typie.domain.entity.folder
+import co.typie.domain.entity.formatDocumentTitle
+import co.typie.domain.entity.formatEntityExcerpt
+import co.typie.domain.entity.formatFolderName
+import co.typie.domain.entity.formatFolderRowSummary
+import co.typie.domain.entity.iconAppearance
+import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
@@ -168,22 +174,31 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
         )
       }
     } else {
-      for (folder in folders) {
+      for (folderNode in folders) {
+        val entity = folderNode.entity.entityRow_entity
+        val folder = entity.folder ?: continue
+
         InteractionScope {
+          val iconAppearance = entity.entityIcon_entity.iconAppearance
+
           Column(
             modifier =
               Modifier.width(140.dp)
                 .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
                 .pressScale()
-                .clickable { nav.navigate(Route.Folder(folder.entity.id)) }
+                .clickable { nav.navigate(Route.Folder(entity.id)) }
                 .padding(16.dp)
           ) {
-            EntityIcon(folder.entity.entityIcon_entity, modifier = Modifier.size(18.dp))
+            Icon(
+              icon = iconAppearance.icon,
+              modifier = Modifier.size(18.dp),
+              tint = iconAppearance.tint,
+            )
 
             Spacer(Modifier.height(6.dp))
 
             Text(
-              folder.name,
+              formatFolderName(folder.name),
               style = AppTheme.typography.label,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
@@ -192,7 +207,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
             Spacer(Modifier.height(2.dp))
 
             Text(
-              if (folder.documentCount == 0) "빈 폴더" else "문서 ${folder.documentCount}개",
+              formatFolderRowSummary(folderCount = 0, documentCount = folder.documentCount),
               style = AppTheme.typography.caption,
               color = AppTheme.colors.textMuted,
             )
@@ -232,80 +247,19 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
         modifier =
           Modifier.background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
       ) {
-        documents.separated(separator = { Divider(inset = 16.dp) }) { document ->
-          InteractionScope {
-            val parentFolder = document.entity.parent?.node?.onFolder
+        documents.separated(separator = { Divider(inset = 16.dp) }) { documentNode ->
+          val entity = documentNode.entity.entityRow_entity
+          val document = entity.document ?: return@separated
+          val parentFolder = documentNode.entity.entityRowParent_entity.parentFolderMeta()
 
-            Column(
-              modifier =
-                Modifier.fillMaxWidth()
-                  .pressScale()
-                  .clickable { nav.navigate(Route.Editor(document.entity.id)) }
-                  .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-              if (parentFolder != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  EntityIcon(parentFolder.entity.entityIcon_entity, modifier = Modifier.size(12.dp))
-
-                  Spacer(Modifier.width(4.dp))
-
-                  Text(
-                    parentFolder.name,
-                    style = AppTheme.typography.caption,
-                    color = AppTheme.colors.textMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
-                }
-              }
-
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                EntityIcon(document.entity.entityIcon_entity, modifier = Modifier.size(18.dp))
-
-                Spacer(Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                  Row(verticalAlignment = Alignment.CenterVertically) {
-                    val title = buildAnnotatedString {
-                      append(document.title)
-
-                      if (document.subtitle != null) {
-                        pushStyle(SpanStyle(color = AppTheme.colors.textMuted))
-                        append(" — ")
-                        append(document.subtitle)
-                        pop()
-                      }
-                    }
-
-                    Text(
-                      title,
-                      style = AppTheme.typography.label,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                      modifier = Modifier.weight(1f),
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
-                    Text(
-                      document.updatedAt.timeAgo(),
-                      style = AppTheme.typography.caption,
-                      color = AppTheme.colors.textMuted,
-                    )
-                  }
-
-                  Spacer(Modifier.height(4.dp))
-
-                  Text(
-                    document.excerpt.ifEmpty { "(내용 없음)" },
-                    style = AppTheme.typography.caption,
-                    color = AppTheme.colors.textMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
-                }
-              }
-            }
+          EntityRow(entity = entity, onClick = { nav.navigate(Route.Editor(entity.id)) }) {
+            parentMeta(parentFolder)
+            title(
+              title = formatDocumentTitle(document.title),
+              subtitle = document.subtitle,
+              trailingText = document.updatedAt.timeAgo(),
+            )
+            supporting(formatEntityExcerpt(document.excerpt))
           }
         }
       }

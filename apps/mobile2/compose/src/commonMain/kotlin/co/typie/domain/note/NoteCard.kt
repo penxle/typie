@@ -62,6 +62,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.datetime.timeAgo
+import co.typie.domain.entity.displayTitle
+import co.typie.domain.entity.iconAppearance
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -321,7 +323,7 @@ private fun NoteExpandedContent(
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           linkedEntities.forEach { entity ->
-            NoteLinkedEntityChip(entity = entity, onClick = { onEntityClick(entity) })
+            NoteLinkedEntityChip(linkedEntity = entity, onClick = { onEntityClick(entity) })
           }
         }
       }
@@ -689,7 +691,7 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
 
     val chipPlaceable =
       meta.visibleEntities.firstOrNull()?.let { entity ->
-        subcompose("chip") { NoteLinkedEntityChip(entity = entity) }
+        subcompose("chip") { NoteLinkedEntityChip(linkedEntity = entity) }
           .single()
           .measure(looseConstraints.copy(maxWidth = chipMaxWidth))
       }
@@ -717,11 +719,12 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
 
 @Composable
 private fun NoteLinkedEntityChip(
-  entity: NoteLinkedEntity_entity,
+  linkedEntity: NoteLinkedEntity_entity,
   modifier: Modifier = Modifier,
   onClick: (() -> Unit)? = null,
 ) {
-  val iconAppearance = entity.iconAppearance()
+  val entity = linkedEntity.entity
+  val iconAppearance = entity.entityIcon_entity.iconAppearance
 
   @Composable
   fun ChipRow(chipModifier: Modifier) {

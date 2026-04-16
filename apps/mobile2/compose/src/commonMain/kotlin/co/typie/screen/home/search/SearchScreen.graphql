@@ -14,35 +14,9 @@ query SearchScreen_Search_Query($siteId: ID!, $query: String!) {
         text
 
         document {
-          id
-          title
-          subtitle
-          type
-          excerpt
-          updatedAt
-
           entity {
-            id
-            slug
-
-            parent {
-              id
-
-              node {
-                __typename
-
-                ... on Folder {
-                  id
-                  name
-
-                  entity {
-                    ...EntityIcon_entity
-                  }
-                }
-              }
-            }
-
-            ...EntityIcon_entity
+            ...EntityRow_entity
+            ...EntityRowParent_entity
           }
         }
       }
@@ -51,12 +25,9 @@ query SearchScreen_Search_Query($siteId: ID!, $query: String!) {
         name
 
         folder {
-          name
-          folderCount
-          documentCount
-
           entity {
-            ...EntityIcon_entity
+            ...EntityRow_entity
+            ...EntityRowParent_entity
           }
         }
       }

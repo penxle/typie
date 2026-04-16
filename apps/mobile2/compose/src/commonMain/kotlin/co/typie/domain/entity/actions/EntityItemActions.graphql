@@ -1,0 +1,5 @@
+query EntityItemActions_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    ...EntityDetails_entity
+  }
+}

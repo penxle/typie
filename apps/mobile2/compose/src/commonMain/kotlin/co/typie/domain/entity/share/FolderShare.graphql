@@ -1,0 +1,43 @@
+fragment FolderShare_entity on Entity {
+  id
+  url
+  visibility
+
+  node {
+    __typename
+
+    ... on Folder {
+      id
+      name
+
+      thumbnail {
+        id
+        url
+      }
+    }
+  }
+}
+
+mutation EntityShareFolder_UpdateFoldersOption_Mutation($input: UpdateFoldersOptionInput!) {
+  updateFoldersOption(input: $input) {
+    id
+
+    thumbnail {
+      id
+      url
+    }
+
+    entity {
+      id
+      visibility
+    }
+  }
+}
+
+mutation EntityShareFolder_PersistBlobAsImage_Mutation($input: PersistBlobAsImageInput!) {
+  persistBlobAsImage(input: $input) {
+    id
+    url
+    ...Img_image
+  }
+}

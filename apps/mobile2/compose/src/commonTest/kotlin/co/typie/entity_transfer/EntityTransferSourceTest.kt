@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class EntityTransferSourceTest {
 
   @Test
-  fun folderInternalDepthContributionUsesMaxDescendantDepth() {
+  fun folderSubtreeFolderDepthUsesMaxDescendantDepth() {
     val source =
       EntityTransferSource.Folder(
         id = "folder-1",
@@ -17,18 +17,18 @@ class EntityTransferSourceTest {
         maxDescendantFoldersDepth = 6,
       )
 
-    assertTrue(source.internalDepthContribution == 3)
+    assertTrue(source.subtreeFolderDepth == 3)
   }
 
   @Test
-  fun documentInternalDepthContributionIsZero() {
+  fun documentSubtreeFolderDepthIsZero() {
     val source = EntityTransferSource.Document(id = "document-1", title = "문서", depth = 7)
 
-    assertTrue(source.internalDepthContribution == 0)
+    assertTrue(source.subtreeFolderDepth == 0)
   }
 
   @Test
-  fun folderTransferDepthValidationMatchesFlutterParity() {
+  fun folderCanMoveToDepthMatchesFlutterParity() {
     val source =
       EntityTransferSource.Folder(
         id = "folder-1",
@@ -37,7 +37,7 @@ class EntityTransferSourceTest {
         maxDescendantFoldersDepth = 6,
       )
 
-    assertTrue(source.canTransferIntoDestinationDepth(destinationDepth = 96))
-    assertFalse(source.canTransferIntoDestinationDepth(destinationDepth = 97))
+    assertTrue(source.canMoveToDepth(destinationDepth = 96))
+    assertFalse(source.canMoveToDepth(destinationDepth = 97))
   }
 }
