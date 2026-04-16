@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState as foundationRememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -113,10 +112,6 @@ private fun resolveMoveDestinationNavigationDirection(
   } else {
     MoveDestinationNavigationDirection.None
   }
-}
-
-private fun moveDestinationScrollStateKey(sourceId: String, destinationEntityId: String?): String {
-  return "entity-move-scroll:$sourceId:${destinationEntityId ?: "root"}"
 }
 
 internal fun moveSheetViewModelKey(sourceId: String, destinationEntityId: String?): String {
@@ -379,14 +374,7 @@ private fun MoveDestinationBody(
   val listFogInsets = remember {
     ScrollFogInsets(top = MoveListFadeHeight, bottom = MoveListFadeHeight)
   }
-  val scrollState =
-    rememberScrollState(
-      key =
-        moveDestinationScrollStateKey(
-          sourceId = source.id,
-          destinationEntityId = content.destinationEntityId,
-        )
-    )
+  val scrollState = rememberScrollState()
   val visibleFolders = content.folders.filter { it.folder != null }
 
   Box(
@@ -444,7 +432,7 @@ private fun MoveBreadcrumbs(
   val breadcrumbFogInsets = remember {
     ScrollFogInsets(left = BreadcrumbFadeWidth, right = BreadcrumbFadeWidth)
   }
-  val scrollState = foundationRememberScrollState()
+  val scrollState = rememberScrollState()
 
   LaunchedEffect(items, scrollState.maxValue) {
     if (scrollState.maxValue > 0 && scrollState.value != scrollState.maxValue) {

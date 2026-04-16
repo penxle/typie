@@ -65,7 +65,7 @@ fun NotesScreen() {
   val dialog = LocalDialog.current
   val model = viewModel { NotesViewModel() }
   val screenState = model.screenState
-  val scrollState = rememberScrollState("notes")
+  val scrollState = rememberScrollState()
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   val sheet = LocalSheet.current

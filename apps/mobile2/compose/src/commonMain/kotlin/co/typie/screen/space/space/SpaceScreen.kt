@@ -111,7 +111,7 @@ fun SpaceScreen() {
   val documentActionModel = viewModel(key = "space-document-actions") { DocumentViewModel() }
   val selectionActionModel =
     viewModel(key = "space-selection-actions") { EntitySelectionViewModel() }
-  val scrollState = rememberScrollState("space")
+  val scrollState = rememberScrollState()
   val presenterScope = rememberCoroutineScope()
   var isReordering by remember { mutableStateOf(false) }
   var isPersistingReorder by remember { mutableStateOf(false) }

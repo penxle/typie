@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState as foundationRememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +61,7 @@ import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toPaddingValues
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
+import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -77,7 +77,7 @@ internal fun NoteEntityPickerSheet(
 ) {
   val currentSiteId = Preference.siteId ?: return
   val model = viewModel(key = "notes-entity-picker:$currentSiteId") { NoteEntityPickerViewModel() }
-  val listScrollState = foundationRememberScrollState()
+  val listScrollState = rememberScrollState()
   var updatingEntityId by remember { mutableStateOf<String?>(null) }
   var selectedEntityIds by remember(linkedEntityIds) { mutableStateOf(linkedEntityIds) }
   val actionScope = rememberCoroutineScope()

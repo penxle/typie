@@ -103,7 +103,7 @@ fun FolderScreen(entityId: String) {
   val model = viewModel(key = "folder:$entityId") { FolderViewModel() }
   val selectionActionModel =
     viewModel(key = "folder-selection-actions:$entityId") { EntitySelectionViewModel() }
-  val scrollState = rememberScrollState("folder-scroll:$entityId")
+  val scrollState = rememberScrollState()
   var isReordering by remember { mutableStateOf(false) }
   var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }

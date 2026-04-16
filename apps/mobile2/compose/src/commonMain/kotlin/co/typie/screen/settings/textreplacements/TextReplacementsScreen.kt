@@ -95,7 +95,7 @@ fun TextReplacementsScreen() {
   val toast = LocalToast.current
   val scope = rememberCoroutineScope()
   var isPersistingCustomReorder by remember { mutableStateOf(false) }
-  val scrollState = rememberScrollState("text-replacements")
+  val scrollState = rememberScrollState()
 
   val presetItems = model.normalizedPresetItems.sortedBy { it.order.orEmpty() }
   val smartQuoteItems = model.normalizedSmartQuoteItems
