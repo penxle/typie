@@ -75,8 +75,8 @@ internal fun NoteEntityPickerSheet(
   onAddEntity: suspend (String) -> Boolean,
   onRemoveEntity: suspend (String) -> Boolean,
 ) {
-  val currentSiteId = Preference.siteId ?: return
-  val model = viewModel(key = "notes-entity-picker:$currentSiteId") { NoteEntityPickerViewModel() }
+  if (Preference.siteId == null) return
+  val model = viewModel { NoteEntityPickerViewModel() }
   val listScrollState = rememberScrollState()
   var updatingEntityId by remember { mutableStateOf<String?>(null) }
   var selectedEntityIds by remember(linkedEntityIds) { mutableStateOf(linkedEntityIds) }

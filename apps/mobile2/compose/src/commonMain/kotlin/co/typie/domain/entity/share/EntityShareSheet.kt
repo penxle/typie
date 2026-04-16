@@ -19,13 +19,12 @@ context(_: SheetScope<Unit>)
 internal fun FolderEntityShareSheet(entityIds: List<String>, onUpdated: () -> Unit = {}) {
   val resolvedEntityIds =
     remember(entityIds) { entityIds.map(String::trim).filter(String::isNotEmpty) }
-  val model =
-    viewModel(key = "folder-entity-share:${resolvedEntityIds.sorted().joinToString(",")}") {
-      EntityShareViewModel(
-        entityIds = resolvedEntityIds,
-        placeholderData = folderEntitySharePlaceholderData(resolvedEntityIds),
-      )
-    }
+  val model = viewModel {
+    EntityShareViewModel(
+      entityIds = resolvedEntityIds,
+      placeholderData = folderEntitySharePlaceholderData(resolvedEntityIds),
+    )
+  }
   EntityShareErrorEffect(state = model.query.state, onRetry = model::refetch)
 
   val folders = model.query.data.entities.map { it.folderShare_entity }
@@ -50,13 +49,12 @@ context(_: SheetScope<Unit>)
 internal fun DocumentEntityShareSheet(entityIds: List<String>, onUpdated: () -> Unit = {}) {
   val resolvedEntityIds =
     remember(entityIds) { entityIds.map(String::trim).filter(String::isNotEmpty) }
-  val model =
-    viewModel(key = "document-entity-share:${resolvedEntityIds.sorted().joinToString(",")}") {
-      EntityShareViewModel(
-        entityIds = resolvedEntityIds,
-        placeholderData = documentEntitySharePlaceholderData(resolvedEntityIds),
-      )
-    }
+  val model = viewModel {
+    EntityShareViewModel(
+      entityIds = resolvedEntityIds,
+      placeholderData = documentEntitySharePlaceholderData(resolvedEntityIds),
+    )
+  }
   EntityShareErrorEffect(state = model.query.state, onRetry = model::refetch)
 
   val documents = model.query.data.entities.map { it.documentShare_entity }

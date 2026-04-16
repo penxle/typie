@@ -125,7 +125,7 @@ fun TrashScreen(entityId: String? = null) {
   val nav = Nav.current
   val dialog = LocalDialog.current
   val toast = LocalToast.current
-  val model = viewModel(key = "trash:${entityId ?: "site"}") { TrashViewModel() }
+  val model = viewModel { TrashViewModel() }
   val sheet = LocalSheet.current
   val screenScope = rememberCoroutineScope()
   val scrollState = rememberScrollState()
@@ -468,10 +468,7 @@ private fun TrashTopBarMenu(actions: List<TrashActionItem>, actionScope: Corouti
 private fun rememberTrashItemActionsQuery(
   initialEntity: EntityRow_entity
 ): WatchQuery<TrashScreen_ItemActions_Query.Data, TrashScreen_ItemActions_Query.Data> {
-  val model =
-    viewModel(key = "trash-item-actions:${initialEntity.id}") {
-      TrashItemActionsViewModel(initialEntity)
-    }
+  val model = viewModel { TrashItemActionsViewModel(initialEntity) }
 
   return model.query
 }

@@ -106,11 +106,10 @@ fun SpaceScreen() {
   val toast = LocalToast.current
   val clipboard = EntityClipboardService
   val model = viewModel { SpaceViewModel() }
-  val createActionModel = viewModel(key = "space-create-actions") { EntityCreateViewModel() }
-  val folderActionModel = viewModel(key = "space-folder-actions") { FolderViewModel() }
-  val documentActionModel = viewModel(key = "space-document-actions") { DocumentViewModel() }
-  val selectionActionModel =
-    viewModel(key = "space-selection-actions") { EntitySelectionViewModel() }
+  val createActionModel = viewModel { EntityCreateViewModel() }
+  val folderActionModel = viewModel { FolderViewModel() }
+  val documentActionModel = viewModel { DocumentViewModel() }
+  val selectionActionModel = viewModel { EntitySelectionViewModel() }
   val scrollState = rememberScrollState()
   val presenterScope = rememberCoroutineScope()
   var isReordering by remember { mutableStateOf(false) }

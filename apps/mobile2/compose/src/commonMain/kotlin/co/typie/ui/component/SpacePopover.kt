@@ -46,7 +46,6 @@ import co.typie.result.result
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.storage.Preference
-import co.typie.storage.Vault
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.popover.PopoverTransitionElement
@@ -111,8 +110,7 @@ class SpacePopoverViewModel : ViewModel() {
 
 @Composable
 fun SpacePopover() {
-  val sessionKey = Vault.authTokens?.sessionToken ?: "no-session"
-  val model = viewModel(key = "space-popover:$sessionKey") { SpacePopoverViewModel() }
+  val model = viewModel { SpacePopoverViewModel() }
 
   val selectedSiteId = Preference.siteId
 

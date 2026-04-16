@@ -45,10 +45,7 @@ private class EntityItemActionsViewModel(initialEntity: EntityRow_entity) : View
 internal fun rememberEntityItemActionsQuery(
   initialEntity: EntityRow_entity
 ): WatchQuery<EntityItemActions_Query.Data, EntityItemActions_Query.Data> {
-  val model =
-    viewModel(key = "entity-item-actions:${initialEntity.id}") {
-      EntityItemActionsViewModel(initialEntity)
-    }
+  val model = viewModel { EntityItemActionsViewModel(initialEntity) }
 
   return model.query
 }
