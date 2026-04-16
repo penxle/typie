@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +63,7 @@ import co.typie.ui.component.toPaddingValues
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 
 internal val NoteEntityPickerStops = listOf(SheetStop.Top(64.dp))
 private val NoteEntityPickerListFadeHeight = 24.dp
@@ -78,6 +80,7 @@ internal fun NoteEntityPickerSheet(
   val listScrollState = foundationRememberScrollState()
   var updatingEntityId by remember { mutableStateOf<String?>(null) }
   var selectedEntityIds by remember(linkedEntityIds) { mutableStateOf(linkedEntityIds) }
+  val actionScope = rememberCoroutineScope()
   val highlightColor = AppTheme.colors.brand
   val mutedTextColor = AppTheme.colors.textMuted
 
@@ -188,7 +191,7 @@ internal fun NoteEntityPickerSheet(
                 Column(Modifier.fillMaxWidth()) {
                   visibleEntities.forEachIndexed { index, item ->
                     if (index > 0) {
-                      CardDivider()
+                      CardDivider(color = AppTheme.colors.borderDefault)
                     }
 
                     NotePickerRow(
@@ -197,16 +200,26 @@ internal fun NoteEntityPickerSheet(
                       updating = updatingEntityId == item.id,
                       enabled = updatingEntityId == null,
                       onClick = {
-                        val selected = item.id in selectedEntityIds
-                        updatingEntityId = item.id
-                        val didToggle =
-                          if (selected) onRemoveEntity(item.id) else onAddEntity(item.id)
-                        if (didToggle) {
-                          selectedEntityIds =
-                            if (selected) selectedEntityIds - item.id
-                            else selectedEntityIds + item.id
+                        actionScope.launch {
+                          if (updatingEntityId != null) {
+                            return@launch
+                          }
+
+                          val selected = item.id in selectedEntityIds
+                          updatingEntityId = item.id
+
+                          try {
+                            val didToggle =
+                              if (selected) onRemoveEntity(item.id) else onAddEntity(item.id)
+                            if (didToggle) {
+                              selectedEntityIds =
+                                if (selected) selectedEntityIds - item.id
+                                else selectedEntityIds + item.id
+                            }
+                          } finally {
+                            updatingEntityId = null
+                          }
                         }
-                        updatingEntityId = null
                       },
                     )
                   }
