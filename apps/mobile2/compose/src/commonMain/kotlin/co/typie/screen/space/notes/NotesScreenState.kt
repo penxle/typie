@@ -1,12 +1,9 @@
 package co.typie.screen.space.notes
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import co.typie.form.FormState
 import co.typie.graphql.fragment.NoteCard_note
@@ -18,21 +15,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-
-@Composable
-internal fun rememberNotesScreenState(
-  contentDebounceMillis: Long = 300L,
-  colorDebounceMillis: Long = 180L,
-): NotesScreenState {
-  val scope = rememberCoroutineScope()
-  return remember(scope, contentDebounceMillis, colorDebounceMillis) {
-    NotesScreenState(
-      scope = scope,
-      contentDebounceMillis = contentDebounceMillis,
-      colorDebounceMillis = colorDebounceMillis,
-    )
-  }
-}
 
 @Stable
 internal class NotesScreenState(

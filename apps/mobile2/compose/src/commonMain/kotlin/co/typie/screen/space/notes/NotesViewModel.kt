@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 
 internal class NotesViewModel : ViewModel() {
   private var hasEnteredScreen = false
+  val screenState = NotesScreenState(scope = viewModelScope)
 
   val siteId: String?
     get() = Preference.siteId
