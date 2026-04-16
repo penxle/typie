@@ -216,3 +216,4 @@ zremrangebyscore
 zstd
 aisettings
 osslicenses
+argb

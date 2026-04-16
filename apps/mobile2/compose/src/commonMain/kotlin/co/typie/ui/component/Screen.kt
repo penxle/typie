@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import co.typie.contract.Loadable
 import co.typie.contract.LoadableState
+import co.typie.ext.imePadding
 import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
@@ -47,6 +48,7 @@ private val MaxContentWidth = 600.dp
 fun Screen(
   loadable: Loadable<*>? = null,
   background: Color = AppTheme.colors.surfaceBase,
+  contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
   content: @Composable (contentPadding: PaddingValues) -> Unit,
 ) {
   val hazeState = remember { HazeState() }
@@ -63,11 +65,11 @@ fun Screen(
         top =
           TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight + TopBarDefaults.ContentTopSpacing
       ) +
-        PaddingValues(horizontal = 16.dp) +
+        contentPadding +
         WindowInsets.statusBars.asPaddingValues() +
         WindowInsets.navigationBars.asPaddingValues()
     } else {
-      PaddingValues(horizontal = 16.dp) + WindowInsets.navigationBars.asPaddingValues()
+      contentPadding + WindowInsets.navigationBars.asPaddingValues()
     }
 
   LaunchedEffect(loadable?.state) {
@@ -76,7 +78,7 @@ fun Screen(
     }
   }
 
-  Box(Modifier.fillMaxSize().background(background)) {
+  Box(Modifier.fillMaxSize().background(background).imePadding()) {
     Box(
       modifier = Modifier.fillMaxSize().hazeSource(hazeState).widthIn(max = MaxContentWidth),
       contentAlignment = Alignment.TopCenter,

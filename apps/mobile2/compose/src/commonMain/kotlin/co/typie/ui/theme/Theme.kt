@@ -5,7 +5,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +28,11 @@ enum class ThemeMode {
   Dark;
 
   data object Serializer : EnumSerializer<ThemeMode>(entries, String::lowercase)
+}
+
+enum class ResolvedThemeMode {
+  Light,
+  Dark,
 }
 
 @Immutable
@@ -155,7 +159,7 @@ val DarkColors =
 val LocalAppColors = staticCompositionLocalOf { LightColors }
 val LocalHazeState = staticCompositionLocalOf { HazeState() }
 val LocalThemeMode =
-  compositionLocalOf<MutableState<ThemeMode>> {
+  compositionLocalOf<ResolvedThemeMode> {
     error("No ThemeMode provided. Wrap your content with AppTheme.")
   }
 
@@ -197,7 +201,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 
   CompositionLocalProvider(
     LocalAppColors provides if (isDark) DarkColors else LightColors,
-    LocalThemeMode provides themeMode,
+    LocalThemeMode provides if (isDark) ResolvedThemeMode.Dark else ResolvedThemeMode.Light,
     LocalHazeStyle provides HazeStyle(blurRadius = 20.dp, noiseFactor = 0f, tints = listOf()),
   ) {
     content()
@@ -208,8 +212,8 @@ object AppTheme {
   val colors: AppColors
     @Composable get() = LocalAppColors.current
 
-  val themeMode: ThemeMode
-    @Composable get() = LocalThemeMode.current.value
+  val themeMode: ResolvedThemeMode
+    @Composable get() = LocalThemeMode.current
 
   val typography: AppTypography
     get() = AppTypography

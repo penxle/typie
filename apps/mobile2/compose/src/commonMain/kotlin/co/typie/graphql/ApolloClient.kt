@@ -36,6 +36,8 @@ val Apollo: ApolloClient =
       MemoryCacheFactory(maxSizeBytes = 10 * 1024 * 1024),
       cacheKeyGenerator = IdCacheKeyGenerator(keyScope = CacheKey.Scope.SERVICE),
       cacheResolver = IdCacheResolver(keyScope = CacheKey.Scope.SERVICE),
+      enableOptimisticUpdates = true,
+      writeToCacheAsynchronously = true,
     )
     .addHttpInterceptor(AuthInterceptor)
     .build()

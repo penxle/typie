@@ -64,7 +64,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.resolveIsDarkTheme
+import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -101,11 +101,7 @@ fun StatsActivityChart(
   val haptic = LocalHapticFeedback.current
   val textMeasurer = rememberTextMeasurer()
   val colors = AppTheme.colors
-  val isDark =
-    resolveIsDarkTheme(
-      themeMode = AppTheme.themeMode,
-      systemIsDark = androidx.compose.foundation.isSystemInDarkTheme(),
-    )
+  val isDark = AppTheme.themeMode == ResolvedThemeMode.Dark
   val tooltipSurface = if (isDark) AppColor.dark.gray.s500 else AppColor.light.gray.s600
   val tooltipText = AppColor.white
 

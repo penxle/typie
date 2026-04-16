@@ -57,7 +57,6 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.LocalThemeMode
 import co.typie.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
@@ -262,7 +261,6 @@ fun SettingsScreen() {
   val authService = model.authService
   val deviceInfo = model.deviceInfo
   val scrollState = rememberScrollState()
-  val themeModeState = LocalThemeMode.current
   val devModeEnabled = Preference.devMode
   val subscriptionState = SubscriptionService.state
   val sections = remember(devModeEnabled) { settingsSections(devModeEnabled = devModeEnabled) }
@@ -290,12 +288,12 @@ fun SettingsScreen() {
       sections.forEach { section ->
         SettingsSectionCard(
           section = section,
-          themeMode = themeModeState.value,
+          themeMode = Preference.themeMode,
           appVersion = appVersion,
           devModeEnabled = devModeEnabled,
           onThemeClick = {
             scope.launch {
-              val result = sheet.present { SettingsThemeContent(themeMode = themeModeState.value) }
+              val result = sheet.present { SettingsThemeContent(themeMode = Preference.themeMode) }
               if (result != null) {
                 // TODO: 테마 변경 트래킹
                 Preference.themeMode = result

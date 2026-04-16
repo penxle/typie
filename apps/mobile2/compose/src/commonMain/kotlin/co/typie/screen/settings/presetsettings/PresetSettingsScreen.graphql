@@ -2,12 +2,14 @@ query PresetSettingsScreen_Query {
   me @catch(to: THROW) {
     id
     preferences
+
     documentFontFamilies {
       id
       familyName
       displayName
       source
       state
+
       fonts {
         id
         weight

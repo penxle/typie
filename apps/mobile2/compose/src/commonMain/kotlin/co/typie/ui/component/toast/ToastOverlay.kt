@@ -22,7 +22,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,7 +60,7 @@ import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.LocalHazeState
-import co.typie.ui.theme.ThemeMode
+import co.typie.ui.theme.ResolvedThemeMode
 import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -118,9 +117,8 @@ private fun AnimatedToast(
   val toastSurface =
     if (
       when (AppTheme.themeMode) {
-        ThemeMode.System -> isSystemInDarkTheme()
-        ThemeMode.Light -> false
-        ThemeMode.Dark -> true
+        ResolvedThemeMode.Light -> false
+        ResolvedThemeMode.Dark -> true
       }
     )
       AppColor.dark.gray.s500

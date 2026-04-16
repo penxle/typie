@@ -1,5 +1,7 @@
 package co.typie.screen.settings.presetsettings
 
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.Apollo
@@ -9,43 +11,60 @@ import co.typie.graphql.PresetSettingsScreen_UpdatePreferences_Mutation
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
+import co.typie.graphql.type.FontFamilyState
+import co.typie.graphql.type.FontState
 import co.typie.graphql.type.UpdatePreferencesInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
+import co.typie.serialization.json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 
 internal class PresetSettingsViewModel : ViewModel() {
-  internal val query =
+  val query =
     Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       PresetSettingsScreen_Query()
     }
 
-  internal val currentTemplate: PresetTemplate
-    get() = PresetTemplate.fromPreferencesJson(query.data.me.preferences)
-
-  internal val activeDocumentFontFamilies: List<PresetFontFamily>
-    get() = activePresetFontFamiliesFromPresetQuery(query.data.me.documentFontFamilies)
-
-  internal val normalizedFontFamilyOptions: List<PresetOption<String>>
-    get() = normalizedPresetFontFamilyOptions(activeDocumentFontFamilies)
-
-  internal val selectedFontWeightAvailability: List<PresetOption<Int>>
-    get() = selectedFontWeightAvailabilityOptions(currentTemplate, activeDocumentFontFamilies)
-
-  internal suspend fun saveTemplate(nextTemplate: PresetTemplate): Result<Unit, Nothing> {
-    return updateTemplate(value = JsonObject(mapOf("template" to nextTemplate.toJsonObject())))
+  val preset by derivedStateOf {
+    json.decodeFromJsonElement<PresetPreferences>(query.data.me.preferences).template ?: Preset()
   }
 
-  internal suspend fun resetTemplate(): Result<Unit, Nothing> {
-    return updateTemplate(value = JsonObject(mapOf("template" to JsonObject(emptyMap()))))
+  val fontFamilies by derivedStateOf {
+    query.data.me.documentFontFamilies
+      .filter { it.state == FontFamilyState.ACTIVE }
+      .map { family ->
+        family.copy(fonts = family.fonts.filter { font -> font.state == FontState.ACTIVE })
+      }
   }
 
-  private suspend fun updateTemplate(value: JsonObject): Result<Unit, Nothing> = result {
+  internal suspend fun updatePreset(preset: Preset): Result<Unit, Nothing> = result {
+    val value = json.encodeToJsonElement(PresetPreferences(template = preset))
     Apollo.executeMutation(
-      PresetSettingsScreen_UpdatePreferences_Mutation(input = UpdatePreferencesInput(value = value))
+      PresetSettingsScreen_UpdatePreferences_Mutation(
+        input = UpdatePreferencesInput(value = value)
+      ),
+      optimisticUpdate =
+        PresetSettingsScreen_UpdatePreferences_Mutation.Data {
+          updatePreferences = buildUser {
+            id = query.data.me.id
+            preferences = value
+          }
+        },
     )
-    query.refetch()
+  }
+
+  internal suspend fun resetPreset(): Result<Unit, Nothing> = result {
+    Apollo.executeMutation(
+      PresetSettingsScreen_UpdatePreferences_Mutation(
+        input =
+          UpdatePreferencesInput(
+            value = json.encodeToJsonElement(PresetPreferences(template = null))
+          )
+      )
+    )
   }
 }
 

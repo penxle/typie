@@ -56,7 +56,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.resolveIsDarkTheme
+import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
@@ -89,11 +89,7 @@ fun ActivityGrid(
       if (weeks.isEmpty()) 0.dp else (CellSize * weeks.size) + (CellGap * max(weeks.size - 1, 0))
     }
   val scope = rememberCoroutineScope()
-  val isDark =
-    resolveIsDarkTheme(
-      themeMode = AppTheme.themeMode,
-      systemIsDark = androidx.compose.foundation.isSystemInDarkTheme(),
-    )
+  val isDark = AppTheme.themeMode == ResolvedThemeMode.Dark
   val levelColors = remember(isDark) { activityLevelColors(isDark = isDark) }
   val density = LocalDensity.current
   val haptic = LocalHapticFeedback.current

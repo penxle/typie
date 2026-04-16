@@ -259,7 +259,6 @@ private fun FontSettingsFamilySection(
       text = family.displayName,
       fallbackTexts = listOf(family.familyName),
       style = AppTheme.typography.title.copy(fontWeight = FontWeight(representativeFont.weight)),
-      modifier = Modifier.fillMaxWidth(),
     )
 
     CardSurface(modifier = Modifier.fillMaxWidth()) {
@@ -277,7 +276,6 @@ private fun FontSettingsFamilySection(
               text = weightLabel,
               fallbackTexts = listOfNotNull(font.subfamilyDisplayName, font.weight.toString()),
               style = AppTheme.typography.label.copy(fontWeight = FontWeight(font.weight)),
-              modifier = Modifier.weight(1f),
             )
 
             InteractionScope {
