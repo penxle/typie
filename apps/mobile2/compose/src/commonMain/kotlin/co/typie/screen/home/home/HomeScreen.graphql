@@ -1,3 +1,16 @@
+fragment HomeRecentDocument_document on Document {
+  entity {
+    ...EntityRow_entity
+    ...EntityRowParent_entity
+  }
+}
+
+fragment HomeRecentFolder_folder on Folder {
+  entity {
+    ...EntityRow_entity
+  }
+}
+
 query HomeScreen_Query($siteId: ID!) {
   site(siteId: $siteId) @catch(to: THROW) {
     name
@@ -11,16 +24,11 @@ query HomeScreen_Query($siteId: ID!) {
         __typename
 
         ... on Document {
-          entity {
-            ...EntityRow_entity
-            ...EntityRowParent_entity
-          }
+          ...HomeRecentDocument_document
         }
 
         ... on Folder {
-          entity {
-            ...EntityRow_entity
-          }
+          ...HomeRecentFolder_folder
         }
       }
     }

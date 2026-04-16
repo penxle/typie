@@ -24,9 +24,6 @@ import co.typie.domain.note.NoteLinkedEntityActionsSheet
 import co.typie.domain.note.NoteList
 import co.typie.domain.note.NoteListActions
 import co.typie.domain.note.NoteListItem
-import co.typie.domain.note.entity
-import co.typie.domain.note.id
-import co.typie.domain.note.linkedEntities
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.NoteCard_note
@@ -307,7 +304,7 @@ fun NotesScreen() {
     scope.launch {
       sheet.present(stops = NoteEntityPickerStops) {
         NoteEntityPickerSheet(
-          linkedEntityIds = note.linkedEntities().mapTo(mutableSetOf()) { it.id },
+          linkedEntityIds = note.entities.mapTo(mutableSetOf()) { it.noteLinkedEntity_entity.id },
           onAddEntity = { entityId -> handleAddEntity(note.id, entityId) },
           onRemoveEntity = { entityId -> handleRemoveEntity(note.id, entityId) },
         )
@@ -322,7 +319,8 @@ fun NotesScreen() {
           linkedEntity = linkedEntity,
           onOpen = {
             scope.launch {
-              if (linkedEntity.entity.isFolder()) nav.navigate(Route.Folder(linkedEntity.id))
+              if (linkedEntity.entityRow_entity.isFolder())
+                nav.navigate(Route.Folder(linkedEntity.id))
               else nav.navigate(Route.Editor(linkedEntity.id))
             }
           },

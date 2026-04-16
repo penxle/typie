@@ -1,5 +1,32 @@
+fragment EntityItemActionsHeader_entity on Entity {
+  ...EntityRow_entity
+  ...EntityBreadcrumb_entity
+  availability
+  visibility
+}
+
+fragment DocumentItemActions_entity on Entity {
+  node {
+    ... on Document {
+      id
+      characterCount
+    }
+  }
+}
+
+fragment FolderItemActions_entity on Entity {
+  node {
+    ... on Folder {
+      id
+      characterCount
+    }
+  }
+}
+
 query EntityItemActions_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
-    ...EntityDetails_entity
+    ...EntityItemActionsHeader_entity
+    ...DocumentItemActions_entity
+    ...FolderItemActions_entity
   }
 }

@@ -3,7 +3,7 @@ package co.typie.domain.entity
 import androidx.compose.ui.text.AnnotatedString
 import co.typie.domain.entitytransfer.EntityTransferSource
 import co.typie.domain.entitytransfer.toTransferSource
-import co.typie.graphql.EntityItemActions_Query
+import co.typie.graphql.FolderScreen_Query
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.SearchScreen_Search_Query
 import co.typie.graphql.SpaceScreen_Query
@@ -26,6 +26,7 @@ class EntityRowTest {
     val entity = detailsEntity {
       id = "entity-1"
       slug = "hello-world"
+      site = buildSite { name = "워크스페이스" }
       ancestors =
         listOf(
           buildEntity { node = buildFolder { name = "상위" } },
@@ -34,18 +35,19 @@ class EntityRowTest {
       node = buildDocument { title = "문서" }
     }
 
-    assertEquals(listOf("워크스페이스", "상위", "하위"), entity.breadcrumbNames("워크스페이스"))
+    assertEquals(listOf("워크스페이스", "상위", "하위"), entity.breadcrumbNames())
   }
 
   @Test
   fun `folder breadcrumb names omit blank site names`() {
     val entity = detailsEntity {
       id = "entity-1"
+      site = buildSite { name = " " }
       ancestors = listOf(buildEntity { node = buildFolder { name = "상위" } })
       node = buildFolder { name = "폴더" }
     }
 
-    assertEquals(listOf("상위"), entity.breadcrumbNames(" "))
+    assertEquals(listOf("상위"), entity.breadcrumbNames())
   }
 
   @Test
@@ -99,7 +101,7 @@ class EntityRowTest {
         .search
         .hits
         .first()
-        .onSearchHitDocument!!
+        .searchResultDocument_hit!!
         .document
         .entity
         .entityRowParent_entity
@@ -151,7 +153,7 @@ private fun rowEntity(block: co.typie.graphql.builder.EntityBuilder.() -> Unit):
 private fun detailsEntity(
   block: co.typie.graphql.builder.EntityBuilder.() -> Unit
 ): EntityDetails_entity =
-  EntityItemActions_Query.Data(PlaceholderResolver) { entity = buildEntity(block) }
+  FolderScreen_Query.Data(PlaceholderResolver) { entity = buildEntity(block) }
     .entity
     .entityDetails_entity
 

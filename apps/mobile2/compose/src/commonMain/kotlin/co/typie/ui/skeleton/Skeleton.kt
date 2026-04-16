@@ -83,6 +83,28 @@ object SkeletonDefaults {
 
 object Skeleton {
   @Composable
+  private fun rememberState(colors: SkeletonColors): SkeletonState {
+    val infiniteTransition = rememberInfiniteTransition()
+    val pulseAlpha by
+      infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec =
+          infiniteRepeatable<Float>(
+            animation = tween<Float>(800, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse,
+          ),
+      )
+
+    val animatedColor = remember { mutableStateOf(colors.bone) }
+    animatedColor.value = lerp(colors.bone, colors.highlight, pulseAlpha)
+
+    return remember(colors) {
+      SkeletonState(enabled = true, color = animatedColor, colors = colors)
+    }
+  }
+
+  @Composable
   operator fun invoke(
     enabled: Boolean,
     modifier: Modifier = Modifier,
@@ -100,23 +122,7 @@ object Skeleton {
       }
 
       if (active) {
-        val infiniteTransition = rememberInfiniteTransition()
-        val pulseAlpha by
-          infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec =
-              infiniteRepeatable<Float>(
-                animation = tween<Float>(800, easing = EaseInOut),
-                repeatMode = RepeatMode.Reverse,
-              ),
-          )
-
-        val animatedColor = remember { mutableStateOf(colors.bone) }
-        animatedColor.value = lerp(colors.bone, colors.highlight, pulseAlpha)
-
-        val state =
-          remember(colors) { SkeletonState(enabled = true, color = animatedColor, colors = colors) }
+        val state = rememberState(colors)
 
         CompositionLocalProvider(LocalSkeleton provides state) {
           Box(Modifier.alpha(effectiveAlpha)) { content() }
@@ -128,6 +134,21 @@ object Skeleton {
         Box(Modifier.matchParentSize().pointerIgnore())
       }
     }
+  }
+
+  @Composable
+  fun Passive(
+    enabled: Boolean,
+    colors: SkeletonColors = SkeletonDefaults.colors(),
+    content: @Composable () -> Unit,
+  ) {
+    if (!enabled) {
+      CompositionLocalProvider(LocalSkeleton provides SkeletonState.Disabled) { content() }
+      return
+    }
+
+    val state = rememberState(colors)
+    CompositionLocalProvider(LocalSkeleton provides state) { content() }
   }
 
   @Composable

@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import co.typie.domain.entity.EntityHeader
 import co.typie.domain.entity.displayTitle
-import co.typie.domain.entity.iconAppearance
 import co.typie.domain.entity.isFolder
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.icons.Lucide
 import co.typie.ui.component.Divider
-import co.typie.ui.component.EntityHeader
-import co.typie.ui.component.EntitySupportingText
 import co.typie.ui.component.sheet.SheetActionRow
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
@@ -32,8 +30,7 @@ internal fun NoteLinkedEntityActionsSheet(
   onOpen: () -> Unit,
   onUnlink: () -> Unit,
 ) {
-  val entity = linkedEntity.entity
-  val iconAppearance = entity.entityIcon_entity.iconAppearance
+  val entity = linkedEntity.entityRow_entity
   val openLabel = if (entity.isFolder()) "이 폴더 열기" else "이 문서 열기"
   val openIcon = if (entity.isFolder()) Lucide.FolderInput else Lucide.FileInput
 
@@ -48,11 +45,10 @@ internal fun NoteLinkedEntityActionsSheet(
       ) {
         EntityHeader(
           title = entity.displayTitle(),
-          icon = iconAppearance.icon,
+          entityIcon = linkedEntity.entityIcon_entity,
           modifier = Modifier.padding(horizontal = NoteLinkedEntityActionsSheetHorizontalPadding),
-          iconTint = iconAppearance.tint,
         ) {
-          EntitySupportingText(text = if (entity.isFolder()) "폴더" else "문서")
+          supportingText(if (entity.isFolder()) "폴더" else "문서")
         }
 
         Divider(color = AppTheme.colors.borderDefault)

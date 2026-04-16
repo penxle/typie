@@ -1,7 +1,6 @@
 package co.typie.domain.entitytransfer
 
 import co.typie.domain.entity.document
-import co.typie.domain.entity.entity
 import co.typie.domain.entity.folder
 import co.typie.graphql.fragment.EntityDetails_entity
 import co.typie.graphql.fragment.EntityRow_entity
@@ -40,7 +39,7 @@ sealed interface EntityTransferSource {
 }
 
 fun EntityDetails_entity.toTransferSource(): EntityTransferSource {
-  return entity.toTransferSource()
+  return entityRow_entity.toTransferSource()
 }
 
 fun EntityRow_entity.toTransferSource(): EntityTransferSource {

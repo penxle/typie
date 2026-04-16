@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -36,7 +37,11 @@ import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-data class PopoverListItem(val content: @Composable () -> Unit, val onSelected: () -> Unit)
+data class PopoverListItem(
+  val content: @Composable () -> Unit,
+  val onSelected: () -> Unit,
+  val enabled: Boolean = true,
+)
 
 @Composable
 context(scope: PopoverScope)
@@ -72,7 +77,7 @@ fun PopoverList(
   val animSpec = tween<Float>(PopoverDefaults.IndicatorDuration, easing = EaseOutCubic)
 
   fun updateActiveIndex(windowPosition: Offset) {
-    val index = hitTestItems(windowPosition, itemBounds)
+    val index = hitTestItems(windowPosition, itemBounds, items)
     if (index != null && index != activeIndex) {
       haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
@@ -147,7 +152,7 @@ fun PopoverList(
       edgeAutoScrollState?.stop()
       val selectedIndex = activeIndex
       activeIndex = null
-      if (selectedIndex != null) {
+      if (selectedIndex != null && items[selectedIndex].enabled) {
         items[selectedIndex].onSelected()
       }
     }
@@ -240,12 +245,13 @@ fun PopoverList(
                             val selectedIndex =
                               when {
                                 isPanScroll -> null
-                                isSelectionArmed -> hitTestItems(currentWindowPos, itemBounds)
-                                else -> hitTestItems(currentWindowPos, itemBounds)
+                                isSelectionArmed ->
+                                  hitTestItems(currentWindowPos, itemBounds, items)
+                                else -> hitTestItems(currentWindowPos, itemBounds, items)
                               }
                             activeIndex = null
                             isLocalTracking = false
-                            if (selectedIndex != null) {
+                            if (selectedIndex != null && items[selectedIndex].enabled) {
                               items[selectedIndex].onSelected()
                             }
                             break
@@ -264,16 +270,20 @@ fun PopoverList(
                 }
               }
         ) {
-          item.content()
+          Box(Modifier.alpha(if (item.enabled) 1f else 0.4f)) { item.content() }
         }
       }
     }
   }
 }
 
-internal fun hitTestItems(windowPosition: Offset, itemBounds: Map<Int, Rect>): Int? {
+internal fun hitTestItems(
+  windowPosition: Offset,
+  itemBounds: Map<Int, Rect>,
+  items: List<PopoverListItem>,
+): Int? {
   for ((index, bounds) in itemBounds) {
-    if (bounds.contains(windowPosition)) return index
+    if (items.getOrNull(index)?.enabled == true && bounds.contains(windowPosition)) return index
   }
   return null
 }

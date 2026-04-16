@@ -41,12 +41,10 @@ import co.typie.domain.entity.FolderRenameSheet
 import co.typie.domain.entity.calculateEntityReorderOrdersFromOrderedKeys
 import co.typie.domain.entity.displayEntityRows
 import co.typie.domain.entity.document
-import co.typie.domain.entity.entity
 import co.typie.domain.entity.folder
 import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entity.formatFolderMetadataSummary
 import co.typie.domain.entity.formatFolderName
-import co.typie.domain.entity.formatFolderSummary
 import co.typie.domain.entity.isRowEntity
 import co.typie.domain.entity.rememberEntityContainerOverlayState
 import co.typie.domain.entity.rememberEntityContainerSelection
@@ -112,22 +110,22 @@ fun FolderScreen(entityId: String) {
   var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   val root = (model.query.state as? QueryState.Success)?.data?.entity
+  val displayRoot = model.query.data.entity
   val entityDetails = root?.entityDetails_entity
-  val entity = entityDetails?.entity
+  val displayEntityDetails = displayRoot.entityDetails_entity
+  val topBarEntity = displayRoot.folderTopBar_entity
+  val loading = root == null
+  val entity = entityDetails?.entityRow_entity
+  val displayEntity = displayEntityDetails.entityRow_entity
   val folder = entity?.folder
-  val folderTitle = folder?.let { formatFolderName(it.name) } ?: "폴더"
-  val folderSummary =
-    formatFolderSummary(
-      folderCount = folder?.folderCount ?: 0,
-      documentCount = folder?.documentCount ?: 0,
-    )
+  val displayFolder = displayEntity.folder
+  val folderTitle = displayFolder?.let { formatFolderName(it.name) } ?: "폴더"
   val folderMetadataSummary =
     formatFolderMetadataSummary(
-      folderCount = folder?.folderCount ?: 0,
-      documentCount = folder?.documentCount ?: 0,
-      characterCount = entityDetails?.folder?.characterCount ?: 0,
+      folderCount = displayFolder?.folderCount ?: 0,
+      documentCount = displayFolder?.documentCount ?: 0,
+      characterCount = displayEntityDetails.folder?.characterCount ?: 0,
     )
-  val siteName = root?.site?.name ?: "내 스페이스"
   val serverChildren =
     remember(root?.children) {
       root?.children.orEmpty().mapNotNull { child ->
@@ -163,7 +161,7 @@ fun FolderScreen(entityId: String) {
   val pasteTarget =
     remember(root) {
       root?.let { currentEntity ->
-        val currentEntityRow = currentEntity.entityDetails_entity.entity
+        val currentEntityRow = currentEntity.entityDetails_entity.entityRow_entity
         EntityPasteTarget(
           siteId = currentEntity.site.id,
           destinationEntityId = currentEntityRow.id,
@@ -403,23 +401,14 @@ fun FolderScreen(entityId: String) {
     leading = { TopBarBackButton() },
     center = {
       Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
-        if (isReordering) {
-          FolderTopBarCapsule(
-            title = folderTitle,
-            subtitle = folderSummary,
-            iconEntity = entity?.entityIcon_entity,
-            modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
-          )
-        } else {
-          FolderTopBarCenterMenu(
-            title = folderTitle,
-            subtitle = folderMetadataSummary,
-            details = entityDetails,
-            siteName = siteName,
-            onAction = ::onCenterAction,
-            modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
-          )
-        }
+        FolderTopBarCenterMenu(
+          title = folderTitle,
+          subtitle = folderMetadataSummary,
+          entity = topBarEntity,
+          loading = loading,
+          onAction = ::onCenterAction,
+          modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
+        )
       }
     },
     trailingKey = EntityContainerTopBarTrailingKey,
@@ -548,7 +537,7 @@ fun FolderScreen(entityId: String) {
             } else {
               presenterScope.launch {
                 sheet.present {
-                  DocumentItemActionsSheet(entity = entity, siteName = root?.site?.name) { action ->
+                  DocumentItemActionsSheet(entity = entity) { action ->
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
@@ -642,7 +631,7 @@ fun FolderScreen(entityId: String) {
             } else {
               presenterScope.launch {
                 sheet.present {
-                  FolderItemActionsSheet(entity = entity, siteName = root?.site?.name) { action ->
+                  FolderItemActionsSheet(entity = entity) { action ->
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {

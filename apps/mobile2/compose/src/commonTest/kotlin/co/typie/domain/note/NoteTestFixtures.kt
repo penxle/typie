@@ -33,28 +33,32 @@ internal fun notesNote(
   )
 
 internal fun notesDocumentEntity(id: String, title: String = "문서") =
-  NoteLinkedEntity_entity(
-    __typename = "Entity",
-    entityRow_entity =
-      SpaceScreen_Query.Data(PlaceholderResolver) {
-          site = buildSite {
-            entities =
-              listOf(
-                buildEntity {
-                  this.id = id
-                  slug = id
-                  icon = "file"
-                  iconColor = "gray"
-                  node = buildDocument {
-                    this.id = "$id-document"
-                    this.title = title
-                  }
-                }
-              )
-          }
-        }
-        .site
-        .entities
-        .first()
-        .entityRow_entity,
-  )
+  SpaceScreen_Query.Data(PlaceholderResolver) {
+      site = buildSite {
+        entities =
+          listOf(
+            buildEntity {
+              this.id = id
+              slug = id
+              icon = "file"
+              iconColor = "gray"
+              node = buildDocument {
+                this.id = "$id-document"
+                this.title = title
+              }
+            }
+          )
+      }
+    }
+    .site
+    .entities
+    .first()
+    .entityRow_entity
+    .let { entityRow ->
+      NoteLinkedEntity_entity(
+        __typename = "Entity",
+        id = id,
+        entityRow_entity = entityRow,
+        entityIcon_entity = entityRow.entityIcon_entity,
+      )
+    }

@@ -19,9 +19,18 @@ import co.typie.graphql.FolderActions_UpdateEntityIcon_Mutation
 import co.typie.graphql.FolderScreen_Query
 import co.typie.graphql.FolderShare_PersistBlobAsImage_Mutation
 import co.typie.graphql.FolderShare_UpdateFoldersOption_Mutation
+import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildEntity
+import co.typie.graphql.builder.buildFolder
+import co.typie.graphql.builder.buildSite
 import co.typie.graphql.executeMutation
+import co.typie.graphql.text
 import co.typie.graphql.type.DeleteDocumentInput
 import co.typie.graphql.type.DeleteEntitiesInput
+import co.typie.graphql.type.EntityAvailability
+import co.typie.graphql.type.EntityState
+import co.typie.graphql.type.EntityType
 import co.typie.graphql.type.EntityVisibility
 import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.type.PersistBlobAsImageInput
@@ -43,7 +52,11 @@ class FolderViewModel :
   var entityId by mutableStateOf("")
 
   val query =
-    Apollo.watchQuery(scope = viewModelScope, skip = { entityId.isBlank() }) {
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderData(),
+      skip = { entityId.isBlank() },
+    ) {
       FolderScreen_Query(entityId = entityId)
     }
 
@@ -249,3 +262,34 @@ class FolderViewModel :
   ): UpdateFoldersOptionInput =
     UpdateFoldersOptionInput.Builder().folderIds(folderIds).apply(block).build()
 }
+
+private fun placeholderData() =
+  FolderScreen_Query.Data(PlaceholderResolver) {
+    entity = buildEntity {
+      id = "placeholder-folder"
+      type = EntityType.FOLDER
+      state = EntityState.ACTIVE
+      depth = 0
+      order = "0"
+      slug = "placeholder-folder"
+      url = ""
+      icon = "folder"
+      iconColor = "gray"
+      visibility = EntityVisibility.PRIVATE
+      availability = EntityAvailability.PRIVATE
+      ancestors = emptyList()
+      children = emptyList()
+      site = buildSite {
+        id = "placeholder-site"
+        name = text(4..8)
+      }
+      node = buildFolder {
+        id = "placeholder-folder-node"
+        name = text(5..10)
+        maxDescendantFoldersDepth = 0
+        folderCount = 0
+        documentCount = 0
+        characterCount = 0
+      }
+    }
+  }

@@ -1,8 +1,11 @@
 fragment NoteLinkedEntity_entity on Entity {
+  id
   ...EntityRow_entity
+  ...EntityIcon_entity
 }
 
 fragment NoteEntityPicker_entity on Entity {
+  id
   ...EntityRow_entity
   ...EntityRowParent_entity
 }

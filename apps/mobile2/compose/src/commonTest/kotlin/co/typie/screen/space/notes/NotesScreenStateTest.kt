@@ -1,7 +1,5 @@
 package co.typie.screen.space.notes
 
-import co.typie.domain.note.id
-import co.typie.domain.note.linkedEntities
 import co.typie.domain.note.notesDocumentEntity
 import co.typie.domain.note.notesNote
 import co.typie.graphql.type.NoteStatus
@@ -103,13 +101,12 @@ class NotesScreenStateTest {
     assertEquals("red", overlaid.color)
     assertEquals(NoteStatus.RESOLVED, overlaid.status)
     assertEquals(Instant.parse("2024-01-02T00:00:00Z"), overlaid.updatedAt)
-    assertEquals(listOf(linkedEntity.id), overlaid.linkedEntities().map { it.id })
+    assertEquals(listOf(linkedEntity.id), overlaid.entities.map { it.noteLinkedEntity_entity.id })
     assertEquals(
       listOf(linkedEntity.id),
-      state
-        .overlay(notesNote(id = "note", content = "server", color = "gray"))
-        .linkedEntities()
-        .map { it.id },
+      state.overlay(notesNote(id = "note", content = "server", color = "gray")).entities.map {
+        it.noteLinkedEntity_entity.id
+      },
     )
   }
 

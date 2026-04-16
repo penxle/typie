@@ -8,8 +8,13 @@ fragment EntityDetailsFolder_folder on Folder {
 
 fragment EntityDetails_entity on Entity {
   ...EntityRow_entity
+  ...EntityBreadcrumb_entity
   visibility
   availability
+
+  ancestors {
+    id
+  }
 
   node {
     __typename
@@ -20,19 +25,6 @@ fragment EntityDetails_entity on Entity {
 
     ... on Folder {
       ...EntityDetailsFolder_folder
-    }
-  }
-
-  ancestors {
-    id
-
-    node {
-      __typename
-
-      ... on Folder {
-        id
-        name
-      }
     }
   }
 }

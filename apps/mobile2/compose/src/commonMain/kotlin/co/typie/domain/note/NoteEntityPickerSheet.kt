@@ -41,6 +41,7 @@ import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entity.formatEntityExcerpt
 import co.typie.domain.entity.formatFolderName
 import co.typie.domain.entity.formatFolderRowSummary
+import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.verticalScroll
 import co.typie.graphql.NoteEntityPicker_Search_Query
 import co.typie.graphql.QueryState
@@ -308,12 +309,13 @@ private data class NotePickerItem(
 }
 
 private fun recentNotePickerItem(entity: NoteEntityPicker_entity): NotePickerItem {
+  val rowEntity = entity.entityRow_entity
   return NotePickerItem(
-    entity = entity.entity,
-    title = AnnotatedString(entity.entity.displayTitle()),
-    previewText = entity.entity.displayPreviewText()?.let(::AnnotatedString),
+    entity = rowEntity,
+    title = AnnotatedString(rowEntity.displayTitle()),
+    previewText = rowEntity.displayPreviewText()?.let(::AnnotatedString),
     previewMaxLines = 2,
-    parentFolder = entity.parentFolder(),
+    parentFolder = entity.entityRowParent_entity.parentFolderMeta(),
   )
 }
 
@@ -324,28 +326,30 @@ private fun searchNotePickerItem(
 ): NotePickerItem? {
   hit.onSearchHitDocument?.let { documentHit ->
     val entity = documentHit.document.entity.noteEntityPicker_entity
-    val document = entity.entity.document ?: return null
+    val rowEntity = entity.entityRow_entity
+    val document = rowEntity.document ?: return null
     val title = formatDocumentTitle(documentHit.title ?: document.title)
     val subtitle = documentHit.subtitle ?: document.subtitle
     val previewText = documentHit.text ?: formatEntityExcerpt(document.excerpt)
 
     return NotePickerItem(
-      entity = entity.entity,
+      entity = rowEntity,
       title = buildSearchHighlightedText(title, highlightColor),
       subtitle = subtitle?.let { buildSearchHighlightedText(it, highlightColor, mutedTextColor) },
       previewText = buildSearchHighlightedText(previewText, highlightColor),
       previewMaxLines = if (documentHit.text != null) 2 else 1,
-      parentFolder = entity.parentFolder(),
+      parentFolder = entity.entityRowParent_entity.parentFolderMeta(),
     )
   }
 
   hit.onSearchHitFolder?.let { folderHit ->
     val entity = folderHit.folder.entity.noteEntityPicker_entity
-    val folder = entity.entity.folder ?: return null
+    val rowEntity = entity.entityRow_entity
+    val folder = rowEntity.folder ?: return null
     val title = formatFolderName(folderHit.name ?: folder.name)
 
     return NotePickerItem(
-      entity = entity.entity,
+      entity = rowEntity,
       title = buildSearchHighlightedText(title, highlightColor),
       previewText =
         AnnotatedString(
@@ -354,7 +358,7 @@ private fun searchNotePickerItem(
             documentCount = folder.documentCount,
           )
         ),
-      parentFolder = entity.parentFolder(),
+      parentFolder = entity.entityRowParent_entity.parentFolderMeta(),
     )
   }
 

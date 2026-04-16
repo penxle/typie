@@ -62,8 +62,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.datetime.timeAgo
+import co.typie.domain.entity.EntityIcon
 import co.typie.domain.entity.displayTitle
-import co.typie.domain.entity.iconAppearance
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
@@ -316,7 +316,7 @@ private fun NoteExpandedContent(
         }
       }
 
-      val linkedEntities = note.linkedEntities()
+      val linkedEntities = note.entities.map { it.noteLinkedEntity_entity }
       if (linkedEntities.isNotEmpty()) {
         FlowRow(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -620,7 +620,7 @@ private fun NoteColorPalette(
 
 @Composable
 private fun NoteCollapsedMetaRow(note: NoteCard_note) {
-  val meta = buildCollapsedMeta(note.linkedEntities())
+  val meta = buildCollapsedMeta(note.entities.map { it.noteLinkedEntity_entity })
   val density = LocalDensity.current
   val spacingPx = with(density) { 6.dp.roundToPx() }
   val mutedCaptionStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textMuted)
@@ -723,8 +723,7 @@ private fun NoteLinkedEntityChip(
   modifier: Modifier = Modifier,
   onClick: (() -> Unit)? = null,
 ) {
-  val entity = linkedEntity.entity
-  val iconAppearance = entity.entityIcon_entity.iconAppearance
+  val entity = linkedEntity.entityRow_entity
 
   @Composable
   fun ChipRow(chipModifier: Modifier) {
@@ -737,7 +736,7 @@ private fun NoteLinkedEntityChip(
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Icon(icon = iconAppearance.icon, modifier = Modifier.size(12.dp), tint = iconAppearance.tint)
+      EntityIcon(entity = linkedEntity.entityIcon_entity, modifier = Modifier.size(12.dp))
 
       Text(
         text = entity.displayTitle(),

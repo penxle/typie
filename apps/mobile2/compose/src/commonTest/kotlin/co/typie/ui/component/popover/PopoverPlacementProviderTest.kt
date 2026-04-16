@@ -3,7 +3,6 @@ package co.typie.ui.component.popover
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,13 +24,14 @@ class PopoverPlacementProviderTest {
     placement: PopoverPlacement,
     popupContentSize: IntSize = popupSize,
   ): IntOffset {
-    val provider = PopoverPlacementProvider(placement, screenPadding)
-    return provider.calculatePosition(
-      anchorBounds,
-      windowSize,
-      LayoutDirection.Ltr,
-      popupContentSize,
-    )
+    return resolvePopoverGeometry(
+        anchorBounds = anchorBounds,
+        windowSize = windowSize,
+        placement = placement,
+        popupContentSize = popupContentSize,
+        screenPadding = screenPadding,
+      )
+      .popupOffset
   }
 
   private fun resolveGeometry(

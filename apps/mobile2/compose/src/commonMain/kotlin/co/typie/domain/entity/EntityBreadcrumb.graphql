@@ -1,0 +1,15 @@
+fragment EntityBreadcrumb_entity on Entity {
+  site {
+    name
+  }
+
+  ancestors {
+    node {
+      __typename
+
+      ... on Folder {
+        name
+      }
+    }
+  }
+}

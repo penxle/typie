@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.timeAgo
+import co.typie.domain.entity.EntityIcon
 import co.typie.domain.entity.EntityRow
 import co.typie.domain.entity.document
 import co.typie.domain.entity.folder
@@ -26,7 +27,6 @@ import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entity.formatEntityExcerpt
 import co.typie.domain.entity.formatFolderName
 import co.typie.domain.entity.formatFolderRowSummary
-import co.typie.domain.entity.iconAppearance
 import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -150,7 +150,8 @@ private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
 @Composable
 private fun RecentFolders(data: HomeScreen_Query.Data) {
   val nav = Nav.current
-  val folders = data.me.recentlyViewedEntities.mapNotNull { it.node.onFolder }
+  val folders =
+    data.me.recentlyViewedEntities.mapNotNull { it.node.onFolder?.homeRecentFolder_folder }
 
   Column {
     Skeleton.Keep {
@@ -174,13 +175,11 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
         )
       }
     } else {
-      for (folderNode in folders) {
-        val entity = folderNode.entity.entityRow_entity
+      for (recentFolder in folders) {
+        val entity = recentFolder.entity.entityRow_entity
         val folder = entity.folder ?: continue
 
         InteractionScope {
-          val iconAppearance = entity.entityIcon_entity.iconAppearance
-
           Column(
             modifier =
               Modifier.width(140.dp)
@@ -189,11 +188,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
                 .clickable { nav.navigate(Route.Folder(entity.id)) }
                 .padding(16.dp)
           ) {
-            Icon(
-              icon = iconAppearance.icon,
-              modifier = Modifier.size(18.dp),
-              tint = iconAppearance.tint,
-            )
+            EntityIcon(entity = entity.entityIcon_entity, modifier = Modifier.size(18.dp))
 
             Spacer(Modifier.height(6.dp))
 
@@ -221,7 +216,8 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
 @Composable
 private fun RecentDocuments(data: HomeScreen_Query.Data) {
   val nav = Nav.current
-  val documents = data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument }
+  val documents =
+    data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument?.homeRecentDocument_document }
 
   Column {
     Skeleton.Keep {
@@ -247,10 +243,10 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
         modifier =
           Modifier.background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
       ) {
-        documents.separated(separator = { Divider(inset = 16.dp) }) { documentNode ->
-          val entity = documentNode.entity.entityRow_entity
+        documents.separated(separator = { Divider(inset = 16.dp) }) { recentDocument ->
+          val entity = recentDocument.entity.entityRow_entity
           val document = entity.document ?: return@separated
-          val parentFolder = documentNode.entity.entityRowParent_entity.parentFolderMeta()
+          val parentFolder = recentDocument.entity.entityRowParent_entity.parentFolderMeta()
 
           EntityRow(entity = entity, onClick = { nav.navigate(Route.Editor(entity.id)) }) {
             parentMeta(parentFolder)

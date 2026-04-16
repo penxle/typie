@@ -3,12 +3,8 @@ package co.typie.domain.entity
 import co.typie.graphql.fragment.EntityDetailsDocument_document
 import co.typie.graphql.fragment.EntityDetailsFolder_folder
 import co.typie.graphql.fragment.EntityDetails_entity
-import co.typie.graphql.fragment.EntityRow_entity
 import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityVisibility
-
-val EntityDetails_entity.entity: EntityRow_entity
-  get() = entityRow_entity
 
 val EntityDetails_entity.document: EntityDetailsDocument_document?
   get() = node.onDocument?.entityDetailsDocument_document
@@ -16,11 +12,8 @@ val EntityDetails_entity.document: EntityDetailsDocument_document?
 val EntityDetails_entity.folder: EntityDetailsFolder_folder?
   get() = node.onFolder?.entityDetailsFolder_folder
 
-fun EntityDetails_entity.breadcrumbNames(siteName: String? = null): List<String> {
-  return buildList {
-    siteName?.takeIf { it.isNotBlank() }?.let(::add)
-    addAll(ancestors.mapNotNull { it.node.onFolder?.name })
-  }
+fun EntityDetails_entity.breadcrumbNames(): List<String> {
+  return entityBreadcrumb_entity.breadcrumbSegments()
 }
 
 internal data class EntityVisibilityPresentation(val label: String, val isShared: Boolean)

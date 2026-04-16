@@ -1,17 +1,28 @@
-query TrashScreen_WithSiteId_Query($siteId: ID!) {
+fragment TrashActionsHeader_entity on Entity {
+  ...EntityRow_entity
+  ...EntityBreadcrumb_entity
+}
+
+query TrashScreen_ItemActions_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    ...TrashActionsHeader_entity
+  }
+}
+
+query TrashScreen_Root_Query($siteId: ID!) {
   site(siteId: $siteId) @catch(to: THROW) {
     id
     name
 
     deletedEntities {
-      ...EntityDetails_entity
+      ...EntityRow_entity
     }
   }
 }
 
-query TrashScreen_WithEntityId_Query($entityId: ID!) {
+query TrashScreen_Folder_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
-    ...EntityDetails_entity
+    ...EntityRow_entity
     state
     site {
       id
@@ -19,7 +30,7 @@ query TrashScreen_WithEntityId_Query($entityId: ID!) {
     }
 
     deletedChildren {
-      ...EntityDetails_entity
+      ...EntityRow_entity
     }
   }
 }

@@ -8,19 +8,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import co.typie.graphql.EntityItemActions_Query
 import co.typie.graphql.QueryState
-import co.typie.graphql.fragment.EntityDetails_entity
 import co.typie.graphql.fragment.EntityRow_entity
 import co.typie.ui.component.Divider
-import co.typie.ui.component.EntityBreadcrumb
-import co.typie.ui.component.EntityHeader
-import co.typie.ui.component.EntitySupportingText
 import co.typie.ui.component.sheet.SheetActionRow
 import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 
 private val MenuSheetHorizontalPadding = 24.dp
@@ -30,17 +26,11 @@ private val MenuSheetRowPadding = PaddingValues(vertical = 12.dp)
 
 @Composable
 context(_: SheetScope<Unit>)
-internal fun FolderItemActionsSheet(
-  entity: EntityRow_entity,
-  siteName: String? = null,
-  onAction: (EntityAction) -> Unit,
-) {
-  val detailsState = rememberEntityItemActionsState(entity.id)
+internal fun FolderItemActionsSheet(entity: EntityRow_entity, onAction: (EntityAction) -> Unit) {
+  val detailsQuery = rememberEntityItemActionsQuery(entity)
   FolderItemActionsSheetContent(
-    entity = entity,
-    details = (detailsState as? QueryState.Success)?.data?.entity?.entityDetails_entity,
-    siteName = siteName,
-    isLoadingDetails = detailsState is QueryState.Loading,
+    details = detailsQuery.data.entity,
+    resolved = detailsQuery.state is QueryState.Success,
     onAction = onAction,
   )
 }
@@ -48,24 +38,19 @@ internal fun FolderItemActionsSheet(
 @Composable
 context(_: SheetScope<Unit>)
 private fun FolderItemActionsSheetContent(
-  entity: EntityRow_entity,
-  details: EntityDetails_entity?,
-  siteName: String?,
-  isLoadingDetails: Boolean,
+  details: EntityItemActions_Query.Entity,
+  resolved: Boolean,
   onAction: (EntityAction) -> Unit,
 ) {
+  val entity = details.entityItemActionsHeader_entity.entityRow_entity
   val folder =
     entity.folder
       ?: run {
         EntityItemActionsStatusContent(message = "폴더 정보를 표시할 수 없어요.")
         return
       }
-  val entityIcon = entity.entityIcon_entity.iconAppearance
-  val breadcrumbNames =
-    details?.breadcrumbNames(siteName)
-      ?: siteName?.takeIf(String::isNotBlank)?.let(::listOf).orEmpty()
-  val visibility = details?.let(::entityVisibilityPresentation)
-  val characterCount = details?.folder?.characterCount
+  val characterCount =
+    if (resolved) details.folderItemActions_entity.node.onFolder?.characterCount else null
 
   SheetLayout(
     bodyScroll = false,
@@ -76,44 +61,23 @@ private fun FolderItemActionsSheetContent(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        EntityHeader(
-          title = formatFolderName(folder.name),
-          icon = entityIcon.icon,
+        EntityItemActionsHeader(
+          entity = details.entityItemActionsHeader_entity,
+          isLoading = !resolved,
           modifier = Modifier.padding(horizontal = MenuSheetHorizontalPadding),
-          iconTint = entityIcon.tint,
         ) {
-          if (breadcrumbNames.isNotEmpty() || isLoadingDetails) {
-            Skeleton(enabled = isLoadingDetails) {
-              EntityBreadcrumb(
-                segments =
-                  if (breadcrumbNames.isNotEmpty()) breadcrumbNames else listOf(Skeleton.text(4..8))
-              )
-            }
-          }
-          if (visibility != null || isLoadingDetails) {
-            Skeleton(enabled = isLoadingDetails) {
-              EntitySupportingText(
-                text = visibility?.label ?: Skeleton.text(4..8),
-                color =
-                  if (visibility?.isShared == true) AppTheme.colors.brand
-                  else AppTheme.colors.textMuted,
-              )
-            }
-          }
-          if (characterCount != null || isLoadingDetails) {
-            Skeleton(enabled = isLoadingDetails) {
-              EntitySupportingText(
-                text =
-                  characterCount?.let {
-                    formatFolderMetadataSummary(
-                      folderCount = folder.folderCount,
-                      documentCount = folder.documentCount,
-                      characterCount = it,
-                    )
-                  } ?: Skeleton.text(10..18)
-              )
-            }
-          }
+          supportingText(
+            text =
+              characterCount?.let {
+                formatFolderMetadataSummary(
+                  folderCount = folder.folderCount,
+                  documentCount = folder.documentCount,
+                  characterCount = it,
+                )
+              },
+            loading = !resolved,
+            placeholderLength = 10..18,
+          )
         }
 
         Divider(color = AppTheme.colors.borderDefault)

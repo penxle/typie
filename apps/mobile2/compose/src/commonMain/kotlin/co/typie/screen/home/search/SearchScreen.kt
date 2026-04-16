@@ -32,6 +32,8 @@ import co.typie.ext.separated
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.SearchScreen_Search_Query
+import co.typie.graphql.fragment.SearchResultDocument_hit
+import co.typie.graphql.fragment.SearchResultFolder_hit
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
@@ -159,7 +161,7 @@ private fun RecentSearches(onSelect: (String) -> Unit, onRemove: (String) -> Uni
 private fun SearchResults(data: SearchScreen_Search_Query.Data, onClick: () -> Unit = {}) {
   val hits =
     data.search.hits.filter { hit ->
-      hit.onSearchHitDocument != null || hit.onSearchHitFolder != null
+      hit.searchResultDocument_hit != null || hit.searchResultFolder_hit != null
     }
 
   Column {
@@ -167,12 +169,12 @@ private fun SearchResults(data: SearchScreen_Search_Query.Data, onClick: () -> U
       Column(Modifier.fillMaxWidth()) {
         hits.separated(separator = { CardDivider() }) { hit ->
           when {
-            hit.onSearchHitDocument != null -> {
-              DocumentRow(hit = hit.onSearchHitDocument, onClick = onClick)
+            hit.searchResultDocument_hit != null -> {
+              DocumentRow(hit = requireNotNull(hit.searchResultDocument_hit), onClick = onClick)
             }
 
-            hit.onSearchHitFolder != null -> {
-              FolderRow(hit = hit.onSearchHitFolder, onClick = onClick)
+            hit.searchResultFolder_hit != null -> {
+              FolderRow(hit = requireNotNull(hit.searchResultFolder_hit), onClick = onClick)
             }
           }
         }
@@ -182,10 +184,7 @@ private fun SearchResults(data: SearchScreen_Search_Query.Data, onClick: () -> U
 }
 
 @Composable
-private fun DocumentRow(
-  hit: SearchScreen_Search_Query.OnSearchHitDocument,
-  onClick: suspend () -> Unit,
-) {
+private fun DocumentRow(hit: SearchResultDocument_hit, onClick: suspend () -> Unit) {
   val nav = Nav.current
 
   val entity = hit.document.entity.entityRow_entity
@@ -218,10 +217,7 @@ private fun DocumentRow(
 }
 
 @Composable
-private fun FolderRow(
-  hit: SearchScreen_Search_Query.OnSearchHitFolder,
-  onClick: suspend () -> Unit,
-) {
+private fun FolderRow(hit: SearchResultFolder_hit, onClick: suspend () -> Unit) {
   val nav = Nav.current
   val entity = hit.folder.entity.entityRow_entity
   val folder = entity.folder ?: return

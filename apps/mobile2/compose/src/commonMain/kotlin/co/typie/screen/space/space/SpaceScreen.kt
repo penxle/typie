@@ -426,7 +426,7 @@ fun SpaceScreen() {
             } else {
               presenterScope.launch {
                 sheet.present {
-                  DocumentItemActionsSheet(entity = entity, siteName = site?.name) { action ->
+                  DocumentItemActionsSheet(entity = entity) { action ->
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
@@ -522,7 +522,7 @@ fun SpaceScreen() {
             } else {
               presenterScope.launch {
                 sheet.present {
-                  FolderItemActionsSheet(entity = entity, siteName = site?.name) { action ->
+                  FolderItemActionsSheet(entity = entity) { action ->
                     when (action) {
                       EntityAction.Rename -> {
                         presenterScope.launch {
