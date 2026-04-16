@@ -16,9 +16,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidedValue
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -65,18 +67,35 @@ fun NavigationStack(
   val exitTopBarState = remember { TopBarState() }
   val exitBottomBarState = remember { bottomBarState?.let { BottomBarState() } }
 
-  @Composable
-  fun RouteContent(route: Route) {
-    val owner =
-      remember(route) {
-        object : ViewModelStoreOwner {
-          override val viewModelStore = navigator.viewModelStoreFor(route)
+  // 라우트별 movable content 캐시. 메인/비하인드 슬롯 사이를 오가도
+  // 동일한 composition 인스턴스를 유지해 currentCompositeKeyHashCode가
+  // 안정적으로 유지된다. (같은 스크린을 두 call site에서 composition하면
+  // compound key가 달라져 viewModel/rememberSaveable 키가 꼬인다.)
+  val latestContent by rememberUpdatedState(content)
+  val routeContents = remember { mutableMapOf<Route, @Composable () -> Unit>() }
+  val routeContentFor: (Route) -> @Composable () -> Unit = { route ->
+    routeContents.getOrPut(route) {
+      movableContentOf {
+        val owner = remember {
+          object : ViewModelStoreOwner {
+            override val viewModelStore = navigator.viewModelStoreFor(route)
+          }
+        }
+        CompositionLocalProvider(
+          LocalViewModelStoreOwner provides owner,
+          LocalRoute provides route,
+        ) {
+          ProvideBottomBar(enabled = false)
+          latestContent(route)
         }
       }
-    CompositionLocalProvider(LocalViewModelStoreOwner provides owner, LocalRoute provides route) {
-      ProvideBottomBar(enabled = false)
-      content(route)
     }
+  }
+
+  // 백스택에서 제거된 라우트의 movable 캐시 정리
+  LaunchedEffect(Unit) {
+    snapshotFlow { navigator.stack.toSet() }
+      .collect { active -> routeContents.keys.retainAll(active) }
   }
 
   val scope = rememberCoroutineScope()
@@ -218,7 +237,7 @@ fun NavigationStack(
                 behindBottomBar?.let { add(LocalBottomBarState provides it) }
               }
             CompositionLocalProvider(*behindProviders.toTypedArray()) {
-              RouteContent(behindRoute!!)
+              routeContentFor(behindRoute!!).invoke()
             }
           }
         } else {
@@ -239,7 +258,7 @@ fun NavigationStack(
                 behindBottomBar?.let { add(LocalBottomBarState provides it) }
               }
             CompositionLocalProvider(*behindProviders.toTypedArray()) {
-              RouteContent(behindRoute!!)
+              routeContentFor(behindRoute!!).invoke()
             }
           }
           // Dim overlay — 전환 중 behind 화면 터치 차단
@@ -331,7 +350,9 @@ fun NavigationStack(
             add(LocalTopBarState provides mainTopBar)
             mainBottomBar?.let { add(LocalBottomBarState provides it) }
           }
-        CompositionLocalProvider(*mainProviders.toTypedArray()) { RouteContent(mainRoute) }
+        CompositionLocalProvider(*mainProviders.toTypedArray()) {
+          routeContentFor(mainRoute).invoke()
+        }
       }
 
       // 제스처 감지 영역
