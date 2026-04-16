@@ -11,7 +11,6 @@ import co.typie.graphql.text
 import co.typie.graphql.watchQuery
 
 class MoreViewModel : ViewModel() {
-
   val query =
     Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       MoreScreen_Query()

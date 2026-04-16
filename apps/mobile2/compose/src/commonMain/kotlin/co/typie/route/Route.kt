@@ -37,6 +37,8 @@ sealed interface Route {
 
   data object Settings : Route
 
+  data object Feedback : Route
+
   data object OssLicenses : Route
 
   data object FontSettings : Route

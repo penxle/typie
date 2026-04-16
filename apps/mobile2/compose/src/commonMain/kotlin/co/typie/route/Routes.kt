@@ -5,6 +5,7 @@ import co.typie.screen.auth.login.LoginScreen
 import co.typie.screen.editor.editor.EditorScreen
 import co.typie.screen.home.home.HomeScreen
 import co.typie.screen.home.search.SearchScreen
+import co.typie.screen.more.feedback.FeedbackScreen
 import co.typie.screen.more.more.MoreScreen
 import co.typie.screen.more.stats.StatsScreen
 import co.typie.screen.settings.aisettings.AiSettingsScreen
@@ -41,6 +42,7 @@ fun MainRoutes(route: Route) {
     is Route.Notes -> NotesScreen()
     is Route.More -> MoreScreen()
     is Route.Stats -> StatsScreen()
+    is Route.Feedback -> FeedbackScreen()
     is Route.CurrentPlan -> CurrentPlanScreen()
     is Route.EnrollPlan -> EnrollPlanScreen()
     is Route.CancelPlan -> CancelPlanScreen()

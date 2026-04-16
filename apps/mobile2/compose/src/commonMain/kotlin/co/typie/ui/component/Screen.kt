@@ -51,7 +51,7 @@ fun Screen(
   background: Color = AppTheme.colors.surfaceBase,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
   foregroundOverlay: (@Composable BoxScope.() -> Unit)? = null,
-  content: @Composable (contentPadding: PaddingValues) -> Unit,
+  content: @Composable BoxScope.(contentPadding: PaddingValues) -> Unit,
 ) {
   val hazeState = remember { HazeState() }
 

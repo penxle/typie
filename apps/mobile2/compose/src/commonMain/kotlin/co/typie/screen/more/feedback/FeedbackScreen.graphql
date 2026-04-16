@@ -1,0 +1,3 @@
+mutation FeedbackScreen_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
+  submitFeedback(input: $input)
+}

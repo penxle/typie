@@ -217,6 +217,7 @@ apollo {
       "src/commonMain/graphql/apollo.graphqls",
     )
 
+    mapScalar("Binary", "kotlin.ByteArray", "co.typie.graphql.adapter.BinaryAdapter")
     mapScalar("DateTime", "kotlin.time.Instant", "co.typie.graphql.adapter.InstantAdapter")
     mapScalar(
       "JSON",

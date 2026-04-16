@@ -1,5 +1,6 @@
 package co.typie.domain.settings
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -12,7 +13,17 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
 @Composable
-fun SettingsCardRow(label: String, onClick: suspend () -> Unit) {
+fun SettingsCardRow(
+  label: String,
+  trailing: @Composable RowScope.() -> Unit = {
+    Icon(
+      icon = Lucide.ChevronRight,
+      modifier = Modifier.size(16.dp),
+      tint = AppTheme.colors.textTertiary,
+    )
+  },
+  onClick: suspend () -> Unit,
+) {
   CardRow(onClick = onClick) {
     Text(
       text = label,
@@ -22,10 +33,6 @@ fun SettingsCardRow(label: String, onClick: suspend () -> Unit) {
       overflow = TextOverflow.Ellipsis,
     )
 
-    Icon(
-      icon = Lucide.ChevronRight,
-      modifier = Modifier.size(16.dp),
-      tint = AppTheme.colors.textTertiary,
-    )
+    trailing()
   }
 }

@@ -15,7 +15,3 @@ query MoreScreen_Query {
     }
   }
 }
-
-mutation MoreScreen_SubmitFeedback_Mutation($input: SubmitFeedbackInput!) {
-  submitFeedback(input: $input)
-}
