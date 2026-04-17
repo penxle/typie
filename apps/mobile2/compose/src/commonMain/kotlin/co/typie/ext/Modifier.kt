@@ -9,6 +9,8 @@ import androidx.compose.foundation.combinedClickable as foundationCombinedClicka
 import androidx.compose.foundation.horizontalScroll as foundationHorizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll as foundationVerticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -24,6 +26,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 val LocalInteractionSource = compositionLocalOf<MutableInteractionSource?> { null }
@@ -40,9 +43,13 @@ fun InteractionScope(content: @Composable () -> Unit) {
   CompositionLocalProvider(LocalInteractionSource provides interactionSource) { content() }
 }
 
-fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier = composed {
+fun Modifier.verticalScroll(
+  state: ScrollState,
+  enabled: Boolean = true,
+  padding: PaddingValues = AppTheme.spacings.scrollBottomPadding,
+): Modifier = composed {
   val isLocked = LocalScrollGestureLockState.current.isLocked
-  foundationVerticalScroll(state, enabled = enabled && !isLocked)
+  foundationVerticalScroll(state, enabled = enabled && !isLocked) then this.padding(padding)
 }
 
 fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier = composed {
@@ -113,8 +120,6 @@ fun Modifier.pointerIgnore(): Modifier =
       }
     }
   }
-
-internal fun Modifier.touchShield(): Modifier = pointerInput(Unit) {}
 
 fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier = composed {
   val interactionSource = LocalInteractionSource.current ?: return@composed Modifier

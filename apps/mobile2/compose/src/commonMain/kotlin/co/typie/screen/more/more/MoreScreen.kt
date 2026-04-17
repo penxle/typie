@@ -23,6 +23,7 @@ import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionService.subscription
 import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.ext.navigationBarsPadding
+import co.typie.ext.plus
 import co.typie.ext.verticalScroll
 import co.typie.generated.resources.Res
 import co.typie.icons.Lucide
@@ -70,7 +71,11 @@ fun MoreScreen() {
 
   Screen(loadable = model.query) { contentPadding ->
     Column(
-      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding)
+          .padding(bottom = BottomBarDefaults.BarAreaHeight),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Skeleton.Keep { Text("더 보기", style = AppTheme.typography.display) }

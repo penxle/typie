@@ -220,4 +220,7 @@ object AppTheme {
 
   val shapes: AppShapes
     get() = AppShapes
+
+  val spacings: AppSpacings
+    get() = AppSpacings
 }
