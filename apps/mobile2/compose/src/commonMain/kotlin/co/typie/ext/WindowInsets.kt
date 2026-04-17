@@ -33,7 +33,10 @@ fun Modifier.navigationBarsPadding(): Modifier = windowInsetsPadding(WindowInset
 fun Modifier.safeDrawingPadding(): Modifier = windowInsetsPadding(WindowInsets.safeDrawing)
 
 @Composable
-fun Modifier.safeBottomPadding(): Modifier = windowInsetsPadding(WindowInsets.safeDrawing)
+fun Modifier.safeBottomPadding(): Modifier {
+  val safeBottom = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+  return padding(bottom = safeBottom)
+}
 
 @Composable
 fun Modifier.imePadding(): Modifier {

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,7 +74,7 @@ fun EntityContainerListContent(
       EntityContainerReorderListCard(
         items = items,
         reorderState = reorderState,
-        modifier = Modifier.padding(horizontal = 16.dp),
+        modifier = Modifier,
         onDragStarted = onDragStarted,
         onDragMoved = onDragMoved,
         onDragStopped = onDragStopped,
@@ -83,8 +82,7 @@ fun EntityContainerListContent(
     } else if (items.isEmpty()) {
       Box(
         modifier =
-          Modifier.padding(horizontal = 16.dp)
-            .fillMaxWidth()
+          Modifier.fillMaxWidth()
             .height(110.dp)
             .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md)),
         contentAlignment = Alignment.Center,
@@ -92,7 +90,7 @@ fun EntityContainerListContent(
         Text(emptyMessage, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
       }
     } else {
-      CardSurface(modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
+      CardSurface(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth()) {
           items.separated(separator = { CardDivider() }) { entity ->
             EntityContainerItemRow(

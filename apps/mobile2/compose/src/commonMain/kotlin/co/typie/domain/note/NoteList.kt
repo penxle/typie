@@ -33,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
@@ -130,20 +129,10 @@ internal fun NoteList(
         )
   ) {
     Column(
-      modifier =
-        Modifier.fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .safeBottomPadding(),
+      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      Skeleton.Keep {
-        Text(
-          text = "노트",
-          style = AppTheme.typography.display,
-          modifier = Modifier.padding(top = 4.dp),
-        )
-      }
+      Skeleton.Keep { Text(text = "노트", style = AppTheme.typography.display) }
 
       if (showEmptyState) {
         NoteEmptyState(message = emptyMessage)

@@ -45,6 +45,7 @@ import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPill
 import co.typie.ui.component.Divider
 import co.typie.ui.component.Screen
+import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
@@ -95,9 +96,12 @@ fun HomeScreen() {
       Modifier.fillMaxSize()
         .verticalScroll(scrollState)
         .padding(contentPadding)
+        .padding(bottom = BottomBarDefaults.BarAreaHeight)
         .padding(AppTheme.spacings.scrollBottomPadding)
     ) {
       Skeleton.Keep { Text("홈", style = AppTheme.typography.display) }
+
+      Spacer(Modifier.height(16.dp))
 
       Skeleton.Bone(
         modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -160,11 +164,9 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
     data.me.recentlyViewedEntities.mapNotNull { it.node.onFolder?.homeRecentFolder_folder }
 
   Column {
-    Skeleton.Keep {
-      Text("최근 폴더", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
-    }
+    Skeleton.Keep { SectionTitle("최근 폴더") }
 
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(16.dp))
 
     if (folders.isEmpty()) {
       Box(
@@ -226,9 +228,9 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
     data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument?.homeRecentDocument_document }
 
   Column {
-    Skeleton.Keep {
-      Text("최근 문서", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
-    }
+    Skeleton.Keep { SectionTitle("최근 문서") }
+
+    Spacer(Modifier.height(16.dp))
 
     if (documents.isEmpty()) {
       Box(

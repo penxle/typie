@@ -57,7 +57,6 @@ import co.typie.domain.entitytransfer.EntityPasteTarget
 import co.typie.domain.entitytransfer.toMessage
 import co.typie.domain.entitytransfer.toTransferSource
 import co.typie.ext.navigationBarsPadding
-import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
@@ -410,11 +409,7 @@ fun SpaceScreen() {
         selectionState = selectionState,
         dimmedItemIds = cutDimmedItemIds,
         bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
-        modifier =
-          Modifier.fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(contentPadding)
-            .safeBottomPadding(),
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
         header = {
           SpaceHeader(
             title = site?.name.orEmpty(),
@@ -660,10 +655,7 @@ fun SpaceScreen() {
 
 @Composable
 private fun SpaceHeader(title: String, summary: String) {
-  Column(
-    modifier =
-      Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 24.dp)
-  ) {
+  Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
     Text(
       if (title.isBlank()) " " else title,
       style = AppTheme.typography.display,
