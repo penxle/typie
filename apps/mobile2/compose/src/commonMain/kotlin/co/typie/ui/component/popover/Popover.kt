@@ -68,12 +68,13 @@ fun Popover(
     )
 
   val overlayState = LocalPopoverOverlayState.current
+  val overlayOwner = remember { Any() }
   var isExpanded by remember { mutableStateOf(false) }
   var isOverlayVisible by remember { mutableStateOf(false) }
   var anchorBounds by remember { mutableStateOf(IntRect.Zero) }
   var outsideDismissGestureActive by remember { mutableStateOf(false) }
   var reverseAnimationCompleted by remember { mutableStateOf(false) }
-  val animationProgress = remember { Animatable(0f) }
+  val progress = remember { Animatable(0f) }
   val scrollGestureLockState = LocalScrollGestureLockState.current
   val outsideTapHostState = LocalPopoverOutsideTapHostState.current
   val scope = remember { PopoverScope(onClose = { isExpanded = false }) }
@@ -83,6 +84,9 @@ fun Popover(
   }
   val finishOutsideDismissGesture by rememberUpdatedState { outsideDismissGestureActive = false }
   var outsideTapHostHandle by remember { mutableStateOf<PopoverOutsideTapHostHandle?>(null) }
+  val ownsOverlay = overlayState.isOwnedBy(overlayOwner)
+  val latestIsOverlayVisible by rememberUpdatedState(isOverlayVisible)
+  val latestOwnsOverlay by rememberUpdatedState(ownsOverlay)
 
   LaunchedEffect(isExpanded) {
     if (isExpanded) {
@@ -90,26 +94,31 @@ fun Popover(
       reverseAnimationCompleted = false
       scope.acceptsInput = true
       isOverlayVisible = true
-      overlayState.entry =
-        PopoverOverlayEntry(
-          placement = placement,
-          screenPadding = resolvedScreenPadding,
-          collapsedCornerRadius = collapsedCornerRadius,
-          maxWidth = maxWidth,
-          minWidth = minWidth,
-          expandToMaxWidth = expandToMaxWidth,
-          pane = { PopoverPaneSelectionHost(scope = scope, pane = pane) },
-          anchor = { anchor() },
-        )
-      animationProgress.stop()
-      animationProgress.snapTo(0f)
-      animationProgress.animateTo(1f, tween(PopoverDefaults.ForwardDuration, easing = LinearEasing))
+      overlayState.show(
+        owner = overlayOwner,
+        entry =
+          PopoverOverlayEntry(
+            owner = overlayOwner,
+            placement = placement,
+            screenPadding = resolvedScreenPadding,
+            collapsedCornerRadius = collapsedCornerRadius,
+            maxWidth = maxWidth,
+            minWidth = minWidth,
+            expandToMaxWidth = expandToMaxWidth,
+            pane = { PopoverPaneSelectionHost(scope = scope, pane = pane) },
+            anchor = { anchor() },
+          ),
+        anchorBounds = anchorBounds,
+      )
+      progress.stop()
+      progress.snapTo(0f)
+      progress.animateTo(1f, tween(PopoverDefaults.ForwardDuration, easing = LinearEasing))
     } else if (isOverlayVisible) {
-      val from = if (animationProgress.value == 0f) 1f else animationProgress.value
+      val from = if (progress.value == 0f) 1f else progress.value
       reverseAnimationCompleted = false
-      animationProgress.stop()
-      animationProgress.snapTo(from)
-      animationProgress.animateTo(0f, tween(PopoverDefaults.ReverseDuration, easing = LinearEasing))
+      progress.stop()
+      progress.snapTo(from)
+      progress.animateTo(0f, tween(PopoverDefaults.ReverseDuration, easing = LinearEasing))
       reverseAnimationCompleted = true
     }
   }
@@ -124,10 +133,20 @@ fun Popover(
       !isExpanded && isOverlayVisible && reverseAnimationCompleted && !outsideDismissGestureActive
     ) {
       isOverlayVisible = false
-      overlayState.entry = null
-      overlayState.paneBoundsInWindow = null
+      overlayState.clear(overlayOwner)
       scope.pressGestureSession = null
       reverseAnimationCompleted = false
+    }
+  }
+
+  DisposableEffect(overlayState, overlayOwner) {
+    onDispose {
+      if (latestIsOverlayVisible && latestOwnsOverlay) {
+        overlayState.detach(overlayOwner)
+      } else {
+        overlayState.clear(overlayOwner)
+      }
+      scope.pressGestureSession = null
     }
   }
 
@@ -148,7 +167,7 @@ fun Popover(
   }
 
   SideEffect {
-    if (isExpanded) {
+    if (isExpanded && ownsOverlay) {
       outsideTapHostHandle?.update(
         paneBounds = overlayState.paneBoundsInWindow,
         onDismiss = dismissPopoverFromOutsideGesture,
@@ -158,19 +177,21 @@ fun Popover(
   }
 
   SideEffect {
-    if (isOverlayVisible) {
-      overlayState.anchorBounds = anchorBounds
-      overlayState.progress =
-        PopoverDefaults.PopoverEasing.transform(animationProgress.value).coerceIn(0f, 1f)
-      overlayState.interactive = scope.acceptsInput
+    if (isOverlayVisible && ownsOverlay) {
+      overlayState.update(
+        owner = overlayOwner,
+        anchorBounds = anchorBounds,
+        progress = progress.value.coerceIn(0f, 1f),
+        interactive = scope.acceptsInput,
+      )
     }
   }
 
-  PlatformBackHandler(enabled = isOverlayVisible) { isExpanded = false }
+  PlatformBackHandler(enabled = isOverlayVisible && ownsOverlay) { isExpanded = false }
 
-  val progress =
-    if (isOverlayVisible) {
-      PopoverDefaults.PopoverEasing.transform(animationProgress.value).coerceIn(0f, 1f)
+  val easedProgress =
+    if (isOverlayVisible && ownsOverlay) {
+      PopoverDefaults.PopoverEasing.transform(progress.value).coerceIn(0f, 1f)
     } else {
       0f
     }
@@ -216,6 +237,6 @@ fun Popover(
           }
         }
   ) {
-    Box(modifier = Modifier.graphicsLayer { alpha = 1f - progress }) { anchor() }
+    Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
   }
 }

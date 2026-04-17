@@ -1,5 +1,8 @@
 package co.typie.ui.component.popover
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +63,28 @@ private enum class PopoverPaneSlot {
 @Composable
 fun PopoverOverlay(state: PopoverOverlayState) {
   val entry = state.entry ?: return
-  val progress = state.progress
+  val detachedCloseProgress = remember { Animatable(0f) }
+  val detachedCloseRequestId = state.detachedCloseRequestId()
+
+  LaunchedEffect(state.isDetached, detachedCloseRequestId, entry) {
+    if (!state.isDetached) {
+      detachedCloseProgress.snapTo(0f)
+      return@LaunchedEffect
+    }
+
+    val from = state.progress.takeIf { it > 0f } ?: 1f
+    detachedCloseProgress.stop()
+    detachedCloseProgress.snapTo(from)
+    detachedCloseProgress.animateTo(
+      targetValue = 0f,
+      animationSpec = tween(PopoverDefaults.ReverseDuration, easing = LinearEasing),
+    ) {
+      state.updateDetachedProgress(detachedCloseRequestId, value)
+    }
+    state.clearDetached(detachedCloseRequestId)
+  }
+
+  val progress = state.easedProgress
   if (progress <= 0f) return
 
   PopoverPaneContent(
@@ -74,7 +99,7 @@ fun PopoverOverlay(state: PopoverOverlayState) {
     maxWidth = entry.maxWidth,
     minWidth = entry.minWidth,
     expandToMaxWidth = entry.expandToMaxWidth,
-    onPaneBoundsChanged = { state.paneBoundsInWindow = it },
+    onPaneBoundsChanged = { state.updatePaneBounds(entry.owner, it) },
   )
 }
 
