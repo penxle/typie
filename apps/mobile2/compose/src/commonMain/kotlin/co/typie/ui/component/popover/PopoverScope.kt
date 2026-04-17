@@ -7,7 +7,7 @@ import androidx.compose.runtime.setValue
 
 @Stable
 class PopoverScope internal constructor(private val onClose: () -> Unit) {
-  var pointerState: AnchorPointerState? by mutableStateOf(null)
+  internal var pressGestureSession: PressGestureSession? by mutableStateOf(null)
     internal set
 
   var acceptsInput: Boolean by mutableStateOf(true)

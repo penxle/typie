@@ -12,8 +12,7 @@ object PopoverDefaults {
   const val ForwardDuration = 320
   const val ReverseDuration = 240
   const val IndicatorDuration = 140
-  const val ArmDelayMs = 250L
-  val ArmDistance = 9.dp
+  const val ArmDelayMs = 150L
 
   val PopoverEasing: Easing = EaseOutExpo
 }

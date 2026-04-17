@@ -3,6 +3,8 @@ package co.typie.ui.component.popover
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -20,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -34,13 +35,6 @@ import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.safeDrawing
 import co.typie.ext.toPx
 import co.typie.navigation.PlatformBackHandler
-import kotlin.time.TimeSource
-
-data class AnchorPointerState(
-  val position: Offset,
-  val isSelectionArmed: Boolean,
-  val isUp: Boolean,
-)
 
 @Composable
 fun Popover(
@@ -58,7 +52,6 @@ fun Popover(
 ) {
   val density = LocalDensity.current
   val layoutDirection = LocalLayoutDirection.current
-  val armDistancePx = PopoverDefaults.ArmDistance.toPx(density)
   val safeDrawing = WindowInsets.safeDrawing
   val resolvedScreenPadding =
     PopoverScreenPadding(
@@ -105,7 +98,7 @@ fun Popover(
           maxWidth = maxWidth,
           minWidth = minWidth,
           expandToMaxWidth = expandToMaxWidth,
-          pane = { context(scope) { pane() } },
+          pane = { PopoverPaneSelectionHost(scope = scope, pane = pane) },
           anchor = { anchor() },
         )
       animationProgress.stop()
@@ -133,7 +126,7 @@ fun Popover(
       isOverlayVisible = false
       overlayState.entry = null
       overlayState.paneBoundsInWindow = null
-      scope.pointerState = null
+      scope.pressGestureSession = null
       reverseAnimationCompleted = false
     }
   }
@@ -189,51 +182,36 @@ fun Popover(
           anchorBounds = IntRect(pos, coordinates.size)
         }
         .pointerInput(Unit) {
-          awaitPointerEventScope {
-            while (true) {
-              val event = awaitPointerEvent()
-              if (event.type == PointerEventType.Press && !isOverlayVisible) {
-                val press = event.changes.firstOrNull() ?: continue
-                val anchorWindowOffset =
-                  Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
-                val origin = press.position + anchorWindowOffset
-                val gestureTracker =
-                  PopoverAnchorGestureTracker(origin = origin, armDistancePx = armDistancePx)
-                val scrollLockHandle = scrollGestureLockState.acquire()
+          awaitEachGesture {
+            val press = awaitFirstDown(requireUnconsumed = false)
+            if (isOverlayVisible) {
+              return@awaitEachGesture
+            }
 
-                try {
-                  isExpanded = true
-                  val startUpdate = gestureTracker.start()
-                  scope.pointerState = startUpdate.pointerState
-                  if (startUpdate.consumeChange) {
-                    press.consume()
-                  }
+            val anchorWindowOffset = Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
+            val scrollLockHandle = scrollGestureLockState.acquire()
+            var released = false
 
-                  val armStartMark = TimeSource.Monotonic.markNow()
+            try {
+              isExpanded = true
+              press.consume()
 
-                  while (true) {
-                    val moveEvent = awaitPointerEvent()
-                    val change = moveEvent.changes.find { it.id == press.id } ?: break
-
-                    val currentPos = change.position + anchorWindowOffset
-                    val elapsed = armStartMark.elapsedNow().inWholeMilliseconds
-                    val update =
-                      gestureTracker.update(
-                        currentPosition = currentPos,
-                        elapsedMillis = elapsed,
-                        isPressed = change.pressed,
-                      )
-                    scope.pointerState = update.pointerState
-                    if (update.consumeChange) {
-                      change.consume()
-                    }
-
-                    if (!change.pressed) break
-                  }
-                } finally {
-                  scrollLockHandle.release()
+              released =
+                trackPressGestureSession(
+                  pointerId = press.id,
+                  initialPositionInWindow = press.position + anchorWindowOffset,
+                  downUptimeMillis = press.uptimeMillis,
+                  armDelayMillis = PopoverDefaults.ArmDelayMs,
+                  resolvePositionInWindow = { change, _ -> change.position + anchorWindowOffset },
+                ) { session, change ->
+                  scope.pressGestureSession = session
+                  change?.consume()
                 }
+            } finally {
+              if (!released) {
+                scope.pressGestureSession = null
               }
+              scrollLockHandle.release()
             }
           }
         }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,36 +36,30 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
 import co.typie.ext.safeDrawing
-import co.typie.ext.toPx
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
-import co.typie.ui.component.popover.AnchorPointerState
-import co.typie.ui.component.popover.PopoverList
-import co.typie.ui.component.popover.PopoverListItem
+import co.typie.ui.component.popover.rememberPressGestureSessionState
+import co.typie.ui.component.popover.trackPressGestureSession
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 data class ActionMenuItem(
   val icon: IconData,
@@ -77,7 +72,6 @@ private const val ACTION_SIZE = 56
 private const val ACTION_GAP = 8
 private const val ACTION_MENU_GAP = 10
 private const val ACTION_SELECTION_ARM_DELAY_MS = 150L
-private const val ACTION_SAME_PRESS_SELECTION_DISTANCE_DP = 9
 
 internal const val ACTION_BUTTON_TOTAL_WIDTH = ACTION_SIZE + ACTION_GAP
 
@@ -89,60 +83,59 @@ fun BottomBarActionButton(
   modifier: Modifier = Modifier,
 ) {
   val colors = AppTheme.colors
-  val density = LocalDensity.current
-  val scope = rememberCoroutineScope()
   val actionInteractionSource = remember { MutableInteractionSource() }
   val actionScale = remember { Animatable(1f) }
   val isActionPressed by actionInteractionSource.collectIsPressedAsState()
   val safeBottomPadding = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
   val hasMenu = menus.isNotEmpty()
-  val samePressSelectionDistance = ACTION_SAME_PRESS_SELECTION_DISTANCE_DP.dp.toPx(density)
+  val pressGestureSessionState = rememberPressGestureSessionState()
+  val menuSelectionState = rememberBottomBarMenuSelectionState()
   var isMenuOpen by remember(icon, menus) { mutableStateOf(false) }
   var isMenuPressed by remember { mutableStateOf(false) }
   var buttonWindowTopLeft by remember { mutableStateOf(Offset.Zero) }
-  var menuPointerState by remember { mutableStateOf<AnchorPointerState?>(null) }
-  var trackedPointerOrigin by remember { mutableStateOf<Offset?>(null) }
-  var trackedPointerPosition by remember { mutableStateOf<Offset?>(null) }
-  var isTrackedPointerArmed by remember { mutableStateOf(false) }
-  var isTrackedPointerHoldComplete by remember { mutableStateOf(false) }
-  var selectionArmJob by remember { mutableStateOf<Job?>(null) }
 
-  fun updateTrackedPointerArmState(windowPosition: Offset) {
-    if (isTrackedPointerArmed || !isTrackedPointerHoldComplete) {
-      return
+  fun resetMenuGesture(resetBounds: Boolean = false) {
+    pressGestureSessionState.clear()
+    if (resetBounds) {
+      menuSelectionState.reset()
+    } else {
+      menuSelectionState.clearPointer()
     }
-
-    val origin = trackedPointerOrigin ?: return
-    if ((windowPosition - origin).getDistance() <= samePressSelectionDistance) {
-      return
-    }
-
-    isTrackedPointerArmed = true
-    menuPointerState =
-      AnchorPointerState(position = windowPosition, isSelectionArmed = true, isUp = false)
-  }
-
-  fun resetTrackedPointer() {
-    selectionArmJob?.cancel()
-    selectionArmJob = null
-    menuPointerState = null
-    trackedPointerOrigin = null
-    trackedPointerPosition = null
-    isTrackedPointerArmed = false
-    isTrackedPointerHoldComplete = false
     isMenuPressed = false
   }
 
   LaunchedEffect(icon, menus) {
     isMenuOpen = false
-    resetTrackedPointer()
+    resetMenuGesture(resetBounds = true)
   }
 
   val bottomBarEnabled = LocalBottomBarState.current?.enabled
   LaunchedEffect(bottomBarEnabled) {
     if (bottomBarEnabled != true) {
       isMenuOpen = false
-      resetTrackedPointer()
+      resetMenuGesture(resetBounds = true)
+    }
+  }
+
+  LaunchedEffect(isMenuOpen, menus, pressGestureSessionState.session) {
+    if (!isMenuOpen) {
+      return@LaunchedEffect
+    }
+
+    val session = pressGestureSessionState.session
+    val selectedIndex = menuSelectionState.syncSession(session)
+    if (session == null) {
+      return@LaunchedEffect
+    }
+
+    if (!session.isReleased) {
+      return@LaunchedEffect
+    }
+
+    pressGestureSessionState.clear()
+    selectedIndex?.let { index ->
+      isMenuOpen = false
+      menus.getOrNull(index)?.onClick?.invoke()
     }
   }
 
@@ -163,7 +156,7 @@ fun BottomBarActionButton(
         modifier =
           Modifier.fillMaxSize().pointerInput(Unit) {
             detectTapGestures {
-              resetTrackedPointer()
+              resetMenuGesture()
               isMenuOpen = false
             }
           }
@@ -206,27 +199,47 @@ fun BottomBarActionButton(
               .border(1.dp, AppTheme.colors.borderDefault, AppShapes.squircle(AppShapes.xl))
         ) {
           Column(modifier = Modifier.width(IntrinsicSize.Max).padding(6.dp)) {
-            PopoverList(
-              items =
-                menus.map { item ->
-                  PopoverListItem(
-                    content = {
-                      ActionMenuItemRow(
-                        item = item,
-                        modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
+            menus.forEachIndexed { index, item ->
+              Box(
+                modifier =
+                  Modifier.fillMaxWidth()
+                    .onGloballyPositioned { coordinates ->
+                      val position = coordinates.positionInWindow()
+                      val size = coordinates.size
+                      menuSelectionState.updateItemBounds(
+                        index = index,
+                        Rect(
+                          left = position.x,
+                          top = position.y,
+                          right = position.x + size.width,
+                          bottom = position.y + size.height,
+                        ),
                       )
-                    },
-                    onSelected = {
-                      resetTrackedPointer()
+                    }
+                    .background(
+                      color =
+                        if (menuSelectionState.activeIndex == index) {
+                          AppTheme.colors.surfaceTinted
+                        } else {
+                          Color.Transparent
+                        },
+                      shape = AppShapes.squircle(AppShapes.md),
+                    )
+                    .clickable {
+                      if (menuSelectionState.consumeSuppressedClick(index)) {
+                        return@clickable
+                      }
+                      resetMenuGesture()
                       isMenuOpen = false
                       item.onClick()
-                    },
-                  )
-                },
-              pointerState = menuPointerState,
-              inputEnabled = isMenuOpen,
-              armDelayMs = ACTION_SELECTION_ARM_DELAY_MS,
-            )
+                    }
+              ) {
+                ActionMenuItemRow(
+                  item = item,
+                  modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
+                )
+              }
+            }
           }
         }
       }
@@ -264,59 +277,39 @@ fun BottomBarActionButton(
                 Modifier.pointerInput(icon, menus) {
                   awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    menuSelectionState.prepareGesture()
 
                     isMenuPressed = true
-                    down.consume()
-                    if (isMenuOpen) {
-                      isMenuOpen = false
-                      resetTrackedPointer()
-                    } else {
-                      trackedPointerOrigin = buttonWindowTopLeft + down.position
-                      trackedPointerPosition = trackedPointerOrigin
-                      isTrackedPointerArmed = false
-                      isTrackedPointerHoldComplete = false
-                      menuPointerState =
-                        AnchorPointerState(
-                          position = trackedPointerOrigin!!,
-                          isSelectionArmed = false,
-                          isUp = false,
-                        )
+                    var released = false
+                    try {
+                      down.consume()
+                      if (isMenuOpen) {
+                        isMenuOpen = false
+                        resetMenuGesture()
+                        return@awaitEachGesture
+                      }
+
                       isMenuOpen = true
-
-                      selectionArmJob?.cancel()
-                      selectionArmJob = scope.launch {
-                        delay(ACTION_SELECTION_ARM_DELAY_MS)
-                        isTrackedPointerHoldComplete = true
-                        trackedPointerPosition?.let { updateTrackedPointerArmState(it) }
+                      released =
+                        trackPressGestureSession(
+                          pointerId = down.id,
+                          initialPositionInWindow = buttonWindowTopLeft + down.position,
+                          downUptimeMillis = down.uptimeMillis,
+                          armDelayMillis = ACTION_SELECTION_ARM_DELAY_MS,
+                          resolvePositionInWindow = { change, _ ->
+                            buttonWindowTopLeft + change.position
+                          },
+                        ) { session, change ->
+                          pressGestureSessionState.publish(session)
+                          change?.consume()
+                        }
+                    } finally {
+                      if (!released) {
+                        pressGestureSessionState.clear()
+                        menuSelectionState.clearPointer()
                       }
+                      isMenuPressed = false
                     }
-
-                    while (true) {
-                      val event = awaitPointerEvent()
-                      val change = event.changes.find { it.id == down.id } ?: break
-                      val windowPosition = buttonWindowTopLeft + change.position
-                      trackedPointerPosition = windowPosition
-                      updateTrackedPointerArmState(windowPosition)
-                      menuPointerState =
-                        AnchorPointerState(
-                          position = windowPosition,
-                          isSelectionArmed = isTrackedPointerArmed,
-                          isUp = !change.pressed,
-                        )
-                      if (isTrackedPointerArmed) change.consume()
-                      if (!change.pressed) {
-                        selectionArmJob?.cancel()
-                        selectionArmJob = null
-                        trackedPointerOrigin = null
-                        trackedPointerPosition = null
-                        isTrackedPointerArmed = false
-                        isTrackedPointerHoldComplete = false
-                        isMenuPressed = false
-                        break
-                      }
-                    }
-
-                    isMenuPressed = false
                   }
                 }
               } else {
