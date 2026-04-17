@@ -6,7 +6,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.ext.navigationBarsPadding
 import co.typie.icons.Lucide
+import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarActionButton
 import co.typie.ui.component.bottombar.BottomBarDefaults
@@ -177,16 +180,33 @@ private fun MainBottomBarPillTrack() {
           Modifier.weight(1f).fillMaxHeight().padding(MainBottomBarPillTrackSegmentPadding),
         contentAlignment = Alignment.Center,
       ) {
-        Icon(
-          icon =
-            when (tab) {
-              Tab.Home -> Lucide.House
-              Tab.Space -> Lucide.FolderOpen
-              Tab.Notes -> Lucide.StickyNote
-              Tab.More -> Lucide.Ellipsis
-            },
-          tint = AppTheme.colors.textSecondary,
-        )
+        Column(
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.Center,
+        ) {
+          Icon(
+            icon =
+              when (tab) {
+                Tab.Home -> Lucide.House
+                Tab.Space -> Lucide.FolderOpen
+                Tab.Notes -> Lucide.StickyNote
+                Tab.More -> Lucide.Ellipsis
+              },
+            tint = AppTheme.colors.textSecondary,
+          )
+          Text(
+            text =
+              when (tab) {
+                Tab.Home -> "홈"
+                Tab.Space -> "스페이스"
+                Tab.Notes -> "노트"
+                Tab.More -> "더 보기"
+              },
+            style = AppTheme.typography.micro,
+            color = AppTheme.colors.textSecondary,
+            maxLines = 1,
+          )
+        }
       }
     }
   }
