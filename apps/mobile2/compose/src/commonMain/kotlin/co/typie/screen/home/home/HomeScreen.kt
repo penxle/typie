@@ -42,7 +42,8 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.shell.MainBottomBarActionButton
-import co.typie.shell.MainBottomBarPill
+import co.typie.shell.MainBottomBarPillEntry
+import co.typie.shell.MainBottomBarPillKey
 import co.typie.ui.component.Divider
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
@@ -78,7 +79,8 @@ fun HomeScreen() {
   )
 
   ProvideBottomBar(
-    pill = { MainBottomBarPill() },
+    pillKey = MainBottomBarPillKey,
+    pill = MainBottomBarPillEntry,
     action = {
       MainBottomBarActionButton(
         onClick = {

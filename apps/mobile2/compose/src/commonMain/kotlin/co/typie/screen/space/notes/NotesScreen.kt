@@ -36,7 +36,8 @@ import co.typie.navigation.Nav
 import co.typie.result.Result
 import co.typie.route.Route
 import co.typie.shell.MainBottomBarActionButton
-import co.typie.shell.MainBottomBarPill
+import co.typie.shell.MainBottomBarPillEntry
+import co.typie.shell.MainBottomBarPillKey
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
@@ -348,7 +349,8 @@ fun NotesScreen() {
   )
 
   ProvideBottomBar(
-    pill = { MainBottomBarPill() },
+    pillKey = MainBottomBarPillKey,
+    pill = MainBottomBarPillEntry,
     action = {
       MainBottomBarActionButton(
         icon = Typie.StickyNotePlus,

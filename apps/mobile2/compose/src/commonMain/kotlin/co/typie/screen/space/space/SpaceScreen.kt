@@ -72,7 +72,8 @@ import co.typie.screen.space.entity.EntityCreateBottomBarAction
 import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.screen.space.entity.EntitySelectionViewModel
 import co.typie.screen.space.folder.FolderViewModel
-import co.typie.shell.MainBottomBarPill
+import co.typie.shell.MainBottomBarPillEntry
+import co.typie.shell.MainBottomBarPillKey
 import co.typie.storage.Preference
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
@@ -320,7 +321,8 @@ fun SpaceScreen() {
   )
 
   ProvideBottomBar(
-    pill = { MainBottomBarPill() },
+    pillKey = MainBottomBarPillKey,
+    pill = MainBottomBarPillEntry,
     action = {
       EntityCreateBottomBarAction(
         model = createActionModel,

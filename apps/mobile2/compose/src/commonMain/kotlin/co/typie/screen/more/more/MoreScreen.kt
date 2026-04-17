@@ -30,7 +30,8 @@ import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.shell.MainBottomBarActionButton
-import co.typie.shell.MainBottomBarPill
+import co.typie.shell.MainBottomBarPillEntry
+import co.typie.shell.MainBottomBarPillKey
 import co.typie.ui.component.CardActionTile
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
@@ -67,7 +68,11 @@ fun MoreScreen() {
     scrollOffset = scrollState.topBarScrollOffset(),
   )
 
-  ProvideBottomBar(pill = { MainBottomBarPill() }, action = { MainBottomBarActionButton() })
+  ProvideBottomBar(
+    pillKey = MainBottomBarPillKey,
+    pill = MainBottomBarPillEntry,
+    action = { MainBottomBarActionButton() },
+  )
 
   Screen(loadable = model.query) { contentPadding ->
     Column(
