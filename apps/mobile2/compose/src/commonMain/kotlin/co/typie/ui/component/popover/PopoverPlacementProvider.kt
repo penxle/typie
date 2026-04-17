@@ -39,6 +39,18 @@ internal data class ResolvedPopoverGeometry(
   val anchorBoundsInPopup: IntRect,
 )
 
+internal fun localizePopoverAnchorBounds(
+  anchorBounds: IntRect,
+  layoutPositionInWindow: IntOffset,
+): IntRect {
+  return IntRect(
+    left = anchorBounds.left - layoutPositionInWindow.x,
+    top = anchorBounds.top - layoutPositionInWindow.y,
+    right = anchorBounds.right - layoutPositionInWindow.x,
+    bottom = anchorBounds.bottom - layoutPositionInWindow.y,
+  )
+}
+
 internal fun resolvePopoverGeometry(
   anchorBounds: IntRect,
   windowSize: IntSize,

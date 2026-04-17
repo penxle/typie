@@ -109,4 +109,22 @@ class PopoverPlacementProviderTest {
     assertEquals(PopoverPlacement.BelowCenter, geometry.placement)
     assertEquals(IntRect(178, 0, 218, 44), geometry.anchorBoundsInPopup)
   }
+
+  @Test
+  fun localizePopoverAnchorBounds_removesLayoutWindowOffset_beforeGeometryResolution() {
+    val anchorBoundsInWindow = IntRect(157, 400, 257, 444)
+
+    val geometry =
+      resolveGeometry(
+        anchorBounds =
+          localizePopoverAnchorBounds(
+            anchorBounds = anchorBoundsInWindow,
+            layoutPositionInWindow = IntOffset(12, 0),
+          ),
+        placement = PopoverPlacement.BelowCenter,
+      )
+
+    assertEquals(IntOffset(95, 400), geometry.popupOffset)
+    assertEquals(IntRect(50, 0, 150, 44), geometry.anchorBoundsInPopup)
+  }
 }

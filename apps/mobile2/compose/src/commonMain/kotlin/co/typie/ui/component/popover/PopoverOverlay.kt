@@ -127,12 +127,17 @@ private fun PopoverPaneContent(
         layoutPositionInWindow = coordinates.positionInWindow().round()
       }
   ) { constraints ->
+    val anchorBoundsInLayout =
+      localizePopoverAnchorBounds(
+        anchorBounds = anchorBounds,
+        layoutPositionInWindow = layoutPositionInWindow,
+      )
     val minWidthPx = minWidth.toPx(density).roundToInt()
     val maxWidthPx = maxWidth?.toPx(density)?.roundToInt()
     val preferredPaneMaxWidth =
       availableWidthForPlacement(
         windowWidth = constraints.maxWidth,
-        anchorBounds = anchorBounds,
+        anchorBounds = anchorBoundsInLayout,
         screenPadding = screenPadding,
         placement = placement,
       )
@@ -157,15 +162,15 @@ private fun PopoverPaneContent(
         .map { it.measure(paneConstraints) }
 
     val initiallyMeasuredWidth =
-      initialPanePlaceables.maxOfOrNull { it.width } ?: anchorBounds.width
+      initialPanePlaceables.maxOfOrNull { it.width } ?: anchorBoundsInLayout.width
     val initiallyMeasuredHeight =
-      initialPanePlaceables.maxOfOrNull { it.height } ?: anchorBounds.height
+      initialPanePlaceables.maxOfOrNull { it.height } ?: anchorBoundsInLayout.height
     val showBelow =
       shouldShowBelow(
         placement = placement,
         childHeight = initiallyMeasuredHeight,
         windowHeight = constraints.maxHeight,
-        anchorRect = anchorBounds,
+        anchorRect = anchorBoundsInLayout,
         screenPadding = screenPadding,
       )
     val finalPaneConstraints =
@@ -173,7 +178,7 @@ private fun PopoverPaneContent(
         maxHeight =
           availableHeightForPlacement(
             windowHeight = constraints.maxHeight,
-            anchorBounds = anchorBounds,
+            anchorBounds = anchorBoundsInLayout,
             screenPadding = screenPadding,
             showBelow = showBelow,
           )
@@ -195,7 +200,7 @@ private fun PopoverPaneContent(
     val paneSize = IntSize(resolvedPaneWidth, paneHeight)
     val geometry =
       resolvePopoverGeometry(
-        anchorBounds = anchorBounds,
+        anchorBounds = anchorBoundsInLayout,
         windowSize = IntSize(constraints.maxWidth, constraints.maxHeight),
         placement = placement,
         popupContentSize = paneSize,
@@ -245,9 +250,9 @@ private fun PopoverPaneContent(
         .single()
         .measure(Constraints.fixed(resolvedPaneWidth, paneHeight))
 
-    val adjustedOffset = geometry.popupOffset - layoutPositionInWindow
-
-    layout(constraints.maxWidth, constraints.maxHeight) { surfacePlaceable.place(adjustedOffset) }
+    layout(constraints.maxWidth, constraints.maxHeight) {
+      surfacePlaceable.place(geometry.popupOffset)
+    }
   }
 }
 

@@ -18,6 +18,8 @@ val LocalPopoverOverlayState =
 class PopoverOverlayState {
   private var owner: Any? by mutableStateOf(null)
   private var detachedCloseRequestIdState: Int by mutableIntStateOf(0)
+  private var outsideDismissGestureIdState: Int by mutableIntStateOf(0)
+  private var onOutsideDismiss: (() -> Unit)? = null
   internal var entry: PopoverOverlayEntry? by mutableStateOf(null)
     private set
 
@@ -36,12 +38,19 @@ class PopoverOverlayState {
   var paneBoundsInWindow: Rect? by mutableStateOf(null)
     private set
 
+  internal val outsideDismissPaneBoundsInWindow: Rect?
+    get() = if (onOutsideDismiss != null) paneBoundsInWindow else null
+
   internal var isDetached: Boolean by mutableStateOf(false)
+    private set
+
+  internal var isOutsideDismissGestureActive: Boolean by mutableStateOf(false)
     private set
 
   internal fun show(owner: Any, entry: PopoverOverlayEntry, anchorBounds: IntRect) {
     this.owner = owner
     isDetached = false
+    onOutsideDismiss = null
     this.entry = entry
     this.anchorBounds = anchorBounds
     progress = 0f
@@ -69,12 +78,45 @@ class PopoverOverlayState {
 
   internal fun isOwnedBy(owner: Any): Boolean = this.owner === owner
 
+  internal fun updateOutsideDismiss(owner: Any, onOutsideDismiss: () -> Unit) {
+    if (this.owner !== owner) {
+      return
+    }
+
+    this.onOutsideDismiss = onOutsideDismiss
+  }
+
+  internal fun clearOutsideDismiss(owner: Any) {
+    if (this.owner !== owner) {
+      return
+    }
+
+    onOutsideDismiss = null
+  }
+
+  internal fun dismissFromOutsideGesture() {
+    onOutsideDismiss?.invoke()
+  }
+
+  internal fun beginOutsideDismissGesture(): Int {
+    outsideDismissGestureIdState += 1
+    isOutsideDismissGestureActive = true
+    return outsideDismissGestureIdState
+  }
+
+  internal fun endOutsideDismissGesture(gestureId: Int) {
+    if (outsideDismissGestureIdState == gestureId) {
+      isOutsideDismissGestureActive = false
+    }
+  }
+
   internal fun detach(owner: Any) {
     if (this.owner !== owner) {
       return
     }
 
     this.owner = null
+    onOutsideDismiss = null
     interactive = false
     paneBoundsInWindow = null
     isDetached = true
@@ -109,6 +151,7 @@ class PopoverOverlayState {
 
   private fun reset() {
     owner = null
+    onOutsideDismiss = null
     isDetached = false
     entry = null
     anchorBounds = IntRect.Zero

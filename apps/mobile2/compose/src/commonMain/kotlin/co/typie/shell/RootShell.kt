@@ -34,6 +34,7 @@ import co.typie.ui.component.loader.LocalLoader
 import co.typie.ui.component.popover.LocalPopoverOverlayState
 import co.typie.ui.component.popover.PopoverOverlay
 import co.typie.ui.component.popover.PopoverOverlayState
+import co.typie.ui.component.popover.popoverOutsideTapHost
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.Sheet
 import co.typie.ui.component.sheet.SheetOverlay
@@ -81,9 +82,10 @@ fun RootShell() {
     LocalPopoverOverlayState provides popover,
   ) {
     Box(
-      Modifier.fillMaxSize().preferredFrameRate(FrameRateCategory.High).pointerInput(Unit) {
-        detectTapGestures { focusManager.clearFocus() }
-      }
+      Modifier.fillMaxSize()
+        .preferredFrameRate(FrameRateCategory.High)
+        .popoverOutsideTapHost(state = popover)
+        .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
     ) {
       Crossfade(
         screen,

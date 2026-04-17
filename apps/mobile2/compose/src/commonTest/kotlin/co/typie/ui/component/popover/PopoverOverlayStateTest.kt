@@ -1,5 +1,6 @@
 package co.typie.ui.component.popover
 
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
@@ -104,6 +105,62 @@ class PopoverOverlayStateTest {
 
     assertEquals(progress, state.progress)
     assertEquals(expectedProgress(progress), state.easedProgress)
+  }
+
+  @Test
+  fun outsideDismissUsesCurrentOwnerCallback() {
+    val state = PopoverOverlayState()
+    val firstOwner = Any()
+    val secondOwner = Any()
+    var firstDismissCount = 0
+    var secondDismissCount = 0
+
+    state.show(firstOwner, createEntry(firstOwner), IntRect.Zero)
+    state.updateOutsideDismiss(firstOwner) { firstDismissCount += 1 }
+    state.show(secondOwner, createEntry(secondOwner), IntRect.Zero)
+
+    state.dismissFromOutsideGesture()
+    state.updateOutsideDismiss(secondOwner) { secondDismissCount += 1 }
+    state.dismissFromOutsideGesture()
+
+    assertEquals(0, firstDismissCount)
+    assertEquals(1, secondDismissCount)
+  }
+
+  @Test
+  fun outsideDismissPaneBoundsAreExposedOnlyWhileDismissIsArmed() {
+    val state = PopoverOverlayState()
+    val owner = Any()
+    val paneBounds = Rect(left = 10f, top = 20f, right = 110f, bottom = 220f)
+
+    state.show(owner, createEntry(owner), IntRect.Zero)
+    state.updatePaneBounds(owner, paneBounds)
+
+    assertNull(state.outsideDismissPaneBoundsInWindow)
+
+    state.updateOutsideDismiss(owner) {}
+
+    assertEquals(paneBounds, state.outsideDismissPaneBoundsInWindow)
+
+    state.clearOutsideDismiss(owner)
+
+    assertNull(state.outsideDismissPaneBoundsInWindow)
+  }
+
+  @Test
+  fun endingOlderOutsideDismissGestureDoesNotCancelNewerGesture() {
+    val state = PopoverOverlayState()
+
+    val firstGestureId = state.beginOutsideDismissGesture()
+    val secondGestureId = state.beginOutsideDismissGesture()
+
+    state.endOutsideDismissGesture(firstGestureId)
+
+    assertEquals(true, state.isOutsideDismissGestureActive)
+
+    state.endOutsideDismissGesture(secondGestureId)
+
+    assertEquals(false, state.isOutsideDismissGestureActive)
   }
 }
 

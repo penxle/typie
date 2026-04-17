@@ -72,25 +72,17 @@ fun Popover(
   var isExpanded by remember { mutableStateOf(false) }
   var isOverlayVisible by remember { mutableStateOf(false) }
   var anchorBounds by remember { mutableStateOf(IntRect.Zero) }
-  var outsideDismissGestureActive by remember { mutableStateOf(false) }
   var reverseAnimationCompleted by remember { mutableStateOf(false) }
   val progress = remember { Animatable(0f) }
   val scrollGestureLockState = LocalScrollGestureLockState.current
-  val outsideTapHostState = LocalPopoverOutsideTapHostState.current
   val scope = remember { PopoverScope(onClose = { isExpanded = false }) }
-  val dismissPopoverFromOutsideGesture by rememberUpdatedState {
-    outsideDismissGestureActive = true
-    scope.close()
-  }
-  val finishOutsideDismissGesture by rememberUpdatedState { outsideDismissGestureActive = false }
-  var outsideTapHostHandle by remember { mutableStateOf<PopoverOutsideTapHostHandle?>(null) }
+  val dismissPopoverFromOutsideGesture by rememberUpdatedState { scope.close() }
   val ownsOverlay = overlayState.isOwnedBy(overlayOwner)
   val latestIsOverlayVisible by rememberUpdatedState(isOverlayVisible)
   val latestOwnsOverlay by rememberUpdatedState(ownsOverlay)
 
   LaunchedEffect(isExpanded) {
     if (isExpanded) {
-      outsideDismissGestureActive = false
       reverseAnimationCompleted = false
       scope.acceptsInput = true
       isOverlayVisible = true
@@ -127,10 +119,13 @@ fun Popover(
     isExpanded,
     isOverlayVisible,
     reverseAnimationCompleted,
-    outsideDismissGestureActive,
+    overlayState.isOutsideDismissGestureActive,
   ) {
     if (
-      !isExpanded && isOverlayVisible && reverseAnimationCompleted && !outsideDismissGestureActive
+      !isExpanded &&
+        isOverlayVisible &&
+        reverseAnimationCompleted &&
+        !overlayState.isOutsideDismissGestureActive
     ) {
       isOverlayVisible = false
       overlayState.clear(overlayOwner)
@@ -150,29 +145,14 @@ fun Popover(
     }
   }
 
-  DisposableEffect(outsideTapHostState, isExpanded) {
-    if (outsideTapHostState == null || !isExpanded) {
-      outsideTapHostHandle = null
-      onDispose {}
-    } else {
-      val handle = outsideTapHostState.register()
-      outsideTapHostHandle = handle
-      onDispose {
-        handle.clear()
-        if (outsideTapHostHandle === handle) {
-          outsideTapHostHandle = null
-        }
-      }
-    }
-  }
-
   SideEffect {
     if (isExpanded && ownsOverlay) {
-      outsideTapHostHandle?.update(
-        paneBounds = overlayState.paneBoundsInWindow,
-        onDismiss = dismissPopoverFromOutsideGesture,
-        onDismissGestureFinished = finishOutsideDismissGesture,
+      overlayState.updateOutsideDismiss(
+        owner = overlayOwner,
+        onOutsideDismiss = dismissPopoverFromOutsideGesture,
       )
+    } else {
+      overlayState.clearOutsideDismiss(overlayOwner)
     }
   }
 
@@ -205,6 +185,9 @@ fun Popover(
         .pointerInput(Unit) {
           awaitEachGesture {
             val press = awaitFirstDown(requireUnconsumed = false)
+            if (overlayState.isOutsideDismissGestureActive) {
+              return@awaitEachGesture
+            }
             if (isOverlayVisible) {
               return@awaitEachGesture
             }
