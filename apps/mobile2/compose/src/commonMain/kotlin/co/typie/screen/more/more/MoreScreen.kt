@@ -277,7 +277,9 @@ fun MoreScreen() {
                 modifier = Modifier.size(20.dp),
                 tint = AppTheme.colors.textSecondary,
               )
+            }
 
+            Skeleton.Ignore {
               Icon(
                 icon = Lucide.ExternalLink,
                 modifier = Modifier.size(16.dp),
