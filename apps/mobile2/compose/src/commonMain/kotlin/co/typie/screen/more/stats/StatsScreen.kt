@@ -163,6 +163,8 @@ fun StatsScreen() {
             user = model.query.data.me.activityGrid_user,
             modifier = Modifier.fillMaxWidth(),
           )
+
+          Spacer(Modifier.height(16.dp))
         }
       }
     }

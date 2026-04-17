@@ -117,7 +117,7 @@ fun MoreScreen() {
         Column {
           Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
           ) {
             Text("나의 글쓰기 활동", style = AppTheme.typography.label)
 
@@ -132,6 +132,8 @@ fun MoreScreen() {
             user = model.query.data.me.activityGrid_user,
             modifier = Modifier.fillMaxWidth(),
           )
+
+          Spacer(Modifier.height(16.dp))
 
           CardDivider()
 

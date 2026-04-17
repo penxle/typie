@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -110,7 +109,7 @@ fun SettingsScreen() {
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.size(4.dp))
+
             Icon(
               icon = Lucide.ChevronRight,
               modifier = Modifier.size(16.dp),
