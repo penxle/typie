@@ -34,7 +34,6 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
-import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.icon.Icon
@@ -145,7 +144,7 @@ fun EntityContainerBottomOverlayStack(
         Modifier.padding(
           start = EntityContainerBottomOverlayHorizontalPadding,
           end = EntityContainerBottomOverlayHorizontalPadding,
-          bottom = baseBottomInset,
+          bottom = baseBottomInset + EntityBottomOverlayDefaults.BottomOffset,
         ),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {

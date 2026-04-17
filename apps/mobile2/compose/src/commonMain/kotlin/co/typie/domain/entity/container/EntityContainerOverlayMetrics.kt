@@ -2,7 +2,6 @@ package co.typie.domain.entity
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import co.typie.ui.component.EntityBottomOverlayDefaults
 
 internal fun initialEntityContainerBottomOverlayMetrics(
   baseBottomInset: Dp

@@ -18,11 +18,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.domain.entity.EntityBottomOverlayDefaults
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
-import co.typie.ui.component.EntityBottomOverlayDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes

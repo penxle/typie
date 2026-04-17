@@ -56,7 +56,6 @@ import co.typie.domain.entitytransfer.EntityPasteBar
 import co.typie.domain.entitytransfer.EntityPasteTarget
 import co.typie.domain.entitytransfer.toMessage
 import co.typie.domain.entitytransfer.toTransferSource
-import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
@@ -147,9 +146,10 @@ fun SpaceScreen() {
     clipboardState != null && pasteTarget != null && clipboard.canPaste(requireNotNull(pasteTarget))
   val isCurrentRoute = nav.current == LocalRoute.current
   val shouldShowPasteBar = isPasteBarVisible && isCurrentRoute
+  val overlayBaseBottomInset = BottomBarDefaults.BarAreaHeight
   val overlayState =
     rememberEntityContainerOverlayState(
-      baseBottomInset = BottomBarDefaults.BarAreaHeight,
+      baseBottomInset = overlayBaseBottomInset,
       pasteBarVisible = shouldShowPasteBar,
       resetKey = site?.id,
     )
@@ -338,9 +338,7 @@ fun SpaceScreen() {
     loadable = model.query,
     foregroundOverlay = {
       EntityContainerBottomOverlayStack(
-        baseBottomInset =
-          BottomBarDefaults.BarAreaHeight +
-            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        baseBottomInset = overlayBaseBottomInset,
         showSelectionBar = isSelectionBarVisible,
         showPasteBar = overlayState.animatedPasteBarVisible && pasteTarget != null,
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -394,7 +392,7 @@ fun SpaceScreen() {
           TopBarDefaults.ContentTopSpacing,
       )
     val reorderViewportBottomInset =
-      WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
+      WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
     Box(
       modifier =

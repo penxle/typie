@@ -174,9 +174,10 @@ fun FolderScreen(entityId: String) {
   val isCurrentRoute = nav.current == LocalRoute.current
   val shouldShowPasteBar = isPasteBarVisible && isCurrentRoute
   val isSelectionBarVisible = selection.isSelectionBarVisible
+  val overlayBaseBottomInset = BottomBarDefaults.BarAreaHeight
   val overlayState =
     rememberEntityContainerOverlayState(
-      baseBottomInset = BottomBarDefaults.BarAreaHeight,
+      baseBottomInset = overlayBaseBottomInset,
       pasteBarVisible = shouldShowPasteBar,
       resetKey = entityId,
     )
@@ -457,7 +458,7 @@ fun FolderScreen(entityId: String) {
     loadable = model.query,
     foregroundOverlay = {
       EntityContainerBottomOverlayStack(
-        baseBottomInset = BottomBarDefaults.BarAreaHeight,
+        baseBottomInset = overlayBaseBottomInset,
         showSelectionBar = isSelectionBarVisible,
         showPasteBar = overlayState.animatedPasteBarVisible && pasteTarget != null,
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -511,7 +512,7 @@ fun FolderScreen(entityId: String) {
           TopBarDefaults.ContentTopSpacing,
       )
     val reorderViewportBottomInset =
-      WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
+      WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + overlayBaseBottomInset
 
     Box(
       modifier =

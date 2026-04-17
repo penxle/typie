@@ -57,7 +57,7 @@ fun EntityContainerListContent(
   isPersistingReorder: Boolean,
   selectionState: EntityContainerSelectionState = EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
-  bottomSpacerHeight: Dp = 140.dp,
+  bottomSpacerHeight: Dp = EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
   modifier: Modifier = Modifier,
   header: @Composable ColumnScope.() -> Unit = {},
   onDocumentClick: suspend (entityId: String) -> Unit,
