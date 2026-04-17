@@ -76,7 +76,7 @@ fun TextArea(
   val borderColor by
     animateColorAsState(
       when {
-        hasError -> AppTheme.colors.dangerSubtle
+        hasError -> AppTheme.colors.danger
         isFocused -> AppTheme.colors.borderStrong
         else -> AppTheme.colors.borderSubtle
       },
@@ -89,7 +89,7 @@ fun TextArea(
     )
   val helpColor by
     animateColorAsState(
-      if (hasError) AppTheme.colors.dangerSubtle else AppTheme.colors.textMuted,
+      if (hasError) AppTheme.colors.danger else AppTheme.colors.textMuted,
       colorSpec,
     )
 
