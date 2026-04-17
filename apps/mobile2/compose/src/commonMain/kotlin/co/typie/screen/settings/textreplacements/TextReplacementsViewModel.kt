@@ -1,5 +1,10 @@
 package co.typie.screen.settings.textreplacements
 
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.colorspace.ColorSpaces.match
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.form.FormState
@@ -21,185 +26,146 @@ import co.typie.graphql.type.UpdateTextReplacementInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.result
+import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CoroutineScope
 
-class TextReplacementForm(scope: CoroutineScope, editingItem: NormalizedTextReplacement?) :
+class TextReplacementForm(scope: CoroutineScope, textReplacement: CustomTextReplacement?) :
   FormState(scope) {
-  val match = field(editingItem?.match.orEmpty())
-  val substitute = field(editingItem?.substitute.orEmpty())
-  val note = field(editingItem?.note.orEmpty())
-  val regex = field(editingItem?.regex ?: false) { focusable = false }
-}
+  val match = field(textReplacement?.match.orEmpty()) { required("찾을 텍스트를 입력해주세요.") }
+  val substitute = field(textReplacement?.substitute.orEmpty()) { required("삽입할 텍스트를 입력해주세요.") }
+  val note = field(textReplacement?.note.orEmpty())
+  val regex = field(textReplacement?.regex ?: false) { focusable = false }
 
-sealed interface SaveRuleError {
-  data class ValidationFailed(val message: String) : SaveRuleError
+  init {
+    validate {
+      check(substitute, match.value != substitute.value) { "찾을 텍스트와 삽입할 텍스트가 같아요." }
+      check(match, !regex.value || isValidRegex(match.value)) { "정규식이 올바르지 않아요." }
+    }
+  }
 }
 
 class TextReplacementsViewModel : ViewModel() {
   val query =
-    Apollo.watchQuery(scope = viewModelScope, placeholderData()) { TextReplacementsScreen_Query() }
-
-  val normalizedItems: List<NormalizedTextReplacement>
-    get() = normalizeTextReplacements(query.data.me.textReplacements)
-
-  val normalizedPresetItems: List<NormalizedTextReplacement>
-    get() = presetItems(normalizedItems)
-
-  val normalizedSmartQuoteItems: List<NormalizedTextReplacement>
-    get() = smartQuoteItems(normalizedItems)
-
-  val normalizedCustomItems: List<NormalizedTextReplacement>
-    get() = customItems(normalizedItems)
-
-  val isSmartQuoteEnabled: Boolean
-    get() = isSmartQuoteEnabled(normalizedItems)
-
-  fun validateRegex(pattern: String): Boolean {
-    return true
-    //    return editorEngine.validateRegex(pattern)
-  }
-
-  suspend fun togglePreset(item: NormalizedTextReplacement): Result<Unit, Nothing> {
-    return toggleTextReplacementState(
-      item = item,
-      enabled = item.state != TextReplacementState.ACTIVE,
-    )
-  }
-
-  suspend fun toggleSmartQuotes(
-    items: List<NormalizedTextReplacement>,
-    enabled: Boolean,
-  ): Result<Unit, Nothing> = result {
-    val smartQuoteItems = smartQuoteItems(items)
-    if (smartQuoteItems.all { it.state == desiredState(enabled) }) return@result
-
-    smartQuoteItems.forEach { item ->
-      updateTextReplacementState(textReplacementId = item.textReplacementId, enabled = enabled)
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
+      TextReplacementsScreen_Query()
     }
-    query.refetch()
+
+  val smartQuotes by derivedStateOf {
+    val byId = query.data.me.textReplacements.associateBy { it.textReplacementId }
+    SMART_QUOTE_IDS.mapNotNull(byId::get)
   }
 
-  suspend fun saveCustomRule(
-    editingItem: NormalizedTextReplacement?,
+  val presets by derivedStateOf {
+    query.data.me.textReplacements
+      .filter { it.isPreset && !it.isSmartQuote }
+      .sortedBy { it.order.orEmpty() }
+  }
+
+  val customs by derivedStateOf {
+    query.data.me.textReplacements.filter { it.isCustom }.sortedBy { it.order.orEmpty() }
+  }
+
+  private var optimisticCustomOrder by mutableStateOf<List<String>?>(null)
+
+  val displayedCustoms by derivedStateOf { applyOptimisticOrder(customs, optimisticCustomOrder) }
+
+  var isReorderInFlight by mutableStateOf(false)
+    private set
+
+  suspend fun createTextReplacement(
     match: String,
     substitute: String,
     regex: Boolean,
     note: String?,
-    lastOrder: String?,
-  ): Result<Unit, SaveRuleError> = result {
-    val validationError =
-      validateTextReplacementForm(
-        match = match,
-        substitute = substitute,
-        regex = regex,
-        regexValidator = ::validateRegex,
+  ): Result<Unit, Nothing> = result {
+    Apollo.executeMutation(
+      TextReplacementsScreen_CreateTextReplacement_Mutation(
+        input =
+          CreateTextReplacementInput(
+            match = match,
+            substitute = substitute,
+            regex = Optional.present(regex),
+            note = Optional.presentIfNotNull(note),
+            lowerOrder = Optional.presentIfNotNull(customs.lastOrNull()?.order),
+          )
       )
-    if (validationError != null) {
-      raise(SaveRuleError.ValidationFailed(validationError.message))
-    }
+    )
+  }
 
-    val normalizedNote = note?.takeIf { it.isNotBlank() }
-
-    if (editingItem == null) {
-      val builder =
-        CreateTextReplacementInput.Builder()
-          .match(match)
-          .substitute(substitute)
-          .regex(regex)
-          .note(normalizedNote)
-
-      if (lastOrder != null) {
-        builder.lowerOrder(lastOrder)
-      }
-
-      Apollo.executeMutation(
-        TextReplacementsScreen_CreateTextReplacement_Mutation(input = builder.build())
+  suspend fun updateTextReplacement(
+    id: String,
+    match: String,
+    substitute: String,
+    regex: Boolean,
+    note: String?,
+  ): Result<Unit, Nothing> = result {
+    Apollo.executeMutation(
+      TextReplacementsScreen_UpdateTextReplacement_Mutation(
+        input =
+          UpdateTextReplacementInput(
+            textReplacementId = id,
+            match = Optional.present(match),
+            substitute = Optional.present(substitute),
+            regex = Optional.present(regex),
+            note = Optional.presentIfNotNull(note),
+          )
       )
-    } else {
+    )
+  }
+
+  suspend fun updateTextReplacementState(id: String, enabled: Boolean): Result<Unit, Nothing> =
+    result {
       Apollo.executeMutation(
         TextReplacementsScreen_UpdateTextReplacement_Mutation(
           input =
-            UpdateTextReplacementInput.Builder()
-              .textReplacementId(editingItem.textReplacementId)
-              .match(match)
-              .substitute(substitute)
-              .regex(regex)
-              .note(normalizedNote)
-              .state(editingItem.state)
-              .build()
+            UpdateTextReplacementInput(
+              textReplacementId = id,
+              state =
+                Optional.present(
+                  if (enabled) TextReplacementState.ACTIVE else TextReplacementState.DISABLED
+                ),
+            )
         )
       )
     }
 
-    query.refetch()
-  }
-
-  suspend fun toggleCustom(item: NormalizedTextReplacement): Result<Unit, Nothing> {
-    return toggleTextReplacementState(
-      item = item,
-      enabled = item.state != TextReplacementState.ACTIVE,
-    )
-  }
-
-  suspend fun deleteCustom(item: NormalizedTextReplacement): Result<Unit, Nothing> = result {
+  suspend fun deleteTextReplacement(id: String): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
       TextReplacementsScreen_DeleteTextReplacement_Mutation(
-        input =
-          DeleteTextReplacementInput.Builder().textReplacementId(item.textReplacementId).build()
-      )
-    )
-    query.refetch()
-  }
-
-  suspend fun moveCustom(
-    textReplacementId: String,
-    lowerOrder: String?,
-    upperOrder: String?,
-  ): Result<Unit, Nothing> = result {
-    Apollo.executeMutation(
-      TextReplacementsScreen_MoveTextReplacement_Mutation(
-        input =
-          MoveTextReplacementInput.Builder()
-            .textReplacementId(textReplacementId)
-            .apply {
-              if (lowerOrder != null) {
-                lowerOrder(lowerOrder)
-              }
-              if (upperOrder != null) {
-                upperOrder(upperOrder)
-              }
-            }
-            .build()
-      )
-    )
-    query.refetch()
-  }
-
-  private suspend fun toggleTextReplacementState(
-    item: NormalizedTextReplacement,
-    enabled: Boolean,
-  ): Result<Unit, Nothing> = result {
-    if (item.state == desiredState(enabled)) return@result
-
-    updateTextReplacementState(textReplacementId = item.textReplacementId, enabled = enabled)
-    query.refetch()
-  }
-
-  private suspend fun updateTextReplacementState(textReplacementId: String, enabled: Boolean) {
-    Apollo.executeMutation(
-      TextReplacementsScreen_UpdateTextReplacement_Mutation(
-        input =
-          UpdateTextReplacementInput.Builder()
-            .textReplacementId(textReplacementId)
-            .state(desiredState(enabled))
-            .build()
+        input = DeleteTextReplacementInput(textReplacementId = id)
       )
     )
   }
 
-  private fun desiredState(enabled: Boolean): TextReplacementState {
-    return if (enabled) TextReplacementState.ACTIVE else TextReplacementState.DISABLED
-  }
+  suspend fun updateSmartQuotesTextReplacementState(enabled: Boolean): Result<Unit, Nothing> =
+    result {
+      for (id in SMART_QUOTE_IDS) {
+        updateTextReplacementState(id, enabled).unwrap()
+      }
+    }
+
+  suspend fun reorderCustom(movedKey: String, orderedKeys: List<String>): Result<Unit, Nothing> =
+    result {
+      val serverOrder = customs.map { it.textReplacementId }
+      if (orderedKeys == serverOrder) return@result
+
+      val bounds = neighboringOrders(orderedKeys, movedKey, customs) ?: return@result
+
+      optimisticCustomOrder = orderedKeys
+      isReorderInFlight = true
+      try {
+        val builder = MoveTextReplacementInput.Builder().textReplacementId(movedKey)
+        bounds.first?.let { builder.lowerOrder(it) }
+        bounds.second?.let { builder.upperOrder(it) }
+        Apollo.executeMutation(
+          TextReplacementsScreen_MoveTextReplacement_Mutation(input = builder.build())
+        )
+        query.refetch()
+      } finally {
+        optimisticCustomOrder = null
+        isReorderInFlight = false
+      }
+    }
 }
 
 private fun placeholderData() =
