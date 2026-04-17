@@ -14,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -66,7 +65,7 @@ fun DialogOverlay(state: Dialog) {
   Box(Modifier.fillMaxSize()) {
     Box(
       Modifier.fillMaxSize()
-        .alpha(progress)
+        .graphicsLayer { alpha = progress }
         .background(AppTheme.colors.scrim)
         .then(
           if (entry.dismissible)
@@ -80,9 +79,10 @@ fun DialogOverlay(state: Dialog) {
 
     Box(
       modifier =
-        Modifier.align(Alignment.Center)
-          .width(280.dp)
-          .graphicsLayer(alpha = progress, translationY = (1f - progress) * offsetPx)
+        Modifier.align(Alignment.Center).width(280.dp).graphicsLayer {
+          alpha = progress
+          translationY = (1f - progress) * offsetPx
+        }
     ) {
       @Suppress("UNCHECKED_CAST") val typedEntry = entry as DialogEntry<Any?>
       context(scope) { typedEntry.content() }

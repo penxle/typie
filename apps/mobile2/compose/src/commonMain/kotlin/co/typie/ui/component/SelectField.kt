@@ -17,7 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import co.typie.form.FieldState
 import co.typie.icons.Lucide
@@ -112,7 +112,7 @@ private fun SelectFieldAnchor(item: SelectFieldDisplayItem, enabled: Boolean) {
   Row(
     modifier =
       Modifier.heightIn(min = 38.dp)
-        .alpha(if (enabled) 1f else 0.5f)
+        .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
         .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
         .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
         .padding(horizontal = 12.dp, vertical = 8.dp),

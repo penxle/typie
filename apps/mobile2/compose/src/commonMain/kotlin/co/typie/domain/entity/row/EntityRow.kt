@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -174,7 +174,7 @@ fun EntityRow(
         modifier
           .fillMaxWidth()
           .background(backgroundColor)
-          .alpha(alpha)
+          .graphicsLayer { this.alpha = alpha }
           .then(
             if (!isInteractive) {
               Modifier

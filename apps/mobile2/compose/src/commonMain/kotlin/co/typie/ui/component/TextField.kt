@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.autofill.contentType
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -446,7 +445,7 @@ fun TextField(
                   placeholder,
                   style = AppTheme.typography.body,
                   color = AppTheme.colors.textMuted,
-                  modifier = Modifier.alpha(placeholderAlpha),
+                  modifier = Modifier.graphicsLayer { alpha = placeholderAlpha },
                 )
               }
               innerTextField()
@@ -458,7 +457,7 @@ fun TextField(
 
               if (suffixAlpha > 0f) {
                 Spacer(Modifier.width(4.dp))
-                Box(Modifier.alpha(suffixAlpha)) { suffix() }
+                Box(Modifier.graphicsLayer { alpha = suffixAlpha }) { suffix() }
               }
             }
 

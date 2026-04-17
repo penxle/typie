@@ -28,8 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -90,7 +90,7 @@ fun Button(
           modifier
             .fillMaxWidth()
             .height(48.dp)
-            .alpha(alpha)
+            .graphicsLayer { this.alpha = alpha }
             .background(colors.background, AppShapes.rounded(AppShapes.lg))
             .clickable(enabled = interactive, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -101,7 +101,10 @@ fun Button(
         Row(modifier = Modifier.pressScale(0.95f), verticalAlignment = Alignment.CenterVertically) {
           Box(modifier = Modifier.width(spinnerWidth), contentAlignment = Alignment.CenterStart) {
             if (debouncedLoading) {
-              ButtonSpinner(color = colors.text, modifier = Modifier.alpha(spinnerAlpha))
+              ButtonSpinner(
+                color = colors.text,
+                modifier = Modifier.graphicsLayer { this.alpha = spinnerAlpha },
+              )
             }
           }
 

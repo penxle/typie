@@ -17,10 +17,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.LayoutCoordinates
 import co.typie.ext.pointerIgnore
@@ -125,7 +125,7 @@ object Skeleton {
         val state = rememberState(colors)
 
         CompositionLocalProvider(LocalSkeleton provides state) {
-          Box(Modifier.alpha(effectiveAlpha)) { content() }
+          Box(Modifier.graphicsLayer { alpha = effectiveAlpha }) { content() }
         }
       }
 
@@ -155,7 +155,7 @@ object Skeleton {
   fun Ignore(content: @Composable () -> Unit) {
     val skeleton = LocalSkeleton.current
     if (skeleton.enabled) {
-      Box(Modifier.alpha(0f)) { content() }
+      Box(Modifier.graphicsLayer { alpha = 0f }) { content() }
     } else {
       content()
     }

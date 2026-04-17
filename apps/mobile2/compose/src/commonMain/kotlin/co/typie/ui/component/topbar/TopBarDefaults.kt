@@ -2,9 +2,9 @@ package co.typie.ui.component.topbar
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ui.theme.AppShapes
@@ -44,11 +44,15 @@ object TopBarDefaults {
   @Composable fun controlBorderColor(): Color = AppTheme.colors.borderStrong
 
   @Composable
-  fun controlShadowModifier(shape: Shape = AppShapes.circle): Modifier =
-    Modifier.shadow(
-      elevation = 4.dp,
-      shape = shape,
-      ambientColor = AppTheme.colors.shadowAmbient,
-      spotColor = AppTheme.colors.shadow,
-    )
+  fun controlShadowModifier(shape: Shape = AppShapes.circle): Modifier {
+    val ambient = AppTheme.colors.shadowAmbient
+    val spot = AppTheme.colors.shadow
+    return Modifier.graphicsLayer {
+      shadowElevation = 4.dp.toPx()
+      this.shape = shape
+      clip = true
+      ambientShadowColor = ambient
+      spotShadowColor = spot
+    }
+  }
 }

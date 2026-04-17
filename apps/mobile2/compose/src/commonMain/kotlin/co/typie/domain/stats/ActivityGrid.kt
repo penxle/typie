@@ -23,9 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
@@ -247,10 +246,14 @@ private fun ActivityTooltip(date: LocalDate, additions: Int, alpha: Float) {
   val background =
     if (themeMode == ResolvedThemeMode.Dark) AppColor.dark.gray.s500 else AppColor.light.gray.s600
 
+  val tooltipShape = RoundedCornerShape(6.dp)
   Column(
     modifier =
-      Modifier.alpha(alpha)
-        .clip(RoundedCornerShape(6.dp))
+      Modifier.graphicsLayer {
+          this.alpha = alpha
+          shape = tooltipShape
+          clip = true
+        }
         .background(background)
         .padding(horizontal = 10.dp, vertical = 6.dp)
   ) {

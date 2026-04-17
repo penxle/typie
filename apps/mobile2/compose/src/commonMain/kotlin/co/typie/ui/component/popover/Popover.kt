@@ -18,8 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -238,6 +238,6 @@ fun Popover(
           }
         }
   ) {
-    Box(modifier = Modifier.alpha(1f - progress)) { anchor() }
+    Box(modifier = Modifier.graphicsLayer { alpha = 1f - progress }) { anchor() }
   }
 }

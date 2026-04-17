@@ -43,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -148,7 +147,7 @@ internal fun NoteCard(
       targetValue = if (expanded) AppTheme.colors.borderDefault else AppTheme.colors.borderSubtle,
       animationSpec = tween(durationMillis = NoteExpandAnimationDurationMillis),
     )
-  val shadowElevation by
+  val baseShadowElevation by
     animateDpAsState(
       targetValue = if (expanded) 8.dp else 3.dp,
       animationSpec = tween(durationMillis = NoteExpandAnimationDurationMillis),
@@ -174,6 +173,8 @@ internal fun NoteCard(
         if (isDragging) tween(durationMillis = 120)
         else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
     )
+  val shadowAmbient = AppTheme.colors.shadowAmbient
+  val shadowSpot = AppTheme.colors.shadow
   val cardModifier =
     modifier
       .fillMaxWidth()
@@ -181,14 +182,12 @@ internal fun NoteCard(
         scaleX = dragScale
         scaleY = dragScale
         rotationZ = dragRotation
+        shadowElevation = (baseShadowElevation + dragShadowElevation).toPx()
+        shape = NoteCardShape
+        clip = true
+        ambientShadowColor = shadowAmbient
+        spotShadowColor = shadowSpot
       }
-      .shadow(
-        elevation = shadowElevation + dragShadowElevation,
-        shape = NoteCardShape,
-        ambientColor = AppTheme.colors.shadowAmbient,
-        spotColor = AppTheme.colors.shadow,
-      )
-      .clip(NoteCardShape)
       .background(containerColor, NoteCardShape)
       .border(1.dp, borderColor, NoteCardShape)
 

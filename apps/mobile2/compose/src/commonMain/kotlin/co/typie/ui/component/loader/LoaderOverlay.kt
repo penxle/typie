@@ -22,10 +22,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import co.typie.ui.theme.AppColor
@@ -52,7 +52,7 @@ fun LoaderOverlay() {
     Box(
       modifier =
         Modifier.fillMaxSize()
-          .alpha(alpha.value)
+          .graphicsLayer { this.alpha = alpha.value }
           .pointerInput(Unit) {}
           .background(AppColor.black.copy(alpha = 0.3f)),
       contentAlignment = Alignment.Center,

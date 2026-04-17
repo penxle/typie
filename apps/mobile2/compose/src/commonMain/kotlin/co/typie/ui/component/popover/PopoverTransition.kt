@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -68,8 +68,8 @@ fun PopoverTransitionElement(
         .size(width = with(density) { width.toDp() }, height = with(density) { height.toDp() }),
   ) {
     if (collapsedContent != null) {
-      Box(modifier = Modifier.alpha(1f - progress)) { collapsedContent() }
-      Box(modifier = Modifier.alpha(progress)) { expandedContent() }
+      Box(modifier = Modifier.graphicsLayer { alpha = 1f - progress }) { collapsedContent() }
+      Box(modifier = Modifier.graphicsLayer { alpha = progress }) { expandedContent() }
     } else {
       expandedContent()
     }

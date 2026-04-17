@@ -28,7 +28,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LookaheadScope
@@ -809,7 +808,7 @@ private fun TextReplacementFormTextAction(
           .clickable(enabled = enabled, onClick = onClick)
           .pressScale(0.97f)
           .padding(horizontal = 4.dp, vertical = 8.dp)
-          .alpha(alpha),
+          .graphicsLayer { this.alpha = alpha },
       contentAlignment = Alignment.Center,
     ) {
       Text(text = text, style = AppTheme.typography.action, color = color)

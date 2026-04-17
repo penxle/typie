@@ -21,10 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
@@ -47,13 +46,17 @@ object SheetBarDefaults {
   @Composable fun controlBorderColor(): Color = AppTheme.colors.borderStrong
 
   @Composable
-  fun controlShadowModifier(shape: Shape = ButtonShape): Modifier =
-    Modifier.shadow(
-      elevation = 4.dp,
-      shape = shape,
-      ambientColor = AppTheme.colors.shadowAmbient,
-      spotColor = AppTheme.colors.shadow,
-    )
+  fun controlShadowModifier(shape: Shape = ButtonShape): Modifier {
+    val ambient = AppTheme.colors.shadowAmbient
+    val spot = AppTheme.colors.shadow
+    return Modifier.graphicsLayer {
+      shadowElevation = 4.dp.toPx()
+      this.shape = shape
+      clip = true
+      ambientShadowColor = ambient
+      spotShadowColor = spot
+    }
+  }
 }
 
 @Composable
@@ -124,7 +127,7 @@ fun SheetBarButton(
       modifier =
         modifier
           .size(SheetBarDefaults.ButtonSize)
-          .alpha(alpha)
+          .graphicsLayer { this.alpha = alpha }
           .then(shadowModifier)
           .background(resolvedBackground, SheetBarDefaults.ButtonShape)
           .border(1.dp, resolvedBorderColor, SheetBarDefaults.ButtonShape)
@@ -164,7 +167,7 @@ fun SheetBarTextButton(
             minWidth = SheetBarDefaults.SlotWidth,
             minHeight = SheetBarDefaults.SlotWidth,
           )
-          .alpha(alpha)
+          .graphicsLayer { this.alpha = alpha }
           .clickable(enabled = enabled && !loading, onClick = onClick)
           .pressScale(0.96f),
       contentAlignment = Alignment.Center,

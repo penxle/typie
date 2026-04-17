@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
@@ -46,7 +46,7 @@ fun EntityPasteBar(
   Box(modifier = modifier, contentAlignment = Alignment.Center) {
     Row(
       modifier =
-        Modifier.alpha(if (enabled) 1f else 0.72f)
+        Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.72f }
           .dropShadow(EntityPasteBarShape) {
             color = colors.shadowAmbient
             radius = 3f

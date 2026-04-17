@@ -25,7 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -494,7 +494,7 @@ private fun MoveNavigateUpRow(enabled: Boolean, onClick: suspend () -> Unit) {
     Box(
       modifier =
         Modifier.fillMaxWidth()
-          .alpha(if (enabled) 1f else 0.48f)
+          .graphicsLayer { alpha = if (enabled) 1f else 0.48f }
           .then(if (enabled) Modifier.clickable(onClick) else Modifier)
           .then(if (enabled) Modifier.pressScale() else Modifier)
           .padding(CardDefaults.RowPadding)

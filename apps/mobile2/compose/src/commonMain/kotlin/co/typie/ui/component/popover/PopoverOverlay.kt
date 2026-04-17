@@ -16,10 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
@@ -276,8 +274,8 @@ private fun PopoverPaneSurface(
       PopoverDefaults.ExpandedRadius.toPx(density),
       progress,
     )
-  val shape = AppShapes.squircle(cornerRadius.toDp(density))
-  val shadowElevation = (12f * progress).dp
+  val paneShape = AppShapes.squircle(cornerRadius.toDp(density))
+  val paneShadowElevation = (12f * progress).dp
 
   Box(
     modifier =
@@ -287,9 +285,12 @@ private fun PopoverPaneSurface(
       modifier =
         Modifier.offset { surfaceOffset }
           .size(width = animatedWidth.toDp(density), height = animatedHeight.toDp(density))
-          .shadow(shadowElevation, shape)
-          .clip(shape)
-          .background(AppTheme.colors.surfaceRaised, shape)
+          .graphicsLayer {
+            shadowElevation = paneShadowElevation.toPx()
+            shape = paneShape
+            clip = true
+          }
+          .background(AppTheme.colors.surfaceRaised, paneShape)
           .then(
             if (interactive) {
               Modifier
@@ -306,8 +307,8 @@ private fun PopoverPaneSurface(
           )
     ) {
       PopoverCropLayout(
-        pane = { Box(modifier = Modifier.alpha(progress)) { pane() } },
-        anchor = { Box(modifier = Modifier.alpha(1f - progress)) { anchor() } },
+        pane = { Box(modifier = Modifier.graphicsLayer { alpha = progress }) { pane() } },
+        anchor = { Box(modifier = Modifier.graphicsLayer { alpha = 1f - progress }) { anchor() } },
         paneSize = paneSize,
         anchorSize = anchorSize,
         paneOffset = paneOffset,

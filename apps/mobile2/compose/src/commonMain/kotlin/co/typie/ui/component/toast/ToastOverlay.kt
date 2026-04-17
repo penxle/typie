@@ -40,7 +40,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -160,7 +159,8 @@ private fun AnimatedToast(
 
   Box(
     modifier =
-      Modifier.fillMaxSize().alpha(alpha.value).graphicsLayer {
+      Modifier.fillMaxSize().graphicsLayer {
+        this.alpha = alpha.value
         translationY = slideOffset.value * 4.dp.toPx(density)
       },
     contentAlignment = Alignment.BottomCenter,

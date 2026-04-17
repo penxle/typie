@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,10 +18,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -83,8 +82,11 @@ fun SettingSwitch(
     Box(
       modifier =
         switchModifier
-          .alpha(if (enabled) 1f else 0.5f)
-          .clip(AppShapes.rounded(AppShapes.lg))
+          .graphicsLayer {
+            alpha = if (enabled) 1f else 0.5f
+            shape = AppShapes.rounded(AppShapes.lg)
+            clip = true
+          }
           .then(
             if (enabled) {
               Modifier.foundationClickable(
@@ -120,7 +122,7 @@ fun SettingSwitch(
 
       Box(
         modifier =
-          Modifier.offset(x = thumbOffset.value)
+          Modifier.graphicsLayer { translationX = thumbOffset.value.toPx() }
             .size(22.dp)
             .dropShadow(AppShapes.circle) {
               color = colors.shadowAmbient

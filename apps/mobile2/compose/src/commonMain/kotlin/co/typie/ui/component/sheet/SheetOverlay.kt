@@ -29,8 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -181,9 +181,10 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
       }
 
     Box(
-      Modifier.fillMaxSize().alpha(scrimAlpha).background(AppTheme.colors.scrim).clickable {
-        requestDismiss()
-      }
+      Modifier.fillMaxSize()
+        .graphicsLayer { alpha = scrimAlpha }
+        .background(AppTheme.colors.scrim)
+        .clickable { requestDismiss() }
     )
 
     Column(
