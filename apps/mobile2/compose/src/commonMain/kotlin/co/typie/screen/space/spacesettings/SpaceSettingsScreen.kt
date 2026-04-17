@@ -117,16 +117,13 @@ fun SpaceSettingsScreen() {
   )
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(
-      modifier =
-        Modifier.fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .padding(AppTheme.spacings.scrollBottomPadding),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(
-        modifier = Modifier.fillMaxWidth().weight(1f),
+        modifier =
+          Modifier.fillMaxWidth()
+            .weight(1f)
+            .verticalScroll(scrollState)
+            .padding(AppTheme.spacings.scrollBottomPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         SectionTitle("일반")
@@ -248,7 +245,7 @@ fun SpaceSettingsScreen() {
         }
       }
 
-      ToastAnchor(inset = 0.dp)
+      ToastAnchor()
 
       Button(
         text = "저장",
