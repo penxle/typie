@@ -89,6 +89,7 @@ fun <V : Comparable<V>> FieldConfig<V>.max(max: V, message: String = "최댓값�
 open class FormState(
   private val scope: CoroutineScope,
   private val defaultValidateOn: ValidateOn = ValidateOn.Submit,
+  val autoFocusFirstField: Boolean = true,
 ) {
   private val registeredFields = mutableListOf<FieldState<*>>()
   private val debounceJobs = mutableMapOf<FieldState<*>, Job>()

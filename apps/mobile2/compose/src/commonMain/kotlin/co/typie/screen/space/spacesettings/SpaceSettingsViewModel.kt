@@ -45,7 +45,7 @@ import kotlinx.coroutines.CoroutineScope
 private val UNAVAILABLE_SITE_SLUGS =
   listOf("admin", "app", "cname", "dev", "docs", "help", "template", "www")
 
-class SpaceSettingsForm(scope: CoroutineScope) : FormState(scope) {
+class SpaceSettingsForm(scope: CoroutineScope) : FormState(scope, autoFocusFirstField = false) {
   val name =
     field("") {
       required("스페이스 이름을 입력해주세요.")

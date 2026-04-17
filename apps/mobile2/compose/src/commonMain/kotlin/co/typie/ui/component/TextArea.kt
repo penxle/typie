@@ -179,7 +179,7 @@ fun TextArea(
 ) {
   val form = field.form
   val isSkeleton = LocalSkeleton.current.enabled
-  val shouldAutoFocus = autoFocus || (form != null && form.isFirstField(field))
+  val shouldAutoFocus = autoFocus || (form?.autoFocusFirstField == true && form.isFirstField(field))
 
   val resolvedOnImeAction: (() -> Unit)? =
     when {
