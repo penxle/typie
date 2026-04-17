@@ -6,7 +6,10 @@ import androidx.compose.animation.core.Spring.StiffnessMediumLow
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,10 +30,13 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastFirstOrNull
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.ext.pointerIgnore
@@ -47,6 +53,7 @@ import co.typie.ui.component.topbar.NavDirection
 import co.typie.ui.component.topbar.TopBarState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 
 private enum class AnimState {
@@ -109,6 +116,54 @@ fun NavigationStack(
   var transitionStyle by remember { mutableStateOf(RouteTransitionStyle.Slide) }
 
   val progress = remember { Animatable(0f) }
+
+  var lastDragAmount by remember { mutableStateOf(0f) }
+
+  fun startPopDrag() {
+    val prev = navigator.previous ?: return
+    transitionStyle = visibleRoute.transitionStyleTo(prev)
+    behindRoute = prev
+    animState = AnimState.Dragging
+    scope.launch { progress.snapTo(0f) }
+  }
+
+  fun updatePopDrag(dragAmount: Float) {
+    lastDragAmount = dragAmount
+    scope.launch {
+      val newValue = (progress.value + dragAmount / containerWidth).coerceIn(0f, 1f)
+      progress.snapTo(newValue)
+    }
+  }
+
+  fun finishPopDrag() {
+    val velocity = lastDragAmount * 1000f / 16f
+    scope.launch {
+      if (progress.value > 0.5f || velocity > 1000f) {
+        val poppedRoute = visibleRoute
+        navigator.requestPop()
+        progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
+        navigator.performPop()
+        navigator.consumePopRequest()
+        visibleRoute = navigator.current
+        topBarState.clearRoute(poppedRoute)
+        exitTopBarState.clearRoute(poppedRoute)
+        bottomBarState?.clearRoute(poppedRoute)
+        exitBottomBarState?.clearRoute(poppedRoute)
+      } else {
+        progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+      }
+      behindRoute = null
+      animState = AnimState.Idle
+    }
+  }
+
+  fun cancelPopDrag() {
+    scope.launch {
+      progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
+      behindRoute = null
+      animState = AnimState.Idle
+    }
+  }
 
   // requestPop: 애니메이션 먼저, 그 다음 상태 변경
   LaunchedEffect(Unit) {
@@ -311,39 +366,80 @@ fun NavigationStack(
         }
 
       Box(
-        Modifier.fillMaxSize().graphicsLayer {
-          if (animState != AnimState.Idle) {
-            val p = progress.value
-            if (useFadeTransition) {
-              alpha =
-                when (animState) {
-                  AnimState.Push -> p
-                  AnimState.Pop -> 1f - p
-                  AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
-                  AnimState.Idle -> 1f
+        Modifier.fillMaxSize()
+          .pointerInput(Unit) {
+            val slop = viewConfiguration.touchSlop
+            awaitEachGesture {
+              val down = awaitFirstDown(requireUnconsumed = false)
+              if (!navigator.canPop) return@awaitEachGesture
+              if (animState != AnimState.Idle && animState != AnimState.Dragging)
+                return@awaitEachGesture
+              var overSlopX = 0f
+              var claimed = false
+              while (!claimed) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                val change =
+                  event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
+                if (!change.pressed) return@awaitEachGesture
+                val dx = change.position.x - down.position.x
+                val dy = change.position.y - down.position.y
+                if (abs(dx) > slop || abs(dy) > slop) {
+                  if (dx <= 0f || abs(dx) <= abs(dy)) return@awaitEachGesture
+                  if (change.isConsumed) return@awaitEachGesture
+                  val confirmEvent = awaitPointerEvent(PointerEventPass.Main)
+                  val confirmChange =
+                    confirmEvent.changes.fastFirstOrNull { it.id == down.id }
+                      ?: return@awaitEachGesture
+                  if (!confirmChange.pressed) return@awaitEachGesture
+                  if (confirmChange.isConsumed) return@awaitEachGesture
+                  confirmChange.consume()
+                  overSlopX = confirmChange.position.x - down.position.x
+                  claimed = true
                 }
-            } else {
-              translationX =
-                when (animState) {
-                  // Push: 오른쪽에서 왼쪽으로 슬라이드 in
-                  AnimState.Push -> containerWidth * (1f - p)
-                  // Pop/Dragging: 오른쪽으로 슬라이드 out
-                  else -> containerWidth * p
+              }
+              startPopDrag()
+              updatePopDrag(overSlopX)
+              val success =
+                horizontalDrag(down.id) { change ->
+                  updatePopDrag(change.positionChange().x)
+                  change.consume()
                 }
-              shadowElevation = 12.dp.toPx()
-              shape =
-                AppShapes.rounded(
-                  cornerRadius(
-                    when (animState) {
-                      AnimState.Push -> p
-                      else -> 1f - p
-                    }
-                  )
-                )
-              clip = true
+              if (success) finishPopDrag() else cancelPopDrag()
             }
           }
-        }
+          .graphicsLayer {
+            if (animState != AnimState.Idle) {
+              val p = progress.value
+              if (useFadeTransition) {
+                alpha =
+                  when (animState) {
+                    AnimState.Push -> p
+                    AnimState.Pop -> 1f - p
+                    AnimState.Dragging -> if (navigator.popRequested) 1f - p else 1f
+                    AnimState.Idle -> 1f
+                  }
+              } else {
+                translationX =
+                  when (animState) {
+                    // Push: 오른쪽에서 왼쪽으로 슬라이드 in
+                    AnimState.Push -> containerWidth * (1f - p)
+                    // Pop/Dragging: 오른쪽으로 슬라이드 out
+                    else -> containerWidth * p
+                  }
+                shadowElevation = 12.dp.toPx()
+                shape =
+                  AppShapes.rounded(
+                    cornerRadius(
+                      when (animState) {
+                        AnimState.Push -> p
+                        else -> 1f - p
+                      }
+                    )
+                  )
+                clip = true
+              }
+            }
+          }
       ) {
         val mainProviders =
           buildList<ProvidedValue<*>> {
@@ -355,55 +451,15 @@ fun NavigationStack(
         }
       }
 
-      // 제스처 감지 영역
+      // 엣지 제스처 감지 영역 (child consume 여부 무관하게 pop 우선)
       if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
-        var lastDragAmount by remember { mutableStateOf(0f) }
         Box(
           Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(Unit) {
             detectHorizontalDragGestures(
-              onDragStart = {
-                navigator.previous?.let {
-                  transitionStyle = visibleRoute.transitionStyleTo(it)
-                  behindRoute = it
-                  animState = AnimState.Dragging
-                  scope.launch { progress.snapTo(0f) }
-                }
-              },
-              onDragEnd = {
-                val velocity = lastDragAmount * 1000f / 16f
-                scope.launch {
-                  if (progress.value > 0.5f || velocity > 1000f) {
-                    val poppedRoute = visibleRoute
-                    navigator.requestPop()
-                    progress.animateTo(1f, spring(stiffness = StiffnessMediumLow))
-                    navigator.performPop()
-                    navigator.consumePopRequest()
-                    visibleRoute = navigator.current
-                    topBarState.clearRoute(poppedRoute)
-                    exitTopBarState.clearRoute(poppedRoute)
-                    bottomBarState?.clearRoute(poppedRoute)
-                    exitBottomBarState?.clearRoute(poppedRoute)
-                  } else {
-                    progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
-                  }
-                  behindRoute = null
-                  animState = AnimState.Idle
-                }
-              },
-              onDragCancel = {
-                scope.launch {
-                  progress.animateTo(0f, spring(stiffness = StiffnessMediumLow))
-                  behindRoute = null
-                  animState = AnimState.Idle
-                }
-              },
-              onHorizontalDrag = { _, dragAmount ->
-                lastDragAmount = dragAmount
-                scope.launch {
-                  val newValue = (progress.value + dragAmount / containerWidth).coerceIn(0f, 1f)
-                  progress.snapTo(newValue)
-                }
-              },
+              onDragStart = { startPopDrag() },
+              onDragEnd = { finishPopDrag() },
+              onDragCancel = { cancelPopDrag() },
+              onHorizontalDrag = { _, dragAmount -> updatePopDrag(dragAmount) },
             )
           }
         )
