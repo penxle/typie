@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,6 +52,9 @@ import co.typie.ext.clickable
 import co.typie.ext.safeDrawing
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
+import co.typie.ui.component.popover.PopoverList
+import co.typie.ui.component.popover.PopoverListItem
+import co.typie.ui.component.popover.SelectablePaneHost
 import co.typie.ui.component.popover.rememberPressGestureSessionState
 import co.typie.ui.component.popover.trackPressGestureSession
 import co.typie.ui.icon.Icon
@@ -89,53 +90,25 @@ fun BottomBarActionButton(
   val safeBottomPadding = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
   val hasMenu = menus.isNotEmpty()
   val pressGestureSessionState = rememberPressGestureSessionState()
-  val menuSelectionState = rememberBottomBarMenuSelectionState()
   var isMenuOpen by remember(icon, menus) { mutableStateOf(false) }
   var isMenuPressed by remember { mutableStateOf(false) }
   var buttonWindowTopLeft by remember { mutableStateOf(Offset.Zero) }
 
-  fun resetMenuGesture(resetBounds: Boolean = false) {
+  fun resetMenuGesture() {
     pressGestureSessionState.clear()
-    if (resetBounds) {
-      menuSelectionState.reset()
-    } else {
-      menuSelectionState.clearPointer()
-    }
     isMenuPressed = false
   }
 
   LaunchedEffect(icon, menus) {
     isMenuOpen = false
-    resetMenuGesture(resetBounds = true)
+    resetMenuGesture()
   }
 
   val bottomBarEnabled = LocalBottomBarState.current?.enabled
   LaunchedEffect(bottomBarEnabled) {
     if (bottomBarEnabled != true) {
       isMenuOpen = false
-      resetMenuGesture(resetBounds = true)
-    }
-  }
-
-  LaunchedEffect(isMenuOpen, menus, pressGestureSessionState.session) {
-    if (!isMenuOpen) {
-      return@LaunchedEffect
-    }
-
-    val session = pressGestureSessionState.session
-    val selectedIndex = menuSelectionState.syncSession(session)
-    if (session == null) {
-      return@LaunchedEffect
-    }
-
-    if (!session.isReleased) {
-      return@LaunchedEffect
-    }
-
-    pressGestureSessionState.clear()
-    selectedIndex?.let { index ->
-      isMenuOpen = false
-      menus.getOrNull(index)?.onClick?.invoke()
+      resetMenuGesture()
     }
   }
 
@@ -198,47 +171,29 @@ fun BottomBarActionButton(
               .background(AppTheme.colors.surfaceRaised, AppShapes.squircle(AppShapes.xl))
               .border(1.dp, AppTheme.colors.borderDefault, AppShapes.squircle(AppShapes.xl))
         ) {
-          Column(modifier = Modifier.width(IntrinsicSize.Max).padding(6.dp)) {
-            menus.forEachIndexed { index, item ->
-              Box(
-                modifier =
-                  Modifier.fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                      val position = coordinates.positionInWindow()
-                      val size = coordinates.size
-                      menuSelectionState.updateItemBounds(
-                        index = index,
-                        Rect(
-                          left = position.x,
-                          top = position.y,
-                          right = position.x + size.width,
-                          bottom = position.y + size.height,
-                        ),
-                      )
-                    }
-                    .background(
-                      color =
-                        if (menuSelectionState.activeIndex == index) {
-                          AppTheme.colors.surfaceTinted
-                        } else {
-                          Color.Transparent
-                        },
-                      shape = AppShapes.squircle(AppShapes.md),
+          SelectablePaneHost(
+            acceptsInput = isMenuOpen,
+            pressGestureSession = pressGestureSessionState.session,
+          ) {
+            Column(modifier = Modifier.width(IntrinsicSize.Max).padding(6.dp)) {
+              PopoverList(
+                items =
+                  menus.map { item ->
+                    PopoverListItem(
+                      content = {
+                        ActionMenuItemRow(
+                          item = item,
+                          modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
+                        )
+                      },
+                      onSelected = {
+                        resetMenuGesture()
+                        isMenuOpen = false
+                        item.onClick()
+                      },
                     )
-                    .clickable {
-                      if (menuSelectionState.consumeSuppressedClick(index)) {
-                        return@clickable
-                      }
-                      resetMenuGesture()
-                      isMenuOpen = false
-                      item.onClick()
-                    }
-              ) {
-                ActionMenuItemRow(
-                  item = item,
-                  modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
-                )
-              }
+                  }
+              )
             }
           }
         }
@@ -277,7 +232,6 @@ fun BottomBarActionButton(
                 Modifier.pointerInput(icon, menus) {
                   awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    menuSelectionState.prepareGesture()
 
                     isMenuPressed = true
                     var released = false
@@ -306,7 +260,6 @@ fun BottomBarActionButton(
                     } finally {
                       if (!released) {
                         pressGestureSessionState.clear()
-                        menuSelectionState.clearPointer()
                       }
                       isMenuPressed = false
                     }
