@@ -198,10 +198,12 @@ private fun Slider(value: Double, onValueChange: (Double) -> Unit, modifier: Mod
         Modifier.matchParentSize().pointerInput(maxWidth) {
           awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
+            var current = value
 
             fun update(x: Float) {
               val next = coerceValue(x)
-              if (next == value) return
+              if (next == current) return
+              current = next
 
               haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
               onValueChange(next)

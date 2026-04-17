@@ -66,7 +66,6 @@ internal fun PresetSnapSlider(
   value: Int,
   onValueChange: suspend (Int) -> Unit,
   range: IntRange,
-  snapPoints: List<Int>,
   sliderStep: Int,
   inputStep: Int = sliderStep,
   formatValue: (Int) -> String,
@@ -122,7 +121,6 @@ internal fun PresetSnapSlider(
         }
       },
       range = range,
-      snapPoints = snapPoints,
       step = sliderStep,
     )
   }
@@ -135,7 +133,6 @@ private fun SliderTrack(
   onDragStart: () -> Unit,
   onDragEnd: () -> Unit,
   range: IntRange,
-  snapPoints: List<Int>,
   step: Int,
 ) {
   val colors = AppTheme.colors
@@ -145,7 +142,6 @@ private fun SliderTrack(
 
   val inRange = value in range
   val rangeSpan = (range.last - range.first).toFloat()
-  val snapSet = remember(snapPoints) { snapPoints.toHashSet() }
 
   BoxWithConstraints(
     modifier = Modifier.fillMaxWidth().height(32.dp),
@@ -194,11 +190,8 @@ private fun SliderTrack(
             fun update(x: Float) {
               val next = valueFromX(x)
               if (next == current) return
-              val prev = current
               current = next
-              if (next in snapSet || prev in snapSet) {
-                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-              }
+              haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
               onDrag(next)
             }
 
