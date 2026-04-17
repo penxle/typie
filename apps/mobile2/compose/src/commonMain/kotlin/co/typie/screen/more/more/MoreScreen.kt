@@ -75,7 +75,8 @@ fun MoreScreen() {
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
           .padding(contentPadding)
-          .padding(bottom = BottomBarDefaults.BarAreaHeight),
+          .padding(bottom = BottomBarDefaults.BarAreaHeight)
+          .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Skeleton.Keep { Text("더 보기", style = AppTheme.typography.display) }

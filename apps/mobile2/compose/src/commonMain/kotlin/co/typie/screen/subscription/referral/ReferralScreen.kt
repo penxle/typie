@@ -79,7 +79,10 @@ fun ReferralScreen() {
   Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(
-        modifier = Modifier.weight(1f).verticalScroll(scrollState),
+        modifier =
+          Modifier.weight(1f)
+            .verticalScroll(scrollState)
+            .padding(AppTheme.spacings.scrollBottomPadding),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
         Text("초대", style = AppTheme.typography.display)

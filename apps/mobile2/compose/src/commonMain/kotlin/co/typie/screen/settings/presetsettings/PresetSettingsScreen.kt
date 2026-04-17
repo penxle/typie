@@ -107,6 +107,7 @@ fun PresetSettingsScreen() {
             .verticalScroll(scrollState)
             .background(colors.surfaceDefault)
             .padding(top = previewHeight + 12.dp, bottom = contentPadding.calculateBottomPadding())
+            .padding(AppTheme.spacings.scrollBottomPadding)
       ) {
         FontSection(model = model, sheet = sheet, onSave = ::save)
 

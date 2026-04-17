@@ -91,7 +91,12 @@ fun HomeScreen() {
   )
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+    Column(
+      Modifier.fillMaxSize()
+        .verticalScroll(scrollState)
+        .padding(contentPadding)
+        .padding(AppTheme.spacings.scrollBottomPadding)
+    ) {
       Skeleton.Keep { Text("홈", style = AppTheme.typography.display) }
 
       Skeleton.Bone(

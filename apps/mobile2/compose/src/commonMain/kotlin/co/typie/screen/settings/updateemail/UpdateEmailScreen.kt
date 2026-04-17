@@ -54,7 +54,12 @@ fun UpdateEmailScreen() {
 
   Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
-      Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
+      Column(
+        modifier =
+          Modifier.weight(1f)
+            .verticalScroll(scrollState)
+            .padding(AppTheme.spacings.scrollBottomPadding)
+      ) {
         Text(
           "현재 이메일 주소",
           style = AppTheme.typography.caption,

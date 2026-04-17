@@ -310,7 +310,8 @@ fun TrashScreen(entityId: String? = null) {
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
           .padding(contentPadding)
-          .padding(bottom = 16.dp),
+          .padding(bottom = 16.dp)
+          .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text(

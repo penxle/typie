@@ -73,7 +73,11 @@ fun FeedbackScreen() {
 
   Screen { contentPadding ->
     Column(
-      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding)
+          .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       FlowRow(

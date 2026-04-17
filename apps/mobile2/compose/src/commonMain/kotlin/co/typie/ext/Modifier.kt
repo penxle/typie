@@ -9,8 +9,6 @@ import androidx.compose.foundation.combinedClickable as foundationCombinedClicka
 import androidx.compose.foundation.horizontalScroll as foundationHorizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll as foundationVerticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -25,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 val LocalInteractionSource = compositionLocalOf<MutableInteractionSource?> { null }
@@ -43,13 +40,9 @@ fun InteractionScope(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun Modifier.verticalScroll(
-  state: ScrollState,
-  enabled: Boolean = true,
-  padding: PaddingValues = AppTheme.spacings.scrollBottomPadding,
-): Modifier {
+fun Modifier.verticalScroll(state: ScrollState, enabled: Boolean = true): Modifier {
   val isLocked = LocalScrollGestureLockState.current.isLocked
-  return this.foundationVerticalScroll(state, enabled = enabled && !isLocked).padding(padding)
+  return this.foundationVerticalScroll(state, enabled = enabled && !isLocked)
 }
 
 @Composable

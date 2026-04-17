@@ -49,7 +49,13 @@ fun UpdatePasswordScreen() {
   ProvideTopBar(center = { Text("비밀번호 변경", style = AppTheme.typography.title) })
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+    Column(
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding)
+          .padding(AppTheme.spacings.scrollBottomPadding)
+    ) {
       Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (model.query.data.me.hasPassword) {
           TextField(

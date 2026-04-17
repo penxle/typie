@@ -77,7 +77,11 @@ fun SettingsScreen() {
 
   Screen(loadable = model.query) { contentPadding ->
     Column(
-      modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .padding(contentPadding)
+          .padding(AppTheme.spacings.scrollBottomPadding),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text("설정", style = AppTheme.typography.display, modifier = Modifier.padding(top = 4.dp))

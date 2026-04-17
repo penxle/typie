@@ -56,7 +56,10 @@ fun DeleteUserScreen() {
   Screen { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(
-        modifier = Modifier.weight(1f).verticalScroll(scrollState),
+        modifier =
+          Modifier.weight(1f)
+            .verticalScroll(scrollState)
+            .padding(AppTheme.spacings.scrollBottomPadding),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
         Column(

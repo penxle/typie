@@ -58,7 +58,11 @@ fun SearchScreen() {
   Screen { contentPadding ->
     Box(Modifier.fillMaxSize()) {
       Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)
+        modifier =
+          Modifier.fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(contentPadding)
+            .padding(AppTheme.spacings.scrollBottomPadding)
       ) {
         if (model.inputKeyword.isBlank()) {
           RecentSearches(

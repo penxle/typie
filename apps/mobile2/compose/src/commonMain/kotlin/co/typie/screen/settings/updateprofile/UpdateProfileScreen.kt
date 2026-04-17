@@ -87,7 +87,12 @@ fun UpdateProfileScreen() {
 
   Screen(loadable = model.query) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
-      Column(modifier = Modifier.weight(1f).verticalScroll(scrollState)) {
+      Column(
+        modifier =
+          Modifier.weight(1f)
+            .verticalScroll(scrollState)
+            .padding(AppTheme.spacings.scrollBottomPadding)
+      ) {
         Column(
           modifier = Modifier.fillMaxWidth(),
           horizontalAlignment = Alignment.CenterHorizontally,
