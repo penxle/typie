@@ -21,6 +21,7 @@ import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.Button
@@ -28,6 +29,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextArea
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
@@ -72,53 +74,67 @@ fun FeedbackScreen() {
   )
 
   Screen { contentPadding ->
-    Column(
-      modifier =
-        Modifier.fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .padding(AppTheme.spacings.scrollBottomPadding),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+      Column(
+        modifier =
+          Modifier.weight(1f)
+            .verticalScroll(scrollState)
+            .padding(AppTheme.spacings.scrollBottomPadding),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        FeedbackTopics.forEach { item ->
-          FeedbackTopicChip(
-            label = item.label,
-            selected = model.form.topic.value == item.value,
-            onClick = { model.form.topic.value = item.value },
-          )
+        Text("의견 보내기", style = AppTheme.typography.display)
+
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          FeedbackTopics.forEach { item ->
+            FeedbackTopicChip(
+              label = item.label,
+              selected = model.form.topic.value == item.value,
+              onClick = { model.form.topic.value = item.value },
+            )
+          }
+        }
+
+        TextArea(field = model.form.content, placeholder = "칭찬도, 불만도, 아이디어도 다 좋아요!")
+
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(4.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          for (mood in FeedbackMoods) {
+            FeedbackMoodButton(
+              icon = mood.icon,
+              selected = model.form.mood.value == mood.value,
+              onClick = {
+                model.form.mood.value =
+                  if (model.form.mood.value == mood.value) null else mood.value
+              },
+            )
+          }
         }
       }
 
-      TextArea(field = model.form.content, placeholder = "칭찬도, 불만도, 아이디어도 다 좋아요!")
-
-      Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        for (mood in FeedbackMoods) {
-          FeedbackMoodButton(
-            icon = mood.icon,
-            selected = model.form.mood.value == mood.value,
-            onClick = {
-              model.form.mood.value = if (model.form.mood.value == mood.value) null else mood.value
-            },
-          )
-        }
-      }
+      ToastAnchor()
 
       Button(
         text = "보내기",
         loading = model.isSubmitting,
         loadingText = "보내는 중...",
         onClick = {
-          model.submit().withDefaultExceptionHandler(toast).onOk {
-            toast.success("피드백을 보냈어요. 감사해요!")
-            nav.pop()
-          }
+          model
+            .submit()
+            .withDefaultExceptionHandler(toast)
+            .onErr {
+              when (it) {
+                is FeedbackError.ValidationFailed -> toast.error(it.errorMessage)
+              }
+            }
+            .onOk {
+              toast.success("피드백을 보냈어요. 감사해요!")
+              nav.pop()
+            }
         },
       )
     }
@@ -136,7 +152,7 @@ private fun FeedbackTopicChip(label: String, selected: Boolean, onClick: suspend
             shape = AppShapes.circle,
           )
           .background(
-            color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceBase,
+            color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceDefault,
             shape = AppShapes.circle,
           )
           .clickable(onClick)

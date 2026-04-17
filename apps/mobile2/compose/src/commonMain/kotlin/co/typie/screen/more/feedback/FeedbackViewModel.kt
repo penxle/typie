@@ -16,6 +16,10 @@ import co.typie.result.loading
 import com.apollographql.apollo.api.Optional
 import kotlinx.coroutines.CoroutineScope
 
+sealed interface FeedbackError {
+  data class ValidationFailed(val errorMessage: String) : FeedbackError
+}
+
 class FeedbackForm(scope: CoroutineScope) : FormState(scope) {
   val topic =
     field<String?>(null) {
@@ -32,8 +36,8 @@ class FeedbackViewModel : ViewModel() {
   var isSubmitting by mutableStateOf(false)
     private set
 
-  suspend fun submit(): Result<Unit, Unit> {
-    if (!form.validate()) return Result.Err(Unit)
+  suspend fun submit(): Result<Unit, FeedbackError> {
+    if (!form.validate()) return Result.Err(FeedbackError.ValidationFailed(form.errorMessage!!))
 
     return loading({ isSubmitting = it }) {
       val deviceInfo = PlatformModule.deviceInfo.retrieve()
