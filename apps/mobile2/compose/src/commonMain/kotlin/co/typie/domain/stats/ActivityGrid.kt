@@ -1,6 +1,9 @@
 package co.typie.domain.stats
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,16 +15,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.typie.datetime.toLocalDate
+import co.typie.ext.comma
 import co.typie.graphql.fragment.ActivityGrid_user
 import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
@@ -32,6 +47,7 @@ import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.time.Clock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
@@ -56,60 +72,230 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
   val weeks = remember(activities) { computeWeeks(activities, gridDates, startDate, endDate) }
   val monthLabelByWeek = remember { computeMonthLabels(gridDates, startDate, endDate) }
 
-  Row(
-    modifier =
-      modifier
-        .scrollFog(FogInsets, AppTheme.colors.surfaceDefault)
-        .horizontalScroll(scrollState)
-        .padding(FogInsets.toPaddingValues()),
-    horizontalArrangement = Arrangement.spacedBy(CellGap),
-  ) {
-    Column(verticalArrangement = Arrangement.spacedBy(CellGap)) {
-      Spacer(modifier = Modifier.height(MonthLabelHeight))
+  val density = LocalDensity.current
+  val cellStridePx = with(density) { (CellSize + CellGap).toPx() }
+  val cellSizePx = with(density) { CellSize.toPx() }
+  val fogLeftPx = with(density) { FogInsets.left.toPx() }
+  val fogRightPx = with(density) { FogInsets.right.toPx() }
+  val monthLabelHeightPx = with(density) { MonthLabelHeight.toPx() }
+  val cellGapPx = with(density) { CellGap.toPx() }
+  val tooltipOffsetPx = with(density) { TooltipOffset.toPx() }
 
-      Weekdays.forEach { weekday ->
-        Box(modifier = Modifier.size(CellSize), contentAlignment = Alignment.CenterStart) {
-          if (weekday != null) {
-            Text(
-              text = weekday,
-              style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
-              color = AppTheme.colors.textTertiary,
-            )
+  var viewportWidthPx by remember { mutableStateOf(0) }
+  var activeCell by remember { mutableStateOf<ActiveCell?>(null) }
+  var displayCell by remember { mutableStateOf<ActiveCell?>(null) }
+  val alpha = remember { Animatable(0f) }
+  LaunchedEffect(activeCell) { activeCell?.let { displayCell = it } }
+  LaunchedEffect(activeCell != null) {
+    if (activeCell != null) {
+      alpha.animateTo(1f, tween(FadeDurationMs))
+    } else {
+      alpha.animateTo(0f, tween(FadeDurationMs))
+      displayCell = null
+    }
+  }
+
+  Box(modifier = modifier.onSizeChanged { viewportWidthPx = it.width }) {
+    Row(
+      modifier =
+        Modifier.scrollFog(FogInsets, AppTheme.colors.surfaceDefault)
+          .horizontalScroll(scrollState)
+          .padding(FogInsets.toPaddingValues())
+          .pointerInput(weeks) {
+            val slopPx = ArmSlop.toPx()
+            val slopSquared = slopPx * slopPx
+            awaitPointerEventScope {
+              while (true) {
+                val down = awaitFirstDown(requireUnconsumed = true)
+                val originX = down.position.x
+                val originY = down.position.y
+                var lastX = originX
+                var lastY = originY
+
+                val armed =
+                  withTimeoutOrNull(ArmDelayMs) {
+                    while (true) {
+                      val event = awaitPointerEvent()
+                      val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                      lastX = change.position.x
+                      lastY = change.position.y
+                      val dx = lastX - originX
+                      val dy = lastY - originY
+                      if (dx * dx + dy * dy > slopSquared) break
+                      if (!change.pressed) break
+                    }
+                  } == null
+
+                if (!armed) continue
+
+                activeCell =
+                  computeActiveCell(
+                    pointerX = lastX,
+                    pointerY = lastY,
+                    scrollOffsetPx = scrollState.value.toFloat(),
+                    viewportWidthPx = viewportWidthPx.toFloat(),
+                    fogLeftPx = fogLeftPx,
+                    fogRightPx = fogRightPx,
+                    cellStridePx = cellStridePx,
+                    monthLabelHeightPx = monthLabelHeightPx,
+                    cellGapPx = cellGapPx,
+                    weeks = weeks,
+                  )
+
+                while (true) {
+                  val event = awaitPointerEvent()
+                  val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                  change.consume()
+                  activeCell =
+                    computeActiveCell(
+                      pointerX = change.position.x,
+                      pointerY = change.position.y,
+                      scrollOffsetPx = scrollState.value.toFloat(),
+                      viewportWidthPx = viewportWidthPx.toFloat(),
+                      fogLeftPx = fogLeftPx,
+                      fogRightPx = fogRightPx,
+                      cellStridePx = cellStridePx,
+                      monthLabelHeightPx = monthLabelHeightPx,
+                      cellGapPx = cellGapPx,
+                      weeks = weeks,
+                    )
+                  if (!change.pressed) break
+                }
+
+                activeCell = null
+              }
+            }
+          },
+      horizontalArrangement = Arrangement.spacedBy(CellGap),
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(CellGap)) {
+        Spacer(modifier = Modifier.height(MonthLabelHeight))
+
+        Weekdays.forEach { weekday ->
+          Box(modifier = Modifier.size(CellSize), contentAlignment = Alignment.CenterStart) {
+            if (weekday != null) {
+              Text(
+                text = weekday,
+                style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+                color = AppTheme.colors.textTertiary,
+              )
+            }
+          }
+        }
+      }
+
+      weeks.forEachIndexed { weekIndex, week ->
+        Column(verticalArrangement = Arrangement.spacedBy(CellGap)) {
+          Box(
+            modifier = Modifier.size(width = CellSize, height = MonthLabelHeight),
+            contentAlignment = Alignment.BottomStart,
+          ) {
+            monthLabelByWeek[weekIndex]?.let { label ->
+              Text(
+                text = label,
+                style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+                color = AppTheme.colors.textTertiary,
+                softWrap = false,
+                overflow = TextOverflow.Visible,
+              )
+            }
+          }
+
+          week.forEach { activity ->
+            if (activity != null) {
+              Box(
+                modifier =
+                  Modifier.size(CellSize)
+                    .background(colors[activity.level], RoundedCornerShape(2.dp))
+              )
+            } else {
+              Spacer(modifier = Modifier.size(CellSize))
+            }
           }
         }
       }
     }
 
-    weeks.forEachIndexed { weekIndex, week ->
-      Column(verticalArrangement = Arrangement.spacedBy(CellGap)) {
-        Box(
-          modifier = Modifier.size(width = CellSize, height = MonthLabelHeight),
-          contentAlignment = Alignment.BottomStart,
-        ) {
-          monthLabelByWeek[weekIndex]?.let { label ->
-            Text(
-              text = label,
-              style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
-              color = AppTheme.colors.textTertiary,
-              softWrap = false,
-              overflow = TextOverflow.Visible,
-            )
-          }
-        }
+    displayCell?.let { cell ->
+      val activity = weeks.getOrNull(cell.weekIndex)?.getOrNull(cell.dayIndex) ?: return@let
+      val anchorContentX =
+        fogLeftPx + cellStridePx + cell.weekIndex * cellStridePx + cellSizePx / 2f
+      val anchorViewportX = anchorContentX - scrollState.value
+      val anchorY = monthLabelHeightPx + cellGapPx + cell.dayIndex * cellStridePx
 
-        week.forEach { activity ->
-          if (activity != null) {
-            Box(
-              modifier =
-                Modifier.size(CellSize).background(colors[activity.level], RoundedCornerShape(2.dp))
-            )
-          } else {
-            Spacer(modifier = Modifier.size(CellSize))
-          }
+      Layout(
+        content = {
+          ActivityTooltip(date = activity.date, additions = activity.additions, alpha = alpha.value)
         }
+      ) { measurables, constraints ->
+        val placeable = measurables.first().measure(Constraints())
+        val x =
+          (anchorViewportX - placeable.width / 2f)
+            .toInt()
+            .coerceIn(0, constraints.maxWidth - placeable.width)
+        val y = (anchorY - placeable.height - tooltipOffsetPx).toInt()
+        layout(0, 0) { placeable.place(x, y) }
       }
     }
   }
+}
+
+@Composable
+private fun ActivityTooltip(date: LocalDate, additions: Int, alpha: Float) {
+  val themeMode = AppTheme.themeMode
+  val background =
+    if (themeMode == ResolvedThemeMode.Dark) AppColor.dark.gray.s500 else AppColor.light.gray.s600
+
+  Column(
+    modifier =
+      Modifier.alpha(alpha)
+        .clip(RoundedCornerShape(6.dp))
+        .background(background)
+        .padding(horizontal = 10.dp, vertical = 6.dp)
+  ) {
+    Text(
+      text = "${date.year}년 ${date.month.number}월 ${date.day}일",
+      style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+      color = AppColor.white,
+    )
+    Text(
+      text = if (additions > 0) "${additions.comma}자 작성했어요" else "기록이 없어요",
+      style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+      color = AppColor.white,
+    )
+  }
+}
+
+private data class ActiveCell(val weekIndex: Int, val dayIndex: Int)
+
+private fun computeActiveCell(
+  pointerX: Float,
+  pointerY: Float,
+  scrollOffsetPx: Float,
+  viewportWidthPx: Float,
+  fogLeftPx: Float,
+  fogRightPx: Float,
+  cellStridePx: Float,
+  monthLabelHeightPx: Float,
+  cellGapPx: Float,
+  weeks: List<List<Activity?>>,
+): ActiveCell? {
+  if (viewportWidthPx <= 0f) return null
+  val viewportX = pointerX - scrollOffsetPx + fogLeftPx
+  if (viewportX < fogLeftPx || viewportX > viewportWidthPx - fogRightPx) return null
+
+  val xInWeeks = pointerX - cellStridePx
+  if (xInWeeks < 0f) return null
+  val weekIndex = (xInWeeks / cellStridePx).toInt()
+  if (weekIndex !in weeks.indices) return null
+
+  val yInGrid = pointerY - monthLabelHeightPx - cellGapPx
+  if (yInGrid < 0f) return null
+  val dayIndex = (yInGrid / cellStridePx).toInt()
+  if (dayIndex !in 0 until 7) return null
+
+  weeks[weekIndex].getOrNull(dayIndex) ?: return null
+  return ActiveCell(weekIndex, dayIndex)
 }
 
 private fun activityLevelColors(themeMode: ResolvedThemeMode): List<Color> {
@@ -139,6 +325,10 @@ private val CellSize = 12.dp
 private val CellGap = 3.dp
 private val MonthLabelHeight = 16.dp
 private val FogInsets = ScrollFogInsets(left = 16.dp, right = 16.dp)
+private val TooltipOffset = 4.dp
+private val ArmSlop = 6.dp
+private const val ArmDelayMs = 300L
+private const val FadeDurationMs = 100
 private val Weekdays = listOf(null, "월", null, "수", null, "금", null)
 
 private data class Activity(val date: LocalDate, val additions: Int, val level: Int)
