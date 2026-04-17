@@ -32,7 +32,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.unit.dp
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
@@ -42,12 +41,13 @@ import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.result.Result
 import co.typie.ui.component.Text
-import co.typie.ui.component.reorder.ReorderCommit
-import co.typie.ui.component.reorder.ReorderableListState
-import co.typie.ui.component.reorder.rememberReorderableListState
+import co.typie.ui.component.reorder.ReorderDrop
+import co.typie.ui.component.reorder.ReorderableColumn
+import co.typie.ui.component.reorder.ReorderableColumnState
+import co.typie.ui.component.reorder.rememberReorderableColumnState
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
-import co.typie.ui.component.reorder.reorderableListContainer
+import co.typie.ui.component.reorder.reorderableViewport
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.Toast
 import co.typie.ui.component.toast.ToastType
@@ -114,16 +114,16 @@ internal fun NoteList(
   val reorderViewportBottomInset =
     WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding() + 72.dp
   val reorderState =
-    rememberReorderableListState(
+    rememberReorderableColumnState(
       keys = items.map { it.note.id },
       verticalScrollableState = scrollState,
     )
-  val displayedItems = displayOrderedNoteItems(items, reorderState.displayedKeys)
+  val displayedItems = displayOrderedNoteItems(items, reorderState.keys)
 
   Box(
     modifier =
       Modifier.fillMaxSize()
-        .reorderableListContainer(
+        .reorderableViewport(
           state = reorderState,
           viewportTopInset = reorderViewportTopInset,
           viewportBottomInset = reorderViewportBottomInset,
@@ -149,152 +149,151 @@ internal fun NoteList(
         NoteEmptyState(message = emptyMessage)
       } else {
         Skeleton(enabled = isLoading) {
-          LookaheadScope {
+          ReorderableColumn(
+            state = reorderState,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
             val boundsTransform = remember {
               androidx.compose.animation.BoundsTransform { _, _ ->
                 spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
               }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-              displayedItems.forEach { item ->
-                key(item.note.id) {
-                  val note = item.note
-                  val colorOption = noteColorOptions.resolve(note.color)
-                  val noteContent = note.content
-                  val noteIsEntering = !isLoading && item.isEntering
-                  val noteIsExiting = !isLoading && item.isExiting
-                  val noteIsExitVisible = !isLoading && item.isExitVisible
+            displayedItems.forEach { item ->
+              key(item.note.id) {
+                val note = item.note
+                val colorOption = noteColorOptions.resolve(note.color)
+                val noteContent = note.content
+                val noteIsEntering = !isLoading && item.isEntering
+                val noteIsExiting = !isLoading && item.isExiting
+                val noteIsExitVisible = !isLoading && item.isExitVisible
 
-                  LaunchedEffect(item.note.id, noteIsEntering) {
-                    if (noteIsEntering) {
-                      delay(NoteEnterDurationMillis.toLong())
-                      onEnterAnimationFinished(item.note.id)
-                    }
+                LaunchedEffect(item.note.id, noteIsEntering) {
+                  if (noteIsEntering) {
+                    delay(NoteEnterDurationMillis.toLong())
+                    onEnterAnimationFinished(item.note.id)
+                  }
+                }
+
+                LaunchedEffect(item.note.id, noteIsExitVisible) {
+                  if (noteIsExitVisible) {
+                    delay((NoteExitDelayMillis + NoteExitDurationMillis).toLong())
+                    onExitAnimationFinished(item.note.id)
+                  }
+                }
+
+                val visibilityState =
+                  remember(item.note.id) { MutableTransitionState(initialState = !noteIsEntering) }
+                visibilityState.targetState = !noteIsExiting
+                val rowModifier =
+                  if (reorderState.isDragging && !reorderState.isDragging(item.note.id)) {
+                    Modifier.animateBounds(
+                      lookaheadScope = this@ReorderableColumn,
+                      boundsTransform = boundsTransform,
+                    )
+                  } else {
+                    Modifier
                   }
 
-                  LaunchedEffect(item.note.id, noteIsExitVisible) {
-                    if (noteIsExitVisible) {
-                      delay((NoteExitDelayMillis + NoteExitDurationMillis).toLong())
-                      onExitAnimationFinished(item.note.id)
-                    }
-                  }
-
-                  val visibilityState =
-                    remember(item.note.id) {
-                      MutableTransitionState(initialState = !noteIsEntering)
-                    }
-                  visibilityState.targetState = !noteIsExiting
-                  val rowModifier =
-                    if (reorderState.isDragging) {
-                      Modifier.animateBounds(
-                        lookaheadScope = this@LookaheadScope,
-                        boundsTransform = boundsTransform,
-                      )
+                AnimatedVisibility(
+                  modifier =
+                    if (interactive) {
+                      rowModifier.reorderableItem(state = reorderState, key = item.note.id)
                     } else {
-                      Modifier
-                    }
-
-                  AnimatedVisibility(
-                    modifier =
-                      if (interactive) {
-                        rowModifier.reorderableItem(state = reorderState, key = item.note.id)
-                      } else {
-                        rowModifier
-                      },
-                    visibleState = visibilityState,
-                    enter =
-                      fadeIn(animationSpec = tween(durationMillis = NoteEnterDurationMillis)) +
-                        expandVertically(
-                          animationSpec = tween(durationMillis = NoteEnterDurationMillis),
-                          expandFrom = Alignment.Top,
-                        ),
-                    exit =
-                      fadeOut(
+                      rowModifier
+                    },
+                  visibleState = visibilityState,
+                  enter =
+                    fadeIn(animationSpec = tween(durationMillis = NoteEnterDurationMillis)) +
+                      expandVertically(
+                        animationSpec = tween(durationMillis = NoteEnterDurationMillis),
+                        expandFrom = Alignment.Top,
+                      ),
+                  exit =
+                    fadeOut(
+                      animationSpec =
+                        tween(
+                          durationMillis = NoteExitDurationMillis,
+                          delayMillis = NoteExitDelayMillis,
+                        )
+                    ) +
+                      slideOutVertically(
                         animationSpec =
                           tween(
                             durationMillis = NoteExitDurationMillis,
                             delayMillis = NoteExitDelayMillis,
-                          )
+                          ),
+                        targetOffsetY = { -it / 6 },
                       ) +
-                        slideOutVertically(
-                          animationSpec =
-                            tween(
-                              durationMillis = NoteExitDurationMillis,
-                              delayMillis = NoteExitDelayMillis,
-                            ),
-                          targetOffsetY = { -it / 6 },
-                        ) +
-                        shrinkVertically(
-                          animationSpec =
-                            tween(
-                              durationMillis = NoteExitDurationMillis,
-                              delayMillis = NoteExitDelayMillis,
-                            ),
-                          shrinkTowards = Alignment.Top,
-                        ),
-                  ) {
-                    NoteCard(
-                      note = note,
-                      expanded = !isLoading && item.expanded,
-                      isDragging = !isLoading && interactive && reorderState.isDragging(note.id),
-                      content = noteContent,
-                      isSaving = !isLoading && item.isSaving,
-                      colorOption = colorOption,
-                      dragHandleModifier =
-                        if (interactive && !isLoading) {
-                          Modifier.reorderableDragHandle(
-                            state = reorderState,
-                            key = note.id,
-                            enabled =
-                              !noteIsExiting &&
-                                !item.isSaving &&
-                                !item.hasPendingColor &&
-                                (!item.expanded || !item.isDirty),
-                            onDragStopped = { commit ->
-                              scope.launch {
-                                handleReorderCommit(
-                                  noteId = note.id,
-                                  commit = commit,
-                                  displayedNotes = displayedItems.map(NoteListItem::note),
-                                  reorderState = reorderState,
-                                  toast = toast,
-                                  moveNote = { lowerOrder, upperOrder ->
-                                    actions.onMoveNote(note.id, lowerOrder, upperOrder)
-                                  },
-                                )
-                              }
-                            },
-                          )
-                        } else {
-                          Modifier
-                        },
-                      onExpand = { if (interactive && !isLoading) actions.onExpand(note) },
-                      onCollapse = { if (interactive && !isLoading) actions.onCollapse() },
-                      onContentChange = { nextValue ->
-                        if (interactive && !isLoading) {
-                          actions.onContentChange(note.id, nextValue)
-                        }
+                      shrinkVertically(
+                        animationSpec =
+                          tween(
+                            durationMillis = NoteExitDurationMillis,
+                            delayMillis = NoteExitDelayMillis,
+                          ),
+                        shrinkTowards = Alignment.Top,
+                      ),
+                ) {
+                  NoteCard(
+                    note = note,
+                    expanded = !isLoading && item.expanded,
+                    isDragging = !isLoading && interactive && reorderState.isDragging(note.id),
+                    content = noteContent,
+                    isSaving = !isLoading && item.isSaving,
+                    colorOption = colorOption,
+                    dragHandleModifier =
+                      if (interactive && !isLoading) {
+                        Modifier.reorderableDragHandle(
+                          state = reorderState,
+                          key = note.id,
+                          enabled =
+                            !noteIsExiting &&
+                              !item.isSaving &&
+                              !item.hasPendingColor &&
+                              (!item.expanded || !item.isDirty),
+                          onDragStopped = { commit ->
+                            scope.launch {
+                              handleReorderCommit(
+                                noteId = note.id,
+                                commit = commit,
+                                displayedNotes = displayedItems.map(NoteListItem::note),
+                                reorderState = reorderState,
+                                toast = toast,
+                                moveNote = { lowerOrder, upperOrder ->
+                                  actions.onMoveNote(note.id, lowerOrder, upperOrder)
+                                },
+                              )
+                            }
+                          },
+                        )
+                      } else {
+                        Modifier
                       },
-                      onBlur = { if (interactive && !isLoading) actions.onBlur(note.id) },
-                      onToggleStatus = {
-                        if (interactive && !isLoading) actions.onToggleStatus(note)
-                      },
-                      onColorChange = { nextColor ->
-                        if (interactive && !isLoading) {
-                          actions.onColorChange(note, nextColor)
-                        }
-                      },
-                      onAddEntity = { if (interactive && !isLoading) actions.onAddEntity(note) },
-                      onEntityClick = { entity ->
-                        if (interactive && !isLoading) {
-                          actions.onEntityClick(note, entity)
-                        }
-                      },
-                      onDelete = { if (interactive && !isLoading) actions.onDelete(note) },
-                      noteColorOptions = noteColorOptions,
-                    )
-                  }
+                    onExpand = { if (interactive && !isLoading) actions.onExpand(note) },
+                    onCollapse = { if (interactive && !isLoading) actions.onCollapse() },
+                    onContentChange = { nextValue ->
+                      if (interactive && !isLoading) {
+                        actions.onContentChange(note.id, nextValue)
+                      }
+                    },
+                    onBlur = { if (interactive && !isLoading) actions.onBlur(note.id) },
+                    onToggleStatus = {
+                      if (interactive && !isLoading) actions.onToggleStatus(note)
+                    },
+                    onColorChange = { nextColor ->
+                      if (interactive && !isLoading) {
+                        actions.onColorChange(note, nextColor)
+                      }
+                    },
+                    onAddEntity = { if (interactive && !isLoading) actions.onAddEntity(note) },
+                    onEntityClick = { entity ->
+                      if (interactive && !isLoading) {
+                        actions.onEntityClick(note, entity)
+                      }
+                    },
+                    onDelete = { if (interactive && !isLoading) actions.onDelete(note) },
+                    noteColorOptions = noteColorOptions,
+                  )
                 }
               }
             }
@@ -323,9 +322,9 @@ private fun NoteEmptyState(message: String) {
 
 private suspend fun handleReorderCommit(
   noteId: String,
-  commit: ReorderCommit<String>?,
+  commit: ReorderDrop<String>?,
   displayedNotes: List<NoteCard_note>,
-  reorderState: ReorderableListState<String>,
+  reorderState: ReorderableColumnState<String>,
   toast: Toast,
   moveNote: suspend (lowerOrder: String?, upperOrder: String?) -> Result<Unit, Nothing>,
 ) {
@@ -343,7 +342,6 @@ private suspend fun handleReorderCommit(
     is Result.Ok -> Unit
     is Result.Err,
     is Result.Exception -> {
-      reorderState.resetToServerKeys(displayedNotes.map { it.id })
       toast.show(ToastType.Error, "순서를 바꿀 수 없어요.")
     }
   }

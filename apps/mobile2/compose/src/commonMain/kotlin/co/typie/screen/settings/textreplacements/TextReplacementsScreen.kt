@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,11 +32,12 @@ import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
-import co.typie.ui.component.reorder.ReorderableListState
-import co.typie.ui.component.reorder.rememberReorderableListState
+import co.typie.ui.component.reorder.ReorderableColumn
+import co.typie.ui.component.reorder.ReorderableColumnState
+import co.typie.ui.component.reorder.rememberReorderableColumnState
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
-import co.typie.ui.component.reorder.reorderableListContainer
+import co.typie.ui.component.reorder.reorderableViewport
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -73,12 +75,12 @@ fun TextReplacementsScreen() {
     val displayed = model.displayedCustoms
     val keys = displayed.map { it.textReplacementId }
     val reorderState =
-      rememberReorderableListState(keys = keys, verticalScrollableState = scrollState)
+      rememberReorderableColumnState(keys = keys, verticalScrollableState = scrollState)
 
     Box(
       modifier =
         Modifier.fillMaxSize()
-          .reorderableListContainer(
+          .reorderableViewport(
             state = reorderState,
             viewportTopInset =
               maxOf(
@@ -177,7 +179,7 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
 private fun CustomSection(
   model: TextReplacementsViewModel,
   displayed: List<TextReplacement>,
-  reorderState: ReorderableListState<String>,
+  reorderState: ReorderableColumnState<String>,
   scope: CoroutineScope,
 ) {
   val sheet = LocalSheet.current
@@ -194,9 +196,11 @@ private fun CustomSection(
     if (displayed.isEmpty()) {
       CardSurface(modifier = Modifier.fillMaxWidth()) { EmptyStateMessage() }
     } else {
+      val byId = remember(displayed) { displayed.associateBy { it.textReplacementId } }
+      val ordered = reorderState.keys.mapNotNull(byId::get)
       CardSurface(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-          displayed.forEachIndexed { index, entry ->
+        ReorderableColumn(state = reorderState, modifier = Modifier.fillMaxWidth()) {
+          ordered.forEachIndexed { index, entry ->
             key(entry.textReplacementId) {
               if (index > 0) CardDivider(inset = 20.dp)
               CustomRow(
@@ -244,7 +248,7 @@ private fun PresetRow(
 private fun CustomRow(
   entry: TextReplacement,
   order: Int,
-  reorderState: ReorderableListState<String>,
+  reorderState: ReorderableColumnState<String>,
   reorderEnabled: Boolean,
   onEdit: suspend () -> Unit,
   onToggle: suspend () -> Unit,
@@ -263,9 +267,9 @@ private fun CustomRow(
             state = reorderState,
             key = id,
             enabled = reorderEnabled,
-            onDragStopped = { commit ->
-              if (commit == null) return@reorderableDragHandle
-              onReorderCommit(commit.movedKey, commit.orderedKeys)
+            onDragStopped = { drop ->
+              if (drop == null) return@reorderableDragHandle
+              onReorderCommit(drop.movedKey, drop.orderedKeys)
             },
           )
           .size(width = 44.dp, height = 56.dp),

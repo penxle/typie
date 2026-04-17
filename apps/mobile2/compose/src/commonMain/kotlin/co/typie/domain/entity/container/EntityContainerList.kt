@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -40,8 +39,9 @@ import co.typie.icons.Lucide
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Text
-import co.typie.ui.component.reorder.ReorderCommit
-import co.typie.ui.component.reorder.ReorderableListState
+import co.typie.ui.component.reorder.ReorderDrop
+import co.typie.ui.component.reorder.ReorderableColumn
+import co.typie.ui.component.reorder.ReorderableColumnState
 import co.typie.ui.component.reorder.reorderableDragHandle
 import co.typie.ui.component.reorder.reorderableItem
 import co.typie.ui.icon.Icon
@@ -53,7 +53,7 @@ fun EntityContainerListContent(
   items: List<EntityRow_entity>,
   emptyMessage: String,
   isReordering: Boolean,
-  reorderState: ReorderableListState<String>,
+  reorderState: ReorderableColumnState<String>,
   isPersistingReorder: Boolean,
   selectionState: EntityContainerSelectionState = EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
@@ -67,7 +67,7 @@ fun EntityContainerListContent(
   onSelectionToggle: suspend (itemId: String) -> Unit = {},
   onDragStarted: () -> Unit = {},
   onDragMoved: () -> Unit = {},
-  onDragStopped: (ReorderCommit<String>?) -> Unit,
+  onDragStopped: (ReorderDrop<String>?) -> Unit,
 ) {
   Column(modifier = modifier.fillMaxSize()) {
     header()
@@ -132,47 +132,54 @@ fun EntityContainerListContent(
 @Composable
 fun EntityContainerReorderListCard(
   items: List<EntityRow_entity>,
-  reorderState: ReorderableListState<String>,
+  reorderState: ReorderableColumnState<String>,
   isPersistingReorder: Boolean,
   onDragStarted: () -> Unit = {},
   onDragMoved: () -> Unit = {},
-  onDragStopped: (ReorderCommit<String>?) -> Unit,
+  onDragStopped: (ReorderDrop<String>?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  LookaheadScope {
+  ReorderableColumn(
+    state = reorderState,
+    modifier = modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(0.dp),
+  ) {
     val boundsTransform = remember {
       androidx.compose.animation.BoundsTransform { _, _ ->
         spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)
       }
     }
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-      items.forEachIndexed { index, entity ->
-        key(entity.id) {
-          val isDragging = reorderState.isDragging(entity.id)
+    items.forEachIndexed { index, entity ->
+      key(entity.id) {
+        val isDragging = reorderState.isDragging(entity.id)
 
-          EntityContainerReorderRow(
-            modifier =
-              Modifier.animateBounds(
-                  lookaheadScope = this@LookaheadScope,
-                  boundsTransform = boundsTransform,
-                )
-                .reorderableItem(state = reorderState, key = entity.id),
-            item = entity,
-            isDragging = isDragging,
-            isFirst = index == 0,
-            isLast = index == items.lastIndex,
-            dragHandleModifier =
-              Modifier.reorderableDragHandle(
-                state = reorderState,
-                key = entity.id,
-                enabled = !isPersistingReorder,
-                onDragStarted = onDragStarted,
-                onDragMoved = onDragMoved,
-                onDragStopped = onDragStopped,
-              ),
-          )
-        }
+        val rowModifier =
+          if (isDragging) {
+            Modifier
+          } else {
+            Modifier.animateBounds(
+              lookaheadScope = this@ReorderableColumn,
+              boundsTransform = boundsTransform,
+            )
+          }
+
+        EntityContainerReorderRow(
+          modifier = rowModifier.reorderableItem(state = reorderState, key = entity.id),
+          item = entity,
+          isDragging = isDragging,
+          isFirst = index == 0,
+          isLast = index == items.lastIndex,
+          dragHandleModifier =
+            Modifier.reorderableDragHandle(
+              state = reorderState,
+              key = entity.id,
+              enabled = !isPersistingReorder,
+              onDragStarted = onDragStarted,
+              onDragMoved = onDragMoved,
+              onDragStopped = onDragStopped,
+            ),
+        )
       }
     }
   }

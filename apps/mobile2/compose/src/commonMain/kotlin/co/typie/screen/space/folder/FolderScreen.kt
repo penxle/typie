@@ -61,7 +61,6 @@ import co.typie.icons.Lucide
 import co.typie.navigation.LocalRoute
 import co.typie.navigation.Nav
 import co.typie.result.onErr
-import co.typie.result.onException
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
@@ -77,8 +76,8 @@ import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.reorder.rememberReorderableListState
-import co.typie.ui.component.reorder.reorderableListContainer
+import co.typie.ui.component.reorder.rememberReorderableColumnState
+import co.typie.ui.component.reorder.reorderableViewport
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
@@ -130,10 +129,10 @@ fun FolderScreen(entityId: String) {
     }
   val serverChildIds = remember(serverChildren) { serverChildren.map { it.id } }
   val reorderState =
-    rememberReorderableListState(keys = serverChildIds, verticalScrollableState = scrollState)
+    rememberReorderableColumnState(keys = serverChildIds, verticalScrollableState = scrollState)
   val displayChildren =
-    remember(serverChildren, reorderState.displayedKeys) {
-      displayEntityRows(serverChildren, reorderState.displayedKeys)
+    remember(serverChildren, reorderState.keys) {
+      displayEntityRows(serverChildren, reorderState.keys)
     }
   val selection = rememberEntityContainerSelection(displayChildren)
   val selectionState = selection.state
@@ -517,7 +516,7 @@ fun FolderScreen(entityId: String) {
     Box(
       modifier =
         Modifier.fillMaxSize()
-          .reorderableListContainer(
+          .reorderableViewport(
             state = reorderState,
             viewportTopInset = reorderViewportTopInset,
             viewportBottomInset = reorderViewportBottomInset,
@@ -733,39 +732,29 @@ fun FolderScreen(entityId: String) {
             }
           },
         onSelectionToggle = { selection.toggle(it) },
-        onDragStopped = onDragStopped@{ commit ->
-            if (commit == null || commit.orderedKeys == serverChildIds) {
+        onDragStopped = onDragStopped@{ drop ->
+            if (drop == null || drop.orderedKeys == serverChildIds) {
               return@onDragStopped
             }
 
-            val parentEntityId =
-              entity?.id
-                ?: run {
-                  reorderState.resetToServerKeys(serverChildIds)
-                  return@onDragStopped
-                }
+            val parentEntityId = entity?.id ?: return@onDragStopped
             val reorderOrders =
               calculateEntityReorderOrdersFromOrderedKeys(
                 items = serverChildren,
-                orderedKeys = commit.orderedKeys,
-                movedKey = commit.movedKey,
-              )
-                ?: run {
-                  reorderState.resetToServerKeys(serverChildIds)
-                  return@onDragStopped
-                }
+                orderedKeys = drop.orderedKeys,
+                movedKey = drop.movedKey,
+              ) ?: return@onDragStopped
 
             isPersistingReorder = true
             presenterScope.launch {
               model
                 .moveChildEntity(
-                  entityId = commit.movedKey,
+                  entityId = drop.movedKey,
                   parentEntityId = parentEntityId,
                   lowerOrder = reorderOrders.lowerOrder,
                   upperOrder = reorderOrders.upperOrder,
                 )
                 .withDefaultExceptionHandler(toast)
-                .onException { reorderState.resetToServerKeys(serverChildIds) }
               isPersistingReorder = false
             }
           },
