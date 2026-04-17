@@ -19,6 +19,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class SearchViewModel : ViewModel() {
+  var inputKeyword by mutableStateOf("")
+    private set
+
+  private var activeKeyword by mutableStateOf("")
+
+  private var debounceJob: Job? = null
+
   val query =
     Apollo.watchQuery(
       scope = viewModelScope,
@@ -37,39 +44,44 @@ class SearchViewModel : ViewModel() {
       SearchScreen_Search_Query(siteId = Preference.siteId!!, query = activeKeyword)
     }
 
-  var inputKeyword by mutableStateOf("")
-    private set
-
-  private var activeKeyword by mutableStateOf("")
-
-  private var debounceJob: Job? = null
-
   fun setKeyword(keyword: String) {
     inputKeyword = keyword
     debounceJob?.cancel()
+
+    if (keyword.isBlank()) {
+      activeKeyword = ""
+      return
+    }
+
     debounceJob = viewModelScope.launch {
       delay(300)
       activeKeyword = keyword
     }
   }
 
-  fun flush() {
+  fun submitKeyword(keyword: String = inputKeyword) {
     debounceJob?.cancel()
-    activeKeyword = ""
+    inputKeyword = keyword
+    activeKeyword = keyword
   }
 
   fun addRecent() {
-    Preference.recentSearches =
-      Preference.recentSearches.toMutableList().apply {
-        remove(activeKeyword)
-        add(0, activeKeyword)
-        take(10)
-      }
+    Preference.recentSearches = updatedRecentSearches(Preference.recentSearches, activeKeyword)
   }
 
   fun removeRecent(keyword: String) {
     Preference.recentSearches -= keyword
   }
+}
+
+internal fun updatedRecentSearches(recentSearches: List<String>, keyword: String): List<String> {
+  if (keyword.isBlank()) return recentSearches
+
+  return buildList {
+      add(keyword)
+      recentSearches.filterNotTo(this) { it == keyword }
+    }
+    .take(10)
 }
 
 private fun placeholderData() =

@@ -1,18 +1,28 @@
 package co.typie.screen.home.search
 
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.timeAgo
@@ -29,6 +39,7 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
 import co.typie.ext.separated
+import co.typie.ext.truncate
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
 import co.typie.graphql.SearchScreen_Search_Query
@@ -40,8 +51,10 @@ import co.typie.route.Route
 import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
+import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
+import co.typie.ui.component.TextField
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
@@ -51,25 +64,41 @@ import co.typie.ui.theme.AppTheme
 fun SearchScreen() {
   val model = viewModel { SearchViewModel() }
   val scrollState = rememberScrollState()
-  val nav = Nav.current
+  val placeholder = "${model.query.data.site.name.truncate(10)}에서 검색..."
+  var didEnter by remember { mutableStateOf(false) }
+  val searchFieldTopOffset by
+    animateDpAsState(
+      targetValue = if (didEnter) 0.dp else 56.dp,
+      animationSpec = tween(durationMillis = 220, easing = EaseOutCubic),
+    )
+
+  LaunchedEffect(Unit) { didEnter = true }
 
   ProvideTopBar()
 
   Screen { contentPadding ->
-    Box(Modifier.fillMaxSize()) {
-      Column(
-        modifier =
-          Modifier.fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(contentPadding)
-            .padding(AppTheme.spacings.scrollBottomPadding)
-      ) {
+    Column(
+      modifier =
+        Modifier.fillMaxSize()
+          .padding(contentPadding)
+          .padding(AppTheme.spacings.scrollBottomPadding)
+    ) {
+      Spacer(Modifier.height(searchFieldTopOffset))
+
+      SearchInputField(
+        value = model.inputKeyword,
+        placeholder = placeholder,
+        onValueChange = { model.setKeyword(it) },
+        onSubmit = { model.submitKeyword() },
+        modifier = Modifier.fillMaxWidth(),
+      )
+
+      Spacer(Modifier.height(16.dp))
+
+      Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(scrollState)) {
         if (model.inputKeyword.isBlank()) {
           RecentSearches(
-            onSelect = {
-              model.setKeyword(it)
-              model.flush()
-            },
+            onSelect = { model.submitKeyword(it) },
             onRemove = { model.removeRecent(it) },
           )
         } else {
@@ -109,6 +138,30 @@ fun SearchScreen() {
       }
     }
   }
+}
+
+@Composable
+private fun SearchInputField(
+  value: String,
+  placeholder: String,
+  onValueChange: (String) -> Unit,
+  onSubmit: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  TextField(
+    value = value,
+    onValueChange = onValueChange,
+    label = "검색",
+    modifier = modifier,
+    labelPosition = LabelPosition.None,
+    placeholder = placeholder,
+    autoFocus = true,
+    imeAction = ImeAction.Search,
+    onImeAction = onSubmit,
+    leadingIcon = {
+      Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textMuted)
+    },
+  )
 }
 
 @Composable
