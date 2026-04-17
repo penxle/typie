@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.excludeTop
+import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.graphql.fragment.Img_image
@@ -38,7 +40,6 @@ import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
@@ -80,41 +81,45 @@ fun UpdateProfileScreen() {
     }
   }
 
-  ProvideTopBar(
-    center = { Text("프로필 변경", style = AppTheme.typography.title) },
-    scrollOffset = scrollState.topBarScrollOffset(),
-  )
+  ProvideTopBar(center = { Text("프로필 변경", style = AppTheme.typography.title) })
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
-      Column(
-        modifier =
-          Modifier.weight(1f)
-            .verticalScroll(scrollState)
-            .padding(AppTheme.spacings.scrollBottomPadding)
-      ) {
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+      Box(modifier = Modifier.weight(1f)) {
         Column(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalAlignment = Alignment.CenterHorizontally,
-          verticalArrangement = Arrangement.spacedBy(12.dp),
+          modifier =
+            Modifier.fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(contentPadding.onlyTop())
+              .padding(AppTheme.spacings.scrollBottomPadding)
         ) {
-          ProfileAvatar(
-            image = model.query.data.me.avatar.img_image,
-            previewUrl = model.avatarPreviewUrl,
-            onClick = { filePicker("image/*") },
+          Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            ProfileAvatar(
+              image = model.query.data.me.avatar.img_image,
+              previewUrl = model.avatarPreviewUrl,
+              onClick = { filePicker("image/*") },
+            )
+
+            Text(
+              "프로필 사진",
+              style = AppTheme.typography.caption,
+              color = AppTheme.colors.textTertiary,
+            )
+          }
+
+          Spacer(Modifier.height(32.dp))
+
+          TextField(
+            field = model.form.name,
+            label = "닉네임",
+            labelPosition = LabelPosition.Internal,
+            onImeAction = { submit() },
           )
-
-          Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
         }
-
-        Spacer(Modifier.height(32.dp))
-
-        TextField(
-          field = model.form.name,
-          label = "닉네임",
-          labelPosition = LabelPosition.Internal,
-          onImeAction = { submit() },
-        )
       }
 
       ToastAnchor()

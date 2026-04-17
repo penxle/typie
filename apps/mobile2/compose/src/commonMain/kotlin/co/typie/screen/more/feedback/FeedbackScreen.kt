@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.excludeTop
+import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.icons.Lucide
@@ -31,7 +33,6 @@ import co.typie.ui.component.TextArea
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.state.rememberScrollState
@@ -68,50 +69,48 @@ fun FeedbackScreen() {
   val nav = Nav.current
   val toast = LocalToast.current
 
-  ProvideTopBar(
-    center = { Text("의견 보내기", style = AppTheme.typography.title) },
-    scrollOffset = scrollState.topBarScrollOffset(),
-  )
+  ProvideTopBar(center = { Text("의견 보내기", style = AppTheme.typography.title) })
 
   Screen { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
-      Column(
-        modifier =
-          Modifier.weight(1f)
-            .verticalScroll(scrollState)
-            .padding(AppTheme.spacings.scrollBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        Text("의견 보내기", style = AppTheme.typography.display)
-
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+      Box(modifier = Modifier.weight(1f)) {
+        Column(
+          modifier =
+            Modifier.fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(contentPadding.onlyTop())
+              .padding(AppTheme.spacings.scrollBottomPadding),
+          verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-          FeedbackTopics.forEach { item ->
-            FeedbackTopicChip(
-              label = item.label,
-              selected = model.form.topic.value == item.value,
-              onClick = { model.form.topic.value = item.value },
-            )
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            FeedbackTopics.forEach { item ->
+              FeedbackTopicChip(
+                label = item.label,
+                selected = model.form.topic.value == item.value,
+                onClick = { model.form.topic.value = item.value },
+              )
+            }
           }
-        }
 
-        TextArea(field = model.form.content, placeholder = "칭찬도, 불만도, 아이디어도 다 좋아요!")
+          TextArea(field = model.form.content, placeholder = "칭찬도, 불만도, 아이디어도 다 좋아요!")
 
-        Row(
-          horizontalArrangement = Arrangement.spacedBy(4.dp),
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          for (mood in FeedbackMoods) {
-            FeedbackMoodButton(
-              icon = mood.icon,
-              selected = model.form.mood.value == mood.value,
-              onClick = {
-                model.form.mood.value =
-                  if (model.form.mood.value == mood.value) null else mood.value
-              },
-            )
+          Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            for (mood in FeedbackMoods) {
+              FeedbackMoodButton(
+                icon = mood.icon,
+                selected = model.form.mood.value == mood.value,
+                onClick = {
+                  model.form.mood.value =
+                    if (model.form.mood.value == mood.value) null else mood.value
+                },
+              )
+            }
           }
         }
       }

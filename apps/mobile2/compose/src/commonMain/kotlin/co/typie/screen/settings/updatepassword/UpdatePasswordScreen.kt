@@ -1,6 +1,7 @@
 package co.typie.screen.settings.updatepassword
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -10,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.excludeTop
+import co.typie.ext.onlyTop
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
 import co.typie.result.loading
@@ -49,43 +52,46 @@ fun UpdatePasswordScreen() {
   ProvideTopBar(center = { Text("비밀번호 변경", style = AppTheme.typography.title) })
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(
-      modifier =
-        Modifier.fillMaxSize()
-          .verticalScroll(scrollState)
-          .padding(contentPadding)
-          .padding(AppTheme.spacings.scrollBottomPadding)
-    ) {
-      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (model.query.data.me.hasPassword) {
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+      Box(modifier = Modifier.weight(1f)) {
+        Column(
+          modifier =
+            Modifier.fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(contentPadding.onlyTop())
+              .padding(AppTheme.spacings.scrollBottomPadding),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          if (model.query.data.me.hasPassword) {
+            TextField(
+              field = model.form.currentPassword,
+              label = "현재 비밀번호",
+              labelPosition = LabelPosition.Internal,
+              placeholder = "********",
+              isPassword = true,
+              contentType = ContentType.Password,
+            )
+          }
+
           TextField(
-            field = model.form.currentPassword,
-            label = "현재 비밀번호",
+            field = model.form.newPassword,
+            label = "새 비밀번호",
             labelPosition = LabelPosition.Internal,
             placeholder = "********",
             isPassword = true,
-            contentType = ContentType.Password,
+            contentType = ContentType.NewPassword,
+          )
+
+          TextField(
+            field = model.form.confirmPassword,
+            label = "새 비밀번호 확인",
+            labelPosition = LabelPosition.Internal,
+            placeholder = "********",
+            isPassword = true,
+            contentType = ContentType.NewPassword,
+            onImeAction = { submit() },
           )
         }
-
-        TextField(
-          field = model.form.newPassword,
-          label = "새 비밀번호",
-          labelPosition = LabelPosition.Internal,
-          placeholder = "********",
-          isPassword = true,
-          contentType = ContentType.NewPassword,
-        )
-
-        TextField(
-          field = model.form.confirmPassword,
-          label = "새 비밀번호 확인",
-          labelPosition = LabelPosition.Internal,
-          placeholder = "********",
-          isPassword = true,
-          contentType = ContentType.NewPassword,
-          onImeAction = { submit() },
-        )
       }
 
       ToastAnchor()

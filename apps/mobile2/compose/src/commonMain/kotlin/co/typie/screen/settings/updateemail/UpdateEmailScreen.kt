@@ -1,5 +1,6 @@
 package co.typie.screen.settings.updateemail
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,8 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.ext.excludeTop
+import co.typie.ext.onlyTop
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
 import co.typie.result.onOk
@@ -53,34 +56,37 @@ fun UpdateEmailScreen() {
   ProvideTopBar(center = { Text("이메일 변경", style = AppTheme.typography.title) })
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
-      Column(
-        modifier =
-          Modifier.weight(1f)
-            .verticalScroll(scrollState)
-            .padding(AppTheme.spacings.scrollBottomPadding)
-      ) {
-        Text(
-          "현재 이메일 주소",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textSecondary,
-        )
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+      Box(modifier = Modifier.weight(1f)) {
+        Column(
+          modifier =
+            Modifier.fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(contentPadding.onlyTop())
+              .padding(AppTheme.spacings.scrollBottomPadding)
+        ) {
+          Text(
+            "현재 이메일 주소",
+            style = AppTheme.typography.caption,
+            color = AppTheme.colors.textSecondary,
+          )
 
-        Spacer(Modifier.height(8.dp))
+          Spacer(Modifier.height(8.dp))
 
-        Text(model.query.data.me.email, style = AppTheme.typography.action)
+          Text(model.query.data.me.email, style = AppTheme.typography.action)
 
-        Spacer(Modifier.height(20.dp))
+          Spacer(Modifier.height(20.dp))
 
-        TextField(
-          field = model.form.email,
-          label = "변경할 이메일 주소",
-          labelPosition = LabelPosition.External,
-          placeholder = "me@example.com",
-          contentType = ContentType.EmailAddress,
-          keyboardType = KeyboardType.Email,
-          onImeAction = { submit() },
-        )
+          TextField(
+            field = model.form.email,
+            label = "변경할 이메일 주소",
+            labelPosition = LabelPosition.External,
+            placeholder = "me@example.com",
+            contentType = ContentType.EmailAddress,
+            keyboardType = KeyboardType.Email,
+            onImeAction = { submit() },
+          )
+        }
       }
 
       ToastAnchor()

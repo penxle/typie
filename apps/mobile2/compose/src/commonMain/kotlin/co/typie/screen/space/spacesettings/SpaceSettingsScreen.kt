@@ -23,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,6 +32,8 @@ import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.excludeTop
+import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
@@ -71,7 +72,6 @@ import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
-import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
@@ -116,36 +116,19 @@ fun SpaceSettingsScreen() {
   ProvideTopBar(
     center = { Text("스페이스 설정", style = AppTheme.typography.title) },
     trailing = { MoreMenu(model) },
-    scrollOffset = scrollState.topBarScrollOffset(),
   )
 
   Screen(loadable = model.query) { contentPadding ->
-    val layoutDirection = LocalLayoutDirection.current
-
-    Column(
-      modifier =
-        Modifier.fillMaxSize()
-          .padding(
-            start = contentPadding.calculateLeftPadding(layoutDirection),
-            end = contentPadding.calculateRightPadding(layoutDirection),
-            bottom = contentPadding.calculateBottomPadding(),
-          )
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
       Box(modifier = Modifier.weight(1f)) {
         Column(
           modifier =
             Modifier.fillMaxSize()
               .verticalScroll(scrollState)
-              .padding(top = contentPadding.calculateTopPadding())
+              .padding(contentPadding.onlyTop())
               .padding(AppTheme.spacings.scrollBottomPadding),
           verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          Text(
-            "스페이스 설정",
-            style = AppTheme.typography.display,
-            modifier = Modifier.padding(top = 4.dp),
-          )
-
           SectionTitle("일반")
 
           CardSurface(modifier = Modifier.fillMaxWidth()) {
