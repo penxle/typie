@@ -44,7 +44,9 @@ internal class AndroidPurchaseService(private val context: Context) : PurchaseSe
       .setListener { _, purchases ->
         purchases?.forEach { purchase -> coroutineScope.launch { handlePurchase(purchase) } }
       }
-      .enablePendingPurchases(PendingPurchasesParams.newBuilder().enablePrepaidPlans().build())
+      .enablePendingPurchases(
+        PendingPurchasesParams.newBuilder().enableOneTimeProducts().enablePrepaidPlans().build()
+      )
       .enableAutoServiceReconnection()
       .build()
 

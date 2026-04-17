@@ -51,7 +51,7 @@ internal class IOSPurchaseService : PurchaseService {
     }
   }
 
-  context(_: ActivityContext)
+  context(activity: ActivityContext)
   override suspend fun purchase(product: PurchaseProduct, accountId: String): Boolean {
     val bridge = bridge ?: return false
 

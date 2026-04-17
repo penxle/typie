@@ -1,7 +1,5 @@
-package co.typie.auth.sso
+package co.typie.domain.auth.sso
 
-import co.typie.domain.auth.sso.SingleSignOnAdapter
-import co.typie.domain.auth.sso.SingleSignOnCredential
 import co.typie.platform.ActivityContext
 
 actual class AppleSingleSignOnProvider : SingleSignOnAdapter {
