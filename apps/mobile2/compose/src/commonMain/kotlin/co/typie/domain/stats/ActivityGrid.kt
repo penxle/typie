@@ -25,10 +25,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,7 @@ import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.ResolvedThemeMode
 import kotlin.time.Clock
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -73,6 +76,7 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
 
   val density = LocalDensity.current
   val layoutDirection = LocalLayoutDirection.current
+  val haptic = LocalHapticFeedback.current
   val cellStridePx = with(density) { (CellSize + CellGap).toPx() }
   val cellSizePx = with(density) { CellSize.toPx() }
   val fogLeftPx = with(density) { FogInsets.calculateLeftPadding(layoutDirection).toPx() }
@@ -83,12 +87,22 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
 
   var viewportWidthPx by remember { mutableStateOf(0) }
   var activeCell by remember { mutableStateOf<ActiveCell?>(null) }
+  var pressed by remember { mutableStateOf(false) }
   var displayCell by remember { mutableStateOf<ActiveCell?>(null) }
   val alpha = remember { Animatable(0f) }
-  LaunchedEffect(activeCell) { activeCell?.let { displayCell = it } }
-  LaunchedEffect(activeCell != null) {
+  LaunchedEffect(activeCell) {
+    activeCell?.let {
+      displayCell = it
+      haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+    }
+  }
+  LaunchedEffect(activeCell, pressed) {
     if (activeCell != null) {
       alpha.animateTo(1f, tween(FadeDurationMs))
+      if (!pressed) {
+        delay(LingerMs)
+        activeCell = null
+      }
     } else {
       alpha.animateTo(0f, tween(FadeDurationMs))
       displayCell = null
@@ -112,21 +126,26 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
                 var lastX = originX
                 var lastY = originY
 
-                val armed =
+                var cancelled = false
+                val longPress =
                   withTimeoutOrNull(ArmDelayMs) {
                     while (true) {
                       val event = awaitPointerEvent()
-                      val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                      val change =
+                        event.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull
                       lastX = change.position.x
                       lastY = change.position.y
                       val dx = lastX - originX
                       val dy = lastY - originY
-                      if (dx * dx + dy * dy > slopSquared) break
-                      if (!change.pressed) break
+                      if (dx * dx + dy * dy > slopSquared) {
+                        cancelled = true
+                        return@withTimeoutOrNull
+                      }
+                      if (!change.pressed) return@withTimeoutOrNull
                     }
                   } == null
 
-                if (!armed) continue
+                if (cancelled) continue
 
                 activeCell =
                   computeActiveCell(
@@ -142,27 +161,29 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
                     weeks = weeks,
                   )
 
-                while (true) {
-                  val event = awaitPointerEvent()
-                  val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                  change.consume()
-                  activeCell =
-                    computeActiveCell(
-                      pointerX = change.position.x,
-                      pointerY = change.position.y,
-                      scrollOffsetPx = scrollState.value.toFloat(),
-                      viewportWidthPx = viewportWidthPx.toFloat(),
-                      fogLeftPx = fogLeftPx,
-                      fogRightPx = fogRightPx,
-                      cellStridePx = cellStridePx,
-                      monthLabelHeightPx = monthLabelHeightPx,
-                      cellGapPx = cellGapPx,
-                      weeks = weeks,
-                    )
-                  if (!change.pressed) break
+                if (longPress) {
+                  pressed = true
+                  while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    change.consume()
+                    activeCell =
+                      computeActiveCell(
+                        pointerX = change.position.x,
+                        pointerY = change.position.y,
+                        scrollOffsetPx = scrollState.value.toFloat(),
+                        viewportWidthPx = viewportWidthPx.toFloat(),
+                        fogLeftPx = fogLeftPx,
+                        fogRightPx = fogRightPx,
+                        cellStridePx = cellStridePx,
+                        monthLabelHeightPx = monthLabelHeightPx,
+                        cellGapPx = cellGapPx,
+                        weeks = weeks,
+                      )
+                    if (!change.pressed) break
+                  }
+                  pressed = false
                 }
-
-                activeCell = null
               }
             }
           },
@@ -329,10 +350,11 @@ private val CellSize = 12.dp
 private val CellGap = 3.dp
 private val MonthLabelHeight = 16.dp
 private val FogInsets = PaddingValues(horizontal = 16.dp)
-private val TooltipOffset = 4.dp
+private val TooltipOffset = 24.dp
 private val ArmSlop = 6.dp
 private const val ArmDelayMs = 300L
-private const val FadeDurationMs = 100
+private const val LingerMs = 500L
+private const val FadeDurationMs = 250
 private val Weekdays = listOf(null, "월", null, "수", null, "금", null)
 
 private data class Activity(val date: LocalDate, val additions: Int, val level: Int)
