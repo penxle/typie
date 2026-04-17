@@ -2,8 +2,11 @@ package co.typie.screen.home.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -93,7 +96,7 @@ fun HomeScreen() {
     },
   )
 
-  Screen(loadable = model.query) { contentPadding ->
+  Screen(loadable = model.query, contentPadding = PaddingValues.Zero) { contentPadding ->
     Column(
       Modifier.fillMaxSize()
         .verticalScroll(scrollState)
@@ -101,18 +104,26 @@ fun HomeScreen() {
         .padding(bottom = BottomBarDefaults.BarAreaHeight)
         .padding(AppTheme.spacings.scrollBottomPadding)
     ) {
-      Skeleton.Keep { Text("홈", style = AppTheme.typography.display) }
+      Skeleton.Keep {
+        Text(
+          "홈",
+          modifier = Modifier.padding(horizontal = 16.dp),
+          style = AppTheme.typography.display,
+        )
+      }
 
       Spacer(Modifier.height(16.dp))
 
-      Skeleton.Bone(
-        modifier = Modifier.fillMaxWidth().height(48.dp),
-        shape = AppShapes.rounded(AppShapes.md),
-      ) {
-        SearchBar(
-          placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
-          onClick = { nav.navigate(Route.Search) },
-        )
+      Box(modifier = Modifier.padding(16.dp)) {
+        Skeleton.Bone(
+          modifier = Modifier.fillMaxWidth().height(48.dp),
+          shape = AppShapes.rounded(AppShapes.md),
+        ) {
+          SearchBar(
+            placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
+            onClick = { nav.navigate(Route.Search) },
+          )
+        }
       }
 
       Spacer(Modifier.height(20.dp))
@@ -166,14 +177,15 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
     data.me.recentlyViewedEntities.mapNotNull { it.node.onFolder?.homeRecentFolder_folder }
 
   Column {
-    Skeleton.Keep { SectionTitle("최근 폴더") }
+    Skeleton.Keep { SectionTitle("최근 폴더", modifier = Modifier.padding(horizontal = 16.dp)) }
 
     Spacer(Modifier.height(16.dp))
 
     if (folders.isEmpty()) {
       Box(
         modifier =
-          Modifier.fillMaxWidth()
+          Modifier.padding(horizontal = 16.dp)
+            .fillMaxWidth()
             .height(110.dp)
             .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md)),
         contentAlignment = Alignment.Center,
@@ -185,37 +197,42 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
         )
       }
     } else {
-      for (recentFolder in folders) {
-        val entity = recentFolder.entity.entityRow_entity
-        val folder = entity.folder ?: continue
+      Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        for (recentFolder in folders) {
+          val entity = recentFolder.entity.entityRow_entity
+          val folder = entity.folder ?: continue
 
-        InteractionScope {
-          Column(
-            modifier =
-              Modifier.width(140.dp)
-                .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
-                .pressScale()
-                .clickable { nav.navigate(Route.Folder(entity.id)) }
-                .padding(16.dp)
-          ) {
-            EntityIcon(entity = entity.entityIcon_entity, modifier = Modifier.size(18.dp))
+          InteractionScope {
+            Column(
+              modifier =
+                Modifier.width(140.dp)
+                  .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
+                  .pressScale()
+                  .clickable { nav.navigate(Route.Folder(entity.id)) }
+                  .padding(16.dp)
+            ) {
+              EntityIcon(entity = entity.entityIcon_entity, modifier = Modifier.size(18.dp))
 
-            Spacer(Modifier.height(6.dp))
+              Spacer(Modifier.height(6.dp))
 
-            Text(
-              formatFolderName(folder.name),
-              style = AppTheme.typography.label,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
+              Text(
+                formatFolderName(folder.name),
+                style = AppTheme.typography.label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
 
-            Spacer(Modifier.height(2.dp))
+              Spacer(Modifier.height(2.dp))
 
-            Text(
-              formatFolderRowSummary(folderCount = 0, documentCount = folder.documentCount),
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textMuted,
-            )
+              Text(
+                formatFolderRowSummary(folderCount = 0, documentCount = folder.documentCount),
+                style = AppTheme.typography.caption,
+                color = AppTheme.colors.textMuted,
+              )
+            }
           }
         }
       }
@@ -229,7 +246,7 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
   val documents =
     data.me.recentlyViewedEntities.mapNotNull { it.node.onDocument?.homeRecentDocument_document }
 
-  Column {
+  Column(modifier = Modifier.padding(horizontal = 16.dp)) {
     Skeleton.Keep { SectionTitle("최근 문서") }
 
     Spacer(Modifier.height(16.dp))
