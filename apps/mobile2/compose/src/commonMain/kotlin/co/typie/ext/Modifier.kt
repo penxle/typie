@@ -22,7 +22,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -43,27 +42,31 @@ fun InteractionScope(content: @Composable () -> Unit) {
   CompositionLocalProvider(LocalInteractionSource provides interactionSource) { content() }
 }
 
+@Composable
 fun Modifier.verticalScroll(
   state: ScrollState,
   enabled: Boolean = true,
   padding: PaddingValues = AppTheme.spacings.scrollBottomPadding,
-): Modifier = composed {
+): Modifier {
   val isLocked = LocalScrollGestureLockState.current.isLocked
-  foundationVerticalScroll(state, enabled = enabled && !isLocked) then this.padding(padding)
+  return this.foundationVerticalScroll(state, enabled = enabled && !isLocked).padding(padding)
 }
 
-fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier = composed {
+@Composable
+fun Modifier.horizontalScroll(state: ScrollState, enabled: Boolean = true): Modifier {
   val isLocked = LocalScrollGestureLockState.current.isLocked
-  foundationHorizontalScroll(state, enabled = enabled && !isLocked)
+  return this.foundationHorizontalScroll(state, enabled = enabled && !isLocked)
 }
 
+@Composable
 fun Modifier.clickable(onClick: suspend () -> Unit): Modifier =
   clickable(enabled = true, onClick = onClick)
 
-fun Modifier.clickable(enabled: Boolean = true, onClick: suspend () -> Unit): Modifier = composed {
+@Composable
+fun Modifier.clickable(enabled: Boolean = true, onClick: suspend () -> Unit): Modifier {
   val scope = rememberCoroutineScope()
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
-  focusProperties { canFocus = false }
+  return this.focusProperties { canFocus = false }
     .foundationClickable(
       enabled = enabled,
       interactionSource = interactionSource,
@@ -72,15 +75,16 @@ fun Modifier.clickable(enabled: Boolean = true, onClick: suspend () -> Unit): Mo
     )
 }
 
+@Composable
 fun Modifier.combinedClickable(
   enabled: Boolean = true,
   onClick: suspend () -> Unit,
   onLongClick: suspend () -> Unit,
-): Modifier = composed {
+): Modifier {
   val interactionSource = LocalInteractionSource.current ?: remember { MutableInteractionSource() }
   var handling by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
-  focusProperties { canFocus = false }
+  return this.focusProperties { canFocus = false }
     .foundationCombinedClickable(
       enabled = enabled,
       interactionSource = interactionSource,
@@ -121,8 +125,9 @@ fun Modifier.pointerIgnore(): Modifier =
     }
   }
 
-fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier = composed {
-  val interactionSource = LocalInteractionSource.current ?: return@composed Modifier
+@Composable
+fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier {
+  val interactionSource = LocalInteractionSource.current ?: return this
   val scale = remember { Animatable(1f) }
 
   LaunchedEffect(interactionSource) {
@@ -135,7 +140,7 @@ fun Modifier.pressScale(targetScale: Float = 0.98f): Modifier = composed {
     }
   }
 
-  graphicsLayer {
+  return this.graphicsLayer {
     scaleX = scale.value
     scaleY = scale.value
   }

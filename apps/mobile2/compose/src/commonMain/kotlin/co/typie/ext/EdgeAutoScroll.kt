@@ -8,7 +8,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -59,12 +58,13 @@ fun rememberEdgeAutoScrollState(
     }
 }
 
+@Composable
 fun Modifier.edgeAutoScroll(
   state: EdgeAutoScrollState,
   enabled: Boolean = true,
   viewportTopInset: Dp = 0.dp,
   viewportBottomInset: Dp = 0.dp,
-): Modifier = composed {
+): Modifier {
   val density = LocalDensity.current
   val viewportTopInsetPx = with(density) { viewportTopInset.toPx() }
   val viewportBottomInsetPx = with(density) { viewportBottomInset.toPx() }
@@ -73,7 +73,7 @@ fun Modifier.edgeAutoScroll(
 
   DisposableEffect(state) { onDispose { state.detach() } }
 
-  onGloballyPositioned { coordinates ->
+  return this.onGloballyPositioned { coordinates ->
     val position = coordinates.positionInWindow()
     val size = coordinates.size
     state.updateViewportRect(

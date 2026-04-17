@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -294,6 +293,7 @@ fun <K : Any> rememberReorderableListState(
   return state
 }
 
+@Composable
 fun Modifier.reorderableListContainer(
   state: ReorderableListState<*>,
   viewportTopInset: Dp = 0.dp,
@@ -307,36 +307,35 @@ fun Modifier.reorderableListContainer(
   )
 }
 
-fun <K : Any> Modifier.reorderableItem(state: ReorderableListState<K>, key: K): Modifier =
-  composed {
-    val settlingTranslationY = state.settlingTranslationY(key)
-    val isSettling = settlingTranslationY != null
-    val settlingTranslation = remember(key, isSettling) { Animatable(settlingTranslationY ?: 0f) }
+@Composable
+fun <K : Any> Modifier.reorderableItem(state: ReorderableListState<K>, key: K): Modifier {
+  val settlingTranslationY = state.settlingTranslationY(key)
+  val isSettling = settlingTranslationY != null
+  val settlingTranslation = remember(key, isSettling) { Animatable(settlingTranslationY ?: 0f) }
 
-    LaunchedEffect(key, isSettling) {
-      if (!isSettling) {
-        settlingTranslation.snapTo(0f)
-        return@LaunchedEffect
-      }
-
-      settlingTranslation.animateTo(
-        targetValue = 0f,
-        animationSpec = spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium),
-      )
-      state.clearSettlingTranslation(key)
+  LaunchedEffect(key, isSettling) {
+    if (!isSettling) {
+      settlingTranslation.snapTo(0f)
+      return@LaunchedEffect
     }
 
-    DisposableEffect(state, key) { onDispose { state.registerItemBounds(key, bounds = null) } }
-
-    onGloballyPositioned { coordinates ->
-        state.registerItemBounds(key, coordinates.boundsInWindow())
-      }
-      .zIndex(if (state.isDragging(key)) 2f else 0f)
-      .graphicsLayer {
-        translationY = settlingTranslation.value + state.draggedItemTranslationY(key)
-      }
+    settlingTranslation.animateTo(
+      targetValue = 0f,
+      animationSpec = spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium),
+    )
+    state.clearSettlingTranslation(key)
   }
 
+  DisposableEffect(state, key) { onDispose { state.registerItemBounds(key, bounds = null) } }
+
+  return this.onGloballyPositioned { coordinates ->
+      state.registerItemBounds(key, coordinates.boundsInWindow())
+    }
+    .zIndex(if (state.isDragging(key)) 2f else 0f)
+    .graphicsLayer { translationY = settlingTranslation.value + state.draggedItemTranslationY(key) }
+}
+
+@Composable
 fun <K : Any> Modifier.reorderableDragHandle(
   state: ReorderableListState<K>,
   key: K,
@@ -345,11 +344,11 @@ fun <K : Any> Modifier.reorderableDragHandle(
   onDragStarted: () -> Unit = {},
   onDragMoved: () -> Unit = {},
   onDragStopped: (ReorderCommit<K>?) -> Unit = {},
-): Modifier = composed {
+): Modifier {
   var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
   val hapticFeedback = LocalHapticFeedback.current
 
-  onGloballyPositioned { coordinates -> handleCoordinates = coordinates }
+  return this.onGloballyPositioned { coordinates -> handleCoordinates = coordinates }
     .pointerInput(state, key, enabled) {
       if (!enabled) return@pointerInput
 
