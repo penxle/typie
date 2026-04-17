@@ -8,10 +8,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
 
 @Composable
 internal fun SelectablePaneHost(
@@ -20,9 +23,13 @@ internal fun SelectablePaneHost(
   content: @Composable () -> Unit,
 ) {
   val autoScrollController = LocalPopoverPaneAutoScrollController.current
+  val hapticFeedback = LocalHapticFeedback.current
+  val hapticFeedbackState = rememberUpdatedState(hapticFeedback)
   val itemRadius = PopoverDefaults.ExpandedRadius - PopoverDefaults.PanePadding
   val paneSelectionState = rememberPopoverPaneSelectionState()
+  val activeItemKey = paneSelectionState.activeItemKey
   var paneCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+  var previousActiveItemKey by remember { mutableStateOf<Any?>(null) }
   val selectionInputModifier =
     if (acceptsInput) {
       rememberPopoverPaneSelectionInputModifier(
@@ -50,6 +57,19 @@ internal fun SelectablePaneHost(
     }
   }
 
+  LaunchedEffect(acceptsInput, activeItemKey) {
+    val nextActiveItemKey = activeItemKey.takeIf { acceptsInput }
+    if (
+      shouldTriggerPopoverPaneHighlightHaptic(
+        previousActiveItemKey = previousActiveItemKey,
+        nextActiveItemKey = nextActiveItemKey,
+      )
+    ) {
+      hapticFeedbackState.value.performHapticFeedback(HapticFeedbackType.SegmentTick)
+    }
+    previousActiveItemKey = nextActiveItemKey
+  }
+
   DisposableEffect(Unit) {
     onDispose {
       paneSelectionState.reset()
@@ -73,4 +93,11 @@ internal fun SelectablePaneHost(
       content()
     }
   }
+}
+
+internal fun shouldTriggerPopoverPaneHighlightHaptic(
+  previousActiveItemKey: Any?,
+  nextActiveItemKey: Any?,
+): Boolean {
+  return nextActiveItemKey != null && nextActiveItemKey != previousActiveItemKey
 }
