@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
@@ -15,13 +16,17 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ToastAnchor(inset: Dp = 12.dp, modifier: Modifier = Modifier) {
   val toast = LocalToast.current
+  val entry = remember { AnchorEntry() }
 
-  DisposableEffect(Unit) { onDispose { toast.anchorY = null } }
+  DisposableEffect(Unit) {
+    toast.registerAnchor(entry)
+    onDispose { toast.unregisterAnchor(entry) }
+  }
 
   Box(
     modifier.padding(vertical = inset).fillMaxWidth().height(0.dp).onGloballyPositioned {
       coordinates ->
-      toast.anchorY = coordinates.positionInRoot().y
+      entry.y = coordinates.positionInRoot().y
     }
   )
 }

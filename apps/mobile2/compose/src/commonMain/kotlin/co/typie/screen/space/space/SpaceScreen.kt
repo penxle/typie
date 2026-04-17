@@ -56,6 +56,8 @@ import co.typie.domain.entitytransfer.EntityPasteBar
 import co.typie.domain.entitytransfer.EntityPasteTarget
 import co.typie.domain.entitytransfer.toMessage
 import co.typie.domain.entitytransfer.toTransferSource
+import co.typie.ext.navigationBars
+import co.typie.ext.navigationBarsPadding
 import co.typie.ext.safeBottomPadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
@@ -88,6 +90,7 @@ import co.typie.ui.component.reorder.rememberReorderableListState
 import co.typie.ui.component.reorder.reorderableListContainer
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarDefaults
@@ -335,7 +338,9 @@ fun SpaceScreen() {
     loadable = model.query,
     foregroundOverlay = {
       EntityContainerBottomOverlayStack(
-        baseBottomInset = BottomBarDefaults.BarAreaHeight,
+        baseBottomInset =
+          BottomBarDefaults.BarAreaHeight +
+            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
         showSelectionBar = isSelectionBarVisible,
         showPasteBar = overlayState.animatedPasteBarVisible && pasteTarget != null,
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -654,6 +659,13 @@ fun SpaceScreen() {
           },
       )
     }
+
+    ToastAnchor(
+      modifier =
+        Modifier.align(Alignment.BottomCenter)
+          .navigationBarsPadding()
+          .padding(bottom = BottomBarDefaults.BarAreaHeight)
+    )
   }
 }
 

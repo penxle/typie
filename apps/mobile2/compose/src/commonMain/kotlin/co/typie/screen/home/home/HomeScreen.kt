@@ -91,36 +91,34 @@ fun HomeScreen() {
   )
 
   Screen(loadable = model.query) { contentPadding ->
-    Box(Modifier.fillMaxSize()) {
-      Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
-        Skeleton.Keep { Text("홈", style = AppTheme.typography.display) }
+    Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding)) {
+      Skeleton.Keep { Text("홈", style = AppTheme.typography.display) }
 
-        Skeleton.Bone(
-          modifier = Modifier.fillMaxWidth().height(48.dp),
-          shape = AppShapes.rounded(AppShapes.md),
-        ) {
-          SearchBar(
-            placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
-            onClick = { nav.navigate(Route.Search) },
-          )
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        RecentFolders(data = model.query.data)
-
-        Spacer(Modifier.height(20.dp))
-
-        RecentDocuments(data = model.query.data)
+      Skeleton.Bone(
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+        shape = AppShapes.rounded(AppShapes.md),
+      ) {
+        SearchBar(
+          placeholder = "${model.query.data.site.name.truncate(10)}에서 검색...",
+          onClick = { nav.navigate(Route.Search) },
+        )
       }
 
-      ToastAnchor(
-        modifier =
-          Modifier.align(Alignment.BottomCenter)
-            .navigationBarsPadding()
-            .padding(bottom = BottomBarDefaults.BarAreaHeight)
-      )
+      Spacer(Modifier.height(20.dp))
+
+      RecentFolders(data = model.query.data)
+
+      Spacer(Modifier.height(20.dp))
+
+      RecentDocuments(data = model.query.data)
     }
+
+    ToastAnchor(
+      modifier =
+        Modifier.align(Alignment.BottomCenter)
+          .navigationBarsPadding()
+          .padding(bottom = BottomBarDefaults.BarAreaHeight)
+    )
   }
 }
 

@@ -119,7 +119,7 @@ fun SpaceSettingsScreen() {
   Screen(loadable = model.query) { contentPadding ->
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),
-      verticalArrangement = Arrangement.spacedBy(24.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Column(
         modifier = Modifier.fillMaxWidth().weight(1f),
@@ -244,7 +244,7 @@ fun SpaceSettingsScreen() {
         }
       }
 
-      ToastAnchor()
+      ToastAnchor(inset = 0.dp)
 
       Button(
         text = "저장",

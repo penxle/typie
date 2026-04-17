@@ -145,7 +145,7 @@ fun EntityContainerBottomOverlayStack(
         Modifier.padding(
           start = EntityContainerBottomOverlayHorizontalPadding,
           end = EntityContainerBottomOverlayHorizontalPadding,
-          bottom = baseBottomInset + EntityBottomOverlayDefaults.BottomOffset,
+          bottom = baseBottomInset,
         ),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {

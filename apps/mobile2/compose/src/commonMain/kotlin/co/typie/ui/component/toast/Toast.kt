@@ -1,6 +1,7 @@
 package co.typie.ui.component.toast
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -30,7 +31,18 @@ class Toast {
   var state by mutableStateOf<ToastState?>(null)
     private set
 
-  var anchorY: Float? by mutableStateOf(null)
+  private val anchors = mutableStateListOf<AnchorEntry>()
+
+  val anchorY: Float?
+    get() = anchors.lastOrNull { it.y != null }?.y
+
+  internal fun registerAnchor(entry: AnchorEntry) {
+    anchors.add(entry)
+  }
+
+  internal fun unregisterAnchor(entry: AnchorEntry) {
+    anchors.remove(entry)
+  }
 
   fun show(type: ToastType, message: String, duration: Duration = 2.seconds) {
     state = ToastState(nextId++, type, message, adaptiveDuration(duration, message))
@@ -102,6 +114,10 @@ class LoadingToastScope {
 }
 
 internal class ToastFailureException(val toastMessage: String) : CancellationException(toastMessage)
+
+internal class AnchorEntry {
+  var y: Float? by mutableStateOf(null)
+}
 
 private fun adaptiveDuration(base: Duration, message: String): Duration {
   val extraMs = (message.length - 18).coerceIn(0, 100) * 12

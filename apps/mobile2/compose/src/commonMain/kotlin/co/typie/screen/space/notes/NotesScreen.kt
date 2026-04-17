@@ -25,6 +25,7 @@ import co.typie.domain.note.NoteList
 import co.typie.domain.note.NoteListActions
 import co.typie.domain.note.NoteListItem
 import co.typie.domain.note.rememberNoteColorOptions
+import co.typie.ext.navigationBarsPadding
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
@@ -40,6 +41,7 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
@@ -48,6 +50,7 @@ import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
+import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
@@ -410,6 +413,13 @@ fun NotesScreen() {
         actions = listActions,
       )
     }
+
+    ToastAnchor(
+      modifier =
+        Modifier.align(Alignment.BottomCenter)
+          .navigationBarsPadding()
+          .padding(bottom = BottomBarDefaults.BarAreaHeight)
+    )
   }
 }
 
