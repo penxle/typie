@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,7 +23,9 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -197,7 +199,10 @@ private fun Slider(value: Double, onValueChange: (Double) -> Unit, modifier: Mod
       modifier =
         Modifier.matchParentSize().pointerInput(maxWidth) {
           awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
+            val down = awaitFirstDown(requireUnconsumed = true)
+            val slop = viewConfiguration.touchSlop
+            var total = Offset.Zero
+            var dragging = false
             var current = value
 
             fun update(x: Float) {
@@ -209,11 +214,28 @@ private fun Slider(value: Double, onValueChange: (Double) -> Unit, modifier: Mod
               onValueChange(next)
             }
 
-            update(down.position.x)
+            while (true) {
+              val event = awaitPointerEvent()
+              val change = event.changes.firstOrNull { it.id == down.id } ?: break
 
-            drag(down.id) { change ->
-              update(change.position.x)
-              change.consume()
+              if (change.changedToUp()) {
+                if (!dragging) update(change.position.x)
+                break
+              }
+              if (change.isConsumed) break
+
+              total += change.positionChange()
+              if (!dragging) {
+                if (abs(total.y) > slop) break
+                if (abs(total.x) > slop) {
+                  dragging = true
+                  change.consume()
+                }
+              }
+              if (dragging) {
+                update(change.position.x)
+                change.consume()
+              }
             }
           }
         }
