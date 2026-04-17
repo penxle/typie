@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -29,6 +30,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,10 +40,8 @@ import androidx.compose.ui.unit.sp
 import co.typie.datetime.toLocalDate
 import co.typie.ext.comma
 import co.typie.graphql.fragment.ActivityGrid_user
-import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
-import co.typie.ui.component.toPaddingValues
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppTheme
@@ -73,10 +73,11 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
   val monthLabelByWeek = remember { computeMonthLabels(gridDates, startDate, endDate) }
 
   val density = LocalDensity.current
+  val layoutDirection = LocalLayoutDirection.current
   val cellStridePx = with(density) { (CellSize + CellGap).toPx() }
   val cellSizePx = with(density) { CellSize.toPx() }
-  val fogLeftPx = with(density) { FogInsets.left.toPx() }
-  val fogRightPx = with(density) { FogInsets.right.toPx() }
+  val fogLeftPx = with(density) { FogInsets.calculateLeftPadding(layoutDirection).toPx() }
+  val fogRightPx = with(density) { FogInsets.calculateRightPadding(layoutDirection).toPx() }
   val monthLabelHeightPx = with(density) { MonthLabelHeight.toPx() }
   val cellGapPx = with(density) { CellGap.toPx() }
   val tooltipOffsetPx = with(density) { TooltipOffset.toPx() }
@@ -100,7 +101,7 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
       modifier =
         Modifier.scrollFog(FogInsets, AppTheme.colors.surfaceDefault)
           .horizontalScroll(scrollState)
-          .padding(FogInsets.toPaddingValues())
+          .padding(FogInsets)
           .pointerInput(weeks) {
             val slopPx = ArmSlop.toPx()
             val slopSquared = slopPx * slopPx
@@ -324,7 +325,7 @@ private fun activityLevelColors(themeMode: ResolvedThemeMode): List<Color> {
 private val CellSize = 12.dp
 private val CellGap = 3.dp
 private val MonthLabelHeight = 16.dp
-private val FogInsets = ScrollFogInsets(left = 16.dp, right = 16.dp)
+private val FogInsets = PaddingValues(horizontal = 16.dp)
 private val TooltipOffset = 4.dp
 private val ArmSlop = 6.dp
 private const val ArmDelayMs = 300L

@@ -44,7 +44,6 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.EntityIconColorOption
 import co.typie.ui.EntityIconOption
-import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
 import co.typie.ui.component.scrollFog
 import co.typie.ui.component.sheet.SheetBar
@@ -204,13 +203,13 @@ internal fun EntityIconPickerSheet(
         onColorSelect = { nextColor -> updateSelection(form.iconName.value, nextColor) },
       )
 
-      val gridFogInsets = remember { ScrollFogInsets(top = EntityIconPickerTopFadeHeight) }
+      val gridFogInsets = remember { PaddingValues(top = EntityIconPickerTopFadeHeight) }
 
       Box(
         modifier =
           Modifier.fillMaxWidth()
             .weight(1f)
-            .scrollFog(insets = gridFogInsets, color = AppTheme.colors.surfaceRaised)
+            .scrollFog(padding = gridFogInsets, color = AppTheme.colors.surfaceRaised)
       ) {
         val safeBottom =
           WindowInsets.safeDrawing
@@ -224,7 +223,7 @@ internal fun EntityIconPickerSheet(
           modifier = Modifier.fillMaxSize(),
           contentPadding =
             PaddingValues(
-              top = gridFogInsets.top,
+              top = gridFogInsets.calculateTopPadding(),
               bottom = EntityIconPickerGridBottomInset + safeBottom,
             ),
           horizontalArrangement = Arrangement.spacedBy(EntityIconPickerCellSpacing),

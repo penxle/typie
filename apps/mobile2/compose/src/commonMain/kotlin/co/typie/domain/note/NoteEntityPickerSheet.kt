@@ -47,7 +47,6 @@ import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
 import co.typie.ui.component.LabelPosition
-import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.scrollFog
@@ -58,7 +57,6 @@ import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.toPaddingValues
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
@@ -169,24 +167,17 @@ internal fun NoteEntityPickerSheet(
             NotePickerEmptyState(message = emptyMessage)
           }
         } else {
-          val listFogInsets = remember {
-            ScrollFogInsets(
-              top = NoteEntityPickerListFadeHeight,
-              bottom = NoteEntityPickerListFadeHeight,
-            )
-          }
+          val listFogInsets = remember { PaddingValues(vertical = NoteEntityPickerListFadeHeight) }
 
           Box(
             modifier =
               Modifier.fillMaxSize()
-                .scrollFog(insets = listFogInsets, color = AppTheme.colors.surfaceSunken)
+                .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceSunken)
           ) {
             Skeleton(enabled = showRecentSkeleton) {
               Column(
                 modifier =
-                  Modifier.fillMaxSize()
-                    .verticalScroll(listScrollState)
-                    .padding(listFogInsets.toPaddingValues())
+                  Modifier.fillMaxSize().verticalScroll(listScrollState).padding(listFogInsets)
               ) {
                 Column(Modifier.fillMaxWidth()) {
                   visibleEntities.forEachIndexed { index, item ->

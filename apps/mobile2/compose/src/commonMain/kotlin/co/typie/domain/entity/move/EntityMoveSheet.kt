@@ -9,6 +9,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,7 +47,6 @@ import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.CardDefaults
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardSurface
-import co.typie.ui.component.ScrollFogInsets
 import co.typie.ui.component.Text
 import co.typie.ui.component.bleedingScrollFog
 import co.typie.ui.component.dialog.DialogResult
@@ -58,7 +58,6 @@ import co.typie.ui.component.sheet.SheetLayout
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
-import co.typie.ui.component.toPaddingValues
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
@@ -371,9 +370,7 @@ private fun MoveDestinationBody(
   navigationEnabled: Boolean,
   onNavigate: (String?) -> Unit,
 ) {
-  val listFogInsets = remember {
-    ScrollFogInsets(top = MoveListFadeHeight, bottom = MoveListFadeHeight)
-  }
+  val listFogInsets = remember { PaddingValues(vertical = MoveListFadeHeight) }
   val scrollState = rememberScrollState()
   val visibleFolders = content.folders.filter { it.folder != null }
 
@@ -381,12 +378,9 @@ private fun MoveDestinationBody(
     modifier =
       modifier
         .fillMaxSize()
-        .scrollFog(insets = listFogInsets, color = AppTheme.colors.surfaceSunken)
+        .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceSunken)
   ) {
-    Column(
-      modifier =
-        Modifier.fillMaxSize().verticalScroll(scrollState).padding(listFogInsets.toPaddingValues())
-    ) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(listFogInsets)) {
       var hasRow = false
 
       if (content.canNavigateUp) {
@@ -429,9 +423,7 @@ private fun MoveBreadcrumbs(
   backgroundColor: androidx.compose.ui.graphics.Color,
   onNavigate: (String?) -> Unit,
 ) {
-  val breadcrumbFogInsets = remember {
-    ScrollFogInsets(left = BreadcrumbFadeWidth, right = BreadcrumbFadeWidth)
-  }
+  val breadcrumbFogInsets = remember { PaddingValues(horizontal = BreadcrumbFadeWidth) }
   val scrollState = rememberScrollState()
 
   LaunchedEffect(items, scrollState.maxValue) {
@@ -443,13 +435,10 @@ private fun MoveBreadcrumbs(
   Box(
     modifier =
       Modifier.fillMaxWidth()
-        .bleedingScrollFog(insets = breadcrumbFogInsets, color = backgroundColor)
+        .bleedingScrollFog(padding = breadcrumbFogInsets, color = backgroundColor)
   ) {
     Row(
-      modifier =
-        Modifier.fillMaxWidth()
-          .horizontalScroll(scrollState)
-          .padding(breadcrumbFogInsets.toPaddingValues()),
+      modifier = Modifier.fillMaxWidth().horizontalScroll(scrollState).padding(breadcrumbFogInsets),
       horizontalArrangement = Arrangement.spacedBy(6.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {

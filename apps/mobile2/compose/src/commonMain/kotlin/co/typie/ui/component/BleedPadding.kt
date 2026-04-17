@@ -1,21 +1,34 @@
 package co.typie.ui.component
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.unit.Constraints
 
-fun Modifier.bleedPadding(insets: ScrollFogInsets): Modifier {
-  if (insets == ScrollFogInsets()) {
-    return this
-  }
+fun Modifier.bleedPadding(padding: PaddingValues): Modifier = this then BleedPaddingElement(padding)
 
-  return this.layout { measurable, constraints ->
-    val leftPx = insets.left.roundToPx()
-    val rightPx = insets.right.roundToPx()
-    val topPx = insets.top.roundToPx()
-    val bottomPx = insets.bottom.roundToPx()
+private data class BleedPaddingElement(private val padding: PaddingValues) :
+  ModifierNodeElement<BleedPaddingNode>() {
+  override fun create(): BleedPaddingNode = BleedPaddingNode(padding)
+
+  override fun update(node: BleedPaddingNode) {
+    node.padding = padding
+  }
+}
+
+private class BleedPaddingNode(var padding: PaddingValues) : Modifier.Node(), LayoutModifierNode {
+  override fun MeasureScope.measure(
+    measurable: Measurable,
+    constraints: Constraints,
+  ): MeasureResult {
+    val leftPx = padding.calculateLeftPadding(layoutDirection).roundToPx()
+    val rightPx = padding.calculateRightPadding(layoutDirection).roundToPx()
+    val topPx = padding.calculateTopPadding().roundToPx()
+    val bottomPx = padding.calculateBottomPadding().roundToPx()
 
     val horizontalBleed = leftPx + rightPx
     val verticalBleed = topPx + bottomPx
@@ -32,17 +45,8 @@ fun Modifier.bleedPadding(insets: ScrollFogInsets): Modifier {
     val height =
       (placeable.height - verticalBleed).coerceIn(constraints.minHeight, constraints.maxHeight)
 
-    layout(width, height) { placeable.place(x = -leftPx, y = -topPx) }
+    return layout(width, height) { placeable.place(x = -leftPx, y = -topPx) }
   }
-}
-
-@Composable
-fun BleedPadding(
-  insets: ScrollFogInsets,
-  modifier: Modifier = Modifier,
-  content: @Composable () -> Unit,
-) {
-  Box(modifier = modifier.bleedPadding(insets)) { content() }
 }
 
 private fun Int.plusOrKeepInfinity(delta: Int): Int {
