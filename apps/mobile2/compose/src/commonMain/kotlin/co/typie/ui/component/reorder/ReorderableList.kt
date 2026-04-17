@@ -15,7 +15,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -29,8 +31,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import co.typie.ext.edgeAutoScroll
-import co.typie.ext.rememberEdgeAutoScrollState
+import co.typie.ext.AutoScrollController
+import co.typie.ext.autoScroll
+import co.typie.ext.rememberAutoScrollController
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 
 data class ReorderCommit<K : Any>(
   val movedKey: K,
@@ -67,7 +72,7 @@ private data class SettlingReorderDrag<K : Any>(val key: K, val initialTranslati
 
 @Stable
 class ReorderableListState<K : Any>
-internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScrollState) {
+internal constructor(internal val autoScrollController: AutoScrollController) {
   private val itemBounds = mutableStateMapOf<K, Rect>()
 
   private var pendingCommittedKeys by mutableStateOf<List<K>?>(null)
@@ -84,6 +89,9 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
     get() = activeDrag != null
 
   fun isDragging(key: K): Boolean = draggingKey == key
+
+  internal val activeDragPointer: Offset?
+    get() = activeDrag?.currentPointerWindowPosition
 
   fun syncKeys(serverKeys: List<K>) {
     itemBounds.keys.retainAll(serverKeys.toSet())
@@ -126,7 +134,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
     settlingDrag = null
     pendingCommittedKeys = null
     displayedKeys = serverKeys
-    edgeAutoScrollState.stop()
+    autoScrollController.pointer = null
   }
 
   fun registerItemBounds(key: K, bounds: Rect?) {
@@ -220,7 +228,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
   }
 
   fun endDrag(): ReorderCommit<K>? {
-    edgeAutoScrollState.stop()
+    autoScrollController.pointer = null
 
     val activeDrag = activeDrag ?: return null
     val settlingTranslationY = draggedItemTranslationY(activeDrag.key)
@@ -247,7 +255,7 @@ internal constructor(internal val edgeAutoScrollState: co.typie.ext.EdgeAutoScro
   fun cancelDrag() {
     activeDrag = null
     settlingDrag = null
-    edgeAutoScrollState.stop()
+    autoScrollController.pointer = null
   }
 
   fun draggedItemTranslationY(key: K): Float {
@@ -278,15 +286,12 @@ fun <K : Any> rememberReorderableListState(
   verticalScrollableState: ScrollableState? = null,
   horizontalScrollableState: ScrollableState? = null,
 ): ReorderableListState<K> {
-  val edgeAutoScrollState =
-    rememberEdgeAutoScrollState(
+  val controller =
+    rememberAutoScrollController(
       verticalScrollableState = verticalScrollableState,
       horizontalScrollableState = horizontalScrollableState,
     )
-  val state =
-    remember(edgeAutoScrollState) {
-      ReorderableListState<K>(edgeAutoScrollState = edgeAutoScrollState)
-    }
+  val state = remember(controller) { ReorderableListState<K>(autoScrollController = controller) }
 
   SideEffect { state.syncKeys(keys) }
 
@@ -299,8 +304,8 @@ fun Modifier.reorderableListContainer(
   viewportTopInset: Dp = 0.dp,
   viewportBottomInset: Dp = 0.dp,
 ): Modifier {
-  return edgeAutoScroll(
-    state = state.edgeAutoScrollState,
+  return autoScroll(
+    controller = state.autoScrollController,
     enabled = state.isDragging,
     viewportTopInset = viewportTopInset,
     viewportBottomInset = viewportBottomInset,
@@ -347,6 +352,22 @@ fun <K : Any> Modifier.reorderableDragHandle(
 ): Modifier {
   var handleCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
   val hapticFeedback = LocalHapticFeedback.current
+  val onDragMovedUpdated by rememberUpdatedState(onDragMoved)
+
+  LaunchedEffect(state, key) {
+    snapshotFlow { if (state.isDragging(key)) state.autoScrollController.scrollEpoch else -1L }
+      .filter { it >= 0L }
+      // Drop the initial subscription emission so only real scrollEpoch increments — not the
+      // cached-epoch echo at drag-start — drive re-hit-test.
+      .drop(1)
+      .collect {
+        val pointer = state.activeDragPointer ?: return@collect
+        if (state.updateDrag(pointer)) {
+          haptics.dragMoved?.let(hapticFeedback::performHapticFeedback)
+          onDragMovedUpdated()
+        }
+      }
+  }
 
   return this.onGloballyPositioned { coordinates -> handleCoordinates = coordinates }
     .pointerInput(state, key, enabled) {
@@ -387,17 +408,9 @@ fun <K : Any> Modifier.reorderableDragHandle(
             change.consume()
             if (state.updateDrag(currentWindowPosition)) {
               haptics.dragMoved?.let(hapticFeedback::performHapticFeedback)
-              onDragMoved()
+              onDragMovedUpdated()
             }
-            state.edgeAutoScrollState.update(
-              pointerPosition = currentWindowPosition,
-              onAutoScroll = {
-                if (state.updateDrag(currentWindowPosition)) {
-                  haptics.dragMoved?.let(hapticFeedback::performHapticFeedback)
-                  onDragMoved()
-                }
-              },
-            )
+            state.autoScrollController.pointer = currentWindowPosition
           }
         }
 

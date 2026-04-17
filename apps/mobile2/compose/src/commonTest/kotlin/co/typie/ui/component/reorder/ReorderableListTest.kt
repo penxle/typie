@@ -5,9 +5,6 @@ import androidx.compose.ui.geometry.Rect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.runTest
 
 class ReorderableListTest {
@@ -416,15 +413,12 @@ class ReorderableListTest {
 }
 
 private fun <K : Any> createReorderableListState(): ReorderableListState<K> {
-  return ReorderableListState(edgeAutoScrollState = createEdgeAutoScrollState())
+  return ReorderableListState(autoScrollController = createAutoScrollController())
 }
 
-private fun createEdgeAutoScrollState(): co.typie.ext.EdgeAutoScrollState {
-  return co.typie.ext.EdgeAutoScrollState(
-    scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-    edgeThresholdPx = 0f,
-    minScrollSpeedPx = 0f,
-    maxScrollSpeedPx = 0f,
-    frameDurationMs = 16L,
+private fun createAutoScrollController(): co.typie.ext.AutoScrollController {
+  return co.typie.ext.AutoScrollController(
+    verticalScrollableState = null,
+    horizontalScrollableState = null,
   )
 }

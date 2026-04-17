@@ -22,7 +22,7 @@ internal fun PopoverPaneSelectionHost(
     () -> Unit,
 ) {
   val paneSelectionState = rememberPopoverPaneSelectionState()
-  val edgeAutoScrollState = LocalPopoverPaneEdgeAutoScrollState.current
+  val controller = LocalPopoverPaneAutoScrollController.current
   val itemRadius = PopoverDefaults.ExpandedRadius - PopoverDefaults.PanePadding
   var paneCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
   val selectionInputModifier =
@@ -31,7 +31,7 @@ internal fun PopoverPaneSelectionHost(
         enabled = true,
         positionInWindow = { localPosition -> paneCoordinates?.localToWindow(localPosition) },
         selectionState = paneSelectionState,
-        edgeAutoScrollState = edgeAutoScrollState,
+        autoScrollController = controller,
       )
     } else {
       Modifier
@@ -40,25 +40,26 @@ internal fun PopoverPaneSelectionHost(
   LaunchedEffect(scope.acceptsInput, scope.pressGestureSession) {
     if (!scope.acceptsInput) {
       paneSelectionState.reset()
-      edgeAutoScrollState?.stop()
+      controller?.pointer = null
       return@LaunchedEffect
     }
 
     val session = scope.pressGestureSession
     paneSelectionState.syncSharedSession(session)
     if (session?.isArmed == true && !session.isReleased) {
-      edgeAutoScrollState?.update(pointerPosition = session.positionInWindow) {
-        paneSelectionState.syncSharedSession(scope.pressGestureSession)
-      }
+      // Scroll-driven re-hit-test is reactive: item onGloballyPositioned →
+      // updateItemLayoutCoordinates
+      // → recomputeActiveItem. No explicit scrollEpoch observer is needed here.
+      controller?.pointer = session.positionInWindow
     } else {
-      edgeAutoScrollState?.stop()
+      controller?.pointer = null
     }
   }
 
   DisposableEffect(Unit) {
     onDispose {
       paneSelectionState.reset()
-      edgeAutoScrollState?.stop()
+      controller?.pointer = null
     }
   }
 

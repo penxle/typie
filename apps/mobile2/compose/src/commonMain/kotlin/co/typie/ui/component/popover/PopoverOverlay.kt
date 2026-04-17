@@ -36,9 +36,9 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
-import co.typie.ext.EdgeAutoScrollState
-import co.typie.ext.edgeAutoScroll
-import co.typie.ext.rememberEdgeAutoScrollState
+import co.typie.ext.AutoScrollController
+import co.typie.ext.autoScroll
+import co.typie.ext.rememberAutoScrollController
 import co.typie.ext.toDp
 import co.typie.ext.toPx
 import co.typie.ext.verticalScroll
@@ -52,7 +52,7 @@ import kotlin.math.roundToInt
 data class PopoverPaneTransition(val progress: Float, val anchorContentRect: Rect)
 
 val LocalPopoverPaneTransition = staticCompositionLocalOf<PopoverPaneTransition?> { null }
-val LocalPopoverPaneEdgeAutoScrollState = staticCompositionLocalOf<EdgeAutoScrollState?> { null }
+val LocalPopoverPaneAutoScrollController = staticCompositionLocalOf<AutoScrollController?> { null }
 
 private enum class PopoverPaneSlot {
   InitialMeasurePane,
@@ -259,9 +259,9 @@ private fun PopoverPaneContent(
 @Composable
 private fun ShrinkWrappedPane(expandToMaxWidth: Boolean = false, content: @Composable () -> Unit) {
   val scrollState = rememberScrollState()
-  val edgeAutoScrollState = rememberEdgeAutoScrollState(verticalScrollableState = scrollState)
+  val controller = rememberAutoScrollController(verticalScrollableState = scrollState)
 
-  CompositionLocalProvider(LocalPopoverPaneEdgeAutoScrollState provides edgeAutoScrollState) {
+  CompositionLocalProvider(LocalPopoverPaneAutoScrollController provides controller) {
     Box(
       modifier =
         Modifier.then(
@@ -271,7 +271,7 @@ private fun ShrinkWrappedPane(expandToMaxWidth: Boolean = false, content: @Compo
               Modifier.width(IntrinsicSize.Max)
             }
           )
-          .edgeAutoScroll(edgeAutoScrollState)
+          .autoScroll(controller)
           .verticalScroll(scrollState)
     ) {
       content()
