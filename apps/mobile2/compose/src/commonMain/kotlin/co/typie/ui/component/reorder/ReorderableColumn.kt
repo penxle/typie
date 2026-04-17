@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
@@ -99,6 +98,10 @@ internal constructor(internal val autoScrollController: AutoScrollController) {
 
   internal fun registerSlotBounds(key: K, bounds: Rect?) {
     if (bounds == null) slotBounds.remove(key) else slotBounds[key] = bounds
+  }
+
+  internal fun pruneSlotBoundsTo(validKeys: Set<K>) {
+    slotBounds.keys.retainAll(validKeys)
   }
 
   fun draggedOffsetY(key: K): Float {
@@ -214,6 +217,7 @@ fun <K : Any> rememberReorderableColumnState(
         if (draggingKey != null && draggingKey !in inputKeys) {
           state.cancelDrag()
         }
+        state.pruneSlotBoundsTo(inputKeys.toSet())
       }
   }
 
@@ -275,8 +279,6 @@ fun <K : Any> Modifier.reorderableItem(state: ReorderableColumnState<K>, key: K)
     )
     state.clearSettling(key)
   }
-
-  DisposableEffect(state, key) { onDispose { state.registerSlotBounds(key, bounds = null) } }
 
   return this.onPlaced { coords ->
       with(lookaheadScope) {

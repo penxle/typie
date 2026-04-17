@@ -33,28 +33,13 @@ val TextReplacement.order: String?
       ?: onTextReplacementPreference?.let { it.order ?: it.textReplacement.order }
 
 val TextReplacement.isPreset: Boolean
-  get() = onTextReplacement?.preset == true || onTextReplacementPreference != null
-
-val TextReplacement.isCustom: Boolean
-  get() = onTextReplacement?.preset == false
+  get() = onTextReplacement?.preset ?: onTextReplacementPreference!!.textReplacement.preset
 
 val TextReplacement.isSmartQuote: Boolean
   get() = textReplacementId in SMART_QUOTE_IDS
 
 val TextReplacement.isActive: Boolean
   get() = onTextReplacementPreference?.state != TextReplacementState.DISABLED
-
-internal fun applyOptimisticOrder(
-  serverItems: List<TextReplacement>,
-  optimisticKeys: List<String>?,
-): List<TextReplacement> {
-  if (optimisticKeys == null) return serverItems
-  val byId = serverItems.associateBy { it.textReplacementId }
-  val ordered = optimisticKeys.mapNotNull(byId::get)
-  if (ordered.size == serverItems.size) return ordered
-  val orderedIds = ordered.mapTo(mutableSetOf()) { it.textReplacementId }
-  return ordered + serverItems.filterNot { it.textReplacementId in orderedIds }
-}
 
 internal fun neighboringOrders(
   orderedKeys: List<String>,

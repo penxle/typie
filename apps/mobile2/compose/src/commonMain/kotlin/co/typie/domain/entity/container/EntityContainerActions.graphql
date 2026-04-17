@@ -22,5 +22,6 @@ mutation EntityContainer_CreateFolder_Mutation($input: CreateFolderInput!) {
 mutation EntityContainer_MoveEntity_Mutation($input: MoveEntityInput!) {
   moveEntity(input: $input) {
     id
+    order
   }
 }

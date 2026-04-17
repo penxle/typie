@@ -4,8 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.graphql.Apollo
 import co.typie.graphql.EntityContainer_MoveEntity_Mutation
+import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.SpaceScreen_Query
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildEntity
 import co.typie.graphql.executeMutation
+import co.typie.graphql.midpointOrder
 import co.typie.graphql.type.MoveEntityInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
@@ -41,6 +45,7 @@ class SpaceViewModel : ViewModel() {
     lowerOrder: String?,
     upperOrder: String?,
   ): Result<Unit, Nothing> = result {
+    val newOrder = midpointOrder(lowerOrder, upperOrder)
     Apollo.executeMutation(
       EntityContainer_MoveEntity_Mutation(
         input =
@@ -51,7 +56,14 @@ class SpaceViewModel : ViewModel() {
               if (upperOrder != null) upperOrder(upperOrder)
             }
             .build()
-      )
+      ),
+      optimisticUpdate =
+        EntityContainer_MoveEntity_Mutation.Data(PlaceholderResolver) {
+          moveEntity = buildEntity {
+            id = entityId
+            order = newOrder
+          }
+        },
     )
   }
 }

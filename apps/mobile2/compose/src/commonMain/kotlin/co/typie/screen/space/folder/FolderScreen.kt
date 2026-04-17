@@ -102,7 +102,6 @@ fun FolderScreen(entityId: String) {
   val selectionActionModel = viewModel { EntitySelectionViewModel() }
   val scrollState = rememberScrollState()
   var isReordering by remember { mutableStateOf(false) }
-  var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   val root = (model.query.state as? QueryState.Success)?.data?.entity
   val displayRoot = model.query.data.entity
@@ -123,9 +122,11 @@ fun FolderScreen(entityId: String) {
     )
   val serverChildren =
     remember(root?.children) {
-      root?.children.orEmpty().mapNotNull { child ->
-        child.entityRow_entity.takeIf { it.isRowEntity() }
-      }
+      root
+        ?.children
+        .orEmpty()
+        .mapNotNull { child -> child.entityRow_entity.takeIf { it.isRowEntity() } }
+        .sortedBy { it.order }
     }
   val serverChildIds = remember(serverChildren) { serverChildren.map { it.id } }
   val reorderState =
@@ -142,7 +143,6 @@ fun FolderScreen(entityId: String) {
     model.entityId = entityId
     isReordering = false
     selection.reset()
-    isPersistingReorder = false
   }
   val clipboardState = clipboard.state
   val cutDimmedItemIds =
@@ -527,7 +527,6 @@ fun FolderScreen(entityId: String) {
         emptyMessage = "폴더가 비어 있어요",
         isReordering = isReordering,
         reorderState = reorderState,
-        isPersistingReorder = isPersistingReorder,
         selectionState = selectionState,
         dimmedItemIds = cutDimmedItemIds,
         bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
@@ -745,7 +744,6 @@ fun FolderScreen(entityId: String) {
                 movedKey = drop.movedKey,
               ) ?: return@onDragStopped
 
-            isPersistingReorder = true
             presenterScope.launch {
               model
                 .moveChildEntity(
@@ -755,7 +753,6 @@ fun FolderScreen(entityId: String) {
                   upperOrder = reorderOrders.upperOrder,
                 )
                 .withDefaultExceptionHandler(toast)
-              isPersistingReorder = false
             }
           },
       )

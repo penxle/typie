@@ -391,12 +391,7 @@ fun NotesScreen() {
           onEntityClick = ::presentLinkedEntityActions,
           onDelete = { note -> scope.launch { handleDeleteNote(note, status) } },
           onMoveNote = { noteId, lowerOrder, upperOrder ->
-            val result =
-              model.moveNote(noteId = noteId, lowerOrder = lowerOrder, upperOrder = upperOrder)
-            if (result is Result.Ok) {
-              model.refetch(status)
-            }
-            result
+            model.moveNote(noteId = noteId, lowerOrder = lowerOrder, upperOrder = upperOrder)
           },
         )
 

@@ -25,6 +25,7 @@ import co.typie.graphql.builder.buildEntity
 import co.typie.graphql.builder.buildFolder
 import co.typie.graphql.builder.buildSite
 import co.typie.graphql.executeMutation
+import co.typie.graphql.midpointOrder
 import co.typie.graphql.text
 import co.typie.graphql.type.DeleteDocumentInput
 import co.typie.graphql.type.DeleteEntitiesInput
@@ -241,6 +242,7 @@ class FolderViewModel :
     lowerOrder: String?,
     upperOrder: String?,
   ): Result<Unit, Nothing> = result {
+    val newOrder = midpointOrder(lowerOrder, upperOrder)
     Apollo.executeMutation(
       EntityContainer_MoveEntity_Mutation(
         input =
@@ -252,7 +254,14 @@ class FolderViewModel :
               if (upperOrder != null) upperOrder(upperOrder)
             }
             .build()
-      )
+      ),
+      optimisticUpdate =
+        EntityContainer_MoveEntity_Mutation.Data(PlaceholderResolver) {
+          moveEntity = buildEntity {
+            id = entityId
+            order = newOrder
+          }
+        },
     )
   }
 

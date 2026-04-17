@@ -114,7 +114,6 @@ fun SpaceScreen() {
   val scrollState = rememberScrollState()
   val presenterScope = rememberCoroutineScope()
   var isReordering by remember { mutableStateOf(false) }
-  var isPersistingReorder by remember { mutableStateOf(false) }
   var isPasting by remember { mutableStateOf(false) }
   val siteId = model.siteId
 
@@ -155,9 +154,11 @@ fun SpaceScreen() {
 
   val serverEntities =
     remember(site?.entities) {
-      site?.entities.orEmpty().mapNotNull { entity ->
-        entity.entityRow_entity.takeIf { it.isRowEntity() }
-      }
+      site
+        ?.entities
+        .orEmpty()
+        .mapNotNull { entity -> entity.entityRow_entity.takeIf { it.isRowEntity() } }
+        .sortedBy { it.order }
     }
   val serverEntityIds = remember(serverEntities) { serverEntities.map { it.id } }
   val reorderState =
@@ -174,7 +175,6 @@ fun SpaceScreen() {
   LaunchedEffect(site?.id) {
     isReordering = false
     selection.reset()
-    isPersistingReorder = false
   }
 
   fun startSelection(initialIds: Set<String> = emptySet()) {
@@ -407,7 +407,6 @@ fun SpaceScreen() {
         emptyMessage = "문서와 폴더가 여기 나타나요",
         isReordering = isReordering,
         reorderState = reorderState,
-        isPersistingReorder = isPersistingReorder,
         selectionState = selectionState,
         dimmedItemIds = cutDimmedItemIds,
         bottomSpacerHeight = overlayState.reservedBottomSpacerHeight,
@@ -637,7 +636,6 @@ fun SpaceScreen() {
                 movedKey = drop.movedKey,
               ) ?: return@onDragStopped
 
-            isPersistingReorder = true
             presenterScope.launch {
               model
                 .moveRootEntity(
@@ -646,7 +644,6 @@ fun SpaceScreen() {
                   upperOrder = reorderOrders.upperOrder,
                 )
                 .withDefaultExceptionHandler(toast)
-              isPersistingReorder = false
             }
           },
       )

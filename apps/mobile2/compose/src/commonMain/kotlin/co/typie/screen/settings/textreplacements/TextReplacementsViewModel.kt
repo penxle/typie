@@ -2,9 +2,6 @@ package co.typie.screen.settings.textreplacements
 
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.colorspace.ColorSpaces.match
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.form.FormState
@@ -16,8 +13,10 @@ import co.typie.graphql.TextReplacementsScreen_MoveTextReplacement_Mutation
 import co.typie.graphql.TextReplacementsScreen_Query
 import co.typie.graphql.TextReplacementsScreen_UpdateTextReplacement_Mutation
 import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildTextReplacement
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
+import co.typie.graphql.midpointOrder
 import co.typie.graphql.type.CreateTextReplacementInput
 import co.typie.graphql.type.DeleteTextReplacementInput
 import co.typie.graphql.type.MoveTextReplacementInput
@@ -62,15 +61,8 @@ class TextReplacementsViewModel : ViewModel() {
   }
 
   val customs by derivedStateOf {
-    query.data.me.textReplacements.filter { it.isCustom }.sortedBy { it.order.orEmpty() }
+    query.data.me.textReplacements.filter { !it.isPreset }.sortedBy { it.order.orEmpty() }
   }
-
-  private var optimisticCustomOrder by mutableStateOf<List<String>?>(null)
-
-  val displayedCustoms by derivedStateOf { applyOptimisticOrder(customs, optimisticCustomOrder) }
-
-  var isReorderInFlight by mutableStateOf(false)
-    private set
 
   suspend fun createTextReplacement(
     match: String,
@@ -90,6 +82,8 @@ class TextReplacementsViewModel : ViewModel() {
           )
       )
     )
+
+    query.refetch()
   }
 
   suspend fun updateTextReplacement(
@@ -111,6 +105,8 @@ class TextReplacementsViewModel : ViewModel() {
           )
       )
     )
+
+    query.refetch()
   }
 
   suspend fun updateTextReplacementState(id: String, enabled: Boolean): Result<Unit, Nothing> =
@@ -127,6 +123,8 @@ class TextReplacementsViewModel : ViewModel() {
             )
         )
       )
+
+      query.refetch()
     }
 
   suspend fun deleteTextReplacement(id: String): Result<Unit, Nothing> = result {
@@ -135,6 +133,8 @@ class TextReplacementsViewModel : ViewModel() {
         input = DeleteTextReplacementInput(textReplacementId = id)
       )
     )
+
+    query.refetch()
   }
 
   suspend fun updateSmartQuotesTextReplacementState(enabled: Boolean): Result<Unit, Nothing> =
@@ -150,21 +150,22 @@ class TextReplacementsViewModel : ViewModel() {
       if (orderedKeys == serverOrder) return@result
 
       val bounds = neighboringOrders(orderedKeys, movedKey, customs) ?: return@result
+      val newOrder = midpointOrder(bounds.first, bounds.second)
 
-      optimisticCustomOrder = orderedKeys
-      isReorderInFlight = true
-      try {
-        val builder = MoveTextReplacementInput.Builder().textReplacementId(movedKey)
-        bounds.first?.let { builder.lowerOrder(it) }
-        bounds.second?.let { builder.upperOrder(it) }
-        Apollo.executeMutation(
-          TextReplacementsScreen_MoveTextReplacement_Mutation(input = builder.build())
-        )
-        query.refetch()
-      } finally {
-        optimisticCustomOrder = null
-        isReorderInFlight = false
-      }
+      val builder = MoveTextReplacementInput.Builder().textReplacementId(movedKey)
+      bounds.first?.let { builder.lowerOrder(it) }
+      bounds.second?.let { builder.upperOrder(it) }
+
+      Apollo.executeMutation(
+        TextReplacementsScreen_MoveTextReplacement_Mutation(input = builder.build()),
+        optimisticUpdate =
+          TextReplacementsScreen_MoveTextReplacement_Mutation.Data(PlaceholderResolver) {
+            moveTextReplacement = buildTextReplacement {
+              id = movedKey
+              order = newOrder
+            }
+          },
+      )
     }
 }
 

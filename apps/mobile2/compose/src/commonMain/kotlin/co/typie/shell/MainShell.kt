@@ -125,74 +125,78 @@ fun MainBottomBarPill() {
       }
     }
 
-    Box(
-      Modifier.fillMaxWidth()
-        .navigationBarsPadding()
-        .padding(horizontal = 24.dp)
-        .padding(bottom = BottomBarDefaults.BottomPadding),
-      contentAlignment = Alignment.Center,
-    ) {
-      Row(
-        Modifier.widthIn(max = 488.dp).fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Box(
-          Modifier.weight(1f).pointerIgnore().graphicsLayer {
-            scaleX = pillScale.value
-            scaleY = pillScale.value
-          }
-        ) {
-          CompositionLocalProvider(LocalInteractionSource provides pillInteractionSource) {
-            Row(
-              Modifier.fillMaxWidth()
-                .height(BottomBarDefaults.PillHeight)
-                .dropShadow(AppShapes.circle) {
-                  color = colors.shadowAmbient
-                  radius = 3f
-                }
-                .dropShadow(AppShapes.circle) {
-                  color = colors.shadow
-                  offset = Offset(0f, 4f)
-                  radius = 16f
-                }
-                .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
-                .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
-            ) {
-              Tab.entries.forEach { tab ->
-                val bgColor by
-                  animateColorAsState(
-                    targetValue =
-                      if (tab == tabState.currentTab) AppTheme.colors.surfaceTinted
-                      else AppTheme.colors.surfaceBase.copy(alpha = 0f),
-                    animationSpec = tween(200),
-                  )
+    Box(Modifier.fillMaxWidth()) {
+      Box(Modifier.matchParentSize().pointerIgnore())
 
-                Box(
-                  modifier =
-                    Modifier.weight(1f)
-                      .fillMaxHeight()
-                      .padding(2.dp)
-                      .background(bgColor, AppShapes.circle)
-                      .clickable { tabState.onSelectTab(tab) },
-                  contentAlignment = Alignment.Center,
-                ) {
-                  Icon(
-                    icon =
-                      when (tab) {
-                        Tab.Home -> Lucide.House
-                        Tab.Space -> Lucide.FolderOpen
-                        Tab.Notes -> Lucide.StickyNote
-                        Tab.More -> Lucide.Ellipsis
-                      },
-                    tint = AppTheme.colors.textSecondary,
-                  )
+      Box(
+        Modifier.fillMaxWidth()
+          .navigationBarsPadding()
+          .padding(horizontal = 24.dp)
+          .padding(bottom = BottomBarDefaults.BottomPadding),
+        contentAlignment = Alignment.Center,
+      ) {
+        Row(
+          Modifier.widthIn(max = 488.dp).fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Box(
+            Modifier.weight(1f).graphicsLayer {
+              scaleX = pillScale.value
+              scaleY = pillScale.value
+            }
+          ) {
+            CompositionLocalProvider(LocalInteractionSource provides pillInteractionSource) {
+              Row(
+                Modifier.fillMaxWidth()
+                  .height(BottomBarDefaults.PillHeight)
+                  .dropShadow(AppShapes.circle) {
+                    color = colors.shadowAmbient
+                    radius = 3f
+                  }
+                  .dropShadow(AppShapes.circle) {
+                    color = colors.shadow
+                    offset = Offset(0f, 4f)
+                    radius = 16f
+                  }
+                  .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
+                  .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
+              ) {
+                Tab.entries.forEach { tab ->
+                  val bgColor by
+                    animateColorAsState(
+                      targetValue =
+                        if (tab == tabState.currentTab) AppTheme.colors.surfaceTinted
+                        else AppTheme.colors.surfaceBase.copy(alpha = 0f),
+                      animationSpec = tween(200),
+                    )
+
+                  Box(
+                    modifier =
+                      Modifier.weight(1f)
+                        .fillMaxHeight()
+                        .padding(2.dp)
+                        .background(bgColor, AppShapes.circle)
+                        .clickable { tabState.onSelectTab(tab) },
+                    contentAlignment = Alignment.Center,
+                  ) {
+                    Icon(
+                      icon =
+                        when (tab) {
+                          Tab.Home -> Lucide.House
+                          Tab.Space -> Lucide.FolderOpen
+                          Tab.Notes -> Lucide.StickyNote
+                          Tab.More -> Lucide.Ellipsis
+                        },
+                      tint = AppTheme.colors.textSecondary,
+                    )
+                  }
                 }
               }
             }
           }
-        }
 
-        Spacer(Modifier.width(ACTION_BUTTON_TOTAL_WIDTH.dp))
+          Spacer(Modifier.width(ACTION_BUTTON_TOTAL_WIDTH.dp))
+        }
       }
     }
   }

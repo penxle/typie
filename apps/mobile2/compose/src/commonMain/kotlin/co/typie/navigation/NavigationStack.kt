@@ -40,6 +40,7 @@ import androidx.compose.ui.util.fastFirstOrNull
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.ext.pointerIgnore
+import co.typie.ext.thenIf
 import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
 import co.typie.route.transitionStyleTo
@@ -367,44 +368,45 @@ fun NavigationStack(
 
       Box(
         Modifier.fillMaxSize()
-          .pointerInput(Unit) {
-            val slop = viewConfiguration.touchSlop
-            awaitEachGesture {
-              val down = awaitFirstDown(requireUnconsumed = false)
-              if (!navigator.canPop) return@awaitEachGesture
-              if (animState != AnimState.Idle && animState != AnimState.Dragging)
-                return@awaitEachGesture
-              var overSlopX = 0f
-              var claimed = false
-              while (!claimed) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
-                val change =
-                  event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
-                if (!change.pressed) return@awaitEachGesture
-                val dx = change.position.x - down.position.x
-                val dy = change.position.y - down.position.y
-                if (abs(dx) > slop || abs(dy) > slop) {
-                  if (dx <= 0f || abs(dx) <= abs(dy)) return@awaitEachGesture
-                  if (change.isConsumed) return@awaitEachGesture
-                  val confirmEvent = awaitPointerEvent(PointerEventPass.Main)
-                  val confirmChange =
-                    confirmEvent.changes.fastFirstOrNull { it.id == down.id }
-                      ?: return@awaitEachGesture
-                  if (!confirmChange.pressed) return@awaitEachGesture
-                  if (confirmChange.isConsumed) return@awaitEachGesture
-                  confirmChange.consume()
-                  overSlopX = confirmChange.position.x - down.position.x
-                  claimed = true
+          .thenIf(navigator.canPop) {
+            pointerInput(Unit) {
+              val slop = viewConfiguration.touchSlop
+              awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                if (animState != AnimState.Idle && animState != AnimState.Dragging)
+                  return@awaitEachGesture
+                var overSlopX = 0f
+                var claimed = false
+                while (!claimed) {
+                  val event = awaitPointerEvent(PointerEventPass.Main)
+                  val change =
+                    event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
+                  if (!change.pressed) return@awaitEachGesture
+                  val dx = change.position.x - down.position.x
+                  val dy = change.position.y - down.position.y
+                  if (abs(dx) > slop || abs(dy) > slop) {
+                    if (dx <= 0f || abs(dx) <= abs(dy)) return@awaitEachGesture
+                    if (change.isConsumed) return@awaitEachGesture
+                    val confirmEvent = awaitPointerEvent(PointerEventPass.Main)
+                    val confirmChange =
+                      confirmEvent.changes.fastFirstOrNull { it.id == down.id }
+                        ?: return@awaitEachGesture
+                    if (!confirmChange.pressed) return@awaitEachGesture
+                    if (confirmChange.isConsumed) return@awaitEachGesture
+                    confirmChange.consume()
+                    overSlopX = confirmChange.position.x - down.position.x
+                    claimed = true
+                  }
                 }
+                startPopDrag()
+                updatePopDrag(overSlopX)
+                val success =
+                  horizontalDrag(down.id) { change ->
+                    updatePopDrag(change.positionChange().x)
+                    change.consume()
+                  }
+                if (success) finishPopDrag() else cancelPopDrag()
               }
-              startPopDrag()
-              updatePopDrag(overSlopX)
-              val success =
-                horizontalDrag(down.id) { change ->
-                  updatePopDrag(change.positionChange().x)
-                  change.consume()
-                }
-              if (success) finishPopDrag() else cancelPopDrag()
             }
           }
           .graphicsLayer {

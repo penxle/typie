@@ -72,7 +72,7 @@ fun TextReplacementsScreen() {
   )
 
   Screen(loadable = model.query) { contentPadding ->
-    val displayed = model.displayedCustoms
+    val displayed = model.customs
     val keys = displayed.map { it.textReplacementId }
     val reorderState =
       rememberReorderableColumnState(keys = keys, verticalScrollableState = scrollState)
@@ -158,7 +158,7 @@ private fun PresetSection(model: TextReplacementsViewModel, scope: CoroutineScop
             entry = it,
             onClick = {
               model
-                .updateTextReplacementState(it.textReplacementId, it.isActive)
+                .updateTextReplacementState(it.textReplacementId, !it.isActive)
                 .withDefaultExceptionHandler(toast)
             },
             onCheckedChange = { next ->
@@ -207,7 +207,6 @@ private fun CustomSection(
                 entry = entry,
                 order = index + 1,
                 reorderState = reorderState,
-                reorderEnabled = !model.isReorderInFlight,
                 onEdit = {
                   sheet.present {
                     TextReplacementEditSheet(model = model, editing = entry.onTextReplacement)
@@ -249,7 +248,6 @@ private fun CustomRow(
   entry: TextReplacement,
   order: Int,
   reorderState: ReorderableColumnState<String>,
-  reorderEnabled: Boolean,
   onEdit: suspend () -> Unit,
   onToggle: suspend () -> Unit,
   onReorderCommit: (movedKey: String, orderedKeys: List<String>) -> Unit,
@@ -266,7 +264,6 @@ private fun CustomRow(
         Modifier.reorderableDragHandle(
             state = reorderState,
             key = id,
-            enabled = reorderEnabled,
             onDragStopped = { drop ->
               if (drop == null) return@reorderableDragHandle
               onReorderCommit(drop.movedKey, drop.orderedKeys)

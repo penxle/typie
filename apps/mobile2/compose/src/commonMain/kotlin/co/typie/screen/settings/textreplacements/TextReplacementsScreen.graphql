@@ -53,10 +53,25 @@ mutation TextReplacementsScreen_UpdateTextReplacement_Mutation($input: UpdateTex
 
     ... on TextReplacement {
       id
+      match
+      substitute
+      regex
+      note
+      order
     }
 
     ... on TextReplacementPreference {
       id
+      state
+      order
+      textReplacement {
+        id
+        match
+        substitute
+        regex
+        note
+        order
+      }
     }
   }
 }
@@ -67,10 +82,17 @@ mutation TextReplacementsScreen_MoveTextReplacement_Mutation($input: MoveTextRep
 
     ... on TextReplacement {
       id
+      order
     }
 
     ... on TextReplacementPreference {
       id
+      order
+
+      textReplacement {
+        id
+        order
+      }
     }
   }
 }
@@ -85,6 +107,11 @@ mutation TextReplacementsScreen_DeleteTextReplacement_Mutation($input: DeleteTex
 
     ... on TextReplacementPreference {
       id
+      state
+
+      textReplacement {
+        id
+      }
     }
   }
 }

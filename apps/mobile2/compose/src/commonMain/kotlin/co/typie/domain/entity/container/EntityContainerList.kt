@@ -54,7 +54,6 @@ fun EntityContainerListContent(
   emptyMessage: String,
   isReordering: Boolean,
   reorderState: ReorderableColumnState<String>,
-  isPersistingReorder: Boolean,
   selectionState: EntityContainerSelectionState = EntityContainerSelectionState(),
   dimmedItemIds: Set<String> = emptySet(),
   bottomSpacerHeight: Dp = EntityBottomOverlayDefaults.DefaultBottomSpacerHeight,
@@ -76,7 +75,6 @@ fun EntityContainerListContent(
       EntityContainerReorderListCard(
         items = items,
         reorderState = reorderState,
-        isPersistingReorder = isPersistingReorder,
         modifier = Modifier.padding(horizontal = 16.dp),
         onDragStarted = onDragStarted,
         onDragMoved = onDragMoved,
@@ -133,7 +131,6 @@ fun EntityContainerListContent(
 fun EntityContainerReorderListCard(
   items: List<EntityRow_entity>,
   reorderState: ReorderableColumnState<String>,
-  isPersistingReorder: Boolean,
   onDragStarted: () -> Unit = {},
   onDragMoved: () -> Unit = {},
   onDragStopped: (ReorderDrop<String>?) -> Unit,
@@ -174,7 +171,6 @@ fun EntityContainerReorderListCard(
             Modifier.reorderableDragHandle(
               state = reorderState,
               key = entity.id,
-              enabled = !isPersistingReorder,
               onDragStarted = onDragStarted,
               onDragMoved = onDragMoved,
               onDragStopped = onDragStopped,

@@ -8,9 +8,13 @@ import co.typie.graphql.Note_Delete_Mutation
 import co.typie.graphql.Note_Move_Mutation
 import co.typie.graphql.Note_RemoveEntity_Mutation
 import co.typie.graphql.Note_Update_Mutation
+import co.typie.graphql.PlaceholderResolver
+import co.typie.graphql.builder.Data
+import co.typie.graphql.builder.buildNote
 import co.typie.graphql.executeMutation
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteEntityPicker_entity
+import co.typie.graphql.midpointOrder
 import co.typie.graphql.type.AddNoteEntityInput
 import co.typie.graphql.type.CreateNoteInput
 import co.typie.graphql.type.DeleteNoteInput
@@ -76,6 +80,7 @@ suspend fun moveNote(
   lowerOrder: String?,
   upperOrder: String?,
 ): Result<Unit, Nothing> = result {
+  val newOrder = midpointOrder(lowerOrder, upperOrder)
   Apollo.executeMutation(
     Note_Move_Mutation(
       input =
@@ -86,7 +91,14 @@ suspend fun moveNote(
             if (upperOrder != null) upperOrder(upperOrder)
           }
           .build()
-    )
+    ),
+    optimisticUpdate =
+      Note_Move_Mutation.Data(PlaceholderResolver) {
+        moveNote = buildNote {
+          id = noteId
+          order = newOrder
+        }
+      },
   )
 }
 
