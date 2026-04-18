@@ -12,6 +12,7 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.excludeTop
+import co.typie.ext.imePadding
 import co.typie.ext.onlyTop
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
@@ -52,7 +53,7 @@ fun UpdatePasswordScreen() {
   ProvideTopBar(center = { Text("비밀번호 변경", style = AppTheme.typography.title) })
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+    Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
       Box(modifier = Modifier.weight(1f)) {
         Column(
           modifier =

@@ -37,6 +37,7 @@ import co.typie.domain.entity.formatFolderRowSummary
 import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.imePadding
 import co.typie.ext.pressScale
 import co.typie.ext.separated
 import co.typie.ext.truncate
@@ -80,6 +81,7 @@ fun SearchScreen() {
     Column(
       modifier =
         Modifier.fillMaxSize()
+          .imePadding()
           .padding(contentPadding)
           .padding(AppTheme.spacings.scrollBottomPadding)
     ) {

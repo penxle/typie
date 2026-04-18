@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.excludeTop
+import co.typie.ext.imePadding
 import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
@@ -84,7 +85,7 @@ fun UpdateProfileScreen() {
   ProvideTopBar(center = { Text("프로필 변경", style = AppTheme.typography.title) })
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+    Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
       Box(modifier = Modifier.weight(1f)) {
         Column(
           modifier =

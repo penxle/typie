@@ -32,6 +32,7 @@ import co.typie.editor.EditorThemeVariant
 import co.typie.editor.EditorValues
 import co.typie.editor.matchWeight
 import co.typie.ext.clickable
+import co.typie.ext.imePadding
 import co.typie.ext.verticalScroll
 import co.typie.graphql.PresetSettingsScreen_Query
 import co.typie.icons.Lucide
@@ -100,7 +101,10 @@ fun PresetSettingsScreen() {
     val previewHeight = 200.dp
     val previewShape = RoundedCornerShape(bottomStart = AppShapes.xl, bottomEnd = AppShapes.xl)
 
-    Box(modifier = Modifier.fillMaxSize().padding(top = contentPadding.calculateTopPadding())) {
+    Box(
+      modifier =
+        Modifier.fillMaxSize().imePadding().padding(top = contentPadding.calculateTopPadding())
+    ) {
       Column(
         modifier =
           Modifier.fillMaxSize()

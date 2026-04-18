@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import co.typie.ext.imePadding
 import co.typie.ext.safeDrawing
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
@@ -127,6 +128,7 @@ internal fun NoteList(
           viewportTopInset = reorderViewportTopInset,
           viewportBottomInset = reorderViewportBottomInset,
         )
+        .imePadding()
   ) {
     Column(
       modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(contentPadding),

@@ -33,6 +33,7 @@ import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.excludeTop
+import co.typie.ext.imePadding
 import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.thenIf
@@ -119,7 +120,7 @@ fun SpaceSettingsScreen() {
   )
 
   Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding.excludeTop())) {
+    Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
       Box(modifier = Modifier.weight(1f)) {
         Column(
           modifier =
