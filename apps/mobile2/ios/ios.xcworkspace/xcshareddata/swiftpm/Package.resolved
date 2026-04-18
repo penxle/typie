@@ -1,5 +1,5 @@
 {
-  "originHash" : "3b52a8695014696664c52c2675de2e5d46cb7cb0253fffc4c725a361a6740239",
+  "originHash" : "f42b4f6eb9d4d02d4e384e0408022a0f625a796a5737091e4059ef146de5a93b",
   "pins" : [
     {
       "identity" : "alamofire",
@@ -89,6 +89,15 @@
       "state" : {
         "revision" : "540318ecedd63d883069ae7f1ed811a2df00b6ac",
         "version" : "2.4.0"
+      }
+    },
+    {
+      "identity" : "sentry-cocoa",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/getsentry/sentry-cocoa.git",
+      "state" : {
+        "revision" : "8627bbc0e663238d516b541d8fc7edd62a627fde",
+        "version" : "8.57.3"
       }
     }
   ],

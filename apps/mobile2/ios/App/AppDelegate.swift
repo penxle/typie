@@ -7,8 +7,10 @@ import UIKit
 final class AppDelegate: UIResponder, UIApplicationDelegate {
   func application(
     _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    didFinishLaunchingWithOptions launchOptions: [UIApplication
+      .LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    InitSentryKt.doInitSentry()
     InitLoggerKt.doInitLogger()
 
     let info = Bundle.main.infoDictionary ?? [:]
@@ -17,8 +19,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
       KakaoSDK.initSDK(appKey: kakaoAppKey)
     }
 
-    if
-      let naverClientId = info["NAVER_CLIENT_ID"] as? String,
+    if let naverClientId = info["NAVER_CLIENT_ID"] as? String,
       let naverClientSecret = info["NAVER_CLIENT_SECRET"] as? String
     {
       NidOAuth.shared.initialize(

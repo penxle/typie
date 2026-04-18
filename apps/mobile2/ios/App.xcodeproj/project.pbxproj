@@ -7,47 +7,39 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A5E5029DB052082E8700DEAC = {
-			isa = PBXBuildFile;
-			productRef = AC83D80FFC3B46D51005E2C9;
-		};
+		A5E5029DB052082E8700DEAC /* KotlinMultiplatformLinkedPackage in Frameworks */ = {isa = PBXBuildFile; productRef = AC83D80FFC3B46D51005E2C9 /* KotlinMultiplatformLinkedPackage */; };
+		B62B10432F93A2E8001CF03A /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = B62B10422F93A2E8001CF03A /* Sentry */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		842029C347CE17DD479773A2 = {
-			isa = PBXFileReference;
-			explicitFileType = wrapper.application;
-			includeInIndex = 0;
-			path = Typie.app;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
+		842029C347CE17DD479773A2 /* Typie.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Typie.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		3145D3115C023EB99DD41DF7 = {
+		3145D3115C023EB99DD41DF7 /* Exceptions for "App" folder in "App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = ECC1A52B937184E31A34CABF;
+			target = ECC1A52B937184E31A34CABF /* App */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		894BE7AE129D19DACBC3AE03 = {
+		894BE7AE129D19DACBC3AE03 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				3145D3115C023EB99DD41DF7,
+				3145D3115C023EB99DD41DF7 /* Exceptions for "App" folder in "App" target */,
 			);
 			path = App;
 			sourceTree = "<group>";
 		};
-		B606CE752F72BD82004E51AC = {
+		B606CE752F72BD82004E51AC /* Resources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		D9DF8733A6D024534604AFF0 = {
+		D9DF8733A6D024534604AFF0 /* Configuration */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Configuration;
 			sourceTree = "<group>";
@@ -55,11 +47,12 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		9A94776235C3835884CC83E3 = {
+		9A94776235C3835884CC83E3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A5E5029DB052082E8700DEAC,
+				A5E5029DB052082E8700DEAC /* KotlinMultiplatformLinkedPackage in Frameworks */,
+				B62B10432F93A2E8001CF03A /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,17 +62,25 @@
 		14F2D9768FB054BE6C33A34A = {
 			isa = PBXGroup;
 			children = (
-				B606CE752F72BD82004E51AC,
-				D9DF8733A6D024534604AFF0,
-				894BE7AE129D19DACBC3AE03,
-				F0E2EDBC5D892DD3F91C268A,
+				B606CE752F72BD82004E51AC /* Resources */,
+				D9DF8733A6D024534604AFF0 /* Configuration */,
+				894BE7AE129D19DACBC3AE03 /* App */,
+				B62B10412F93A2E8001CF03A /* Frameworks */,
+				F0E2EDBC5D892DD3F91C268A /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		F0E2EDBC5D892DD3F91C268A = {
+		B62B10412F93A2E8001CF03A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				842029C347CE17DD479773A2,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		F0E2EDBC5D892DD3F91C268A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				842029C347CE17DD479773A2 /* Typie.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,35 +88,36 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		ECC1A52B937184E31A34CABF = {
+		ECC1A52B937184E31A34CABF /* App */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6B30383EB71618EFD68F9D5F;
+			buildConfigurationList = 6B30383EB71618EFD68F9D5F /* Build configuration list for PBXNativeTarget "App" */;
 			buildPhases = (
-				C389EBBFB59DD44FEB72F364,
-				32DD8222449A2321BE8E4639,
-				9A94776235C3835884CC83E3,
-				B7B2A01F8920CA4E494168AD,
+				C389EBBFB59DD44FEB72F364 /* Compile Kotlin Framework */,
+				32DD8222449A2321BE8E4639 /* Sources */,
+				9A94776235C3835884CC83E3 /* Frameworks */,
+				B7B2A01F8920CA4E494168AD /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				894BE7AE129D19DACBC3AE03,
-				B606CE752F72BD82004E51AC,
+				894BE7AE129D19DACBC3AE03 /* App */,
+				B606CE752F72BD82004E51AC /* Resources */,
 			);
 			name = App;
 			packageProductDependencies = (
-				AC83D80FFC3B46D51005E2C9,
+				AC83D80FFC3B46D51005E2C9 /* KotlinMultiplatformLinkedPackage */,
+				B62B10422F93A2E8001CF03A /* Sentry */,
 			);
 			productName = App;
-			productReference = 842029C347CE17DD479773A2;
+			productReference = 842029C347CE17DD479773A2 /* Typie.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		1207CB01F78751FA303BF123 = {
+		1207CB01F78751FA303BF123 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
@@ -127,7 +129,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 0D85A1BE380A7ACA2A80A25A;
+			buildConfigurationList = 0D85A1BE380A7ACA2A80A25A /* Build configuration list for PBXProject "App" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -138,20 +140,21 @@
 			mainGroup = 14F2D9768FB054BE6C33A34A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				AD70A8C673ABD67E11E0951C,
+				AD70A8C673ABD67E11E0951C /* XCLocalSwiftPackageReference "KotlinMultiplatformLinkedPackage" */,
+				B62B10402F93A263001CF03A /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = F0E2EDBC5D892DD3F91C268A;
+			productRefGroup = F0E2EDBC5D892DD3F91C268A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				ECC1A52B937184E31A34CABF,
+				ECC1A52B937184E31A34CABF /* App */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		B7B2A01F8920CA4E494168AD = {
+		B7B2A01F8920CA4E494168AD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -161,7 +164,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		C389EBBFB59DD44FEB72F364 = {
+		C389EBBFB59DD44FEB72F364 /* Compile Kotlin Framework */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -183,7 +186,7 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		32DD8222449A2321BE8E4639 = {
+		32DD8222449A2321BE8E4639 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -193,7 +196,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		8F054C1D32C8097DF6EA1771 = {
+		8F054C1D32C8097DF6EA1771 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = arm64;
@@ -229,7 +232,7 @@
 			};
 			name = Debug;
 		};
-		93B4BD245D135B4D4D03BD87 = {
+		93B4BD245D135B4D4D03BD87 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = arm64;
@@ -265,9 +268,9 @@
 			};
 			name = Release;
 		};
-		D98EB048EA55A7A524D32169 = {
+		D98EB048EA55A7A524D32169 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = D9DF8733A6D024534604AFF0;
+			baseConfigurationReferenceAnchor = D9DF8733A6D024534604AFF0 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -324,9 +327,9 @@
 			};
 			name = Release;
 		};
-		F3457514A944C662DF4EB98B = {
+		F3457514A944C662DF4EB98B /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = D9DF8733A6D024534604AFF0;
+			baseConfigurationReferenceAnchor = D9DF8733A6D024534604AFF0 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -393,20 +396,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		0D85A1BE380A7ACA2A80A25A = {
+		0D85A1BE380A7ACA2A80A25A /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				F3457514A944C662DF4EB98B,
-				D98EB048EA55A7A524D32169,
+				F3457514A944C662DF4EB98B /* Debug */,
+				D98EB048EA55A7A524D32169 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6B30383EB71618EFD68F9D5F = {
+		6B30383EB71618EFD68F9D5F /* Build configuration list for PBXNativeTarget "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				8F054C1D32C8097DF6EA1771,
-				93B4BD245D135B4D4D03BD87,
+				8F054C1D32C8097DF6EA1771 /* Debug */,
+				93B4BD245D135B4D4D03BD87 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -414,19 +417,35 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		AD70A8C673ABD67E11E0951C = {
+		AD70A8C673ABD67E11E0951C /* XCLocalSwiftPackageReference "KotlinMultiplatformLinkedPackage" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = KotlinMultiplatformLinkedPackage;
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		B62B10402F93A263001CF03A /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa.git";
+			requirement = {
+				kind = exactVersion;
+				version = 8.57.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
-		AC83D80FFC3B46D51005E2C9 = {
+		AC83D80FFC3B46D51005E2C9 /* KotlinMultiplatformLinkedPackage */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AD70A8C673ABD67E11E0951C;
+			package = AD70A8C673ABD67E11E0951C /* XCLocalSwiftPackageReference "KotlinMultiplatformLinkedPackage" */;
 			productName = KotlinMultiplatformLinkedPackage;
+		};
+		B62B10422F93A2E8001CF03A /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B62B10402F93A263001CF03A /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = 1207CB01F78751FA303BF123;
+	rootObject = 1207CB01F78751FA303BF123 /* Project object */;
 }

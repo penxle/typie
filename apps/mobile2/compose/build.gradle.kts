@@ -40,6 +40,7 @@ plugins {
   alias(libs.plugins.aboutLibraries)
   alias(libs.plugins.buildkonfig)
   alias(libs.plugins.detekt)
+  alias(libs.plugins.sentry)
 }
 
 kotlin {
@@ -182,6 +183,7 @@ buildkonfig {
     buildConfigField(FieldSpec.Type.STRING, "NAVER_CLIENT_SECRET", env("NAVER_CLIENT_SECRET"))
     buildConfigField(FieldSpec.Type.STRING, "USERSITE_HOST", env("USERSITE_HOST"))
     buildConfigField(FieldSpec.Type.STRING, "PREFLIGHT_URL", env("PREFLIGHT_URL"))
+    buildConfigField(FieldSpec.Type.STRING, "SENTRY_DSN", env("SENTRY_DSN"))
     buildConfigField(FieldSpec.Type.STRING, "STAGE", env("STAGE"))
   }
 }
