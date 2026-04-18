@@ -114,30 +114,29 @@ private fun SelectFieldAnchor(item: SelectFieldDisplayItem, enabled: Boolean) {
       Modifier.heightIn(min = 38.dp)
         .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
         .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
-        .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
+        .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md))
         .padding(horizontal = 12.dp, vertical = 8.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     if (item.icon != null) {
-      Icon(icon = item.icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textSecondary)
+      Icon(icon = item.icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textMuted)
     }
 
-    Text(text = item.label, style = AppTheme.typography.body, color = AppTheme.colors.textSecondary)
+    Text(text = item.label, style = AppTheme.typography.body, color = AppTheme.colors.textMuted)
 
     Icon(
       icon = Lucide.ChevronDown,
       modifier = Modifier.size(16.dp),
-      tint = AppTheme.colors.textTertiary,
+      tint = AppTheme.colors.textMuted,
     )
   }
 }
 
 @Composable
 private fun <T> SelectFieldPopoverItem(item: SelectFieldItem<T>, selected: Boolean) {
-  val labelColor = if (selected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
-  val descriptionColor =
-    if (selected) AppTheme.colors.textSecondary else AppTheme.colors.textTertiary
+  val labelColor = if (selected) AppTheme.colors.textDefault else AppTheme.colors.textMuted
+  val descriptionColor = if (selected) AppTheme.colors.textMuted else AppTheme.colors.textMuted
 
   Row(
     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -161,7 +160,7 @@ private fun <T> SelectFieldPopoverItem(item: SelectFieldItem<T>, selected: Boole
         Icon(
           icon = Lucide.Check,
           modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.textPrimary,
+          tint = AppTheme.colors.textDefault,
         )
       } else {
         Spacer(Modifier.width(16.dp))

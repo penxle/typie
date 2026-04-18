@@ -77,7 +77,7 @@ internal fun PresetPageLayoutSheet(preset: Preset, onSave: (PresetPageLayout.Pag
           Text(
             text = "페이지 설정",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -87,7 +87,7 @@ internal fun PresetPageLayoutSheet(preset: Preset, onSave: (PresetPageLayout.Pag
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("페이지 크기", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+        Text("페이지 크기", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
         Row(
           modifier = Modifier.fillMaxWidth(),
@@ -115,7 +115,7 @@ internal fun PresetPageLayoutSheet(preset: Preset, onSave: (PresetPageLayout.Pag
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("여백", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+        Text("여백", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
         Row(
           modifier = Modifier.fillMaxWidth(),
@@ -195,12 +195,12 @@ private fun MmInputField(
   Row(
     modifier =
       modifier
-        .background(AppTheme.colors.surfaceSunken, AppShapes.rounded(AppShapes.sm))
+        .background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.sm))
         .padding(horizontal = 12.dp, vertical = 10.dp),
     horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+    Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
     BasicTextField(
       value = textFieldValue,
@@ -211,15 +211,15 @@ private fun MmInputField(
           isFocused = state.isFocused
           if (wasFocused && !state.isFocused) commit()
         },
-      textStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textPrimary),
-      cursorBrush = SolidColor(AppTheme.colors.textPrimary),
+      textStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textDefault),
+      cursorBrush = SolidColor(AppTheme.colors.textDefault),
       keyboardOptions =
         KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
       keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
       singleLine = true,
     )
 
-    Text(text = "mm", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+    Text(text = "mm", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
   }
 }
 

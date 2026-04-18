@@ -47,7 +47,7 @@ fun SettingControlRow(
         Text(
           text = description,
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
         )
       }
 

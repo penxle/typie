@@ -103,7 +103,7 @@ fun TextReplacementsScreen() {
         Text(
           "입력 중 특정 텍스트를 자동으로 변환해요.",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
         )
 
         PresetSection(model = model, scope = scope)
@@ -190,7 +190,7 @@ private fun CustomSection(
     Text(
       text = "위에서부터 순서대로 먼저 매치되는 규칙이 적용돼요.",
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
+      color = AppTheme.colors.textMuted,
     )
 
     if (displayed.isEmpty()) {
@@ -275,7 +275,7 @@ private fun CustomRow(
       Icon(
         icon = Lucide.GripVertical,
         modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.textTertiary,
+        tint = AppTheme.colors.textMuted,
       )
     }
 
@@ -309,7 +309,7 @@ private fun EmptyStateMessage() {
     Text(
       text = "아직 사용자 대치 규칙이 없어요.",
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
+      color = AppTheme.colors.textMuted,
     )
   }
 }
@@ -319,14 +319,14 @@ private fun OrderBadge(order: Int) {
   Box(
     modifier =
       Modifier.clip(AppShapes.rounded(AppShapes.sm))
-        .background(AppTheme.colors.surfaceTinted)
+        .background(AppTheme.colors.surfaceInset)
         .padding(horizontal = 6.dp, vertical = 2.dp),
     contentAlignment = Alignment.Center,
   ) {
     Text(
       text = order.toString(),
       style = AppTheme.typography.caption.copy(fontFamily = FontFamily.Monospace),
-      color = AppTheme.colors.textTertiary,
+      color = AppTheme.colors.textMuted,
       maxLines = 1,
     )
   }
@@ -354,16 +354,12 @@ private fun RuleLabel(entry: TextReplacement, modifier: Modifier = Modifier) {
       Icon(
         icon = Lucide.ChevronRight,
         modifier = Modifier.size(14.dp),
-        tint = AppTheme.colors.textTertiary,
+        tint = AppTheme.colors.textMuted,
       )
       Token(text = entry.substitute, modifier = Modifier.weight(1f, fill = false))
     }
     if (entry.regex) {
-      Icon(
-        icon = Lucide.Regex,
-        modifier = Modifier.size(16.dp),
-        tint = AppTheme.colors.textOnBrandSubtle,
-      )
+      Icon(icon = Lucide.Regex, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textDefault)
     }
   }
 }
@@ -374,7 +370,7 @@ private fun Token(text: String, modifier: Modifier = Modifier) {
     modifier =
       modifier
         .clip(AppShapes.rounded(AppShapes.sm))
-        .background(AppTheme.colors.surfaceTinted)
+        .background(AppTheme.colors.surfaceInset)
         .padding(horizontal = 6.dp, vertical = 2.dp)
   ) {
     Text(

@@ -57,7 +57,7 @@ fun SheetOptionRow(
   contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 16.dp),
   trailing: @Composable RowScope.() -> Unit = {
     if (selected) {
-      Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = AppTheme.colors.brand)
+      Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textDefault)
     } else {
       Spacer(Modifier.size(16.dp))
     }
@@ -110,7 +110,7 @@ fun SheetActionRow(
           .pressScale(),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Icon(icon = icon, modifier = Modifier.size(18.dp), tint = tint ?: AppTheme.colors.textPrimary)
+      Icon(icon = icon, modifier = Modifier.size(18.dp), tint = tint ?: AppTheme.colors.textDefault)
 
       Spacer(Modifier.size(12.dp))
 
@@ -118,14 +118,14 @@ fun SheetActionRow(
         text = label,
         modifier = Modifier.weight(1f),
         style = AppTheme.typography.action,
-        color = tint ?: AppTheme.colors.textPrimary,
+        color = tint ?: AppTheme.colors.textDefault,
       )
 
       if (trailingIcon != null) {
         Icon(
           icon = trailingIcon,
           modifier = Modifier.size(14.dp),
-          tint = tint ?: AppTheme.colors.textTertiary,
+          tint = tint ?: AppTheme.colors.textMuted,
         )
       }
     }

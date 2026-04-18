@@ -78,7 +78,7 @@ fun OssLicensesScreen() {
             Text(
               "의존성 메타데이터가 비어 있어요.",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
           }
         } else {
@@ -111,7 +111,7 @@ private fun OssLicenseRow(entry: OssLicenseEntry) {
   Icon(
     icon = Lucide.ChevronRight,
     modifier = Modifier.size(16.dp),
-    tint = AppTheme.colors.textTertiary,
+    tint = AppTheme.colors.textMuted,
   )
 }
 
@@ -125,7 +125,7 @@ private fun OssLicenseDetailSheet(entry: OssLicenseEntry) {
           Text(
             text = entry.packageName,
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -134,11 +134,7 @@ private fun OssLicenseDetailSheet(entry: OssLicenseEntry) {
     }
   ) {
     for (paragraph in entry.paragraphs) {
-      Text(
-        text = paragraph,
-        style = AppTheme.typography.body,
-        color = AppTheme.colors.textSecondary,
-      )
+      Text(text = paragraph, style = AppTheme.typography.body, color = AppTheme.colors.textMuted)
     }
   }
 }

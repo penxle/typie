@@ -109,7 +109,7 @@ fun SearchScreen() {
               Text(
                 "검색 중...",
                 style = AppTheme.typography.action,
-                color = AppTheme.colors.textTertiary,
+                color = AppTheme.colors.textMuted,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
               )
             }
@@ -119,7 +119,7 @@ fun SearchScreen() {
                 Text(
                   "검색 결과가 없어요",
                   style = AppTheme.typography.action,
-                  color = AppTheme.colors.textTertiary,
+                  color = AppTheme.colors.textMuted,
                   modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
               } else {
@@ -131,7 +131,7 @@ fun SearchScreen() {
               Text(
                 "검색 중 오류가 발생했어요",
                 style = AppTheme.typography.action,
-                color = AppTheme.colors.textTertiary,
+                color = AppTheme.colors.textMuted,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
               )
             }
@@ -161,7 +161,7 @@ private fun SearchInputField(
     imeAction = ImeAction.Search,
     onImeAction = onSubmit,
     leadingIcon = {
-      Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textMuted)
+      Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textHint)
     },
   )
 }
@@ -172,16 +172,12 @@ private fun RecentSearches(onSelect: (String) -> Unit, onRemove: (String) -> Uni
     Text(
       "최근 검색",
       style = AppTheme.typography.caption.copy(fontWeight = FontWeight.W700),
-      color = AppTheme.colors.textTertiary,
+      color = AppTheme.colors.textMuted,
     )
 
     if (Preference.recentSearches.isEmpty()) {
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Text(
-          "최근 검색어가 없어요",
-          style = AppTheme.typography.action,
-          color = AppTheme.colors.textTertiary,
-        )
+        Text("최근 검색어가 없어요", style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
       }
     } else {
       for (search in Preference.recentSearches) {
@@ -197,7 +193,7 @@ private fun RecentSearches(onSelect: (String) -> Unit, onRemove: (String) -> Uni
             Icon(
               icon = Lucide.Clock,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
 
             Spacer(Modifier.width(12.dp))
@@ -207,7 +203,7 @@ private fun RecentSearches(onSelect: (String) -> Unit, onRemove: (String) -> Uni
             Icon(
               icon = Lucide.X,
               modifier = Modifier.size(16.dp).clickable { onRemove(search) },
-              tint = AppTheme.colors.textMuted,
+              tint = AppTheme.colors.textHint,
             )
           }
         }
@@ -251,12 +247,12 @@ private fun DocumentRow(hit: SearchResultDocument_hit, onClick: suspend () -> Un
   val title = formatDocumentTitle(hit.title ?: document.title)
   val subtitle = hit.subtitle ?: document.subtitle
   val parentFolder = hit.document.entity.entityRowParent_entity.parentFolderMeta()
-  val highlightedTitle = buildSearchHighlightedText(title, AppTheme.colors.brand)
+  val highlightedTitle = buildSearchHighlightedText(title, AppTheme.colors.textDefault)
   val highlightedSubtitle = subtitle?.let {
-    buildSearchHighlightedText(it, AppTheme.colors.brand, AppTheme.colors.textMuted)
+    buildSearchHighlightedText(it, AppTheme.colors.textDefault, AppTheme.colors.textHint)
   }
   val previewText = hit.text ?: formatEntityExcerpt(document.excerpt)
-  val highlightedPreview = buildSearchHighlightedText(previewText, AppTheme.colors.brand)
+  val highlightedPreview = buildSearchHighlightedText(previewText, AppTheme.colors.textDefault)
 
   EntityRow(
     entity = entity,
@@ -282,7 +278,7 @@ private fun FolderRow(hit: SearchResultFolder_hit, onClick: suspend () -> Unit) 
   val folder = entity.folder ?: return
   val title = formatFolderName(hit.name ?: folder.name)
   val parentFolder = hit.folder.entity.entityRowParent_entity.parentFolderMeta()
-  val highlightedTitle = buildSearchHighlightedText(title, AppTheme.colors.brand)
+  val highlightedTitle = buildSearchHighlightedText(title, AppTheme.colors.textDefault)
 
   EntityRow(
     entity = entity,

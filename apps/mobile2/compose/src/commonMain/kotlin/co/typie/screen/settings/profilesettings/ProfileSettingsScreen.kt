@@ -125,14 +125,14 @@ fun ProfileSettingsScreen() {
             Text(
               "문의나 지원 요청 시 이 ID를 알려주시면 더 빠르게 도와드릴 수 있어요.",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
           }
 
           Text(
             text = model.query.data.me.id,
             style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
+            color = AppTheme.colors.textMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )

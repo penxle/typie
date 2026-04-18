@@ -237,7 +237,7 @@ private fun EntityRowTitle(entry: EntityRowTitleEntry) {
       Text(
         text = trailingText,
         style = AppTheme.typography.caption,
-        color = AppTheme.colors.textMuted,
+        color = AppTheme.colors.textHint,
       )
     }
   }
@@ -250,7 +250,7 @@ private fun EntityRowSupporting(entry: EntityRowSupportingEntry) {
       Text(
         text = text.value,
         style = AppTheme.typography.caption,
-        color = AppTheme.colors.textMuted,
+        color = AppTheme.colors.textHint,
         maxLines = entry.maxLines,
         overflow = TextOverflow.Ellipsis,
       )
@@ -259,7 +259,7 @@ private fun EntityRowSupporting(entry: EntityRowSupportingEntry) {
       Text(
         text = text.annotated,
         style = AppTheme.typography.caption,
-        color = AppTheme.colors.textMuted,
+        color = AppTheme.colors.textHint,
         maxLines = entry.maxLines,
         overflow = TextOverflow.Ellipsis,
       )
@@ -272,7 +272,7 @@ private fun EntityRowTitleEntry.buildText(): AnnotatedString {
     append(title.toAnnotatedString())
 
     subtitle?.let { subtitle ->
-      pushStyle(SpanStyle(color = AppTheme.colors.textMuted))
+      pushStyle(SpanStyle(color = AppTheme.colors.textHint))
       append(" — ")
       pop()
       append(subtitle.toAnnotatedString())
@@ -291,7 +291,7 @@ private fun EntityRowText.toAnnotatedString(): AnnotatedString {
 fun EntityRowMetaLine(
   text: String,
   modifier: Modifier = Modifier,
-  color: Color = AppTheme.colors.textMuted,
+  color: Color = AppTheme.colors.textHint,
   leading: (@Composable () -> Unit)? = null,
 ) {
   if (text.isBlank()) {
@@ -321,7 +321,7 @@ fun EntityRowMetaLine(
 fun EntityRowParentMeta(
   folder: EntityParentMeta_folder,
   modifier: Modifier = Modifier,
-  color: Color = AppTheme.colors.textMuted,
+  color: Color = AppTheme.colors.textHint,
 ) {
   EntityRowMetaLine(
     text = formatFolderName(folder.name),
@@ -341,7 +341,7 @@ fun EntityRowSelectionControl(selected: Boolean, modifier: Modifier = Modifier) 
   Icon(
     icon = if (selected) Lucide.SquareCheck else Lucide.Square,
     modifier = modifier.size(EntityRowDefaults.IconSize),
-    tint = if (selected) AppTheme.colors.brand else AppTheme.colors.textTertiary,
+    tint = if (selected) AppTheme.colors.textDefault else AppTheme.colors.textMuted,
   )
 }
 
@@ -350,6 +350,6 @@ fun EntityRowChevron(modifier: Modifier = Modifier) {
   Icon(
     icon = Lucide.ChevronRight,
     modifier = modifier.size(EntityRowDefaults.IconSize),
-    tint = AppTheme.colors.textTertiary,
+    tint = AppTheme.colors.textMuted,
   )
 }

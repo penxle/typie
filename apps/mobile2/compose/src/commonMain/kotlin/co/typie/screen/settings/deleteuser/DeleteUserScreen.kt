@@ -76,7 +76,7 @@ fun DeleteUserScreen() {
             Text(
               "탈퇴 전 아래 유의사항을 확인해주세요.",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
               textAlign = TextAlign.Center,
             )
           }
@@ -85,7 +85,7 @@ fun DeleteUserScreen() {
             Text(
               text = "유의사항",
               style = AppTheme.typography.title,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
 
             CardSurface(modifier = Modifier.fillMaxWidth()) {
@@ -103,7 +103,7 @@ fun DeleteUserScreen() {
                     Text(
                       text = item,
                       style = AppTheme.typography.caption,
-                      color = AppTheme.colors.textSecondary,
+                      color = AppTheme.colors.textMuted,
                     )
                   }
               }
@@ -121,13 +121,14 @@ fun DeleteUserScreen() {
                   Modifier.size(20.dp)
                     .clip(AppShapes.rounded(AppShapes.sm))
                     .background(
-                      if (model.form.acknowledged.value) AppTheme.colors.brand
-                      else AppTheme.colors.surfaceTinted,
+                      if (model.form.acknowledged.value) AppTheme.colors.textDefault
+                      else AppTheme.colors.surfaceInset,
                       AppShapes.rounded(AppShapes.sm),
                     )
                     .border(
                       1.dp,
-                      if (model.form.acknowledged.value) AppTheme.colors.brand.copy(alpha = 0.72f)
+                      if (model.form.acknowledged.value)
+                        AppTheme.colors.textDefault.copy(alpha = 0.72f)
                       else AppTheme.colors.borderDefault,
                       AppShapes.rounded(AppShapes.sm),
                     ),
@@ -137,7 +138,7 @@ fun DeleteUserScreen() {
                   Icon(
                     icon = Lucide.Check,
                     modifier = Modifier.size(14.dp),
-                    tint = AppTheme.colors.textOnBrand,
+                    tint = AppTheme.colors.surfaceCanvas,
                   )
                 }
               }

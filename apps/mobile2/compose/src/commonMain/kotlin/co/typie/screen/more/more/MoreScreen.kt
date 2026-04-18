@@ -108,7 +108,7 @@ fun MoreScreen() {
             Text(
               model.query.data.me.email,
               style = AppTheme.typography.action,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
@@ -118,7 +118,7 @@ fun MoreScreen() {
             Icon(
               icon = Lucide.ChevronRight,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
           }
         }
@@ -135,7 +135,7 @@ fun MoreScreen() {
             Text(
               "지난 1년 동안의 기록이에요",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
           }
 
@@ -153,7 +153,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.BarChart3,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSecondary,
+                tint = AppTheme.colors.textMuted,
               )
 
               Text("통계", style = AppTheme.typography.label)
@@ -165,7 +165,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.ChevronRight,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textTertiary,
+                tint = AppTheme.colors.textMuted,
               )
             }
           }
@@ -187,7 +187,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.CreditCard,
                 modifier = Modifier.size(18.dp).align(Alignment.Top),
-                tint = AppTheme.colors.textSecondary,
+                tint = AppTheme.colors.textMuted,
               )
 
               Column(
@@ -199,7 +199,7 @@ fun MoreScreen() {
                 Text(
                   subscription?.planName ?: "타이피 BASIC ACCESS",
                   style = AppTheme.typography.caption,
-                  color = AppTheme.colors.textTertiary,
+                  color = AppTheme.colors.textMuted,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
                 )
@@ -219,13 +219,13 @@ fun MoreScreen() {
                     else -> ""
                   },
                   style = AppTheme.typography.caption,
-                  color = AppTheme.colors.textTertiary,
+                  color = AppTheme.colors.textMuted,
                 )
 
                 Icon(
                   icon = Lucide.ChevronRight,
                   modifier = Modifier.size(14.dp),
-                  tint = AppTheme.colors.textTertiary,
+                  tint = AppTheme.colors.textMuted,
                 )
               }
             }
@@ -239,7 +239,7 @@ fun MoreScreen() {
             Icon(
               icon = Lucide.Settings,
               modifier = Modifier.size(20.dp),
-              tint = AppTheme.colors.textSecondary,
+              tint = AppTheme.colors.textMuted,
             )
 
             Text("설정", style = AppTheme.typography.label)
@@ -251,7 +251,7 @@ fun MoreScreen() {
             Icon(
               icon = Lucide.ChevronRight,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
           }
         }
@@ -275,7 +275,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.Headphones,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSecondary,
+                tint = AppTheme.colors.textMuted,
               )
             }
 
@@ -283,7 +283,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.ExternalLink,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textTertiary,
+                tint = AppTheme.colors.textMuted,
               )
             }
           }
@@ -301,7 +301,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.MessageSquare,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSecondary,
+                tint = AppTheme.colors.textMuted,
               )
 
               Spacer(Modifier.size(16.dp))
@@ -320,7 +320,7 @@ fun MoreScreen() {
                 Img(
                   url = Res.getUri("files/brands/discord.svg"),
                   modifier = Modifier.size(20.dp),
-                  color = AppTheme.colors.textSecondary,
+                  color = AppTheme.colors.textMuted,
                 )
 
                 Text("타이피 유저 커뮤니티", style = AppTheme.typography.label)
@@ -332,7 +332,7 @@ fun MoreScreen() {
                 Icon(
                   icon = Lucide.ExternalLink,
                   modifier = Modifier.size(16.dp),
-                  tint = AppTheme.colors.textTertiary,
+                  tint = AppTheme.colors.textMuted,
                 )
               }
             }
@@ -345,7 +345,7 @@ fun MoreScreen() {
               Img(
                 url = Res.getUri("files/brands/x.svg"),
                 modifier = Modifier.size(18.dp),
-                color = AppTheme.colors.textSecondary,
+                color = AppTheme.colors.textMuted,
               )
 
               Text("타이피 공식 X", style = AppTheme.typography.label)
@@ -357,7 +357,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.ExternalLink,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textTertiary,
+                tint = AppTheme.colors.textMuted,
               )
             }
           }
@@ -369,7 +369,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.Newspaper,
                 modifier = Modifier.size(20.dp),
-                tint = AppTheme.colors.textSecondary,
+                tint = AppTheme.colors.textMuted,
               )
 
               Text("업데이트 노트", style = AppTheme.typography.label)
@@ -381,7 +381,7 @@ fun MoreScreen() {
               Icon(
                 icon = Lucide.ExternalLink,
                 modifier = Modifier.size(16.dp),
-                tint = AppTheme.colors.textTertiary,
+                tint = AppTheme.colors.textMuted,
               )
             }
           }

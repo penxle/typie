@@ -16,7 +16,7 @@ fun EntityIcon_entity.iconAppearance(colors: AppColors): EntityIconAppearance {
     iconName = icon,
     iconColor = iconColor,
     fallbackIcon = if (type == EntityType.FOLDER) Lucide.Folder else Lucide.File,
-    fallbackTint = colors.textSecondary,
+    fallbackTint = colors.textMuted,
     colors = colors,
   )
 }

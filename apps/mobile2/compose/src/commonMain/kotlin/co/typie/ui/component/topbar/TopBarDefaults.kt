@@ -39,14 +39,14 @@ object TopBarDefaults {
   fun hazeProgressive(): HazeProgressive =
     HazeProgressive.verticalGradient(startIntensity = 1f, endIntensity = 0f)
 
-  @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceRaised
+  @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceDefault
 
-  @Composable fun controlBorderColor(): Color = AppTheme.colors.borderStrong
+  @Composable fun controlBorderColor(): Color = AppTheme.colors.borderEmphasis
 
   @Composable
   fun controlShadowModifier(shape: Shape = AppShapes.circle): Modifier {
     val ambient = AppTheme.colors.shadowAmbient
-    val spot = AppTheme.colors.shadow
+    val spot = AppTheme.colors.shadowSpot
     return Modifier.graphicsLayer {
       shadowElevation = 4.dp.toPx()
       this.shape = shape

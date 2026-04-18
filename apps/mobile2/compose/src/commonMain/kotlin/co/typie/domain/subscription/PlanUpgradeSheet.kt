@@ -120,7 +120,7 @@ fun PlanUpgradeSheet(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: String
             Text(
               text = title,
               style = AppTheme.typography.title,
-              color = AppTheme.colors.textPrimary,
+              color = AppTheme.colors.textDefault,
               overflow = TextOverflow.Ellipsis,
               maxLines = 1,
             )
@@ -129,7 +129,7 @@ fun PlanUpgradeSheet(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: String
         Text(
           text = message,
           style = AppTheme.typography.caption.copy(textAlign = TextAlign.Center),
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
           modifier = Modifier.fillMaxWidth(),
         )
       }
@@ -177,13 +177,13 @@ fun PlanUpgradeSheet(title: String = DEFAULT_PLAN_UPGRADE_TITLE, message: String
     Column(
       modifier =
         Modifier.fillMaxWidth()
-          .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
+          .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md))
           .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Text(text = "타이피 FULL ACCESS", style = AppTheme.typography.title)
 
-      CardDivider(inset = 0.dp, color = AppTheme.colors.borderStrong)
+      CardDivider(inset = 0.dp, color = AppTheme.colors.borderEmphasis)
 
       SubscriptionFeatureList(features = fullPlanFeatures, iconSize = 16.dp, rowSpacing = 8.dp)
     }

@@ -105,11 +105,7 @@ fun UpdateProfileScreen() {
               onClick = { filePicker("image/*") },
             )
 
-            Text(
-              "프로필 사진",
-              style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
-            )
+            Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
           }
 
           Spacer(Modifier.height(32.dp))
@@ -159,13 +155,13 @@ private fun ProfileAvatar(image: Img_image, previewUrl: String?, onClick: () -> 
           Modifier.align(Alignment.BottomEnd)
             .size(36.dp)
             .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
-            .background(AppTheme.colors.surfaceRaised, AppShapes.circle),
+            .background(AppTheme.colors.surfaceDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         Icon(
           icon = Lucide.Camera,
           modifier = Modifier.size(18.dp),
-          tint = AppTheme.colors.textSecondary,
+          tint = AppTheme.colors.textMuted,
         )
       }
     }

@@ -43,7 +43,7 @@ internal fun PresetSwatchRow(
   val ringInset = ringWidth + ringGap
   val outerShape = RoundedCornerShape(cornerRadius)
   val innerShape = RoundedCornerShape((cornerRadius - ringInset).coerceAtLeast(0.dp))
-  val slashColor = AppTheme.colors.textTertiary
+  val slashColor = AppTheme.colors.textMuted
 
   val selectedIndex = remember(options, selected) { options.indexOfFirst { it.value == selected } }
   val listState = rememberLazyListState(initialFirstVisibleItemIndex = maxOf(0, selectedIndex))
@@ -102,7 +102,7 @@ internal fun PresetSwatchRow(
         modifier =
           Modifier.clickable { onSelect(option.value) }
             .then(
-              if (isSelected) Modifier.border(ringWidth, AppTheme.colors.textPrimary, outerShape)
+              if (isSelected) Modifier.border(ringWidth, AppTheme.colors.textDefault, outerShape)
               else Modifier
             )
             .padding(ringInset)

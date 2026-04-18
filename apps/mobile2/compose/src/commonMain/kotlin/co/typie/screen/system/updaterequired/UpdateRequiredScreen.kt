@@ -55,20 +55,20 @@ fun UpdateRequiredScreen() {
           url = Res.getUri("files/logos/full.svg"),
           modifier = Modifier.height(32.dp),
           contentScale = ContentScale.FillHeight,
-          color = AppTheme.colors.textPrimary,
+          color = AppTheme.colors.textDefault,
         )
 
         Spacer(Modifier.height(28.dp))
 
         Box(
           modifier =
-            Modifier.size(56.dp).background(AppTheme.colors.surfaceSunken, AppShapes.circle),
+            Modifier.size(56.dp).background(AppTheme.colors.surfaceInset, AppShapes.circle),
           contentAlignment = Alignment.Center,
         ) {
           Icon(
             icon = Lucide.CircleFadingArrowUp,
             modifier = Modifier.size(24.dp),
-            tint = AppTheme.colors.textTertiary,
+            tint = AppTheme.colors.textMuted,
           )
         }
 
@@ -86,7 +86,7 @@ fun UpdateRequiredScreen() {
         Text(
           text = "새로운 버전이 출시되었어요.\n스토어에서 업데이트를 진행해주세요.",
           style = AppTheme.typography.body,
-          color = AppTheme.colors.textSecondary,
+          color = AppTheme.colors.textMuted,
           textAlign = TextAlign.Center,
           modifier = Modifier.fillMaxWidth(),
         )
@@ -106,7 +106,7 @@ fun UpdateRequiredScreen() {
               Text(
                 text = "현재 버전",
                 style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
+                color = AppTheme.colors.textMuted,
               )
 
               Text(text = state.currentVersion, style = AppTheme.typography.caption)
@@ -120,7 +120,7 @@ fun UpdateRequiredScreen() {
               Text(
                 text = "필요 버전",
                 style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
+                color = AppTheme.colors.textMuted,
               )
 
               Text(text = state.requiredVersion, style = AppTheme.typography.caption)

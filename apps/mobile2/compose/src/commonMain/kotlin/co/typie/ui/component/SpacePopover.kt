@@ -180,7 +180,7 @@ fun SpacePopover() {
             Text(
               "다른 스페이스",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
               modifier = Modifier.padding(horizontal = 8.dp),
             )
             Spacer(Modifier.height(8.dp))
@@ -249,7 +249,7 @@ private fun CreateSpaceContent(model: SpacePopoverViewModel) {
           Text(
             text = "새 스페이스 생성",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -260,7 +260,7 @@ private fun CreateSpaceContent(model: SpacePopoverViewModel) {
     Text(
       text = "스페이스는 독립된 글쓰기 공간이에요.\n주제나 목적에 따라 글을 나누어 관리해보세요.",
       style = AppTheme.typography.body,
-      color = AppTheme.colors.textSecondary,
+      color = AppTheme.colors.textMuted,
     )
 
     TextField(

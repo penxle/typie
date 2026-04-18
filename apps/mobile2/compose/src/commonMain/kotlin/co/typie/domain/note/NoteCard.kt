@@ -82,10 +82,8 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.Skeleton
-import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
-import co.typie.ui.theme.DarkColors
 import kotlin.math.abs
 
 private val NoteCardShape = AppShapes.rounded(AppShapes.md)
@@ -139,12 +137,12 @@ internal fun NoteCard(
 ) {
   val containerColor by
     animateColorAsState(
-      targetValue = if (expanded) AppTheme.colors.surfaceDefault else AppTheme.colors.surfaceTinted,
+      targetValue = if (expanded) AppTheme.colors.surfaceDefault else AppTheme.colors.surfaceInset,
       animationSpec = tween(durationMillis = NoteExpandAnimationDurationMillis),
     )
   val borderColor by
     animateColorAsState(
-      targetValue = if (expanded) AppTheme.colors.borderDefault else AppTheme.colors.borderSubtle,
+      targetValue = if (expanded) AppTheme.colors.borderDefault else AppTheme.colors.borderHairline,
       animationSpec = tween(durationMillis = NoteExpandAnimationDurationMillis),
     )
   val baseShadowElevation by
@@ -174,7 +172,7 @@ internal fun NoteCard(
         else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
     )
   val shadowAmbient = AppTheme.colors.shadowAmbient
-  val shadowSpot = AppTheme.colors.shadow
+  val shadowSpot = AppTheme.colors.shadowSpot
   val cardModifier =
     modifier
       .fillMaxWidth()
@@ -303,7 +301,7 @@ private fun NoteExpandedContent(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           if (isSaving) {
-            Text("저장 중...", style = AppTheme.typography.micro, color = AppTheme.colors.textMuted)
+            Text("저장 중...", style = AppTheme.typography.micro, color = AppTheme.colors.textHint)
           }
 
           NoteCardMenuPopover(
@@ -376,9 +374,9 @@ private fun NoteCollapsedContent(
               ),
             color =
               when {
-                note.content.isBlank() -> AppTheme.colors.textMuted
-                note.status == NoteStatus.RESOLVED -> AppTheme.colors.textMuted
-                else -> AppTheme.colors.textPrimary
+                note.content.isBlank() -> AppTheme.colors.textHint
+                note.status == NoteStatus.RESOLVED -> AppTheme.colors.textHint
+                else -> AppTheme.colors.textDefault
               },
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
@@ -391,7 +389,7 @@ private fun NoteCollapsedContent(
           Icon(
             icon = Lucide.Maximize2,
             modifier = Modifier.size(15.dp),
-            tint = AppTheme.colors.textSecondary,
+            tint = AppTheme.colors.textMuted,
           )
         }
       }
@@ -419,7 +417,7 @@ private fun NoteCardLeadingContent(
       Icon(
         icon = Lucide.GripVertical,
         modifier = Modifier.size(16.dp),
-        tint = AppTheme.colors.textMuted,
+        tint = AppTheme.colors.textHint,
       )
     }
   }
@@ -449,7 +447,7 @@ private fun NoteCardMenuPopover(
       val items =
         listOf(
           PopoverListItem(
-            content = { row(Lucide.Link, "연결 추가", AppTheme.colors.textPrimary) },
+            content = { row(Lucide.Link, "연결 추가", AppTheme.colors.textDefault) },
             onSelected = {
               close()
               onAddEntity()
@@ -460,7 +458,7 @@ private fun NoteCardMenuPopover(
               row(
                 if (status == NoteStatus.RESOLVED) Lucide.Circle else Lucide.CircleCheck,
                 if (status == NoteStatus.RESOLVED) "미완료로 표시" else "완료로 표시",
-                AppTheme.colors.textPrimary,
+                AppTheme.colors.textDefault,
               )
             },
             onSelected = {
@@ -529,7 +527,7 @@ private fun NoteStatusToggleButton(
 @Composable
 private fun NoteActionIconButton(
   icon: IconData,
-  tint: Color = AppTheme.colors.textSecondary,
+  tint: Color = AppTheme.colors.textMuted,
   onClick: () -> Unit,
 ) {
   InteractionScope {
@@ -547,7 +545,7 @@ private fun NoteActionIconButton(
 }
 
 @Composable
-private fun NoteActionIconAnchor(icon: IconData, tint: Color = AppTheme.colors.textSecondary) {
+private fun NoteActionIconAnchor(icon: IconData, tint: Color = AppTheme.colors.textMuted) {
   Box(modifier = Modifier.size(NoteActionButtonSize), contentAlignment = Alignment.Center) {
     Icon(icon = icon, modifier = Modifier.size(15.dp), tint = tint)
   }
@@ -622,7 +620,7 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
   val meta = buildCollapsedMeta(note.entities.map { it.noteLinkedEntity_entity })
   val density = LocalDensity.current
   val spacingPx = with(density) { 6.dp.roundToPx() }
-  val mutedCaptionStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textMuted)
+  val mutedCaptionStyle = AppTheme.typography.caption.copy(color = AppTheme.colors.textHint)
   val showSeparator = meta.visibleEntities.isNotEmpty() || meta.overflowCount > 0
 
   SubcomposeLayout(modifier = Modifier.fillMaxWidth()) { constraints ->
@@ -646,7 +644,7 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
             Text(
               text = "+${meta.overflowCount}",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textMuted,
+              color = AppTheme.colors.textHint,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
@@ -660,7 +658,7 @@ private fun NoteCollapsedMetaRow(note: NoteCard_note) {
     val separatorPlaceable =
       if (showSeparator) {
         subcompose("separator") {
-            Text("·", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
+            Text("·", style = AppTheme.typography.caption, color = AppTheme.colors.textHint)
           }
           .single()
           .measure(looseConstraints)
@@ -730,7 +728,7 @@ private fun NoteLinkedEntityChip(
       modifier =
         chipModifier
           .clip(AppShapes.rounded(AppShapes.sm))
-          .background(AppTheme.colors.surfaceSunken, AppShapes.rounded(AppShapes.sm))
+          .background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.sm))
           .padding(horizontal = 6.dp, vertical = 4.dp),
       horizontalArrangement = Arrangement.spacedBy(4.dp),
       verticalAlignment = Alignment.CenterVertically,
@@ -741,7 +739,7 @@ private fun NoteLinkedEntityChip(
         text = entity.displayTitle(),
         modifier = Modifier.weight(1f, fill = false),
         style = AppTheme.typography.caption.copy(fontWeight = FontWeight.W500),
-        color = AppTheme.colors.textSecondary,
+        color = AppTheme.colors.textMuted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
@@ -813,20 +811,20 @@ private fun NoteContentEditor(
             onBlur()
           }
         },
-      textStyle = AppTheme.typography.body.copy(color = AppTheme.colors.textPrimary),
+      textStyle = AppTheme.typography.body.copy(color = AppTheme.colors.textDefault),
       keyboardOptions =
         KeyboardOptions(
           capitalization = KeyboardCapitalization.Sentences,
           imeAction = ImeAction.Default,
         ),
-      cursorBrush = SolidColor(AppTheme.colors.textPrimary),
+      cursorBrush = SolidColor(AppTheme.colors.textDefault),
       decorationBox = { innerTextField ->
         Box(modifier = Modifier.fillMaxWidth()) {
           if (textFieldValue.text.isEmpty()) {
             Text(
               text = "내용을 입력하세요",
               style = AppTheme.typography.body,
-              color = AppTheme.colors.textMuted,
+              color = AppTheme.colors.textHint,
             )
           }
 
@@ -839,17 +837,17 @@ private fun NoteContentEditor(
 
 @Composable
 internal fun rememberNoteColorOptions(): List<NoteColorOption> {
-  val palette = if (AppTheme.colors == DarkColors) AppColor.dark else AppColor.light
+  val palette = AppTheme.colors.palette
 
   return remember(palette) {
     listOf(
-      NoteColorOption("gray", "그레이", palette.gray.s500, palette.gray.s100),
-      NoteColorOption("red", "레드", palette.red.s500, palette.red.s100),
-      NoteColorOption("orange", "오렌지", palette.amber.s600, palette.amber.s100),
-      NoteColorOption("yellow", "옐로", palette.amber.s400, palette.amber.s50),
-      NoteColorOption("green", "그린", palette.green.s500, palette.green.s100),
-      NoteColorOption("blue", "블루", palette.blue.s500, palette.blue.s100),
-      NoteColorOption("purple", "퍼플", palette.brand.s500, palette.brand.s100),
+      NoteColorOption("gray", "그레이", palette.gray),
+      NoteColorOption("red", "레드", palette.red),
+      NoteColorOption("orange", "오렌지", palette.orange),
+      NoteColorOption("yellow", "옐로", palette.yellow),
+      NoteColorOption("green", "그린", palette.green),
+      NoteColorOption("blue", "블루", palette.blue),
+      NoteColorOption("purple", "퍼플", palette.purple),
     )
   }
 }
@@ -897,9 +895,4 @@ internal fun buildCollapsedMeta(
   )
 }
 
-internal data class NoteColorOption(
-  val value: String,
-  val label: String,
-  val stroke: Color,
-  val fill: Color,
-)
+internal data class NoteColorOption(val value: String, val label: String, val stroke: Color)

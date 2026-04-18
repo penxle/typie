@@ -57,7 +57,7 @@ fun LoaderOverlay() {
           .background(AppColor.black.copy(alpha = 0.3f)),
       contentAlignment = Alignment.Center,
     ) {
-      Spinner(color = AppTheme.colors.textPrimary)
+      Spinner(color = AppTheme.colors.textDefault)
     }
   }
 }

@@ -10,6 +10,6 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     text = text,
     modifier = modifier,
     style = AppTheme.typography.title,
-    color = AppTheme.colors.textTertiary,
+    color = AppTheme.colors.textMuted,
   )
 }

@@ -36,7 +36,7 @@ fun FontSpecimen(
   }
 
   val height = with(LocalDensity.current) { style.fontSize.toDp() }
-  val color = if (style.color == Color.Unspecified) AppTheme.colors.textPrimary else style.color
+  val color = if (style.color == Color.Unspecified) AppTheme.colors.textDefault else style.color
 
   val url =
     remember(fontId, text, fallbackTexts, color) {

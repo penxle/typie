@@ -74,7 +74,7 @@ fun SubscriptionBadgeRow() {
 @Composable
 private fun CelebrationBadge(icon: IconData) {
   val borderColor = AppTheme.colors.surfaceDefault
-  val backgroundColor = AppTheme.colors.textPrimary
+  val backgroundColor = AppTheme.colors.textDefault
   val iconTint = AppTheme.colors.surfaceDefault
 
   Box(
@@ -95,11 +95,7 @@ private fun SubscriptionFeatureItem(feature: SubscriptionFeature, iconSize: Dp) 
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    Icon(
-      icon = feature.icon,
-      modifier = Modifier.size(iconSize),
-      tint = AppTheme.colors.textSecondary,
-    )
+    Icon(icon = feature.icon, modifier = Modifier.size(iconSize), tint = AppTheme.colors.textMuted)
 
     Text(text = feature.label, style = AppTheme.typography.body)
   }

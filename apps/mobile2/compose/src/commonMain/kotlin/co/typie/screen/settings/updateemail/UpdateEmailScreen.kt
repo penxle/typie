@@ -66,11 +66,7 @@ fun UpdateEmailScreen() {
               .padding(contentPadding.onlyTop())
               .padding(AppTheme.spacings.scrollBottomPadding)
         ) {
-          Text(
-            "현재 이메일 주소",
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textSecondary,
-          )
+          Text("현재 이메일 주소", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
           Spacer(Modifier.height(8.dp))
 

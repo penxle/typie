@@ -52,12 +52,12 @@ fun EntityPasteBar(
             radius = 3f
           }
           .dropShadow(EntityPasteBarShape) {
-            color = colors.shadow
+            color = colors.shadowSpot
             offset = Offset(0f, 4f)
             radius = 16f
           }
-          .background(AppTheme.colors.brand, EntityPasteBarShape)
-          .border(1.dp, AppTheme.colors.brand.copy(alpha = 0.14f), EntityPasteBarShape),
+          .background(AppTheme.colors.textDefault, EntityPasteBarShape)
+          .border(1.dp, AppTheme.colors.textDefault.copy(alpha = 0.14f), EntityPasteBarShape),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       InteractionScope {
@@ -77,13 +77,13 @@ fun EntityPasteBar(
             Icon(
               icon = Lucide.ClipboardPaste,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textOnBrand,
+              tint = AppTheme.colors.surfaceCanvas,
             )
 
             Text(
               text = if (loading) "붙여넣는 중..." else "여기에 붙여넣기",
               style = AppTheme.typography.action,
-              color = AppTheme.colors.textOnBrand,
+              color = AppTheme.colors.surfaceCanvas,
             )
           }
         }
@@ -93,7 +93,7 @@ fun EntityPasteBar(
         modifier =
           Modifier.width(1.dp)
             .height(18.dp)
-            .background(AppTheme.colors.textOnBrand.copy(alpha = 0.22f))
+            .background(AppTheme.colors.surfaceCanvas.copy(alpha = 0.22f))
       )
 
       InteractionScope {
@@ -104,7 +104,11 @@ fun EntityPasteBar(
               .pressScale(0.96f),
           contentAlignment = Alignment.Center,
         ) {
-          Icon(icon = Lucide.X, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textOnBrand)
+          Icon(
+            icon = Lucide.X,
+            modifier = Modifier.size(18.dp),
+            tint = AppTheme.colors.surfaceCanvas,
+          )
         }
       }
     }

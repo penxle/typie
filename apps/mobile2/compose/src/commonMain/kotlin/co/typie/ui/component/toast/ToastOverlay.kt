@@ -187,7 +187,7 @@ private fun AnimatedToast(
                       when (type) {
                         ToastType.Success -> AppTheme.colors.success
                         ToastType.Error -> AppTheme.colors.danger
-                        else -> AppTheme.colors.brand
+                        else -> AppTheme.colors.textDefault
                       },
                       AppShapes.circle,
                     ),

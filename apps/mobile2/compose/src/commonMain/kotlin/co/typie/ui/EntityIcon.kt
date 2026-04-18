@@ -1,11 +1,11 @@
 package co.typie.ui
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import co.typie.icons.Lucide
 import co.typie.ui.icon.IconData
-import co.typie.ui.theme.AppColor
 import co.typie.ui.theme.AppColors
-import co.typie.ui.theme.DarkColors
+import co.typie.ui.theme.AppTheme
 
 data class EntityIconAppearance(val icon: IconData, val tint: Color)
 
@@ -149,16 +149,19 @@ data class EntityIconColorOption(val label: String, val value: String, val color
 
 val entityIcons = entityIconMap.map { (name, icon) -> EntityIconOption(name = name, icon = icon) }
 
-val entityIconColors =
-  listOf(
-    EntityIconColorOption("그레이", "gray", AppColor.light.gray.s500),
-    EntityIconColorOption("레드", "red", AppColor.light.red.s500),
-    EntityIconColorOption("오렌지", "orange", AppColor.light.amber.s600),
-    EntityIconColorOption("옐로", "yellow", AppColor.light.amber.s400),
-    EntityIconColorOption("그린", "green", AppColor.light.green.s500),
-    EntityIconColorOption("블루", "blue", AppColor.light.blue.s500),
-    EntityIconColorOption("퍼플", "purple", AppColor.light.brand.s500),
+@Composable
+internal fun rememberEntityIconColorOptions(): List<EntityIconColorOption> {
+  val palette = AppTheme.colors.palette
+  return listOf(
+    EntityIconColorOption("그레이", "gray", palette.gray),
+    EntityIconColorOption("레드", "red", palette.red),
+    EntityIconColorOption("오렌지", "orange", palette.orange),
+    EntityIconColorOption("옐로", "yellow", palette.yellow),
+    EntityIconColorOption("그린", "green", palette.green),
+    EntityIconColorOption("블루", "blue", palette.blue),
+    EntityIconColorOption("퍼플", "purple", palette.purple),
   )
+}
 
 fun resolveEntityIconAppearance(
   iconName: String?,
@@ -174,16 +177,14 @@ fun resolveEntityIconAppearance(
 }
 
 fun resolveEntityIconTint(iconColor: String?, colors: AppColors): Color? {
-  val palette = if (colors == DarkColors) AppColor.dark else AppColor.light
-
   return when (iconColor?.trim()) {
-    "gray" -> if (colors == DarkColors) palette.gray.s300 else palette.gray.s500
-    "red" -> if (colors == DarkColors) palette.red.s300 else palette.red.s500
-    "orange" -> if (colors == DarkColors) palette.amber.s300 else palette.amber.s600
-    "yellow" -> if (colors == DarkColors) palette.amber.s200 else palette.amber.s400
-    "green" -> if (colors == DarkColors) palette.green.s200 else palette.green.s500
-    "blue" -> if (colors == DarkColors) palette.blue.s200 else palette.blue.s500
-    "purple" -> if (colors == DarkColors) palette.brand.s200 else palette.brand.s500
+    "gray" -> colors.palette.gray
+    "red" -> colors.palette.red
+    "orange" -> colors.palette.orange
+    "yellow" -> colors.palette.yellow
+    "green" -> colors.palette.green
+    "blue" -> colors.palette.blue
+    "purple" -> colors.palette.purple
     else -> null
   }
 }

@@ -61,7 +61,7 @@ internal fun PopoverPaneSelectionIndicator(activeBoundsInPane: Rect?, itemRadius
         Modifier.offset { IntOffset(indicatorX.value.toInt(), indicatorY.value.toInt()) }
           .width(indicatorWidth.value.toDp(density))
           .height(indicatorHeight.value.toDp(density))
-          .background(AppTheme.colors.surfaceTinted, AppShapes.squircle(itemRadius))
+          .background(AppTheme.colors.surfaceInset, AppShapes.squircle(itemRadius))
     )
   }
 }

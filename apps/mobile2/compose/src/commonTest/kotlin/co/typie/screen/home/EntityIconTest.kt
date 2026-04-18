@@ -77,7 +77,7 @@ class EntityIconTest {
           iconName = "does-not-exist",
           iconColor = "green",
           fallbackIcon = Lucide.Folder,
-          fallbackTint = LightColors.brand,
+          fallbackTint = LightColors.palette.purple,
           colors = LightColors,
         )
         .icon,
@@ -87,7 +87,7 @@ class EntityIconTest {
   @Test
   fun `entity icon colors resolve against active theme palette`() {
     assertEquals(
-      AppColor.light.blue.s500,
+      AppColor.light.palette.blue,
       resolveEntityIconAppearance(
           iconName = "file",
           iconColor = "blue",
@@ -98,7 +98,7 @@ class EntityIconTest {
         .tint,
     )
     assertEquals(
-      AppColor.dark.brand.s200,
+      AppColor.dark.palette.purple,
       resolveEntityIconAppearance(
           iconName = "file",
           iconColor = "purple",
@@ -113,12 +113,12 @@ class EntityIconTest {
   @Test
   fun `unsupported entity icon colors fall back to caller tint`() {
     assertEquals(
-      LightColors.brand,
+      LightColors.palette.purple,
       resolveEntityIconAppearance(
           iconName = "folder",
           iconColor = "unknown",
           fallbackIcon = Lucide.Folder,
-          fallbackTint = LightColors.brand,
+          fallbackTint = LightColors.palette.purple,
           colors = LightColors,
         )
         .tint,

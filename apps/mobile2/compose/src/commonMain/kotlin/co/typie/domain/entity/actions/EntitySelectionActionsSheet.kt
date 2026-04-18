@@ -58,12 +58,12 @@ internal fun EntitySelectionActionsSheet(
             Icon(
               icon = Lucide.SquareCheck,
               modifier = Modifier.size(20.dp),
-              tint = AppTheme.colors.textPrimary,
+              tint = AppTheme.colors.textDefault,
             )
             Text(
               text = "${summary.selectedItems.size}개 선택됨",
               style = AppTheme.typography.title,
-              color = AppTheme.colors.textPrimary,
+              color = AppTheme.colors.textDefault,
             )
           }
 
@@ -159,7 +159,7 @@ private fun SelectionCountChip(icon: co.typie.ui.icon.IconData, label: String) {
     horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Icon(icon = icon, modifier = Modifier.size(14.dp), tint = AppTheme.colors.textTertiary)
-    Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+    Icon(icon = icon, modifier = Modifier.size(14.dp), tint = AppTheme.colors.textMuted)
+    Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
   }
 }

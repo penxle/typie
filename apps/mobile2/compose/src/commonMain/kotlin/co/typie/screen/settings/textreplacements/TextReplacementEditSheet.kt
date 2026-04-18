@@ -94,7 +94,7 @@ internal fun TextReplacementEditSheet(
         leading = {
           SheetBarTextButton(
             text = "취소",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = !isSaving && !isDeleting,
             onClick = { dismiss() },
           )
@@ -103,7 +103,7 @@ internal fun TextReplacementEditSheet(
           Text(
             text = if (editing != null) "대치 규칙 수정" else "대치 규칙 추가",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -111,7 +111,7 @@ internal fun TextReplacementEditSheet(
         trailing = {
           SheetBarTextButton(
             text = "저장",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = !isDeleting,
             loading = isSaving,
             onClick = { submit() },
@@ -191,17 +191,13 @@ private fun RegexToggleRow(
       horizontalArrangement = Arrangement.spacedBy(12.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Icon(
-        icon = Lucide.Regex,
-        modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.textTertiary,
-      )
+      Icon(icon = Lucide.Regex, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textMuted)
       Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("정규식", style = AppTheme.typography.label)
         Text(
           "찾을 텍스트를 정규식 패턴으로 해석합니다.",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
         )
       }
       SettingSwitch(checked = checked, onCheckedChange = onCheckedChange)

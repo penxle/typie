@@ -30,7 +30,7 @@ internal fun DialogLayout(
 ) {
   Column(
     modifier =
-      Modifier.clip(AppShapes.rounded(AppShapes.lg)).background(AppTheme.colors.surfaceRaised),
+      Modifier.clip(AppShapes.rounded(AppShapes.lg)).background(AppTheme.colors.surfaceDefault),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Column(
@@ -43,10 +43,10 @@ internal fun DialogLayout(
       }
       Text(title, style = AppTheme.typography.title)
       Spacer(Modifier.height(6.dp))
-      Text(message, style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+      Text(message, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
     }
 
-    Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderSubtle))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline))
 
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -60,7 +60,7 @@ internal fun DialogLayout(
 context(rowScope: RowScope)
 internal fun DialogActionButton(
   text: String,
-  color: Color = AppTheme.colors.textPrimary,
+  color: Color = AppTheme.colors.textDefault,
   onClick: () -> Unit,
 ) {
   Box(
@@ -73,5 +73,5 @@ internal fun DialogActionButton(
 
 @Composable
 internal fun DialogActionDivider() {
-  Box(modifier = Modifier.width(1.dp).height(48.dp).background(AppTheme.colors.borderSubtle))
+  Box(modifier = Modifier.width(1.dp).height(48.dp).background(AppTheme.colors.borderHairline))
 }

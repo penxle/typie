@@ -148,11 +148,11 @@ private fun FeedbackTopicChip(label: String, selected: Boolean, onClick: suspend
       modifier =
         Modifier.border(
             width = 1.dp,
-            color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
+            color = if (selected) AppTheme.colors.textDefault else AppTheme.colors.borderDefault,
             shape = AppShapes.circle,
           )
           .background(
-            color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceDefault,
+            color = if (selected) AppTheme.colors.surfaceInset else AppTheme.colors.surfaceDefault,
             shape = AppShapes.circle,
           )
           .clickable(onClick)
@@ -163,7 +163,7 @@ private fun FeedbackTopicChip(label: String, selected: Boolean, onClick: suspend
       Text(
         text = label,
         style = AppTheme.typography.action,
-        color = if (selected) AppTheme.colors.brand else AppTheme.colors.textSecondary,
+        color = if (selected) AppTheme.colors.textDefault else AppTheme.colors.textMuted,
       )
     }
   }
@@ -177,11 +177,11 @@ private fun FeedbackMoodButton(icon: IconData, selected: Boolean, onClick: suspe
         Modifier.size(34.dp)
           .border(
             width = 1.dp,
-            color = if (selected) AppTheme.colors.brand else AppTheme.colors.borderDefault,
+            color = if (selected) AppTheme.colors.textDefault else AppTheme.colors.borderDefault,
             shape = AppShapes.circle,
           )
           .background(
-            color = if (selected) AppTheme.colors.brandSubtle else AppTheme.colors.surfaceDefault,
+            color = if (selected) AppTheme.colors.surfaceInset else AppTheme.colors.surfaceDefault,
             shape = AppShapes.circle,
           )
           .clickable(onClick)
@@ -191,7 +191,7 @@ private fun FeedbackMoodButton(icon: IconData, selected: Boolean, onClick: suspe
       Icon(
         icon = icon,
         modifier = Modifier.size(18.dp),
-        tint = if (selected) AppTheme.colors.brand else AppTheme.colors.textTertiary,
+        tint = if (selected) AppTheme.colors.textDefault else AppTheme.colors.textMuted,
       )
     }
   }

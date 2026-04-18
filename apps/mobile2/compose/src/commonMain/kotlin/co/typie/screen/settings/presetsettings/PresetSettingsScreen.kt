@@ -94,7 +94,7 @@ fun PresetSettingsScreen() {
 
   Screen(
     loadable = model.query,
-    background = AppTheme.colors.surfaceSunken,
+    background = AppTheme.colors.surfaceInset,
     contentPadding = PaddingValues.Zero,
   ) { contentPadding ->
     val colors = AppTheme.colors
@@ -133,7 +133,7 @@ fun PresetSettingsScreen() {
           modifier =
             Modifier.fillMaxWidth()
               .height(previewHeight)
-              .background(colors.surfaceSunken, previewShape)
+              .background(colors.surfaceInset, previewShape)
               .zIndex(1f)
         )
 
@@ -144,7 +144,7 @@ fun PresetSettingsScreen() {
               .offset(y = previewHeight - AppShapes.xl / 2)
               .background(
                 Brush.verticalGradient(
-                  colors = listOf(colors.surfaceSunken, colors.surfaceSunken.copy(alpha = 0f))
+                  colors = listOf(colors.surfaceInset, colors.surfaceInset.copy(alpha = 0f))
                 )
               )
         )
@@ -222,7 +222,7 @@ private fun FontSection(
       }
     ) {
       Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = "패밀리", style = AppTheme.typography.label, color = AppTheme.colors.textSecondary)
+        Text(text = "패밀리", style = AppTheme.typography.label, color = AppTheme.colors.textMuted)
 
         if (selectedFamily != null) {
           val representativeFont = selectedFamily.representativeFont
@@ -236,7 +236,7 @@ private fun FontSection(
           Text(
             text = model.preset.fontFamily,
             style = AppTheme.typography.action,
-            color = AppTheme.colors.textTertiary,
+            color = AppTheme.colors.textMuted,
           )
         }
       }
@@ -244,7 +244,7 @@ private fun FontSection(
       Icon(
         icon = Lucide.ChevronRight,
         modifier = Modifier.size(16.dp),
-        tint = AppTheme.colors.textTertiary,
+        tint = AppTheme.colors.textMuted,
       )
     }
 
@@ -525,7 +525,7 @@ private fun LayoutSection(
 
 @Composable
 private fun SectionDivider() {
-  Spacer(modifier = Modifier.fillMaxWidth().height(12.dp).background(AppTheme.colors.surfaceSunken))
+  Spacer(modifier = Modifier.fillMaxWidth().height(12.dp).background(AppTheme.colors.surfaceInset))
 }
 
 @Composable
@@ -546,7 +546,7 @@ private fun PresetSettingRow(label: String, content: @Composable () -> Unit) {
     Text(
       label,
       style = AppTheme.typography.label,
-      color = AppTheme.colors.textSecondary,
+      color = AppTheme.colors.textMuted,
       modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
     )
     content()
@@ -559,8 +559,8 @@ private fun PresetTrailingChip(
   selected: Boolean = false,
   onClick: suspend () -> Unit,
 ) {
-  val backgroundColor = if (selected) AppTheme.colors.textPrimary else AppTheme.colors.surfaceSunken
-  val textColor = if (selected) AppTheme.colors.surfaceDefault else AppTheme.colors.textPrimary
+  val backgroundColor = if (selected) AppTheme.colors.textDefault else AppTheme.colors.surfaceInset
+  val textColor = if (selected) AppTheme.colors.surfaceDefault else AppTheme.colors.textDefault
   Box(
     modifier =
       Modifier.clickable(onClick)
@@ -609,7 +609,7 @@ private fun <R> InstantSheetLayout(title: String, content: @Composable ColumnSco
           Text(
             text = title,
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )

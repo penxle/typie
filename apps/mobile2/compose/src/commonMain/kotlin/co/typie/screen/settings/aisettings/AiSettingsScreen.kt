@@ -87,7 +87,7 @@ fun AiSettingsScreen() {
             Text(
               "타이피는 사용자의 프라이버시를 최우선으로 생각해요. 사용자가 작성한 글은 어떠한 경우에도 AI 모델 학습에 사용되지 않아요.",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -122,7 +122,7 @@ fun AiSettingsScreen() {
 @Composable
 private fun NoticeItem(title: String, description: String) {
   Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-    Text("•", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+    Text("•", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
     Text(
       buildAnnotatedString {
@@ -130,7 +130,7 @@ private fun NoticeItem(title: String, description: String) {
         append(description)
       },
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
+      color = AppTheme.colors.textMuted,
       modifier = Modifier.weight(1f),
     )
   }

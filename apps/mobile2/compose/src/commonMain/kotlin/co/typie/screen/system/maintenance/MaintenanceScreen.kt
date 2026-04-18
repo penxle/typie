@@ -54,20 +54,20 @@ fun MaintenanceScreen() {
           url = Res.getUri("files/logos/full.svg"),
           modifier = Modifier.height(32.dp),
           contentScale = ContentScale.FillHeight,
-          color = AppTheme.colors.textPrimary,
+          color = AppTheme.colors.textDefault,
         )
 
         Spacer(Modifier.height(28.dp))
 
         Box(
           modifier =
-            Modifier.size(56.dp).background(AppTheme.colors.surfaceSunken, AppShapes.circle),
+            Modifier.size(56.dp).background(AppTheme.colors.surfaceInset, AppShapes.circle),
           contentAlignment = Alignment.Center,
         ) {
           Icon(
             icon = Lucide.Construction,
             modifier = Modifier.size(24.dp),
-            tint = AppTheme.colors.textTertiary,
+            tint = AppTheme.colors.textMuted,
           )
         }
 
@@ -85,7 +85,7 @@ fun MaintenanceScreen() {
         Text(
           text = state.message.replace("\\n", "\n"),
           style = AppTheme.typography.body,
-          color = AppTheme.colors.textSecondary,
+          color = AppTheme.colors.textMuted,
           textAlign = TextAlign.Center,
           modifier = Modifier.fillMaxWidth(),
         )
@@ -95,13 +95,13 @@ fun MaintenanceScreen() {
 
           Box(
             modifier =
-              Modifier.background(AppTheme.colors.surfaceSunken, AppShapes.rounded(AppShapes.full))
+              Modifier.background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.full))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
           ) {
             Text(
               text = "예상 종료: ${state.until.format("M월 d일 HH시 mm분")}",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
               textAlign = TextAlign.Center,
             )
           }

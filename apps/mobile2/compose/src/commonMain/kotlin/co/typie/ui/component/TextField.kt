@@ -251,9 +251,9 @@ fun TextField(
   val containerColor by
     animateColorAsState(
       when {
-        !enabled -> AppTheme.colors.surfaceBase
+        !enabled -> AppTheme.colors.surfaceCanvas
         isFocused -> AppTheme.colors.surfaceDefault
-        else -> AppTheme.colors.surfaceSunken
+        else -> AppTheme.colors.surfaceInset
       },
       colorSpec,
     )
@@ -262,8 +262,8 @@ fun TextField(
     animateColorAsState(
       when {
         hasError -> AppTheme.colors.danger
-        isFocused -> AppTheme.colors.borderStrong
-        else -> AppTheme.colors.borderSubtle
+        isFocused -> AppTheme.colors.borderEmphasis
+        else -> AppTheme.colors.borderHairline
       },
       colorSpec,
     )
@@ -282,9 +282,9 @@ fun TextField(
     animateColorAsState(
       when {
         hasError -> AppTheme.colors.danger
-        isInternal -> AppTheme.colors.textTertiary
-        isFocused -> AppTheme.colors.textPrimary
-        else -> AppTheme.colors.textSecondary
+        isInternal -> AppTheme.colors.textMuted
+        isFocused -> AppTheme.colors.textDefault
+        else -> AppTheme.colors.textMuted
       },
       colorSpec,
     )
@@ -305,7 +305,7 @@ fun TextField(
 
   Column(modifier = modifier) {
     if (!isInternal && labelPosition != LabelPosition.None) {
-      Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
+      Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
       Spacer(Modifier.height(8.dp))
     }
@@ -377,9 +377,9 @@ fun TextField(
           },
       textStyle =
         AppTheme.typography.body.copy(
-          color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted
+          color = if (enabled) AppTheme.colors.textDefault else AppTheme.colors.textHint
         ),
-      cursorBrush = SolidColor(AppTheme.colors.textPrimary),
+      cursorBrush = SolidColor(AppTheme.colors.textDefault),
       keyboardOptions =
         KeyboardOptions(keyboardType = resolvedKeyboardType, imeAction = resolvedImeAction),
       keyboardActions =
@@ -418,7 +418,7 @@ fun TextField(
                 Text(
                   label,
                   style = if (labelActive) AppTheme.typography.action else AppTheme.typography.body,
-                  color = if (labelActive) labelColor else AppTheme.colors.textMuted,
+                  color = if (labelActive) labelColor else AppTheme.colors.textHint,
                   modifier =
                     Modifier.graphicsLayer {
                       val fieldHeightPx = fieldHeight.toPx()
@@ -444,7 +444,7 @@ fun TextField(
                 Text(
                   placeholder,
                   style = AppTheme.typography.body,
-                  color = AppTheme.colors.textMuted,
+                  color = AppTheme.colors.textHint,
                   modifier = Modifier.graphicsLayer { alpha = placeholderAlpha },
                 )
               }
@@ -526,7 +526,7 @@ fun TextField(
 
     val helpColor by
       animateColorAsState(
-        if (hasError) AppTheme.colors.danger else AppTheme.colors.textTertiary,
+        if (hasError) AppTheme.colors.danger else AppTheme.colors.textMuted,
         colorSpec,
       )
 

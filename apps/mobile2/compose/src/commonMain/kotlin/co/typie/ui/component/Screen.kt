@@ -47,7 +47,7 @@ private val MaxContentWidth = 600.dp
 @Composable
 fun Screen(
   loadable: Loadable<*>? = null,
-  background: Color = AppTheme.colors.surfaceBase,
+  background: Color = AppTheme.colors.surfaceCanvas,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
   overlay: (@Composable BoxScope.() -> Unit)? = null,
   content: @Composable BoxScope.(contentPadding: PaddingValues) -> Unit,

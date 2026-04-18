@@ -210,7 +210,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
             else Modifier
           )
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
-          .background(AppTheme.colors.surfaceRaised)
+          .background(AppTheme.colors.surfaceDefault)
     ) {
       SheetHandle()
       CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
@@ -236,7 +236,7 @@ private fun SheetHandle() {
       modifier =
         Modifier.size(width = HandleWidth, height = HandleHeight)
           .clip(AppShapes.rounded(AppShapes.sm))
-          .background(AppTheme.colors.borderSubtle)
+          .background(AppTheme.colors.borderHairline)
     )
   }
 }

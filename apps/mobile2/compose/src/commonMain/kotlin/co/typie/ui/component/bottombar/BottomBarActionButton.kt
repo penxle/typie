@@ -165,10 +165,10 @@ fun BottomBarActionButton(
         Box(
           modifier =
             Modifier.dropShadow(AppShapes.squircle(AppShapes.xl)) {
-                color = colors.shadow.copy(alpha = 0.08f)
+                color = colors.shadowSpot.copy(alpha = 0.08f)
                 radius = 8f
               }
-              .background(AppTheme.colors.surfaceRaised, AppShapes.squircle(AppShapes.xl))
+              .background(AppTheme.colors.surfaceDefault, AppShapes.squircle(AppShapes.xl))
               .border(1.dp, AppTheme.colors.borderDefault, AppShapes.squircle(AppShapes.xl))
         ) {
           SelectablePaneHost(
@@ -221,11 +221,11 @@ fun BottomBarActionButton(
               radius = 3f
             }
             .dropShadow(AppShapes.circle) {
-              color = colors.shadow
+              color = colors.shadowSpot
               offset = Offset(0f, 4f)
               radius = 16f
             }
-            .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
+            .background(AppTheme.colors.surfaceDefault, AppShapes.circle)
             .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
             .then(
               if (hasMenu) {
@@ -271,10 +271,7 @@ fun BottomBarActionButton(
             ),
         contentAlignment = Alignment.Center,
       ) {
-        Icon(
-          icon = if (hasMenu && isMenuOpen) Lucide.X else icon,
-          tint = AppTheme.colors.textSecondary,
-        )
+        Icon(icon = if (hasMenu && isMenuOpen) Lucide.X else icon, tint = AppTheme.colors.textMuted)
       }
     }
   }
@@ -286,7 +283,7 @@ private fun ActionMenuItemRow(item: ActionMenuItem, modifier: Modifier = Modifie
     Icon(
       icon = item.icon,
       modifier = Modifier.size(18.dp),
-      tint = item.tint ?: AppTheme.colors.textPrimary,
+      tint = item.tint ?: AppTheme.colors.textDefault,
     )
 
     Spacer(Modifier.width(12.dp))
@@ -294,7 +291,7 @@ private fun ActionMenuItemRow(item: ActionMenuItem, modifier: Modifier = Modifie
     Text(
       text = item.label,
       style = AppTheme.typography.action,
-      color = item.tint ?: AppTheme.colors.textPrimary,
+      color = item.tint ?: AppTheme.colors.textDefault,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )

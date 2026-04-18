@@ -109,7 +109,7 @@ fun SettingsScreen() {
                   ThemeMode.Dark -> "다크"
                 },
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
@@ -117,7 +117,7 @@ fun SettingsScreen() {
             Icon(
               icon = Lucide.ChevronRight,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
           },
         )
@@ -158,7 +158,7 @@ fun SettingsScreen() {
             Icon(
               icon = Lucide.ExternalLink,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
           },
         )
@@ -170,7 +170,7 @@ fun SettingsScreen() {
             Icon(
               icon = Lucide.ExternalLink,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
           },
         )
@@ -184,7 +184,7 @@ fun SettingsScreen() {
             Icon(
               icon = Lucide.ExternalLink,
               modifier = Modifier.size(16.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
           },
         )
@@ -214,7 +214,7 @@ fun SettingsScreen() {
             Text(
               text = appVersion,
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
@@ -277,7 +277,7 @@ private fun ThemeModeSheet() {
           Text(
             text = "테마",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -304,12 +304,12 @@ private fun ThemeModeSheet() {
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          Icon(icon = icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textSecondary)
+          Icon(icon = icon, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textMuted)
           Text(
             text = label,
             style = AppTheme.typography.action,
             modifier = Modifier.weight(1f),
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )

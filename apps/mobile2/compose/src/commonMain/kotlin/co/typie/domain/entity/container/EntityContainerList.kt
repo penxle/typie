@@ -87,7 +87,7 @@ fun EntityContainerListContent(
             .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md)),
         contentAlignment = Alignment.Center,
       ) {
-        Text(emptyMessage, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
+        Text(emptyMessage, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
       }
     } else {
       CardSurface(modifier = Modifier.fillMaxWidth()) {
@@ -250,7 +250,7 @@ private fun EntityContainerReorderRow(
         }
         .zIndex(if (isDragging) 1f else 0f),
     shape = shape,
-    color = if (isDragging) AppTheme.colors.surfaceRaised else AppTheme.colors.surfaceDefault,
+    color = if (isDragging) AppTheme.colors.surfaceDefault else AppTheme.colors.surfaceDefault,
   ) {
     Column(modifier = Modifier.fillMaxWidth()) {
       if (!isFirst) {
@@ -281,7 +281,7 @@ private fun EntityContainerReorderGrip(modifier: Modifier = Modifier) {
   Icon(
     icon = Lucide.GripVertical,
     modifier = modifier.size(18.dp),
-    tint = AppTheme.colors.textTertiary,
+    tint = AppTheme.colors.textMuted,
   )
 }
 
@@ -305,7 +305,7 @@ private fun EntityContainerItemRow(
     interactive = interactive,
     opacity = opacity,
     backgroundColor =
-      if (showSelectionControls && selected) AppTheme.colors.brandSubtle else Color.Transparent,
+      if (showSelectionControls && selected) AppTheme.colors.surfaceInset else Color.Transparent,
     leading =
       if (showSelectionControls) {
         { EntityRowSelectionControl(selected = selected) }

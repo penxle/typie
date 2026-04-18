@@ -79,11 +79,7 @@ fun CurrentPlanScreen() {
               modifier = Modifier.fillMaxWidth(),
               verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-              Text(
-                "현재 이용권",
-                style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
-              )
+              Text("현재 이용권", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
               Text(
                 subscription.planName,
@@ -115,7 +111,7 @@ fun CurrentPlanScreen() {
                 Text(
                   text = line,
                   style = AppTheme.typography.body,
-                  color = AppTheme.colors.textTertiary,
+                  color = AppTheme.colors.textMuted,
                 )
               }
             }
@@ -148,7 +144,7 @@ private fun Footer(subscription: Subscription) {
 
         Box(
           modifier =
-            Modifier.size(width = 1.dp, height = 20.dp).background(AppTheme.colors.borderSubtle)
+            Modifier.size(width = 1.dp, height = 20.dp).background(AppTheme.colors.borderHairline)
         )
 
         FooterButton(
@@ -163,7 +159,7 @@ private fun Footer(subscription: Subscription) {
       Text(
         text = "웹사이트에서 가입한 이용권이에요.\n정보 변경이 필요할 경우 웹사이트에서 진행해주세요.",
         style = AppTheme.typography.body,
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
         modifier = Modifier.padding(16.dp),
       )
     }
@@ -172,7 +168,7 @@ private fun Footer(subscription: Subscription) {
       Text(
         text = "정보 변경을 할 수 없는 이용권이에요.\n정보 변경이 필요할 경우 고객센터에 문의해주세요.",
         style = AppTheme.typography.body,
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
         modifier = Modifier.padding(16.dp),
       )
     }
@@ -189,7 +185,7 @@ private fun Footer(subscription: Subscription) {
       Text(
         text = "정보 변경을 할 수 없는 이용권이에요.\n정보 변경이 필요할 경우 고객센터에 문의해주세요.",
         style = AppTheme.typography.body,
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
         modifier = Modifier.padding(16.dp),
       )
     }
@@ -207,7 +203,7 @@ private fun FooterButton(
       modifier = modifier.clickable(onClick).padding(vertical = 12.dp).pressScale(),
       contentAlignment = Alignment.Center,
     ) {
-      Text(text = label, style = AppTheme.typography.action, color = AppTheme.colors.textSecondary)
+      Text(text = label, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
     }
   }
 }

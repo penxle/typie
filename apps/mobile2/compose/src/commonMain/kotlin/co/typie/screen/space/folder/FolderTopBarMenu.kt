@@ -164,7 +164,7 @@ internal fun FolderTopBarCenterPane(
                       icon = action.icon,
                       modifier = Modifier.size(18.dp),
                       tint =
-                        if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textPrimary,
+                        if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textDefault,
                     )
 
                     Spacer(Modifier.width(12.dp))
@@ -174,7 +174,7 @@ internal fun FolderTopBarCenterPane(
                       modifier = Modifier.weight(1f),
                       style = AppTheme.typography.action,
                       color =
-                        if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textPrimary,
+                        if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textDefault,
                     )
 
                     if (action.trailingIcon != null) {
@@ -182,8 +182,7 @@ internal fun FolderTopBarCenterPane(
                         icon = action.trailingIcon,
                         modifier = Modifier.size(14.dp),
                         tint =
-                          if (action.isDanger) AppTheme.colors.danger
-                          else AppTheme.colors.textTertiary,
+                          if (action.isDanger) AppTheme.colors.danger else AppTheme.colors.textMuted,
                       )
                     }
                   }
@@ -238,7 +237,7 @@ internal fun FolderTopBarCapsule(
       Text(
         text = subtitle,
         style = AppTheme.typography.caption.copy(fontSize = 11.sp),
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
@@ -256,10 +255,10 @@ private fun FolderTopBarPaneHeader(
 ) {
   val visibility = entityVisibilityPresentation(entity.visibility, entity.availability)
   val breadcrumbEntity = entity.entityBreadcrumb_entity
-  val breadcrumbColor = AppTheme.colors.textTertiary
+  val breadcrumbColor = AppTheme.colors.textMuted
   val visibilityColor =
-    if (visibility.isShared) AppTheme.colors.brand else AppTheme.colors.textMuted
-  val subtitleColor = AppTheme.colors.textMuted
+    if (visibility.isShared) AppTheme.colors.textDefault else AppTheme.colors.textHint
+  val subtitleColor = AppTheme.colors.textHint
 
   EntityHeader(
     topContentModifier = Modifier.fillMaxWidth().height(FolderPaneHeaderTopHeight),
@@ -411,7 +410,7 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
             .then(TopBarDefaults.controlShadowModifier(AppShapes.circle))
             .background(TopBarDefaults.controlBackgroundColor(), AppShapes.circle),
       ) {
-        Icon(icon = Lucide.X, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textPrimary)
+        Icon(icon = Lucide.X, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textDefault)
       }
     }
   }

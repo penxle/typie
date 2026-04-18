@@ -150,12 +150,12 @@ private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
     verticalAlignment = Alignment.CenterVertically,
     modifier =
       Modifier.height(48.dp)
-        .border(1.dp, AppTheme.colors.borderSubtle, AppShapes.rounded(AppShapes.md))
+        .border(1.dp, AppTheme.colors.borderHairline, AppShapes.rounded(AppShapes.md))
         .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
         .clickable(onClick = onClick)
         .padding(horizontal = 16.dp),
   ) {
-    Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textMuted)
+    Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textHint)
 
     Spacer(Modifier.width(12.dp))
 
@@ -163,7 +163,7 @@ private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
       placeholder,
       modifier = Modifier.weight(1f),
       style = AppTheme.typography.body,
-      color = AppTheme.colors.textMuted,
+      color = AppTheme.colors.textHint,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
@@ -193,7 +193,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
         Text(
           "최근 사용한 폴더가 여기 나타나요",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
         )
       }
     } else {
@@ -230,7 +230,7 @@ private fun RecentFolders(data: HomeScreen_Query.Data) {
               Text(
                 formatFolderRowSummary(folderCount = 0, documentCount = folder.documentCount),
                 style = AppTheme.typography.caption,
-                color = AppTheme.colors.textMuted,
+                color = AppTheme.colors.textHint,
               )
             }
           }
@@ -262,7 +262,7 @@ private fun RecentDocuments(data: HomeScreen_Query.Data) {
         Text(
           "최근 문서가 여기 나타나요",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
         )
       }
     } else {

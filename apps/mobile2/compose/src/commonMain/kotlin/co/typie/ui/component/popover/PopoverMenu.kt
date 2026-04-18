@@ -60,7 +60,7 @@ class PopoverMenuScope {
 
 @Composable
 internal fun PopoverMenuItemRow(icon: IconData, label: String, color: Color? = null) {
-  val resolvedColor = color ?: AppTheme.colors.textPrimary
+  val resolvedColor = color ?: AppTheme.colors.textDefault
 
   Row(
     modifier = Modifier.height(42.dp).padding(horizontal = 16.dp),
@@ -101,7 +101,7 @@ fun PopoverMenu(
               Modifier.fillMaxWidth()
                 .height(1.dp)
                 .padding(horizontal = 8.dp)
-                .background(AppTheme.colors.borderSubtle)
+                .background(AppTheme.colors.borderHairline)
             )
             Spacer(Modifier.height(12.dp))
           }

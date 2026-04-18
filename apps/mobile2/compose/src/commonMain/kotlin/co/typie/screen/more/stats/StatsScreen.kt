@@ -106,7 +106,7 @@ fun StatsScreen() {
               Text(
                 "지난 1년간의 기록",
                 style = AppTheme.typography.caption,
-                color = AppTheme.colors.textSecondary,
+                color = AppTheme.colors.textMuted,
               )
             }
 
@@ -116,7 +116,7 @@ fun StatsScreen() {
                   modifier =
                     Modifier.border(
                         1.dp,
-                        AppTheme.colors.borderStrong,
+                        AppTheme.colors.borderEmphasis,
                         AppShapes.rounded(AppShapes.md),
                       )
                       .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
@@ -125,7 +125,7 @@ fun StatsScreen() {
                   Text(
                     "이미지 받기",
                     style = AppTheme.typography.action,
-                    color = AppTheme.colors.textSecondary,
+                    color = AppTheme.colors.textMuted,
                   )
                 }
               },
@@ -179,7 +179,7 @@ fun StatsScreen() {
 private fun SummaryCard(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
   CardSurface(modifier = modifier.fillMaxWidth()) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-      Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
+      Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
       Spacer(Modifier.height(8.dp))
 
@@ -187,7 +187,7 @@ private fun SummaryCard(label: String, value: String, unit: String, modifier: Mo
         Text(
           value,
           style = AppTheme.typography.heading,
-          color = AppTheme.colors.textPrimary,
+          color = AppTheme.colors.textDefault,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
           modifier = Modifier.alignBy(FirstBaseline),
@@ -198,7 +198,7 @@ private fun SummaryCard(label: String, value: String, unit: String, modifier: Mo
         Text(
           unit,
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
           modifier = Modifier.alignBy(FirstBaseline),
         )
       }
@@ -210,7 +210,7 @@ private fun SummaryCard(label: String, value: String, unit: String, modifier: Mo
 private fun StreakCard(activity: ActivityData) {
   CardSurface(modifier = Modifier.fillMaxWidth()) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-      Text("연속 기록", style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
+      Text("연속 기록", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
       Spacer(Modifier.height(8.dp))
 
@@ -218,7 +218,7 @@ private fun StreakCard(activity: ActivityData) {
         Text(
           activity.currentStreak.toString(),
           style = AppTheme.typography.display,
-          color = AppTheme.colors.textPrimary,
+          color = AppTheme.colors.textDefault,
           modifier = Modifier.alignBy(FirstBaseline),
         )
 
@@ -227,13 +227,13 @@ private fun StreakCard(activity: ActivityData) {
         Text(
           "일째",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
           modifier = Modifier.alignBy(FirstBaseline),
         )
       }
       Spacer(Modifier.height(12.dp))
 
-      CardDivider(inset = 0.dp, color = AppTheme.colors.borderSubtle)
+      CardDivider(inset = 0.dp, color = AppTheme.colors.borderHairline)
 
       Spacer(Modifier.height(12.dp))
 
@@ -241,14 +241,14 @@ private fun StreakCard(activity: ActivityData) {
         Text(
           "최장 ",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
           modifier = Modifier.alignBy(FirstBaseline),
         )
 
         Text(
           "${activity.longestStreak}일",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textSecondary,
+          color = AppTheme.colors.textMuted,
           modifier = Modifier.alignBy(FirstBaseline),
         )
 
@@ -257,14 +257,14 @@ private fun StreakCard(activity: ActivityData) {
         Text(
           "이번 달 ",
           style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
+          color = AppTheme.colors.textMuted,
           modifier = Modifier.alignBy(FirstBaseline),
         )
 
         Text(
           "${activity.thisMonthActiveDays}일",
           style = AppTheme.typography.action,
-          color = AppTheme.colors.textSecondary,
+          color = AppTheme.colors.textMuted,
           modifier = Modifier.alignBy(FirstBaseline),
         )
       }
@@ -277,7 +277,7 @@ private fun WeekdayCard(activity: ActivityData) {
   CardSurface(modifier = Modifier.fillMaxWidth()) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
       Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("요일별 기록", style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
+        Text("요일별 기록", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
         Spacer(Modifier.weight(1f))
 
@@ -285,7 +285,7 @@ private fun WeekdayCard(activity: ActivityData) {
           Text(
             "${WeekdayNames[activity.mostActiveWeekdayIndex]}요일 최다",
             style = AppTheme.typography.micro,
-            color = AppTheme.colors.textTertiary,
+            color = AppTheme.colors.textMuted,
           )
         }
       }
@@ -317,8 +317,8 @@ private fun WeekdayCard(activity: ActivityData) {
                   .height(barHeight.dp)
                   .clip(AppShapes.rounded(AppShapes.sm))
                   .background(
-                    if (isMostActiveWeekday) AppTheme.colors.textPrimary
-                    else AppTheme.colors.borderStrong
+                    if (isMostActiveWeekday) AppTheme.colors.textDefault
+                    else AppTheme.colors.borderEmphasis
                   )
             )
 
@@ -328,8 +328,7 @@ private fun WeekdayCard(activity: ActivityData) {
               WeekdayNames[weekdayActivity.dayIndex],
               style = AppTheme.typography.micro,
               color =
-                if (isMostActiveWeekday) AppTheme.colors.textPrimary
-                else AppTheme.colors.textTertiary,
+                if (isMostActiveWeekday) AppTheme.colors.textDefault else AppTheme.colors.textMuted,
             )
           }
         }

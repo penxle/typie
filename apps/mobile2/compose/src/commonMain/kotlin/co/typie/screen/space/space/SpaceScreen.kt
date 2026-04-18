@@ -667,6 +667,6 @@ private fun SpaceHeader(title: String, summary: String) {
 
     Spacer(Modifier.height(8.dp))
 
-    Text(summary, style = AppTheme.typography.body, color = AppTheme.colors.textTertiary)
+    Text(summary, style = AppTheme.typography.body, color = AppTheme.colors.textMuted)
   }
 }

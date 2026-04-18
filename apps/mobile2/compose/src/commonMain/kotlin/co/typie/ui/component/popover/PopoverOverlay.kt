@@ -320,7 +320,7 @@ private fun PopoverPaneSurface(
             shape = paneShape
             clip = true
           }
-          .background(AppTheme.colors.surfaceRaised, paneShape)
+          .background(AppTheme.colors.surfaceDefault, paneShape)
           .then(
             if (interactive) {
               Modifier

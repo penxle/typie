@@ -93,7 +93,7 @@ fun EditorSettingsScreen() {
               Text(
                 "현재 작성 중인 줄이 고정될 화면상의 위치를 설정합니다.",
                 style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
+                color = AppTheme.colors.textMuted,
               )
             }
 
@@ -101,11 +101,7 @@ fun EditorSettingsScreen() {
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-              Text(
-                "화면 상단",
-                style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
-              )
+              Text("화면 상단", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
               Slider(
                 value = Preference.typewriterPosition,
@@ -113,11 +109,7 @@ fun EditorSettingsScreen() {
                 modifier = Modifier.weight(1f),
               )
 
-              Text(
-                "화면 하단",
-                style = AppTheme.typography.caption,
-                color = AppTheme.colors.textTertiary,
-              )
+              Text("화면 하단", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
             }
           }
         }
@@ -189,13 +181,13 @@ private fun Slider(value: Double, onValueChange: (Double) -> Unit, modifier: Mod
       modifier =
         Modifier.fillMaxWidth()
           .height(8.dp)
-          .background(AppTheme.colors.borderStrong.copy(alpha = 0.5f), AppShapes.circle)
+          .background(AppTheme.colors.borderEmphasis.copy(alpha = 0.5f), AppShapes.circle)
     ) {
       Box(
         modifier =
           Modifier.fillMaxWidth(filledFraction)
             .height(8.dp)
-            .background(AppTheme.colors.brand.copy(alpha = 0.75f), AppShapes.circle)
+            .background(AppTheme.colors.textDefault.copy(alpha = 0.75f), AppShapes.circle)
       )
     }
 
@@ -254,12 +246,12 @@ private fun Slider(value: Double, onValueChange: (Double) -> Unit, modifier: Mod
             radius = 4f
           }
           .dropShadow(AppShapes.circle) {
-            color = colors.shadow
+            color = colors.shadowSpot
             radius = 8f
             offset = Offset(0f, 1f)
           }
           .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
-          .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
+          .background(AppTheme.colors.surfaceDefault, AppShapes.circle)
     )
   }
 }

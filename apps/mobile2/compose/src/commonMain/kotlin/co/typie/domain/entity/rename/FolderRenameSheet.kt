@@ -92,7 +92,7 @@ internal fun FolderRenameSheet(
         leading = {
           SheetBarTextButton(
             text = "취소",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = !isSubmitting,
             onClick = { dismiss() },
           )
@@ -101,7 +101,7 @@ internal fun FolderRenameSheet(
           Text(
             text = "이름 변경",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -109,7 +109,7 @@ internal fun FolderRenameSheet(
         trailing = {
           SheetBarTextButton(
             text = "저장",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = canSubmit,
             loading = isSubmitting,
             onClick = { submit() },

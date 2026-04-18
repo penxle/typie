@@ -33,7 +33,7 @@ fun EntityBreadcrumb(
   entity: EntityBreadcrumb_entity,
   modifier: Modifier = Modifier,
   layout: EntityBreadcrumbLayout = EntityBreadcrumbLayout.FlowWrap,
-  color: Color = AppTheme.colors.textTertiary,
+  color: Color = AppTheme.colors.textMuted,
 ) {
   val segments = entity.breadcrumbSegments()
 

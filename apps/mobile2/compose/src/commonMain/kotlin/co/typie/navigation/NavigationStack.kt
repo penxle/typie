@@ -333,7 +333,7 @@ fun NavigationStack(
                     else -> 1f - p
                   }
               }
-              .background(AppTheme.colors.shadow.copy(alpha = 0.5f))
+              .background(AppTheme.colors.shadowSpot.copy(alpha = 0.5f))
               .pointerIgnore()
           )
         }

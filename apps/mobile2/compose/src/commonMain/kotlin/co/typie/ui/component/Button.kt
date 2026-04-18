@@ -50,8 +50,8 @@ enum class ButtonVariant {
 
 private fun AppColors.buttonColors(variant: ButtonVariant): ButtonColors =
   when (variant) {
-    ButtonVariant.Primary -> ButtonColors(background = brand, text = textOnBrand)
-    ButtonVariant.Secondary -> ButtonColors(background = surfaceSunken, text = textPrimary)
+    ButtonVariant.Primary -> ButtonColors(background = textDefault, text = surfaceCanvas)
+    ButtonVariant.Secondary -> ButtonColors(background = surfaceInset, text = textDefault)
     ButtonVariant.Danger -> ButtonColors(background = danger, text = textOnDanger)
   }
 

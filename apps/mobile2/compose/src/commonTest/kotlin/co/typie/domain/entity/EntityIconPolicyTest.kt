@@ -18,7 +18,7 @@ class EntityIconPolicyTest {
         .iconAppearance(LightColors)
 
     assertSame(Lucide.Folder, appearance.icon)
-    assertEquals(LightColors.textSecondary, appearance.tint)
+    assertEquals(LightColors.textMuted, appearance.tint)
   }
 
   @Test
@@ -33,7 +33,7 @@ class EntityIconPolicyTest {
         .iconAppearance(LightColors)
 
     assertSame(Lucide.File, appearance.icon)
-    assertEquals(LightColors.textSecondary, appearance.tint)
+    assertEquals(LightColors.textMuted, appearance.tint)
   }
 
   @Test
@@ -48,6 +48,6 @@ class EntityIconPolicyTest {
         .iconAppearance(DarkColors)
 
     assertSame(Lucide.BookOpen, appearance.icon)
-    assertEquals(AppColor.dark.brand.s200, appearance.tint)
+    assertEquals(AppColor.dark.palette.purple, appearance.tint)
   }
 }

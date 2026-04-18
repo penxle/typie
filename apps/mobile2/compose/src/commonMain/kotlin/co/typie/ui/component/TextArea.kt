@@ -67,9 +67,9 @@ fun TextArea(
   val containerColor by
     animateColorAsState(
       when {
-        !enabled -> AppTheme.colors.surfaceBase
+        !enabled -> AppTheme.colors.surfaceCanvas
         isFocused -> AppTheme.colors.surfaceDefault
-        else -> AppTheme.colors.surfaceSunken
+        else -> AppTheme.colors.surfaceInset
       },
       colorSpec,
     )
@@ -77,8 +77,8 @@ fun TextArea(
     animateColorAsState(
       when {
         hasError -> AppTheme.colors.danger
-        isFocused -> AppTheme.colors.borderStrong
-        else -> AppTheme.colors.borderSubtle
+        isFocused -> AppTheme.colors.borderEmphasis
+        else -> AppTheme.colors.borderHairline
       },
       colorSpec,
     )
@@ -89,7 +89,7 @@ fun TextArea(
     )
   val helpColor by
     animateColorAsState(
-      if (hasError) AppTheme.colors.danger else AppTheme.colors.textMuted,
+      if (hasError) AppTheme.colors.danger else AppTheme.colors.textHint,
       colorSpec,
     )
 
@@ -99,7 +99,7 @@ fun TextArea(
 
   Column(modifier = modifier) {
     if (label != null) {
-      Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
+      Text(text = label, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
       Spacer(Modifier.height(8.dp))
     }
@@ -120,9 +120,9 @@ fun TextArea(
           },
       textStyle =
         AppTheme.typography.body.copy(
-          color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted
+          color = if (enabled) AppTheme.colors.textDefault else AppTheme.colors.textHint
         ),
-      cursorBrush = SolidColor(AppTheme.colors.textPrimary),
+      cursorBrush = SolidColor(AppTheme.colors.textDefault),
       keyboardOptions = KeyboardOptions(capitalization = capitalization, imeAction = imeAction),
       keyboardActions =
         KeyboardActions(onNext = { onImeAction?.invoke() }, onDone = { onImeAction?.invoke() }),
@@ -140,7 +140,7 @@ fun TextArea(
             Text(
               text = placeholder,
               style = AppTheme.typography.body,
-              color = AppTheme.colors.textMuted,
+              color = AppTheme.colors.textHint,
             )
           }
 

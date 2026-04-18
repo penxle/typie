@@ -54,9 +54,9 @@ import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.SheetStop
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
-import co.typie.ui.entityIconColors
 import co.typie.ui.entityIcons
 import co.typie.ui.icon.Icon
+import co.typie.ui.rememberEntityIconColorOptions
 import co.typie.ui.resolveEntityIconTint
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -161,7 +161,7 @@ internal fun EntityIconPickerSheet(
 
   val currentTint =
     form.color.value?.let { resolveEntityIconTint(it, AppTheme.colors) }
-      ?: AppTheme.colors.textSecondary
+      ?: AppTheme.colors.textMuted
   val iconGridState = rememberLazyGridState()
 
   SheetLayout(
@@ -177,7 +177,7 @@ internal fun EntityIconPickerSheet(
         leading = {
           SheetBarTextButton(
             text = "완료",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = !isUpdating,
             onClick = { dismiss() },
           )
@@ -186,7 +186,7 @@ internal fun EntityIconPickerSheet(
           Text(
             text = "아이콘 변경",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -196,7 +196,7 @@ internal fun EntityIconPickerSheet(
   ) {
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       IconColorRow(
-        colors = entityIconColors,
+        colors = rememberEntityIconColorOptions(),
         selectedColor = form.color.value,
         enabled = !isUpdating,
         modifier = Modifier,
@@ -209,7 +209,7 @@ internal fun EntityIconPickerSheet(
         modifier =
           Modifier.fillMaxWidth()
             .weight(1f)
-            .scrollFog(padding = gridFogInsets, color = AppTheme.colors.surfaceRaised)
+            .scrollFog(padding = gridFogInsets, color = AppTheme.colors.surfaceDefault)
       ) {
         val safeBottom =
           WindowInsets.safeDrawing
@@ -293,7 +293,7 @@ private fun IconColorChip(
           .background(color.color, AppShapes.circle)
           .border(
             width = if (selected) 1.dp else 0.dp,
-            color = if (selected) AppTheme.colors.borderStrong else Color.Transparent,
+            color = if (selected) AppTheme.colors.borderEmphasis else Color.Transparent,
             shape = AppShapes.circle,
           )
           .clickable(enabled = enabled) { onClick() }
@@ -321,7 +321,7 @@ private fun IconGridCell(
         Modifier.fillMaxWidth()
           .aspectRatio(1f)
           .clip(AppShapes.rounded(AppShapes.sm))
-          .background(if (selected) AppTheme.colors.surfaceSunken else Color.Transparent)
+          .background(if (selected) AppTheme.colors.surfaceInset else Color.Transparent)
           .clickable(enabled = enabled) { onSelect() }
           .pressScale(0.98f),
     ) {

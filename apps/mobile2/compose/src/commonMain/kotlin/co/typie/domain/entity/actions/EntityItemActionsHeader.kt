@@ -17,7 +17,7 @@ internal fun EntityItemActionsHeader(
   val breadcrumbEntity = entity.entityBreadcrumb_entity
   val visibility = entityVisibilityPresentation(entity.visibility, entity.availability)
   val visibilityColor =
-    if (visibility.isShared) AppTheme.colors.brand else AppTheme.colors.textMuted
+    if (visibility.isShared) AppTheme.colors.textDefault else AppTheme.colors.textHint
 
   EntityHeader(
     title = rowEntity.displayTitle(),

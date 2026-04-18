@@ -486,7 +486,7 @@ internal fun DocumentShareSheet(
         leading = {
           SheetBarTextButton(
             text = "완료",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = !isBusy,
             onClick = { dismiss() },
           )
@@ -495,7 +495,7 @@ internal fun DocumentShareSheet(
           Text(
             text = resolveDocumentShareTitle(documents.size),
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -599,7 +599,7 @@ internal fun DocumentShareSheet(
                   Icon(
                     icon = Lucide.Dices,
                     modifier = Modifier.size(18.dp),
-                    tint = AppTheme.colors.textTertiary,
+                    tint = AppTheme.colors.textMuted,
                   )
                 }
               }

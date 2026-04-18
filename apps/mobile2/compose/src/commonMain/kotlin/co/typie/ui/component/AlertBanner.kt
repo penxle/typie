@@ -66,9 +66,9 @@ private fun AppColors.alertBannerColors(variant: AlertBannerVariant): AlertBanne
   when (variant) {
     AlertBannerVariant.Default ->
       AlertBannerColors(
-        background = brandSubtle,
-        border = brand.copy(alpha = 0.14f),
-        text = textOnBrandSubtle,
+        background = surfaceInset,
+        border = textDefault.copy(alpha = 0.14f),
+        text = textDefault,
       )
 
     AlertBannerVariant.Danger ->

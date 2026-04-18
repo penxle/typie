@@ -41,14 +41,14 @@ object SheetBarDefaults {
   val ButtonIconSize: Dp = 18.dp
   val ButtonShape: Shape = AppShapes.circle
 
-  @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceRaised
+  @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceDefault
 
-  @Composable fun controlBorderColor(): Color = AppTheme.colors.borderStrong
+  @Composable fun controlBorderColor(): Color = AppTheme.colors.borderEmphasis
 
   @Composable
   fun controlShadowModifier(shape: Shape = ButtonShape): Modifier {
     val ambient = AppTheme.colors.shadowAmbient
-    val spot = AppTheme.colors.shadow
+    val spot = AppTheme.colors.shadowSpot
     return Modifier.graphicsLayer {
       shadowElevation = 4.dp.toPx()
       this.shape = shape
@@ -119,7 +119,7 @@ fun SheetBarButton(
   val alpha by animateFloatAsState(if (enabled) 1f else 0.4f)
   val resolvedBackground = backgroundColor ?: SheetBarDefaults.controlBackgroundColor()
   val resolvedBorderColor = borderColor ?: SheetBarDefaults.controlBorderColor()
-  val resolvedTint = tint ?: AppTheme.colors.textPrimary
+  val resolvedTint = tint ?: AppTheme.colors.textDefault
   val shadowModifier = SheetBarDefaults.controlShadowModifier(SheetBarDefaults.ButtonShape)
 
   InteractionScope {
@@ -155,7 +155,7 @@ fun SheetBarTextButton(
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
   loading: Boolean = false,
-  color: Color = AppTheme.colors.textPrimary,
+  color: Color = AppTheme.colors.textDefault,
 ) {
   val alpha by animateFloatAsState(if (enabled) 1f else 0.4f)
 

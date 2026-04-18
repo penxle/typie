@@ -60,14 +60,16 @@ fun SettingSwitch(
     val trackColor =
       animateColorAsState(
         targetValue =
-          if (checked && !indeterminate) colors.brand.copy(alpha = 0.92f) else colors.surfaceTinted,
+          if (checked && !indeterminate) colors.textDefault.copy(alpha = 0.92f)
+          else colors.surfaceInset,
         animationSpec = tween(durationMillis = 180),
         label = "setting-switch-track",
       )
     val borderColor =
       animateColorAsState(
         targetValue =
-          if (checked && !indeterminate) colors.brand.copy(alpha = 0.24f) else colors.borderDefault,
+          if (checked && !indeterminate) colors.textDefault.copy(alpha = 0.24f)
+          else colors.borderDefault,
         animationSpec = tween(durationMillis = 180),
         label = "setting-switch-border",
       )
@@ -115,7 +117,7 @@ fun SettingSwitch(
               Modifier.fillMaxHeight()
                 .fillMaxWidth(0.5f)
                 .clip(RoundedCornerShape(topStart = AppShapes.lg, bottomStart = AppShapes.lg))
-                .background(colors.brandSubtle)
+                .background(colors.surfaceInset)
                 .align(Alignment.CenterStart)
           )
         }
@@ -129,18 +131,18 @@ fun SettingSwitch(
                 radius = 4f
               }
               .dropShadow(AppShapes.circle) {
-                color = colors.shadow
+                color = colors.shadowSpot
                 offset = Offset(0f, 2f)
                 radius = 8f
               }
-              .background(colors.surfaceRaised, AppShapes.circle),
+              .background(colors.surfaceDefault, AppShapes.circle),
           contentAlignment = Alignment.Center,
         ) {
           if (indeterminate) {
             Icon(
               icon = Lucide.Minus,
               modifier = Modifier.size(12.dp),
-              tint = colors.textTertiary,
+              tint = colors.textMuted,
               strokeWidth = 2.5f,
               contentDescription = null,
             )

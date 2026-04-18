@@ -148,7 +148,7 @@ fun SpaceSettingsScreen() {
                 Text(
                   "스페이스 로고",
                   style = AppTheme.typography.caption,
-                  color = AppTheme.colors.textTertiary,
+                  color = AppTheme.colors.textMuted,
                 )
               }
 
@@ -197,7 +197,7 @@ fun SpaceSettingsScreen() {
                       Text(
                         ".${model.usersiteHost}",
                         style = AppTheme.typography.body,
-                        color = AppTheme.colors.textSecondary,
+                        color = AppTheme.colors.textMuted,
                       )
                     },
                   )
@@ -230,7 +230,7 @@ fun SpaceSettingsScreen() {
                     Text(
                       text = SpaceDateDisplayOptions[model.form.dateDisplay.value] ?: "(알 수 없음)",
                       style = AppTheme.typography.caption,
-                      color = AppTheme.colors.textTertiary,
+                      color = AppTheme.colors.textMuted,
                       maxLines = 1,
                       overflow = TextOverflow.Ellipsis,
                     )
@@ -240,7 +240,7 @@ fun SpaceSettingsScreen() {
                     Icon(
                       icon = Lucide.ChevronRight,
                       modifier = Modifier.size(16.dp),
-                      tint = AppTheme.colors.textTertiary,
+                      tint = AppTheme.colors.textMuted,
                     )
                   },
                 )
@@ -295,7 +295,7 @@ private fun SpaceDateDisplaySheet(selected: SiteDateDisplay) {
           Text(
             text = "글 목록에 표시할 날짜",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -309,7 +309,7 @@ private fun SpaceDateDisplaySheet(selected: SiteDateDisplay) {
           text = label,
           style = AppTheme.typography.action,
           modifier = Modifier.fillMaxWidth(),
-          color = AppTheme.colors.textPrimary,
+          color = AppTheme.colors.textDefault,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
@@ -385,14 +385,14 @@ private fun SpaceLogo(image: Img_image, previewUrl: String?, onClick: () -> Unit
           Modifier.align(Alignment.BottomEnd)
             .offset(x = 6.dp, y = 6.dp)
             .size(36.dp)
-            .background(AppTheme.colors.surfaceRaised, AppShapes.circle)
+            .background(AppTheme.colors.surfaceDefault, AppShapes.circle)
             .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle),
         contentAlignment = Alignment.Center,
       ) {
         Icon(
           icon = Lucide.Camera,
           modifier = Modifier.size(18.dp),
-          tint = AppTheme.colors.textSecondary,
+          tint = AppTheme.colors.textMuted,
         )
       }
     }
@@ -421,7 +421,7 @@ private fun DeleteSiteSheet(
           Text(
             text = "스페이스 삭제",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )

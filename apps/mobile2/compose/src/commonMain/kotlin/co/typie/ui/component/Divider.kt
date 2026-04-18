@@ -16,7 +16,7 @@ import co.typie.ui.theme.AppTheme
 fun Divider(
   modifier: Modifier = Modifier,
   inset: Dp = 0.dp,
-  color: Color = AppTheme.colors.borderSubtle,
+  color: Color = AppTheme.colors.borderHairline,
 ) {
   Box(modifier = modifier.fillMaxWidth().height(1.dp).padding(horizontal = inset).background(color))
 }

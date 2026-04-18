@@ -108,7 +108,7 @@ fun ReferralScreen() {
                   Text(
                     "친구는 즉시 1달 무료 혜택을 받고, 첫 결제가 완료되면 나도 1달 무료 혜택을 받아요.",
                     style = AppTheme.typography.body,
-                    color = AppTheme.colors.textTertiary,
+                    color = AppTheme.colors.textMuted,
                   )
                 }
 
@@ -203,16 +203,16 @@ private fun MetricCard(
         modifier =
           Modifier.size(36.dp)
             .background(
-              color = AppTheme.colors.surfaceSunken,
+              color = AppTheme.colors.surfaceInset,
               shape = AppShapes.rounded(AppShapes.md),
             ),
         contentAlignment = Alignment.Center,
       ) {
-        Icon(icon = icon, modifier = Modifier.size(20.dp), tint = AppTheme.colors.textSecondary)
+        Icon(icon = icon, modifier = Modifier.size(20.dp), tint = AppTheme.colors.textMuted)
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+        Text(label, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
         Text(
           value,
@@ -236,19 +236,19 @@ private fun BenefitSummaryRow(icon: IconData, label: String, value: String) {
       modifier =
         Modifier.size(32.dp)
           .background(
-            color = AppTheme.colors.surfaceSunken,
+            color = AppTheme.colors.surfaceInset,
             shape = AppShapes.rounded(AppShapes.md),
           ),
       contentAlignment = Alignment.Center,
     ) {
-      Icon(icon = icon, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textSecondary)
+      Icon(icon = icon, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textMuted)
     }
 
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
       Text(
         label,
         style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
@@ -256,7 +256,7 @@ private fun BenefitSummaryRow(icon: IconData, label: String, value: String) {
       Text(
         value,
         style = AppTheme.typography.action,
-        color = AppTheme.colors.textSecondary,
+        color = AppTheme.colors.textMuted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
@@ -271,7 +271,7 @@ private fun BulletPoint(text: String) {
       modifier =
         Modifier.padding(top = 8.dp)
           .size(4.dp)
-          .background(color = AppTheme.colors.textTertiary, shape = AppShapes.circle)
+          .background(color = AppTheme.colors.textMuted, shape = AppShapes.circle)
     )
 
     Spacer(Modifier.size(8.dp))
@@ -280,7 +280,7 @@ private fun BulletPoint(text: String) {
       text,
       modifier = Modifier.weight(1f),
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
+      color = AppTheme.colors.textMuted,
     )
   }
 }

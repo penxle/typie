@@ -48,7 +48,7 @@ internal fun ShareSection(title: String, content: @Composable ColumnScope.() -> 
     modifier = Modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(16.dp),
     content = {
-      Text(text = title, style = AppTheme.typography.caption, color = AppTheme.colors.textSecondary)
+      Text(text = title, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
       content()
     },
   )
@@ -60,7 +60,7 @@ internal fun ShareOptionRow(icon: IconData, label: String, trailing: @Composable
     modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    Icon(icon = icon, modifier = Modifier.size(20.dp), tint = AppTheme.colors.textSecondary)
+    Icon(icon = icon, modifier = Modifier.size(20.dp), tint = AppTheme.colors.textMuted)
 
     Spacer(Modifier.size(8.dp))
 
@@ -68,7 +68,7 @@ internal fun ShareOptionRow(icon: IconData, label: String, trailing: @Composable
       text = label,
       modifier = Modifier.weight(1f),
       style = AppTheme.typography.body,
-      color = AppTheme.colors.textSecondary,
+      color = AppTheme.colors.textMuted,
     )
 
     trailing()
@@ -127,12 +127,12 @@ private fun ShareThumbnailUploadButton(
         modifier =
           Modifier.size(width = SHARE_THUMBNAIL_WIDTH_DP.dp, height = SHARE_THUMBNAIL_HEIGHT_DP.dp)
             .clip(shape)
-            .background(AppTheme.colors.surfaceSunken, shape)
+            .background(AppTheme.colors.surfaceInset, shape)
             .border(
               width = 1.dp,
               color =
-                if (thumbnailUrl == null) AppTheme.colors.borderStrong
-                else AppTheme.colors.borderSubtle,
+                if (thumbnailUrl == null) AppTheme.colors.borderEmphasis
+                else AppTheme.colors.borderHairline,
               shape = shape,
             ),
         contentAlignment = Alignment.Center,
@@ -142,7 +142,7 @@ private fun ShareThumbnailUploadButton(
             Text(
               text = if (isUploading) "..." else "다름",
               style = AppTheme.typography.caption,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
           }
 
@@ -158,7 +158,7 @@ private fun ShareThumbnailUploadButton(
             Icon(
               icon = Lucide.Image,
               modifier = Modifier.size(14.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
           }
         }
@@ -181,7 +181,7 @@ private fun ShareThumbnailRemoveButton(enabled: Boolean, isRemoving: Boolean, on
         text = if (isRemoving) "삭제 중..." else "삭제",
         modifier = Modifier.padding(horizontal = 8.dp),
         style = AppTheme.typography.caption.copy(fontWeight = FontWeight.W600),
-        color = if (enabled && !isRemoving) AppTheme.colors.danger else AppTheme.colors.textTertiary,
+        color = if (enabled && !isRemoving) AppTheme.colors.danger else AppTheme.colors.textMuted,
       )
     }
   }
@@ -190,7 +190,7 @@ private fun ShareThumbnailRemoveButton(enabled: Boolean, isRemoving: Boolean, on
 @Composable
 internal fun ShareThumbnailSpinner() {
   val transition = rememberInfiniteTransition()
-  val spinnerColor = AppTheme.colors.textTertiary
+  val spinnerColor = AppTheme.colors.textMuted
   val rotation by
     transition.animateFloat(
       initialValue = 0f,

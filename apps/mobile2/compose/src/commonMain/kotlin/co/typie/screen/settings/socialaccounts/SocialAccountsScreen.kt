@@ -67,7 +67,7 @@ fun SocialAccountsScreen() {
             Icon(
               icon = Lucide.UserRoundX,
               modifier = Modifier.size(48.dp),
-              tint = AppTheme.colors.textTertiary,
+              tint = AppTheme.colors.textMuted,
             )
 
             Spacer(Modifier.height(12.dp))
@@ -75,7 +75,7 @@ fun SocialAccountsScreen() {
             Text(
               "연결된 SNS 계정이 없어요",
               style = AppTheme.typography.label,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
           }
         } else {
@@ -101,7 +101,7 @@ private fun SocialAccountRow(provider: SingleSignOnProvider, email: String) {
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
       Text(provider.toProviderName(), style = AppTheme.typography.action)
-      Text(email, style = AppTheme.typography.body, color = AppTheme.colors.textTertiary)
+      Text(email, style = AppTheme.typography.body, color = AppTheme.colors.textMuted)
     }
   }
 }
@@ -148,11 +148,7 @@ private fun ProviderIcon(provider: SingleSignOnProvider) {
         background = AppTheme.colors.surfaceDefault,
         border = AppTheme.colors.borderDefault,
       ) {
-        Icon(
-          icon = Lucide.User,
-          modifier = Modifier.size(18.dp),
-          tint = AppTheme.colors.textTertiary,
-        )
+        Icon(icon = Lucide.User, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textMuted)
       }
     }
   }

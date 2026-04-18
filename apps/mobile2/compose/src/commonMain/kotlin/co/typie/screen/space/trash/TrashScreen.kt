@@ -323,7 +323,7 @@ fun TrashScreen(entityId: String? = null) {
       Text(
         text = content.subtitle,
         style = AppTheme.typography.body,
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
       )
 
       SectionTitle("삭제된 항목")
@@ -337,7 +337,7 @@ fun TrashScreen(entityId: String? = null) {
             Text(
               text = content.emptyMessage,
               style = AppTheme.typography.label,
-              color = AppTheme.colors.textTertiary,
+              color = AppTheme.colors.textMuted,
             )
           }
         }

@@ -307,7 +307,7 @@ private fun NoteEmptyState(message: String) {
         .background(AppTheme.colors.surfaceDefault),
     contentAlignment = Alignment.Center,
   ) {
-    Text(message, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
+    Text(message, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
   }
 }
 

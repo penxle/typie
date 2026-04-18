@@ -88,7 +88,7 @@ actual fun SystemChrome(content: @Composable () -> Unit) {
 
 @Composable
 private fun StatusBar(modifier: Modifier = Modifier) {
-  val contentColor = AppTheme.colors.textPrimary
+  val contentColor = AppTheme.colors.textDefault
   var time by remember { mutableStateOf(Clock.System.now().format("HH:mm")) }
 
   LaunchedEffect(Unit) {
@@ -193,7 +193,7 @@ private fun BatteryIcon(color: Color) {
 
 @Composable
 private fun HomeIndicator(modifier: Modifier = Modifier) {
-  val color = AppTheme.colors.textPrimary
+  val color = AppTheme.colors.textDefault
   Box(
     modifier
       .padding(bottom = HomeIndicatorBottom)

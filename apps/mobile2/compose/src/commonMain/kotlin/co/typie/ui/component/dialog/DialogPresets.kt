@@ -41,7 +41,7 @@ suspend fun Dialog.confirm(
         DialogActionDivider()
         DialogActionButton(
           text = confirmText,
-          color = if (confirmIsDestructive) AppTheme.colors.danger else AppTheme.colors.brand,
+          color = if (confirmIsDestructive) AppTheme.colors.danger else AppTheme.colors.textDefault,
         ) {
           resolve(Unit)
         }

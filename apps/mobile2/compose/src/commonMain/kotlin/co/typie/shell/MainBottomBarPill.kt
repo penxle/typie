@@ -86,8 +86,8 @@ fun MainBottomBarPill() {
       .mainBottomBarPillGestures(state = state, trackLayout = trackLayout, tabState = tabState)
       .mainBottomBarPillSurfaceDecoration(
         ambientShadowColor = colors.shadowAmbient,
-        shadowColor = colors.shadow,
-        backgroundColor = colors.surfaceRaised,
+        shadowColor = colors.shadowSpot,
+        backgroundColor = colors.surfaceDefault,
         borderColor = colors.borderDefault.copy(alpha = 0.5f),
       )
 
@@ -95,7 +95,7 @@ fun MainBottomBarPill() {
     pillScale = state.pillScale.value,
     trackModifier = trackModifier,
     indicatorShape = indicatorShape,
-    indicatorColor = colors.surfaceTinted,
+    indicatorColor = colors.surfaceInset,
     indicatorInsetPx = visualIndicatorInsetPx,
   )
 }
@@ -192,7 +192,7 @@ private fun MainBottomBarPillTrack() {
                 Tab.Notes -> Lucide.StickyNote
                 Tab.More -> Lucide.Ellipsis
               },
-            tint = AppTheme.colors.textSecondary,
+            tint = AppTheme.colors.textMuted,
           )
           Text(
             text =
@@ -203,7 +203,7 @@ private fun MainBottomBarPillTrack() {
                 Tab.More -> "더 보기"
               },
             style = AppTheme.typography.micro,
-            color = AppTheme.colors.textSecondary,
+            color = AppTheme.colors.textMuted,
             maxLines = 1,
           )
         }

@@ -137,7 +137,7 @@ fun FontSettingsScreen() {
           Text(
             "아직 직접 업로드한 폰트가 없어요.\n우측 상단의 추가 버튼으로 TTF 폰트를 한 번에 여러 개 업로드할 수 있어요.",
             style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
+            color = AppTheme.colors.textMuted,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 40.dp),
           )
         }
@@ -195,7 +195,7 @@ private fun FontUploadSheet(isUploading: Boolean, onUpload: suspend () -> Unit) 
           Text(
             text = "폰트 업로드하기",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -239,11 +239,11 @@ private fun BulletItem(text: String) {
     horizontalArrangement = Arrangement.spacedBy(8.dp),
     verticalAlignment = Alignment.Top,
   ) {
-    Text("•", style = AppTheme.typography.caption, color = AppTheme.colors.textTertiary)
+    Text("•", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
     Text(
       text,
       style = AppTheme.typography.caption,
-      color = AppTheme.colors.textTertiary,
+      color = AppTheme.colors.textMuted,
       modifier = Modifier.weight(1f),
     )
   }
@@ -290,7 +290,7 @@ private fun FontSettingsFamilySection(
                 Icon(
                   icon = Lucide.Trash2,
                   modifier = Modifier.size(18.dp),
-                  tint = AppTheme.colors.textSecondary,
+                  tint = AppTheme.colors.textMuted,
                 )
               }
             }

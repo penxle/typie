@@ -198,7 +198,7 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
               Text(
                 text = weekday,
                 style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
-                color = AppTheme.colors.textTertiary,
+                color = AppTheme.colors.textMuted,
               )
             }
           }
@@ -215,7 +215,7 @@ fun ActivityGrid(user: ActivityGrid_user, modifier: Modifier = Modifier) {
               Text(
                 text = label,
                 style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
-                color = AppTheme.colors.textTertiary,
+                color = AppTheme.colors.textMuted,
                 softWrap = false,
                 overflow = TextOverflow.Visible,
               )
@@ -328,20 +328,20 @@ private fun activityLevelColors(themeMode: ResolvedThemeMode): List<Color> {
     ResolvedThemeMode.Dark ->
       listOf(
         AppColor.dark.gray.s800,
-        AppColor.dark.green.s700,
-        AppColor.dark.green.s500,
-        AppColor.dark.green.s400,
-        AppColor.dark.green.s300,
-        AppColor.dark.green.s200,
+        AppColor.dark.heatmap.s700,
+        AppColor.dark.heatmap.s500,
+        AppColor.dark.heatmap.s400,
+        AppColor.dark.heatmap.s300,
+        AppColor.dark.heatmap.s200,
       )
     ResolvedThemeMode.Light ->
       listOf(
         AppColor.light.gray.s200,
-        AppColor.light.green.s300,
-        AppColor.light.green.s500,
-        AppColor.light.green.s600,
-        AppColor.light.green.s700,
-        AppColor.light.green.s800,
+        AppColor.light.heatmap.s300,
+        AppColor.light.heatmap.s500,
+        AppColor.light.heatmap.s600,
+        AppColor.light.heatmap.s700,
+        AppColor.light.heatmap.s800,
       )
   }
 }

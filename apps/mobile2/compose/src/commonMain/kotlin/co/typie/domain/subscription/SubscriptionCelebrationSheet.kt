@@ -31,7 +31,7 @@ fun SubscriptionCelebrationSheet(title: String, message: String) {
           Text(
             text = title,
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -47,24 +47,20 @@ fun SubscriptionCelebrationSheet(title: String, message: String) {
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-      Text(
-        text = message,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textTertiary,
-      )
+      Text(text = message, style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
     }
 
     Column(
       modifier =
         Modifier.fillMaxWidth()
           .clip(AppShapes.rounded(AppShapes.md))
-          .border(1.dp, AppTheme.colors.borderStrong, AppShapes.rounded(AppShapes.md))
+          .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md))
           .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Text(text = "타이피 FULL ACCESS", style = AppTheme.typography.title)
 
-      CardDivider(inset = 0.dp, color = AppTheme.colors.borderStrong)
+      CardDivider(inset = 0.dp, color = AppTheme.colors.borderEmphasis)
 
       SubscriptionFeatureList(features = fullPlanFeatures, iconSize = 16.dp, rowSpacing = 8.dp)
     }

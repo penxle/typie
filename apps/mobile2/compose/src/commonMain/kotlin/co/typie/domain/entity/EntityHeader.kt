@@ -133,7 +133,7 @@ private fun RenderEntityHeaderEntries(entries: List<EntityHeaderEntry>) {
             entity = entry.entity,
             modifier = entry.modifier,
             layout = entry.layout,
-            color = entry.color ?: AppTheme.colors.textTertiary,
+            color = entry.color ?: AppTheme.colors.textMuted,
           )
         }
       }
@@ -143,7 +143,7 @@ private fun RenderEntityHeaderEntries(entries: List<EntityHeaderEntry>) {
           EntitySupportingText(
             text = entry.text?.takeIf(String::isNotBlank) ?: Skeleton.text(entry.placeholderLength),
             modifier = entry.modifier,
-            color = entry.color ?: AppTheme.colors.textMuted,
+            color = entry.color ?: AppTheme.colors.textHint,
           )
         }
       }
@@ -235,7 +235,7 @@ fun EntityHeader(
 fun EntitySupportingText(
   text: String,
   modifier: Modifier = Modifier,
-  color: Color = AppTheme.colors.textMuted,
+  color: Color = AppTheme.colors.textHint,
 ) {
   Text(text = text, modifier = modifier, style = EntityMetadataTextStyle, color = color)
 }

@@ -117,7 +117,7 @@ fun CardChevronRow(
         Icon(
           icon = Lucide.ChevronRight,
           modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.textTertiary,
+          tint = AppTheme.colors.textMuted,
         )
       },
     )
@@ -128,7 +128,7 @@ fun CardChevronRow(
 fun CardDivider(
   modifier: Modifier = Modifier,
   inset: Dp = CardDefaults.DividerInset,
-  color: Color = AppTheme.colors.borderSubtle,
+  color: Color = AppTheme.colors.borderHairline,
 ) {
   Divider(modifier = modifier, inset = inset, color = color)
 }

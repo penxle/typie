@@ -93,7 +93,7 @@ internal fun PresetSnapSlider(
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text(text = label, style = AppTheme.typography.label, color = AppTheme.colors.textSecondary)
+      Text(text = label, style = AppTheme.typography.label, color = AppTheme.colors.textMuted)
 
       ValueBadge(
         value = displayValue,
@@ -170,13 +170,13 @@ private fun SliderTrack(
       modifier =
         Modifier.fillMaxWidth()
           .height(8.dp)
-          .background(colors.borderStrong.copy(alpha = 0.5f), AppShapes.circle)
+          .background(colors.borderEmphasis.copy(alpha = 0.5f), AppShapes.circle)
     ) {
       Box(
         modifier =
           Modifier.fillMaxWidth(filledFraction)
             .height(8.dp)
-            .background(colors.textPrimary, AppShapes.circle)
+            .background(colors.textDefault, AppShapes.circle)
       )
     }
 
@@ -240,19 +240,19 @@ private fun SliderTrack(
             radius = 4f
           }
           .dropShadow(AppShapes.circle) {
-            color = colors.shadow
+            color = colors.shadowSpot
             radius = 8f
             offset = Offset(0f, 1f)
           }
           .border(1.dp, colors.borderDefault, AppShapes.circle)
-          .background(colors.surfaceRaised, AppShapes.circle),
+          .background(colors.surfaceDefault, AppShapes.circle),
       contentAlignment = Alignment.Center,
     ) {
       if (!inRange) {
         Icon(
           icon = if (value < range.first) Lucide.ChevronsLeft else Lucide.ChevronsRight,
           modifier = Modifier.size(14.dp),
-          tint = colors.textTertiary,
+          tint = colors.textMuted,
         )
       }
     }
@@ -287,7 +287,7 @@ private fun ValueBadge(
   }
 
   val numberText = formatValue(value).removeSuffix(unitSuffix)
-  val numberColor = if (isFocused) AppTheme.colors.textPrimary else AppTheme.colors.textTertiary
+  val numberColor = if (isFocused) AppTheme.colors.textDefault else AppTheme.colors.textMuted
   val badgeShape = AppShapes.rounded(AppShapes.sm)
 
   fun commit() {
@@ -305,10 +305,10 @@ private fun ValueBadge(
     modifier =
       Modifier.border(
           1.5.dp,
-          if (isFocused) AppTheme.colors.textPrimary else Color.Transparent,
+          if (isFocused) AppTheme.colors.textDefault else Color.Transparent,
           badgeShape,
         )
-        .background(AppTheme.colors.surfaceSunken, badgeShape)
+        .background(AppTheme.colors.surfaceInset, badgeShape)
         .padding(horizontal = 8.dp, vertical = 4.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
@@ -328,7 +328,7 @@ private fun ValueBadge(
           }
         },
       textStyle = AppTheme.typography.action.copy(color = numberColor),
-      cursorBrush = SolidColor(AppTheme.colors.textPrimary),
+      cursorBrush = SolidColor(AppTheme.colors.textDefault),
       keyboardOptions =
         KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
       keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
@@ -339,7 +339,7 @@ private fun ValueBadge(
       Text(
         text = unitSuffix,
         style = AppTheme.typography.action,
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
         modifier =
           Modifier.clickable {
             if (!isFocused) {

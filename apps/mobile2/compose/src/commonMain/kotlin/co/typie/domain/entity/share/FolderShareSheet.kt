@@ -293,7 +293,7 @@ internal fun FolderShareSheet(
         leading = {
           SheetBarTextButton(
             text = "완료",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = !isBusy,
             onClick = { dismiss() },
           )
@@ -302,7 +302,7 @@ internal fun FolderShareSheet(
           Text(
             text = resolveFolderShareTitle(folders.size),
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )

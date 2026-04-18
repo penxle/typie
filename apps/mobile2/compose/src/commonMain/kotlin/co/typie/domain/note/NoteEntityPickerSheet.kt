@@ -79,8 +79,8 @@ internal fun NoteEntityPickerSheet(
   var updatingEntityId by remember { mutableStateOf<String?>(null) }
   var selectedEntityIds by remember(linkedEntityIds) { mutableStateOf(linkedEntityIds) }
   val actionScope = rememberCoroutineScope()
-  val highlightColor = AppTheme.colors.brand
-  val mutedTextColor = AppTheme.colors.textMuted
+  val highlightColor = AppTheme.colors.textDefault
+  val mutedTextColor = AppTheme.colors.textHint
 
   LaunchedEffect(model) { model.clearSearch() }
 
@@ -124,7 +124,7 @@ internal fun NoteEntityPickerSheet(
         leading = {
           SheetBarTextButton(
             text = "완료",
-            color = AppTheme.colors.brand,
+            color = AppTheme.colors.textDefault,
             enabled = updatingEntityId == null,
             onClick = { dismiss() },
           )
@@ -133,7 +133,7 @@ internal fun NoteEntityPickerSheet(
           Text(
             text = "연결 추가",
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -157,7 +157,7 @@ internal fun NoteEntityPickerSheet(
 
       CardSurface(
         modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp),
-        color = AppTheme.colors.surfaceSunken,
+        color = AppTheme.colors.surfaceInset,
       ) {
         if (visibleEntities.isEmpty()) {
           Box(
@@ -172,7 +172,7 @@ internal fun NoteEntityPickerSheet(
           Box(
             modifier =
               Modifier.fillMaxSize()
-                .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceSunken)
+                .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceInset)
           ) {
             Skeleton(enabled = showRecentSkeleton) {
               Column(
@@ -227,7 +227,7 @@ internal fun NoteEntityPickerSheet(
 @Composable
 private fun NotePickerEmptyState(message: String, modifier: Modifier = Modifier) {
   Box(modifier = modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-    Text(message, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
+    Text(message, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
   }
 }
 
@@ -239,7 +239,7 @@ private fun NotePickerRow(
   enabled: Boolean,
   onClick: suspend () -> Unit,
 ) {
-  val metaColor = AppTheme.colors.textMuted
+  val metaColor = AppTheme.colors.textHint
 
   EntityRow(
     entity = item.entity,
@@ -248,7 +248,11 @@ private fun NotePickerRow(
       when {
         updating -> Text("...", style = AppTheme.typography.caption, color = metaColor)
         selected ->
-          Icon(icon = Lucide.Check, modifier = Modifier.size(16.dp), tint = AppTheme.colors.brand)
+          Icon(
+            icon = Lucide.Check,
+            modifier = Modifier.size(16.dp),
+            tint = AppTheme.colors.textDefault,
+          )
         else -> Spacer(Modifier.size(16.dp))
       }
     },

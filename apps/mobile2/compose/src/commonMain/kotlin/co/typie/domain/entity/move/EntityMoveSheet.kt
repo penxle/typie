@@ -239,7 +239,7 @@ fun EntityMoveSheet(
           Text(
             text = MOVE_SHEET_TITLE,
             style = AppTheme.typography.title,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
             overflow = TextOverflow.Ellipsis,
             maxLines = 1,
           )
@@ -274,17 +274,13 @@ fun EntityMoveSheet(
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       if (content != null) {
-        Text(
-          text = "옮길 위치",
-          style = AppTheme.typography.caption,
-          color = AppTheme.colors.textTertiary,
-        )
+        Text(text = "옮길 위치", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
         Skeleton(enabled = showLoadingSkeleton) {
           MoveBreadcrumbs(
             items = content.breadcrumbs,
             enabled = !isLoadingDestination && !isMoving,
-            backgroundColor = AppTheme.colors.surfaceRaised,
+            backgroundColor = AppTheme.colors.surfaceDefault,
             onNavigate = ::navigateTo,
           )
         }
@@ -292,7 +288,7 @@ fun EntityMoveSheet(
 
       CardSurface(
         modifier = Modifier.fillMaxWidth().weight(1f),
-        color = AppTheme.colors.surfaceSunken,
+        color = AppTheme.colors.surfaceInset,
       ) {
         when {
           showLoadingSkeleton && content != null -> {
@@ -378,7 +374,7 @@ private fun MoveDestinationBody(
     modifier =
       modifier
         .fillMaxSize()
-        .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceSunken)
+        .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceInset)
   ) {
     Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(listFogInsets)) {
       var hasRow = false
@@ -447,7 +443,7 @@ private fun MoveBreadcrumbs(
           Icon(
             icon = Lucide.ChevronRight,
             modifier = Modifier.size(16.dp),
-            tint = AppTheme.colors.textTertiary,
+            tint = AppTheme.colors.textMuted,
           )
         }
 
@@ -463,7 +459,7 @@ private fun MoveBreadcrumbChip(
   enabled: Boolean,
   onClick: suspend () -> Unit,
 ) {
-  val color = if (item.isCurrent) AppTheme.colors.textPrimary else AppTheme.colors.textTertiary
+  val color = if (item.isCurrent) AppTheme.colors.textDefault else AppTheme.colors.textMuted
 
   if (item.isCurrent || !enabled) {
     Text(
@@ -506,13 +502,13 @@ private fun MoveNavigateUpRow(enabled: Boolean, onClick: suspend () -> Unit) {
         Icon(
           icon = Lucide.CornerLeftUp,
           modifier = Modifier.size(18.dp),
-          tint = AppTheme.colors.textPrimary,
+          tint = AppTheme.colors.textDefault,
         )
 
         Text(
           text = "상위 폴더로 가기",
           style = AppTheme.typography.label,
-          color = AppTheme.colors.textPrimary,
+          color = AppTheme.colors.textDefault,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
@@ -521,7 +517,7 @@ private fun MoveNavigateUpRow(enabled: Boolean, onClick: suspend () -> Unit) {
       Icon(
         icon = Lucide.ChevronRight,
         modifier = Modifier.align(Alignment.CenterEnd).size(18.dp),
-        tint = AppTheme.colors.textTertiary,
+        tint = AppTheme.colors.textMuted,
       )
     }
   }
@@ -548,7 +544,7 @@ private fun MoveDestinationFolderRow(
 @Composable
 private fun MoveSheetStatus(message: String) {
   Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-    Text(text = message, style = AppTheme.typography.action, color = AppTheme.colors.textTertiary)
+    Text(text = message, style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
   }
 }
 

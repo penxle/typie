@@ -241,11 +241,11 @@ fun EnrollPlanScreen() {
 private fun StatusBadge(label: String) {
   Box(
     modifier =
-      Modifier.background(AppTheme.colors.brandSubtle, AppShapes.rounded(AppShapes.sm))
+      Modifier.background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.sm))
         .padding(horizontal = 8.dp, vertical = 4.dp),
     contentAlignment = Alignment.Center,
   ) {
-    Text(text = label, style = AppTheme.typography.micro, color = AppTheme.colors.textOnBrandSubtle)
+    Text(text = label, style = AppTheme.typography.micro, color = AppTheme.colors.textDefault)
   }
 }
 
@@ -260,7 +260,7 @@ private fun SubscriptionPurchaseRow(
     Row(
       modifier =
         Modifier.fillMaxWidth()
-          .background(AppTheme.colors.surfaceSunken, AppShapes.rounded(AppShapes.md))
+          .background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.md))
           .thenIfNotNull(product) { clickable { onClick(it) } }
           .padding(12.dp)
           .pressScale(),
@@ -281,7 +281,7 @@ private fun SubscriptionPurchaseRow(
         Icon(
           icon = Lucide.ChevronRight,
           modifier = Modifier.size(16.dp),
-          tint = AppTheme.colors.textSecondary,
+          tint = AppTheme.colors.textMuted,
         )
       } else {
         Spinner()
@@ -309,7 +309,7 @@ private fun Spinner() {
   Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
     Canvas(Modifier.size(14.dp)) {
       drawArc(
-        color = colors.textSecondary,
+        color = colors.textMuted,
         startAngle = rotation,
         sweepAngle = 270f,
         useCenter = false,

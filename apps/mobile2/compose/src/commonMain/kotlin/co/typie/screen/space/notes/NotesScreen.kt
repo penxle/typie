@@ -359,7 +359,7 @@ fun NotesScreen() {
     },
   )
 
-  Screen(background = AppTheme.colors.surfaceBase) { contentPadding ->
+  Screen(background = AppTheme.colors.surfaceCanvas) { contentPadding ->
     Crossfade(
       targetState = screenState.filterStatus,
       modifier = Modifier,
@@ -434,7 +434,7 @@ private fun NotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus
             Icon(
               icon = if (status == NoteStatus.RESOLVED) Lucide.CircleCheck else Lucide.Circle,
               modifier = Modifier.size(18.dp),
-              tint = AppTheme.colors.textSecondary,
+              tint = AppTheme.colors.textMuted,
             )
             Text(
               text = status.filterLabel(),
@@ -446,7 +446,7 @@ private fun NotesFilterPopover(selectedStatus: NoteStatus, onSelect: (NoteStatus
                 Icon(
                   icon = Lucide.Check,
                   modifier = Modifier.size(16.dp),
-                  tint = AppTheme.colors.brand,
+                  tint = AppTheme.colors.textDefault,
                 )
               }
             }

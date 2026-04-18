@@ -58,7 +58,7 @@ internal fun EntityItemActionsStatusContent(message: String) {
       text = message,
       modifier = Modifier.fillMaxWidth().padding(horizontal = EntityItemActionsStatusPadding),
       style = AppTheme.typography.body,
-      color = AppTheme.colors.textSecondary,
+      color = AppTheme.colors.textMuted,
     )
   }
 }

@@ -72,7 +72,7 @@ fun CancelPlanScreen() {
           Text(
             "해지 시 다음 혜택을 더 이상 받을 수 없어요.",
             style = AppTheme.typography.body,
-            color = AppTheme.colors.textSecondary,
+            color = AppTheme.colors.textMuted,
           )
         }
       }
@@ -82,11 +82,7 @@ fun CancelPlanScreen() {
           modifier = Modifier.fillMaxWidth().padding(20.dp),
           verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          Text(
-            "이용 중인 혜택",
-            style = AppTheme.typography.caption,
-            color = AppTheme.colors.textTertiary,
-          )
+          Text("이용 중인 혜택", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
 
           Column(
             modifier = Modifier.fillMaxWidth(),
@@ -101,7 +97,7 @@ fun CancelPlanScreen() {
         text =
           "지금 해지하더라도 ${subscription.expiresAt.formatKoreanDate()}까지는 계속해서 ${subscription.planName} 혜택을 이용할 수 있어요.",
         style = AppTheme.typography.body,
-        color = AppTheme.colors.textTertiary,
+        color = AppTheme.colors.textMuted,
       )
 
       Button(

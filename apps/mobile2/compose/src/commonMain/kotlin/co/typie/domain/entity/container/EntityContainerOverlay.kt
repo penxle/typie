@@ -183,11 +183,11 @@ fun EntityContainerSelectionBar(
           radius = 3f
         }
         .dropShadow(EntityContainerSelectionBarShape) {
-          color = colors.shadow
+          color = colors.shadowSpot
           offset = Offset(0f, 4f)
           radius = 16f
         }
-        .background(AppTheme.colors.surfaceRaised, EntityContainerSelectionBarShape),
+        .background(AppTheme.colors.surfaceDefault, EntityContainerSelectionBarShape),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     InteractionScope {
@@ -207,13 +207,13 @@ fun EntityContainerSelectionBar(
           Text(
             text = "${selectedCount}개 선택됨",
             style = AppTheme.typography.action,
-            color = AppTheme.colors.textPrimary,
+            color = AppTheme.colors.textDefault,
           )
 
           Icon(
             icon = Lucide.EllipsisVertical,
             modifier = Modifier.size(16.dp),
-            tint = AppTheme.colors.textPrimary,
+            tint = AppTheme.colors.textDefault,
           )
         }
       }
@@ -223,7 +223,7 @@ fun EntityContainerSelectionBar(
       modifier =
         Modifier.width(1.dp)
           .height(18.dp)
-          .background(AppTheme.colors.borderStrong.copy(alpha = 0.4f))
+          .background(AppTheme.colors.borderEmphasis.copy(alpha = 0.4f))
     )
 
     InteractionScope {
@@ -234,7 +234,7 @@ fun EntityContainerSelectionBar(
             .pressScale(0.96f),
         contentAlignment = Alignment.Center,
       ) {
-        Icon(icon = Lucide.X, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textPrimary)
+        Icon(icon = Lucide.X, modifier = Modifier.size(18.dp), tint = AppTheme.colors.textDefault)
       }
     }
   }

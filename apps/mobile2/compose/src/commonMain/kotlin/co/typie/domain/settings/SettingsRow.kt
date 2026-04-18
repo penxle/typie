@@ -19,7 +19,7 @@ fun SettingsCardRow(
     Icon(
       icon = Lucide.ChevronRight,
       modifier = Modifier.size(16.dp),
-      tint = AppTheme.colors.textTertiary,
+      tint = AppTheme.colors.textMuted,
     )
   },
   onClick: suspend () -> Unit,

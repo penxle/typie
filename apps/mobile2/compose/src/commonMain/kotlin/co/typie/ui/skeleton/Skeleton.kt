@@ -40,8 +40,8 @@ val LocalSkeletonUnite = staticCompositionLocalOf<SkeletonUniteGroup?> { null }
 object SkeletonDefaults {
   @Composable
   fun colors(
-    bone: Color = AppTheme.colors.skeletonBone,
-    highlight: Color = AppTheme.colors.skeletonHighlight,
+    bone: Color = AppTheme.colors.skeletonBase,
+    highlight: Color = AppTheme.colors.skeletonShimmer,
   ): SkeletonColors = SkeletonColors(bone = bone, highlight = highlight)
 }
 

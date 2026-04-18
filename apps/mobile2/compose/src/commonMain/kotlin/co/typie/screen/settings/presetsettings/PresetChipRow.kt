@@ -83,9 +83,9 @@ internal fun <T> PresetChipRow(
       val isSelected = option.value == selected
 
       val backgroundColor =
-        if (isSelected) AppTheme.colors.textPrimary else AppTheme.colors.surfaceSunken
+        if (isSelected) AppTheme.colors.textDefault else AppTheme.colors.surfaceInset
       val textColor =
-        if (isSelected) AppTheme.colors.surfaceDefault else AppTheme.colors.textPrimary
+        if (isSelected) AppTheme.colors.surfaceDefault else AppTheme.colors.textDefault
 
       Box(
         modifier =
