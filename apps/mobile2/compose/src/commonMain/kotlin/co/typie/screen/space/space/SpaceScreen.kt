@@ -336,7 +336,7 @@ fun SpaceScreen() {
 
   Screen(
     loadable = model.query,
-    foregroundOverlay = {
+    overlay = {
       EntityContainerBottomOverlayStack(
         baseBottomInset = overlayBaseBottomInset,
         showSelectionBar = isSelectionBarVisible,

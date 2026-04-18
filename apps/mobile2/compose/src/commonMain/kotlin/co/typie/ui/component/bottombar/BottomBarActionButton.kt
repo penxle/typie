@@ -49,7 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import co.typie.ext.LocalInteractionSource
 import co.typie.ext.clickable
-import co.typie.ext.safeDrawing
+import co.typie.ext.navigationBars
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.component.popover.PopoverList
@@ -87,7 +87,7 @@ fun BottomBarActionButton(
   val actionInteractionSource = remember { MutableInteractionSource() }
   val actionScale = remember { Animatable(1f) }
   val isActionPressed by actionInteractionSource.collectIsPressedAsState()
-  val safeBottomPadding = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+  val safeBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
   val hasMenu = menus.isNotEmpty()
   val pressGestureSessionState = rememberPressGestureSessionState()
   var isMenuOpen by remember(icon, menus) { mutableStateOf(false) }

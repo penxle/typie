@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import co.typie.contract.Loadable
 import co.typie.contract.LoadableState
-import co.typie.ext.imePadding
 import co.typie.ext.navigationBars
 import co.typie.ext.navigationBarsPadding
 import co.typie.ext.plus
@@ -50,7 +49,7 @@ fun Screen(
   loadable: Loadable<*>? = null,
   background: Color = AppTheme.colors.surfaceBase,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
-  foregroundOverlay: (@Composable BoxScope.() -> Unit)? = null,
+  overlay: (@Composable BoxScope.() -> Unit)? = null,
   content: @Composable BoxScope.(contentPadding: PaddingValues) -> Unit,
 ) {
   val hazeState = remember { HazeState() }
@@ -80,7 +79,7 @@ fun Screen(
     }
   }
 
-  Box(Modifier.fillMaxSize().background(background).imePadding()) {
+  Box(Modifier.fillMaxSize().background(background)) {
     Box(
       modifier = Modifier.fillMaxSize().hazeSource(hazeState).widthIn(max = MaxContentWidth),
       contentAlignment = Alignment.TopCenter,
@@ -139,6 +138,6 @@ fun Screen(
       }
     }
 
-    foregroundOverlay?.invoke(this)
+    overlay?.invoke(this)
   }
 }

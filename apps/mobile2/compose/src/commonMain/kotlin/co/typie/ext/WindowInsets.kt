@@ -1,8 +1,5 @@
 package co.typie.ext
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.padding
@@ -41,24 +38,5 @@ fun Modifier.safeBottomPadding(): Modifier {
 @Composable
 fun Modifier.imePadding(): Modifier {
   val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-  val animatedBottom by
-    animateDpAsState(
-      targetValue = imeBottom,
-      animationSpec =
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
-    )
-  return padding(bottom = animatedBottom)
-}
-
-@Composable
-fun Modifier.imeOrNavigationBarsPadding(): Modifier {
-  val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-  val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val animatedBottom by
-    animateDpAsState(
-      targetValue = maxOf(imeBottom, navBottom),
-      animationSpec =
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
-    )
-  return padding(bottom = animatedBottom)
+  return padding(bottom = imeBottom)
 }
