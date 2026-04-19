@@ -35,13 +35,13 @@ import co.typie.icons.Typie
 import co.typie.navigation.Nav
 import co.typie.result.Result
 import co.typie.route.Route
-import co.typie.shell.MainBottomBarActionButton
 import co.typie.shell.MainBottomBarPillEntry
 import co.typie.shell.MainBottomBarPillKey
 import co.typie.ui.component.Screen
 import co.typie.ui.component.SpacePopover
 import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
+import co.typie.ui.component.bottombar.BottomBarAction
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
@@ -351,12 +351,11 @@ fun NotesScreen() {
   ProvideBottomBar(
     pillKey = MainBottomBarPillKey,
     pill = MainBottomBarPillEntry,
-    action = {
-      MainBottomBarActionButton(
+    action =
+      BottomBarAction(
         icon = Typie.StickyNotePlus,
         onClick = { scope.launch { handleCreateNote() } },
-      )
-    },
+      ),
   )
 
   Screen(background = AppTheme.colors.surfaceCanvas) { contentPadding ->

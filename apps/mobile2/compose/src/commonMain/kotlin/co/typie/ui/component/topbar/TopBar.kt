@@ -18,13 +18,12 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
@@ -101,39 +100,20 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
       },
     ) { mode ->
       if (mode == TopBarState.NormalModeKey) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
+        Box(
           modifier =
             Modifier.fillMaxWidth()
               .height(TopBarDefaults.Height)
-              .padding(horizontal = TopBarDefaults.HorizontalPadding),
+              .padding(horizontal = TopBarDefaults.HorizontalPadding)
         ) {
-          // Leading slot — slide + fade
-          Box(
-            contentAlignment = Alignment.CenterStart,
-            modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
-          ) {
-            AnimatedContent(
-              targetState = state.leadingKey,
-              contentAlignment = Alignment.CenterStart,
-              transitionSpec = {
-                (slideInHorizontally { -it / 2 } + fadeIn(tween(200)))
-                  .togetherWith(slideOutHorizontally { -it / 2 } + fadeOut(tween(150)))
-                  .using(SizeTransform(clip = false) { _, _ -> snap() })
-              },
-            ) { entryKey ->
-              key(entryKey, state.leadingInstances[entryKey]) {
-                state.leadingEntries[entryKey]?.invoke()
-              }
-            }
-          }
-
-          Spacer(Modifier.width(TopBarDefaults.SlotGap))
-
-          // Center slot — crossfade (per route) + scroll-based reveal (per entry, independent)
+          // Center slot — leading/trailing 크기와 무관하게 정중앙에 배치 (양 끝 SlotWidth+SlotGap 확보)
           Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.weight(1f).height(TopBarDefaults.Height),
+            modifier =
+              Modifier.align(Alignment.Center)
+                .fillMaxWidth()
+                .padding(horizontal = TopBarDefaults.SlotWidth + TopBarDefaults.SlotGap)
+                .height(TopBarDefaults.Height),
           ) {
             AnimatedContent(
               targetState = state.centerKey,
@@ -168,12 +148,36 @@ fun TopBar(state: TopBarState, modifier: Modifier = Modifier, onTap: (() -> Unit
             }
           }
 
-          Spacer(Modifier.width(TopBarDefaults.SlotGap))
+          // Leading slot — slide + fade
+          Box(
+            contentAlignment = Alignment.CenterStart,
+            modifier =
+              Modifier.align(Alignment.CenterStart)
+                .widthIn(min = TopBarDefaults.SlotWidth)
+                .height(TopBarDefaults.Height),
+          ) {
+            AnimatedContent(
+              targetState = state.leadingKey,
+              contentAlignment = Alignment.CenterStart,
+              transitionSpec = {
+                (slideInHorizontally { -it / 2 } + fadeIn(tween(200)))
+                  .togetherWith(slideOutHorizontally { -it / 2 } + fadeOut(tween(150)))
+                  .using(SizeTransform(clip = false) { _, _ -> snap() })
+              },
+            ) { entryKey ->
+              key(entryKey, state.leadingInstances[entryKey]) {
+                state.leadingEntries[entryKey]?.invoke()
+              }
+            }
+          }
 
           // Trailing slot — slide + fade (오른쪽, leading의 반대)
           Box(
             contentAlignment = Alignment.CenterEnd,
-            modifier = Modifier.width(TopBarDefaults.SlotWidth).height(TopBarDefaults.Height),
+            modifier =
+              Modifier.align(Alignment.CenterEnd)
+                .width(TopBarDefaults.SlotWidth)
+                .height(TopBarDefaults.Height),
           ) {
             AnimatedContent(
               targetState = state.trailingKey,

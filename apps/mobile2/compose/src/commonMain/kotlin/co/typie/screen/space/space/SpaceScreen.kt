@@ -68,9 +68,9 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
 import co.typie.screen.space.document.DocumentViewModel
-import co.typie.screen.space.entity.EntityCreateBottomBarAction
 import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.screen.space.entity.EntitySelectionViewModel
+import co.typie.screen.space.entity.rememberEntityCreateBottomBarAction
 import co.typie.screen.space.folder.FolderViewModel
 import co.typie.shell.MainBottomBarPillEntry
 import co.typie.shell.MainBottomBarPillKey
@@ -92,7 +92,6 @@ import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarDefaults
-import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
@@ -295,14 +294,6 @@ fun SpaceScreen() {
   ProvideTopBar(
     leadingKey = SpacePopoverLeadingKey,
     leading = { SpacePopover() },
-    center = {
-      Text(
-        site?.name ?: "스페이스",
-        style = AppTheme.typography.title,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    },
     trailingKey = EntityContainerTopBarTrailingKey,
     trailing =
       if (serverEntities.isEmpty()) null
@@ -317,21 +308,19 @@ fun SpaceScreen() {
           )
         }
       },
-    scrollOffset = scrollState.topBarScrollOffset(),
   )
 
   ProvideBottomBar(
     pillKey = MainBottomBarPillKey,
     pill = MainBottomBarPillEntry,
-    action = {
-      EntityCreateBottomBarAction(
+    action =
+      rememberEntityCreateBottomBarAction(
         model = createActionModel,
         siteId = siteId,
         onCreated = { model.refetch() },
         onFolderCreated = { nav.navigate(Route.Folder(it)) },
         onDocumentCreated = { nav.navigate(Route.Editor(it)) },
-      )
-    },
+      ),
   )
 
   Screen(

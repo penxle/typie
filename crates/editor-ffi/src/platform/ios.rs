@@ -3,7 +3,9 @@ use editor_renderer::{RenderBackend, RenderSink};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_metal::{MTLOrigin, MTLRegion, MTLSize};
+use objc2_metal::{
+    MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily, MTLOrigin, MTLRegion, MTLSize,
+};
 use std::ffi::c_void;
 use std::sync::Arc;
 
@@ -12,6 +14,15 @@ use crate::error::FfiError;
 
 #[ffi]
 pub type PlatformHandle = u64;
+
+// vello/wgpu compute pipeline miscompiles on Apple GPU family 7 (A14 and earlier),
+// producing partial tile rendering with uninitialized GPU memory bleeding through.
+// See https://github.com/gfx-rs/wgpu/issues/4500
+pub fn supports_apple_gpu_family_8() -> bool {
+    MTLCreateSystemDefaultDevice()
+        .map(|device| device.supportsFamily(MTLGPUFamily::Apple8))
+        .unwrap_or(true)
+}
 
 pub struct SurfaceHandle {
     backend: RenderBackend,

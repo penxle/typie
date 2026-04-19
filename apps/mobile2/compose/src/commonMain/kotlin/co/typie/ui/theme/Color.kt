@@ -33,7 +33,7 @@ data class ColorPalette(
 data class ThemeColors(val gray: ColorScale, val heatmap: ColorScale, val palette: ColorPalette)
 
 object AppColor {
-  val white = Color(0xFFFFFFFF)
+  val white = Color(0xFFFFFDF8)
   val black = Color(0xFF000000)
 
   val light =

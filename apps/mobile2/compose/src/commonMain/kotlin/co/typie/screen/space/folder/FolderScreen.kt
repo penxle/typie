@@ -63,9 +63,9 @@ import co.typie.result.onErr
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
-import co.typie.screen.space.entity.EntityCreateBottomBarAction
 import co.typie.screen.space.entity.EntityCreateViewModel
 import co.typie.screen.space.entity.EntitySelectionViewModel
+import co.typie.screen.space.entity.rememberEntityCreateBottomBarAction
 import co.typie.shell.MainBottomBarPillEntry
 import co.typie.shell.MainBottomBarPillKey
 import co.typie.storage.Preference
@@ -442,16 +442,15 @@ fun FolderScreen(entityId: String) {
   ProvideBottomBar(
     pillKey = MainBottomBarPillKey,
     pill = MainBottomBarPillEntry,
-    action = {
-      EntityCreateBottomBarAction(
+    action =
+      rememberEntityCreateBottomBarAction(
         model = createActionModel,
         siteId = root?.site?.id ?: Preference.siteId,
         parentEntityId = entityId,
         onCreated = { model.refetch() },
         onFolderCreated = { nav.navigate(Route.Folder(it)) },
         onDocumentCreated = { nav.navigate(Route.Editor(it)) },
-      )
-    },
+      ),
   )
 
   Screen(

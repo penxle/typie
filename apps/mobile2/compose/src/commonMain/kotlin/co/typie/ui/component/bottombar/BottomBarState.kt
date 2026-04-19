@@ -10,10 +10,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import co.typie.navigation.LocalRoute
 
+sealed interface BottomBarActionEntry {
+  data class Data(val action: BottomBarAction) : BottomBarActionEntry
+
+  data class Content(val content: @Composable () -> Unit) : BottomBarActionEntry
+}
+
 @Stable
 class BottomBarState {
   internal val pillEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
-  internal val actionEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
+  internal val actionEntries = mutableStateMapOf<Any, BottomBarActionEntry>()
   internal val customEntries = mutableStateMapOf<Any, @Composable () -> Unit>()
 
   var pillKey: Any by mutableStateOf(NullKey)
@@ -29,8 +35,8 @@ class BottomBarState {
     pillKey = key
   }
 
-  fun setAction(key: Any, content: (@Composable () -> Unit)?) {
-    if (content != null) actionEntries[key] = content else actionEntries.remove(key)
+  fun setAction(key: Any, entry: BottomBarActionEntry?) {
+    if (entry != null) actionEntries[key] = entry else actionEntries.remove(key)
     actionKey = key
   }
 
@@ -57,14 +63,14 @@ private fun needsImplicitRouteKey(
   enabled: Boolean,
   pill: (@Composable () -> Unit)?,
   pillKey: Any?,
-  action: (@Composable () -> Unit)?,
+  actionEntry: BottomBarActionEntry?,
   actionKey: Any?,
   custom: (@Composable () -> Unit)?,
   customKey: Any?,
 ): Boolean {
   if (!enabled) return false
   return (pill != null && pillKey == null) ||
-    (action != null && actionKey == null) ||
+    (actionEntry != null && actionKey == null) ||
     (custom != null && customKey == null)
 }
 
@@ -77,7 +83,8 @@ fun ProvideBottomBar(
   enabled: Boolean = true,
   pill: (@Composable () -> Unit)? = null,
   pillKey: Any? = null,
-  action: (@Composable () -> Unit)? = null,
+  action: BottomBarAction? = null,
+  actionContent: (@Composable () -> Unit)? = null,
   actionKey: Any? = null,
   custom: (@Composable () -> Unit)? = null,
   customKey: Any? = null,
@@ -87,12 +94,17 @@ fun ProvideBottomBar(
 
   state.enabled = enabled
   if (enabled) {
-    val routeKey =
-      if (needsImplicitRouteKey(enabled, pill, pillKey, action, actionKey, custom, customKey)) {
-        LocalRoute.current
-      } else {
-        null
+    val actionEntry: BottomBarActionEntry? =
+      when {
+        action != null -> BottomBarActionEntry.Data(action)
+        actionContent != null -> BottomBarActionEntry.Content(actionContent)
+        else -> null
       }
+
+    val routeKey =
+      if (needsImplicitRouteKey(enabled, pill, pillKey, actionEntry, actionKey, custom, customKey))
+        LocalRoute.current
+      else null
 
     state.setPill(
       if (pill != null) resolveBottomBarEntryKey(pillKey, routeKey, fallbackEntryKey)
@@ -100,9 +112,9 @@ fun ProvideBottomBar(
       pill,
     )
     state.setAction(
-      if (action != null) resolveBottomBarEntryKey(actionKey, routeKey, fallbackEntryKey)
+      if (actionEntry != null) resolveBottomBarEntryKey(actionKey, routeKey, fallbackEntryKey)
       else BottomBarState.NullKey,
-      action,
+      actionEntry,
     )
     state.setCustom(resolveBottomBarEntryKey(customKey, routeKey, fallbackEntryKey), custom)
   }

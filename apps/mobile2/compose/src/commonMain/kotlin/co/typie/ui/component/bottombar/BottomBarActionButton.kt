@@ -1,6 +1,7 @@
 package co.typie.ui.component.bottombar
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.spring
@@ -69,6 +70,12 @@ data class ActionMenuItem(
   val onClick: () -> Unit = {},
 )
 
+data class BottomBarAction(
+  val icon: IconData,
+  val menus: List<ActionMenuItem> = emptyList(),
+  val onClick: suspend () -> Unit = {},
+)
+
 private const val ACTION_SIZE = 56
 private const val ACTION_GAP = 8
 private const val ACTION_MENU_GAP = 10
@@ -121,7 +128,7 @@ fun BottomBarActionButton(
   }
 
   BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-    val shellWidth = (maxWidth - 48.dp).coerceAtMost(488.dp).coerceAtLeast(0.dp)
+    val shellWidth = (maxWidth - 32.dp).coerceAtMost(488.dp).coerceAtLeast(0.dp)
     val shellHorizontalInset = (maxWidth - shellWidth) / 2
 
     if (isMenuOpen && hasMenu) {
@@ -217,16 +224,11 @@ fun BottomBarActionButton(
               scaleY = actionScale.value
             }
             .dropShadow(AppShapes.circle) {
-              color = colors.shadowAmbient
-              radius = 3f
-            }
-            .dropShadow(AppShapes.circle) {
               color = colors.shadowSpot
               offset = Offset(0f, 4f)
               radius = 16f
             }
-            .background(AppTheme.colors.surfaceDefault, AppShapes.circle)
-            .border(1.dp, AppTheme.colors.borderDefault.copy(alpha = 0.5f), AppShapes.circle)
+            .background(AppTheme.colors.surfaceInverse, AppShapes.circle)
             .then(
               if (hasMenu) {
                 Modifier.pointerInput(icon, menus) {
@@ -271,7 +273,8 @@ fun BottomBarActionButton(
             ),
         contentAlignment = Alignment.Center,
       ) {
-        Icon(icon = if (hasMenu && isMenuOpen) Lucide.X else icon, tint = AppTheme.colors.textMuted)
+        val icon = if (hasMenu && isMenuOpen) Lucide.X else icon
+        Crossfade(icon) { icon -> Icon(icon = icon, tint = AppTheme.colors.textOnInverse) }
       }
     }
   }

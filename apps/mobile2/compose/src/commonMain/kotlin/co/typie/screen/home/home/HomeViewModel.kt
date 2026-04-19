@@ -1,5 +1,6 @@
 package co.typie.screen.home.home
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,13 +17,13 @@ import co.typie.graphql.builder.buildFolder
 import co.typie.graphql.builder.buildSite
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
+import co.typie.graphql.fragment.HomeRecentDocument_document
 import co.typie.graphql.text
 import co.typie.graphql.type.CreateDocumentInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
 import co.typie.result.loading
 import co.typie.storage.Preference
-import co.typie.storage.Preference.siteId
 
 class HomeViewModel : ViewModel() {
   var isCreatingDocument by mutableStateOf(false)
@@ -36,6 +37,20 @@ class HomeViewModel : ViewModel() {
     ) {
       HomeScreen_Query(siteId = Preference.siteId!!)
     }
+
+  private var continueWritingDismissed by mutableStateOf(false)
+
+  val continueWritingDocument: HomeRecentDocument_document? by derivedStateOf {
+    if (continueWritingDismissed) null
+    else
+      query.data.me.recentlyViewedEntities.firstNotNullOfOrNull {
+        it.node.onDocument?.homeRecentDocument_document
+      }
+  }
+
+  fun dismissContinueWriting() {
+    continueWritingDismissed = true
+  }
 
   suspend fun createDocument(): Result<String, Nothing> =
     loading({ isCreatingDocument = it }) {

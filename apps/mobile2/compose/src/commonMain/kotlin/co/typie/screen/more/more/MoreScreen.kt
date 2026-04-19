@@ -29,9 +29,6 @@ import co.typie.generated.resources.Res
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
-import co.typie.shell.MainBottomBarActionButton
-import co.typie.shell.MainBottomBarPillEntry
-import co.typie.shell.MainBottomBarPillKey
 import co.typie.ui.component.CardActionTile
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
@@ -41,7 +38,6 @@ import co.typie.ui.component.Screen
 import co.typie.ui.component.SectionTitle
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.BottomBarDefaults
-import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
@@ -62,16 +58,9 @@ fun MoreScreen() {
   val uriHandler = LocalUriHandler.current
 
   ProvideTopBar(
-    leading = null,
     center = { Text("더 보기", style = AppTheme.typography.title) },
     trailing = { TopBarButton(Lucide.Settings, onClick = { nav.navigate(Route.Settings) }) },
     scrollOffset = scrollState.topBarScrollOffset(),
-  )
-
-  ProvideBottomBar(
-    pillKey = MainBottomBarPillKey,
-    pill = MainBottomBarPillEntry,
-    action = { MainBottomBarActionButton() },
   )
 
   Screen(loadable = model.query) { contentPadding ->

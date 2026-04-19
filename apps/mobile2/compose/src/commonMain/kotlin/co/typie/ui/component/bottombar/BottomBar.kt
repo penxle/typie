@@ -47,7 +47,16 @@ fun BottomBar(state: BottomBarState, modifier: Modifier = Modifier) {
       state.customEntries[state.customKey]?.invoke()
     } else {
       state.pillEntries[state.pillKey]?.invoke()
-      state.actionEntries[state.actionKey]?.invoke()
+      when (val entry = state.actionEntries[state.actionKey]) {
+        is BottomBarActionEntry.Data ->
+          BottomBarActionButton(
+            icon = entry.action.icon,
+            menus = entry.action.menus,
+            onClick = entry.action.onClick,
+          )
+        is BottomBarActionEntry.Content -> entry.content()
+        null -> Unit
+      }
     }
   }
 }

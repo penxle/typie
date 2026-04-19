@@ -37,7 +37,6 @@ val Apollo: ApolloClient =
       cacheKeyGenerator = IdCacheKeyGenerator(keyScope = CacheKey.Scope.SERVICE),
       cacheResolver = IdCacheResolver(keyScope = CacheKey.Scope.SERVICE),
       enableOptimisticUpdates = true,
-      writeToCacheAsynchronously = true,
     )
     .addHttpInterceptor(AuthInterceptor)
     .build()

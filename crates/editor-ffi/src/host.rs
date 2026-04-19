@@ -58,11 +58,20 @@ impl EditorHost {
             match kind {
                 Some(editor_renderer::BackendKind::Cpu) => BackendMode::Cpu,
                 Some(editor_renderer::BackendKind::Gpu) | None => {
-                    match editor_renderer::GpuDevice::new().await {
-                        Ok(device) => BackendMode::Gpu {
-                            device: Arc::new(device),
-                        },
-                        Err(_) => BackendMode::Cpu,
+                    #[cfg(target_os = "ios")]
+                    let gpu_supported = crate::platform::supports_apple_gpu_family_8();
+                    #[cfg(not(target_os = "ios"))]
+                    let gpu_supported = true;
+
+                    if !gpu_supported {
+                        BackendMode::Cpu
+                    } else {
+                        match editor_renderer::GpuDevice::new().await {
+                            Ok(device) => BackendMode::Gpu {
+                                device: Arc::new(device),
+                            },
+                            Err(_) => BackendMode::Cpu,
+                        }
                     }
                 }
             }

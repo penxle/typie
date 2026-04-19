@@ -5,11 +5,9 @@ data class SpacePopoverSelection(val currentSiteId: String, val otherSiteIds: Li
 fun resolveSpacePopoverSelection(
   selectedSiteId: String,
   availableSiteIds: List<String>,
-): SpacePopoverSelection? {
+): SpacePopoverSelection {
   val currentSiteId =
-    availableSiteIds.firstOrNull { it == selectedSiteId }
-      ?: availableSiteIds.firstOrNull()
-      ?: return null
+    availableSiteIds.firstOrNull { it == selectedSiteId } ?: availableSiteIds.first()
 
   return SpacePopoverSelection(
     currentSiteId = currentSiteId,

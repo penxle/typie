@@ -1,12 +1,20 @@
 package co.typie.ui.theme
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import co.typie.generated.resources.Res
+import co.typie.generated.resources.paperlogy_black
+import co.typie.generated.resources.paperlogy_bold
+import co.typie.generated.resources.paperlogy_extrabold
+import co.typie.generated.resources.paperlogy_extralight
+import co.typie.generated.resources.paperlogy_light
+import co.typie.generated.resources.paperlogy_medium
+import co.typie.generated.resources.paperlogy_regular
+import co.typie.generated.resources.paperlogy_semibold
+import co.typie.generated.resources.paperlogy_thin
 import co.typie.generated.resources.suit_bold
 import co.typie.generated.resources.suit_extrabold
 import co.typie.generated.resources.suit_extralight
@@ -33,14 +41,28 @@ val SuitFontFamily: FontFamily
       Font(Res.font.suit_heavy, FontWeight.Black),
     )
 
+val PaperlogyFontFamily: FontFamily
+  @Composable
+  get() =
+    FontFamily(
+      Font(Res.font.paperlogy_thin, FontWeight.Thin),
+      Font(Res.font.paperlogy_extralight, FontWeight.ExtraLight),
+      Font(Res.font.paperlogy_light, FontWeight.Light),
+      Font(Res.font.paperlogy_regular, FontWeight.Normal),
+      Font(Res.font.paperlogy_medium, FontWeight.Medium),
+      Font(Res.font.paperlogy_semibold, FontWeight.SemiBold),
+      Font(Res.font.paperlogy_bold, FontWeight.Bold),
+      Font(Res.font.paperlogy_extrabold, FontWeight.ExtraBold),
+      Font(Res.font.paperlogy_black, FontWeight.Black),
+    )
+
 object AppTypography {
   /** 화면 최상단 대제목 (홈, 더 보기 등) */
   val display: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 28.sp,
         fontWeight = FontWeight.W600,
         lineHeight = 36.sp,
@@ -51,9 +73,8 @@ object AppTypography {
   val heading: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 22.sp,
         fontWeight = FontWeight.W600,
         lineHeight = 28.sp,
@@ -64,9 +85,8 @@ object AppTypography {
   val title: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 17.sp,
         fontWeight = FontWeight.W600,
         lineHeight = 22.sp,
@@ -77,9 +97,8 @@ object AppTypography {
   val label: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 15.sp,
         fontWeight = FontWeight.W600,
         lineHeight = 20.sp,
@@ -90,9 +109,8 @@ object AppTypography {
   val body: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 16.sp,
         fontWeight = FontWeight.W400,
         lineHeight = 24.sp,
@@ -103,9 +121,8 @@ object AppTypography {
   val action: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 15.sp,
         fontWeight = FontWeight.W500,
         lineHeight = 20.sp,
@@ -116,9 +133,8 @@ object AppTypography {
   val caption: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 13.sp,
         fontWeight = FontWeight.W400,
         lineHeight = 18.sp,
@@ -129,28 +145,11 @@ object AppTypography {
   val micro: TextStyle
     @Composable
     get() {
-      val fontFamily = rememberSuitFontFamily()
       return TextStyle(
-        fontFamily = fontFamily,
+        fontFamily = SuitFontFamily,
         fontSize = 11.sp,
         fontWeight = FontWeight.W400,
         lineHeight = 16.sp,
       )
     }
-}
-
-@Composable
-private fun rememberSuitFontFamily(): FontFamily {
-  val thin = Font(Res.font.suit_thin, FontWeight.Thin)
-  val extraLight = Font(Res.font.suit_extralight, FontWeight.ExtraLight)
-  val light = Font(Res.font.suit_light, FontWeight.Light)
-  val regular = Font(Res.font.suit_regular, FontWeight.Normal)
-  val medium = Font(Res.font.suit_medium, FontWeight.Medium)
-  val semiBold = Font(Res.font.suit_semibold, FontWeight.SemiBold)
-  val bold = Font(Res.font.suit_bold, FontWeight.Bold)
-  val extraBold = Font(Res.font.suit_extrabold, FontWeight.ExtraBold)
-  val heavy = Font(Res.font.suit_heavy, FontWeight.Black)
-  return remember(thin, extraLight, light, regular, medium, semiBold, bold, extraBold, heavy) {
-    FontFamily(thin, extraLight, light, regular, medium, semiBold, bold, extraBold, heavy)
-  }
 }

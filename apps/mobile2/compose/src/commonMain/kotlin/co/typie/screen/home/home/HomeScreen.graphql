@@ -1,7 +1,28 @@
 fragment HomeRecentDocument_document on Document {
+  id
+  title
+  subtitle
+  excerpt
+  updatedAt
+  characterCount
+  characterCountChange {
+    additions
+    deletions
+  }
+
   entity {
-    ...EntityRow_entity
-    ...EntityRowParent_entity
+    id
+    ...EntityIcon_entity
+
+    ancestors {
+      node {
+        __typename
+
+        ... on Folder {
+          name
+        }
+      }
+    }
   }
 }
 
@@ -17,6 +38,16 @@ query HomeScreen_Query($siteId: ID!) {
   }
 
   me @catch(to: THROW) {
+    id
+    name
+    email
+
+    avatar {
+      id
+
+      ...Img_image
+    }
+
     recentlyViewedEntities(siteId: $siteId) {
       type
 

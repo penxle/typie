@@ -2,49 +2,6 @@ package co.typie.shell
 
 import kotlin.math.abs
 
-data class BottomBarTrackLayout(
-  val trackWidth: Float,
-  val indicatorBaseWidth: Float,
-  val tabCenters: List<Float>,
-) {
-  fun centerFor(tab: Tab): Float = tabCenters[tab.ordinal]
-
-  fun clampPointerX(pointerX: Float): Float = pointerX.coerceIn(0f, trackWidth)
-
-  fun clampIndicatorCenter(centerX: Float, indicatorWidth: Float = indicatorBaseWidth): Float {
-    val halfWidth = indicatorWidth / 2f
-    return when {
-      trackWidth <= indicatorWidth -> trackWidth / 2f
-      else -> centerX.coerceIn(halfWidth, trackWidth - halfWidth)
-    }
-  }
-
-  fun nearestTab(pointerX: Float): Tab {
-    val clampedX = clampPointerX(pointerX)
-    val tabIndex =
-      tabCenters.indices.minByOrNull { index -> abs(tabCenters[index] - clampedX) } ?: 0
-    return Tab.entries[tabIndex]
-  }
-}
-
-fun bottomBarTrackLayout(
-  trackWidth: Float,
-  tabCount: Int,
-  segmentPadding: Float,
-): BottomBarTrackLayout {
-  require(tabCount > 0) { "tabCount must be greater than 0" }
-
-  val segmentWidth = trackWidth / tabCount
-  val indicatorBaseWidth = (segmentWidth - segmentPadding * 2f).coerceAtLeast(0f)
-  val tabCenters = List(tabCount) { index -> segmentWidth * (index + 0.5f) }
-
-  return BottomBarTrackLayout(
-    trackWidth = trackWidth,
-    indicatorBaseWidth = indicatorBaseWidth,
-    tabCenters = tabCenters,
-  )
-}
-
 fun stableIndicatorDirection(
   previousDirection: Float,
   from: Float,
