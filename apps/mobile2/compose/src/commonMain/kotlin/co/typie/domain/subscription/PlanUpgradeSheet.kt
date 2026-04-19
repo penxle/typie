@@ -58,6 +58,7 @@ import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastType
 import co.typie.ui.icon.Icon
+import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.PaperlogyFontFamily
 
@@ -123,6 +124,8 @@ fun PlanUpgradeSheet(
 
   SheetLayout(
     padding = SheetPadding(header = PaddingValues(0.dp)),
+    handle = false,
+    headerBackgroundColor = AppTheme.colors.surfaceInverse,
     header = { InkHeroStrip(title = title) },
     footer = {
       Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -224,8 +227,8 @@ private fun TrialAvailablePill(modifier: Modifier = Modifier) {
   Row(
     modifier =
       modifier
-        .background(AppTheme.colors.surfaceCanvas, RoundedCornerShape(999.dp))
-        .border(1.dp, AppTheme.colors.borderDefault, RoundedCornerShape(999.dp))
+        .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
+        .background(AppTheme.colors.surfaceInset, AppShapes.circle)
         .padding(horizontal = 10.dp, vertical = 4.dp),
     horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalAlignment = Alignment.CenterVertically,
@@ -233,7 +236,7 @@ private fun TrialAvailablePill(modifier: Modifier = Modifier) {
     Icon(icon = Lucide.Zap, modifier = Modifier.size(10.dp), tint = AppTheme.colors.textDefault)
     Text(
       text = "2주 무료 체험 가능",
-      style = AppTheme.typography.micro.copy(fontWeight = FontWeight.Bold),
+      style = AppTheme.typography.micro,
       color = AppTheme.colors.textDefault,
     )
   }

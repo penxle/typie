@@ -1,5 +1,6 @@
 package co.typie.ui.component.sheet
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,15 +13,22 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ime
 import co.typie.ext.safeDrawing
+import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
 import co.typie.ui.state.rememberScrollState
+import co.typie.ui.theme.AppShapes
+import co.typie.ui.theme.AppTheme
 
 @Immutable
 data class SheetPadding(
@@ -43,8 +51,11 @@ fun SheetLayout(
   modifier: Modifier = Modifier,
   fillHeight: Boolean = false,
   bodyScroll: Boolean = true,
+  handle: Boolean = true,
   padding: SheetPadding = SheetPadding(),
   verticalSpacing: Dp = 12.dp,
+  backgroundColor: Color = AppTheme.colors.surfaceCanvas,
+  headerBackgroundColor: Color = backgroundColor,
   header: (@Composable ColumnScope.() -> Unit)? = null,
   footer: (@Composable ColumnScope.() -> Unit)? = null,
   body: @Composable ColumnScope.() -> Unit,
@@ -54,55 +65,72 @@ fun SheetLayout(
   val safeBottom = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
   val bottomInset = maxOf(imeBottom, safeBottom)
 
-  Column(
-    modifier =
-      modifier
-        .fillMaxWidth()
-        .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier)
-        .then(if (footer != null) Modifier.padding(bottom = bottomInset) else Modifier),
-    verticalArrangement = Arrangement.spacedBy(verticalSpacing),
-  ) {
+  Column(modifier = modifier.fillMaxWidth().thenIf(fillHeight) { fillMaxHeight() }) {
+    if (handle) SheetHandle(modifier = Modifier.background(headerBackgroundColor))
+
     if (header != null) {
       Column(
-        modifier = Modifier.fillMaxWidth().padding(padding.header),
+        modifier =
+          Modifier.fillMaxWidth().background(headerBackgroundColor).padding(padding.header),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = header,
       )
     }
 
-    Box(
-      modifier =
-        Modifier.fillMaxWidth()
-          .weight(1f, fill = fillHeight)
-          .then(if (bodyScroll) Modifier.verticalScroll(scrollState) else Modifier)
-          .padding(padding.body)
-    ) {
-      Column(
+    Column(modifier = Modifier.background(backgroundColor)) {
+      Spacer(Modifier.height(verticalSpacing))
+
+      Box(
         modifier =
           Modifier.fillMaxWidth()
-            .then(
-              if (fillHeight && !bodyScroll) {
-                Modifier.fillMaxHeight()
-              } else {
-                Modifier
-              }
-            ),
-        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+            .weight(1f, fill = fillHeight)
+            .thenIf(bodyScroll) { verticalScroll(scrollState) }
+            .padding(padding.body)
       ) {
-        body()
+        Column(
+          modifier = Modifier.fillMaxWidth().thenIf(fillHeight && !bodyScroll) { fillMaxHeight() },
+          verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+        ) {
+          body()
 
-        if (footer == null && bottomInset > 0.dp) {
-          Spacer(modifier = Modifier.height(bottomInset))
+          if (footer == null && bottomInset > 0.dp) {
+            Spacer(modifier = Modifier.height(bottomInset))
+          }
         }
       }
-    }
 
-    if (footer != null) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(padding.footer),
-        verticalArrangement = Arrangement.spacedBy(verticalSpacing),
-        content = footer,
-      )
+      if (footer != null) {
+        Spacer(Modifier.height(verticalSpacing))
+
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(padding.footer),
+          verticalArrangement = Arrangement.spacedBy(verticalSpacing),
+          content = footer,
+        )
+
+        Spacer(Modifier.height(bottomInset))
+      }
     }
+  }
+}
+
+private val HandleTopPadding = 8.dp
+private val HandleHeight = 4.dp
+private val HandleBottomPadding = 8.dp
+private val HandleWidth = 36.dp
+
+@Composable
+private fun SheetHandle(modifier: Modifier) {
+  Box(
+    modifier =
+      modifier.fillMaxWidth().height(HandleTopPadding + HandleHeight + HandleBottomPadding),
+    contentAlignment = Alignment.Center,
+  ) {
+    Box(
+      modifier =
+        Modifier.size(width = HandleWidth, height = HandleHeight)
+          .clip(AppShapes.rounded(AppShapes.sm))
+          .background(AppTheme.colors.borderHairline)
+    )
   }
 }

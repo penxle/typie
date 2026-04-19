@@ -63,7 +63,8 @@ import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Img
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
-import co.typie.ui.component.SectionTitle
+import co.typie.ui.component.SelectField
+import co.typie.ui.component.SelectFieldItem
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
 import co.typie.ui.component.dialog.LocalDialog
@@ -72,8 +73,6 @@ import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
-import co.typie.ui.component.sheet.SheetOptionList
-import co.typie.ui.component.sheet.SheetOptionRow
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.complete
 import co.typie.ui.component.toast.LocalToast
@@ -146,7 +145,7 @@ fun SpaceSettingsScreen() {
 
           PaperPane(modifier = Modifier.offset(y = (-28).dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-              SectionTitle("일반")
+              Text(text = "일반", style = AppTheme.typography.title)
 
               TextField(
                 field = model.form.name,
@@ -188,7 +187,6 @@ fun SpaceSettingsScreen() {
                     if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
                       "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
                     } else null,
-                  helpTextStyle = AppTheme.typography.caption,
                   labelPosition = LabelPosition.Internal,
                   placeholder = "스페이스 주소",
                   enabled = SubscriptionService.state is SubscriptionServiceState.Subscribed,
@@ -201,67 +199,32 @@ fun SpaceSettingsScreen() {
                     )
                   },
                 )
+
                 if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
                   LockedBadge(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 12.dp)
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp)
                   )
                 }
               }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-              SectionTitle("디자인")
+            Column {
+              Text(text = "디자인", style = AppTheme.typography.title)
 
-              Column {
-                Box(
-                  modifier =
-                    Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline)
-                )
+              Spacer(Modifier.height(12.dp))
 
-                InteractionScope {
-                  Row(
-                    modifier =
-                      Modifier.fillMaxWidth()
-                        .clickable {
-                          val result = sheet.present {
-                            SpaceDateDisplaySheet(selected = model.form.dateDisplay.value)
-                          }
-                          if (result != null) model.form.dateDisplay.setValue(result)
-                        }
-                        .pressScale()
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                  ) {
-                    SpaceSettingsRowContent(
-                      label = "글 목록에 표시할 날짜",
-                      trailing = {
-                        Text(
-                          text =
-                            SpaceDateDisplayOptions[model.form.dateDisplay.value] ?: "(알 수 없음)",
-                          style = AppTheme.typography.caption,
-                          color = AppTheme.colors.textMuted,
-                          maxLines = 1,
-                          overflow = TextOverflow.Ellipsis,
-                        )
-
-                        Spacer(Modifier.width(4.dp))
-
-                        Icon(
-                          icon = Lucide.ChevronRight,
-                          modifier = Modifier.size(16.dp),
-                          tint = AppTheme.colors.textMuted,
-                        )
+              SpaceSettingsRow(
+                label = "글 목록에 표시할 날짜",
+                trailing = {
+                  SelectField(
+                    field = model.form.dateDisplay,
+                    items =
+                      SpaceDateDisplayOptions.map { option ->
+                        SelectFieldItem(value = option.key, label = option.value)
                       },
-                    )
-                  }
-                }
-
-                Box(
-                  modifier =
-                    Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline)
-                )
-              }
+                  )
+                },
+              )
             }
           }
         }
@@ -269,7 +232,7 @@ fun SpaceSettingsScreen() {
 
       ToastAnchor()
 
-      Box(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+      Box(Modifier.padding(horizontal = 16.dp)) {
         Button(
           text = "저장",
           loading = model.isSubmitting,
@@ -287,53 +250,17 @@ fun SpaceSettingsScreen() {
 }
 
 @Composable
-context(rowScope: RowScope)
-private fun SpaceSettingsRowContent(label: String, trailing: @Composable RowScope.() -> Unit) {
-  Text(
-    text = label,
-    style = AppTheme.typography.label,
-    modifier = with(rowScope) { Modifier.weight(1f) },
-    maxLines = 1,
-    overflow = TextOverflow.Ellipsis,
-  )
+private fun SpaceSettingsRow(label: String, trailing: @Composable RowScope.() -> Unit) {
+  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Text(
+      text = label,
+      style = AppTheme.typography.label,
+      modifier = Modifier.weight(1f),
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
 
-  Row(
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(0.dp),
-    content = trailing,
-  )
-}
-
-@Composable
-context(_: SheetScope<SiteDateDisplay>)
-private fun SpaceDateDisplaySheet(selected: SiteDateDisplay) {
-  SheetLayout(
-    header = {
-      SheetBar(
-        center = {
-          Text(
-            text = "글 목록에 표시할 날짜",
-            style = AppTheme.typography.title,
-            color = AppTheme.colors.textDefault,
-            overflow = TextOverflow.Ellipsis,
-            maxLines = 1,
-          )
-        }
-      )
-    }
-  ) {
-    SheetOptionList(items = SpaceDateDisplayOptions.entries) { (value, label) ->
-      SheetOptionRow(selected = value == selected, onClick = { complete(value) }) {
-        Text(
-          text = label,
-          style = AppTheme.typography.action,
-          modifier = Modifier.fillMaxWidth(),
-          color = AppTheme.colors.textDefault,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-    }
+    trailing()
   }
 }
 
@@ -505,14 +432,14 @@ private fun SpaceLogoHero(
         Img(image = image, modifier = Modifier.matchParentSize().scale(1.3f))
       }
     }
+
     Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.2f)))
+
     Column(
       modifier = Modifier.matchParentSize().padding(top = topInset + 8.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       SpaceLogo(image = image, previewUrl = previewUrl, onClick = onClick)
-      Spacer(Modifier.height(12.dp))
-      Text(text = "스페이스 로고", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
     }
   }
 }
@@ -536,18 +463,14 @@ private fun LockedBadge(modifier: Modifier = Modifier) {
   Row(
     modifier =
       modifier
-        .background(AppTheme.colors.surfaceInset, RoundedCornerShape(4.dp))
-        .border(1.dp, AppTheme.colors.borderDefault, RoundedCornerShape(4.dp))
+        .background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.sm))
+        .border(1.dp, AppTheme.colors.borderDefault, AppShapes.rounded(AppShapes.sm))
         .padding(horizontal = 6.dp, vertical = 3.dp),
     horizontalArrangement = Arrangement.spacedBy(4.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Icon(icon = Lucide.Lock, modifier = Modifier.size(10.dp), tint = AppTheme.colors.textMuted)
-    Text(
-      text = "잠김",
-      style = AppTheme.typography.micro.copy(fontWeight = FontWeight.Bold),
-      color = AppTheme.colors.textMuted,
-    )
+    Text(text = "잠김", style = AppTheme.typography.micro, color = AppTheme.colors.textHint)
   }
 }
 

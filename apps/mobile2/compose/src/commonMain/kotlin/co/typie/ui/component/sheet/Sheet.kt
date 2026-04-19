@@ -13,7 +13,6 @@ class Sheet {
 
   suspend fun <R> present(
     stops: List<SheetStop> = emptyList(),
-    handle: Boolean = true,
     content:
       @Composable
       context(SheetScope<R>)
@@ -22,7 +21,6 @@ class Sheet {
     val entry =
       SheetEntry(
         stops = stops,
-        handle = handle,
         content = content,
         onResult = { result -> if (continuation.isActive) continuation.resume(result) },
       )
@@ -37,7 +35,6 @@ class Sheet {
 
 class SheetEntry<R>(
   val stops: List<SheetStop>,
-  val handle: Boolean,
   val content:
     @Composable
     context(SheetScope<R>)

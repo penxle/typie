@@ -76,10 +76,9 @@ suspend fun SubscriptionService.gate(
 ): Boolean {
   if (state !is SubscriptionServiceState.NotSubscribed) return true
 
-  val result =
-    sheet.present(handle = false) {
-      PlanUpgradeSheet(title = title, benefits = benefits, preview = preview)
-    }
+  val result = sheet.present {
+    PlanUpgradeSheet(title = title, benefits = benefits, preview = preview)
+  }
   when (result) {
     is PlanUpgradeSheetResult.TrialStarted -> {
       sheet.present<Unit> {

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -27,18 +26,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.ext.clickable
+import co.typie.ext.thenIf
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
@@ -205,38 +203,12 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
             layout(placeable.width, placeable.height) { placeable.place(0, currentOffset) }
           }
           .anchoredDraggable(state = anchoredState, orientation = Orientation.Vertical)
-          .then(
-            if (isIntrinsic) Modifier.onSizeChanged { contentHeightPx = it.height.toFloat() }
-            else Modifier
-          )
+          .thenIf(isIntrinsic) { onSizeChanged { contentHeightPx = it.height.toFloat() } }
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
-          .background(AppTheme.colors.surfaceCanvas)
     ) {
-      if (entry.handle) SheetHandle()
       CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
         context(scope) { typedEntry.content() }
       }
     }
-  }
-}
-
-private val HandleTopPadding = 8.dp
-private val HandleHeight = 4.dp
-private val HandleBottomPadding = 8.dp
-private val HandleWidth = 36.dp
-
-@Composable
-private fun SheetHandle() {
-  Box(
-    modifier =
-      Modifier.fillMaxWidth().height(HandleTopPadding + HandleHeight + HandleBottomPadding),
-    contentAlignment = Alignment.Center,
-  ) {
-    Box(
-      modifier =
-        Modifier.size(width = HandleWidth, height = HandleHeight)
-          .clip(AppShapes.rounded(AppShapes.sm))
-          .background(AppTheme.colors.borderHairline)
-    )
   }
 }

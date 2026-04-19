@@ -1,18 +1,22 @@
 package co.typie.ui.component
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseInOutExpo
 import androidx.compose.animation.core.EaseOutExpo
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -209,7 +213,7 @@ fun TextField(
   label: String,
   modifier: Modifier = Modifier,
   help: String? = null,
-  helpTextStyle: TextStyle = AppTheme.typography.micro,
+  helpTextStyle: TextStyle = AppTheme.typography.caption,
   error: String? = null,
   success: Boolean = false,
   placeholder: String? = null,
@@ -251,9 +255,9 @@ fun TextField(
   val containerColor by
     animateColorAsState(
       when {
-        !enabled -> AppTheme.colors.surfaceCanvas
+        !enabled -> AppTheme.colors.surfaceInset
         isFocused -> AppTheme.colors.surfaceDefault
-        else -> AppTheme.colors.surfaceInset
+        else -> AppTheme.colors.surfaceDefault
       },
       colorSpec,
     )
@@ -522,20 +526,35 @@ fun TextField(
       },
     )
 
-    Spacer(Modifier.height(4.dp))
+    AnimatedVisibility(
+      visible = error != null || help != null,
+      enter =
+        expandVertically(
+          animationSpec = tween(220, easing = EaseOutExpo),
+          expandFrom = Alignment.Top,
+        ) + fadeIn(tween(220)),
+      exit =
+        shrinkVertically(
+          animationSpec = tween(220, easing = EaseInOutExpo),
+          shrinkTowards = Alignment.Top,
+        ) + fadeOut(tween(220)),
+    ) {
+      val helpColor by
+        animateColorAsState(
+          if (hasError) AppTheme.colors.danger else AppTheme.colors.textHint,
+          colorSpec,
+        )
 
-    val helpColor by
-      animateColorAsState(
-        if (hasError) AppTheme.colors.danger else AppTheme.colors.textMuted,
-        colorSpec,
-      )
-
-    Text(
-      text = error ?: help ?: "",
-      style = helpTextStyle,
-      color = helpColor,
-      modifier = Modifier.defaultMinSize(minHeight = 16.dp).padding(start = 8.dp),
-    )
+      Column {
+        Spacer(Modifier.height(4.dp))
+        Text(
+          text = error ?: help ?: "",
+          style = helpTextStyle,
+          color = helpColor,
+          modifier = Modifier.padding(start = 12.dp),
+        )
+      }
+    }
   }
 }
 
@@ -545,7 +564,7 @@ fun TextField(
   label: String,
   modifier: Modifier = Modifier,
   help: String? = null,
-  helpTextStyle: TextStyle = AppTheme.typography.micro,
+  helpTextStyle: TextStyle = AppTheme.typography.caption,
   success: Boolean = false,
   placeholder: String? = null,
   labelPosition: LabelPosition = LabelPosition.External,
