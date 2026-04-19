@@ -80,7 +80,9 @@ fun MainShell(content: @Composable (Route) -> Unit) {
         }
       }
 
-      MainDrawerEdgeGestureHost(drawer)
+      if (!activeNavigator.canPop) {
+        MainDrawerEdgeGestureHost(drawer)
+      }
       MainDrawerOverlay(drawer)
     }
   }
