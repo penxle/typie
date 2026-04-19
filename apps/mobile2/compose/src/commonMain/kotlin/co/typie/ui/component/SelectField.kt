@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -47,10 +46,13 @@ fun <T> SelectField(
   placement: PopoverPlacement = PopoverPlacement.BelowEnd,
   onSelected: (T) -> Unit = {},
 ) {
+  val selectedValues = values ?: listOf(field.value)
   val resolvedDisplayItem =
-    remember(field.value, values, items) {
-      resolveSelectFieldDisplayItem(currentValue = field.value, values = values, items = items)
-    }
+    resolveSelectFieldDisplayItem(
+      currentValue = field.value,
+      selectedValues = selectedValues,
+      items = items,
+    )
 
   val anchor =
     @Composable {
@@ -72,7 +74,10 @@ fun <T> SelectField(
     items.forEach { selectItem ->
       item(
         content = {
-          SelectFieldPopoverItem(item = selectItem, selected = selectItem.value == field.value)
+          SelectFieldPopoverItem(
+            item = selectItem,
+            selected = selectedValues.contains(selectItem.value),
+          )
         }
       ) {
         field.setValue(selectItem.value)
@@ -84,10 +89,9 @@ fun <T> SelectField(
 
 private fun <T> resolveSelectFieldDisplayItem(
   currentValue: T,
-  values: List<T>?,
+  selectedValues: List<T>,
   items: List<SelectFieldItem<T>>,
 ): SelectFieldDisplayItem {
-  val selectedValues = values ?: listOf(currentValue)
   val distinctValues = selectedValues.distinct()
 
   if (distinctValues.size > 1) {
