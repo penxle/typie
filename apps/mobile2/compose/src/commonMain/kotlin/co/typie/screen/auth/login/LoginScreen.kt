@@ -33,7 +33,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
-import co.typie.ext.safeBottomPadding
 import co.typie.ext.thenIfNotNull
 import co.typie.generated.resources.Res
 import co.typie.graphql.type.SingleSignOnProvider
@@ -52,6 +51,7 @@ import co.typie.ui.component.loader.LocalLoader
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
+import co.typie.ui.component.sheet.SheetPadding
 import co.typie.ui.component.sheet.SheetScope
 import co.typie.ui.component.sheet.dismiss
 import co.typie.ui.component.toast.LocalToast
@@ -68,7 +68,7 @@ fun LoginScreen() {
   ProvideTopBar(enabled = false)
 
   Screen { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().padding(contentPadding).safeBottomPadding()) {
+    Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
       Column(
         modifier = Modifier.weight(1f).fillMaxWidth(),
         verticalArrangement = Arrangement.Center,
@@ -88,13 +88,7 @@ fun LoginScreen() {
         Text("타이피 하나로 해결해요.", style = AppTheme.typography.label)
       }
 
-      Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-      ) {
-        Button(text = "시작하기", onClick = { scope.launch { sheet.present { LoginSheet() } } })
-      }
+      Button(text = "시작하기", onClick = { scope.launch { sheet.present { LoginSheet() } } })
     }
   }
 }
@@ -110,6 +104,7 @@ private fun LoginSheet() {
   var step by remember { mutableStateOf(LoginStep.SingleSignOn) }
 
   SheetLayout(
+    padding = SheetPadding.None,
     header = {
       SheetBar(
         center = {
@@ -122,7 +117,7 @@ private fun LoginSheet() {
           )
         }
       )
-    }
+    },
   ) {
     AnimatedContent(
       targetState = step,
@@ -134,15 +129,17 @@ private fun LoginSheet() {
         }
       },
     ) { currentStep ->
-      when (currentStep) {
-        LoginStep.SingleSignOn ->
-          LoginSSOContent(onEmailClick = { step = LoginStep.Email }, onSuccess = { dismiss() })
+      Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+        when (currentStep) {
+          LoginStep.SingleSignOn ->
+            LoginSSOContent(onEmailClick = { step = LoginStep.Email }, onSuccess = { dismiss() })
 
-        LoginStep.Email ->
-          LoginEmailContent(
-            onSingleSignOnClick = { step = LoginStep.SingleSignOn },
-            onSuccess = { dismiss() },
-          )
+          LoginStep.Email ->
+            LoginEmailContent(
+              onSingleSignOnClick = { step = LoginStep.SingleSignOn },
+              onSuccess = { dismiss() },
+            )
+        }
       }
     }
   }
@@ -242,7 +239,7 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
     }
   }
 
-  Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     TextField(
       field = model.form.email,
       label = "이메일",
@@ -250,8 +247,6 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
       contentType = ContentType.Username + ContentType.EmailAddress,
       keyboardType = KeyboardType.Email,
     )
-
-    Spacer(Modifier.height(8.dp))
 
     TextField(
       field = model.form.password,
@@ -262,16 +257,12 @@ private fun LoginEmailContent(onSingleSignOnClick: () -> Unit, onSuccess: () -> 
       onImeAction = { submit() },
     )
 
-    Spacer(Modifier.height(8.dp))
-
     Button(
       text = "로그인",
       onClick = { submit() },
       loading = model.isSubmitting,
       loadingText = "로그인 중...",
     )
-
-    Spacer(Modifier.height(16.dp))
 
     Text(
       "다른 방법으로 로그인",
@@ -292,7 +283,7 @@ private fun SingleSignOnButton(
   iconColor: Color? = null,
   onClick: () -> Unit = {},
 ) {
-  val shape = AppShapes.rounded(AppShapes.lg)
+  val shape = AppShapes.rounded(AppShapes.md)
 
   InteractionScope {
     Box(
