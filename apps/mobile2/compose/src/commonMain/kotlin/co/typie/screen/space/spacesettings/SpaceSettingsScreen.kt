@@ -5,16 +5,21 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,11 +27,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.domain.subscription.PlanUpgradeBenefit
 import co.typie.domain.subscription.SubscriptionService
 import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.domain.subscription.gate
@@ -34,7 +46,6 @@ import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.excludeTop
 import co.typie.ext.imePadding
-import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
@@ -49,9 +60,6 @@ import co.typie.ui.component.AlertBanner
 import co.typie.ui.component.AlertBannerVariant
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
-import co.typie.ui.component.CardDivider
-import co.typie.ui.component.CardRow
-import co.typie.ui.component.CardSurface
 import co.typie.ui.component.Img
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
@@ -78,6 +86,7 @@ import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.time.Duration
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val SpaceDateDisplayOptions =
@@ -119,130 +128,138 @@ fun SpaceSettingsScreen() {
     trailing = { MoreMenu(model) },
   )
 
-  Screen(loadable = model.query) { contentPadding ->
+  Screen(loadable = model.query, contentPadding = PaddingValues.Zero) { contentPadding ->
     Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
       Box(modifier = Modifier.weight(1f)) {
         Column(
           modifier =
             Modifier.fillMaxSize()
               .verticalScroll(scrollState)
-              .padding(contentPadding.onlyTop())
-              .padding(AppTheme.spacings.scrollBottomPadding),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
+              .padding(AppTheme.spacings.scrollBottomPadding)
         ) {
-          SectionTitle("일반")
+          SpaceLogoHero(
+            image = model.query.data.site.logo.img_image,
+            previewUrl = model.logoPreviewUrl,
+            onClick = { filePicker("image/*") },
+            topInset = contentPadding.calculateTopPadding(),
+          )
 
-          CardSurface(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-              Column(
-                modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-              ) {
-                SpaceLogo(
-                  image = model.query.data.site.logo.img_image,
-                  previewUrl = model.logoPreviewUrl,
-                  onClick = { filePicker("image/*") },
-                )
+          PaperPane(modifier = Modifier.offset(y = (-28).dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              SectionTitle("일반")
 
-                Text(
-                  "스페이스 로고",
-                  style = AppTheme.typography.caption,
-                  color = AppTheme.colors.textMuted,
-                )
-              }
+              TextField(
+                field = model.form.name,
+                label = "이름",
+                labelPosition = LabelPosition.Internal,
+                placeholder = "스페이스 이름",
+              )
 
-              CardDivider()
-
-              Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+              Box(
+                modifier =
+                  Modifier.fillMaxWidth().thenIf(
+                    SubscriptionService.state is SubscriptionServiceState.NotSubscribed
+                  ) {
+                    clickable {
+                      SubscriptionService.gate(
+                        sheet,
+                        nav,
+                        title = "나만의 주소로\n이 공간을 완성해요.",
+                        benefits =
+                          listOf(
+                            PlanUpgradeBenefit.CustomSpaceAddress,
+                            PlanUpgradeBenefit.CustomFontUpload,
+                            PlanUpgradeBenefit.UnlimitedCharacters,
+                          ),
+                        preview = {
+                          SpaceSlugUpgradePreview(
+                            currentSlug = model.form.slug.value,
+                            host = model.usersiteHost,
+                          )
+                        },
+                      )
+                    }
+                  }
               ) {
                 TextField(
-                  field = model.form.name,
-                  label = "이름",
+                  field = model.form.slug,
+                  label = "주소",
+                  help =
+                    if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
+                      "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                    } else null,
+                  helpTextStyle = AppTheme.typography.caption,
                   labelPosition = LabelPosition.Internal,
-                  placeholder = "스페이스 이름",
+                  placeholder = "스페이스 주소",
+                  enabled = SubscriptionService.state is SubscriptionServiceState.Subscribed,
+                  readOnly = SubscriptionService.state !is SubscriptionServiceState.Subscribed,
+                  suffix = {
+                    Text(
+                      ".${model.usersiteHost}",
+                      style = AppTheme.typography.body,
+                      color = AppTheme.colors.textMuted,
+                    )
+                  },
                 )
-
-                Box(
-                  modifier =
-                    Modifier.fillMaxWidth().thenIf(
-                      SubscriptionService.state is SubscriptionServiceState.NotSubscribed
-                    ) {
-                      clickable {
-                        SubscriptionService.gate(
-                          sheet,
-                          nav,
-                          message = "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요.",
-                        )
-                      }
-                    }
-                ) {
-                  TextField(
-                    field = model.form.slug,
-                    label = "주소",
-                    help =
-                      if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
-                        "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
-                      } else {
-                        null
-                      },
-                    helpTextStyle = AppTheme.typography.caption,
-                    labelPosition = LabelPosition.Internal,
-                    placeholder = "스페이스 주소",
-                    enabled = SubscriptionService.state is SubscriptionServiceState.Subscribed,
-                    readOnly = SubscriptionService.state !is SubscriptionServiceState.Subscribed,
-                    suffix = {
-                      Text(
-                        ".${model.usersiteHost}",
-                        style = AppTheme.typography.body,
-                        color = AppTheme.colors.textMuted,
-                      )
-                    },
+                if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
+                  LockedBadge(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 12.dp)
                   )
                 }
               }
             }
-          }
 
-          Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            SectionTitle("디자인")
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+              SectionTitle("디자인")
 
-            CardSurface(modifier = Modifier.fillMaxWidth()) {
-              CardRow(
-                onClick = {
-                  val result = sheet.present {
-                    SpaceDateDisplaySheet(selected = model.form.dateDisplay.value)
-                  }
+              Column {
+                Box(
+                  modifier =
+                    Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline)
+                )
 
-                  if (result != null) {
-                    model.form.dateDisplay.setValue(result)
+                InteractionScope {
+                  Row(
+                    modifier =
+                      Modifier.fillMaxWidth()
+                        .clickable {
+                          val result = sheet.present {
+                            SpaceDateDisplaySheet(selected = model.form.dateDisplay.value)
+                          }
+                          if (result != null) model.form.dateDisplay.setValue(result)
+                        }
+                        .pressScale()
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  ) {
+                    SpaceSettingsRowContent(
+                      label = "글 목록에 표시할 날짜",
+                      trailing = {
+                        Text(
+                          text =
+                            SpaceDateDisplayOptions[model.form.dateDisplay.value] ?: "(알 수 없음)",
+                          style = AppTheme.typography.caption,
+                          color = AppTheme.colors.textMuted,
+                          maxLines = 1,
+                          overflow = TextOverflow.Ellipsis,
+                        )
+
+                        Spacer(Modifier.width(4.dp))
+
+                        Icon(
+                          icon = Lucide.ChevronRight,
+                          modifier = Modifier.size(16.dp),
+                          tint = AppTheme.colors.textMuted,
+                        )
+                      },
+                    )
                   }
                 }
-              ) {
-                SpaceSettingsRowContent(
-                  label = "글 목록에 표시할 날짜",
-                  trailing = {
-                    Text(
-                      text = SpaceDateDisplayOptions[model.form.dateDisplay.value] ?: "(알 수 없음)",
-                      style = AppTheme.typography.caption,
-                      color = AppTheme.colors.textMuted,
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                    )
 
-                    Spacer(Modifier.width(4.dp))
-
-                    Icon(
-                      icon = Lucide.ChevronRight,
-                      modifier = Modifier.size(16.dp),
-                      tint = AppTheme.colors.textMuted,
-                    )
-                  },
+                Box(
+                  modifier =
+                    Modifier.fillMaxWidth().height(1.dp).background(AppTheme.colors.borderHairline)
                 )
               }
             }
@@ -252,17 +269,19 @@ fun SpaceSettingsScreen() {
 
       ToastAnchor()
 
-      Button(
-        text = "저장",
-        loading = model.isSubmitting,
-        loadingText = "저장 중...",
-        onClick = {
-          model.submit().withDefaultExceptionHandler(toast).onOk {
-            toast.success("스페이스 설정이 변경되었어요.")
-            nav.pop()
-          }
-        },
-      )
+      Box(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+        Button(
+          text = "저장",
+          loading = model.isSubmitting,
+          loadingText = "저장 중...",
+          onClick = {
+            model.submit().withDefaultExceptionHandler(toast).onOk {
+              toast.success("스페이스 설정이 변경되었어요.")
+              nav.pop()
+            }
+          },
+        )
+      }
     }
   }
 }
@@ -467,6 +486,157 @@ private fun DeleteSiteSheet(
         autoFocus = true,
         keyboardType = KeyboardType.Number,
       )
+    }
+  }
+}
+
+@Composable
+private fun SpaceLogoHero(
+  image: Img_image,
+  previewUrl: String?,
+  onClick: () -> Unit,
+  topInset: Dp,
+) {
+  Box(modifier = Modifier.fillMaxWidth().height(200.dp + topInset)) {
+    Box(modifier = Modifier.matchParentSize().blur(64.dp), contentAlignment = Alignment.Center) {
+      if (previewUrl != null) {
+        Img(url = previewUrl, modifier = Modifier.matchParentSize().scale(1.3f))
+      } else {
+        Img(image = image, modifier = Modifier.matchParentSize().scale(1.3f))
+      }
+    }
+    Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.2f)))
+    Column(
+      modifier = Modifier.matchParentSize().padding(top = topInset + 8.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+      SpaceLogo(image = image, previewUrl = previewUrl, onClick = onClick)
+      Spacer(Modifier.height(12.dp))
+      Text(text = "스페이스 로고", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
+    }
+  }
+}
+
+@Composable
+private fun PaperPane(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+  val shape = RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl)
+  Column(
+    modifier =
+      modifier
+        .fillMaxSize()
+        .background(AppTheme.colors.surfaceCanvas, shape)
+        .padding(horizontal = 16.dp, vertical = 24.dp),
+    verticalArrangement = Arrangement.spacedBy(24.dp),
+    content = content,
+  )
+}
+
+@Composable
+private fun LockedBadge(modifier: Modifier = Modifier) {
+  Row(
+    modifier =
+      modifier
+        .background(AppTheme.colors.surfaceInset, RoundedCornerShape(4.dp))
+        .border(1.dp, AppTheme.colors.borderDefault, RoundedCornerShape(4.dp))
+        .padding(horizontal = 6.dp, vertical = 3.dp),
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(icon = Lucide.Lock, modifier = Modifier.size(10.dp), tint = AppTheme.colors.textMuted)
+    Text(
+      text = "잠김",
+      style = AppTheme.typography.micro.copy(fontWeight = FontWeight.Bold),
+      color = AppTheme.colors.textMuted,
+    )
+  }
+}
+
+private val SpaceSlugPreviewTargets =
+  listOf("dailynotes", "my-diary", "lovelywriters", "archiveproject")
+
+@Composable
+private fun SpaceSlugUpgradePreview(currentSlug: String, host: String) {
+  var typed by remember { mutableStateOf("") }
+  var caretVisible by remember { mutableStateOf(true) }
+
+  LaunchedEffect(Unit) {
+    while (true) {
+      delay(500)
+      caretVisible = !caretVisible
+    }
+  }
+
+  LaunchedEffect(Unit) {
+    delay(450)
+    var index = 0
+    while (true) {
+      val target = SpaceSlugPreviewTargets[index]
+      for (i in 1..target.length) {
+        typed = target.substring(0, i)
+        delay(65)
+      }
+      delay(2500)
+      for (i in target.length - 1 downTo 0) {
+        typed = target.substring(0, i)
+        delay(35)
+      }
+      delay(250)
+      index = (index + 1) % SpaceSlugPreviewTargets.size
+    }
+  }
+
+  Column(
+    modifier =
+      Modifier.fillMaxWidth()
+        .border(1.dp, AppTheme.colors.borderDefault, AppShapes.rounded(AppShapes.lg))
+        .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.lg))
+        .padding(16.dp),
+    verticalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      Text(text = "지금", style = AppTheme.typography.micro, color = AppTheme.colors.textHint)
+      Text(
+        text = "$currentSlug.$host",
+        style = AppTheme.typography.caption.copy(textDecoration = TextDecoration.LineThrough),
+        color = AppTheme.colors.textHint,
+      )
+    }
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+      Box(modifier = Modifier.weight(1f).height(1.dp).background(AppTheme.colors.borderHairline))
+      Icon(
+        icon = Lucide.ArrowDown,
+        modifier = Modifier.size(12.dp),
+        tint = AppTheme.colors.textMuted,
+      )
+      Box(modifier = Modifier.weight(1f).height(1.dp).background(AppTheme.colors.borderHairline))
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      Text(
+        text = "앞으로",
+        style = AppTheme.typography.micro.copy(fontWeight = FontWeight.Bold),
+        color = AppTheme.colors.textDefault,
+      )
+
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          text = typed,
+          style = AppTheme.typography.body.copy(fontWeight = FontWeight.Bold),
+          color = AppTheme.colors.textDefault,
+        )
+
+        Box(
+          modifier =
+            Modifier.padding(start = 1.dp)
+              .width(2.dp)
+              .height(16.dp)
+              .background(AppTheme.colors.textDefault.copy(alpha = if (caretVisible) 1f else 0f))
+        )
+
+        Text(text = ".$host", style = AppTheme.typography.body, color = AppTheme.colors.textMuted)
+      }
     }
   }
 }

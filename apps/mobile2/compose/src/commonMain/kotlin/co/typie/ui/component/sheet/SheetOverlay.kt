@@ -210,9 +210,9 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
             else Modifier
           )
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
-          .background(AppTheme.colors.surfaceDefault)
+          .background(AppTheme.colors.surfaceCanvas)
     ) {
-      SheetHandle()
+      if (entry.handle) SheetHandle()
       CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
         context(scope) { typedEntry.content() }
       }

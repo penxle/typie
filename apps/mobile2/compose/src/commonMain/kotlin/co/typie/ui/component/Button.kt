@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -61,10 +63,13 @@ fun Button(
   onClick: suspend () -> Unit,
   modifier: Modifier = Modifier,
   leading: (@Composable (Color) -> Unit)? = null,
+  trailing: (@Composable (Color) -> Unit)? = null,
   loadingText: String? = null,
   variant: ButtonVariant = ButtonVariant.Primary,
   enabled: Boolean = true,
   loading: Boolean = false,
+  height: Dp = 48.dp,
+  textStyle: TextStyle? = null,
 ) {
   var debouncedLoading by remember { mutableStateOf(false) }
   LaunchedEffect(loading) {
@@ -81,7 +86,7 @@ fun Button(
   val alpha by animateFloatAsState(if (enabled) 1f else 0.4f)
 
   Skeleton.Bone(
-    modifier = modifier.fillMaxWidth().height(48.dp),
+    modifier = modifier.fillMaxWidth().height(height),
     shape = AppShapes.rounded(AppShapes.lg),
   ) {
     InteractionScope {
@@ -89,7 +94,7 @@ fun Button(
         modifier =
           modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(height)
             .graphicsLayer { this.alpha = alpha }
             .background(colors.background, AppShapes.rounded(AppShapes.lg))
             .clickable(enabled = interactive, onClick = onClick),
@@ -125,7 +130,19 @@ fun Button(
             targetState = displayText,
             transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
           ) { label ->
-            Text(text = label, style = AppTheme.typography.action, color = colors.text)
+            Text(
+              text = label,
+              style = AppTheme.typography.action.merge(textStyle),
+              color = colors.text,
+            )
+          }
+
+          if (trailing != null) {
+            Spacer(Modifier.width(8.dp))
+
+            Box(modifier = Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+              trailing(colors.text)
+            }
           }
         }
       }

@@ -90,6 +90,7 @@ fun SheetLayout(
         verticalArrangement = Arrangement.spacedBy(verticalSpacing),
       ) {
         body()
+
         if (footer == null && bottomInset > 0.dp) {
           Spacer(modifier = Modifier.height(bottomInset))
         }

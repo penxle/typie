@@ -1,5 +1,6 @@
 package co.typie.domain.subscription
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import co.typie.graphql.Apollo
@@ -66,10 +67,19 @@ private fun SubscriptionService_Query.Subscription.toSubscription(): Subscriptio
   )
 }
 
-suspend fun SubscriptionService.gate(sheet: Sheet, nav: Navigator, message: String): Boolean {
+suspend fun SubscriptionService.gate(
+  sheet: Sheet,
+  nav: Navigator,
+  title: String,
+  benefits: List<PlanUpgradeBenefit>,
+  preview: (@Composable () -> Unit)? = null,
+): Boolean {
   if (state !is SubscriptionServiceState.NotSubscribed) return true
 
-  val result = sheet.present { PlanUpgradeSheet(message = message) }
+  val result =
+    sheet.present(handle = false) {
+      PlanUpgradeSheet(title = title, benefits = benefits, preview = preview)
+    }
   when (result) {
     is PlanUpgradeSheetResult.TrialStarted -> {
       sheet.present<Unit> {
