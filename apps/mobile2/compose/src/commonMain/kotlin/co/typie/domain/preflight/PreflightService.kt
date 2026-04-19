@@ -10,6 +10,7 @@ import co.typie.platform.PlatformModule
 import co.typie.storage.Preference
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.sentry.kotlin.multiplatform.Sentry
 import kotlin.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +40,10 @@ object PreflightService {
       launch {
         try {
           check()
+        } catch (e: CancellationException) {
+          throw e
         } catch (e: Exception) {
+          Sentry.captureException(e)
           if (state is PreflightState.NotReady) {
             state = PreflightState.Unavailable
           }

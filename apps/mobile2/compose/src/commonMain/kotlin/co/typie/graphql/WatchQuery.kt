@@ -10,6 +10,7 @@ import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Query
 import com.apollographql.apollo.exception.CacheMissException
 import com.apollographql.cache.normalized.watch
+import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -100,6 +101,7 @@ private constructor(
               response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
             if (error != null) {
               Logger.e(error) { "GraphQL error (${query.name()})" }
+              Sentry.captureException(error)
               state = QueryState.Error(error)
             }
           }
@@ -108,6 +110,7 @@ private constructor(
         throw e
       } catch (e: Exception) {
         Logger.e(e) { "GraphQL error" }
+        Sentry.captureException(e)
         state = QueryState.Error(e)
       }
     }
