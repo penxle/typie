@@ -1,15 +1,15 @@
-package co.typie.ui.component
+package co.typie.shell
 
-data class SpacePopoverSelection(val currentSiteId: String, val otherSiteIds: List<String>)
+data class MainDrawerSelection(val currentSiteId: String, val otherSiteIds: List<String>)
 
-fun resolveSpacePopoverSelection(
+fun resolveMainDrawerSelection(
   selectedSiteId: String,
   availableSiteIds: List<String>,
-): SpacePopoverSelection {
+): MainDrawerSelection {
   val currentSiteId =
     availableSiteIds.firstOrNull { it == selectedSiteId } ?: availableSiteIds.first()
 
-  return SpacePopoverSelection(
+  return MainDrawerSelection(
     currentSiteId = currentSiteId,
     otherSiteIds = availableSiteIds.filter { it != currentSiteId },
   )

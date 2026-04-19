@@ -37,9 +37,9 @@ import co.typie.result.Result
 import co.typie.route.Route
 import co.typie.shell.MainBottomBarPillEntry
 import co.typie.shell.MainBottomBarPillKey
+import co.typie.shell.MainDrawerTrigger
+import co.typie.shell.MainDrawerTriggerLeadingKey
 import co.typie.ui.component.Screen
-import co.typie.ui.component.SpacePopover
-import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.BottomBarAction
 import co.typie.ui.component.bottombar.BottomBarDefaults
@@ -335,8 +335,8 @@ fun NotesScreen() {
   }
 
   ProvideTopBar(
-    leadingKey = SpacePopoverLeadingKey,
-    leading = { SpacePopover() },
+    leadingKey = MainDrawerTriggerLeadingKey,
+    leading = { MainDrawerTrigger() },
     center = { Text("노트", style = AppTheme.typography.title) },
     trailingKey = NotesFilterTopBarTrailingKey,
     trailing = {

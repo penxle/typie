@@ -40,7 +40,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
@@ -72,7 +71,6 @@ import co.typie.ext.pressScale
 import co.typie.ext.separated
 import co.typie.ext.truncate
 import co.typie.ext.verticalScroll
-import co.typie.graphql.HomeScreen_Query
 import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.HomeRecentDocument_document
 import co.typie.icons.Lucide
@@ -83,22 +81,18 @@ import co.typie.route.Route
 import co.typie.shell.LocalTabState
 import co.typie.shell.MainBottomBarPillEntry
 import co.typie.shell.MainBottomBarPillKey
+import co.typie.shell.MainDrawerTrigger
+import co.typie.shell.MainDrawerTriggerLeadingKey
 import co.typie.shell.Tab
 import co.typie.ui.component.Divider
-import co.typie.ui.component.Img
 import co.typie.ui.component.Screen
-import co.typie.ui.component.SpacePopover
-import co.typie.ui.component.SpacePopoverLeadingKey
 import co.typie.ui.component.Text
 import co.typie.ui.component.bottombar.BottomBarAction
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.component.bottombar.ProvideBottomBar
-import co.typie.ui.component.popover.PopoverMenu
-import co.typie.ui.component.popover.PopoverPlacement
 import co.typie.ui.component.toast.LocalToast
 import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.skeleton.SkeletonDefaults
@@ -120,19 +114,6 @@ private val ContinueWritingPinHeight: Dp = 56.dp
 private val ContinueWritingPinGap: Dp = 12.dp
 private const val ContinueWritingPinDragFadeStrength = 0.6f
 
-private val AvatarPopoverAnchorHeight: Dp = 44.dp
-private val AvatarPopoverAvatarSize: Dp = 32.dp
-private val AvatarPopoverHeaderAvatarSize: Dp = 32.dp
-private val AvatarPopoverVerticalOffset: Dp =
-  (TopBarDefaults.Height - AvatarPopoverAnchorHeight) / 2
-private val AvatarPopoverScreenPadding =
-  PaddingValues(
-    start = TopBarDefaults.HorizontalPadding,
-    top = AvatarPopoverVerticalOffset,
-    end = TopBarDefaults.HorizontalPadding,
-    bottom = AvatarPopoverVerticalOffset + 100.dp,
-  )
-
 @Composable
 fun HomeScreen() {
   val model = viewModel { HomeViewModel() }
@@ -143,13 +124,9 @@ fun HomeScreen() {
   val toast = LocalToast.current
 
   ProvideTopBar(
-    leadingKey = SpacePopoverLeadingKey,
-    leading = { SpacePopover() },
-    trailing = {
-      Skeleton(enabled = model.query.state !is QueryState.Success) {
-        AvatarPopover(me = model.query.data.me)
-      }
-    },
+    leadingKey = MainDrawerTriggerLeadingKey,
+    leading = { MainDrawerTrigger() },
+    trailing = null,
   )
 
   ProvideBottomBar(
@@ -865,69 +842,5 @@ private fun ContinueWritingNotification(
         )
       }
     }
-  }
-}
-
-@Composable
-private fun AvatarPopoverAnchor(me: HomeScreen_Query.Me) {
-  Box(modifier = Modifier.size(AvatarPopoverAnchorHeight), contentAlignment = Alignment.Center) {
-    Img(
-      image = me.avatar.img_image,
-      modifier = Modifier.size(AvatarPopoverAvatarSize).clip(AppShapes.circle),
-    )
-  }
-}
-
-@Composable
-private fun AvatarPopoverHeader(me: HomeScreen_Query.Me) {
-  Row(
-    modifier =
-      Modifier.fillMaxWidth().height(TopBarDefaults.ButtonSize).padding(start = 8.dp, end = 16.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Img(
-      image = me.avatar.img_image,
-      modifier = Modifier.size(AvatarPopoverHeaderAvatarSize).clip(AppShapes.circle),
-    )
-
-    Spacer(Modifier.width(12.dp))
-
-    Column(modifier = Modifier.weight(1f)) {
-      Text(
-        me.name,
-        style = AppTheme.typography.label,
-        color = AppTheme.colors.textDefault,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-
-      Text(
-        me.email,
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textMuted,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-    }
-  }
-}
-
-@Composable
-private fun AvatarPopover(me: HomeScreen_Query.Me) {
-  val nav = Nav.current
-  val scope = rememberCoroutineScope()
-
-  PopoverMenu(
-    anchor = { AvatarPopoverAnchor(me) },
-    placement = PopoverPlacement.BelowEnd,
-    screenPadding = AvatarPopoverScreenPadding,
-    collapsedCornerRadius = AvatarPopoverAnchorHeight / 2,
-  ) {
-    item(content = { AvatarPopoverHeader(me) }) {
-      scope.launch { nav.navigate(Route.UpdateProfile) }
-    }
-    divider()
-    item(icon = Lucide.Settings, label = "설정") { scope.launch { nav.navigate(Route.Settings) } }
-    item(icon = Lucide.Ellipsis, label = "더 보기") { scope.launch { nav.navigate(Route.More) } }
   }
 }

@@ -2,6 +2,7 @@ package co.typie.shell
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -15,12 +16,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import co.typie.graphql.Apollo
 import co.typie.graphql.MainShell_SiteUpdateStream_Subscription
+import co.typie.navigation.Nav
 import co.typie.navigation.NavigationScaffold
 import co.typie.navigation.NavigationStack
 import co.typie.navigation.Navigator
 import co.typie.route.Route
 import co.typie.storage.Preference
 import co.typie.ui.component.bottombar.BottomBarState
+import co.typie.ui.component.drawer.Drawer
+import co.typie.ui.component.drawer.LocalDrawer
 import co.typie.ui.component.topbar.TopBarState
 import kotlinx.coroutines.flow.collect
 
@@ -32,10 +36,13 @@ fun MainShell(content: @Composable (Route) -> Unit) {
 
   val topBarState = remember { TopBarState() }
   val bottomBarState = remember { BottomBarState() }
+  val drawer = remember { Drawer() }
 
   val siteId = Preference.siteId
 
   DisposableEffect(Unit) { onDispose { navigators.values.forEach { it.clear() } } }
+
+  LaunchedEffect(currentTab) { if (drawer.isOpen) drawer.close() }
 
   LaunchedEffect(siteId) {
     if (siteId == null) {
@@ -49,25 +56,32 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   }
 
   CompositionLocalProvider(
-    LocalTabState provides TabState(currentTab = currentTab, onSelectTab = { currentTab = it })
+    LocalTabState provides TabState(currentTab = currentTab, onSelectTab = { currentTab = it }),
+    LocalDrawer provides drawer,
+    Nav provides activeNavigator,
   ) {
-    NavigationScaffold(
-      navigator = activeNavigator,
-      topBarState = topBarState,
-      bottomBarState = bottomBarState,
-    ) {
-      Crossfade(
-        targetState = currentTab,
-        modifier = Modifier.fillMaxSize(),
-        animationSpec = tween(200),
-      ) { tab ->
-        NavigationStack(
-          navigator = navigators[tab]!!,
-          topBarState = topBarState,
-          bottomBarState = bottomBarState,
-          content = content,
-        )
+    Box(Modifier.fillMaxSize()) {
+      NavigationScaffold(
+        navigator = activeNavigator,
+        topBarState = topBarState,
+        bottomBarState = bottomBarState,
+      ) {
+        Crossfade(
+          targetState = currentTab,
+          modifier = Modifier.fillMaxSize(),
+          animationSpec = tween(200),
+        ) { tab ->
+          NavigationStack(
+            navigator = navigators[tab]!!,
+            topBarState = topBarState,
+            bottomBarState = bottomBarState,
+            content = content,
+          )
+        }
       }
+
+      MainDrawerEdgeGestureHost(drawer)
+      MainDrawerOverlay(drawer)
     }
   }
 }

@@ -1,5 +1,14 @@
-query SpacePopover_Query {
+query MainDrawer_Query {
   me @catch(to: THROW) {
+    id
+    name
+    email
+
+    avatar {
+      id
+      ...Img_image
+    }
+
     sites {
       id
       name
@@ -13,7 +22,7 @@ query SpacePopover_Query {
   }
 }
 
-mutation SpacePopover_CreateSite_Mutation($input: CreateSiteInput!) {
+mutation MainDrawer_CreateSite_Mutation($input: CreateSiteInput!) {
   createSite(input: $input) {
     id
     name

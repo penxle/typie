@@ -99,7 +99,7 @@ private constructor(
             val error =
               response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
             if (error != null) {
-              Logger.e(error) { "GraphQL error" }
+              Logger.e(error) { "GraphQL error (${query.name()})" }
               state = QueryState.Error(error)
             }
           }
