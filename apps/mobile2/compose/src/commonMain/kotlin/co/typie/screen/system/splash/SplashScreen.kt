@@ -8,17 +8,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import co.typie.generated.resources.Res
 import co.typie.ui.component.Img
+import co.typie.ui.theme.AppColor
 
 @Composable
 fun SplashScreen() {
-  val isDark = isSystemInDarkTheme()
-  val backgroundColor = if (isDark) Color.Black else Color.White
-  val iconTint = if (isDark) Color.White else Color(0xFFFAAD00)
+  val (backgroundColor, iconColor) =
+    when (isSystemInDarkTheme()) {
+      true -> AppColor.light.gray.s950 to AppColor.white
+      false -> AppColor.white to AppColor.light.gray.s950
+    }
 
   Box(
     modifier = Modifier.fillMaxSize().background(backgroundColor),
@@ -28,7 +30,7 @@ fun SplashScreen() {
       url = Res.getUri("files/logos/full.svg"),
       modifier = Modifier.size(64.dp),
       contentScale = ContentScale.Fit,
-      color = iconTint,
+      color = iconColor,
     )
   }
 }
