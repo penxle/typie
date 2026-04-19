@@ -33,38 +33,38 @@ data class ColorPalette(
 data class ThemeColors(val gray: ColorScale, val heatmap: ColorScale, val palette: ColorPalette)
 
 object AppColor {
-  val white = Color(0xFFFFFDF8)
+  val white = Color(0xFFFEFDFA)
   val black = Color(0xFF000000)
 
   val light =
     ThemeColors(
       gray =
         ColorScale(
-          s50 = Color(0xFFFAF9F5),
-          s100 = Color(0xFFF2F1EB),
-          s200 = Color(0xFFE4E2D7),
-          s300 = Color(0xFFD2CFC4),
-          s400 = Color(0xFF9E9C91),
-          s500 = Color(0xFF73716A),
-          s600 = Color(0xFF54524C),
-          s700 = Color(0xFF3F3E38),
-          s800 = Color(0xFF2A2925),
-          s900 = Color(0xFF22211D),
-          s950 = Color(0xFF100F0C),
+          s50 = Color(0xFFF9F9F7),
+          s100 = Color(0xFFF1F0ED),
+          s200 = Color(0xFFE2E1DB),
+          s300 = Color(0xFFCFCEC8),
+          s400 = Color(0xFF9C9B95),
+          s500 = Color(0xFF71706D),
+          s600 = Color(0xFF52514E),
+          s700 = Color(0xFF3E3D3A),
+          s800 = Color(0xFF292927),
+          s900 = Color(0xFF21211F),
+          s950 = Color(0xFF0F0F0D),
         ),
       heatmap =
         ColorScale(
-          s50 = Color(0xFFFAF9F5),
-          s100 = Color(0xFFF2F1EB),
-          s200 = Color(0xFFE4E2D7),
-          s300 = Color(0xFFB9B6A8),
-          s400 = Color(0xFF868377),
-          s500 = Color(0xFF73716A),
-          s600 = Color(0xFF54524C),
-          s700 = Color(0xFF3F3E38),
-          s800 = Color(0xFF2A2925),
-          s900 = Color(0xFF22211D),
-          s950 = Color(0xFF100F0C),
+          s50 = Color(0xFFF9F9F7),
+          s100 = Color(0xFFF1F0ED),
+          s200 = Color(0xFFE2E1DB),
+          s300 = Color(0xFFB6B4AD),
+          s400 = Color(0xFF83827C),
+          s500 = Color(0xFF71706D),
+          s600 = Color(0xFF52514E),
+          s700 = Color(0xFF3E3D3A),
+          s800 = Color(0xFF292927),
+          s900 = Color(0xFF21211F),
+          s950 = Color(0xFF0F0F0D),
         ),
       palette =
         ColorPalette(
@@ -82,31 +82,31 @@ object AppColor {
     ThemeColors(
       gray =
         ColorScale(
-          s50 = Color(0xFFE6E4DC),
-          s100 = Color(0xFFCECCC2),
-          s200 = Color(0xFFB4B1A6),
-          s300 = Color(0xFF98968B),
-          s400 = Color(0xFF7A7974),
-          s500 = Color(0xFF54534E),
-          s600 = Color(0xFF3A3935),
-          s700 = Color(0xFF2A2925),
-          s800 = Color(0xFF1F1E1A),
-          s900 = Color(0xFF191815),
-          s950 = Color(0xFF13120F),
+          s50 = Color(0xFFE4E3DF),
+          s100 = Color(0xFFCCCBC6),
+          s200 = Color(0xFFB1B0AA),
+          s300 = Color(0xFF96958F),
+          s400 = Color(0xFF797876),
+          s500 = Color(0xFF535250),
+          s600 = Color(0xFF393937),
+          s700 = Color(0xFF292927),
+          s800 = Color(0xFF1E1E1C),
+          s900 = Color(0xFF181816),
+          s950 = Color(0xFF121210),
         ),
       heatmap =
         ColorScale(
-          s50 = Color(0xFFE6E4DC),
-          s100 = Color(0xFFCECCC2),
-          s200 = Color(0xFFB4B1A6),
-          s300 = Color(0xFF98968B),
-          s400 = Color(0xFF7A7974),
-          s500 = Color(0xFF6C6B65),
-          s600 = Color(0xFF3A3935),
-          s700 = Color(0xFF2A2925),
-          s800 = Color(0xFF1F1E1A),
-          s900 = Color(0xFF191815),
-          s950 = Color(0xFF13120F),
+          s50 = Color(0xFFE4E3DF),
+          s100 = Color(0xFFCCCBC6),
+          s200 = Color(0xFFB1B0AA),
+          s300 = Color(0xFF96958F),
+          s400 = Color(0xFF797876),
+          s500 = Color(0xFF6A6A67),
+          s600 = Color(0xFF393937),
+          s700 = Color(0xFF292927),
+          s800 = Color(0xFF1E1E1C),
+          s900 = Color(0xFF181816),
+          s950 = Color(0xFF121210),
         ),
       palette =
         ColorPalette(
