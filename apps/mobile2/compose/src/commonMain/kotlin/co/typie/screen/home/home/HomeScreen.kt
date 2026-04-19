@@ -64,7 +64,6 @@ import co.typie.datetime.timeAgo
 import co.typie.domain.entity.EntityIcon
 import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entity.formatEntityExcerpt
-import co.typie.editor.EditorValues.fontWeight
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -508,7 +507,7 @@ private fun ContinueWritingCard(doc: HomeRecentDocument_document, activeness: Fl
 
       Text(
         formatDocumentTitle(doc.title),
-        style = AppTheme.typography.heading.copy(fontFamily = PaperlogyFontFamily),
+        style = AppTheme.typography.heading,
         color = AppTheme.colors.textDefault,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
@@ -593,9 +592,6 @@ private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
       RecentDocumentSort.Opened -> docs
     }
 
-  val visible = sorted.take(10)
-  val hasMore = sorted.size > visible.size
-
   Column {
     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
@@ -605,10 +601,7 @@ private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
       withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = AppTheme.colors.textMuted)) {
         append("최근 문서")
         append("  ")
-        if (hasMore) append(visible.size.toString())
-      }
-      withStyle(SpanStyle(color = AppTheme.colors.textHint)) {
-        if (hasMore) append(" / ${sorted.size}") else append(sorted.size.toString())
+        append(docs.size.toString())
       }
     }
 
@@ -637,7 +630,7 @@ private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
     Spacer(Modifier.height(4.dp))
 
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-      visible.separated(separator = { Divider() }) { recentDocument ->
+      sorted.separated(separator = { Divider() }) { recentDocument ->
         RecentDocumentRow(doc = recentDocument)
       }
     }
@@ -720,7 +713,7 @@ private fun RecentDocumentRow(doc: HomeRecentDocument_document) {
 
         Text(
           formatDocumentTitle(doc.title),
-          style = AppTheme.typography.label.copy(fontFamily = PaperlogyFontFamily),
+          style = AppTheme.typography.label,
           color = AppTheme.colors.textDefault,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
@@ -877,7 +870,7 @@ private fun ContinueWritingNotification(
 
         Text(
           formatDocumentTitle(doc.title),
-          style = AppTheme.typography.label.copy(fontFamily = PaperlogyFontFamily),
+          style = AppTheme.typography.label,
           color = AppTheme.colors.textOnInverse,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
