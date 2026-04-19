@@ -21,7 +21,7 @@ actual class GoogleSingleSignOnProvider : SingleSignOnAdapter {
 
     return SingleSignOnCredential(
       provider = SingleSignOnProvider.GOOGLE,
-      params = mapOf("code" to googleIdTokenCredential.idToken),
+      params = mapOf("token" to googleIdTokenCredential.idToken),
     )
   }
 }
