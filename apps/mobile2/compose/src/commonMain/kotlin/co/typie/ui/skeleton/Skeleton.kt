@@ -43,6 +43,12 @@ object SkeletonDefaults {
     bone: Color = AppTheme.colors.skeletonBase,
     highlight: Color = AppTheme.colors.skeletonShimmer,
   ): SkeletonColors = SkeletonColors(bone = bone, highlight = highlight)
+
+  @Composable
+  fun inverseColors(
+    bone: Color = AppTheme.colors.skeletonBaseInverse,
+    highlight: Color = AppTheme.colors.skeletonShimmerInverse,
+  ): SkeletonColors = SkeletonColors(bone = bone, highlight = highlight)
 }
 
 @Composable

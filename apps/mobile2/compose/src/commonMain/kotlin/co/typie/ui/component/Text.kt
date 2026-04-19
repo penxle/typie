@@ -25,6 +25,7 @@ fun Text(
   color: Color = AppTheme.colors.textDefault,
   overflow: TextOverflow = TextOverflow.Clip,
   softWrap: Boolean = true,
+  minLines: Int = 1,
   maxLines: Int = Int.MAX_VALUE,
   textAlign: TextAlign = TextAlign.Start,
 ) {
@@ -35,6 +36,7 @@ fun Text(
     style = style.copy(color = color, textAlign = textAlign),
     overflow = overflow,
     softWrap = softWrap,
+    minLines = minLines,
     maxLines = maxLines,
     onTextLayout = { layoutResult = it },
   )
@@ -48,6 +50,7 @@ fun Text(
   color: Color = AppTheme.colors.textDefault,
   overflow: TextOverflow = TextOverflow.Clip,
   softWrap: Boolean = true,
+  minLines: Int = 1,
   maxLines: Int = Int.MAX_VALUE,
   textAlign: TextAlign = TextAlign.Start,
   inlineContent: Map<String, InlineTextContent> = mapOf(),
@@ -59,6 +62,7 @@ fun Text(
     style = style.copy(color = color, textAlign = textAlign),
     overflow = overflow,
     softWrap = softWrap,
+    minLines = minLines,
     maxLines = maxLines,
     inlineContent = inlineContent,
     onTextLayout = { layoutResult = it },

@@ -71,6 +71,8 @@ data class AppColors(
   // Skeleton
   val skeletonBase: Color,
   val skeletonShimmer: Color,
+  val skeletonBaseInverse: Color,
+  val skeletonShimmerInverse: Color,
 
   // Utility
   val scrim: Color,
@@ -104,6 +106,8 @@ val LightColors =
     shadowAmbient = Color(0x0A18160F),
     skeletonBase = AppColor.light.gray.s100,
     skeletonShimmer = Color(0xFFE9E8DF),
+    skeletonBaseInverse = AppColor.light.gray.s800,
+    skeletonShimmerInverse = AppColor.light.gray.s700,
     scrim = Color(0x521A180E),
     palette = AppColor.light.palette,
   )
@@ -133,6 +137,8 @@ val DarkColors =
     shadowAmbient = Color(0x1A000000),
     skeletonBase = AppColor.dark.gray.s800,
     skeletonShimmer = AppColor.dark.gray.s700,
+    skeletonBaseInverse = AppColor.light.gray.s100,
+    skeletonShimmerInverse = AppColor.light.gray.s200,
     scrim = Color(0x52000000),
     palette = AppColor.dark.palette,
   )

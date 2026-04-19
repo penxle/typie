@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -102,13 +101,16 @@ import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
+import co.typie.ui.skeleton.SkeletonDefaults
 import co.typie.ui.state.rememberPagerState
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.AppTypography.title
 import co.typie.ui.theme.PaperlogyFontFamily
+import dev.chrisbanes.haze.HazeLogger.enabled
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.coroutineScope
@@ -186,15 +188,17 @@ fun HomeScreen() {
     overlay =
       continueWritingDoc?.let { doc ->
         {
-          ContinueWritingNotification(
-            doc = doc,
-            onDismiss = { model.dismissContinueWriting() },
+          Skeleton(
+            enabled = model.query.state !is QueryState.Success,
             modifier =
               Modifier.align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = BottomBarDefaults.BarAreaHeight + ContinueWritingPinGap)
                 .padding(horizontal = 16.dp),
-          )
+            colors = SkeletonDefaults.inverseColors(),
+          ) {
+            ContinueWritingNotification(doc = doc, onDismiss = { model.dismissContinueWriting() })
+          }
         }
       },
   ) { contentPadding ->
@@ -381,82 +385,45 @@ private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
 }
 
 @Composable
-private fun SectionLabel(
-  title: String,
-  subtitle: String? = null,
-  trailing: @Composable (() -> Unit)? = null,
-  modifier: Modifier = Modifier,
-) {
-  val text = buildAnnotatedString {
-    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = AppTheme.colors.textMuted)) {
-      append(title)
-    }
-    if (subtitle != null) {
-      withStyle(SpanStyle(color = AppTheme.colors.textHint)) {
-        append("  ")
-        append(subtitle)
-      }
-    }
-  }
-
-  Row(
-    modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
-    verticalAlignment = Alignment.Bottom,
-  ) {
-    Skeleton.Keep { Text(text, style = AppTheme.typography.caption) }
-
-    Spacer(Modifier.weight(1f))
-
-    trailing?.invoke()
-  }
-}
-
-@Composable
 private fun ContinueWritingSection(docs: List<HomeRecentDocument_document>) {
-  val nav = Nav.current
-
   Column {
-    if (docs.size == 1) {
-      Skeleton.Keep { SectionLabel(title = "이어쓰기") }
+    val pagerState = rememberPagerState(pageCount = { docs.size })
 
-      Spacer(Modifier.height(12.dp))
-
-      Box(Modifier.padding(horizontal = 16.dp)) {
-        ContinueWritingCard(doc = docs[0], activeness = 1f)
+    Row(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+      verticalAlignment = Alignment.Bottom,
+    ) {
+      Skeleton.Keep {
+        Text("이어쓰기", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
       }
-    } else {
-      val pagerState = rememberPagerState(pageCount = { docs.size })
 
-      SectionLabel(
-        title = "이어쓰기",
-        trailing = {
-          val text = buildAnnotatedString {
-            withStyle(SpanStyle(color = AppTheme.colors.textMuted, fontWeight = FontWeight.Bold)) {
-              append((pagerState.currentPage + 1).toString())
-            }
+      Spacer(Modifier.weight(1f))
 
-            withStyle(SpanStyle(color = AppTheme.colors.textHint)) { append(" / ${docs.size}") }
-          }
-
-          Skeleton.Ignore { Text(text, style = AppTheme.typography.caption) }
-        },
-      )
-
-      Spacer(Modifier.height(12.dp))
-
-      HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
-        val progress = pagerState.currentPage + pagerState.currentPageOffsetFraction
-        val activeness = (1f - abs(progress - page)).coerceIn(0f, 1f)
-
-        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-          ContinueWritingCard(doc = docs[page], activeness = activeness)
+      val text = buildAnnotatedString {
+        withStyle(SpanStyle(color = AppTheme.colors.textMuted, fontWeight = FontWeight.Bold)) {
+          append((pagerState.currentPage + 1).toString())
         }
+
+        withStyle(SpanStyle(color = AppTheme.colors.textHint)) { append(" / ${docs.size}") }
       }
 
-      Spacer(Modifier.height(16.dp))
-
-      CarouselDots(pagerState = pagerState, modifier = Modifier.align(Alignment.CenterHorizontally))
+      Skeleton.Ignore { Text(text, style = AppTheme.typography.caption) }
     }
+
+    Spacer(Modifier.height(12.dp))
+
+    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
+      val progress = pagerState.currentPage + pagerState.currentPageOffsetFraction
+      val activeness = (1f - abs(progress - page)).coerceIn(0f, 1f)
+
+      Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        ContinueWritingCard(doc = docs[page], activeness = activeness)
+      }
+    }
+
+    Spacer(Modifier.height(16.dp))
+
+    CarouselDots(pagerState = pagerState, modifier = Modifier.align(Alignment.CenterHorizontally))
   }
 }
 
@@ -465,7 +432,7 @@ private fun ContinueWritingCard(doc: HomeRecentDocument_document, activeness: Fl
   val nav = Nav.current
   val breadcrumbSegments = doc.entity.ancestors.mapNotNull { it.node.onFolder?.name }
   val net = doc.characterCountChange.additions - doc.characterCountChange.deletions
-  val shape = AppShapes.rounded(20.dp)
+  val shape = AppShapes.rounded(AppShapes.xl)
   val shadowSpot = AppTheme.colors.shadowSpot
 
   val borderWidth = lerp(1.dp, 1.5.dp, activeness)
@@ -484,7 +451,7 @@ private fun ContinueWritingCard(doc: HomeRecentDocument_document, activeness: Fl
           .border(borderWidth, borderColor, shape)
           .clickable(onClick = { nav.navigate(Route.Editor(doc.entity.id)) })
           .pressScale()
-          .padding(horizontal = 20.dp, vertical = 18.dp)
+          .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         EntityIcon(entity = doc.entity.entityIcon_entity, modifier = Modifier.size(14.dp))
@@ -503,28 +470,29 @@ private fun ContinueWritingCard(doc: HomeRecentDocument_document, activeness: Fl
         )
       }
 
-      Spacer(Modifier.height(12.dp))
+      Spacer(Modifier.height(8.dp))
 
       Text(
         formatDocumentTitle(doc.title),
         style = AppTheme.typography.heading,
         color = AppTheme.colors.textDefault,
-        maxLines = 2,
+        maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
 
-      Spacer(Modifier.height(10.dp))
+      Spacer(Modifier.height(12.dp))
 
       Text(
         formatEntityExcerpt(doc.excerpt),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 94.dp),
+        modifier = Modifier.fillMaxWidth(),
         style = AppTheme.typography.body,
         color = AppTheme.colors.textMuted,
+        minLines = 4,
         maxLines = 4,
         overflow = TextOverflow.Ellipsis,
       )
 
-      Spacer(Modifier.height(14.dp))
+      Spacer(Modifier.height(12.dp))
 
       DashedDivider()
 
@@ -536,6 +504,7 @@ private fun ContinueWritingCard(doc: HomeRecentDocument_document, activeness: Fl
             withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = AppTheme.colors.textMuted)) {
               append(doc.characterCount.comma)
             }
+
             withStyle(SpanStyle(color = AppTheme.colors.textHint)) { append(" 자") }
           },
           style = AppTheme.typography.caption,
@@ -597,20 +566,20 @@ private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
 
     Spacer(Modifier.height(16.dp))
 
-    val headerText = buildAnnotatedString {
-      withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = AppTheme.colors.textMuted)) {
-        append("최근 문서")
-        append("  ")
-        append(docs.size.toString())
-      }
-    }
-
     Skeleton.Keep {
       Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.Bottom,
       ) {
-        Text(headerText, style = AppTheme.typography.caption)
+        Text("최근 문서", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
+
+        Spacer(Modifier.width(4.dp))
+
+        Text(
+          docs.size.toString(),
+          style = AppTheme.typography.caption,
+          color = AppTheme.colors.textHint,
+        )
 
         Spacer(Modifier.weight(1f))
 
@@ -637,16 +606,23 @@ private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
 
     Spacer(Modifier.height(16.dp))
 
-    Row(
-      modifier =
-        Modifier.fillMaxWidth()
-          .clickable(onClick = { tabState.onSelectTab(Tab.Space) })
-          .padding(horizontal = 16.dp, vertical = 8.dp),
-      horizontalArrangement = Arrangement.Center,
-    ) {
-      Text("스페이스에서 모든 문서 보기", style = AppTheme.typography.action, color = AppTheme.colors.textMuted)
+    InteractionScope {
+      Row(
+        modifier =
+          Modifier.fillMaxWidth()
+            .clickable(onClick = { tabState.onSelectTab(Tab.Space) })
+            .pressScale()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+      ) {
+        Text(
+          "스페이스에서 모든 문서 보기",
+          style = AppTheme.typography.action,
+          color = AppTheme.colors.textMuted,
+        )
 
-      Icon(Lucide.ArrowRight, modifier = Modifier.size(16.dp))
+        Icon(Lucide.ArrowRight, modifier = Modifier.size(16.dp))
+      }
     }
   }
 }
@@ -655,20 +631,20 @@ private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
 private fun SortToggle(mode: RecentDocumentSort, onToggle: suspend () -> Unit) {
   InteractionScope {
     Row(
-      modifier = Modifier.clickable(onClick = onToggle).padding(horizontal = 2.dp, vertical = 4.dp),
+      modifier =
+        Modifier.clickable(onClick = onToggle)
+          .pressScale()
+          .padding(horizontal = 2.dp, vertical = 4.dp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
       Icon(
         icon = Lucide.ArrowDownUp,
-        modifier = Modifier.size(11.dp),
+        modifier = Modifier.size(13.dp),
         tint = AppTheme.colors.textHint,
       )
-      Text(
-        mode.label,
-        style = AppTheme.typography.micro.copy(fontWeight = FontWeight.SemiBold),
-        color = AppTheme.colors.textHint,
-      )
+
+      Text(mode.label, style = AppTheme.typography.caption, color = AppTheme.colors.textHint)
     }
   }
 }
@@ -859,12 +835,14 @@ private fun ContinueWritingNotification(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Column(modifier = Modifier.weight(1f)) {
-        Text(
-          "마지막 글 이어쓰기",
-          style = AppTheme.typography.micro,
-          color = AppTheme.colors.textHint,
-          maxLines = 1,
-        )
+        Skeleton.Keep {
+          Text(
+            "마지막 글 이어쓰기",
+            style = AppTheme.typography.micro,
+            color = AppTheme.colors.textHint,
+            maxLines = 1,
+          )
+        }
 
         Spacer(Modifier.height(2.dp))
 
@@ -879,11 +857,13 @@ private fun ContinueWritingNotification(
 
       Spacer(Modifier.width(12.dp))
 
-      Icon(
-        icon = Lucide.ArrowRight,
-        modifier = Modifier.size(18.dp),
-        tint = AppTheme.colors.textOnInverse,
-      )
+      Skeleton.Ignore {
+        Icon(
+          icon = Lucide.ArrowRight,
+          modifier = Modifier.size(18.dp),
+          tint = AppTheme.colors.textOnInverse,
+        )
+      }
     }
   }
 }
