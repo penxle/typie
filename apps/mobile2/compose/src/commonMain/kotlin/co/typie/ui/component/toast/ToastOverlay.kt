@@ -26,9 +26,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,13 +44,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import co.typie.ext.safeDrawing
-import co.typie.ext.toDp
-import co.typie.ext.toPx
+import co.typie.ext.ime
+import co.typie.ext.navigationBars
 import co.typie.icons.Lucide
 import co.typie.icons.Typie
 import co.typie.ui.component.Text
@@ -71,18 +70,19 @@ fun ToastOverlay() {
   val toastState = toast.state
 
   val density = LocalDensity.current
-  val safeDrawingBottom = WindowInsets.safeDrawing.getBottom(density).toDp(density)
+  val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+  val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
 
   var rootHeight by remember { mutableStateOf(0f) }
-  val fallbackY = rootHeight - with(density) { (safeDrawingBottom + 12.dp).toPx() }
+  val fallbackY =
+    rootHeight - with(density) { (maxOf(navigationBarsBottom, imeBottom) + 12.dp).toPx() }
   val targetY = toast.anchorY ?: fallbackY
 
-  val animatedAnchorY by
+  val animatedTargetY by
     animateFloatAsState(
       targetY,
       spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
     )
-  val bottomOffset = with(density) { (rootHeight - animatedAnchorY).toDp() } + 12.dp
 
   var visibleState by remember { mutableStateOf<ToastState?>(null) }
 
@@ -94,7 +94,7 @@ fun ToastOverlay() {
     visibleState?.let { state ->
       AnimatedToast(
         state = state,
-        bottomOffset = bottomOffset,
+        offset = animatedTargetY,
         dismissed = toastState == null,
         onDismiss = {
           visibleState = null
@@ -108,22 +108,16 @@ fun ToastOverlay() {
 @Composable
 private fun AnimatedToast(
   state: ToastState,
-  bottomOffset: Dp,
+  offset: Float,
   dismissed: Boolean,
   onDismiss: () -> Unit,
 ) {
-  AppTheme.colors
   val toastSurface =
-    if (
-      when (AppTheme.themeMode) {
-        ResolvedThemeMode.Light -> false
-        ResolvedThemeMode.Dark -> true
-      }
-    )
-      AppColor.dark.gray.s500
-    else AppColor.light.gray.s600
+    when (AppTheme.themeMode) {
+      ResolvedThemeMode.Light -> AppColor.light.gray.s600
+      ResolvedThemeMode.Dark -> AppColor.dark.gray.s500
+    }
   val toastText = AppColor.white
-  val density = LocalDensity.current
   val alpha = remember { Animatable(0f) }
   val slideOffset = remember { Animatable(1f) }
 
@@ -159,71 +153,69 @@ private fun AnimatedToast(
 
   Box(
     modifier =
-      Modifier.fillMaxSize().graphicsLayer {
-        this.alpha = alpha.value
-        translationY = slideOffset.value * 4.dp.toPx(density)
-      },
-    contentAlignment = Alignment.BottomCenter,
+      Modifier.layout { measurable, constraints ->
+          val placeable = measurable.measure(constraints)
+          layout(placeable.width, placeable.height) { placeable.place(0, -placeable.height) }
+        }
+        .graphicsLayer {
+          this.alpha = alpha.value
+          translationY = offset + slideOffset.value * 4.dp.toPx()
+        }
+        .padding(horizontal = 16.dp)
+        .fillMaxWidth()
+        .clip(AppShapes.rounded(AppShapes.lg))
+        .hazeEffect(LocalHazeState.current)
+        .background(toastSurface.copy(alpha = .6f))
+        .padding(horizontal = 24.dp, vertical = 16.dp)
   ) {
-    Box(
-      modifier =
-        Modifier.offset(y = -bottomOffset)
-          .padding(horizontal = 16.dp)
-          .fillMaxWidth()
-          .clip(AppShapes.rounded(AppShapes.lg))
-          .hazeEffect(LocalHazeState.current)
-          .background(toastSurface.copy(alpha = .6f))
-          .padding(horizontal = 24.dp, vertical = 16.dp)
-    ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Crossfade(targetState = state.type, animationSpec = tween(200)) { type ->
-          when (type) {
-            ToastType.Loading -> ToastSpinner()
-            else -> {
-              Box(
-                modifier =
-                  Modifier.size(20.dp)
-                    .background(
-                      when (type) {
-                        ToastType.Success -> AppTheme.colors.success
-                        ToastType.Error -> AppTheme.colors.danger
-                        else -> AppTheme.colors.textDefault
-                      },
-                      AppShapes.circle,
-                    ),
-                contentAlignment = Alignment.Center,
-              ) {
-                Icon(
-                  icon =
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Crossfade(targetState = state.type, animationSpec = tween(200)) { type ->
+        when (type) {
+          ToastType.Loading -> ToastSpinner()
+          else -> {
+            Box(
+              modifier =
+                Modifier.size(20.dp)
+                  .background(
                     when (type) {
-                      ToastType.Success -> Lucide.Check
-                      ToastType.Error -> Typie.Exclamation
-                      else -> Lucide.Bell
+                      ToastType.Success -> AppTheme.colors.success
+                      ToastType.Error -> AppTheme.colors.danger
+                      else -> AppTheme.colors.textDefault
                     },
-                  strokeWidth =
-                    when (type) {
-                      ToastType.Success -> 4f
-                      ToastType.Error -> 1.75f
-                      else -> 2.5f
-                    },
-                  tint = toastText,
-                  modifier = Modifier.size(12.dp),
-                )
-              }
+                    AppShapes.circle,
+                  ),
+              contentAlignment = Alignment.Center,
+            ) {
+              Icon(
+                icon =
+                  when (type) {
+                    ToastType.Success -> Lucide.Check
+                    ToastType.Error -> Typie.Exclamation
+                    else -> Lucide.Bell
+                  },
+                strokeWidth =
+                  when (type) {
+                    ToastType.Success -> 4f
+                    ToastType.Error -> 1.75f
+                    else -> 2.5f
+                  },
+                tint = toastText,
+                modifier = Modifier.size(12.dp),
+              )
             }
           }
         }
-        Spacer(Modifier.width(8.dp))
-        AnimatedContent(
-          targetState = state.message,
-          transitionSpec = {
-            (slideInVertically { it } + fadeIn(tween(200))) togetherWith
-              (slideOutVertically { -it } + fadeOut(tween(200))) using
-              SizeTransform(clip = false)
-          },
-        ) { message ->
-          Text(text = message, style = AppTheme.typography.caption, color = toastText)
-        }
+      }
+      Spacer(Modifier.width(8.dp))
+      AnimatedContent(
+        targetState = state.message,
+        transitionSpec = {
+          (slideInVertically { it } + fadeIn(tween(200))) togetherWith
+            (slideOutVertically { -it } + fadeOut(tween(200))) using
+            SizeTransform(clip = false)
+        },
+      ) { message ->
+        Text(text = message, style = AppTheme.typography.caption, color = toastText)
       }
     }
   }
