@@ -165,16 +165,22 @@ fun HomeScreen() {
     overlay =
       continueWritingDoc?.let { doc ->
         {
-          Skeleton(
-            enabled = model.query.state !is QueryState.Success,
+          Column(
             modifier =
               Modifier.align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = BottomBarDefaults.BarAreaHeight + ContinueWritingPinGap)
                 .padding(horizontal = 16.dp),
-            colors = SkeletonDefaults.inverseColors(),
+            horizontalAlignment = Alignment.CenterHorizontally,
           ) {
-            ContinueWritingNotification(doc = doc, onDismiss = { model.dismissContinueWriting() })
+            ToastAnchor()
+
+            Skeleton(
+              enabled = model.query.state !is QueryState.Success,
+              colors = SkeletonDefaults.inverseColors(),
+            ) {
+              ContinueWritingNotification(doc = doc, onDismiss = { model.dismissContinueWriting() })
+            }
           }
         }
       },
@@ -200,12 +206,14 @@ fun HomeScreen() {
       )
     }
 
-    ToastAnchor(
-      modifier =
-        Modifier.align(Alignment.BottomCenter)
-          .navigationBarsPadding()
-          .padding(bottom = BottomBarDefaults.BarAreaHeight)
-    )
+    if (continueWritingDoc == null) {
+      ToastAnchor(
+        modifier =
+          Modifier.align(Alignment.BottomCenter)
+            .navigationBarsPadding()
+            .padding(bottom = BottomBarDefaults.BarAreaHeight)
+      )
+    }
   }
 }
 
