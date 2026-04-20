@@ -177,20 +177,23 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
 
     val offsetCorrection = remember { Animatable(0f) }
 
-    LaunchedEffect(anchors) {
-      val prevOffset = anchoredState.offset
-      anchoredState.updateAnchors(anchors, anchoredState.targetValue)
-      val newOffset = anchoredState.offset
+    if (isIntrinsic) {
+      remember(anchors) { anchoredState.updateAnchors(anchors, anchoredState.targetValue) }
+    } else {
+      LaunchedEffect(anchors) {
+        val prevOffset = anchoredState.offset
+        anchoredState.updateAnchors(anchors, anchoredState.targetValue)
+        val newOffset = anchoredState.offset
 
-      if (
-        !isIntrinsic &&
+        if (
           !prevOffset.isNaN() &&
-          !newOffset.isNaN() &&
-          prevOffset != newOffset &&
-          anchoredState.currentValue != ANCHOR_HIDDEN
-      ) {
-        offsetCorrection.snapTo(prevOffset - newOffset)
-        offsetCorrection.animateTo(0f, SheetAnimationSpec)
+            !newOffset.isNaN() &&
+            prevOffset != newOffset &&
+            anchoredState.currentValue != ANCHOR_HIDDEN
+        ) {
+          offsetCorrection.snapTo(prevOffset - newOffset)
+          offsetCorrection.animateTo(0f, SheetAnimationSpec)
+        }
       }
     }
 
@@ -294,18 +297,19 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
                 maxOf((constraints.maxHeight - animatedOffsetPx).coerceAtLeast(0), minStopHeightPx)
               }
             val placeable = measurable.measure(constraints.copy(maxHeight = maxH))
+            val measuredIntrinsicOffsetPx =
+              maxOf(constraints.maxHeight - placeable.height, intrinsicTopLimit)
+            val stateVisibleOffsetPx =
+              anchoredState.anchors.positionOf(ANCHOR_VISIBLE).takeIf { !it.isNaN() }?.roundToInt()
             val shouldUseMeasuredIntrinsicOffset =
               isIntrinsic &&
                 anchoredState.settledValue == ANCHOR_VISIBLE &&
                 anchoredState.targetValue == ANCHOR_VISIBLE &&
-                contentHeightPx > 0f &&
-                contentHeightPx != placeable.height.toFloat()
+                stateVisibleOffsetPx != null &&
+                stateVisibleOffsetPx != measuredIntrinsicOffsetPx &&
+                animatedOffsetPx == stateVisibleOffsetPx
             val currentOffset =
-              if (shouldUseMeasuredIntrinsicOffset) {
-                maxOf(constraints.maxHeight - placeable.height, intrinsicTopLimit)
-              } else {
-                animatedOffsetPx
-              }
+              if (shouldUseMeasuredIntrinsicOffset) measuredIntrinsicOffsetPx else animatedOffsetPx
             layout(placeable.width, placeable.height) { placeable.place(0, currentOffset) }
           }
           .anchoredDraggable(
@@ -313,7 +317,14 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
             orientation = Orientation.Vertical,
             overscrollEffect = dragOverscrollEffect,
           )
-          .thenIf(isIntrinsic) { onSizeChanged { contentHeightPx = it.height.toFloat() } }
+          .thenIf(isIntrinsic) {
+            onSizeChanged {
+              val measuredHeightPx = it.height.toFloat()
+              if (contentHeightPx != measuredHeightPx) {
+                contentHeightPx = measuredHeightPx
+              }
+            }
+          }
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
     ) {
       CompositionLocalProvider(LocalViewModelStoreOwner provides viewModelStoreOwner) {
