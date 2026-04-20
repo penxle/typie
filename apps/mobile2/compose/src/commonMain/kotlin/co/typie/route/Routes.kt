@@ -2,6 +2,7 @@ package co.typie.route
 
 import androidx.compose.runtime.Composable
 import co.typie.screen.auth.login.LoginScreen
+import co.typie.screen.document.document.DocumentScreen
 import co.typie.screen.editor.editor.EditorScreen
 import co.typie.screen.home.home.HomeScreen
 import co.typie.screen.home.search.SearchScreen
@@ -65,7 +66,8 @@ fun MainRoutes(route: Route) {
     is Route.SpaceSettings -> SpaceSettingsScreen()
     is Route.Trash -> TrashScreen(entityId = route.entityId)
     is Route.Folder -> FolderScreen(entityId = route.entityId)
-    is Route.Editor -> EditorScreen(slug = route.entityId)
+    is Route.Editor -> EditorScreen(entityId = route.entityId)
+    is Route.Document -> DocumentScreen(entityId = route.entityId)
     else -> {}
   }
 }

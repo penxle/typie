@@ -1,0 +1,30 @@
+query DocumentScreen_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+    depth
+    url
+    visibility
+    availability
+    ...EntityIcon_entity
+    ...EntityBreadcrumb_entity
+
+    node {
+      __typename
+
+      ... on Document {
+        id
+        title
+        subtitle
+        type
+        locked
+        createdAt
+        updatedAt
+        characterCount
+        characterCountChange {
+          additions
+          deletions
+        }
+      }
+    }
+  }
+}

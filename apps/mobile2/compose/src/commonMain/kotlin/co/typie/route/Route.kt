@@ -61,6 +61,8 @@ sealed interface Route {
 
   data class Editor(val entityId: String) : Route
 
+  data class Document(val entityId: String) : Route
+
   data object Login : Route
 }
 

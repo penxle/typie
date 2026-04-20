@@ -171,21 +171,36 @@ fun NavigationStack(
     snapshotFlow { navigator.popRequested }
       .collect { requested ->
         if (requested && animState == AnimState.Idle) {
-          behindRoute = navigator.previous
-          behindRoute?.let { transitionStyle = visibleRoute.transitionStyleTo(it) }
+          val popTarget = navigator.peekPopTarget()
+          val targetRoute = popTarget ?: navigator.previous
+          if (targetRoute == null) {
+            navigator.consumePopRequest()
+            navigator.completeTransition()
+            return@collect
+          }
+
+          behindRoute = targetRoute
+          transitionStyle = visibleRoute.transitionStyleTo(targetRoute)
           animState = AnimState.Pop
           progress.snapTo(0f)
           progress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
-          val poppedRoute = visibleRoute
-          navigator.performPop()
+          val removedRoutes =
+            if (popTarget != null) {
+              navigator.performPopTo(popTarget)
+            } else {
+              navigator.performPop()
+              listOf(visibleRoute)
+            }
           navigator.consumePopRequest()
           visibleRoute = navigator.current
           behindRoute = null
           animState = AnimState.Idle
-          topBarState.clearRoute(poppedRoute)
-          exitTopBarState.clearRoute(poppedRoute)
-          bottomBarState?.clearRoute(poppedRoute)
-          exitBottomBarState?.clearRoute(poppedRoute)
+          removedRoutes.forEach { removedRoute ->
+            topBarState.clearRoute(removedRoute)
+            exitTopBarState.clearRoute(removedRoute)
+            bottomBarState?.clearRoute(removedRoute)
+            exitBottomBarState?.clearRoute(removedRoute)
+          }
           navigator.completeTransition()
         }
       }

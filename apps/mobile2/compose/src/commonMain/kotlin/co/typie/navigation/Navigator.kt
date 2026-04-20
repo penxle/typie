@@ -36,6 +36,8 @@ class Navigator(startRoute: Route) {
   var popRequested: Boolean by mutableStateOf(false)
     private set
 
+  private var pendingPopTarget: Route? = null
+
   private var transitionCompletion: CompletableDeferred<Unit>? = null
 
   val isTransitioning: Boolean
@@ -71,12 +73,16 @@ class Navigator(startRoute: Route) {
     if (isTransitioning) return
     val deferred = CompletableDeferred<Unit>()
     transitionCompletion = deferred
+    pendingPopTarget = null
     popRequested = true
     deferred.await()
   }
 
   internal fun requestPop() {
-    if (canPop) popRequested = true
+    if (canPop) {
+      pendingPopTarget = null
+      popRequested = true
+    }
   }
 
   internal fun completeTransition() {
@@ -86,7 +92,10 @@ class Navigator(startRoute: Route) {
 
   internal fun consumePopRequest() {
     popRequested = false
+    pendingPopTarget = null
   }
+
+  internal fun peekPopTarget(): Route? = pendingPopTarget
 
   internal fun performPop(): Boolean {
     if (_stack.size <= 1) return false
@@ -96,13 +105,30 @@ class Navigator(startRoute: Route) {
     return true
   }
 
-  fun popTo(route: Route) {
+  internal fun performPopTo(route: Route): List<Route> {
     val index = _stack.lastIndexOf(route)
-    if (index < 0) return
+    if (index < 0) return emptyList()
+    val removedRoutes = mutableListOf<Route>()
     while (_stack.size > index + 1) {
       val removed = _stack.removeLast()
       viewModelStores.remove(removed)?.clear()
+      removedRoutes += removed
     }
+    if (removedRoutes.isNotEmpty()) {
+      lastOperation = NavOperation.Pop
+    }
+    return removedRoutes
+  }
+
+  suspend fun popTo(route: Route) {
+    val index = _stack.lastIndexOf(route)
+    if (index < 0 || index == _stack.lastIndex) return
+    if (isTransitioning) return
+    val deferred = CompletableDeferred<Unit>()
+    transitionCompletion = deferred
+    pendingPopTarget = route
+    popRequested = true
+    deferred.await()
   }
 
   fun popToRoot() {

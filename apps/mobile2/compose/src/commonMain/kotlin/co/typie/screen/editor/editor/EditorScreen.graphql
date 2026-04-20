@@ -1,0 +1,16 @@
+query EditorScreen_Query($entityId: ID!) {
+  entity(entityId: $entityId) @catch(to: THROW) {
+    id
+    ...EntityIcon_entity
+
+    node {
+      __typename
+
+      ... on Document {
+        id
+        title
+        subtitle
+      }
+    }
+  }
+}
