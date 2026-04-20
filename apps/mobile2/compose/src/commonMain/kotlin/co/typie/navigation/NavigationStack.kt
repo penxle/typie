@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
@@ -119,6 +119,8 @@ fun NavigationStack(
   val progress = remember { Animatable(0f) }
 
   var lastDragAmount by remember { mutableStateOf(0f) }
+  // 전환 중 blocker가 consume에서 제외할 포인터(= back-swipe를 소유한 포인터).
+  var activeDragPointerId by remember { mutableStateOf<PointerId?>(null) }
 
   fun startPopDrag() {
     val prev = navigator.previous ?: return
@@ -311,6 +313,8 @@ fun NavigationStack(
               routeContentFor(behindRoute!!).invoke()
             }
           }
+          // 전환 중 behind 화면 터치 차단 (fade는 dim overlay가 없으므로 별도 pointerIgnore)
+          Box(Modifier.fillMaxSize().pointerIgnore())
         } else {
           Box(
             Modifier.fillMaxSize().graphicsLayer {
@@ -413,14 +417,19 @@ fun NavigationStack(
                     claimed = true
                   }
                 }
-                startPopDrag()
-                updatePopDrag(overSlopX)
-                val success =
-                  horizontalDrag(down.id) { change ->
-                    updatePopDrag(change.positionChange().x)
-                    change.consume()
-                  }
-                if (success) finishPopDrag() else cancelPopDrag()
+                activeDragPointerId = down.id
+                try {
+                  startPopDrag()
+                  updatePopDrag(overSlopX)
+                  val success =
+                    horizontalDrag(down.id) { change ->
+                      updatePopDrag(change.positionChange().x)
+                      change.consume()
+                    }
+                  if (success) finishPopDrag() else cancelPopDrag()
+                } finally {
+                  activeDragPointerId = null
+                }
               }
             }
           }
@@ -466,18 +475,64 @@ fun NavigationStack(
         CompositionLocalProvider(*mainProviders.toTypedArray()) {
           routeContentFor(mainRoute).invoke()
         }
+        // 전환/드래그 중 front 화면 내부로 터치가 흘러가지 않도록 차단.
+        // Initial pass에서 consume하여 scrollable 등이 Main pass에서 unconsumed 상태로
+        // 보지 못하게 한다. 단 back-swipe를 소유한 포인터는 제외해야 horizontalDrag가 유지된다.
+        if (animState != AnimState.Idle) {
+          Box(
+            Modifier.fillMaxSize().pointerInput(Unit) {
+              awaitPointerEventScope {
+                while (true) {
+                  val event = awaitPointerEvent(PointerEventPass.Initial)
+                  val excludedId = activeDragPointerId
+                  event.changes.forEach { change ->
+                    if (excludedId == null || change.id != excludedId) {
+                      change.consume()
+                    }
+                  }
+                }
+              }
+            }
+          )
+        }
       }
 
       // 엣지 제스처 감지 영역 (child consume 여부 무관하게 pop 우선)
       if (navigator.canPop && (animState == AnimState.Idle || animState == AnimState.Dragging)) {
         Box(
           Modifier.fillMaxHeight().width(20.dp).align(Alignment.CenterStart).pointerInput(Unit) {
-            detectHorizontalDragGestures(
-              onDragStart = { startPopDrag() },
-              onDragEnd = { finishPopDrag() },
-              onDragCancel = { cancelPopDrag() },
-              onHorizontalDrag = { _, dragAmount -> updatePopDrag(dragAmount) },
-            )
+            val slop = viewConfiguration.touchSlop
+            awaitEachGesture {
+              val down = awaitFirstDown(requireUnconsumed = false)
+              var overSlopX = 0f
+              var claimed = false
+              while (!claimed) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                val change =
+                  event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
+                if (!change.pressed) return@awaitEachGesture
+                if (change.isConsumed) return@awaitEachGesture
+                val dx = change.position.x - down.position.x
+                if (abs(dx) >= slop) {
+                  change.consume()
+                  overSlopX = dx
+                  claimed = true
+                }
+              }
+              activeDragPointerId = down.id
+              try {
+                startPopDrag()
+                updatePopDrag(overSlopX)
+                val success =
+                  horizontalDrag(down.id) { change ->
+                    updatePopDrag(change.positionChange().x)
+                    change.consume()
+                  }
+                if (success) finishPopDrag() else cancelPopDrag()
+              } finally {
+                activeDragPointerId = null
+              }
+            }
           }
         )
       }
