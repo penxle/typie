@@ -7,7 +7,6 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -37,7 +36,7 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.navigationBarsPadding
+import co.typie.ext.pointerIgnore
 import co.typie.ext.pressScale
 import co.typie.ext.statusBarsPadding
 import co.typie.ext.verticalScroll
@@ -411,6 +411,10 @@ fun MainDrawerOverlay(drawer: Drawer) {
       if (panelWidthPx == 0f) 0f else ((rawOffset + panelWidthPx) / panelWidthPx).coerceIn(0f, 1f)
 
     if (progress > 0f) {
+      // Drawer가 열리는 중/열린 상태에서 아래 화면으로 터치(스크롤 등)가 새지 않도록 차단.
+      // scrim보다 먼저 composed → scrim이 top-drawn → Main pass에서 scrim이 먼저 click/cancel 판정 후
+      // 이 overlay가 나머지 drag 이벤트를 consume한다. scrim의 clickable(close)은 유지.
+      Box(Modifier.fillMaxSize().pointerIgnore())
       Box(
         modifier =
           Modifier.fillMaxSize()
@@ -501,12 +505,19 @@ fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
         drawer.state.dispatchRawDelta(overSlopX)
       }
 
-      horizontalDrag(down.id) { change ->
-        val dx = change.positionChange().x
-        if (dx != 0f) {
-          drawer.state.dispatchRawDelta(dx)
-          change.consume()
+      // MainDrawerOverlay의 blocker가 Main pass에서 consume하므로 isConsumed 무시.
+      // 자식 scrollable이 수직 slop을 잡아 제스처가 취소되지 않도록 우리가 계속 consume.
+      var dragging = true
+      while (dragging) {
+        val event = awaitPointerEvent(PointerEventPass.Main)
+        val change = event.changes.fastFirstOrNull { it.id == down.id }
+        if (change == null) {
+          dragging = false
+          continue
         }
+        val dx = change.positionChangeIgnoreConsumed().x
+        if (dx != 0f) drawer.state.dispatchRawDelta(dx)
+        if (!change.pressed) dragging = false else change.consume()
       }
 
       scope.launch { drawer.settle() }

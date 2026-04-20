@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,9 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -119,8 +117,6 @@ fun NavigationStack(
   val progress = remember { Animatable(0f) }
 
   var lastDragAmount by remember { mutableStateOf(0f) }
-  // 전환 중 blocker가 consume에서 제외할 포인터(= back-swipe를 소유한 포인터).
-  var activeDragPointerId by remember { mutableStateOf<PointerId?>(null) }
 
   fun startPopDrag() {
     val prev = navigator.previous ?: return
@@ -417,19 +413,22 @@ fun NavigationStack(
                     claimed = true
                   }
                 }
-                activeDragPointerId = down.id
-                try {
-                  startPopDrag()
-                  updatePopDrag(overSlopX)
-                  val success =
-                    horizontalDrag(down.id) { change ->
-                      updatePopDrag(change.positionChange().x)
-                      change.consume()
-                    }
-                  if (success) finishPopDrag() else cancelPopDrag()
-                } finally {
-                  activeDragPointerId = null
+                startPopDrag()
+                updatePopDrag(overSlopX)
+                // blocker가 Main pass 전에 consume하므로 isConsumed를 무시하고 loop.
+                // 자식 scrollable이 이 포인터를 take over하지 못하도록 우리가 계속 consume.
+                var dragging = true
+                while (dragging) {
+                  val event = awaitPointerEvent(PointerEventPass.Main)
+                  val change = event.changes.fastFirstOrNull { it.id == down.id }
+                  if (change == null) {
+                    dragging = false
+                    continue
+                  }
+                  updatePopDrag(change.positionChangeIgnoreConsumed().x)
+                  if (!change.pressed) dragging = false else change.consume()
                 }
+                finishPopDrag()
               }
             }
           }
@@ -475,25 +474,11 @@ fun NavigationStack(
         CompositionLocalProvider(*mainProviders.toTypedArray()) {
           routeContentFor(mainRoute).invoke()
         }
-        // 전환/드래그 중 front 화면 내부로 터치가 흘러가지 않도록 차단.
-        // Initial pass에서 consume하여 scrollable 등이 Main pass에서 unconsumed 상태로
-        // 보지 못하게 한다. 단 back-swipe를 소유한 포인터는 제외해야 horizontalDrag가 유지된다.
+        // 전환/드래그 중 front 화면 내부로 터치가 흘러가지 않도록 consume.
+        // Main pass 기준 overlay가 sibling routeContent보다 나중에 composed → 먼저 처리되어 consume.
+        // Drag 로직은 Main pass에서 positionChangeIgnoreConsumed로 계속 추적하므로 영향받지 않는다.
         if (animState != AnimState.Idle) {
-          Box(
-            Modifier.fillMaxSize().pointerInput(Unit) {
-              awaitPointerEventScope {
-                while (true) {
-                  val event = awaitPointerEvent(PointerEventPass.Initial)
-                  val excludedId = activeDragPointerId
-                  event.changes.forEach { change ->
-                    if (excludedId == null || change.id != excludedId) {
-                      change.consume()
-                    }
-                  }
-                }
-              }
-            }
-          )
+          Box(Modifier.fillMaxSize().pointerIgnore())
         }
       }
 
@@ -519,19 +504,20 @@ fun NavigationStack(
                   claimed = true
                 }
               }
-              activeDragPointerId = down.id
-              try {
-                startPopDrag()
-                updatePopDrag(overSlopX)
-                val success =
-                  horizontalDrag(down.id) { change ->
-                    updatePopDrag(change.positionChange().x)
-                    change.consume()
-                  }
-                if (success) finishPopDrag() else cancelPopDrag()
-              } finally {
-                activeDragPointerId = null
+              startPopDrag()
+              updatePopDrag(overSlopX)
+              var dragging = true
+              while (dragging) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                val change = event.changes.fastFirstOrNull { it.id == down.id }
+                if (change == null) {
+                  dragging = false
+                  continue
+                }
+                updatePopDrag(change.positionChangeIgnoreConsumed().x)
+                if (!change.pressed) dragging = false else change.consume()
               }
+              finishPopDrag()
             }
           }
         )
