@@ -14,13 +14,13 @@ import co.typie.domain.pushnotification.NotificationPermissionLauncher
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    NotificationPermissionLauncher.register(this)
-
     val splashScreen = installSplashScreen()
     splashScreen.setKeepOnScreenCondition { BootstrapService.state !is BootstrapState.Ready }
 
     enableEdgeToEdge()
     WindowCompat.setDecorFitsSystemWindows(window, false)
+
+    NotificationPermissionLauncher.register(this)
 
     super.onCreate(savedInstanceState)
 
