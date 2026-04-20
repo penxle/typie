@@ -1,6 +1,5 @@
 package co.typie.editor.compose
 
-import android.graphics.PixelFormat
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.runtime.Composable
@@ -40,13 +39,7 @@ internal actual fun Surface(
     }
 
   AndroidView(
-    factory = { context ->
-      SurfaceView(context).also {
-        it.holder.setFormat(PixelFormat.TRANSLUCENT)
-        it.setZOrderOnTop(true)
-        it.holder.addCallback(callback)
-      }
-    },
+    factory = { context -> SurfaceView(context).also { it.holder.addCallback(callback) } },
     modifier = modifier,
     onRelease = { view -> view.holder.removeCallback(callback) },
   )

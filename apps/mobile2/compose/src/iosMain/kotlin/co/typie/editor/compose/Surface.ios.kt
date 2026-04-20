@@ -21,7 +21,6 @@ import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGSizeMake
 import platform.QuartzCore.CAMetalLayer
 import platform.QuartzCore.CATransaction
-import platform.UIKit.UIColor
 import platform.UIKit.UIScreen
 import platform.UIKit.UIView
 import swiftPMImport.co.typie.compose.MetalSurfaceBridge
@@ -33,11 +32,10 @@ private class MetalSurfaceView(private val metalLayer: CAMetalLayer) :
   private var lastHeight = 0.0
 
   init {
-    opaque = false
-    backgroundColor = UIColor.clearColor
+    opaque = true
 
     metalLayer.framebufferOnly = false
-    metalLayer.opaque = false
+    metalLayer.opaque = true
     metalLayer.contentsScale = UIScreen.mainScreen.scale
     metalLayer.presentsWithTransaction = true
     layer.addSublayer(metalLayer)
@@ -82,6 +80,6 @@ internal actual fun Surface(
     modifier = modifier,
     update = { view -> view.onLayoutChanged = onResize },
     onRelease = { onDetach() },
-    properties = UIKitInteropProperties(interactionMode = null, placedAsOverlay = true),
+    properties = UIKitInteropProperties(interactionMode = null, placedAsOverlay = false),
   )
 }

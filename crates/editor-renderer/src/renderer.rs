@@ -296,6 +296,11 @@ impl Renderer {
         scale_factor: f32,
         marks: &[Mark],
     ) {
+        let page_size = view.pages()[page_idx].size;
+        let page_rect = Rect::from_xywh(0.0, 0.0, page_size.width, page_size.height);
+        let bg = self.theme.color("ui.surface.default");
+        sink.fill_rect(page_rect, bg, Transform::scale(scale_factor));
+
         view.visit_page(
             page_idx,
             &mut self.page_visitor(

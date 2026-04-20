@@ -31,17 +31,10 @@ impl GpuSink {
             .copied()
             .unwrap_or(caps.formats[0]);
         use wgpu::CompositeAlphaMode::*;
-        let alpha_mode = if caps.alpha_modes.contains(&PreMultiplied)
-            || device.adapter.get_info().backend == wgpu::Backend::BrowserWebGpu
-        {
-            // WebGPU reports [Opaque] but supports PreMultiplied in practice
-            PreMultiplied
-        } else {
-            [PostMultiplied, Opaque]
-                .into_iter()
-                .find(|m| caps.alpha_modes.contains(m))
-                .unwrap_or(caps.alpha_modes[0])
-        };
+        let alpha_mode = [Opaque, PreMultiplied, PostMultiplied, Inherit]
+            .into_iter()
+            .find(|m| caps.alpha_modes.contains(m))
+            .unwrap_or(caps.alpha_modes[0]);
         let submitter = GpuSubmitter::new(Arc::clone(&device))?;
 
         Ok(Self {
