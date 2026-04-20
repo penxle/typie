@@ -223,6 +223,13 @@ fun ProvideTopBar(
   val fallbackEntryKey = remember { Any() }
   val owner = LocalRoute.current
 
+  // movableContentOf + CompositionLocal 상호작용의 알려진 한계를 우회하기 위한 reader 등록.
+  // Editor처럼 keepAlive=true인 route가 background에서 behind/main으로 이동할 때 내부 subtree의
+  // LocalTopBarState.current가 stale 값으로 캐시되어 이 함수가 재구성되지 않는다.
+  // centerKey를 구독해두면 다른 screen이 setCenter를 호출할 때 이 scope가 invalidate되고,
+  // 재구성 과정에서 LocalTopBarState.current가 최신 값으로 다시 resolve된다.
+  @Suppress("UNUSED_EXPRESSION") state.centerKey
+
   state.enabled = enabled
   if (enabled) {
     val entryInstance = remember { Any() }

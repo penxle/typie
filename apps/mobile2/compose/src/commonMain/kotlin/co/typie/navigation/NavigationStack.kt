@@ -79,19 +79,25 @@ fun NavigationStack(
   // 안정적으로 유지된다. (같은 스크린을 두 call site에서 composition하면
   // compound key가 달라져 viewModel/rememberSaveable 키가 꼬인다.)
   val latestContent by rememberUpdatedState(content)
-  val routeContents = remember { mutableMapOf<Route, @Composable () -> Unit>() }
-  val routeContentFor: (Route) -> @Composable () -> Unit = { route ->
+  val routeContents = remember {
+    mutableMapOf<Route, @Composable (TopBarState?, BottomBarState?) -> Unit>()
+  }
+  val routeContentFor: (Route) -> @Composable (TopBarState?, BottomBarState?) -> Unit = { route ->
     routeContents.getOrPut(route) {
-      movableContentOf {
+      movableContentOf<TopBarState?, BottomBarState?> { topBar, bottomBar ->
         val owner = remember {
           object : ViewModelStoreOwner {
             override val viewModelStore = navigator.viewModelStoreFor(route)
           }
         }
-        CompositionLocalProvider(
-          LocalViewModelStoreOwner provides owner,
-          LocalRoute provides route,
-        ) {
+        val providers =
+          buildList<ProvidedValue<*>> {
+            add(LocalViewModelStoreOwner provides owner)
+            add(LocalRoute provides route)
+            add(LocalTopBarState provides topBar)
+            if (bottomBar != null) add(LocalBottomBarState provides bottomBar)
+          }
+        CompositionLocalProvider(*providers.toTypedArray()) {
           ProvideBottomBar(enabled = false)
           latestContent(route)
         }
@@ -293,7 +299,7 @@ fun NavigationStack(
         navigator.stack.forEach { route ->
           if (route == mainRoute || route == behindRoute) return@forEach
           if (!route.keepAlive) return@forEach
-          Box(Modifier.fillMaxSize()) { routeContentFor(route).invoke() }
+          Box(Modifier.fillMaxSize()) { routeContentFor(route).invoke(null, null) }
         }
       }
 
@@ -330,14 +336,7 @@ fun NavigationStack(
                 }
             }
           ) {
-            val behindProviders =
-              buildList<ProvidedValue<*>> {
-                add(LocalTopBarState provides behindTopBar)
-                behindBottomBar?.let { add(LocalBottomBarState provides it) }
-              }
-            CompositionLocalProvider(*behindProviders.toTypedArray()) {
-              routeContentFor(behindRoute!!).invoke()
-            }
+            routeContentFor(behindRoute!!).invoke(behindTopBar, behindBottomBar)
           }
           // 전환 중 behind 화면 터치 차단 (fade는 dim overlay가 없으므로 별도 pointerIgnore)
           Box(Modifier.fillMaxSize().pointerIgnore())
@@ -353,14 +352,7 @@ fun NavigationStack(
                 }
             }
           ) {
-            val behindProviders =
-              buildList<ProvidedValue<*>> {
-                add(LocalTopBarState provides behindTopBar)
-                behindBottomBar?.let { add(LocalBottomBarState provides it) }
-              }
-            CompositionLocalProvider(*behindProviders.toTypedArray()) {
-              routeContentFor(behindRoute!!).invoke()
-            }
+            routeContentFor(behindRoute!!).invoke(behindTopBar, behindBottomBar)
           }
           // Dim overlay — 전환 중 behind 화면 터치 차단
           Box(
@@ -489,14 +481,7 @@ fun NavigationStack(
             }
           }
       ) {
-        val mainProviders =
-          buildList<ProvidedValue<*>> {
-            add(LocalTopBarState provides mainTopBar)
-            mainBottomBar?.let { add(LocalBottomBarState provides it) }
-          }
-        CompositionLocalProvider(*mainProviders.toTypedArray()) {
-          routeContentFor(mainRoute).invoke()
-        }
+        routeContentFor(mainRoute).invoke(mainTopBar, mainBottomBar)
         // 전환/드래그 중 front 화면 내부로 터치가 흘러가지 않도록 consume.
         // Main pass 기준 overlay가 sibling routeContent보다 나중에 composed → 먼저 처리되어 consume.
         // Drag 로직은 Main pass에서 positionChangeIgnoreConsumed로 계속 추적하므로 영향받지 않는다.
