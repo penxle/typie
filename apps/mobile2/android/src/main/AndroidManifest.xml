@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
   <application
     android:name=".MainApplication"
     android:allowBackup="true"
@@ -28,6 +30,22 @@
         android:name="android.support.FILE_PROVIDER_PATHS"
         android:resource="@xml/stats_image_file_paths" />
     </provider>
+
+    <service
+      android:name="co.typie.domain.pushnotification.AppMessagingService"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+    </service>
+
+    <meta-data
+      android:name="com.google.firebase.messaging.default_notification_icon"
+      android:resource="@drawable/ic_notification_foreground" />
+
+    <meta-data
+      android:name="com.google.firebase.messaging.default_notification_color"
+      android:resource="@color/notification_accent" />
   </application>
 
 </manifest>

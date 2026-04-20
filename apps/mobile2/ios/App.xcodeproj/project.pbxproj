@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		A5E5029DB052082E8700DEAC /* KotlinMultiplatformLinkedPackage in Frameworks */ = {isa = PBXBuildFile; productRef = AC83D80FFC3B46D51005E2C9 /* KotlinMultiplatformLinkedPackage */; };
 		B62B10432F93A2E8001CF03A /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = B62B10422F93A2E8001CF03A /* Sentry */; };
+		B63A87C02F95335200781191 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = B63A87BF2F95335200781191 /* FirebaseAnalytics */; };
+		B63A87C22F95335200781191 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = B63A87C12F95335200781191 /* FirebaseMessaging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,8 +53,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B63A87C22F95335200781191 /* FirebaseMessaging in Frameworks */,
 				A5E5029DB052082E8700DEAC /* KotlinMultiplatformLinkedPackage in Frameworks */,
 				B62B10432F93A2E8001CF03A /* Sentry in Frameworks */,
+				B63A87C02F95335200781191 /* FirebaseAnalytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -109,6 +113,8 @@
 			packageProductDependencies = (
 				AC83D80FFC3B46D51005E2C9 /* KotlinMultiplatformLinkedPackage */,
 				B62B10422F93A2E8001CF03A /* Sentry */,
+				B63A87BF2F95335200781191 /* FirebaseAnalytics */,
+				B63A87C12F95335200781191 /* FirebaseMessaging */,
 			);
 			productName = App;
 			productReference = 842029C347CE17DD479773A2 /* Typie.app */;
@@ -142,6 +148,7 @@
 			packageReferences = (
 				AD70A8C673ABD67E11E0951C /* XCLocalSwiftPackageReference "KotlinMultiplatformLinkedPackage" */,
 				B62B10402F93A263001CF03A /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+				B63A87BE2F95335200781191 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0E2EDBC5D892DD3F91C268A /* Products */;
@@ -202,6 +209,7 @@
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Manual;
@@ -214,7 +222,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Allow Typie to save your activity image to the photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow access to your photo library to add post images and update your profile picture.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -238,6 +245,7 @@
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
@@ -250,7 +258,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Allow Typie to save your activity image to the photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Allow access to your photo library to add post images and update your profile picture.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -432,6 +439,14 @@
 				version = 8.57.3;
 			};
 		};
+		B63A87BE2F95335200781191 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.12.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -444,6 +459,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B62B10402F93A263001CF03A /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
+		};
+		B63A87BF2F95335200781191 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B63A87BE2F95335200781191 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		B63A87C12F95335200781191 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B63A87BE2F95335200781191 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

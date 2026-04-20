@@ -8,6 +8,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.multiplatform)
   alias(libs.plugins.compose.compiler)
+  alias(libs.plugins.google.services)
 }
 
 kotlin {
@@ -23,6 +24,10 @@ kotlin {
 
     implementation(libs.kakao.user)
     implementation(libs.naver.oauth)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.messaging)
   }
 }
 

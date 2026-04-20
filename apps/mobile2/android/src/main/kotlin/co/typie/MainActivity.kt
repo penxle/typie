@@ -9,9 +9,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import co.typie.domain.bootstrap.BootstrapService
 import co.typie.domain.bootstrap.BootstrapState
+import co.typie.domain.pushnotification.NotificationPermissionLauncher
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    NotificationPermissionLauncher.register(this)
+
     val splashScreen = installSplashScreen()
     splashScreen.setKeepOnScreenCondition { BootstrapService.state !is BootstrapState.Ready }
 

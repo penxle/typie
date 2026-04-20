@@ -103,8 +103,11 @@ kotlin {
         implementation(libs.androidx.credentials)
         implementation(libs.androidx.credentials.playServicesAuth)
         implementation(libs.billing)
+        implementation(project.dependencies.platform(libs.firebase.bom))
+        implementation(libs.firebase.messaging)
         implementation(libs.googleid)
         implementation(libs.kakao.user)
+        implementation(libs.kotlinx.coroutines.playServices)
         implementation(libs.naver.oauth)
         implementation(libs.jna.map { "$it@aar" })
       }

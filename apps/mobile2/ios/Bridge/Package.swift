@@ -23,6 +23,10 @@ let package = Package(
       url: "https://github.com/naver/naveridlogin-sdk-ios-swift.git",
       from: "5.1.0"
     ),
+    .package(
+      url: "https://github.com/firebase/firebase-ios-sdk.git",
+      from: "12.12.1"
+    ),
   ],
   targets: [
     // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -41,6 +45,7 @@ let package = Package(
           name: "NidThirdPartyLogin",
           package: "naveridlogin-sdk-ios-swift"
         ),
+        .product(name: "FirebaseMessaging", package: "firebase-ios-sdk"),
       ],
     ),
     .testTarget(

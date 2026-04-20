@@ -20,6 +20,8 @@ import co.typie.domain.bootstrap.BootstrapService
 import co.typie.domain.bootstrap.BootstrapState
 import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
+import co.typie.domain.pushnotification.PushNotificationService
+import co.typie.domain.pushnotification.PushNotificationToastEffect
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
@@ -56,6 +58,7 @@ private enum class RootScreen {
 @Composable
 fun RootShell() {
   LaunchedEffect(Unit) { BootstrapService.launch() }
+  LaunchedEffect(Unit) { PushNotificationService.launch() }
 
   val toast = remember { Toast() }
   val loader = remember { Loader() }
@@ -106,6 +109,7 @@ fun RootShell() {
       DialogOverlay(dialog)
       LoaderOverlay()
       ToastOverlay()
+      PushNotificationToastEffect()
     }
   }
 }

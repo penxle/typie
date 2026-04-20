@@ -1,4 +1,5 @@
 import Compose
+import FirebaseCore
 import KakaoSDKCommon
 import NidThirdPartyLogin
 import UIKit
@@ -12,6 +13,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
   ) -> Bool {
     InitSentryKt.doInitSentry()
     InitLoggerKt.doInitLogger()
+
+    FirebaseApp.configure()
+    InitPushNotificationsKt.doInitPushNotifications(application: application)
 
     let info = Bundle.main.infoDictionary ?? [:]
 

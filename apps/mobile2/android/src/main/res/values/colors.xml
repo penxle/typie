@@ -4,4 +4,5 @@
   <color name="black">#000000</color>
   <color name="gray950">#100F0D</color>
   <color name="splash_background">@color/white</color>
+  <color name="notification_accent">@color/gray950</color>
 </resources>

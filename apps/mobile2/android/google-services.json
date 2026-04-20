@@ -1,0 +1,79 @@
+{
+  "project_info": {
+    "project_number": "378927208010",
+    "project_id": "typie-co",
+    "storage_bucket": "typie-co.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:378927208010:android:43c0f4af9b2ffcf234b8b3",
+        "android_client_info": {
+          "package_name": "co.typie"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "378927208010-1b4k84hbf7g535bnf9cml4mndne08gmv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.typie",
+            "certificate_hash": "597f06a183a5a391021a7d6f323069bf072fafa5"
+          }
+        },
+        {
+          "client_id": "378927208010-6sm4u4tpb20ndipsi0gro71hls65dji5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.typie",
+            "certificate_hash": "f9c09d4ecb69577fcd2beb0cb4801e59546f97bf"
+          }
+        },
+        {
+          "client_id": "378927208010-e87097u3ejiv2p4l9rs1v5dcj5c0pf6d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.typie",
+            "certificate_hash": "f3c16f782a378a9eded875a9fdc354bd762ecc7e"
+          }
+        },
+        {
+          "client_id": "378927208010-t9l63lbic38k9n5pj6e6i1pov3e0oh95.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.typie",
+            "certificate_hash": "386beb1478e89e2674aa4fde2484c2f6f8356c62"
+          }
+        },
+        {
+          "client_id": "378927208010-9erhukn2ke7nkftciep6g3rme183hc8j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBA24S5eLR1AuB_Mdk2lBuz5jTprccg7CI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "378927208010-1ouolccrso57o79l0ol7co0sgktq99i6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "378927208010-2msqgj6movh864tta6fhiau8eo9vtck2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "co.typie",
+                "app_store_id": "6745595771"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
