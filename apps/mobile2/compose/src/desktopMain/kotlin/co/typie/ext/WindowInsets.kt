@@ -9,22 +9,26 @@ import androidx.compose.ui.unit.dp
 
 // iPhone 16 Pro Max preview in desktop chrome:
 // dynamic island 59pt, home indicator 34pt, frame bezel 12dp per side.
-private val PreviewHorizontalSafeInset = 12.dp
+// Content fills the whole window, so the bezel thickness is included in the
+// status/navigation insets to match the visible screen area.
+private val BezelThickness = 12.dp
+private val DynamicIslandSafeTop = BezelThickness + 59.dp
+private val HomeIndicatorSafeBottom = BezelThickness + 34.dp
 
 actual val WindowInsets.Companion.statusBars: WindowInsets
-  @Composable get() = WindowInsets(top = 59.dp)
+  @Composable get() = WindowInsets(top = DynamicIslandSafeTop)
 
 actual val WindowInsets.Companion.navigationBars: WindowInsets
-  @Composable get() = WindowInsets(bottom = 34.dp)
+  @Composable get() = WindowInsets(bottom = HomeIndicatorSafeBottom)
 
 actual val WindowInsets.Companion.safeDrawing: WindowInsets
   @Composable
   get() =
     WindowInsets(
-      left = PreviewHorizontalSafeInset,
-      top = 59.dp,
-      right = PreviewHorizontalSafeInset,
-      bottom = 34.dp,
+      left = BezelThickness,
+      top = DynamicIslandSafeTop,
+      right = BezelThickness,
+      bottom = HomeIndicatorSafeBottom,
     )
 
 actual val WindowInsets.Companion.ime: WindowInsets

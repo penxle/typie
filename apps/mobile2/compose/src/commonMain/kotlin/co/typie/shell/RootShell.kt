@@ -22,6 +22,7 @@ import co.typie.domain.preflight.PreflightService
 import co.typie.domain.preflight.PreflightState
 import co.typie.domain.pushnotification.PushNotificationService
 import co.typie.domain.pushnotification.PushNotificationToastEffect
+import co.typie.ext.safeDrawingHorizontalPadding
 import co.typie.route.AuthRoutes
 import co.typie.route.MainRoutes
 import co.typie.screen.system.maintenance.MaintenanceScreen
@@ -86,6 +87,7 @@ fun RootShell() {
   ) {
     Box(
       Modifier.fillMaxSize()
+        .safeDrawingHorizontalPadding()
         .preferredFrameRate(FrameRateCategory.High)
         .popoverOutsideTapHost(state = popover)
         .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }

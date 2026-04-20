@@ -217,3 +217,4 @@ zstd
 aisettings
 osslicenses
 argb
+rects
