@@ -33,6 +33,7 @@ import co.typie.domain.entity.EntityContainerSelectionBar
 import co.typie.domain.entity.EntityContainerTopBarTrailing
 import co.typie.domain.entity.EntityContainerTopBarTrailingKey
 import co.typie.domain.entity.EntityIconPickerSheet
+import co.typie.domain.entity.EntityIconPickerStopPolicy
 import co.typie.domain.entity.EntityIconPickerStops
 import co.typie.domain.entity.EntityMoveSheet
 import co.typie.domain.entity.EntityMoveStops
@@ -218,7 +219,10 @@ fun SpaceScreen() {
           summary = selectionSummary,
           onChangeIcon = {
             presenterScope.launch {
-              sheet.present(stops = EntityIconPickerStops) {
+              sheet.present(
+                stops = EntityIconPickerStops,
+                stopPolicy = EntityIconPickerStopPolicy,
+              ) {
                 EntityIconPickerSheet(
                   model = selectionActionModel,
                   entityIds = selectionSummary.selectedItems.map { it.id },
@@ -439,7 +443,10 @@ fun SpaceScreen() {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
-                          sheet.present(stops = EntityIconPickerStops) {
+                          sheet.present(
+                            stops = EntityIconPickerStops,
+                            stopPolicy = EntityIconPickerStopPolicy,
+                          ) {
                             EntityIconPickerSheet(
                               model = documentActionModel,
                               entityId = entity.id,
@@ -538,7 +545,10 @@ fun SpaceScreen() {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
-                          sheet.present(stops = EntityIconPickerStops) {
+                          sheet.present(
+                            stops = EntityIconPickerStops,
+                            stopPolicy = EntityIconPickerStopPolicy,
+                          ) {
                             EntityIconPickerSheet(
                               model = folderActionModel,
                               entityId = entity.id,

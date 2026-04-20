@@ -75,6 +75,7 @@ internal val EntityIconPickerStops =
     SheetStop.Bottom(EntityIconPickerCollapsedHeight),
     SheetStop.Top(EntityIconPickerExpandedTopGap),
   )
+internal val EntityIconPickerStopPolicy = SheetStop.Policy.DismissFromTopStop
 
 internal interface EntityIconPickerSheetModel {
   suspend fun updateEntityIcons(

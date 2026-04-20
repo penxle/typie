@@ -13,6 +13,7 @@ class Sheet {
 
   suspend fun <R> present(
     stops: List<SheetStop> = emptyList(),
+    stopPolicy: SheetStop.Policy = SheetStop.Policy.KeepAll,
     content:
       @Composable
       context(SheetScope<R>)
@@ -21,6 +22,7 @@ class Sheet {
     val entry =
       SheetEntry(
         stops = stops,
+        stopPolicy = stopPolicy,
         content = content,
         onResult = { result -> if (continuation.isActive) continuation.resume(result) },
       )
@@ -35,6 +37,7 @@ class Sheet {
 
 class SheetEntry<R>(
   val stops: List<SheetStop>,
+  val stopPolicy: SheetStop.Policy,
   val content:
     @Composable
     context(SheetScope<R>)

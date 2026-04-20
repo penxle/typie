@@ -100,37 +100,79 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
       }
     val isIntrinsic = entry.stops.isEmpty()
     var contentHeightPx by remember { mutableStateOf(0f) }
+    var hasReachedTopStop by remember(entry) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val dragOverscrollEffect = remember { SheetTopHysteresisOverscrollEffect() }
 
-    val visibleOffsets: List<Float> =
+    val baseVisibleAnchors: List<SheetAnchor> =
       remember(entry.stops, containerHeightPx, contentHeightPx, intrinsicTopLimitPx) {
         if (isIntrinsic) {
           if (contentHeightPx > 0f) {
-            listOf(maxOf(containerHeightPx - contentHeightPx, intrinsicTopLimitPx))
+            listOf(
+              SheetAnchor(
+                value = ANCHOR_VISIBLE,
+                offset = maxOf(containerHeightPx - contentHeightPx, intrinsicTopLimitPx),
+              )
+            )
           } else {
             emptyList()
           }
         } else {
-          entry.stops.map { stop ->
-            when (stop) {
-              is SheetStop.Bottom -> containerHeightPx - with(density) { stop.height.toPx() }
-              is SheetStop.Top -> with(density) { stop.margin.toPx() }
-            }
+          entry.stops.mapIndexed { index, stop ->
+            SheetAnchor(
+              value = index,
+              offset =
+                when (stop) {
+                  is SheetStop.Bottom -> containerHeightPx - with(density) { stop.height.toPx() }
+                  is SheetStop.Top -> with(density) { stop.margin.toPx() }
+                },
+            )
           }
         }
       }
+    val topVisibleOffset = baseVisibleAnchors.minOfOrNull(SheetAnchor::offset) ?: containerHeightPx
+    val visibleAnchors =
+      remember(baseVisibleAnchors, entry.stopPolicy, hasReachedTopStop) {
+        resolveEffectiveSheetAnchors(
+          anchors = baseVisibleAnchors,
+          stopPolicy = entry.stopPolicy,
+          hasReachedTopStop = hasReachedTopStop,
+        )
+      }
 
     val anchors =
-      remember(visibleOffsets, containerHeightPx) {
+      remember(visibleAnchors, containerHeightPx) {
         DraggableAnchors {
-          visibleOffsets.forEachIndexed { index, offset -> index at offset }
+          visibleAnchors.forEach { anchor -> anchor.value at anchor.offset }
           ANCHOR_HIDDEN at containerHeightPx
         }
       }
 
     val anchoredState = remember {
       AnchoredDraggableState(initialValue = ANCHOR_HIDDEN, anchors = anchors)
+    }
+
+    LaunchedEffect(
+      entry.stopPolicy,
+      isIntrinsic,
+      topVisibleOffset,
+      baseVisibleAnchors,
+      anchoredState,
+    ) {
+      if (
+        isIntrinsic ||
+          entry.stopPolicy != SheetStop.Policy.DismissFromTopStop ||
+          baseVisibleAnchors.isEmpty()
+      ) {
+        return@LaunchedEffect
+      }
+
+      snapshotFlow { anchoredState.offset }
+        .collect { currentOffset ->
+          if (!hasReachedTopStop && hasSheetReachedTopStop(currentOffset, topVisibleOffset)) {
+            hasReachedTopStop = true
+          }
+        }
     }
 
     val offsetCorrection = remember { Animatable(0f) }
@@ -152,8 +194,8 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
       }
     }
 
-    LaunchedEffect(visibleOffsets.isNotEmpty()) {
-      if (visibleOffsets.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(baseVisibleAnchors.isNotEmpty()) {
+      if (baseVisibleAnchors.isEmpty()) return@LaunchedEffect
 
       anchoredState.animateTo(ANCHOR_VISIBLE, SheetAnimationSpec)
 
@@ -208,7 +250,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     val nestedScrollConnection =
       rememberSheetNestedScrollConnection(
         anchoredState = anchoredState,
-        visibleOffsets = visibleOffsets,
+        visibleAnchors = visibleAnchors,
         containerHeightPx = containerHeightPx,
         hiddenValue = ANCHOR_HIDDEN,
         animationSpec = SheetAnimationSpec,
@@ -221,10 +263,11 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     val animatedOffsetPx = offset.roundToInt().coerceAtLeast(0)
     val intrinsicTopLimit = intrinsicTopLimitPx.roundToInt()
     val minStopHeightPx =
-      (containerHeightPx - (visibleOffsets.maxOrNull() ?: containerHeightPx))
+      (containerHeightPx -
+          (baseVisibleAnchors.maxOfOrNull(SheetAnchor::offset) ?: containerHeightPx))
         .roundToInt()
         .coerceAtLeast(0)
-    val minVisibleOffset = visibleOffsets.minOrNull() ?: containerHeightPx
+    val minVisibleOffset = topVisibleOffset
     val scrimAlpha =
       if (containerHeightPx > minVisibleOffset) {
         (1f - (offset - minVisibleOffset) / (containerHeightPx - minVisibleOffset)).coerceIn(0f, 1f)

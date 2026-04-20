@@ -45,6 +45,7 @@ import co.typie.domain.entity.EntityBreadcrumb
 import co.typie.domain.entity.EntityBreadcrumbLayout
 import co.typie.domain.entity.EntityIcon
 import co.typie.domain.entity.EntityIconPickerSheet
+import co.typie.domain.entity.EntityIconPickerStopPolicy
 import co.typie.domain.entity.EntityIconPickerStops
 import co.typie.domain.entity.EntityMoveSheet
 import co.typie.domain.entity.EntityMoveStops
@@ -238,7 +239,7 @@ fun DocumentScreen(entityId: String) {
 
     val openIconPicker: suspend () -> Unit = {
       if (!loading) {
-        sheet.present(stops = EntityIconPickerStops) {
+        sheet.present(stops = EntityIconPickerStops, stopPolicy = EntityIconPickerStopPolicy) {
           EntityIconPickerSheet(
             model = model,
             entityId = entity.id,

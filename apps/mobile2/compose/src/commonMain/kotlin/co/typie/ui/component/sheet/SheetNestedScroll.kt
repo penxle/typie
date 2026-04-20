@@ -13,32 +13,25 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
-private const val SheetNestedScrollTolerancePx = 0.5f
-
 @Composable
 internal fun rememberSheetNestedScrollConnection(
   anchoredState: AnchoredDraggableState<Int>,
-  visibleOffsets: List<Float>,
+  visibleAnchors: List<SheetAnchor>,
   containerHeightPx: Float,
   hiddenValue: Int,
   animationSpec: AnimationSpec<Float>,
 ): NestedScrollConnection {
   val density = LocalDensity.current
-  val topVisibleOffset = visibleOffsets.minOrNull() ?: containerHeightPx
+  val topVisibleOffset = visibleAnchors.minOfOrNull(SheetAnchor::offset) ?: containerHeightPx
   val velocityThresholdPx = with(density) { 125.dp.toPx() }
   val anchors =
-    remember(visibleOffsets, containerHeightPx, hiddenValue) {
-      buildList {
-        visibleOffsets.forEachIndexed { index, offset ->
-          add(SheetAnchor(value = index, offset = offset))
-        }
-        add(SheetAnchor(value = hiddenValue, offset = containerHeightPx))
-      }
+    remember(visibleAnchors, containerHeightPx, hiddenValue) {
+      visibleAnchors + SheetAnchor(value = hiddenValue, offset = containerHeightPx)
     }
 
   return remember(
     anchoredState,
-    visibleOffsets,
+    visibleAnchors,
     containerHeightPx,
     topVisibleOffset,
     velocityThresholdPx,
@@ -47,7 +40,7 @@ internal fun rememberSheetNestedScrollConnection(
   ) {
     object : NestedScrollConnection {
       override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-        if (source != NestedScrollSource.UserInput || visibleOffsets.isEmpty()) {
+        if (source != NestedScrollSource.UserInput || visibleAnchors.isEmpty()) {
           return Offset.Zero
         }
 
@@ -70,7 +63,7 @@ internal fun rememberSheetNestedScrollConnection(
         available: Offset,
         source: NestedScrollSource,
       ): Offset {
-        if (source != NestedScrollSource.UserInput || visibleOffsets.isEmpty()) {
+        if (source != NestedScrollSource.UserInput || visibleAnchors.isEmpty()) {
           return Offset.Zero
         }
 
@@ -89,7 +82,7 @@ internal fun rememberSheetNestedScrollConnection(
       }
 
       override suspend fun onPreFling(available: Velocity): Velocity {
-        if (visibleOffsets.isEmpty()) {
+        if (visibleAnchors.isEmpty()) {
           return Velocity.Zero
         }
 
@@ -116,7 +109,7 @@ internal fun rememberSheetNestedScrollConnection(
       }
 
       override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-        if (visibleOffsets.isEmpty()) {
+        if (visibleAnchors.isEmpty()) {
           return Velocity.Zero
         }
 
@@ -137,13 +130,11 @@ internal fun rememberSheetNestedScrollConnection(
   }
 }
 
-internal data class SheetAnchor(val value: Int, val offset: Float)
-
 internal fun shouldSheetConsumeNestedPreScroll(
   currentOffset: Float,
   topStopOffset: Float,
   availableY: Float,
-  tolerancePx: Float = SheetNestedScrollTolerancePx,
+  tolerancePx: Float = SheetAnchorTolerancePx,
 ): Boolean {
   if (currentOffset.isNaN() || availableY == 0f) {
     return false
@@ -156,7 +147,7 @@ internal fun shouldSheetConsumeNestedPostScroll(
   currentOffset: Float,
   topStopOffset: Float,
   availableY: Float,
-  tolerancePx: Float = SheetNestedScrollTolerancePx,
+  tolerancePx: Float = SheetAnchorTolerancePx,
 ): Boolean {
   if (currentOffset.isNaN() || availableY <= 0f) {
     return false
@@ -168,7 +159,7 @@ internal fun shouldSheetConsumeNestedPostScroll(
 internal fun shouldSheetSettleAfterNestedGesture(
   currentOffset: Float,
   topStopOffset: Float,
-  tolerancePx: Float = SheetNestedScrollTolerancePx,
+  tolerancePx: Float = SheetAnchorTolerancePx,
 ): Boolean {
   if (currentOffset.isNaN()) {
     return false
@@ -236,7 +227,7 @@ private fun nextDirectionalSheetAnchor(
   anchors: List<SheetAnchor>,
   position: Float,
   searchUpwards: Boolean,
-  tolerancePx: Float = SheetNestedScrollTolerancePx,
+  tolerancePx: Float = SheetAnchorTolerancePx,
 ): SheetAnchor {
   return anchors
     .filter { anchor ->

@@ -30,6 +30,7 @@ import co.typie.domain.entity.EntityContainerSelectionBar
 import co.typie.domain.entity.EntityContainerTopBarTrailing
 import co.typie.domain.entity.EntityContainerTopBarTrailingKey
 import co.typie.domain.entity.EntityIconPickerSheet
+import co.typie.domain.entity.EntityIconPickerStopPolicy
 import co.typie.domain.entity.EntityIconPickerStops
 import co.typie.domain.entity.EntityMoveSheet
 import co.typie.domain.entity.EntityMoveStops
@@ -223,7 +224,10 @@ fun FolderScreen(entityId: String) {
           summary = selectionSummary,
           onChangeIcon = {
             presenterScope.launch {
-              sheet.present(stops = EntityIconPickerStops) {
+              sheet.present(
+                stops = EntityIconPickerStops,
+                stopPolicy = EntityIconPickerStopPolicy,
+              ) {
                 EntityIconPickerSheet(
                   model = selectionActionModel,
                   entityIds = selectionSummary.selectedItems.map { it.id },
@@ -301,7 +305,7 @@ fun FolderScreen(entityId: String) {
           return
         }
         presenterScope.launch {
-          sheet.present(stops = EntityIconPickerStops) {
+          sheet.present(stops = EntityIconPickerStops, stopPolicy = EntityIconPickerStopPolicy) {
             EntityIconPickerSheet(
               model = model,
               entityId = resolvedEntity.id,
@@ -560,7 +564,10 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
-                          sheet.present(stops = EntityIconPickerStops) {
+                          sheet.present(
+                            stops = EntityIconPickerStops,
+                            stopPolicy = EntityIconPickerStopPolicy,
+                          ) {
                             EntityIconPickerSheet(
                               model = model,
                               entityId = entity.id,
@@ -657,7 +664,10 @@ fun FolderScreen(entityId: String) {
 
                       EntityAction.ChangeIcon -> {
                         presenterScope.launch {
-                          sheet.present(stops = EntityIconPickerStops) {
+                          sheet.present(
+                            stops = EntityIconPickerStops,
+                            stopPolicy = EntityIconPickerStopPolicy,
+                          ) {
                             EntityIconPickerSheet(
                               model = model,
                               entityId = entity.id,
