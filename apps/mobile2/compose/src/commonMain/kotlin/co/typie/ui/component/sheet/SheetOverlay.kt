@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,10 +33,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import co.typie.ext.clickable
+import co.typie.ext.safeDrawing
 import co.typie.ext.thenIf
 import co.typie.navigation.PlatformBackHandler
 import co.typie.ui.theme.AppShapes
@@ -45,6 +48,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 private const val ANCHOR_HIDDEN = -1
+private val DefaultIntrinsicTopGap = 64.dp
 private val SheetAnimationSpec = spring<Float>(stiffness = 500f)
 
 @Composable
@@ -83,15 +87,23 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
   BoxWithConstraints(Modifier.fillMaxSize()) {
     val density = LocalDensity.current
     val containerHeightPx = with(density) { maxHeight.toPx() }
+    val intrinsicTopLimitPx =
+      with(density) {
+        maxOf(WindowInsets.safeDrawing.getTop(density).toFloat(), DefaultIntrinsicTopGap.toPx())
+      }
     val isIntrinsic = entry.stops.isEmpty()
     var contentHeightPx by remember { mutableStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
     val dragOverscrollEffect = remember { SheetTopHysteresisOverscrollEffect() }
 
     val visibleOffsets: List<Float> =
-      remember(entry.stops, containerHeightPx, contentHeightPx) {
+      remember(entry.stops, containerHeightPx, contentHeightPx, intrinsicTopLimitPx) {
         if (isIntrinsic) {
-          if (contentHeightPx > 0f) listOf(containerHeightPx - contentHeightPx) else emptyList()
+          if (contentHeightPx > 0f) {
+            listOf(maxOf(containerHeightPx - contentHeightPx, intrinsicTopLimitPx))
+          } else {
+            emptyList()
+          }
         } else {
           entry.stops.map { stop ->
             when (stop) {
@@ -193,7 +205,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
             val currentOffset = offset.roundToInt().coerceAtLeast(0)
             val maxH =
               if (isIntrinsic) {
-                constraints.maxHeight
+                (constraints.maxHeight - intrinsicTopLimitPx.roundToInt()).coerceAtLeast(0)
               } else {
                 val maxVisibleOffset = visibleOffsets.maxOrNull() ?: containerHeightPx
                 val minStopHeight =
