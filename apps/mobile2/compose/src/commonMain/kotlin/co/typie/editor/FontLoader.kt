@@ -112,34 +112,36 @@ object FontLoader {
     if (initialized) return
     initialized = true
 
-    val phantomFonts =
-      listOf(
-        "Noto (Phantom)" to "files/editor/Noto-Phantom.bin",
-        "Noto Emoji (Phantom)" to "files/editor/Noto-Phantom-Emoji.bin",
-      )
+    withContext(Dispatchers.Default) {
+      val phantomFonts =
+        listOf(
+          "Noto (Phantom)" to "files/editor/Noto-Phantom.bin",
+          "Noto Emoji (Phantom)" to "files/editor/Noto-Phantom-Emoji.bin",
+        )
 
-    for ((familyName, path) in phantomFonts) {
-      val data = Res.readBytes(path)
-      PlatformModule.editorHost.loadFontBase(familyName, 400, data)
-    }
-
-    PlatformModule.editorHost.setPhantomFontFamilies(phantomFonts.map { it.first })
-
-    val fallbackManifestData = Res.readBytes("files/editor/fallbacks.bin")
-    PlatformModule.editorHost.loadFallbackFontManifests(fallbackManifestData)
-
-    val fallbackFamilies =
-      Json.decodeFromString<List<FallbackFamily>>(
-        Res.readBytes("files/editor/fallbacks.json").decodeToString()
-      )
-
-    for (family in fallbackFamilies) {
-      for (font in family.fonts) {
-        fontPaths[fontKey(family.familyName, font.weight)] = FontPathEntry(font.path, font.hash)
+      for ((familyName, path) in phantomFonts) {
+        val data = Res.readBytes(path)
+        PlatformModule.editorHost.loadFontBase(familyName, 400, data)
       }
-    }
 
-    PlatformModule.editorHost.setFontFamilies(listOf(FontFamily("Pretendard", listOf(400))))
+      PlatformModule.editorHost.setPhantomFontFamilies(phantomFonts.map { it.first })
+
+      val fallbackManifestData = Res.readBytes("files/editor/fallbacks.bin")
+      PlatformModule.editorHost.loadFallbackFontManifests(fallbackManifestData)
+
+      val fallbackFamilies =
+        Json.decodeFromString<List<FallbackFamily>>(
+          Res.readBytes("files/editor/fallbacks.json").decodeToString()
+        )
+
+      for (family in fallbackFamilies) {
+        for (font in family.fonts) {
+          fontPaths[fontKey(family.familyName, font.weight)] = FontPathEntry(font.path, font.hash)
+        }
+      }
+
+      PlatformModule.editorHost.setFontFamilies(listOf(FontFamily("Pretendard", listOf(400))))
+    }
   }
 
   val fontManifestMissingHandler: EditorEventListener<EditorEvent.FontManifestMissing> =
@@ -154,7 +156,7 @@ object FontLoader {
   private fun loadManifest(editor: Editor, family: String, weight: Int) {
     val fontPath = primaryFontPaths[family] ?: return
 
-    editor.scope.launch {
+    editor.scope.launch(Dispatchers.Default) {
       loadOnce("manifest:$family:$weight") {
         coroutineScope {
           val manifestDeferred = async {
@@ -187,7 +189,7 @@ object FontLoader {
     val info = fontPaths[fontKey(family, weight)] ?: return
     val baseUrl = "$CDN_BASE/${info.path}/${info.hash}"
 
-    editor.scope.launch {
+    editor.scope.launch(Dispatchers.Default) {
       if (required.any { it is FontData.Base }) {
         loadOnce("base:$family:$weight") {
           val data = getOrFetch("$baseUrl/base.bin")
