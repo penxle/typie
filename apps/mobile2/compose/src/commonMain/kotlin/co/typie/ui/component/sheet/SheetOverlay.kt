@@ -25,14 +25,17 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -76,6 +79,8 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
   var pendingResult by remember(entry) { mutableStateOf<Any?>(null) }
   var resolved by remember(entry) { mutableStateOf(false) }
   var dismissed by remember(entry) { mutableStateOf(false) }
+  val hapticFeedback = LocalHapticFeedback.current
+  val hapticFeedbackState = rememberUpdatedState(hapticFeedback)
 
   val handleDismissed: () -> Unit = {
     if (!dismissed) {
@@ -152,6 +157,25 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
       snapshotFlow { anchoredState.settledValue }
         .filter { it == ANCHOR_HIDDEN }
         .collect { handleDismissed() }
+    }
+
+    LaunchedEffect(anchoredState) {
+      var previousVisibleStop: Int? = null
+
+      snapshotFlow { anchoredState.settledValue }
+        .collect { settledValue ->
+          val nextVisibleStop = settledValue.takeIf { it != ANCHOR_HIDDEN }
+          if (
+            previousVisibleStop != null &&
+              nextVisibleStop != null &&
+              nextVisibleStop != previousVisibleStop
+          ) {
+            hapticFeedbackState.value.performHapticFeedback(HapticFeedbackType.SegmentTick)
+          }
+          if (nextVisibleStop != null) {
+            previousVisibleStop = nextVisibleStop
+          }
+        }
     }
 
     val requestDismiss: () -> Unit = {
