@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ToastAnchor(inset: Dp = 12.dp, modifier: Modifier = Modifier) {
+fun ToastAnchor(bottom: Dp = 12.dp, modifier: Modifier = Modifier) {
   val toast = LocalToast.current
   val entry = remember { AnchorEntry() }
 
@@ -24,8 +24,8 @@ fun ToastAnchor(inset: Dp = 12.dp, modifier: Modifier = Modifier) {
   }
 
   Box(
-    modifier.padding(vertical = inset).fillMaxWidth().height(0.dp).onGloballyPositioned {
-      coordinates ->
+    modifier.padding(bottom = bottom).fillMaxWidth().height(0.dp).onGloballyPositioned { coordinates
+      ->
       entry.y = coordinates.positionInRoot().y
     }
   )

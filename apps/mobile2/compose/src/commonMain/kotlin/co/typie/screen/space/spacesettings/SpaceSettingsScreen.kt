@@ -58,6 +58,7 @@ import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.ui.component.AlertBanner
 import co.typie.ui.component.AlertBannerVariant
+import co.typie.ui.component.BottomFade
 import co.typie.ui.component.Button
 import co.typie.ui.component.ButtonVariant
 import co.typie.ui.component.Img
@@ -127,112 +128,13 @@ fun SpaceSettingsScreen() {
     trailing = { MoreMenu(model) },
   )
 
-  Screen(loadable = model.query, contentPadding = PaddingValues.Zero) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
-      Box(modifier = Modifier.weight(1f)) {
-        Column(
-          modifier =
-            Modifier.fillMaxSize()
-              .verticalScroll(scrollState)
-              .padding(AppTheme.spacings.scrollBottomPadding)
-        ) {
-          SpaceLogoHero(
-            image = model.query.data.site.logo.img_image,
-            previewUrl = model.logoPreviewUrl,
-            onClick = { filePicker("image/*") },
-            topInset = contentPadding.calculateTopPadding(),
-          )
+  Screen(
+    loadable = model.query,
+    contentPadding = PaddingValues.Zero,
+    overlay = {
+      BottomFade(modifier = Modifier.padding(horizontal = 16.dp)) {
+        ToastAnchor()
 
-          PaperPane(modifier = Modifier.offset(y = (-28).dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-              Text(text = "일반", style = AppTheme.typography.title)
-
-              TextField(
-                field = model.form.name,
-                label = "이름",
-                labelPosition = LabelPosition.Internal,
-                placeholder = "스페이스 이름",
-              )
-
-              Box(
-                modifier =
-                  Modifier.fillMaxWidth().thenIf(
-                    SubscriptionService.state is SubscriptionServiceState.NotSubscribed
-                  ) {
-                    clickable {
-                      SubscriptionService.gate(
-                        sheet,
-                        nav,
-                        title = "나만의 주소로\n이 공간을 완성해요.",
-                        benefits =
-                          listOf(
-                            PlanUpgradeBenefit.CustomSpaceAddress,
-                            PlanUpgradeBenefit.CustomFontUpload,
-                            PlanUpgradeBenefit.UnlimitedCharacters,
-                          ),
-                        preview = {
-                          SpaceSlugUpgradePreview(
-                            currentSlug = model.form.slug.value,
-                            host = model.usersiteHost,
-                          )
-                        },
-                      )
-                    }
-                  }
-              ) {
-                TextField(
-                  field = model.form.slug,
-                  label = "주소",
-                  help =
-                    if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
-                      "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
-                    } else null,
-                  labelPosition = LabelPosition.Internal,
-                  placeholder = "스페이스 주소",
-                  enabled = SubscriptionService.state is SubscriptionServiceState.Subscribed,
-                  readOnly = SubscriptionService.state !is SubscriptionServiceState.Subscribed,
-                  suffix = {
-                    Text(
-                      ".${model.usersiteHost}",
-                      style = AppTheme.typography.body,
-                      color = AppTheme.colors.textMuted,
-                    )
-                  },
-                )
-
-                if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
-                  LockedBadge(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp)
-                  )
-                }
-              }
-            }
-
-            Column {
-              Text(text = "디자인", style = AppTheme.typography.title)
-
-              Spacer(Modifier.height(12.dp))
-
-              SpaceSettingsRow(
-                label = "글 목록에 표시할 날짜",
-                trailing = {
-                  SelectField(
-                    field = model.form.dateDisplay,
-                    items =
-                      SpaceDateDisplayOptions.map { option ->
-                        SelectFieldItem(value = option.key, label = option.value)
-                      },
-                  )
-                },
-              )
-            }
-          }
-        }
-      }
-
-      ToastAnchor()
-
-      Box(Modifier.padding(horizontal = 16.dp)) {
         Button(
           text = "저장",
           loading = model.isSubmitting,
@@ -244,6 +146,109 @@ fun SpaceSettingsScreen() {
             }
           },
         )
+
+        Spacer(Modifier.height(12.dp))
+      }
+    },
+  ) { contentPadding ->
+    Column(
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .imePadding()
+          .padding(contentPadding.excludeTop())
+          .padding(AppTheme.spacings.scrollBottomPadding)
+    ) {
+      SpaceLogoHero(
+        image = model.query.data.site.logo.img_image,
+        previewUrl = model.logoPreviewUrl,
+        onClick = { filePicker("image/*") },
+        topInset = contentPadding.calculateTopPadding(),
+      )
+
+      PaperPane(modifier = Modifier.offset(y = (-28).dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Text(text = "일반", style = AppTheme.typography.title)
+
+          TextField(
+            field = model.form.name,
+            label = "이름",
+            labelPosition = LabelPosition.Internal,
+            placeholder = "스페이스 이름",
+          )
+
+          Box(
+            modifier =
+              Modifier.fillMaxWidth().thenIf(
+                SubscriptionService.state is SubscriptionServiceState.NotSubscribed
+              ) {
+                clickable {
+                  SubscriptionService.gate(
+                    sheet,
+                    nav,
+                    title = "나만의 주소로\n이 공간을 완성해요.",
+                    benefits =
+                      listOf(
+                        PlanUpgradeBenefit.CustomSpaceAddress,
+                        PlanUpgradeBenefit.CustomFontUpload,
+                        PlanUpgradeBenefit.UnlimitedCharacters,
+                      ),
+                    preview = {
+                      SpaceSlugUpgradePreview(
+                        currentSlug = model.form.slug.value,
+                        host = model.usersiteHost,
+                      )
+                    },
+                  )
+                }
+              }
+          ) {
+            TextField(
+              field = model.form.slug,
+              label = "주소",
+              help =
+                if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
+                  "스페이스 주소 기능은 FULL ACCESS 플랜에서 사용할 수 있어요."
+                } else null,
+              labelPosition = LabelPosition.Internal,
+              placeholder = "스페이스 주소",
+              enabled = SubscriptionService.state is SubscriptionServiceState.Subscribed,
+              readOnly = SubscriptionService.state !is SubscriptionServiceState.Subscribed,
+              suffix = {
+                Text(
+                  ".${model.usersiteHost}",
+                  style = AppTheme.typography.body,
+                  color = AppTheme.colors.textMuted,
+                )
+              },
+            )
+
+            if (SubscriptionService.state is SubscriptionServiceState.NotSubscribed) {
+              LockedBadge(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp)
+              )
+            }
+          }
+        }
+
+        Column {
+          Text(text = "디자인", style = AppTheme.typography.title)
+
+          Spacer(Modifier.height(12.dp))
+
+          SpaceSettingsRow(
+            label = "글 목록에 표시할 날짜",
+            trailing = {
+              SelectField(
+                field = model.form.dateDisplay,
+                items =
+                  SpaceDateDisplayOptions.map { option ->
+                    SelectFieldItem(value = option.key, label = option.value)
+                  },
+              )
+            },
+          )
+        }
       }
     }
   }
