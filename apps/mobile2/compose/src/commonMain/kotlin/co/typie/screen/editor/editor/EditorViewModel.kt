@@ -1,7 +1,6 @@
 package co.typie.screen.editor.editor
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,15 +23,10 @@ import co.typie.graphql.text
 import co.typie.graphql.type.EntityType
 import co.typie.graphql.watchQuery
 
-class EditorViewModel : ViewModel() {
-  var entityId by mutableStateOf("")
+class EditorViewModel(val entityId: String) : ViewModel() {
 
   val query =
-    Apollo.watchQuery(
-      scope = viewModelScope,
-      placeholderData = placeholderData(),
-      skip = { entityId.isBlank() },
-    ) {
+    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       EditorScreen_Query(entityId = entityId)
     }
 

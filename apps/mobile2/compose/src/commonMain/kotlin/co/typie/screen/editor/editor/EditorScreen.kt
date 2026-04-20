@@ -14,12 +14,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,10 +37,7 @@ import co.typie.route.Route
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
-import co.typie.ui.component.dialog.LocalDialog
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarBackButton
 import co.typie.ui.component.topbar.TopBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
@@ -51,21 +46,12 @@ import co.typie.ui.theme.AppTheme
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
-  val dialog = LocalDialog.current
-  val model = viewModel { EditorViewModel() }
+  val model = viewModel { EditorViewModel(entityId) }
   val loading = model.query.state !is QueryState.Success
   val entity = model.query.data.entity
   val document = entity.node.onDocument
 
-  LaunchedEffect(entityId) { model.entityId = entityId }
-  LaunchedEffect(loading, document) {
-    if (!loading && document == null) {
-      dialog.error(nav = nav, onRetry = { model.query.refetch() })
-    }
-  }
-
   ProvideTopBar(
-    leading = { TopBarBackButton() },
     center = {
       document?.let { document ->
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -79,10 +65,10 @@ fun EditorScreen(entityId: String) {
           )
         }
       }
-    },
+    }
   )
 
-  Screen(loadable = model.query, background = Color.White) { contentPadding ->
+  Screen(loadable = model.query, background = AppTheme.colors.surfaceDefault) { contentPadding ->
     CompositionLocalProvider(LocalEditorState provides model.editorState) {
       Box(Modifier.fillMaxSize().padding(contentPadding)) {
         EditorView(doc = model.doc, selection = model.selection)
