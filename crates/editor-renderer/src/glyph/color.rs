@@ -1,370 +1,248 @@
-use skrifa::color::Transform;
-use skrifa::color::{Brush, ColorPainter, CompositeMode, PaintCachedColorGlyph, PaintError};
-use skrifa::instance::{LocationRef, Size};
+use skrifa::color::ColorPalettes;
+use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::DrawSettings;
 use skrifa::raw::TableProvider;
-use skrifa::raw::types::BoundingBox;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
-use zeno::{Command, Format, Mask, Placement, Point, Scratch, Verb};
+use zeno::{Placement, Point};
 
-use super::outline::Outline;
+use super::mask::rasterize_outline_to_mask;
 use super::outline_pen::OutlineWriter;
-use crate::types::Image;
+use super::scaler::ScaleContext;
+use super::{Content, RasterizedGlyph};
 
-pub fn rasterize_color_outline(font_data: &[u8], glyph_id: u32, font_size: f32) -> Option<Image> {
-    let font = FontRef::from_index(font_data, 0).ok()?;
-    let color_glyphs = font.color_glyphs();
-    let gid = GlyphId::new(glyph_id);
-    let color_glyph = color_glyphs.get(gid)?;
+const FOREGROUND_FALLBACK: [u8; 4] = [128, 128, 128, 255];
 
-    let palettes = font.color_palettes();
-    let palette = palettes.get(0)?;
-    let colors: Vec<[u8; 4]> = palette
-        .colors()
-        .iter()
-        .map(|c| [c.red, c.green, c.blue, c.alpha])
-        .collect();
-
-    let upem = font.head().ok()?.units_per_em() as f32;
-    let scale = font_size / upem;
-
-    let mut painter = ColorGlyphRasterizer::new(font_data, font_size, scale, &colors);
-    color_glyph
-        .paint(LocationRef::default(), &mut painter)
-        .ok()?;
-
-    painter.finish()
-}
-
-struct ColorGlyphRasterizer<'a> {
-    font_data: &'a [u8],
+pub fn rasterize_color_outline(
+    ctx: &mut ScaleContext,
+    font_data: &[u8],
+    glyph_id: u32,
     font_size: f32,
-    scale: f32,
-    colors: &'a [[u8; 4]],
-
-    pixels: Vec<u8>,
-    width: u32,
-    height: u32,
-    offset_x: f32,
-    offset_y: f32,
-
-    clip_mask: Option<ClipMask>,
-    clip_stack: Vec<Option<ClipMask>>,
-
-    layer_stack: Vec<LayerState>,
-
-    transform_stack: Vec<Transform>,
-    current_transform: Transform,
-
-    scratch: Scratch,
-}
-
-struct ClipMask {
-    data: Vec<u8>,
-    placement: Placement,
-}
-
-struct LayerState {
-    pixels: Vec<u8>,
-    composite_mode: CompositeMode,
-}
-
-impl<'a> ColorGlyphRasterizer<'a> {
-    fn new(font_data: &'a [u8], font_size: f32, scale: f32, colors: &'a [[u8; 4]]) -> Self {
-        let est_size = (font_size * 1.5).ceil() as u32;
-        let w = est_size.max(1);
-        let h = est_size.max(1);
-
-        Self {
-            font_data,
-            font_size,
-            scale,
-            colors,
-            pixels: vec![0u8; (w * h * 4) as usize],
-            width: w,
-            height: h,
-            offset_x: 0.0,
-            offset_y: 0.0,
-            clip_mask: None,
-            clip_stack: Vec::new(),
-            layer_stack: Vec::new(),
-            transform_stack: Vec::new(),
-            current_transform: Transform::default(),
-            scratch: Scratch::new(),
-        }
+    subpixel_offset_x: f32,
+) -> Option<RasterizedGlyph> {
+    let font = FontRef::from_index(font_data, 0).ok()?;
+    let layers = read_colr_v0_layers(&font, glyph_id)?;
+    if layers.is_empty() {
+        return None;
     }
 
-    fn finish(self) -> Option<Image> {
-        if self.width == 0 || self.height == 0 {
-            return None;
+    let palette = read_palette(&font);
+    let size = Size::new(font_size);
+    let coords: &[NormalizedCoord] = &[];
+
+    let (base_x, base_y, width, height) =
+        compute_union_bounds(ctx, &font, size, coords, &layers, subpixel_offset_x)?;
+
+    let mut canvas = vec![0u8; (width * height * 4) as usize];
+
+    let outlines = font.outline_glyphs();
+    for (layer_gid, color_index) in &layers {
+        let og = outlines.get(GlyphId::new(u32::from(*layer_gid)))?;
+        ctx.outline.clear();
+        og.draw(
+            DrawSettings::unhinted(size, LocationRef::new(coords)),
+            &mut OutlineWriter(&mut ctx.outline),
+        )
+        .ok()?;
+        if ctx.outline.is_empty() {
+            continue;
         }
 
-        Some(Image {
-            data: self.pixels,
-            width: self.width,
-            height: self.height,
-        })
-    }
-
-    fn rasterize_glyph_to_mask(&mut self, glyph_id: GlyphId) -> Option<(Vec<u8>, Placement)> {
-        let font = FontRef::from_index(self.font_data, 0).ok()?;
-        let outlines = font.outline_glyphs();
-        let outline_glyph = outlines.get(glyph_id)?;
-
-        let settings = DrawSettings::unhinted(Size::new(self.font_size), LocationRef::default());
-        let mut outline = Outline::new();
-        let mut writer = OutlineWriter(&mut outline);
-        outline_glyph.draw(settings, &mut writer).ok()?;
-
-        if outline.is_empty() {
-            return None;
-        }
-
-        let commands = outline_to_zeno_commands(&outline);
-
-        let mut mask_buf = Vec::new();
-        let placement = Mask::with_scratch(&commands[..], &mut self.scratch)
-            .format(Format::Alpha)
-            .inspect(|fmt, w, h| {
-                mask_buf.resize(fmt.buffer_size(w, h), 0);
-            })
-            .render_into(&mut mask_buf, None);
-
-        Some((mask_buf, placement))
-    }
-
-    fn fill_solid(&mut self, r: u8, g: u8, b: u8, a: u8) {
-        let clip = match &self.clip_mask {
-            Some(c) => c,
-            None => return,
-        };
-
-        let clip_left = clip.placement.left;
-        let clip_top = clip.placement.top;
-        let clip_w = clip.placement.width;
-        let clip_h = clip.placement.height;
-
-        let dst_x0 = clip_left - self.offset_x as i32;
-        let dst_y0 = clip_top - self.offset_y as i32;
-
-        for row in 0..clip_h as i32 {
-            for col in 0..clip_w as i32 {
-                let mask_idx = (row as u32 * clip_w + col as u32) as usize;
-                let mask_alpha = match clip.data.get(mask_idx) {
-                    Some(&v) => v,
-                    None => continue,
-                };
-
-                if mask_alpha == 0 {
-                    continue;
-                }
-
-                let px = dst_x0 + col;
-                let py = dst_y0 + row;
-                if px < 0 || py < 0 || px >= self.width as i32 || py >= self.height as i32 {
-                    continue;
-                }
-
-                let sa = (a as u16 * mask_alpha as u16 / 255) as u8;
-                let sr = (r as u16 * sa as u16 / 255) as u8;
-                let sg = (g as u16 * sa as u16 / 255) as u8;
-                let sb = (b as u16 * sa as u16 / 255) as u8;
-
-                let off = ((py as u32 * self.width + px as u32) * 4) as usize;
-                blend_src_over(&mut self.pixels[off..off + 4], sr, sg, sb, sa);
-            }
-        }
-    }
-
-    fn resolve_color(&self, palette_index: u16, alpha: f32) -> [u8; 4] {
-        let base = self
-            .colors
-            .get(palette_index as usize)
-            .copied()
-            .unwrap_or([0, 0, 0, 255]);
-        let a = (base[3] as f32 * alpha).round().clamp(0.0, 255.0) as u8;
-        [base[0], base[1], base[2], a]
-    }
-
-    fn resize_buffer(&mut self, width: u32, height: u32, offset_x: f32, offset_y: f32) {
-        self.width = width;
-        self.height = height;
-        self.offset_x = offset_x;
-        self.offset_y = offset_y;
-        self.pixels = vec![0u8; (width * height * 4) as usize];
-    }
-}
-
-impl ColorPainter for ColorGlyphRasterizer<'_> {
-    fn push_transform(&mut self, transform: Transform) {
-        self.transform_stack.push(self.current_transform);
-        self.current_transform *= transform;
-    }
-
-    fn pop_transform(&mut self) {
-        if let Some(prev) = self.transform_stack.pop() {
-            self.current_transform = prev;
-        }
-    }
-
-    fn push_clip_glyph(&mut self, glyph_id: GlyphId) {
-        self.clip_stack.push(self.clip_mask.take());
-        self.clip_mask = self
-            .rasterize_glyph_to_mask(glyph_id)
-            .map(|(data, placement)| ClipMask { data, placement });
-    }
-
-    fn push_clip_box(&mut self, clip_box: BoundingBox<f32>) {
-        self.clip_stack.push(self.clip_mask.take());
-
-        let x_min = (clip_box.x_min * self.scale).floor();
-        let y_min = (clip_box.y_min * self.scale).floor();
-        let x_max = (clip_box.x_max * self.scale).ceil();
-        let y_max = (clip_box.y_max * self.scale).ceil();
-
-        let w = (x_max - x_min).max(0.0) as u32;
-        let h = (y_max - y_min).max(0.0) as u32;
-
-        if w > 0 && h > 0 {
-            self.resize_buffer(w, h, x_min, y_min);
-
-            self.clip_mask = Some(ClipMask {
-                data: vec![255u8; (w * h) as usize],
-                placement: Placement {
-                    left: x_min as i32,
-                    top: y_min as i32,
-                    width: w,
-                    height: h,
-                },
-            });
-        }
-    }
-
-    fn pop_clip(&mut self) {
-        self.clip_mask = self.clip_stack.pop().flatten();
-    }
-
-    fn fill(&mut self, brush: Brush<'_>) {
-        match brush {
-            Brush::Solid {
-                palette_index,
-                alpha,
-            } => {
-                let [r, g, b, a] = self.resolve_color(palette_index, alpha);
-                self.fill_solid(r, g, b, a);
-            }
-            Brush::LinearGradient { .. }
-            | Brush::RadialGradient { .. }
-            | Brush::SweepGradient { .. } => {}
-        }
-    }
-
-    fn push_layer(&mut self, composite_mode: CompositeMode) {
-        let saved = std::mem::replace(
-            &mut self.pixels,
-            vec![0u8; (self.width * self.height * 4) as usize],
+        let placement = rasterize_outline_to_mask(
+            &ctx.outline,
+            &mut ctx.scratch.zeno,
+            subpixel_offset_x,
+            None,
+            &mut ctx.scratch.bitmap_0,
         );
+        if placement.width == 0 || placement.height == 0 {
+            continue;
+        }
 
-        self.layer_stack.push(LayerState {
-            pixels: saved,
-            composite_mode,
+        let color = resolve_color(*color_index, palette.as_deref());
+        blit_mask_onto_canvas(
+            &ctx.scratch.bitmap_0,
+            placement,
+            base_x,
+            base_y,
+            width,
+            height,
+            color,
+            &mut canvas,
+        );
+    }
+
+    Some(RasterizedGlyph {
+        data: canvas,
+        width,
+        height,
+        placement_left: base_x,
+        placement_top: base_y + height as i32,
+        content: Content::Color,
+    })
+}
+
+fn read_colr_v0_layers(font: &FontRef<'_>, glyph_id: u32) -> Option<Vec<(u16, u16)>> {
+    let colr = font.colr().ok()?;
+    let range = colr.v0_base_glyph(GlyphId::new(glyph_id)).ok()??;
+    let mut out = Vec::with_capacity(range.len());
+    for i in range {
+        let (layer_gid, palette_index) = colr.v0_layer(i).ok()?;
+        out.push((layer_gid.to_u16(), palette_index));
+    }
+    Some(out)
+}
+
+fn read_palette(font: &FontRef<'_>) -> Option<Vec<[u8; 4]>> {
+    let palettes = ColorPalettes::new(font);
+    let palette = palettes.get(0)?;
+    Some(
+        palette
+            .colors()
+            .iter()
+            .map(|c| [c.red(), c.green(), c.blue(), c.alpha()])
+            .collect(),
+    )
+}
+
+fn resolve_color(palette_index: u16, palette: Option<&[[u8; 4]]>) -> [u8; 4] {
+    if palette_index == 0xFFFF {
+        return FOREGROUND_FALLBACK;
+    }
+    palette
+        .and_then(|p| p.get(palette_index as usize).copied())
+        .unwrap_or(FOREGROUND_FALLBACK)
+}
+
+fn compute_union_bounds(
+    ctx: &mut ScaleContext,
+    font: &FontRef<'_>,
+    size: Size,
+    coords: &[NormalizedCoord],
+    layers: &[(u16, u16)],
+    subpixel_offset_x: f32,
+) -> Option<(i32, i32, u32, u32)> {
+    let outlines = font.outline_glyphs();
+    let mut union: Option<(f32, f32, f32, f32)> = None;
+
+    for (layer_gid, _) in layers {
+        let og = outlines.get(GlyphId::new(u32::from(*layer_gid)))?;
+        ctx.outline.clear();
+        og.draw(
+            DrawSettings::unhinted(size, LocationRef::new(coords)),
+            &mut OutlineWriter(&mut ctx.outline),
+        )
+        .ok()?;
+        if ctx.outline.is_empty() {
+            continue;
+        }
+
+        let (min, max) = outline_point_bounds(ctx.outline.points())?;
+        union = Some(match union {
+            None => (min.x, min.y, max.x, max.y),
+            Some((lx, ly, hx, hy)) => (lx.min(min.x), ly.min(min.y), hx.max(max.x), hy.max(max.y)),
         });
     }
 
-    fn pop_layer(&mut self) {
-        if let Some(layer) = self.layer_stack.pop() {
-            let src = std::mem::replace(&mut self.pixels, layer.pixels);
-            if layer.composite_mode == CompositeMode::SrcOver {
-                for i in (0..self.pixels.len()).step_by(4) {
-                    if i + 3 < src.len() {
-                        blend_src_over(
-                            &mut self.pixels[i..i + 4],
-                            src[i],
-                            src[i + 1],
-                            src[i + 2],
-                            src[i + 3],
-                        );
-                    }
+    let (min_x, min_y, max_x, max_y) = union?;
+    // 서브픽셀 오프셋은 x축에만 적용 (legacy 와 동일). y 는 floor 대신 ceil 로
+    // 비대칭 처리 — 폰트 좌표계의 y-up 과 픽셀 그리드 정렬을 위한 기존 규약.
+    let base_x = (min_x + subpixel_offset_x).floor() as i32;
+    let base_y = min_y.ceil() as i32;
+    let width = (max_x - min_x).ceil() as u32;
+    let height = (max_y - min_y).ceil() as u32;
+    if width == 0 || height == 0 {
+        return None;
+    }
+    Some((base_x, base_y, width, height))
+}
+
+fn outline_point_bounds(points: &[Point]) -> Option<(Point, Point)> {
+    if points.is_empty() {
+        return None;
+    }
+    let mut min = points[0];
+    let mut max = points[0];
+    for p in &points[1..] {
+        if p.x < min.x {
+            min.x = p.x;
+        }
+        if p.y < min.y {
+            min.y = p.y;
+        }
+        if p.x > max.x {
+            max.x = p.x;
+        }
+        if p.y > max.y {
+            max.y = p.y;
+        }
+    }
+    Some((min, max))
+}
+
+fn blit_mask_onto_canvas(
+    mask: &[u8],
+    placement: Placement,
+    base_x: i32,
+    base_y: i32,
+    canvas_w: u32,
+    canvas_h: u32,
+    color: [u8; 4],
+    canvas: &mut [u8],
+) {
+    let mask_w = placement.width;
+    let mask_h = placement.height;
+    if mask_w == 0 || mask_h == 0 {
+        return;
+    }
+    let dst_x = placement.left.wrapping_sub(base_x);
+    let dst_y = (canvas_h as i32 + base_y).wrapping_sub(placement.top);
+
+    let source_w = mask_w as usize;
+    let source_h = mask_h as usize;
+    let dest_w = canvas_w as usize;
+    let dest_h = canvas_h as usize;
+
+    let source_x = if dst_x < 0 { -dst_x as usize } else { 0 };
+    let source_y = if dst_y < 0 { -dst_y as usize } else { 0 };
+    if source_x >= source_w || source_y >= source_h {
+        return;
+    }
+    let dest_x = if dst_x < 0 { 0 } else { dst_x as usize };
+    let dest_y = if dst_y < 0 { 0 } else { dst_y as usize };
+    if dest_x >= dest_w || dest_y >= dest_h {
+        return;
+    }
+
+    let source_end_x = source_w.min(dest_w - dest_x + source_x);
+    let source_end_y = source_h.min(dest_h - dest_y + source_y);
+    let dest_pitch = dest_w * 4;
+    let color_a = color[3] as u32;
+
+    let mut dy = dest_y;
+    for sy in source_y..source_end_y {
+        let src_row = &mask[sy * source_w..];
+        let dst_row = &mut canvas[dy * dest_pitch..];
+        dy += 1;
+        let mut dx = dest_x * 4;
+        for sx in source_x..source_end_x {
+            let a = (src_row[sx] as u32 * color_a) >> 8;
+            if a >= 255 {
+                dst_row[dx] = color[0];
+                dst_row[dx + 1] = color[1];
+                dst_row[dx + 2] = color[2];
+                dst_row[dx + 3] = 255;
+            } else if a != 0 {
+                let inverse_a = 255 - a;
+                for i in 0..3 {
+                    let d = dst_row[dx + i] as u32;
+                    let c = ((inverse_a * d) + (a * color[i] as u32)) >> 8;
+                    dst_row[dx + i] = c as u8;
                 }
+                let d = dst_row[dx + 3] as u32;
+                let c = ((inverse_a * d) + a * 255) >> 8;
+                dst_row[dx + 3] = c as u8;
             }
+            dx += 4;
         }
     }
-
-    fn pop_layer_with_mode(&mut self, _composite_mode: CompositeMode) {
-        self.pop_layer();
-    }
-
-    fn paint_cached_color_glyph(
-        &mut self,
-        _glyph: GlyphId,
-    ) -> Result<PaintCachedColorGlyph, PaintError> {
-        Ok(PaintCachedColorGlyph::Unimplemented)
-    }
-}
-
-fn outline_to_zeno_commands(outline: &Outline) -> Vec<Command> {
-    let points = outline.points();
-    let verbs = outline.verbs();
-    let mut commands = Vec::new();
-    let mut point_idx = 0usize;
-
-    for verb in verbs {
-        match verb {
-            Verb::MoveTo => {
-                let p = points[point_idx];
-                point_idx += 1;
-                commands.push(Command::MoveTo(Point::new(p.x, p.y)));
-            }
-            Verb::LineTo => {
-                let p = points[point_idx];
-                point_idx += 1;
-                commands.push(Command::LineTo(Point::new(p.x, p.y)));
-            }
-            Verb::QuadTo => {
-                let ctrl = points[point_idx];
-                let p = points[point_idx + 1];
-                point_idx += 2;
-                commands.push(Command::QuadTo(
-                    Point::new(ctrl.x, ctrl.y),
-                    Point::new(p.x, p.y),
-                ));
-            }
-            Verb::CurveTo => {
-                let c1 = points[point_idx];
-                let c2 = points[point_idx + 1];
-                let p = points[point_idx + 2];
-                point_idx += 3;
-                commands.push(Command::CurveTo(
-                    Point::new(c1.x, c1.y),
-                    Point::new(c2.x, c2.y),
-                    Point::new(p.x, p.y),
-                ));
-            }
-            Verb::Close => {
-                commands.push(Command::Close);
-            }
-        }
-    }
-
-    commands
-}
-
-fn blend_src_over(dst: &mut [u8], src_r: u8, src_g: u8, src_b: u8, src_a: u8) {
-    if src_a == 0 {
-        return;
-    }
-
-    if src_a == 255 {
-        dst[0] = src_r;
-        dst[1] = src_g;
-        dst[2] = src_b;
-        dst[3] = 255;
-        return;
-    }
-
-    let inv_a = 255 - src_a as u16;
-    dst[0] = (src_r as u16 + dst[0] as u16 * inv_a / 255) as u8;
-    dst[1] = (src_g as u16 + dst[1] as u16 * inv_a / 255) as u8;
-    dst[2] = (src_b as u16 + dst[2] as u16 * inv_a / 255) as u8;
-    dst[3] = (src_a as u16 + dst[3] as u16 * inv_a / 255) as u8;
 }

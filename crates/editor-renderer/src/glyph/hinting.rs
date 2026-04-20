@@ -9,7 +9,7 @@ const MAX_CACHED_HINT_INSTANCES: usize = 8;
 const HINTING_OPTIONS: HintingOptions = HintingOptions {
     engine: Engine::AutoFallback,
     target: Target::Smooth {
-        mode: SmoothMode::Normal,
+        mode: SmoothMode::Lcd,
         symmetric_rendering: true,
         preserve_linear_metrics: true,
     },

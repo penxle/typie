@@ -5,15 +5,41 @@ use editor_view::style::{BoxStyle, DecorationData};
 use editor_view::{Edges, PageRect, PageVisitor};
 use std::sync::{Arc, Mutex};
 
-use crate::glyph::{GlyphCache, ScaleContext};
+use crate::glyph::{Content, GlyphCache, ScaleContext};
 use crate::icons::ICONS;
 use crate::sink::RenderSink;
 use crate::theme::Theme;
 use crate::theme_data::ThemeVariant;
 use crate::types::{
-    Color, CornerRadii, IconData, IconElement, Path, PathElement, Stroke, StrokeCap, StrokeJoin,
-    Transform,
+    Color, CornerRadii, IconData, IconElement, Image, Path, PathElement, Stroke, StrokeCap,
+    StrokeJoin, Transform,
 };
+
+fn bake_mask_to_premul_rgba(mask: &[u8], width: u32, height: u32, color: Color) -> Image {
+    let color_r = color.r as u32;
+    let color_g = color.g as u32;
+    let color_b = color.b as u32;
+    let color_a = color.a as u32;
+
+    // legacy blit 공식과 동일: a = (m * color_a) >> 8, rgb_premul = (a * c) >> 8.
+    // zero canvas 위에서 legacy 의 직접 블릿 출력과 byte-exact 일치하도록 선택했다.
+    let mut data = Vec::with_capacity((width * height * 4) as usize);
+    for &m in mask {
+        let a = (m as u32 * color_a) >> 8;
+        let pr = (a * color_r) >> 8;
+        let pg = (a * color_g) >> 8;
+        let pb = (a * color_b) >> 8;
+        data.push(pr as u8);
+        data.push(pg as u8);
+        data.push(pb as u8);
+        data.push(a as u8);
+    }
+    Image {
+        data,
+        width,
+        height,
+    }
+}
 
 fn callout_token(variant: editor_model::CalloutVariant) -> &'static str {
     match variant {
@@ -417,8 +443,6 @@ impl<'a> RenderVisitor<'a> {
         color: Color,
         base_transform: Transform,
     ) {
-        let inv_scale = 1.0 / self.scale_factor;
-
         for run in glyph_runs {
             let resource = Arc::clone(&self.renderer.resource);
             let resource_guard = resource.lock().unwrap();
@@ -428,21 +452,28 @@ impl<'a> RenderVisitor<'a> {
                 &mut self.renderer.scale_ctx,
                 &mut self.renderer.glyph_cache,
                 self.scale_factor,
+                base_transform,
             );
             drop(resource_guard);
 
             for pg in &positioned {
-                let gt = base_transform.translate(pg.x, pg.y).post_scale(inv_scale);
-                match &pg.raster {
-                    crate::glyph::RasterizedGlyph::Path(path) => {
-                        self.sink.fill_path(path, color, gt);
-                    }
-                    crate::glyph::RasterizedGlyph::Bitmap(image) => {
-                        let rect =
-                            Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
-                        self.sink.draw_image(image, rect, gt);
-                    }
-                }
+                let image = match pg.raster.content {
+                    Content::Mask => bake_mask_to_premul_rgba(
+                        &pg.raster.data,
+                        pg.raster.width,
+                        pg.raster.height,
+                        color,
+                    ),
+                    Content::Color => Image {
+                        data: pg.raster.data.clone(),
+                        width: pg.raster.width,
+                        height: pg.raster.height,
+                    },
+                };
+
+                let t = Transform::IDENTITY.translate(pg.blit_x as f32, pg.blit_y as f32);
+                let rect = Rect::from_xywh(0.0, 0.0, image.width as f32, image.height as f32);
+                self.sink.draw_image(&image, rect, t);
             }
         }
     }

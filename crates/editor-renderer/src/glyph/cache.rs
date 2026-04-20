@@ -9,6 +9,7 @@ pub struct GlyphCacheKey {
     pub size_q4: u32,
     pub has_skew: bool,
     pub embolden: bool,
+    pub subpixel_x: u8,
 }
 
 impl GlyphCacheKey {
@@ -18,13 +19,16 @@ impl GlyphCacheKey {
         font_size: f32,
         has_skew: bool,
         embolden: bool,
+        subpixel_x: u8,
     ) -> Self {
+        debug_assert!(subpixel_x < 4);
         Self {
             font_id,
             glyph_id,
             size_q4: (font_size * 4.0).round() as u32,
             has_skew,
             embolden,
+            subpixel_x,
         }
     }
 }

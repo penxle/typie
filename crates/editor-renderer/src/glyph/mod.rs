@@ -2,128 +2,114 @@ mod bitmap;
 mod cache;
 mod color;
 mod hinting;
+mod mask;
 mod outline;
 mod outline_pen;
-mod path;
 mod scaler;
+mod scratch;
 
 pub use cache::GlyphCache;
 pub use scaler::ScaleContext;
 
-use editor_resource::FontRegistry;
-
-use crate::types::{Image, Path};
+use crate::types::Transform as RenderTransform;
 use cache::GlyphCacheKey;
-use scaler::rasterize_glyph;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Content {
+    Mask,
+    Color,
+}
 
 #[derive(Debug, Clone)]
-pub enum RasterizedGlyph {
-    Path(Path),
-    Bitmap(Image),
+pub struct RasterizedGlyph {
+    pub data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub placement_left: i32,
+    pub placement_top: i32,
+    pub content: Content,
 }
 
 #[derive(Debug, Clone)]
 pub struct PositionedGlyph {
     pub raster: RasterizedGlyph,
-    pub x: f32,
-    pub y: f32,
+    pub blit_x: i32,
+    pub blit_y: i32,
 }
 
-struct GlyphInput {
-    id: u32,
-    x: f32,
-    y: f32,
-}
-
-struct RasterizeInput<'a> {
-    font_id: u16,
-    font_weight: u16,
-    font_size: f32,
-    embolden: bool,
-    skew: Option<f32>,
-    glyphs: &'a [GlyphInput],
+/// base_transform 의 2×3 매트릭스로 logical (x, y) 를 매핑한다.
+#[inline]
+fn map_point(t: RenderTransform, x: f32, y: f32) -> (f32, f32) {
+    let [a, b, c, d, e, f] = t.m;
+    (a * x + c * y + e, b * x + d * y + f)
 }
 
 pub fn rasterize(
     run: &editor_view::glyph_run::GlyphRun,
-    fonts: &FontRegistry,
+    fonts: &editor_resource::FontRegistry,
     scale_ctx: &mut ScaleContext,
     cache: &mut GlyphCache,
     scale_factor: f32,
+    base_transform: RenderTransform,
 ) -> Vec<PositionedGlyph> {
-    let glyphs: Vec<GlyphInput> = run
-        .glyphs
-        .iter()
-        .map(|g| GlyphInput {
-            id: g.id,
-            x: g.x,
-            y: g.y,
-        })
-        .collect();
-    let input = RasterizeInput {
-        font_id: run.font_id,
-        font_weight: run.font_weight,
-        font_size: run.font_size,
-        embolden: run.synthesis.embolden,
-        skew: run.synthesis.skew,
-        glyphs: &glyphs,
-    };
-    rasterize_inner(&input, fonts, scale_ctx, cache, scale_factor)
-}
-
-fn rasterize_inner(
-    input: &RasterizeInput,
-    fonts: &FontRegistry,
-    scale_ctx: &mut ScaleContext,
-    cache: &mut GlyphCache,
-    scale_factor: f32,
-) -> Vec<PositionedGlyph> {
-    let Some(font_data) = fonts.font_data(input.font_id, input.font_weight) else {
+    let Some(font_data) = fonts.font_data(run.font_id, run.font_weight) else {
         return Vec::new();
     };
+    let font_version = fonts.font_version(run.font_id, run.font_weight);
+    let scaled_font_size = run.font_size * scale_factor;
+    let has_skew = run.synthesis.skew.is_some();
+    let embolden = run.synthesis.embolden;
 
-    let font_version = fonts.font_version(input.font_id, input.font_weight);
-    let embolden = input.embolden;
-    let has_skew = input.skew.is_some();
-    let scaled_font_size = input.font_size * scale_factor;
+    let mut out = Vec::with_capacity(run.glyphs.len());
+    for g in &run.glyphs {
+        if g.id == 0 {
+            continue;
+        }
 
-    input
-        .glyphs
-        .iter()
-        .filter_map(|glyph| {
-            if glyph.id == 0 {
-                return None;
+        // base_transform 은 renderer::ContentVisitor 에서 root_transform =
+        // Transform::scale(scale_factor) 로 시작해 누적되므로 이미 device-pixel
+        // 좌표계다. 여기서 scale_factor 를 다시 곱하면 이중 적용이 된다.
+        let (glyph_x_device, glyph_y_device) = map_point(base_transform, g.x, g.y);
+
+        let snapped_x = (glyph_x_device * 4.0).round() / 4.0;
+        let subpixel_x = ((snapped_x - snapped_x.floor()) * 4.0) as u8;
+
+        let key = GlyphCacheKey::new(
+            run.font_id,
+            g.id,
+            scaled_font_size,
+            has_skew,
+            embolden,
+            subpixel_x,
+        );
+
+        let raster = match cache.get(&key, font_version) {
+            Some(entry) => entry.clone(),
+            None => {
+                let r = scaler::rasterize_glyph(
+                    scale_ctx,
+                    font_data,
+                    g.id,
+                    scaled_font_size,
+                    embolden,
+                    run.synthesis.skew,
+                    subpixel_x as f32 / 4.0,
+                );
+                cache.insert(key, r.clone(), font_version);
+                r
             }
+        };
 
-            let key = GlyphCacheKey::new(
-                input.font_id,
-                glyph.id,
-                scaled_font_size,
-                has_skew,
-                embolden,
-            );
+        let Some(raster) = raster else { continue };
 
-            let result = match cache.get(&key, font_version) {
-                Some(cached) => cached.clone(),
-                None => {
-                    let result = rasterize_glyph(
-                        scale_ctx,
-                        font_data,
-                        glyph.id,
-                        scaled_font_size,
-                        embolden,
-                        input.skew,
-                    );
-                    cache.insert(key, result.clone(), font_version);
-                    result
-                }
-            };
+        let blit_x = snapped_x.floor() as i32 + raster.placement_left;
+        let blit_y = glyph_y_device.floor() as i32 - raster.placement_top;
 
-            result.map(|r| PositionedGlyph {
-                raster: r,
-                x: glyph.x,
-                y: glyph.y,
-            })
-        })
-        .collect()
+        out.push(PositionedGlyph {
+            raster,
+            blit_x,
+            blit_y,
+        });
+    }
+    out
 }

@@ -1,4 +1,4 @@
-use skrifa::bitmap::{BitmapData, BitmapStrikes, MaskData};
+use skrifa::bitmap::{BitmapData, BitmapStrikes, MaskData, Origin};
 use skrifa::instance::Size;
 use skrifa::{FontRef, GlyphId};
 use zune_png::PngDecoder;
@@ -6,53 +6,148 @@ use zune_png::zune_core::bytestream::ZCursor;
 use zune_png::zune_core::colorspace::ColorSpace;
 use zune_png::zune_core::options::DecoderOptions;
 
-use crate::types::Image;
+use super::scaler::ScaleContext;
+use super::{Content, RasterizedGlyph};
 
-pub fn rasterize_bitmap(font_data: &[u8], glyph_id: u32, font_size: f32) -> Option<Image> {
+pub fn rasterize_bitmap(
+    ctx: &mut ScaleContext,
+    font_data: &[u8],
+    glyph_id: u32,
+    font_size: f32,
+) -> Option<RasterizedGlyph> {
     let font = FontRef::from_index(font_data, 0).ok()?;
     let strikes = BitmapStrikes::new(&font);
     let gid = GlyphId::new(glyph_id);
 
-    let bitmap_glyph = strikes.glyph_for_size(Size::new(font_size), gid)?;
-
-    let src_w = bitmap_glyph.width;
-    let src_h = bitmap_glyph.height;
+    let bg = strikes.glyph_for_size(Size::new(font_size), gid)?;
+    let src_w = bg.width;
+    let src_h = bg.height;
     if src_w == 0 || src_h == 0 {
         return None;
     }
 
-    let mut pixels = match &bitmap_glyph.data {
-        BitmapData::Png(png_data) => decode_png_to_rgba(png_data)?,
-        BitmapData::Bgra(data) => decode_bgra_to_rgba(data, src_w, src_h)?,
-        BitmapData::Mask(mask) => decode_mask_to_rgba(mask, src_w, src_h)?,
-    };
-
-    premultiply_rgba(&mut pixels);
-
-    let ppem = bitmap_glyph.ppem_y;
+    let ppem = bg.ppem_y;
     let scale = if font_size != 0.0 && ppem != 0.0 {
         font_size / ppem
     } else {
         1.0
     };
+    let dst_w = ((src_w as f32) * scale).ceil() as u32;
+    let dst_h = ((src_h as f32) * scale).ceil() as u32;
+    if dst_w == 0 || dst_h == 0 {
+        return None;
+    }
 
-    let (final_data, final_w, final_h) = if (scale - 1.0).abs() > f32::EPSILON {
-        let dst_w = ((src_w as f32) * scale).ceil() as u32;
-        let dst_h = ((src_h as f32) * scale).ceil() as u32;
-        if dst_w == 0 || dst_h == 0 {
-            return None;
+    let (bearing_x, bearing_y) = match bg.placement_origin {
+        Origin::TopLeft => (bg.inner_bearing_x, -bg.inner_bearing_y),
+        Origin::BottomLeft => (bg.inner_bearing_x, -(bg.inner_bearing_y - src_h as f32)),
+    };
+    let placement_left = (bearing_x * scale) as i32;
+    let placement_top = -(bearing_y * scale) as i32;
+
+    let need_resize = (scale - 1.0).abs() > f32::EPSILON;
+
+    match &bg.data {
+        BitmapData::Mask(mask) => {
+            let alpha = decode_bitmap_mask(mask, src_w, src_h)?;
+            let data = if need_resize {
+                resize_mitchell_alpha(ctx, &alpha, src_w, src_h, dst_w, dst_h)?
+            } else {
+                alpha
+            };
+            Some(RasterizedGlyph {
+                data,
+                width: dst_w,
+                height: dst_h,
+                placement_left,
+                placement_top,
+                content: Content::Mask,
+            })
         }
-        let resized = resize_rgba(&pixels, src_w, src_h, dst_w, dst_h)?;
-        (resized, dst_w, dst_h)
-    } else {
-        (pixels, src_w, src_h)
+        BitmapData::Png(png) => {
+            let mut rgba = decode_png_to_rgba(png)?;
+            premultiply_rgba_inplace(&mut rgba);
+            let data = if need_resize {
+                resize_mitchell_rgba(ctx, &rgba, src_w, src_h, dst_w, dst_h)?
+            } else {
+                rgba
+            };
+            Some(RasterizedGlyph {
+                data,
+                width: dst_w,
+                height: dst_h,
+                placement_left,
+                placement_top,
+                content: Content::Color,
+            })
+        }
+        BitmapData::Bgra(bgra) => {
+            let mut rgba = decode_bgra_to_rgba(bgra, src_w, src_h)?;
+            premultiply_rgba_inplace(&mut rgba);
+            let data = if need_resize {
+                resize_mitchell_rgba(ctx, &rgba, src_w, src_h, dst_w, dst_h)?
+            } else {
+                rgba
+            };
+            Some(RasterizedGlyph {
+                data,
+                width: dst_w,
+                height: dst_h,
+                placement_left,
+                placement_top,
+                content: Content::Color,
+            })
+        }
+    }
+}
+
+fn decode_bitmap_mask(mask: &MaskData<'_>, width: u32, height: u32) -> Option<Vec<u8>> {
+    let pixel_count = (width as usize) * (height as usize);
+
+    let bpp = match mask.bpp {
+        1 | 2 | 4 | 8 => mask.bpp as usize,
+        _ => return None,
     };
 
-    Some(Image {
-        data: final_data,
-        width: final_w,
-        height: final_h,
-    })
+    let max_sample = ((1u16 << bpp) - 1) as u16;
+    let row_bits = width as usize * bpp;
+    let stride_bits = if mask.is_packed {
+        row_bits
+    } else {
+        row_bits.next_multiple_of(8)
+    };
+    let total_bits = stride_bits * height as usize;
+    let required_bytes = total_bits.div_ceil(8);
+    if mask.data.len() < required_bytes {
+        return None;
+    }
+
+    let mut out = vec![0u8; pixel_count];
+    let mut cursor = 0usize;
+    for y in 0..height as usize {
+        let row_base = y * stride_bits;
+        for x in 0..width as usize {
+            let sample = read_packed_sample(mask.data, row_base + x * bpp, bpp);
+            out[cursor] = if bpp == 8 {
+                sample
+            } else {
+                ((sample as u16 * 255 + max_sample / 2) / max_sample) as u8
+            };
+            cursor += 1;
+        }
+    }
+    Some(out)
+}
+
+fn read_packed_sample(data: &[u8], bit_start: usize, bpp: usize) -> u8 {
+    let mut sample = 0u8;
+    for bit in 0..bpp {
+        let bit_index = bit_start + bit;
+        let byte = data[bit_index / 8];
+        let shift = 7 - (bit_index % 8);
+        sample = (sample << 1) | ((byte >> shift) & 1);
+    }
+    sample
 }
 
 fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
@@ -63,8 +158,6 @@ fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
     let pixels = decoder.decode_raw().ok()?;
     let (w, h) = decoder.dimensions()?;
     let colorspace = decoder.colorspace()?;
-    let channels = colorspace.num_components();
-
     match colorspace {
         ColorSpace::RGBA => Some(pixels),
         ColorSpace::RGB => {
@@ -90,13 +183,7 @@ fn decode_png_to_rgba(png_data: &[u8]) -> Option<Vec<u8>> {
             }
             Some(rgba)
         }
-        _ => {
-            if channels == 4 {
-                Some(pixels)
-            } else {
-                None
-            }
-        }
+        _ => None,
     }
 }
 
@@ -105,147 +192,253 @@ fn decode_bgra_to_rgba(data: &[u8], width: u32, height: u32) -> Option<Vec<u8>> 
     if data.len() < expected {
         return None;
     }
-
     let mut rgba = vec![0u8; expected];
     for (i, chunk) in data[..expected].chunks_exact(4).enumerate() {
         let off = i * 4;
-        rgba[off] = chunk[2]; // R
-        rgba[off + 1] = chunk[1]; // G
-        rgba[off + 2] = chunk[0]; // B
-        rgba[off + 3] = chunk[3]; // A
+        rgba[off] = chunk[2];
+        rgba[off + 1] = chunk[1];
+        rgba[off + 2] = chunk[0];
+        rgba[off + 3] = chunk[3];
     }
-
     Some(rgba)
 }
 
-fn decode_mask_to_rgba(mask: &MaskData<'_>, width: u32, height: u32) -> Option<Vec<u8>> {
-    let pixel_count = (width as usize) * (height as usize);
-    let mut alpha = vec![0u8; pixel_count];
-    if !decode_bitmap_mask(mask, width, height, &mut alpha) {
-        return None;
-    }
-
-    let mut rgba = vec![0u8; pixel_count * 4];
-    for (i, &a) in alpha.iter().enumerate() {
-        let off = i * 4;
-        rgba[off] = 255;
-        rgba[off + 1] = 255;
-        rgba[off + 2] = 255;
-        rgba[off + 3] = a;
-    }
-
-    Some(rgba)
-}
-
-fn decode_bitmap_mask(mask: &MaskData<'_>, width: u32, height: u32, target: &mut [u8]) -> bool {
-    let pixel_count = width as usize * height as usize;
-    if target.len() < pixel_count {
-        return false;
-    }
-
-    let bpp = match mask.bpp {
-        1 | 2 | 4 | 8 => mask.bpp as usize,
-        _ => return false,
-    };
-
-    let max_sample = (1u16 << bpp) - 1;
-    let row_bits = width as usize * bpp;
-    let stride_bits = if mask.is_packed {
-        row_bits
-    } else {
-        row_bits.next_multiple_of(8)
-    };
-
-    let total_bits = stride_bits * height as usize;
-    let required_bytes = total_bits.div_ceil(8);
-    if mask.data.len() < required_bytes {
-        return false;
-    }
-
-    let mut out = 0usize;
-    for y in 0..height as usize {
-        let row_base = y * stride_bits;
-        for x in 0..width as usize {
-            let sample = read_packed_sample(mask.data, row_base + x * bpp, bpp);
-            target[out] = if bpp == 8 {
-                sample
-            } else {
-                ((sample as u16 * 255 + max_sample / 2) / max_sample) as u8
-            };
-            out += 1;
-        }
-    }
-
-    true
-}
-
-fn read_packed_sample(data: &[u8], bit_start: usize, bpp: usize) -> u8 {
-    let mut sample = 0u8;
-    for bit in 0..bpp {
-        let bit_index = bit_start + bit;
-        let byte = data[bit_index / 8];
-        let shift = 7 - (bit_index % 8);
-        sample = (sample << 1) | ((byte >> shift) & 1);
-    }
-    sample
-}
-
-fn premultiply_rgba(data: &mut [u8]) {
-    for chunk in data.chunks_exact_mut(4) {
-        let a = chunk[3] as u16;
+fn premultiply_rgba_inplace(pixels: &mut [u8]) {
+    for px in pixels.chunks_exact_mut(4) {
+        let a = px[3] as u32;
         if a == 0 {
-            chunk[0] = 0;
-            chunk[1] = 0;
-            chunk[2] = 0;
+            px[0] = 0;
+            px[1] = 0;
+            px[2] = 0;
         } else if a < 255 {
-            chunk[0] = ((chunk[0] as u16 * a) / 255) as u8;
-            chunk[1] = ((chunk[1] as u16 * a) / 255) as u8;
-            chunk[2] = ((chunk[2] as u16 * a) / 255) as u8;
+            px[0] = (px[0] as u32 * a / 255) as u8;
+            px[1] = (px[1] as u32 * a / 255) as u8;
+            px[2] = (px[2] as u32 * a / 255) as u8;
         }
     }
 }
 
-fn resize_rgba(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Option<Vec<u8>> {
-    let src_w = src_w as usize;
-    let src_h = src_h as usize;
-    let dst_w = dst_w as usize;
-    let dst_h = dst_h as usize;
-
-    let src_pixels: Vec<resize::px::RGBA<u8>> = src
-        .chunks_exact(4)
-        .map(|c| resize::px::RGBA {
-            r: c[0],
-            g: c[1],
-            b: c[2],
-            a: c[3],
-        })
-        .collect();
-
-    let mut dst_pixels = vec![
-        resize::px::RGBA {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 0
-        };
-        dst_w * dst_h
-    ];
-
-    let mut resizer = resize::new(
+pub(crate) fn resize_mitchell_alpha(
+    ctx: &mut ScaleContext,
+    src: &[u8],
+    src_w: u32,
+    src_h: u32,
+    dst_w: u32,
+    dst_h: u32,
+) -> Option<Vec<u8>> {
+    let scratch_size = (dst_w as usize) * (src_h as usize);
+    ctx.scratch.bitmap_1.clear();
+    ctx.scratch.bitmap_1.resize(scratch_size, 0);
+    let mut target = vec![0u8; (dst_w as usize) * (dst_h as usize)];
+    if resample(
+        src,
         src_w,
         src_h,
+        1,
+        &mut target,
         dst_w,
         dst_h,
-        resize::Pixel::RGBA8,
-        resize::Type::Lanczos3,
-    )
-    .ok()?;
-    resizer.resize(&src_pixels, &mut dst_pixels).ok()?;
+        &mut ctx.scratch.bitmap_1,
+        2.0,
+        &mitchell,
+    ) {
+        Some(target)
+    } else {
+        None
+    }
+}
 
-    let dst_bytes: Vec<u8> = dst_pixels
-        .iter()
-        .flat_map(|px| [px.r, px.g, px.b, px.a])
-        .collect();
+pub(crate) fn resize_mitchell_rgba(
+    ctx: &mut ScaleContext,
+    src: &[u8],
+    src_w: u32,
+    src_h: u32,
+    dst_w: u32,
+    dst_h: u32,
+) -> Option<Vec<u8>> {
+    let scratch_size = (dst_w as usize) * (src_h as usize) * 4;
+    ctx.scratch.bitmap_1.clear();
+    ctx.scratch.bitmap_1.resize(scratch_size, 0);
+    let mut target = vec![0u8; (dst_w as usize) * (dst_h as usize) * 4];
+    if resample(
+        src,
+        src_w,
+        src_h,
+        4,
+        &mut target,
+        dst_w,
+        dst_h,
+        &mut ctx.scratch.bitmap_1,
+        2.0,
+        &mitchell,
+    ) {
+        Some(target)
+    } else {
+        None
+    }
+}
 
-    Some(dst_bytes)
+fn resample<F>(
+    image: &[u8],
+    width: u32,
+    height: u32,
+    channels: u32,
+    target: &mut [u8],
+    target_width: u32,
+    target_height: u32,
+    scratch: &mut [u8],
+    support: f32,
+    filter: &F,
+) -> bool
+where
+    F: Fn(f32) -> f32,
+{
+    let tmp_width = target_width;
+    let tmp_height = height;
+    let s = 1. / 255.;
+    if channels == 1 {
+        sample_dir(
+            &|x, y| [0., 0., 0., image[(y * width + x) as usize] as f32 * s],
+            width,
+            height,
+            target_width,
+            filter,
+            support,
+            &mut |x, y, p| scratch[(y * tmp_width + x) as usize] = (p[3] * 255.) as u8,
+        );
+        sample_dir(
+            &|y, x| [0., 0., 0., scratch[(y * tmp_width + x) as usize] as f32 * s],
+            tmp_height,
+            tmp_width,
+            target_height,
+            filter,
+            support,
+            &mut |y, x, p| target[(y * target_width + x) as usize] = (p[3] * 255.) as u8,
+        );
+        true
+    } else if channels == 4 {
+        sample_dir(
+            &|x, y| {
+                let row = (y * width * channels + x * channels) as usize;
+                [
+                    image[row] as f32 * s,
+                    image[row + 1] as f32 * s,
+                    image[row + 2] as f32 * s,
+                    image[row + 3] as f32 * s,
+                ]
+            },
+            width,
+            height,
+            target_width,
+            filter,
+            support,
+            &mut |x, y, p| {
+                let row = (y * target_width * channels + x * channels) as usize;
+                scratch[row] = (p[0] * 255.) as u8;
+                scratch[row + 1] = (p[1] * 255.) as u8;
+                scratch[row + 2] = (p[2] * 255.) as u8;
+                scratch[row + 3] = (p[3] * 255.) as u8;
+            },
+        );
+        sample_dir(
+            &|y, x| {
+                let row = (y * tmp_width * channels + x * channels) as usize;
+                [
+                    scratch[row] as f32 * s,
+                    scratch[row + 1] as f32 * s,
+                    scratch[row + 2] as f32 * s,
+                    scratch[row + 3] as f32 * s,
+                ]
+            },
+            tmp_height,
+            tmp_width,
+            target_height,
+            filter,
+            support,
+            &mut |y, x, p| {
+                let row = (y * target_width * channels + x * channels) as usize;
+                target[row] = (p[0] * 255.) as u8;
+                target[row + 1] = (p[1] * 255.) as u8;
+                target[row + 2] = (p[2] * 255.) as u8;
+                target[row + 3] = (p[3] * 255.) as u8;
+            },
+        );
+        true
+    } else {
+        false
+    }
+}
+
+fn sample_dir<Input, Output, F>(
+    input: &Input,
+    width: u32,
+    height: u32,
+    new_width: u32,
+    filter: &F,
+    support: f32,
+    output: &mut Output,
+) where
+    Input: Fn(u32, u32) -> [f32; 4],
+    Output: FnMut(u32, u32, &[f32; 4]),
+    F: Fn(f32) -> f32,
+{
+    const MAX_WEIGHTS: usize = 64;
+    let mut weights = [0f32; MAX_WEIGHTS];
+    let mut num_weights;
+    let ratio = width as f32 / new_width as f32;
+    let sratio = ratio.max(1.);
+    let src_support = support * sratio;
+    let isratio = 1. / sratio;
+    for outx in 0..new_width {
+        let inx = (outx as f32 + 0.5) * ratio;
+        let left = (inx - src_support).floor() as i32;
+        let mut left = left.max(0).min(width as i32 - 1) as usize;
+        let right = (inx + src_support).ceil() as i32;
+        let mut right = right.max(left as i32 + 1).min(width as i32) as usize;
+        let inx = inx - 0.5;
+        while right - left > MAX_WEIGHTS {
+            right -= 1;
+            left += 1;
+        }
+        num_weights = 0;
+        let mut sum = 0.;
+        for i in left..right {
+            let w = filter((i as f32 - inx) * isratio);
+            weights[num_weights] = w;
+            num_weights += 1;
+            sum += w;
+        }
+        let isum = 1. / sum;
+        let weights = &weights[..num_weights];
+        for y in 0..height {
+            let mut accum = [0f32; 4];
+            for (i, w) in weights.iter().enumerate() {
+                let p = input((left + i) as u32, y);
+                let a = p[3];
+                accum[0] += p[0] * w * a;
+                accum[1] += p[1] * w * a;
+                accum[2] += p[2] * w * a;
+                accum[3] += p[3] * w;
+            }
+            if accum[3] != 0. {
+                let a = 1. / accum[3];
+                accum[0] *= a;
+                accum[1] *= a;
+                accum[2] *= a;
+                accum[3] *= isum;
+            }
+            output(outx, y, &accum);
+        }
+    }
+}
+
+fn mitchell(x: f32) -> f32 {
+    let x = x.abs();
+    if x < 1. {
+        ((16. + x * x * (21. * x - 36.)) / 18.).abs()
+    } else if x < 2. {
+        ((32. + x * (-60. + x * (36. - 7. * x))) / 18.).abs()
+    } else {
+        0.
+    }
 }

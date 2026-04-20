@@ -1,20 +1,23 @@
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::DrawSettings;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
+use zeno::Transform as ZTransform;
 
-use super::RasterizedGlyph;
 use super::bitmap::rasterize_bitmap;
 use super::color::rasterize_color_outline;
 use super::hinting::HintingCache;
+use super::mask::rasterize_outline_to_mask;
 use super::outline::Outline;
 use super::outline_pen::OutlineWriter;
-use super::path::outline_to_path;
+use super::scratch::GlyphScratch;
+use super::{Content, RasterizedGlyph};
 
 pub const EMBOLDEN_RATIO: f32 = 1.0 / 64.0;
 
 pub struct ScaleContext {
     pub outline: Outline,
     pub hinting_cache: HintingCache,
+    pub scratch: GlyphScratch,
 }
 
 impl ScaleContext {
@@ -22,7 +25,14 @@ impl ScaleContext {
         Self {
             outline: Outline::new(),
             hinting_cache: HintingCache::new(),
+            scratch: GlyphScratch::new(),
         }
+    }
+}
+
+impl Default for ScaleContext {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -33,6 +43,7 @@ pub fn rasterize_glyph(
     font_size: f32,
     embolden: bool,
     skew: Option<f32>,
+    subpixel_offset_x: f32,
 ) -> Option<RasterizedGlyph> {
     let font = FontRef::from_index(font_data, 0).ok()?;
     let gid = GlyphId::new(glyph_id);
@@ -47,33 +58,56 @@ pub fn rasterize_glyph(
         0.0
     };
 
+    let skew_transform = skew.map(|angle| {
+        let kx = (angle as f64).to_radians().tan() as f32;
+        ZTransform {
+            xx: 1.0,
+            yx: kx,
+            xy: 0.0,
+            yy: 1.0,
+            x: 0.0,
+            y: 0.0,
+        }
+    });
+
     let try_outline_before_bitmap = has_skew || embolden;
 
-    if font.color_glyphs().get(gid).is_some()
-        && let Some(image) = rasterize_color_outline(font_data, glyph_id, font_size)
+    if let Some(img) =
+        rasterize_color_outline(ctx, font_data, glyph_id, quantized_size, subpixel_offset_x)
     {
-        return Some(RasterizedGlyph::Bitmap(image));
+        return Some(img);
     }
 
     if try_outline_before_bitmap {
-        if let Some(result) = try_outline(ctx, &font, gid, quantized_size, embolden_amount, skew) {
-            return Some(result);
+        if let Some(r) = try_outline(
+            ctx,
+            &font,
+            gid,
+            quantized_size,
+            embolden_amount,
+            skew_transform,
+            subpixel_offset_x,
+        ) {
+            return Some(r);
         }
-
-        if let Some(image) = rasterize_bitmap(font_data, glyph_id, font_size) {
-            return Some(RasterizedGlyph::Bitmap(image));
+        if let Some(r) = rasterize_bitmap(ctx, font_data, glyph_id, quantized_size) {
+            return Some(r);
         }
-    } else {
-        if let Some(image) = rasterize_bitmap(font_data, glyph_id, font_size) {
-            return Some(RasterizedGlyph::Bitmap(image));
-        }
-
-        if let Some(result) = try_outline(ctx, &font, gid, quantized_size, embolden_amount, skew) {
-            return Some(result);
-        }
+        return None;
     }
 
-    None
+    if let Some(r) = rasterize_bitmap(ctx, font_data, glyph_id, quantized_size) {
+        return Some(r);
+    }
+    try_outline(
+        ctx,
+        &font,
+        gid,
+        quantized_size,
+        embolden_amount,
+        skew_transform,
+        subpixel_offset_x,
+    )
 }
 
 fn try_outline(
@@ -82,10 +116,11 @@ fn try_outline(
     gid: GlyphId,
     quantized_size: f32,
     embolden_amount: f32,
-    skew: Option<f32>,
+    skew_transform: Option<ZTransform>,
+    subpixel_offset_x: f32,
 ) -> Option<RasterizedGlyph> {
     let outlines = font.outline_glyphs();
-    let outline_glyph = outlines.get(gid)?;
+    let og = outlines.get(gid)?;
 
     let size = Size::new(quantized_size);
     let coords: &[NormalizedCoord] = &[];
@@ -100,8 +135,8 @@ fn try_outline(
     };
 
     ctx.outline.clear();
-    let mut writer = OutlineWriter(&mut ctx.outline);
-    outline_glyph.draw(settings, &mut writer).ok()?;
+    og.draw(settings, &mut OutlineWriter(&mut ctx.outline))
+        .ok()?;
 
     if ctx.outline.is_empty() {
         return None;
@@ -111,19 +146,30 @@ fn try_outline(
         ctx.outline.embolden(embolden_amount, embolden_amount);
     }
 
-    if let Some(angle) = skew {
-        let kx = (angle as f64).to_radians().tan() as f32;
-        let skew_transform = zeno::Transform {
-            xx: 1.0,
-            yx: kx,
-            xy: 0.0,
-            yy: 1.0,
-            x: 0.0,
-            y: 0.0,
-        };
-        ctx.outline.transform(&skew_transform);
+    // skew 는 legacy 와 동일하게 점 좌표에 직접 적용 (Mask transform 인자가 아님).
+    if let Some(t) = skew_transform {
+        ctx.outline.transform(&t);
     }
 
-    let path = outline_to_path(&ctx.outline, 0.0, 0.0);
-    Some(RasterizedGlyph::Path(path))
+    let mask_buf = &mut ctx.scratch.bitmap_0;
+    let placement = rasterize_outline_to_mask(
+        &ctx.outline,
+        &mut ctx.scratch.zeno,
+        subpixel_offset_x,
+        None,
+        mask_buf,
+    );
+
+    if placement.width == 0 || placement.height == 0 {
+        return None;
+    }
+
+    Some(RasterizedGlyph {
+        data: mask_buf.clone(),
+        width: placement.width,
+        height: placement.height,
+        placement_left: placement.left,
+        placement_top: placement.top,
+        content: Content::Mask,
+    })
 }
