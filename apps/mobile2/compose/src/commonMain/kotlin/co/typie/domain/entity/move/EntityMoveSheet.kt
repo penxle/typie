@@ -280,7 +280,7 @@ fun EntityMoveSheet(
           MoveBreadcrumbs(
             items = content.breadcrumbs,
             enabled = !isLoadingDestination && !isMoving,
-            backgroundColor = AppTheme.colors.surfaceDefault,
+            backgroundColor = AppTheme.colors.surfaceCanvas,
             onNavigate = ::navigateTo,
           )
         }

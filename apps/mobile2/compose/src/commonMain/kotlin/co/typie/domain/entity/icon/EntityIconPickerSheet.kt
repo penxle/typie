@@ -209,7 +209,7 @@ internal fun EntityIconPickerSheet(
         modifier =
           Modifier.fillMaxWidth()
             .weight(1f)
-            .scrollFog(padding = gridFogInsets, color = AppTheme.colors.surfaceDefault)
+            .scrollFog(padding = gridFogInsets, color = AppTheme.colors.surfaceCanvas)
       ) {
         val safeBottom =
           WindowInsets.safeDrawing
