@@ -2,7 +2,6 @@
 
 package co.typie.platform
 
-import co.typie.editor.ffi.BackendKind
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.IosEditorHost
 import co.typie.migration.IOSLegacyMigrationPlatformSource
@@ -15,7 +14,6 @@ import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
-import kotlinx.coroutines.runBlocking
 import platform.Foundation.NSBundle
 import platform.Foundation.NSData
 import platform.Foundation.create
@@ -40,7 +38,7 @@ actual object PlatformModule {
       ByteArray(nsData.length.toInt()).apply {
         usePinned { memcpy(it.addressOf(0), nsData.bytes, nsData.length) }
       }
-    runBlocking { IosEditorHost.create(BackendKind.Gpu, icuData) }
+    IosEditorHost.create(icuData)
   }
   actual val diskCache: DiskCache = diskCache()
 }

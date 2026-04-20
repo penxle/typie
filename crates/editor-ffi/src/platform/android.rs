@@ -2,10 +2,7 @@ use editor_macros::ffi;
 use editor_renderer::{RenderBackend, RenderSink};
 use std::ffi::c_void;
 use std::ptr;
-use std::ptr::NonNull;
-use std::sync::Arc;
 
-use crate::backend::BackendMode;
 use crate::error::FfiError;
 
 const WINDOW_FORMAT_RGBA_8888: i32 = 1;
@@ -80,7 +77,6 @@ pub struct SurfaceHandle {
 
 impl SurfaceHandle {
     pub fn new(
-        mode: &BackendMode,
         handle: PlatformHandle,
         width: u32,
         height: u32,
@@ -120,38 +116,7 @@ impl SurfaceHandle {
             )
         };
 
-        let backend = match mode {
-            BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
-            BackendMode::Gpu { device } => {
-                let window_ptr = NonNull::new(handle as *mut c_void)
-                    .ok_or_else(|| FfiError::Surface("null ANativeWindow handle".into()))?;
-
-                let raw_window_handle = raw_window_handle::RawWindowHandle::AndroidNdk(
-                    raw_window_handle::AndroidNdkWindowHandle::new(window_ptr),
-                );
-                let raw_display_handle = raw_window_handle::RawDisplayHandle::Android(
-                    raw_window_handle::AndroidDisplayHandle::new(),
-                );
-
-                let surface = unsafe {
-                    device
-                        .instance
-                        .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                            raw_display_handle,
-                            raw_window_handle,
-                        })
-                        .map_err(|e| FfiError::Surface(e.to_string()))?
-                };
-
-                match RenderBackend::new_gpu(Arc::clone(device), surface) {
-                    Ok(mut backend) => {
-                        backend.resize(pw as u16, ph as u16);
-                        backend
-                    }
-                    Err(_) => RenderBackend::new_cpu(pw as u16, ph as u16),
-                }
-            }
-        };
+        let backend = RenderBackend::new_cpu(pw as u16, ph as u16);
 
         Ok(Self {
             backend,
@@ -177,30 +142,28 @@ impl SurfaceHandle {
         }
 
         // lock first to get actual buffer dimensions
-        if let RenderBackend::Cpu(_) = &self.backend {
-            let (bw, bh, _) = unsafe {
-                let mut buffer = std::mem::zeroed::<ANativeWindowBuffer>();
-                if native_window_lock(window, &mut buffer, ptr::null_mut()) != 0 {
-                    return;
-                }
-                if buffer.bits.is_null() {
-                    native_window_unlock_and_post(window);
-                    return;
-                }
-                let dims = (
-                    buffer.width as u32,
-                    buffer.height as u32,
-                    buffer.stride as u32,
-                );
-                native_window_unlock_and_post(window);
-                dims
-            };
-
-            if bw != self.width || bh != self.height {
-                self.width = bw;
-                self.height = bh;
-                self.backend.resize(bw as u16, bh as u16);
+        let (bw, bh, _) = unsafe {
+            let mut buffer = std::mem::zeroed::<ANativeWindowBuffer>();
+            if native_window_lock(window, &mut buffer, ptr::null_mut()) != 0 {
+                return;
             }
+            if buffer.bits.is_null() {
+                native_window_unlock_and_post(window);
+                return;
+            }
+            let dims = (
+                buffer.width as u32,
+                buffer.height as u32,
+                buffer.stride as u32,
+            );
+            native_window_unlock_and_post(window);
+            dims
+        };
+
+        if bw != self.width || bh != self.height {
+            self.width = bw;
+            self.height = bh;
+            self.backend.resize(bw as u16, bh as u16);
         }
 
         match &mut self.backend {
@@ -233,9 +196,6 @@ impl SurfaceHandle {
 
                     native_window_unlock_and_post(window);
                 }
-            }
-            RenderBackend::Gpu(sink) => {
-                let _ = sink.present();
             }
         }
     }

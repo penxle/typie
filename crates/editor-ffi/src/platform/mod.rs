@@ -6,7 +6,7 @@ cfg_if! {
         pub use android::{PlatformHandle, SurfaceHandle};
     } else if #[cfg(target_os = "ios")] {
         mod ios;
-        pub use ios::{PlatformHandle, SurfaceHandle, supports_apple_gpu_family_8};
+        pub use ios::{PlatformHandle, SurfaceHandle};
     } else if #[cfg(feature = "uniffi")] {
         mod desktop;
         pub use desktop::{PlatformHandle, SurfaceHandle};

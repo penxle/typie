@@ -23,8 +23,6 @@ uniffi = [
   "editor-state/uniffi",
   "editor-transaction/uniffi",
   "editor-view/uniffi",
-  "dep:wgpu",
-  "dep:raw-window-handle",
 ]
 wasm = [
   "dep:console_error_panic_hook",
@@ -44,7 +42,7 @@ wasm = [
   "editor-transaction/wasm",
   "editor-view/wasm",
 ]
-wasm-browser = ["wasm", "dep:web-sys", "dep:wgpu"]
+wasm-browser = ["wasm", "dep:web-sys"]
 wasm-server = ["wasm", "dep:editor-server", "editor-server/wasm"]
 
 [dependencies]
@@ -67,7 +65,6 @@ env_filter = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 hashbrown.workspace = true
 log.workspace = true
-raw-window-handle = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde-wasm-bindgen = { workspace = true, optional = true }
 serde_json.workspace = true
@@ -81,7 +78,6 @@ web-sys = { workspace = true, optional = true, features = [
   "CanvasRenderingContext2d",
   "ImageData",
 ] }
-wgpu = { workspace = true, optional = true }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 objc2.workspace = true

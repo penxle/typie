@@ -1,8 +1,6 @@
 use cfg_if::cfg_if;
 use std::sync::{Arc, Mutex};
 
-#[cfg(not(feature = "wasm-server"))]
-use crate::backend::BackendMode;
 use crate::prelude::*;
 
 fn init_logger() {
@@ -35,57 +33,22 @@ fn init_logger() {
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct EditorHost {
     resource: Arc<Mutex<editor_resource::Resource>>,
-    #[cfg(not(feature = "wasm-server"))]
-    backend: BackendMode,
 }
 
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
 #[cfg_attr(feature = "wasm", editor_macros::ffi_export(wasm))]
 impl EditorHost {
     #[cfg_attr(feature = "uniffi", uniffi::constructor)]
-    pub async fn create(
-        kind: Option<Complex<editor_renderer::BackendKind>>,
-        icu_data: Vec<u8>,
-    ) -> EditorResult<Owned<Self>> {
+    pub fn create(icu_data: Vec<u8>) -> EditorResult<Owned<Self>> {
         #[cfg(feature = "wasm")]
         console_error_panic_hook::set_once();
 
         init_logger();
 
-        #[cfg(not(feature = "wasm-server"))]
-        let backend = {
-            let kind = kind.from_ffi()?;
-            match kind {
-                Some(editor_renderer::BackendKind::Cpu) => BackendMode::Cpu,
-                Some(editor_renderer::BackendKind::Gpu) | None => {
-                    #[cfg(target_os = "ios")]
-                    let gpu_supported = crate::platform::supports_apple_gpu_family_8();
-                    #[cfg(not(target_os = "ios"))]
-                    let gpu_supported = true;
-
-                    if !gpu_supported {
-                        BackendMode::Cpu
-                    } else {
-                        match editor_renderer::GpuDevice::new().await {
-                            Ok(device) => BackendMode::Gpu {
-                                device: Arc::new(device),
-                            },
-                            Err(_) => BackendMode::Cpu,
-                        }
-                    }
-                }
-            }
-        };
-
-        #[cfg(feature = "wasm-server")]
-        let _ = kind;
-
         let segmenters = Arc::new(editor_resource::TextSegmenters::from_icu_data(&icu_data)?);
 
         Ok(into_owned(Self {
             resource: Arc::new(Mutex::new(editor_resource::Resource::new(segmenters))),
-            #[cfg(not(feature = "wasm-server"))]
-            backend,
         }))
     }
 
@@ -102,17 +65,7 @@ impl EditorHost {
         let viewport = viewport.from_ffi()?;
         let core = editor_core::Editor::new(state, viewport, Arc::clone(&self.resource));
 
-        #[cfg(not(feature = "wasm-server"))]
-        {
-            Ok(into_owned(crate::editor::Editor::new(
-                core,
-                self.backend.clone(),
-            )))
-        }
-        #[cfg(feature = "wasm-server")]
-        {
-            Ok(into_owned(crate::editor::Editor::new(core)))
-        }
+        Ok(into_owned(crate::editor::Editor::new(core)))
     }
 
     pub fn load_font_base(&self, family: String, weight: u16, data: Vec<u8>) -> EditorResult<()> {
@@ -163,11 +116,6 @@ impl EditorHost {
             resource.set_phantom_font_families(families)?;
             Ok(())
         })
-    }
-
-    #[cfg(not(feature = "wasm-server"))]
-    pub fn backend_kind(&self) -> EditorResult<Complex<editor_renderer::BackendKind>> {
-        Ok(self.backend.kind().into_ffi()?)
     }
 }
 

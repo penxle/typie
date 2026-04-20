@@ -1,6 +1,5 @@
 package co.typie.platform
 
-import co.typie.editor.ffi.BackendKind
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.JnaEditorHost
 import co.typie.migration.DesktopLegacyMigrationPlatformSource
@@ -9,7 +8,6 @@ import co.typie.storage.DiskCache
 import co.typie.storage.diskCache
 import eu.anifantakis.lib.ksafe.KSafe
 import eu.anifantakis.lib.ksafe.KSafeMemoryPolicy
-import kotlinx.coroutines.runBlocking
 
 actual object PlatformModule {
   actual val platform: Platform = Platform.Desktop
@@ -25,7 +23,7 @@ actual object PlatformModule {
   actual val share: Share = DesktopShare()
   actual val editorHost: EditorHost = run {
     val icuData = JnaEditorHost::class.java.classLoader.getResourceAsStream("icu.zst")!!.readBytes()
-    runBlocking { JnaEditorHost.create(BackendKind.Cpu, icuData) }
+    JnaEditorHost.create(icuData)
   }
   actual val diskCache: DiskCache = diskCache()
 }

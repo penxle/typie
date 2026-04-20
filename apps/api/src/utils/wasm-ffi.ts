@@ -18,7 +18,7 @@ function getIcuData(): Promise<Uint8Array> {
 async function createHost(module: WebAssembly.Module): Promise<EditorHost> {
   const icuData = await getIcuData();
   const { EditorHost } = await createInstance(module);
-  return EditorHost.create('gpu', icuData);
+  return EditorHost.create(icuData);
 }
 
 const available: EditorHost[] = [];

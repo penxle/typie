@@ -2,7 +2,6 @@ package co.typie.platform
 
 import android.annotation.SuppressLint
 import android.content.Context
-import co.typie.editor.ffi.BackendKind
 import co.typie.editor.ffi.EditorHost
 import co.typie.editor.ffi.JnaEditorHost
 import co.typie.migration.AndroidLegacyMigrationPlatformSource
@@ -11,7 +10,6 @@ import co.typie.storage.DiskCache
 import co.typie.storage.diskCache
 import eu.anifantakis.lib.ksafe.KSafe
 import eu.anifantakis.lib.ksafe.KSafeMemoryPolicy
-import kotlinx.coroutines.runBlocking
 
 @SuppressLint("StaticFieldLeak")
 actual object PlatformModule {
@@ -32,7 +30,7 @@ actual object PlatformModule {
   actual val share: Share by lazy { AndroidShare(context) }
   actual val editorHost: EditorHost by lazy {
     val icuData = context.assets.open("icu.zst").readBytes()
-    runBlocking { JnaEditorHost.create(BackendKind.Gpu, icuData) }
+    JnaEditorHost.create(icuData)
   }
   actual val diskCache: DiskCache by lazy { diskCache() }
 }

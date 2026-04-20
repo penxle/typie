@@ -3,8 +3,6 @@ use hashbrown::HashMap;
 use std::sync::Mutex;
 
 #[cfg(not(feature = "wasm-server"))]
-use crate::backend::BackendMode;
-#[cfg(not(feature = "wasm-server"))]
 use crate::platform::{PlatformHandle, SurfaceHandle};
 use crate::prelude::*;
 
@@ -18,8 +16,6 @@ struct EditorInner {
 #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct Editor {
     inner: Mutex<EditorInner>,
-    #[cfg(not(feature = "wasm-server"))]
-    backend: BackendMode,
 }
 
 #[cfg_attr(feature = "uniffi", editor_macros::ffi_export(uniffi))]
@@ -113,7 +109,7 @@ impl Editor {
         height: u32,
         scale_factor: f64,
     ) -> EditorResult<()> {
-        let surface = SurfaceHandle::new(&self.backend, handle, width, height, scale_factor)?;
+        let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
         self.with_inner(|inner| {
             inner.surfaces.insert(page, surface);
             Ok(())
@@ -168,8 +164,10 @@ impl Editor {
             inner.editor.render_page(page, backend.sink(), 1.0);
 
             let mut buf = vec![0u8; (width * height * 4) as usize];
-            if let editor_renderer::RenderBackend::Cpu(sink) = &mut backend {
-                sink.flush_to(&mut buf);
+            match &mut backend {
+                editor_renderer::RenderBackend::Cpu(sink) => {
+                    sink.flush_to(&mut buf);
+                }
             }
 
             Ok(buf)
@@ -178,21 +176,13 @@ impl Editor {
 }
 
 impl Editor {
-    #[cfg(not(feature = "wasm-server"))]
-    pub(crate) fn new(core: editor_core::Editor, backend: BackendMode) -> Self {
+    pub(crate) fn new(core: editor_core::Editor) -> Self {
         Self {
             inner: Mutex::new(EditorInner {
                 editor: core,
+                #[cfg(not(feature = "wasm-server"))]
                 surfaces: HashMap::new(),
             }),
-            backend,
-        }
-    }
-
-    #[cfg(feature = "wasm-server")]
-    pub(crate) fn new(core: editor_core::Editor) -> Self {
-        Self {
-            inner: Mutex::new(EditorInner { editor: core }),
         }
     }
 

@@ -303,8 +303,6 @@ export type Alignment = "left" | "center" | "right" | "justify";
 
 export type Axis = "horizontal" | "vertical";
 
-export type BackendKind = "cpu" | "gpu";
-
 export type BlockquoteVariant = "left_line" | "left_quote" | "message_sent" | "message_received";
 
 export type Break = "line" | "paragraph" | "page";
@@ -389,7 +387,7 @@ declare class EditorHost {
     [Symbol.dispose](): void;
     build_fallback_font_manifests(entries: any): Uint8Array;
     build_font_manifest(chunk_codepoints: any): Uint8Array;
-    static create(kind: BackendKind | null | undefined, icu_data: Uint8Array): Promise<EditorHost>;
+    static create(icu_data: Uint8Array): EditorHost;
     create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
     encode_font(ttf_data: Uint8Array, chunk_codepoints: any): EncodedFont;
     get_font_codepoints(ttf_data: Uint8Array): any;

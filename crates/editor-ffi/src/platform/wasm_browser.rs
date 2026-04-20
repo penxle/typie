@@ -1,8 +1,6 @@
 use editor_renderer::{RenderBackend, RenderSink};
-use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
-use crate::backend::BackendMode;
 use crate::error::FfiError;
 
 pub type PlatformHandle = web_sys::HtmlCanvasElement;
@@ -17,7 +15,6 @@ pub struct SurfaceHandle {
 
 impl SurfaceHandle {
     pub fn new(
-        mode: &BackendMode,
         handle: PlatformHandle,
         width: u32,
         height: u32,
@@ -26,22 +23,7 @@ impl SurfaceHandle {
         let pw = (width as f64 * scale_factor).round() as u32;
         let ph = (height as f64 * scale_factor).round() as u32;
 
-        let backend = match mode {
-            BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
-            BackendMode::Gpu { device } => {
-                let surface = device
-                    .instance
-                    .create_surface(wgpu::SurfaceTarget::Canvas(handle.clone()))
-                    .map_err(|e| FfiError::Surface(e.to_string()))?;
-
-                let mut backend = RenderBackend::new_gpu(Arc::clone(device), surface)
-                    .map_err(|e| FfiError::Surface(e.to_string()))?;
-
-                backend.resize(pw as u16, ph as u16);
-
-                backend
-            }
-        };
+        let backend = RenderBackend::new_cpu(pw as u16, ph as u16);
 
         handle.set_width(pw);
         handle.set_height(ph);
@@ -97,9 +79,6 @@ impl SurfaceHandle {
                 .unwrap();
 
                 ctx.put_image_data(&image_data, 0.0, 0.0).unwrap();
-            }
-            RenderBackend::Gpu(sink) => {
-                let _ = sink.present();
             }
         }
     }

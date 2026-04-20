@@ -17,7 +17,7 @@ export function initWasm(): Promise<EditorHost> {
     ]);
 
     const { EditorHost } = await createInstance(mod);
-    host = await EditorHost.create('gpu', icuData);
+    host = EditorHost.create(icuData);
     return host;
   })());
 }

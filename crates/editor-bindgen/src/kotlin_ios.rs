@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use heck::{ToLowerCamelCase, ToUpperCamelCase};
+use heck::ToLowerCamelCase;
 
 use crate::kotlin_iface::{param_to_kotlin, return_to_kotlin};
 use crate::meta::{
@@ -47,7 +47,6 @@ fn generate_ios_wrapper(
     w.line("import platform.Foundation.NSData");
     w.line("import platform.Foundation.NSError");
     w.line("import platform.Foundation.create");
-    w.line("import kotlinx.coroutines.suspendCancellableCoroutine");
     w.line("import co.typie.editor.EditorException");
     w.line(&format!(
         "import swiftPMImport.co.typie.compose.Native{} as Swift{}",
@@ -93,51 +92,30 @@ fn generate_ios_wrapper(
                 .join(", ");
 
             w.line(&format!(
-                "suspend fun {}({}): Ios{} {{",
+                "fun {}({}): Ios{} {{",
                 kt_name, params_sig, iface.name
             ));
             w.indent += 1;
             w.line(&format!("val native = Swift{}()", iface.name));
-            w.line("suspendCancellableCoroutine { cont ->");
+            w.line("memScoped {");
             w.indent += 1;
+            w.line("val error = alloc<ObjCObjectVar<NSError?>>()");
+            emit_pre_call_conversions(&mut w, &ctor.params);
 
-            let needs_mem_scope = ctor.params.iter().any(|p| is_byte_array(&p.ty));
-            if needs_mem_scope {
-                w.line("memScoped {");
-                w.indent += 1;
-                emit_pre_call_conversions(&mut w, &ctor.params);
-            }
-
-            let selector = if ctor.params.is_empty() {
-                format!("{}WithCompletion", kt_name)
-            } else {
-                let first = ctor.params[0].name.to_upper_camel_case();
-                format!("{}With{}", kt_name, first)
-            };
-
+            let selector = objc_selector(ctor);
             if ctor.params.is_empty() {
-                w.line(&format!("native.{}() {{ error ->", selector));
+                w.line(&format!("native.{}(error = error.ptr)", selector));
             } else {
                 let cinterop_args = crate::objc::kotlin_cinterop_args(&ctor.params, |p| {
                     convert_param_value(p, custom_types)
                 });
                 w.line(&format!(
-                    "native.{}({}) {{ error ->",
+                    "native.{}({}, error = error.ptr)",
                     selector, cinterop_args
                 ));
             }
 
-            w.indent += 1;
-            w.line("if (error != null) cont.resumeWith(Result.failure(EditorException(error.localizedDescription)))");
-            w.line("else cont.resumeWith(Result.success(Unit))");
-            w.indent -= 1;
-            w.line("}");
-
-            if needs_mem_scope {
-                w.indent -= 1;
-                w.line("}");
-            }
-
+            w.line("error.value?.let { throw EditorException(it.localizedDescription) }");
             w.indent -= 1;
             w.line("}");
             w.line(&format!("return Ios{}(native)", iface.name));
@@ -548,7 +526,7 @@ mod tests {
             methods: vec![
                 FfiMethod {
                     name: "create".into(),
-                    is_async: true,
+                    is_async: false,
                     is_constructor: true,
                     params: vec![FfiParam {
                         name: "kind".into(),
@@ -574,7 +552,7 @@ mod tests {
             name: "EditorHost".into(),
             methods: vec![FfiMethod {
                 name: "create".into(),
-                is_async: true,
+                is_async: false,
                 is_constructor: true,
                 params: vec![FfiParam {
                     name: "kind".into(),
@@ -590,8 +568,13 @@ mod tests {
             output
         );
         assert!(
-            output.contains("suspend fun create("),
-            "Expected suspend fun create:\n{}",
+            output.contains("fun create("),
+            "Expected fun create:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("suspend fun create("),
+            "Constructor should not be suspend:\n{}",
             output
         );
         assert!(
@@ -607,6 +590,11 @@ mod tests {
         assert!(
             output.contains("createWithKind("),
             "Expected ObjC cinterop selector:\n{}",
+            output
+        );
+        assert!(
+            output.contains("error = error.ptr"),
+            "Expected error pointer argument:\n{}",
             output
         );
         assert!(
@@ -627,7 +615,7 @@ mod tests {
             name: "EditorHost".into(),
             methods: vec![FfiMethod {
                 name: "create".into(),
-                is_async: true,
+                is_async: false,
                 is_constructor: true,
                 params: vec![
                     FfiParam {

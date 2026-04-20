@@ -94,21 +94,18 @@ fn generate_constructor_method(
     let mut out = String::new();
 
     let user_params = swift_param_decl(&method.params, |p| swift_param_type(&p.ty, custom_types));
+    let error_param = "error: AutoreleasingUnsafeMutablePointer<NSError?>";
     let all_params = if user_params.is_empty() {
-        "completion: @escaping @Sendable (NSError?) -> Void".to_string()
+        error_param.to_string()
     } else {
-        format!(
-            "{}, completion: @escaping @Sendable (NSError?) -> Void",
-            user_params
-        )
+        format!("{}, {}", user_params, error_param)
     };
 
     out.push_str(&format!(
         "    @objc public func create({}) {{\n",
         all_params
     ));
-    out.push_str("        Task {\n");
-    out.push_str("            do {\n");
+    out.push_str("        do {\n");
 
     let call_args = swift_call_args(&method.params, |p| param_conversion(p, custom_types));
     let create_call = if call_args.is_empty() {
@@ -117,14 +114,9 @@ fn generate_constructor_method(
         format!("{}.create({})", inner_type, call_args)
     };
 
-    out.push_str(&format!(
-        "                self.inner = try await {}\n",
-        create_call
-    ));
-    out.push_str("                completion(nil)\n");
-    out.push_str("            } catch {\n");
-    out.push_str("                completion(error as NSError)\n");
-    out.push_str("            }\n");
+    out.push_str(&format!("            self.inner = try {}\n", create_call));
+    out.push_str("        } catch let e {\n");
+    out.push_str("            error.pointee = e as NSError\n");
     out.push_str("        }\n");
     out.push_str("    }\n");
 
@@ -317,7 +309,7 @@ mod tests {
             methods: vec![
                 FfiMethod {
                     name: "create".into(),
-                    is_async: true,
+                    is_async: false,
                     is_constructor: true,
                     params: vec![FfiParam {
                         name: "kind".into(),
@@ -463,13 +455,25 @@ mod tests {
         let iface = editor_host_iface();
         let output = generate_class(&iface, &empty_ct());
         assert!(
-            output.contains("func create(kind: String?, completion:"),
-            "Expected kind param in constructor:\n{}",
+            output.contains(
+                "func create(kind: String?, error: AutoreleasingUnsafeMutablePointer<NSError?>)"
+            ),
+            "Expected kind + error params in constructor:\n{}",
             output
         );
         assert!(
             output.contains("EditorHost.create(kind: kind)"),
             "Expected kind forwarded to inner create:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("completion:"),
+            "Constructor should not use completion callback:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("Task {"),
+            "Constructor should not use Task:\n{}",
             output
         );
     }

@@ -4,26 +4,13 @@ use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2_core_foundation::CGSize;
-use objc2_metal::{
-    MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily, MTLOrigin, MTLRegion, MTLSize,
-};
+use objc2_metal::{MTLOrigin, MTLRegion, MTLSize};
 use std::ffi::c_void;
-use std::sync::Arc;
 
-use crate::backend::BackendMode;
 use crate::error::FfiError;
 
 #[ffi]
 pub type PlatformHandle = u64;
-
-// vello/wgpu compute pipeline miscompiles on Apple GPU family 7 (A14 and earlier),
-// producing partial tile rendering with uninitialized GPU memory bleeding through.
-// See https://github.com/gfx-rs/wgpu/issues/4500
-pub fn supports_apple_gpu_family_8() -> bool {
-    MTLCreateSystemDefaultDevice()
-        .map(|device| device.supportsFamily(MTLGPUFamily::Apple8))
-        .unwrap_or(true)
-}
 
 // Read the layer's drawableSize directly so Rust and Kotlin agree on pixel dims.
 // Returns None before the view has been laid out (drawableSize is 0).
@@ -52,7 +39,6 @@ pub struct SurfaceHandle {
 
 impl SurfaceHandle {
     pub fn new(
-        mode: &BackendMode,
         handle: PlatformHandle,
         width: u32,
         height: u32,
@@ -65,32 +51,7 @@ impl SurfaceHandle {
             )
         });
 
-        let backend = match mode {
-            BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
-            BackendMode::Gpu { device } => {
-                let layer_ptr_void = handle as *mut c_void;
-                if layer_ptr_void.is_null() {
-                    return Err(FfiError::Surface("null CAMetalLayer handle".into()));
-                }
-
-                let surface = unsafe {
-                    device
-                        .instance
-                        .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(
-                            layer_ptr_void,
-                        ))
-                        .map_err(|e| FfiError::Surface(e.to_string()))?
-                };
-
-                match RenderBackend::new_gpu(Arc::clone(device), surface) {
-                    Ok(mut backend) => {
-                        backend.resize(pw as u16, ph as u16);
-                        backend
-                    }
-                    Err(_) => RenderBackend::new_cpu(pw as u16, ph as u16),
-                }
-            }
-        };
+        let backend = RenderBackend::new_cpu(pw as u16, ph as u16);
 
         Ok(Self {
             backend,
@@ -151,9 +112,6 @@ impl SurfaceHandle {
 
                     let _: () = msg_send![&*drawable, present];
                 }
-            }
-            RenderBackend::Gpu(sink) => {
-                let _ = sink.present();
             }
         }
     }

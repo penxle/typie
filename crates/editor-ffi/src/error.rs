@@ -27,9 +27,6 @@ pub enum EditorError {
     Resource(#[from] editor_resource::ResourceError),
 
     #[error(transparent)]
-    Renderer(#[from] editor_renderer::RendererError),
-
-    #[error(transparent)]
     Ffi(#[from] FfiError),
 
     #[cfg(feature = "wasm-server")]

@@ -3,7 +3,6 @@ use editor_renderer::{RenderBackend, RenderSink};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::backend::BackendMode;
 use crate::error::FfiError;
 
 struct PixelBuffer {
@@ -111,7 +110,6 @@ pub struct SurfaceHandle {
 
 impl SurfaceHandle {
     pub fn new(
-        mode: &BackendMode,
         handle: PlatformHandle,
         width: u32,
         height: u32,
@@ -120,26 +118,16 @@ impl SurfaceHandle {
         let pw = (width as f64 * scale_factor).round() as u32;
         let ph = (height as f64 * scale_factor).round() as u32;
 
-        let backend = match mode {
-            BackendMode::Cpu => {
-                if handle != 0 {
-                    unsafe {
-                        let buf = &mut *(handle as *mut PixelBuffer);
-                        let size = (pw as usize) * (ph as usize) * 4;
-                        buf.data.resize(size, 0);
-                        buf.width = pw;
-                        buf.height = ph;
-                    }
-                }
-                RenderBackend::new_cpu(pw as u16, ph as u16)
+        if handle != 0 {
+            unsafe {
+                let buf = &mut *(handle as *mut PixelBuffer);
+                let size = (pw as usize) * (ph as usize) * 4;
+                buf.data.resize(size, 0);
+                buf.width = pw;
+                buf.height = ph;
             }
-            BackendMode::Gpu { device } => {
-                let _ = device;
-                return Err(FfiError::Surface(
-                    "Desktop GPU surface not yet supported".into(),
-                ));
-            }
-        };
+        }
+        let backend = RenderBackend::new_cpu(pw as u16, ph as u16);
 
         Ok(Self {
             backend,
@@ -169,9 +157,6 @@ impl SurfaceHandle {
                     sink.flush_to(&mut buf.data);
                     buf.dirty.store(true, Ordering::Release);
                 }
-            }
-            RenderBackend::Gpu(sink) => {
-                let _ = sink.present();
             }
         }
     }
