@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime as foundationIme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import co.typie.dev.DesktopDebugKeyboard
 
 // iPhone 16 Pro Max preview in desktop chrome:
 // dynamic island 59pt, home indicator 34pt, frame bezel 12dp per side.
@@ -32,4 +33,4 @@ actual val WindowInsets.Companion.safeDrawing: WindowInsets
     )
 
 actual val WindowInsets.Companion.ime: WindowInsets
-  @Composable get() = foundationIme
+  @Composable get() = DesktopDebugKeyboard.asWindowInsets(foundationIme)

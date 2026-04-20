@@ -34,16 +34,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -51,12 +48,11 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +62,8 @@ import co.typie.domain.entity.displayTitle
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.pressScale
+import co.typie.ext.rememberTextInputState
+import co.typie.ext.textInputFocusable
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.graphql.type.NoteStatus
@@ -785,28 +783,22 @@ private fun NoteContentEditor(
   onValueChange: (String) -> Unit,
   onBlur: () -> Unit,
 ) {
-  var textFieldValue by remember {
-    mutableStateOf(TextFieldValue(text = content, selection = TextRange(content.length)))
-  }
-
-  LaunchedEffect(content) {
-    if (textFieldValue.text != content) {
-      val selectionStart = textFieldValue.selection.start.coerceAtMost(content.length)
-      val selectionEnd = textFieldValue.selection.end.coerceAtMost(content.length)
-      textFieldValue =
-        TextFieldValue(text = content, selection = TextRange(selectionStart, selectionEnd))
-    }
-  }
+  val focusManager = LocalFocusManager.current
+  val textInputState =
+    rememberTextInputState(
+      value = content,
+      onValueChange = onValueChange,
+      onDismiss = { focusManager.clearFocus() },
+    )
 
   CompositionLocalProvider(LocalBringIntoViewSpec provides NoteEditorBringIntoViewSpec) {
     BasicTextField(
-      value = textFieldValue,
-      onValueChange = {
-        textFieldValue = it
-        onValueChange(it.text)
-      },
+      value = textInputState.value,
+      onValueChange = textInputState::onValueChange,
       modifier =
-        Modifier.fillMaxWidth().defaultMinSize(minHeight = 90.dp).onFocusChanged { state ->
+        Modifier.fillMaxWidth().defaultMinSize(minHeight = 90.dp).textInputFocusable(
+          textInputState
+        ) { state ->
           if (!state.isFocused) {
             onBlur()
           }
@@ -820,7 +812,7 @@ private fun NoteContentEditor(
       cursorBrush = SolidColor(AppTheme.colors.textDefault),
       decorationBox = { innerTextField ->
         Box(modifier = Modifier.fillMaxWidth()) {
-          if (textFieldValue.text.isEmpty()) {
+          if (textInputState.value.text.isEmpty()) {
             Text(
               text = "내용을 입력하세요",
               style = AppTheme.typography.body,

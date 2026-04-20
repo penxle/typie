@@ -16,11 +16,18 @@ import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.establishTextInputSession
 import co.typie.editor.Editor
 import co.typie.editor.createBindings
+import co.typie.editor.ffi.CompositionOp
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.InsertionOp
+import co.typie.editor.ffi.Key as FfiKey
+import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StateField
 import co.typie.editor.handleKeyDown
+import co.typie.ext.TextInputClient
+import co.typie.ext.TextInputKey
+import co.typie.ext.notifyTextInputFocusChanged
+import co.typie.ext.registerTextInputClient
 import co.typie.platform.Platform
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
@@ -49,6 +56,50 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
   Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private val bindings by lazy { createBindings(platform) }
+  private val textInputClient =
+    object : TextInputClient {
+      override val hasActiveComposition: Boolean
+        get() = editor.ime?.composing != null
+
+      override fun requestFocus() {
+        editor.focus()
+      }
+
+      override fun insertText(text: String): Boolean {
+        editor.enqueue(Message.Insertion(InsertionOp.Text(text)))
+        return true
+      }
+
+      override fun commitText(text: String) {
+        if (text == "\n") {
+          editor.enqueue(Message.Insertion(InsertionOp.Text("\n")))
+        } else {
+          editor.enqueue(Message.Composition(CompositionOp.Commit(text)))
+        }
+      }
+
+      override fun setComposingText(text: String) {
+        editor.enqueue(Message.Composition(CompositionOp.Update(text, null)))
+      }
+
+      override fun finishComposition() {
+        editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
+      }
+
+      override fun pressKey(key: TextInputKey): Boolean {
+        val ffiKey =
+          when (key) {
+            TextInputKey.Enter -> FfiKey.Enter
+            TextInputKey.Backspace -> FfiKey.Backspace
+          }
+        editor.enqueue(Message.Key(FfiKeyEvent(ffiKey)))
+        return true
+      }
+
+      override fun dismiss() {
+        editor.blur()
+      }
+    }
 
   override fun onKeyEvent(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
@@ -76,6 +127,8 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
   override fun onPreKeyEvent(event: KeyEvent) = false
 
   override fun onFocusEvent(focusState: FocusState) {
+    notifyTextInputFocusChanged(this, focusState.isFocused)
+    registerTextInputClient(this, if (focusState.isFocused) textInputClient else null)
     focusedJob?.cancel()
     focusedJob =
       if (focusState.isFocused) {
@@ -104,6 +157,13 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
       } else {
         null
       }
+  }
+
+  override fun onDetach() {
+    notifyTextInputFocusChanged(this, false)
+    registerTextInputClient(this, null)
+    focusedJob?.cancel()
+    super.onDetach()
   }
 }
 

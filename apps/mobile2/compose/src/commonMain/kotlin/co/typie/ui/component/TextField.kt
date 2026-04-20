@@ -36,9 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.autofill.contentType
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
@@ -49,7 +47,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,6 +55,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import co.typie.ext.rememberTextInputState
+import co.typie.ext.textInputFocusable
 import co.typie.form.FieldState
 import co.typie.icons.Lucide
 import co.typie.ui.icon.Icon
@@ -234,15 +234,16 @@ fun TextField(
 ) {
   val shape = AppShapes.rounded(AppShapes.md)
   var isFocused by remember { mutableStateOf(false) }
-  val focusRequester = remember { FocusRequester() }
+  val focusManager = LocalFocusManager.current
+  val textInputState =
+    rememberTextInputState(
+      value = value,
+      onValueChange = onValueChange,
+      enabled = enabled && !readOnly,
+      onDismiss = { focusManager.clearFocus() },
+    )
 
-  var textFieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
   var suppressTabValueChange by remember { mutableStateOf(false) }
-
-  if (textFieldValue.text != value) {
-    textFieldValue = TextFieldValue(value, TextRange(value.length))
-    suppressTabValueChange = false
-  }
 
   val hasError = error != null
   val isInternal = labelPosition == LabelPosition.Internal
@@ -296,9 +297,8 @@ fun TextField(
   val labelActive = isInternal && (isFocused || value.isNotEmpty())
   val fieldHeight = if (isInternal) 56.dp else 48.dp
   val tabNavigationEnabled = onTabAction != null || onShiftTabAction != null
-
   if (autoFocus) {
-    LaunchedEffect(autoFocus) { focusRequester.requestFocus() }
+    LaunchedEffect(autoFocus) { textInputState.requestFocus() }
   }
 
   val labelProgress by
@@ -315,11 +315,11 @@ fun TextField(
     }
 
     BasicTextField(
-      value = textFieldValue,
+      value = textInputState.value,
       onValueChange = { newValue ->
         val result =
           resolveTextFieldValueChange(
-            currentValue = textFieldValue,
+            currentValue = textInputState.value,
             newValue = newValue,
             tabNavigationEnabled = tabNavigationEnabled,
             hasTabAction = onTabAction != null,
@@ -329,8 +329,7 @@ fun TextField(
         if (result.triggerTabAction) {
           onTabAction?.invoke()
         } else if (!result.consumeValueChange) {
-          textFieldValue = result.nextValue
-          onValueChange(result.nextValue.text)
+          textInputState.onValueChange(result.nextValue)
         }
       },
       enabled = enabled,
@@ -343,8 +342,7 @@ fun TextField(
               Modifier
             }
           )
-          .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
-          .onFocusChanged { state ->
+          .textInputFocusable(textInputState, enabled = enabled && !readOnly) { state ->
             val wasFocused = isFocused
             isFocused = state.isFocused
             if (wasFocused && !state.isFocused) {

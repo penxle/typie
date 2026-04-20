@@ -31,9 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -53,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import co.typie.ext.clickable
 import co.typie.ext.ime
+import co.typie.ext.rememberTextInputBinding
+import co.typie.ext.textInputFocusable
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
@@ -273,9 +272,9 @@ private fun ValueBadge(
 ) {
   var editText by remember { mutableStateOf(TextFieldValue("")) }
   var isFocused by remember { mutableStateOf(false) }
-  val focusRequester = remember { FocusRequester() }
   val focusManager = LocalFocusManager.current
   val scope = rememberCoroutineScope()
+  val textInputBinding = rememberTextInputBinding(onDismiss = { focusManager.clearFocus() })
 
   val density = LocalDensity.current
   val imeBottom = WindowInsets.ime.getBottom(density)
@@ -316,7 +315,7 @@ private fun ValueBadge(
       value = if (isFocused) editText else TextFieldValue(numberText),
       onValueChange = { editText = it },
       modifier =
-        Modifier.width(IntrinsicSize.Min).focusRequester(focusRequester).onFocusChanged { state ->
+        Modifier.width(IntrinsicSize.Min).textInputFocusable(textInputBinding) { state ->
           val wasFocused = isFocused
           isFocused = state.isFocused
           if (state.isFocused && !wasFocused) {
@@ -345,7 +344,7 @@ private fun ValueBadge(
             if (!isFocused) {
               editText = TextFieldValue(numberText, TextRange(numberText.length))
             }
-            focusRequester.requestFocus()
+            textInputBinding.requestFocus()
           },
       )
     }

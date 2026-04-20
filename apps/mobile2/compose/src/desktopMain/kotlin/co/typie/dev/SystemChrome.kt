@@ -77,6 +77,10 @@ actual fun SystemChrome(content: @Composable () -> Unit) {
     // rather than a layout container, so positionInWindow works consistently.
     Box(Modifier.fillMaxSize().clip(RoundedCornerShape(r + BezelThickness))) {
       content()
+      DesktopDebugKeyboard.Overlay(
+        Modifier.align(Alignment.BottomStart)
+          .padding(start = BezelThickness, end = BezelThickness, bottom = BezelThickness)
+      )
       StatusBar(
         Modifier.fillMaxWidth()
           .align(Alignment.TopStart)

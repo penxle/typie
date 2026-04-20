@@ -24,15 +24,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.ext.rememberTextInputState
+import co.typie.ext.textInputFocusable
 import co.typie.form.FieldState
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.theme.AppShapes
@@ -60,8 +61,15 @@ fun TextArea(
 ) {
   val shape = AppShapes.rounded(AppShapes.md)
   var isFocused by remember { mutableStateOf(false) }
-  val focusRequester = remember { FocusRequester() }
+  val focusManager = LocalFocusManager.current
   val hasError = error != null
+  val textInputState =
+    rememberTextInputState(
+      value = value,
+      onValueChange = onValueChange,
+      enabled = enabled && !readOnly,
+      onDismiss = { focusManager.clearFocus() },
+    )
 
   val colorSpec = tween<Color>(220)
   val containerColor by
@@ -94,7 +102,7 @@ fun TextArea(
     )
 
   if (autoFocus) {
-    LaunchedEffect(autoFocus) { focusRequester.requestFocus() }
+    LaunchedEffect(autoFocus) { textInputState.requestFocus() }
   }
 
   Column(modifier = modifier) {
@@ -105,19 +113,19 @@ fun TextArea(
     }
 
     BasicTextField(
-      value = value,
-      onValueChange = onValueChange,
+      value = textInputState.value,
+      onValueChange = textInputState::onValueChange,
       enabled = enabled,
       readOnly = readOnly,
       modifier =
-        Modifier.fillMaxWidth()
-          .heightIn(min = minHeight)
-          .then(if (autoFocus) Modifier.focusRequester(focusRequester) else Modifier)
-          .onFocusChanged { state ->
-            val wasFocused = isFocused
-            isFocused = state.isFocused
-            if (wasFocused && !state.isFocused) onBlur?.invoke()
-          },
+        Modifier.fillMaxWidth().heightIn(min = minHeight).textInputFocusable(
+          textInputState,
+          enabled = enabled && !readOnly,
+        ) { state ->
+          val wasFocused = isFocused
+          isFocused = state.isFocused
+          if (wasFocused && !state.isFocused) onBlur?.invoke()
+        },
       textStyle =
         AppTheme.typography.body.copy(
           color = if (enabled) AppTheme.colors.textDefault else AppTheme.colors.textHint
@@ -136,7 +144,7 @@ fun TextArea(
               .background(containerColor, shape)
               .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-          if (value.isEmpty() && placeholder != null) {
+          if (textInputState.value.text.isEmpty() && placeholder != null) {
             Text(
               text = placeholder,
               style = AppTheme.typography.body,

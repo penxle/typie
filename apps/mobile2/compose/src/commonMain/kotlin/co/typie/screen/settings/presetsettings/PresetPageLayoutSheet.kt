@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -26,6 +25,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import co.typie.ext.rememberTextInputBinding
+import co.typie.ext.textInputFocusable
 import co.typie.ui.component.Text
 import co.typie.ui.component.sheet.SheetBar
 import co.typie.ui.component.sheet.SheetLayout
@@ -180,6 +181,7 @@ private fun MmInputField(
   var textFieldValue by remember(displayMm) { mutableStateOf(TextFieldValue(displayMm.toString())) }
   var isFocused by remember { mutableStateOf(false) }
   val focusManager = LocalFocusManager.current
+  val textInputBinding = rememberTextInputBinding(onDismiss = { focusManager.clearFocus() })
 
   fun commit() {
     val parsed = textFieldValue.text.trim().toIntOrNull()
@@ -206,7 +208,7 @@ private fun MmInputField(
       value = textFieldValue,
       onValueChange = { textFieldValue = it },
       modifier =
-        Modifier.weight(1f).onFocusChanged { state ->
+        Modifier.weight(1f).textInputFocusable(textInputBinding) { state ->
           val wasFocused = isFocused
           isFocused = state.isFocused
           if (wasFocused && !state.isFocused) commit()
