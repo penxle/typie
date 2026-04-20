@@ -18,8 +18,9 @@ object TopBarDefaults {
   val SlotGap: Dp = 12.dp
   val RevealOffset: Dp = 44.dp
 
-  val BlurRadius: Dp = 18.dp
+  val BlurRadius: Dp = 6.dp
   val BlurFadeHeight: Dp = 16.dp
+  val FadeOpacity: Float = 0.8f
   val ContentTopSpacing: Dp = 8.dp
 
   val RevealAnimationDuration: Int = 200

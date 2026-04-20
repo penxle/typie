@@ -8,6 +8,6 @@ object BottomBarDefaults {
   val PillHeight: Dp = 56.dp
 
   val FadeHeight: Dp = 20.dp
-  val FadeOpacity: Float = 0.85f
+  val FadeOpacity: Float = 0.8f
   val BarAreaHeight: Dp = PillHeight + BottomPadding
 }

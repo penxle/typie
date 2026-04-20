@@ -92,28 +92,49 @@ fun Screen(
     val topBarAlpha = LocalTopBarAnimationSource.current?.animatedAlpha ?: 0f
     val topBarTranslationY = LocalTopBarAnimationSource.current?.animatedTranslationY ?: 0f
     if (topBarState?.enabled == true && topBarAlpha > 0f) {
+      val topBarSolidHeight = 0.dp
+      val topBarFadeHeight = TopBarDefaults.Height + TopBarDefaults.BlurFadeHeight
+      val topBarOverlayModifier =
+        Modifier.fillMaxWidth().align(Alignment.TopCenter).graphicsLayer {
+          alpha = topBarAlpha
+          translationY = topBarTranslationY * size.height
+        }
+
       Column(
         modifier =
-          Modifier.fillMaxWidth()
-            .align(Alignment.TopCenter)
-            .graphicsLayer {
-              alpha = topBarAlpha
-              translationY = topBarTranslationY * size.height
-            }
-            .hazeEffect(hazeState) {
-              backgroundColor = background
-              blurRadius = TopBarDefaults.BlurRadius
-              progressive = TopBarDefaults.hazeProgressive()
-            }
+          topBarOverlayModifier.hazeEffect(hazeState) {
+            backgroundColor = background
+            blurRadius = TopBarDefaults.BlurRadius
+            progressive = TopBarDefaults.hazeProgressive()
+          }
       ) {
         Spacer(Modifier.fillMaxWidth().statusBarsPadding().height(TopBarDefaults.Height))
         Spacer(Modifier.height(TopBarDefaults.BlurFadeHeight))
+      }
+
+      val fadeColor = background.copy(alpha = TopBarDefaults.FadeOpacity)
+      Column(modifier = topBarOverlayModifier) {
+        Spacer(
+          Modifier.fillMaxWidth()
+            .background(fadeColor)
+            .statusBarsPadding()
+            .height(topBarSolidHeight)
+        )
+        Spacer(
+          Modifier.fillMaxWidth()
+            .height(topBarFadeHeight)
+            .background(
+              Brush.verticalGradient(colors = listOf(fadeColor, fadeColor.copy(alpha = 0f)))
+            )
+        )
       }
     }
 
     val bottomBarAlpha = LocalBottomBarAnimationSource.current?.animatedAlpha ?: 0f
     val bottomBarTranslationY = LocalBottomBarAnimationSource.current?.animatedTranslationY ?: 0f
     if (bottomBarAlpha > 0f) {
+      val bottomBarSolidHeight = BottomBarDefaults.BottomPadding
+      val bottomBarFadeHeight = BottomBarDefaults.FadeHeight + BottomBarDefaults.PillHeight
       val fadeColor = background.copy(alpha = BottomBarDefaults.FadeOpacity)
       Column(
         modifier =
@@ -124,7 +145,7 @@ fun Screen(
       ) {
         Spacer(
           Modifier.fillMaxWidth()
-            .height(BottomBarDefaults.FadeHeight)
+            .height(bottomBarFadeHeight)
             .background(
               Brush.verticalGradient(colors = listOf(fadeColor.copy(alpha = 0f), fadeColor))
             )
@@ -133,7 +154,7 @@ fun Screen(
           Modifier.fillMaxWidth()
             .background(fadeColor)
             .navigationBarsPadding()
-            .height(BottomBarDefaults.BarAreaHeight)
+            .height(bottomBarSolidHeight)
         )
       }
     }
