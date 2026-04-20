@@ -158,7 +158,7 @@ internal fun DocumentShareSheet(
   val toast = LocalToast.current
   val dialog = LocalDialog.current
   val scope = rememberCoroutineScope()
-  val documentIds = remember(documents) { documents.map(DocumentShare_entity::id) }
+  val documentIds = remember(documents) { documents.map { it.document.id } }
   val documentUrls = remember(documents) { documents.map(DocumentShare_entity::url) }
   val visibilityValues = remember(documents) { documents.map(DocumentShare_entity::visibility) }
   val contentRatingValues = remember(documents) { documents.map { it.document.contentRating } }

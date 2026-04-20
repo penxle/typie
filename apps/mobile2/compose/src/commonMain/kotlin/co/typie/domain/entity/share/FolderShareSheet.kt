@@ -129,7 +129,7 @@ internal fun FolderShareSheet(
   val toast = LocalToast.current
   val dialog = LocalDialog.current
   val scope = rememberCoroutineScope()
-  val folderIds = remember(folders) { folders.map(FolderShare_entity::id) }
+  val folderIds = remember(folders) { folders.map { it.folder.id } }
   val folderUrls = remember(folders) { folders.map(FolderShare_entity::url) }
   val visibilityValues = remember(folders) { folders.map(FolderShare_entity::visibility) }
   val isSingleFolder = folders.size == 1
