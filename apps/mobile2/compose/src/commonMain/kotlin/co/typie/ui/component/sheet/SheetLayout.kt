@@ -23,7 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ime
-import co.typie.ext.safeDrawing
+import co.typie.ext.navigationBars
 import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
 import co.typie.ui.state.rememberScrollState
@@ -62,8 +62,8 @@ fun SheetLayout(
 ) {
   val scrollState = rememberScrollState()
   val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-  val safeBottom = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
-  val bottomInset = maxOf(imeBottom, safeBottom)
+  val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+  val bottomInset = maxOf(imeBottom, navigationBarsBottom)
 
   Column(modifier = modifier.fillMaxWidth().thenIf(fillHeight) { fillMaxHeight() }) {
     if (handle) SheetHandle(modifier = Modifier.background(headerBackgroundColor))
