@@ -1,5 +1,6 @@
 <script lang="ts">
   import { css } from '@typie/styled-system/css';
+  import { untrack } from 'svelte';
   import { getEditorContext } from '../editor.svelte';
 
   type Props = {
@@ -35,23 +36,25 @@
   <canvas
     class={css({ height: 'full', width: 'full', imageRendering: 'pixelated' })}
     {@attach (canvas) => {
-      if (editor) {
+      if (!editor) return;
+
+      untrack(() => {
         editor.attachSurface(page, canvas, width, height);
+      });
 
-        const off = editor.on('render_invalidated', () => {
-          editor.renderSurface(page);
-        });
+      const off = editor.on('render_invalidated', () => {
+        editor.renderSurface(page);
+      });
 
-        $effect.pre(() => {
-          editor.resizeSurface(page, width, height);
-          editor.renderSurface(page);
-        });
+      $effect.pre(() => {
+        editor.resizeSurface(page, width, height);
+        editor.renderSurface(page);
+      });
 
-        return () => {
-          off();
-          editor.detachSurface(page);
-        };
-      }
+      return () => {
+        off();
+        untrack(() => editor.detachSurface(page));
+      };
     }}
   ></canvas>
 </div>
