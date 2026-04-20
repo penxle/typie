@@ -19,7 +19,8 @@ private data class PopoverPaneRegisteredItem(
 
 private enum class PopoverPaneTrackingSource {
   Local,
-  Shared,
+  SharedPending,
+  SharedCommitted,
 }
 
 internal val LocalPopoverPaneSelectionState =
@@ -41,6 +42,11 @@ internal class PopoverPaneSelectionState {
   val activeItemBoundsInPane: Rect?
     get() = activeItemKey?.let { key ->
       items[key]?.takeIf(PopoverPaneRegisteredItem::enabled)?.let(::currentBoundsInPane)
+    }
+
+  val sharedTrackedPointerInWindow: Offset?
+    get() = trackedPointerInWindow?.takeIf {
+      trackingSource == PopoverPaneTrackingSource.SharedCommitted
     }
 
   fun updatePaneCoordinates(layoutCoordinates: LayoutCoordinates?) {
@@ -109,19 +115,23 @@ internal class PopoverPaneSelectionState {
     releaseSelection(positionInWindow)
   }
 
-  fun syncSharedSession(session: PressGestureSession?) {
+  fun syncSharedSession(session: PressGestureSession?, commitDistance: Float) {
     if (trackingSource == PopoverPaneTrackingSource.Local) {
       return
     }
 
     if (session == null) {
-      if (trackingSource == PopoverPaneTrackingSource.Shared) {
+      if (
+        trackingSource == PopoverPaneTrackingSource.SharedPending ||
+          trackingSource == PopoverPaneTrackingSource.SharedCommitted
+      ) {
         clear()
       }
       return
     }
 
     if (!session.isArmed) {
+      trackingSource = null
       trackedPointerInWindow = null
       activeItemKey = null
       if (session.isReleased) {
@@ -130,7 +140,20 @@ internal class PopoverPaneSelectionState {
       return
     }
 
-    trackingSource = PopoverPaneTrackingSource.Shared
+    if (
+      trackingSource != PopoverPaneTrackingSource.SharedCommitted &&
+        (session.positionInWindow - session.initialPositionInWindow).getDistance() <= commitDistance
+    ) {
+      trackingSource = PopoverPaneTrackingSource.SharedPending
+      trackedPointerInWindow = null
+      activeItemKey = null
+      if (session.isReleased) {
+        clear()
+      }
+      return
+    }
+
+    trackingSource = PopoverPaneTrackingSource.SharedCommitted
     trackedPointerInWindow = session.positionInWindow
     recomputeActiveItem()
     if (session.isReleased) {

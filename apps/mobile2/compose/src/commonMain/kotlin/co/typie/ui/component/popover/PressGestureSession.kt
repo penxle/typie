@@ -13,6 +13,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal data class PressGestureSession(
+  val initialPositionInWindow: Offset,
   val positionInWindow: Offset,
   val isArmed: Boolean,
   val isReleased: Boolean,
@@ -54,6 +55,7 @@ internal suspend fun AwaitPointerEventScope.trackPressGestureSession(
   fun publish(change: PointerInputChange?) {
     onSession(
       PressGestureSession(
+        initialPositionInWindow = initialPositionInWindow,
         positionInWindow = currentPositionInWindow,
         isArmed = isArmed,
         isReleased = !isPressed,

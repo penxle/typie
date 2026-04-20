@@ -15,6 +15,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalViewConfiguration
 
 @Composable
 internal fun SelectablePaneHost(
@@ -24,6 +25,7 @@ internal fun SelectablePaneHost(
 ) {
   val autoScrollController = LocalPopoverPaneAutoScrollController.current
   val hapticFeedback = LocalHapticFeedback.current
+  val viewConfiguration = LocalViewConfiguration.current
   val hapticFeedbackState = rememberUpdatedState(hapticFeedback)
   val itemRadius = PopoverDefaults.ExpandedRadius - PopoverDefaults.PanePadding
   val paneSelectionState = rememberPopoverPaneSelectionState()
@@ -42,19 +44,18 @@ internal fun SelectablePaneHost(
       Modifier
     }
 
-  LaunchedEffect(acceptsInput, pressGestureSession) {
+  LaunchedEffect(acceptsInput, pressGestureSession, viewConfiguration.touchSlop) {
     if (!acceptsInput) {
       paneSelectionState.reset()
       autoScrollController?.pointer = null
       return@LaunchedEffect
     }
 
-    paneSelectionState.syncSharedSession(pressGestureSession)
-    if (pressGestureSession?.isArmed == true && !pressGestureSession.isReleased) {
-      autoScrollController?.pointer = pressGestureSession.positionInWindow
-    } else {
-      autoScrollController?.pointer = null
-    }
+    paneSelectionState.syncSharedSession(
+      pressGestureSession,
+      commitDistance = viewConfiguration.touchSlop,
+    )
+    autoScrollController?.pointer = paneSelectionState.sharedTrackedPointerInWindow
   }
 
   LaunchedEffect(acceptsInput, activeItemKey) {
