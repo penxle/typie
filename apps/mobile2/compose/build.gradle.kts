@@ -50,6 +50,10 @@ kotlin {
         withAndroid()
         withJvm()
       }
+      group("skiko") {
+        withJvm()
+        withIos()
+      }
     }
   }
 

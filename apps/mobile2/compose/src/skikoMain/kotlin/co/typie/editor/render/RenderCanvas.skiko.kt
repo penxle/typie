@@ -1,4 +1,4 @@
-package co.typie.editor.compose
+package co.typie.editor.render
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.onSizeChanged
-import com.sun.jna.Pointer
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
@@ -21,7 +20,7 @@ import org.jetbrains.skia.Image as SkImage
 import org.jetbrains.skia.ImageInfo
 
 @Composable
-internal actual fun Surface(
+internal actual fun RenderCanvas(
   modifier: Modifier,
   onAttach: (handle: Long) -> Unit,
   onDetach: () -> Unit,
@@ -34,7 +33,7 @@ internal actual fun Surface(
     modifier =
       modifier.onSizeChanged { size ->
         if (bufferHandle == 0L && size.width > 0 && size.height > 0) {
-          bufferHandle = DesktopSurfaceBridge.allocatePixelBuffer(size.width, size.height)
+          bufferHandle = RenderBuffer.allocate(size.width, size.height)
           if (bufferHandle != 0L) {
             onAttach(bufferHandle)
             onResize()
@@ -44,33 +43,48 @@ internal actual fun Surface(
         }
       }
   ) {
-    bitmap?.let { drawImage(it) }
+    bitmap?.let { drawImage(image = it) }
   }
 
   LaunchedEffect(bufferHandle) {
     val handle = bufferHandle
     if (handle == 0L) return@LaunchedEffect
 
+    var cachedWidth = 0
+    var cachedHeight = 0
+    var cachedBytes: ByteArray? = null
+    var cachedSkBitmap: Bitmap? = null
+
     while (true) {
       withFrameNanos {}
-      if (!DesktopSurfaceBridge.checkAndClearDirty(handle)) continue
+      if (!RenderBuffer.beginRead(handle)) continue
 
-      val w = DesktopSurfaceBridge.getPixelWidth(handle)
-      val h = DesktopSurfaceBridge.getPixelHeight(handle)
-      if (w <= 0 || h <= 0) continue
+      val w = RenderBuffer.getPixelWidth(handle)
+      val h = RenderBuffer.getPixelHeight(handle)
+      val dataAddr = RenderBuffer.getDataPointer(handle)
+      if (w <= 0 || h <= 0 || dataAddr == 0L) {
+        RenderBuffer.endRead(handle)
+        continue
+      }
 
-      val dataAddr = DesktopSurfaceBridge.getDataPointer(handle)
-      if (dataAddr == 0L) continue
+      val byteCount = w * h * 4
+      val bytes =
+        cachedBytes?.takeIf { it.size == byteCount }
+          ?: ByteArray(byteCount).also { cachedBytes = it }
+      copyNativeBytes(dataAddr, bytes, byteCount)
+      RenderBuffer.endRead(handle)
 
-      val ptr = Pointer(dataAddr)
-      val bytes = ByteArray(w * h * 4)
-      ptr.read(0, bytes, 0, bytes.size)
-
-      val skBitmap = Bitmap()
-      skBitmap.allocPixels(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.PREMUL))
+      val skBitmap =
+        cachedSkBitmap?.takeIf { cachedWidth == w && cachedHeight == h }
+          ?: Bitmap()
+            .apply { allocPixels(ImageInfo(w, h, ColorType.RGBA_8888, ColorAlphaType.PREMUL)) }
+            .also {
+              cachedSkBitmap = it
+              cachedWidth = w
+              cachedHeight = h
+            }
       skBitmap.installPixels(skBitmap.imageInfo, bytes, w * 4)
-      val skImage = SkImage.makeFromBitmap(skBitmap)
-      bitmap = skImage.toComposeImageBitmap()
+      bitmap = SkImage.makeFromBitmap(skBitmap).toComposeImageBitmap()
     }
   }
 
@@ -79,7 +93,7 @@ internal actual fun Surface(
       val handle = bufferHandle
       if (handle != 0L) {
         onDetach()
-        DesktopSurfaceBridge.freePixelBuffer(handle)
+        RenderBuffer.free(handle)
         bufferHandle = 0L
       }
     }

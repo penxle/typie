@@ -103,9 +103,15 @@ impl RenderSink for CpuSink {
         let pixmap =
             vello_cpu::Pixmap::from_parts(premul_pixels, image.width as u16, image.height as u16);
         let image_source = vello_cpu::ImageSource::Pixmap(Arc::new(pixmap));
+        // Nearest + 정수 translate 조건에서 byte-exact 1:1 복사 (POC 검증)
         let image_brush = vello_cpu::Image {
             image: image_source,
-            sampler: Default::default(),
+            sampler: peniko::ImageSampler {
+                x_extend: peniko::Extend::Pad,
+                y_extend: peniko::Extend::Pad,
+                quality: peniko::ImageQuality::Low,
+                alpha: 1.0,
+            },
         };
 
         self.ctx.set_transform(transform.into());

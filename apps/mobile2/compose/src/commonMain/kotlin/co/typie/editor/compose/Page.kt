@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import co.typie.editor.Editor
 import co.typie.editor.ffi.EditorEvent
+import co.typie.editor.render.RenderCanvas
 import kotlin.math.roundToInt
 
 @Composable
@@ -22,7 +23,7 @@ internal fun Page(
   val density = LocalDensity.current
   val scaleFactor = density.density.toDouble()
 
-  Surface(
+  RenderCanvas(
     modifier = modifier.width(Dp(width)).height(Dp(height)),
     onAttach = { handle ->
       editor.attachSurface(page, handle, width.roundToInt(), height.roundToInt(), scaleFactor)
