@@ -58,11 +58,18 @@ class PopoverOverlayState {
     paneBoundsInWindow = null
   }
 
-  internal fun update(owner: Any, anchorBounds: IntRect, progress: Float, interactive: Boolean) {
+  internal fun update(
+    owner: Any,
+    entry: PopoverOverlayEntry,
+    anchorBounds: IntRect,
+    progress: Float,
+    interactive: Boolean,
+  ) {
     if (this.owner !== owner) {
       return
     }
 
+    this.entry = entry
     this.anchorBounds = anchorBounds
     this.progress = progress
     this.interactive = interactive

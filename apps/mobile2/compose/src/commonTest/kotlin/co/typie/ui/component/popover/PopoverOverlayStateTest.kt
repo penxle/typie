@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class PopoverOverlayStateTest {
 
@@ -38,6 +39,7 @@ class PopoverOverlayStateTest {
     state.show(secondOwner, secondEntry, secondBounds)
     state.update(
       owner = firstOwner,
+      entry = createEntry(firstOwner),
       anchorBounds = IntRect(left = 1, top = 2, right = 3, bottom = 4),
       progress = 0.25f,
       interactive = false,
@@ -51,13 +53,38 @@ class PopoverOverlayStateTest {
   }
 
   @Test
+  fun updateReplacesEntryForCurrentOwner() {
+    val state = PopoverOverlayState()
+    val owner = Any()
+    val initialEntry = createEntry(owner)
+    val updatedEntry = createEntry(owner)
+    val bounds = IntRect(left = 40, top = 50, right = 140, bottom = 170)
+
+    state.show(owner, initialEntry, IntRect.Zero)
+    state.update(
+      owner = owner,
+      entry = updatedEntry,
+      anchorBounds = bounds,
+      progress = 0.25f,
+      interactive = false,
+    )
+
+    assertSame(updatedEntry, state.entry)
+    assertEquals(bounds, state.anchorBounds)
+    assertEquals(0.25f, state.progress)
+    assertEquals(false, state.interactive)
+  }
+
+  @Test
   fun clearResetsVisibleOverlayForCurrentOwner() {
     val state = PopoverOverlayState()
     val owner = Any()
+    val entry = createEntry(owner)
 
-    state.show(owner, createEntry(owner), IntRect(left = 10, top = 12, right = 34, bottom = 56))
+    state.show(owner, entry, IntRect(left = 10, top = 12, right = 34, bottom = 56))
     state.update(
       owner = owner,
+      entry = entry,
       anchorBounds = IntRect(left = 10, top = 12, right = 34, bottom = 56),
       progress = 1f,
       interactive = false,
@@ -81,7 +108,13 @@ class PopoverOverlayStateTest {
     val progress = 0.8f
 
     state.show(owner, entry, bounds)
-    state.update(owner = owner, anchorBounds = bounds, progress = progress, interactive = true)
+    state.update(
+      owner = owner,
+      entry = entry,
+      anchorBounds = bounds,
+      progress = progress,
+      interactive = true,
+    )
     state.detach(owner)
 
     assertEquals(entry, state.entry)
@@ -99,9 +132,16 @@ class PopoverOverlayStateTest {
     val owner = Any()
     val progress = 0.4f
     val bounds = IntRect(left = 10, top = 12, right = 34, bottom = 56)
+    val entry = createEntry(owner)
 
-    state.show(owner, createEntry(owner), bounds)
-    state.update(owner = owner, anchorBounds = bounds, progress = progress, interactive = true)
+    state.show(owner, entry, bounds)
+    state.update(
+      owner = owner,
+      entry = entry,
+      anchorBounds = bounds,
+      progress = progress,
+      interactive = true,
+    )
 
     assertEquals(progress, state.progress)
     assertEquals(expectedProgress(progress), state.easedProgress)

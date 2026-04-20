@@ -75,6 +75,7 @@ internal fun PopoverMenuItemRow(icon: IconData, label: String, color: Color? = n
 @Composable
 fun PopoverMenu(
   anchor: @Composable () -> Unit,
+  enabled: Boolean = true,
   placement: PopoverPlacement = PopoverPlacement.BelowEnd,
   maxWidth: Dp? = null,
   minWidth: Dp = 0.dp,
@@ -84,6 +85,7 @@ fun PopoverMenu(
 ) {
   Popover(
     anchor = anchor,
+    enabled = enabled,
     placement = placement,
     maxWidth = maxWidth,
     minWidth = minWidth,

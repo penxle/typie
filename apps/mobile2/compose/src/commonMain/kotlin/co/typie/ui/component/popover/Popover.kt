@@ -43,6 +43,7 @@ fun Popover(
     @Composable
     context(PopoverScope)
     () -> Unit,
+  enabled: Boolean = true,
   placement: PopoverPlacement = PopoverPlacement.BelowEnd,
   maxWidth: Dp? = null,
   minWidth: Dp = 0.dp,
@@ -80,28 +81,25 @@ fun Popover(
   val ownsOverlay = overlayState.isOwnedBy(overlayOwner)
   val latestIsOverlayVisible by rememberUpdatedState(isOverlayVisible)
   val latestOwnsOverlay by rememberUpdatedState(ownsOverlay)
+  val overlayEntry =
+    PopoverOverlayEntry(
+      owner = overlayOwner,
+      placement = placement,
+      screenPadding = resolvedScreenPadding,
+      collapsedCornerRadius = collapsedCornerRadius,
+      maxWidth = maxWidth,
+      minWidth = minWidth,
+      expandToMaxWidth = expandToMaxWidth,
+      pane = { PopoverPaneSelectionHost(scope = scope, pane = pane) },
+      anchor = { anchor() },
+    )
 
   LaunchedEffect(isExpanded) {
     if (isExpanded) {
       reverseAnimationCompleted = false
       scope.acceptsInput = true
       isOverlayVisible = true
-      overlayState.show(
-        owner = overlayOwner,
-        entry =
-          PopoverOverlayEntry(
-            owner = overlayOwner,
-            placement = placement,
-            screenPadding = resolvedScreenPadding,
-            collapsedCornerRadius = collapsedCornerRadius,
-            maxWidth = maxWidth,
-            minWidth = minWidth,
-            expandToMaxWidth = expandToMaxWidth,
-            pane = { PopoverPaneSelectionHost(scope = scope, pane = pane) },
-            anchor = { anchor() },
-          ),
-        anchorBounds = anchorBounds,
-      )
+      overlayState.show(owner = overlayOwner, entry = overlayEntry, anchorBounds = anchorBounds)
       progress.stop()
       progress.snapTo(0f)
       progress.animateTo(1f, tween(PopoverDefaults.ForwardDuration, easing = LinearEasing))
@@ -160,6 +158,7 @@ fun Popover(
     if (isOverlayVisible && ownsOverlay) {
       overlayState.update(
         owner = overlayOwner,
+        entry = overlayEntry,
         anchorBounds = anchorBounds,
         progress = progress.value.coerceIn(0f, 1f),
         interactive = scope.acceptsInput,
@@ -175,50 +174,57 @@ fun Popover(
     } else {
       0f
     }
+  val anchorModifier = Modifier.onGloballyPositioned { coordinates ->
+    val pos = coordinates.positionInWindow().round()
+    anchorBounds = IntRect(pos, coordinates.size)
+  }
+
+  if (!enabled) {
+    Box(modifier = anchorModifier) {
+      Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
+    }
+    return
+  }
 
   Box(
     modifier =
-      Modifier.onGloballyPositioned { coordinates ->
-          val pos = coordinates.positionInWindow().round()
-          anchorBounds = IntRect(pos, coordinates.size)
-        }
-        .pointerInput(Unit) {
-          awaitEachGesture {
-            val press = awaitFirstDown(requireUnconsumed = false)
-            if (overlayState.isOutsideDismissGestureActive) {
-              return@awaitEachGesture
-            }
-            if (isOverlayVisible) {
-              return@awaitEachGesture
-            }
+      anchorModifier.pointerInput(Unit) {
+        awaitEachGesture {
+          val press = awaitFirstDown(requireUnconsumed = false)
+          if (overlayState.isOutsideDismissGestureActive) {
+            return@awaitEachGesture
+          }
+          if (isOverlayVisible) {
+            return@awaitEachGesture
+          }
 
-            val anchorWindowOffset = Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
-            val scrollLockHandle = scrollGestureLockState.acquire()
-            var released = false
+          val anchorWindowOffset = Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
+          val scrollLockHandle = scrollGestureLockState.acquire()
+          var released = false
 
-            try {
-              isExpanded = true
-              press.consume()
+          try {
+            isExpanded = true
+            press.consume()
 
-              released =
-                trackPressGestureSession(
-                  pointerId = press.id,
-                  initialPositionInWindow = press.position + anchorWindowOffset,
-                  downUptimeMillis = press.uptimeMillis,
-                  armDelayMillis = PopoverDefaults.ArmDelayMs,
-                  resolvePositionInWindow = { change, _ -> change.position + anchorWindowOffset },
-                ) { session, change ->
-                  scope.pressGestureSession = session
-                  change?.consume()
-                }
-            } finally {
-              if (!released) {
-                scope.pressGestureSession = null
+            released =
+              trackPressGestureSession(
+                pointerId = press.id,
+                initialPositionInWindow = press.position + anchorWindowOffset,
+                downUptimeMillis = press.uptimeMillis,
+                armDelayMillis = PopoverDefaults.ArmDelayMs,
+                resolvePositionInWindow = { change, _ -> change.position + anchorWindowOffset },
+              ) { session, change ->
+                scope.pressGestureSession = session
+                change?.consume()
               }
-              scrollLockHandle.release()
+          } finally {
+            if (!released) {
+              scope.pressGestureSession = null
             }
+            scrollLockHandle.release()
           }
         }
+      }
   ) {
     Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
   }

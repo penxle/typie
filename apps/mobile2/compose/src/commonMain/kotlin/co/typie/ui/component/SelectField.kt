@@ -59,12 +59,8 @@ fun <T> SelectField(
       Box(modifier = modifier) { SelectFieldAnchor(item = resolvedDisplayItem, enabled = enabled) }
     }
 
-  if (!enabled) {
-    anchor()
-    return
-  }
-
   PopoverMenu(
+    enabled = enabled,
     placement = placement,
     maxWidth = 320.dp,
     screenPadding = PaddingValues(20.dp),
