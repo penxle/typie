@@ -44,8 +44,7 @@ import co.typie.domain.subscription.SubscriptionServiceState
 import co.typie.domain.subscription.gate
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.excludeTop
-import co.typie.ext.imePadding
+import co.typie.ext.navigationBarsOrImePadding
 import co.typie.ext.pressScale
 import co.typie.ext.thenIf
 import co.typie.ext.verticalScroll
@@ -155,8 +154,7 @@ fun SpaceSettingsScreen() {
       modifier =
         Modifier.fillMaxSize()
           .verticalScroll(scrollState)
-          .imePadding()
-          .padding(contentPadding.excludeTop())
+          .navigationBarsOrImePadding()
           .padding(AppTheme.spacings.scrollBottomPadding)
     ) {
       SpaceLogoHero(

@@ -1,9 +1,10 @@
 package co.typie.screen.settings.updatepassword
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -11,14 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.ext.excludeTop
 import co.typie.ext.imePadding
-import co.typie.ext.onlyTop
 import co.typie.ext.verticalScroll
 import co.typie.navigation.Nav
-import co.typie.result.loading
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.ui.component.BottomFade
 import co.typie.ui.component.Button
 import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
@@ -52,56 +51,60 @@ fun UpdatePasswordScreen() {
 
   ProvideTopBar(center = { Text("비밀번호 변경", style = AppTheme.typography.title) })
 
-  Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
-      Box(modifier = Modifier.weight(1f)) {
-        Column(
-          modifier =
-            Modifier.fillMaxSize()
-              .verticalScroll(scrollState)
-              .padding(contentPadding.onlyTop())
-              .padding(AppTheme.spacings.scrollBottomPadding),
-          verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-          if (model.query.data.me.hasPassword) {
-            TextField(
-              field = model.form.currentPassword,
-              label = "현재 비밀번호",
-              labelPosition = LabelPosition.Internal,
-              placeholder = "********",
-              isPassword = true,
-              contentType = ContentType.Password,
-            )
-          }
+  Screen(
+    loadable = model.query,
+    overlay = {
+      BottomFade(modifier = Modifier.padding(horizontal = 16.dp)) {
+        ToastAnchor()
 
-          TextField(
-            field = model.form.newPassword,
-            label = "새 비밀번호",
-            labelPosition = LabelPosition.Internal,
-            placeholder = "********",
-            isPassword = true,
-            contentType = ContentType.NewPassword,
-          )
+        Button(
+          text = if (model.query.data.me.hasPassword) "변경" else "설정",
+          loading = model.isSubmitting,
+          loadingText = if (model.query.data.me.hasPassword) "변경 중..." else "설정 중...",
+          onClick = { submit() },
+        )
 
-          TextField(
-            field = model.form.confirmPassword,
-            label = "새 비밀번호 확인",
-            labelPosition = LabelPosition.Internal,
-            placeholder = "********",
-            isPassword = true,
-            contentType = ContentType.NewPassword,
-            onImeAction = { submit() },
-          )
-        }
+        Spacer(Modifier.height(12.dp))
+      }
+    },
+  ) { contentPadding ->
+    Column(
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .imePadding()
+          .padding(contentPadding)
+          .padding(AppTheme.spacings.scrollBottomPadding),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      if (model.query.data.me.hasPassword) {
+        TextField(
+          field = model.form.currentPassword,
+          label = "현재 비밀번호",
+          labelPosition = LabelPosition.Internal,
+          placeholder = "********",
+          isPassword = true,
+          contentType = ContentType.Password,
+        )
       }
 
-      ToastAnchor()
+      TextField(
+        field = model.form.newPassword,
+        label = "새 비밀번호",
+        labelPosition = LabelPosition.Internal,
+        placeholder = "********",
+        isPassword = true,
+        contentType = ContentType.NewPassword,
+      )
 
-      Button(
-        text = if (model.query.data.me.hasPassword) "변경" else "설정",
-        loading = model.isSubmitting,
-        loadingText = if (model.query.data.me.hasPassword) "변경 중..." else "설정 중...",
-        onClick = { submit() },
+      TextField(
+        field = model.form.confirmPassword,
+        label = "새 비밀번호 확인",
+        labelPosition = LabelPosition.Internal,
+        placeholder = "********",
+        isPassword = true,
+        contentType = ContentType.NewPassword,
+        onImeAction = { submit() },
       )
     }
   }

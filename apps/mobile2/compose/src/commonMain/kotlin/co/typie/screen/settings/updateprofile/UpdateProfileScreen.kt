@@ -20,9 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
-import co.typie.ext.excludeTop
 import co.typie.ext.imePadding
-import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.verticalScroll
 import co.typie.graphql.fragment.Img_image
@@ -31,6 +29,7 @@ import co.typie.navigation.Nav
 import co.typie.platform.rememberFilePicker
 import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
+import co.typie.ui.component.BottomFade
 import co.typie.ui.component.Button
 import co.typie.ui.component.Img
 import co.typie.ui.component.LabelPosition
@@ -84,48 +83,52 @@ fun UpdateProfileScreen() {
 
   ProvideTopBar(center = { Text("프로필 변경", style = AppTheme.typography.title) })
 
-  Screen(loadable = model.query) { contentPadding ->
-    Column(modifier = Modifier.fillMaxSize().imePadding().padding(contentPadding.excludeTop())) {
-      Box(modifier = Modifier.weight(1f)) {
-        Column(
-          modifier =
-            Modifier.fillMaxSize()
-              .verticalScroll(scrollState)
-              .padding(contentPadding.onlyTop())
-              .padding(AppTheme.spacings.scrollBottomPadding)
-        ) {
-          Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            ProfileAvatar(
-              image = model.query.data.me.avatar.img_image,
-              previewUrl = model.avatarPreviewUrl,
-              onClick = { filePicker("image/*") },
-            )
+  Screen(
+    loadable = model.query,
+    overlay = {
+      BottomFade(modifier = Modifier.padding(horizontal = 16.dp)) {
+        ToastAnchor()
 
-            Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
-          }
+        Button(
+          text = "변경",
+          loading = model.isSubmitting,
+          loadingText = "변경 중...",
+          onClick = { submit() },
+        )
 
-          Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(12.dp))
+      }
+    },
+  ) { contentPadding ->
+    Column(
+      modifier =
+        Modifier.fillMaxSize()
+          .verticalScroll(scrollState)
+          .imePadding()
+          .padding(contentPadding)
+          .padding(AppTheme.spacings.scrollBottomPadding)
+    ) {
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        ProfileAvatar(
+          image = model.query.data.me.avatar.img_image,
+          previewUrl = model.avatarPreviewUrl,
+          onClick = { filePicker("image/*") },
+        )
 
-          TextField(
-            field = model.form.name,
-            label = "닉네임",
-            labelPosition = LabelPosition.Internal,
-            onImeAction = { submit() },
-          )
-        }
+        Text("프로필 사진", style = AppTheme.typography.caption, color = AppTheme.colors.textMuted)
       }
 
-      ToastAnchor()
+      Spacer(Modifier.height(32.dp))
 
-      Button(
-        text = "변경",
-        loading = model.isSubmitting,
-        loadingText = "변경 중...",
-        onClick = { submit() },
+      TextField(
+        field = model.form.name,
+        label = "닉네임",
+        labelPosition = LabelPosition.Internal,
+        onImeAction = { submit() },
       )
     }
   }
