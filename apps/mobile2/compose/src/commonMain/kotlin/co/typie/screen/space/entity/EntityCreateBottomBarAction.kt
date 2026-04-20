@@ -60,9 +60,9 @@ fun rememberEntityCreateBottomBarAction(
                 model
                   .createDocument(siteId = resolvedSiteId, parentEntityId = parentEntityId)
                   .withDefaultExceptionHandler(toast)
-                  .onOk { createdSlug ->
+                  .onOk { createdEntityId ->
                     onCreatedRef()
-                    onDocumentCreatedRef(createdSlug)
+                    onDocumentCreatedRef(createdEntityId)
                   }
               }
             },

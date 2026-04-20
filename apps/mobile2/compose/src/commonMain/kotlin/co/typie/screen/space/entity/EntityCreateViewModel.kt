@@ -35,7 +35,7 @@ class EntityCreateViewModel : ViewModel() {
       Apollo.executeMutation(EntityContainer_CreateDocument_Mutation(input = input))
         .createDocument
         .entity
-        .slug
+        .id
     }
 
   suspend fun createFolder(

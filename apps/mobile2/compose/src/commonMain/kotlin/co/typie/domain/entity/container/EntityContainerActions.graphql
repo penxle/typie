@@ -4,7 +4,6 @@ mutation EntityContainer_CreateDocument_Mutation($input: CreateDocumentInput!) {
 
     entity {
       id
-      slug
     }
   }
 }
