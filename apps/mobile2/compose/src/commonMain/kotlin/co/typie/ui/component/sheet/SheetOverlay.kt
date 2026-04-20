@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -204,16 +205,21 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
         }
       }
 
+    val nestedScrollConnection =
+      rememberSheetNestedScrollConnection(
+        anchoredState = anchoredState,
+        visibleOffsets = visibleOffsets,
+        containerHeightPx = containerHeightPx,
+        hiddenValue = ANCHOR_HIDDEN,
+        animationSpec = SheetAnimationSpec,
+      )
+
     PlatformBackHandler(enabled = !dismissed) { requestDismiss() }
 
     val stateOffset = if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset
     val offset = if (isIntrinsic) stateOffset else stateOffset + offsetCorrection.value
     val animatedOffsetPx = offset.roundToInt().coerceAtLeast(0)
     val intrinsicTopLimit = intrinsicTopLimitPx.roundToInt()
-    val shouldUseMeasuredIntrinsicOffset =
-      isIntrinsic &&
-        anchoredState.settledValue == ANCHOR_VISIBLE &&
-        anchoredState.targetValue == ANCHOR_VISIBLE
     val minStopHeightPx =
       (containerHeightPx - (visibleOffsets.maxOrNull() ?: containerHeightPx))
         .roundToInt()
@@ -236,6 +242,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     Column(
       modifier =
         Modifier.fillMaxWidth()
+          .nestedScroll(nestedScrollConnection)
           .layout { measurable, constraints ->
             val maxH =
               if (isIntrinsic) {
@@ -244,6 +251,12 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
                 maxOf((constraints.maxHeight - animatedOffsetPx).coerceAtLeast(0), minStopHeightPx)
               }
             val placeable = measurable.measure(constraints.copy(maxHeight = maxH))
+            val shouldUseMeasuredIntrinsicOffset =
+              isIntrinsic &&
+                anchoredState.settledValue == ANCHOR_VISIBLE &&
+                anchoredState.targetValue == ANCHOR_VISIBLE &&
+                contentHeightPx > 0f &&
+                contentHeightPx != placeable.height.toFloat()
             val currentOffset =
               if (shouldUseMeasuredIntrinsicOffset) {
                 maxOf(constraints.maxHeight - placeable.height, intrinsicTopLimit)
