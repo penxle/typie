@@ -6,6 +6,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
@@ -57,7 +58,7 @@ private fun rememberSkeletonState(enabled: Boolean, colors: SkeletonColors): Ske
   val fraction =
     animateFloatAsState(
       targetValue = if (enabled) 1f else 0f,
-      animationSpec = tween(durationMillis = 200, easing = EaseInOut),
+      animationSpec = if (enabled) snap() else tween(durationMillis = 200, easing = EaseInOut),
     )
   val boneColor =
     transition.animateColor(
