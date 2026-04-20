@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
+import co.typie.ext.navigationBarsPadding
 import co.typie.ext.pressScale
 import co.typie.icons.Lucide
 import co.typie.ui.component.Text
@@ -141,11 +142,12 @@ fun EntityContainerBottomOverlayStack(
   Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
     Column(
       modifier =
-        Modifier.padding(
-          start = EntityContainerBottomOverlayHorizontalPadding,
-          end = EntityContainerBottomOverlayHorizontalPadding,
-          bottom = baseBottomInset + EntityBottomOverlayDefaults.BottomOffset,
-        ),
+        Modifier.navigationBarsPadding()
+          .padding(
+            start = EntityContainerBottomOverlayHorizontalPadding,
+            end = EntityContainerBottomOverlayHorizontalPadding,
+            bottom = baseBottomInset + EntityBottomOverlayDefaults.BottomOffset,
+          ),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       ToastAnchor()
