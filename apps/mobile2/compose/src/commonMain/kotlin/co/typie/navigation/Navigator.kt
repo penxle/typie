@@ -43,6 +43,13 @@ class Navigator(startRoute: Route) {
   val isTransitioning: Boolean
     get() = transitionCompletion?.isActive == true
 
+  suspend fun awaitTransitionIdle() {
+    while (true) {
+      val current = transitionCompletion ?: return
+      current.await()
+    }
+  }
+
   fun viewModelStoreFor(route: Route): ViewModelStore {
     return viewModelStores.getOrPut(route) { ViewModelStore() }
   }

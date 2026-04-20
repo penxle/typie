@@ -78,3 +78,10 @@ fun Route.transitionStyleTo(route: Route): RouteTransitionStyle =
 
     else -> RouteTransitionStyle.Slide
   }
+
+val Route.keepAlive: Boolean
+  get() =
+    when (this) {
+      is Route.Editor -> true
+      else -> false
+    }

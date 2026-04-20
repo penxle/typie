@@ -41,6 +41,7 @@ import co.typie.ext.pointerIgnore
 import co.typie.ext.thenIf
 import co.typie.route.Route
 import co.typie.route.RouteTransitionStyle
+import co.typie.route.keepAlive
 import co.typie.route.transitionStyleTo
 import co.typie.ui.component.bottombar.BottomBarState
 import co.typie.ui.component.bottombar.LocalBottomBarAnimationSource
@@ -267,6 +268,35 @@ fun NavigationStack(
           }
       }
 
+      val mainRoute =
+        when (animState) {
+          // Push: 새 화면 (오른쪽에서 슬라이드 in)
+          AnimState.Push -> navigator.current
+          // Idle/Pop/Dragging: 현재 보이는 화면
+          else -> visibleRoute
+        }
+
+      Box(
+        Modifier.fillMaxSize()
+          .graphicsLayer {
+            alpha = 0f
+            clip = true
+          }
+          .pointerInput(Unit) {
+            awaitPointerEventScope {
+              while (true) {
+                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+              }
+            }
+          }
+      ) {
+        navigator.stack.forEach { route ->
+          if (route == mainRoute || route == behindRoute) return@forEach
+          if (!route.keepAlive) return@forEach
+          Box(Modifier.fillMaxSize()) { routeContentFor(route).invoke() }
+        }
+      }
+
       // Behind layer (애니메이션 중 뒤에 깔리는 화면)
       if (behindRoute != null) {
         val behindTopBar =
@@ -356,13 +386,6 @@ fun NavigationStack(
 
       // Main layer (현재 화면 — 항상 같은 composition slot을 유지하여
       // Push→Idle 전환 시 remember 등 composition 상태가 보존됨)
-      val mainRoute =
-        when (animState) {
-          // Push: 새 화면 (오른쪽에서 슬라이드 in)
-          AnimState.Push -> navigator.current
-          // Idle/Pop/Dragging: 현재 보이는 화면
-          else -> visibleRoute
-        }
       val mainTopBar =
         when (animState) {
           // Pop: 나가는 화면은 exitTopBarState
