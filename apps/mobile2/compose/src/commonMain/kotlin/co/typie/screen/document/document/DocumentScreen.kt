@@ -484,7 +484,7 @@ private fun DocumentInfoRow(
   Row(
     modifier = modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.spacedBy(16.dp),
-    verticalAlignment = Alignment.Top,
+    verticalAlignment = Alignment.CenterVertically,
   ) {
     Text(
       text = label,
