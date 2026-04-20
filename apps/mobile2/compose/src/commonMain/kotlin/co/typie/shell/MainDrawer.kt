@@ -143,111 +143,114 @@ internal fun MainDrawerContent() {
     Column(modifier = Modifier.fillMaxHeight()) {
       val scrollState = rememberScrollState()
 
-      Column(
-        modifier =
-          Modifier.weight(1f)
-            .verticalScroll(scrollState)
-            .padding(horizontal = 4.dp, vertical = 8.dp)
-      ) {
+      Column(modifier = Modifier.weight(1f)) {
         Text(
           text = "스페이스",
           style = AppTheme.typography.title,
           color = AppTheme.colors.textDefault,
-          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+          modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 4.dp),
         )
 
         Spacer(Modifier.height(4.dp))
 
-        for (site in data.me.sites) {
-          val isCurrent = site.id == selection.currentSiteId
+        Column(
+          modifier =
+            Modifier.weight(1f)
+              .verticalScroll(scrollState)
+              .padding(start = 4.dp, top = 8.dp, end = 4.dp, bottom = 8.dp)
+        ) {
+          for (site in data.me.sites) {
+            val isCurrent = site.id == selection.currentSiteId
 
-          InteractionScope {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier =
-                Modifier.fillMaxWidth()
-                  .background(
-                    if (isCurrent) AppTheme.colors.surfaceInset else AppTheme.colors.surfaceDefault,
-                    AppShapes.rounded(AppShapes.md),
-                  )
-                  .clickable {
-                    if (site.id != selection.currentSiteId) {
-                      Preference.siteId = site.id
-                    }
-
-                    scope.launch { drawer.close() }
-                  }
-                  .pressScale()
-                  .padding(horizontal = 12.dp, vertical = 12.dp),
-            ) {
-              Box(
+            InteractionScope {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier =
-                  Modifier.size(44.dp)
-                    .border(
-                      2.dp,
-                      if (isCurrent) AppTheme.colors.textDefault
-                      else AppTheme.colors.textDefault.copy(alpha = 0f),
+                  Modifier.fillMaxWidth()
+                    .background(
+                      if (isCurrent) AppTheme.colors.surfaceInset
+                      else AppTheme.colors.surfaceDefault,
                       AppShapes.rounded(AppShapes.md),
                     )
-                    .padding(4.dp)
+                    .clickable {
+                      if (site.id != selection.currentSiteId) {
+                        Preference.siteId = site.id
+                      }
+
+                      scope.launch { drawer.close() }
+                    }
+                    .pressScale()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
               ) {
-                Img(
-                  image = site.logo.img_image,
-                  modifier = Modifier.fillMaxSize().clip(AppShapes.rounded(AppShapes.md - 4.dp)),
-                )
-              }
+                Box(
+                  modifier =
+                    Modifier.size(44.dp)
+                      .border(
+                        2.dp,
+                        if (isCurrent) AppTheme.colors.textDefault
+                        else AppTheme.colors.textDefault.copy(alpha = 0f),
+                        AppShapes.rounded(AppShapes.md),
+                      )
+                      .padding(4.dp)
+                ) {
+                  Img(
+                    image = site.logo.img_image,
+                    modifier = Modifier.fillMaxSize().clip(AppShapes.rounded(AppShapes.md - 4.dp)),
+                  )
+                }
 
-              Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(8.dp))
 
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = site.name,
-                  style = AppTheme.typography.label,
-                  color = AppTheme.colors.textDefault,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = site.name,
+                    style = AppTheme.typography.label,
+                    color = AppTheme.colors.textDefault,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
 
-                Text(
-                  text = site.url,
-                  style = AppTheme.typography.micro,
-                  color = AppTheme.colors.textHint,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                )
+                  Text(
+                    text = site.url,
+                    style = AppTheme.typography.micro,
+                    color = AppTheme.colors.textHint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                }
               }
             }
           }
-        }
 
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier =
-            Modifier.fillMaxWidth()
-              .clickable { dismissAndRun { sheet.present { CreateSpaceSheet(model) } } }
-              .padding(horizontal = 12.dp, vertical = 12.dp),
-        ) {
-          Box(
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier =
-              Modifier.padding(start = 4.dp)
-                .size(36.dp)
-                .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md)),
-            contentAlignment = Alignment.Center,
+              Modifier.fillMaxWidth()
+                .clickable { dismissAndRun { sheet.present { CreateSpaceSheet(model) } } }
+                .padding(horizontal = 12.dp, vertical = 12.dp),
           ) {
-            Icon(
-              icon = Lucide.Plus,
-              tint = AppTheme.colors.textMuted,
-              modifier = Modifier.size(20.dp),
+            Box(
+              modifier =
+                Modifier.padding(start = 4.dp)
+                  .size(36.dp)
+                  .border(1.dp, AppTheme.colors.borderEmphasis, AppShapes.rounded(AppShapes.md)),
+              contentAlignment = Alignment.Center,
+            ) {
+              Icon(
+                icon = Lucide.Plus,
+                tint = AppTheme.colors.textMuted,
+                modifier = Modifier.size(20.dp),
+              )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Text(
+              text = "새 스페이스 생성",
+              style = AppTheme.typography.action,
+              color = AppTheme.colors.textMuted,
             )
           }
-
-          Spacer(Modifier.width(12.dp))
-
-          Text(
-            text = "새 스페이스 생성",
-            style = AppTheme.typography.action,
-            color = AppTheme.colors.textMuted,
-          )
         }
       }
 
