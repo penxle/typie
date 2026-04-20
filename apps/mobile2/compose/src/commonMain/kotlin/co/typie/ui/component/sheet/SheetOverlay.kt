@@ -86,6 +86,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     val isIntrinsic = entry.stops.isEmpty()
     var contentHeightPx by remember { mutableStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
+    val dragOverscrollEffect = remember { SheetTopHysteresisOverscrollEffect() }
 
     val visibleOffsets: List<Float> =
       remember(entry.stops, containerHeightPx, contentHeightPx) {
@@ -202,7 +203,11 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
             val placeable = measurable.measure(constraints.copy(maxHeight = maxH))
             layout(placeable.width, placeable.height) { placeable.place(0, currentOffset) }
           }
-          .anchoredDraggable(state = anchoredState, orientation = Orientation.Vertical)
+          .anchoredDraggable(
+            state = anchoredState,
+            orientation = Orientation.Vertical,
+            overscrollEffect = dragOverscrollEffect,
+          )
           .thenIf(isIntrinsic) { onSizeChanged { contentHeightPx = it.height.toFloat() } }
           .clip(RoundedCornerShape(topStart = AppShapes.xl, topEnd = AppShapes.xl))
     ) {
