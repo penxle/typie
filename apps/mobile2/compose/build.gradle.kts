@@ -82,6 +82,9 @@ kotlin {
   swiftPMDependencies {
     group = "co.typie"
     iosMinimumDeploymentTarget.set("15.6")
+    xcodeProjectPathForKmpIJPlugin.set(
+      rootProject.layout.projectDirectory.file("ios/App.xcodeproj")
+    )
 
     localSwiftPackage(
       directory = rootProject.layout.projectDirectory.dir("ios/Bridge"),
