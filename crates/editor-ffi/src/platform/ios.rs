@@ -3,6 +3,7 @@ use editor_renderer::{RenderBackend, RenderSink};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
+use objc2_core_foundation::CGSize;
 use objc2_metal::{
     MTLCreateSystemDefaultDevice, MTLDevice, MTLGPUFamily, MTLOrigin, MTLRegion, MTLSize,
 };
@@ -24,6 +25,23 @@ pub fn supports_apple_gpu_family_8() -> bool {
         .unwrap_or(true)
 }
 
+// Read the layer's drawableSize directly so Rust and Kotlin agree on pixel dims.
+// Returns None before the view has been laid out (drawableSize is 0).
+fn drawable_size(handle: PlatformHandle) -> Option<(u32, u32)> {
+    if handle == 0 {
+        return None;
+    }
+    unsafe {
+        let layer = &*(handle as *const AnyObject);
+        let size: CGSize = msg_send![layer, drawableSize];
+        if size.width > 0.0 && size.height > 0.0 {
+            Some((size.width as u32, size.height as u32))
+        } else {
+            None
+        }
+    }
+}
+
 pub struct SurfaceHandle {
     backend: RenderBackend,
     handle: PlatformHandle,
@@ -40,8 +58,12 @@ impl SurfaceHandle {
         height: u32,
         scale_factor: f64,
     ) -> Result<Self, FfiError> {
-        let pw = (width as f64 * scale_factor).round() as u32;
-        let ph = (height as f64 * scale_factor).round() as u32;
+        let (pw, ph) = drawable_size(handle).unwrap_or_else(|| {
+            (
+                (width as f64 * scale_factor).round() as u32,
+                (height as f64 * scale_factor).round() as u32,
+            )
+        });
 
         let backend = match mode {
             BackendMode::Cpu => RenderBackend::new_cpu(pw as u16, ph as u16),
@@ -137,8 +159,12 @@ impl SurfaceHandle {
     }
 
     pub fn resize(&mut self, width: u32, height: u32, scale_factor: f64) {
-        let pw = (width as f64 * scale_factor).round() as u32;
-        let ph = (height as f64 * scale_factor).round() as u32;
+        let (pw, ph) = drawable_size(self.handle).unwrap_or_else(|| {
+            (
+                (width as f64 * scale_factor).round() as u32,
+                (height as f64 * scale_factor).round() as u32,
+            )
+        });
 
         self.width = pw;
         self.height = ph;

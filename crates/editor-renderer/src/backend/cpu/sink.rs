@@ -51,6 +51,10 @@ impl CpuSink {
 }
 
 impl RenderSink for CpuSink {
+    fn pixel_size(&self) -> (u32, u32) {
+        (self.width as u32, self.height as u32)
+    }
+
     fn fill_rect(&mut self, rect: Rect, color: Color, transform: Transform) {
         self.ctx.set_transform(transform.into());
         self.ctx.set_paint(peniko::color::AlphaColor::from(color));

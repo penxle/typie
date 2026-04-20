@@ -296,10 +296,12 @@ impl Renderer {
         scale_factor: f32,
         marks: &[Mark],
     ) {
-        let page_size = view.pages()[page_idx].size;
-        let page_rect = Rect::from_xywh(0.0, 0.0, page_size.width, page_size.height);
+        // Fill the entire surface in pixel space to avoid fractional-pixel anti-alias
+        // gaps at page edges when page_size * scale_factor isn't integer-aligned.
+        let (sw, sh) = sink.pixel_size();
+        let surface_rect = Rect::from_xywh(0.0, 0.0, sw as f32, sh as f32);
         let bg = self.theme.color("ui.surface.default");
-        sink.fill_rect(page_rect, bg, Transform::scale(scale_factor));
+        sink.fill_rect(surface_rect, bg, Transform::IDENTITY);
 
         view.visit_page(
             page_idx,

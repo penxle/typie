@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import co.typie.editor.Editor
 import co.typie.editor.ffi.EditorEvent
+import kotlin.math.roundToInt
 
 @Composable
 internal fun Page(
@@ -24,12 +25,12 @@ internal fun Page(
   Surface(
     modifier = modifier.width(Dp(width)).height(Dp(height)),
     onAttach = { handle ->
-      editor.attachSurface(page, handle, width.toInt(), height.toInt(), scaleFactor)
+      editor.attachSurface(page, handle, width.roundToInt(), height.roundToInt(), scaleFactor)
       editor.renderSurface(page)
     },
     onDetach = { editor.detachSurface(page) },
     onResize = {
-      editor.resizeSurface(page, width.toInt(), height.toInt(), scaleFactor)
+      editor.resizeSurface(page, width.roundToInt(), height.roundToInt(), scaleFactor)
       editor.renderSurface(page)
     },
   )

@@ -17,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,7 +80,7 @@ fun EditorScreen(entityId: String) {
     },
   )
 
-  Screen(loadable = model.query) { contentPadding ->
+  Screen(loadable = model.query, background = Color.White) { contentPadding ->
     document ?: return@Screen
 
     CompositionLocalProvider(LocalEditorState provides model.editorState) {

@@ -87,6 +87,10 @@ impl GpuSink {
 }
 
 impl RenderSink for GpuSink {
+    fn pixel_size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
     fn fill_rect(&mut self, rect: Rect, color: Color, transform: Transform) {
         let brush = peniko::Brush::Solid(color.into());
         let r = kurbo::Rect::new(
