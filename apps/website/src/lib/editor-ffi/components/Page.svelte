@@ -10,12 +10,17 @@
 
   let { page, width, height }: Props = $props();
 
-  const { editor } = getEditorContext();
+  const ctx = getEditorContext();
+  const { editor } = ctx;
+
+  const scaleFactor = $derived(ctx.editor?.scaleFactor ?? 1);
+  const cssWidth = $derived(Math.round(width * scaleFactor) / scaleFactor);
+  const cssHeight = $derived(Math.round(height * scaleFactor) / scaleFactor);
 </script>
 
 <div
-  style:width={`${width}px`}
-  style:height={`${height}px`}
+  style:width={`${cssWidth}px`}
+  style:height={`${cssHeight}px`}
   class={css({ position: 'relative', flexShrink: '0' })}
   {@attach (el) => {
     if (editor) {

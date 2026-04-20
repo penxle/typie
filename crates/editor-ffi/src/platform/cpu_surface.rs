@@ -18,12 +18,12 @@ pub struct SurfaceHandle {
 impl SurfaceHandle {
     pub fn new(
         handle: PlatformHandle,
-        width: u32,
-        height: u32,
+        width: f64,
+        height: f64,
         scale_factor: f64,
     ) -> Result<Self, FfiError> {
-        let pw = (width as f64 * scale_factor).round() as u32;
-        let ph = (height as f64 * scale_factor).round() as u32;
+        let pw = (width * scale_factor).round() as u32;
+        let ph = (height * scale_factor).round() as u32;
 
         if handle != 0 {
             unsafe {
@@ -63,9 +63,9 @@ impl SurfaceHandle {
         }
     }
 
-    pub fn resize(&mut self, width: u32, height: u32, scale_factor: f64) {
-        let pw = (width as f64 * scale_factor).round() as u32;
-        let ph = (height as f64 * scale_factor).round() as u32;
+    pub fn resize(&mut self, width: f64, height: f64, scale_factor: f64) {
+        let pw = (width * scale_factor).round() as u32;
+        let ph = (height * scale_factor).round() as u32;
 
         self.width = pw;
         self.height = ph;

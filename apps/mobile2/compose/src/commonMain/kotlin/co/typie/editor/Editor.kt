@@ -108,12 +108,12 @@ private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: Co
 
   fun globalToLocal(x: Float, y: Float): PagePoint? = globalToLocal(x, y, pageOffsets, pageSizes)
 
-  fun attachSurface(page: Int, handle: Long, width: Int, height: Int, scaleFactor: Double) =
+  fun attachSurface(page: Int, handle: Long, width: Double, height: Double, scaleFactor: Double) =
     inner.attachSurface(page, handle, width, height, scaleFactor)
 
   fun detachSurface(page: Int) = inner.detachSurface(page)
 
-  fun resizeSurface(page: Int, width: Int, height: Int, scaleFactor: Double) =
+  fun resizeSurface(page: Int, width: Double, height: Double, scaleFactor: Double) =
     inner.resizeSurface(page, width, height, scaleFactor)
 
   fun renderSurface(page: Int) = inner.renderSurface(page)

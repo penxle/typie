@@ -11,8 +11,8 @@ pub struct SurfaceHandle;
 impl SurfaceHandle {
     pub fn new(
         _handle: PlatformHandle,
-        _width: u32,
-        _height: u32,
+        _width: f64,
+        _height: f64,
         _scale_factor: f64,
     ) -> Result<Self, FfiError> {
         unreachable!();
@@ -30,7 +30,7 @@ impl SurfaceHandle {
         unreachable!();
     }
 
-    pub fn resize(&mut self, _width: u32, _height: u32, _scale_factor: f64) {
+    pub fn resize(&mut self, _width: f64, _height: f64, _scale_factor: f64) {
         unreachable!();
     }
 }

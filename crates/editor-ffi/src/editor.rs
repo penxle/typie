@@ -105,8 +105,8 @@ impl Editor {
         &self,
         page: u32,
         handle: PlatformHandle,
-        width: u32,
-        height: u32,
+        width: f64,
+        height: f64,
         scale_factor: f64,
     ) -> EditorResult<()> {
         let surface = SurfaceHandle::new(handle, width, height, scale_factor)?;
@@ -126,8 +126,8 @@ impl Editor {
     pub fn resize_surface(
         &self,
         page: u32,
-        width: u32,
-        height: u32,
+        width: f64,
+        height: f64,
         scale_factor: f64,
     ) -> EditorResult<()> {
         self.with_inner(|inner| {

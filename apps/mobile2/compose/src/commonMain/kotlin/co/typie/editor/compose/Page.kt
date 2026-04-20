@@ -10,7 +10,7 @@ import androidx.compose.ui.unit.Dp
 import co.typie.editor.Editor
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.render.RenderCanvas
-import kotlin.math.roundToInt
+import kotlin.math.round
 
 @Composable
 internal fun Page(
@@ -23,15 +23,22 @@ internal fun Page(
   val density = LocalDensity.current
   val scaleFactor = density.density.toDouble()
 
+  val widthDouble = width.toDouble()
+  val heightDouble = height.toDouble()
+  val canvasWidth = round(widthDouble * scaleFactor)
+  val canvasHeight = round(heightDouble * scaleFactor)
+  val quantizedWidthDp = Dp((canvasWidth / scaleFactor).toFloat())
+  val quantizedHeightDp = Dp((canvasHeight / scaleFactor).toFloat())
+
   RenderCanvas(
-    modifier = modifier.width(Dp(width)).height(Dp(height)),
+    modifier = modifier.width(quantizedWidthDp).height(quantizedHeightDp),
     onAttach = { handle ->
-      editor.attachSurface(page, handle, width.roundToInt(), height.roundToInt(), scaleFactor)
+      editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
       editor.renderSurface(page)
     },
     onDetach = { editor.detachSurface(page) },
     onResize = {
-      editor.resizeSurface(page, width.roundToInt(), height.roundToInt(), scaleFactor)
+      editor.resizeSurface(page, widthDouble, heightDouble, scaleFactor)
       editor.renderSurface(page)
     },
   )

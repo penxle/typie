@@ -75,6 +75,10 @@ export class Editor {
     return this.#pageSizes;
   }
 
+  get scaleFactor() {
+    return this.#viewport.scale_factor;
+  }
+
   focus() {
     this.inputEl?.focus();
   }
