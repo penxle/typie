@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
-import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.horizontalDrag
@@ -36,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.ext.InteractionScope
@@ -83,6 +84,7 @@ import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -448,27 +450,66 @@ fun MainDrawerOverlay(drawer: Drawer) {
 }
 
 @Composable
-fun MainDrawerEdgeGestureHost(drawer: Drawer) {
+fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
   val scope = rememberCoroutineScope()
 
-  Box(
-    modifier =
-      Modifier.fillMaxHeight().width(DrawerDefaults.EdgeHitSlop).pointerInput(drawer) {
-        awaitEachGesture {
-          val down = awaitFirstDown(requireUnconsumed = false)
-          if (drawer.isOpen) return@awaitEachGesture
+  if (!enabled) {
+    return Modifier
+  }
 
-          horizontalDrag(down.id) { change ->
-            val dx = change.positionChange().x
-            if (dx != 0f) {
-              drawer.state.dispatchRawDelta(dx)
-              change.consume()
-            }
+  return Modifier.pointerInput(drawer) {
+    val slop = viewConfiguration.touchSlop
+
+    awaitEachGesture {
+      val down = awaitFirstDown(requireUnconsumed = false)
+      if (drawer.isOpen || drawer.isProgrammaticAnimating) {
+        return@awaitEachGesture
+      }
+
+      var overSlopX = 0f
+      var claimed = false
+
+      while (!claimed) {
+        val event = awaitPointerEvent(PointerEventPass.Main)
+        val change = event.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
+        if (!change.pressed) {
+          return@awaitEachGesture
+        }
+
+        val dx = change.position.x - down.position.x
+        val dy = change.position.y - down.position.y
+
+        if (abs(dx) > slop || abs(dy) > slop) {
+          if (dx <= 0f || abs(dx) <= abs(dy) || change.isConsumed) {
+            return@awaitEachGesture
           }
-          scope.launch {
-            drawer.state.animateTo(drawer.state.targetValue, DrawerDefaults.AnimationSpec)
+
+          val confirmEvent = awaitPointerEvent(PointerEventPass.Main)
+          val confirmChange =
+            confirmEvent.changes.fastFirstOrNull { it.id == down.id } ?: return@awaitEachGesture
+          if (!confirmChange.pressed || confirmChange.isConsumed) {
+            return@awaitEachGesture
           }
+
+          confirmChange.consume()
+          overSlopX = confirmChange.position.x - down.position.x
+          claimed = true
         }
       }
-  )
+
+      if (overSlopX != 0f) {
+        drawer.state.dispatchRawDelta(overSlopX)
+      }
+
+      horizontalDrag(down.id) { change ->
+        val dx = change.positionChange().x
+        if (dx != 0f) {
+          drawer.state.dispatchRawDelta(dx)
+          change.consume()
+        }
+      }
+
+      scope.launch { drawer.settle() }
+    }
+  }
 }

@@ -37,6 +37,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
   val topBarState = remember { TopBarState() }
   val bottomBarState = remember { BottomBarState() }
   val drawer = remember { Drawer() }
+  val drawerSwipeModifier = mainDrawerSwipeToOpenModifier(drawer, enabled = !activeNavigator.canPop)
 
   val siteId = Preference.siteId
 
@@ -65,6 +66,7 @@ fun MainShell(content: @Composable (Route) -> Unit) {
         navigator = activeNavigator,
         topBarState = topBarState,
         bottomBarState = bottomBarState,
+        modifier = drawerSwipeModifier,
       ) {
         Crossfade(
           targetState = currentTab,
@@ -78,10 +80,6 @@ fun MainShell(content: @Composable (Route) -> Unit) {
             content = content,
           )
         }
-      }
-
-      if (!activeNavigator.canPop) {
-        MainDrawerEdgeGestureHost(drawer)
       }
       MainDrawerOverlay(drawer)
     }

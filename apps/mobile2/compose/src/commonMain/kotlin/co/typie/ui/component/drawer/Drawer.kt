@@ -51,6 +51,10 @@ class Drawer {
     if (isOpen) close() else open()
   }
 
+  suspend fun settle() {
+    runProgrammatic { state.animateTo(state.targetValue, DrawerDefaults.AnimationSpec) }
+  }
+
   private suspend inline fun runProgrammatic(block: () -> Unit) {
     programmaticAnimationCount++
     try {
