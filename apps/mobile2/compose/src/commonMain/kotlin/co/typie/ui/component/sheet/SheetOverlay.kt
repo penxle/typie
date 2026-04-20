@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 private const val ANCHOR_HIDDEN = -1
+private const val ANCHOR_VISIBLE = 0
 private val DefaultIntrinsicTopGap = 64.dp
 private val SheetAnimationSpec = spring<Float>(stiffness = 500f)
 
@@ -139,7 +140,8 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
       val newOffset = anchoredState.offset
 
       if (
-        !prevOffset.isNaN() &&
+        !isIntrinsic &&
+          !prevOffset.isNaN() &&
           !newOffset.isNaN() &&
           prevOffset != newOffset &&
           anchoredState.currentValue != ANCHOR_HIDDEN
@@ -152,7 +154,7 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
     LaunchedEffect(visibleOffsets.isNotEmpty()) {
       if (visibleOffsets.isEmpty()) return@LaunchedEffect
 
-      anchoredState.animateTo(0, SheetAnimationSpec)
+      anchoredState.animateTo(ANCHOR_VISIBLE, SheetAnimationSpec)
 
       snapshotFlow { anchoredState.settledValue }
         .filter { it == ANCHOR_HIDDEN }
@@ -204,9 +206,18 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
 
     PlatformBackHandler(enabled = !dismissed) { requestDismiss() }
 
-    val offset =
-      (if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset) +
-        offsetCorrection.value
+    val stateOffset = if (anchoredState.offset.isNaN()) containerHeightPx else anchoredState.offset
+    val offset = if (isIntrinsic) stateOffset else stateOffset + offsetCorrection.value
+    val animatedOffsetPx = offset.roundToInt().coerceAtLeast(0)
+    val intrinsicTopLimit = intrinsicTopLimitPx.roundToInt()
+    val shouldUseMeasuredIntrinsicOffset =
+      isIntrinsic &&
+        anchoredState.settledValue == ANCHOR_VISIBLE &&
+        anchoredState.targetValue == ANCHOR_VISIBLE
+    val minStopHeightPx =
+      (containerHeightPx - (visibleOffsets.maxOrNull() ?: containerHeightPx))
+        .roundToInt()
+        .coerceAtLeast(0)
     val minVisibleOffset = visibleOffsets.minOrNull() ?: containerHeightPx
     val scrimAlpha =
       if (containerHeightPx > minVisibleOffset) {
@@ -226,17 +237,19 @@ private fun SheetEntryOverlay(entry: SheetEntry<*>, onResolve: (Any?) -> Unit) {
       modifier =
         Modifier.fillMaxWidth()
           .layout { measurable, constraints ->
-            val currentOffset = offset.roundToInt().coerceAtLeast(0)
             val maxH =
               if (isIntrinsic) {
-                (constraints.maxHeight - intrinsicTopLimitPx.roundToInt()).coerceAtLeast(0)
+                (constraints.maxHeight - intrinsicTopLimit).coerceAtLeast(0)
               } else {
-                val maxVisibleOffset = visibleOffsets.maxOrNull() ?: containerHeightPx
-                val minStopHeight =
-                  (containerHeightPx - maxVisibleOffset).roundToInt().coerceAtLeast(0)
-                maxOf((constraints.maxHeight - currentOffset).coerceAtLeast(0), minStopHeight)
+                maxOf((constraints.maxHeight - animatedOffsetPx).coerceAtLeast(0), minStopHeightPx)
               }
             val placeable = measurable.measure(constraints.copy(maxHeight = maxH))
+            val currentOffset =
+              if (shouldUseMeasuredIntrinsicOffset) {
+                maxOf(constraints.maxHeight - placeable.height, intrinsicTopLimit)
+              } else {
+                animatedOffsetPx
+              }
             layout(placeable.width, placeable.height) { placeable.place(0, currentOffset) }
           }
           .anchoredDraggable(
