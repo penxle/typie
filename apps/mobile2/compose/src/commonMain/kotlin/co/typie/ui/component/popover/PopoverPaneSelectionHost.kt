@@ -10,6 +10,11 @@ internal fun PopoverPaneSelectionHost(
     context(PopoverScope)
     () -> Unit,
 ) {
+  if (LocalPopoverPaneRenderPhase.current == PopoverPaneRenderPhase.Measure) {
+    context(scope) { pane() }
+    return
+  }
+
   SelectablePaneHost(
     acceptsInput = scope.acceptsInput,
     pressGestureSession = scope.pressGestureSession,

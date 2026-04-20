@@ -54,6 +54,15 @@ data class PopoverPaneTransition(val progress: Float, val anchorContentRect: Rec
 val LocalPopoverPaneTransition = staticCompositionLocalOf<PopoverPaneTransition?> { null }
 val LocalPopoverPaneAutoScrollController = staticCompositionLocalOf<AutoScrollController?> { null }
 
+internal enum class PopoverPaneRenderPhase {
+  Measure,
+  Interactive,
+}
+
+internal val LocalPopoverPaneRenderPhase = staticCompositionLocalOf {
+  PopoverPaneRenderPhase.Interactive
+}
+
 private enum class PopoverPaneSlot {
   InitialMeasurePane,
   FinalMeasurePane,
@@ -157,7 +166,11 @@ private fun PopoverPaneContent(
 
     val initialPanePlaceables =
       subcompose(PopoverPaneSlot.InitialMeasurePane) {
-          ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+          CompositionLocalProvider(
+            LocalPopoverPaneRenderPhase provides PopoverPaneRenderPhase.Measure
+          ) {
+            ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+          }
         }
         .map { it.measure(paneConstraints) }
 
@@ -185,7 +198,11 @@ private fun PopoverPaneContent(
       )
     val finalPanePlaceables =
       subcompose(PopoverPaneSlot.FinalMeasurePane) {
-          ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+          CompositionLocalProvider(
+            LocalPopoverPaneRenderPhase provides PopoverPaneRenderPhase.Measure
+          ) {
+            ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane)
+          }
         }
         .map { it.measure(finalPaneConstraints) }
 
@@ -234,7 +251,10 @@ private fun PopoverPaneContent(
                 )
               }
           ) {
-            CompositionLocalProvider(LocalPopoverPaneTransition provides transition) {
+            CompositionLocalProvider(
+              LocalPopoverPaneTransition provides transition,
+              LocalPopoverPaneRenderPhase provides PopoverPaneRenderPhase.Interactive,
+            ) {
               PopoverPaneSurface(
                 anchor = anchor,
                 pane = { ShrinkWrappedPane(expandToMaxWidth = expandToMaxWidth, content = pane) },

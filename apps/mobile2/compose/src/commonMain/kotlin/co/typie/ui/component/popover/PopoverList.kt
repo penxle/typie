@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -22,9 +24,7 @@ fun PopoverList(items: List<PopoverListItem>) {
   Column(modifier = Modifier.fillMaxWidth()) {
     items.forEach { item ->
       PopoverPaneSelectableItem(enabled = item.enabled, onSelected = item.onSelected) {
-        Box(Modifier.graphicsLayer { alpha = if (item.enabled) 1f else 0.4f }) {
-          item.content()
-        }
+        Box(Modifier.graphicsLayer { alpha = if (item.enabled) 1f else 0.4f }) { item.content() }
       }
     }
   }
@@ -38,14 +38,23 @@ private fun PopoverPaneSelectableItem(
 ) {
   val paneSelectionState = LocalPopoverPaneSelectionState.current
   val registrationKey = remember { Any() }
+  val latestOnSelected = rememberUpdatedState(onSelected)
 
-  DisposableEffect(paneSelectionState, registrationKey, enabled, onSelected) {
+  DisposableEffect(paneSelectionState, registrationKey) {
     paneSelectionState?.registerItem(
       key = registrationKey,
       enabled = enabled,
-      onSelected = onSelected,
+      onSelected = { latestOnSelected.value() },
     )
     onDispose { paneSelectionState?.unregisterItem(registrationKey) }
+  }
+
+  SideEffect {
+    paneSelectionState?.registerItem(
+      key = registrationKey,
+      enabled = enabled,
+      onSelected = { latestOnSelected.value() },
+    )
   }
 
   Box(
@@ -58,7 +67,7 @@ private fun PopoverPaneSelectableItem(
           if (paneSelectionState?.consumeSuppressedClick(registrationKey) == true) {
             return@clickable
           }
-          onSelected()
+          latestOnSelected.value()
         }
   ) {
     content()
