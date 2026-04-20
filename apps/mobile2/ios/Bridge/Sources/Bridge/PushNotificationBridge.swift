@@ -25,7 +25,7 @@ import UIKit
     super.init()
   }
 
-  public func attach(to application: UIApplication) {
+  @MainActor public func attach(to application: UIApplication) {
     UNUserNotificationCenter.current().delegate = self
     Messaging.messaging().delegate = self
     application.registerForRemoteNotifications()
