@@ -2,11 +2,6 @@ package co.typie.screen.home.home
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOut
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -33,6 +28,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,6 +104,7 @@ import kotlin.math.min
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val ContinueWritingPinHeight: Dp = 56.dp
@@ -187,7 +184,10 @@ fun HomeScreen() {
   ) { contentPadding ->
     if (documents.isEmpty()) {
       EmptyHome(
-        modifier = Modifier.fillMaxSize().padding(contentPadding),
+        modifier =
+          Modifier.fillMaxSize()
+            .padding(contentPadding)
+            .padding(bottom = BottomBarDefaults.BarAreaHeight),
         userName = model.query.data.me.name,
         onCreate = createDocument,
       )
@@ -323,23 +323,23 @@ private fun EmptyHome(
 
 @Composable
 private fun BlinkingCaret() {
-  val transition = rememberInfiniteTransition()
-  val alpha by
-    transition.animateFloat(
-      initialValue = 1f,
-      targetValue = 0f,
-      animationSpec =
-        infiniteRepeatable(
-          animation = tween(durationMillis = 575, easing = LinearEasing),
-          repeatMode = RepeatMode.Reverse,
-        ),
-    )
+  var visible by remember { mutableStateOf(true) }
+
+  LaunchedEffect(Unit) {
+    while (true) {
+      delay(575)
+      visible = !visible
+    }
+  }
 
   Box(
     modifier =
       Modifier.width(3.dp)
         .height(44.dp)
-        .background(AppTheme.colors.textDefault.copy(alpha = alpha), RoundedCornerShape(1.5.dp))
+        .background(
+          AppTheme.colors.textDefault.copy(alpha = if (visible) 1f else 0f),
+          RoundedCornerShape(1.5.dp),
+        )
   )
 }
 
