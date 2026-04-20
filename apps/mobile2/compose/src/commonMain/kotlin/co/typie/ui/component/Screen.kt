@@ -43,6 +43,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 
 private val MaxContentWidth = 600.dp
+private const val OverlayFadeSamples = 48
 
 @Composable
 fun Screen(
@@ -123,9 +124,7 @@ fun Screen(
         Spacer(
           Modifier.fillMaxWidth()
             .height(topBarFadeHeight)
-            .background(
-              Brush.verticalGradient(colors = listOf(fadeColor, fadeColor.copy(alpha = 0f)))
-            )
+            .background(overlayFadeBrush(color = fadeColor, reverse = false))
         )
       }
     }
@@ -146,9 +145,7 @@ fun Screen(
         Spacer(
           Modifier.fillMaxWidth()
             .height(bottomBarFadeHeight)
-            .background(
-              Brush.verticalGradient(colors = listOf(fadeColor.copy(alpha = 0f), fadeColor))
-            )
+            .background(overlayFadeBrush(color = fadeColor, reverse = true))
         )
         Spacer(
           Modifier.fillMaxWidth()
@@ -161,4 +158,21 @@ fun Screen(
 
     overlay?.invoke(this)
   }
+}
+
+private fun overlayFadeBrush(color: Color, reverse: Boolean): Brush {
+  val stops =
+    Array(OverlayFadeSamples + 1) { index ->
+      val t = index / OverlayFadeSamples.toFloat()
+      val eased = overlayFadeEasing(t)
+      val alpha = color.alpha * if (reverse) eased else 1f - eased
+      t to color.copy(alpha = alpha)
+    }
+
+  return Brush.verticalGradient(colorStops = stops)
+}
+
+private fun overlayFadeEasing(t: Float): Float {
+  val x = t.coerceIn(0f, 1f)
+  return x * x * x * (x * (x * 6f - 15f) + 10f)
 }
