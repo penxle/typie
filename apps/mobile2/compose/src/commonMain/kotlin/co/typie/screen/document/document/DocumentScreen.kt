@@ -103,8 +103,6 @@ private sealed interface DocumentPendingAction {
   data object Duplicate : DocumentPendingAction
 
   data object ToggleLocked : DocumentPendingAction
-
-  data object ToggleDocumentType : DocumentPendingAction
 }
 
 @Composable
@@ -132,8 +130,6 @@ fun DocumentScreen(entityId: String) {
       DocumentPendingAction.Export -> "파일로 내보내기"
       DocumentPendingAction.Duplicate -> "복제하기"
       DocumentPendingAction.ToggleLocked -> if (document?.locked == true) "편집 잠금 해제" else "편집 잠금"
-      DocumentPendingAction.ToggleDocumentType ->
-        if (document?.type == DocumentType.TEMPLATE) "문서로 전환" else "템플릿으로 전환"
     }
   }
 
@@ -273,6 +269,29 @@ fun DocumentScreen(entityId: String) {
               initialDestinationId = null,
               onMoved = model::refetch,
             )
+          }
+        }
+      }
+    }
+    val toggleDocumentType: suspend () -> Unit = {
+      if (!loading) {
+        val nextType =
+          if (document.type == DocumentType.TEMPLATE) DocumentType.NORMAL else DocumentType.TEMPLATE
+        val isToTemplate = nextType == DocumentType.TEMPLATE
+        val result =
+          dialog.confirm(
+            title = if (isToTemplate) "템플릿으로 전환" else "문서로 전환",
+            message =
+              if (isToTemplate) {
+                "이 문서를 템플릿으로 전환하시겠어요?\n앞으로 새 문서를 생성할 때 이 문서의 내용을 쉽게 이용할 수 있어요."
+              } else {
+                "이 템플릿을 다시 일반 문서로 전환하시겠어요?"
+              },
+            confirmText = "전환",
+          )
+        if (result is DialogResult.Resolved) {
+          model.updateDocumentType(document.id, nextType).withDefaultExceptionHandler(toast).also {
+            if (it.isOk) model.refetch()
           }
         }
       }
@@ -430,9 +449,9 @@ fun DocumentScreen(entityId: String) {
         onClick = { showPendingAction(DocumentPendingAction.ToggleLocked) },
       )
       DocumentActionRow(
-        icon = Lucide.LayoutTemplate,
+        icon = if (document.type == DocumentType.TEMPLATE) Lucide.File else Lucide.LayoutTemplate,
         label = if (document.type == DocumentType.TEMPLATE) "문서로 전환" else "템플릿으로 전환",
-        onClick = { showPendingAction(DocumentPendingAction.ToggleDocumentType) },
+        onClick = toggleDocumentType,
       )
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)

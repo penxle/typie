@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import co.typie.domain.entity.EntityIconPickerSheetModel
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentActions_DeleteDocument_Mutation
+import co.typie.graphql.DocumentActions_UpdateDocumentType_Mutation
 import co.typie.graphql.DocumentActions_UpdateEntityIcon_Mutation
 import co.typie.graphql.DocumentScreen_Query
 import co.typie.graphql.PlaceholderResolver
@@ -23,6 +24,7 @@ import co.typie.graphql.type.DocumentType
 import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityType
 import co.typie.graphql.type.EntityVisibility
+import co.typie.graphql.type.UpdateDocumentTypeInput
 import co.typie.graphql.type.UpdateEntityIconInput
 import co.typie.graphql.watchQuery
 import co.typie.result.Result
@@ -67,6 +69,15 @@ class DocumentViewModel : ViewModel(), EntityIconPickerSheetModel {
       )
     )
   }
+
+  suspend fun updateDocumentType(documentId: String, type: DocumentType): Result<Unit, Nothing> =
+    result {
+      Apollo.executeMutation(
+        DocumentActions_UpdateDocumentType_Mutation(
+          input = UpdateDocumentTypeInput(documentId = documentId, type = type)
+        )
+      )
+    }
 
   suspend fun deleteDocument(documentId: String): Result<Unit, Nothing> = result {
     Apollo.executeMutation(

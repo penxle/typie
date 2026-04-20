@@ -5,6 +5,22 @@ mutation DocumentActions_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
   }
 }
 
+mutation DocumentActions_UpdateDocumentType_Mutation($input: UpdateDocumentTypeInput!) {
+  updateDocumentType(input: $input) {
+    id
+    type
+    entity {
+      id
+      site {
+        id
+        documentTemplates {
+          id
+        }
+      }
+    }
+  }
+}
+
 mutation DocumentActions_UpdateEntityIcon_Mutation($input: UpdateEntityIconInput!) {
   updateEntityIcon(input: $input) {
     id
