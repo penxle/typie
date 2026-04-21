@@ -32,8 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
@@ -383,7 +381,6 @@ internal fun CreateSpaceSheet(model: MainDrawerViewModel) {
 fun MainDrawerOverlay(drawer: Drawer) {
   val density = LocalDensity.current
   val scope = rememberCoroutineScope()
-  val shadowSpot = AppTheme.colors.shadowSpot
 
   BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
     val panelWidthDp =
@@ -439,11 +436,6 @@ fun MainDrawerOverlay(drawer: Drawer) {
             orientation = Orientation.Horizontal,
             enabled = !drawer.isProgrammaticAnimating,
           )
-          .dropShadow(panelShape) {
-            color = shadowSpot
-            offset = Offset(4f, 0f)
-            radius = 24f
-          }
           .background(AppTheme.colors.surfaceDefault, panelShape)
           .statusBarsPadding()
           .navigationBarsPadding()

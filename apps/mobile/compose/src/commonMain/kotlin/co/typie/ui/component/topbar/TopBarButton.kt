@@ -15,6 +15,7 @@ import co.typie.ext.pressScale
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 
 @Composable
 fun TopBarButton(
@@ -38,15 +39,14 @@ private fun TopBarButtonContent(
 ) {
   val bg = TopBarDefaults.controlBackgroundColor()
   val borderColor = TopBarDefaults.controlBorderColor()
-  val shadowMod = TopBarDefaults.controlShadowModifier(TopBarDefaults.ButtonShape)
 
   Box(
     contentAlignment = Alignment.Center,
     modifier =
       modifier
         .size(TopBarDefaults.ButtonSize)
+        .shadow(AppTheme.shadows.sm, TopBarDefaults.ButtonShape)
         .pressScale(1.05f)
-        .then(shadowMod)
         .background(bg, TopBarDefaults.ButtonShape)
         .border(1.dp, borderColor, TopBarDefaults.ButtonShape)
         .then(if (onClick != null) Modifier.clickable(onClick) else Modifier),

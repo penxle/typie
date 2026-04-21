@@ -28,8 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -37,7 +35,6 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.ext.navigationBarsPadding
@@ -47,10 +44,32 @@ import co.typie.ui.component.bottombar.ACTION_BUTTON_TOTAL_WIDTH
 import co.typie.ui.component.bottombar.BottomBarDefaults
 import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
+import co.typie.ui.theme.AppShadow
+import co.typie.ui.theme.AppShadowLayer
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.DarkShadowBase
+import co.typie.ui.theme.LightShadowBase
+import co.typie.ui.theme.ResolvedThemeMode
+import co.typie.ui.theme.shadow
 import kotlin.math.roundToInt
 import kotlin.math.sign
+
+private val LightPillShadow =
+  AppShadow(
+    listOf(
+      AppShadowLayer(offsetY = 0.dp, blur = 3.dp, color = LightShadowBase.copy(alpha = 0.04f)),
+      AppShadowLayer(offsetY = 1.dp, blur = 8.dp, color = LightShadowBase.copy(alpha = 0.03f)),
+    )
+  )
+
+private val DarkPillShadow =
+  AppShadow(
+    listOf(
+      AppShadowLayer(offsetY = 0.dp, blur = 3.dp, color = DarkShadowBase.copy(alpha = 0.06f)),
+      AppShadowLayer(offsetY = 1.dp, blur = 8.dp, color = DarkShadowBase.copy(alpha = 0.05f)),
+    )
+  )
 
 @Composable
 fun MainBottomBarPill() {
@@ -109,6 +128,8 @@ fun MainBottomBarPill() {
     )
 
   val totalWidthDp = with(density) { totalWidthPx.toDp() }
+  val pillShadow =
+    if (AppTheme.themeMode == ResolvedThemeMode.Dark) DarkPillShadow else LightPillShadow
 
   val trackModifier =
     Modifier.width(totalWidthDp)
@@ -121,14 +142,9 @@ fun MainBottomBarPill() {
         totalWidth = totalWidthPx,
         tabState = tabState,
       )
-      .mainBottomBarPillSurfaceDecoration(
-        shadowColor = colors.shadowSpot,
-        shadowOffsetY = 12.dp,
-        shadowBlur = 28.dp,
-        shadowSpread = (-10).dp,
-        backgroundColor = colors.surfaceDefault,
-        borderColor = colors.borderDefault.copy(alpha = 0.5f),
-      )
+      .shadow(pillShadow, AppShapes.circle)
+      .border(1.dp, colors.borderHairline, AppShapes.circle)
+      .background(colors.surfaceDefault, AppShapes.circle)
 
   MainBottomBarPillLayout(
     pillScale = state.pillScale.value,
@@ -200,23 +216,6 @@ private fun MainBottomBarPillLayout(
     }
   }
 }
-
-private fun Modifier.mainBottomBarPillSurfaceDecoration(
-  shadowColor: Color,
-  shadowOffsetY: Dp,
-  shadowBlur: Dp,
-  shadowSpread: Dp,
-  backgroundColor: Color,
-  borderColor: Color,
-): Modifier =
-  dropShadow(AppShapes.circle) {
-      color = shadowColor
-      offset = Offset(0f, shadowOffsetY.toPx())
-      radius = shadowBlur.toPx()
-      spread = shadowSpread.toPx()
-    }
-    .border(1.dp, borderColor, AppShapes.circle)
-    .background(backgroundColor, AppShapes.circle)
 
 @Composable
 private fun MainBottomBarPillTrack(

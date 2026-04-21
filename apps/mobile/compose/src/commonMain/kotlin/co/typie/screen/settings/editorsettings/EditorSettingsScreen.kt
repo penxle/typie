@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -44,6 +43,7 @@ import co.typie.ui.component.topbar.topBarScrollOffset
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -241,15 +241,7 @@ private fun Slider(value: Double, onValueChange: (Double) -> Unit, modifier: Mod
       modifier =
         Modifier.graphicsLayer { translationX = thumbOffset.toPx() }
           .size(thumbSize)
-          .dropShadow(AppShapes.circle) {
-            color = colors.shadowAmbient
-            radius = 4f
-          }
-          .dropShadow(AppShapes.circle) {
-            color = colors.shadowSpot
-            radius = 8f
-            offset = Offset(0f, 1f)
-          }
+          .shadow(AppTheme.shadows.sm, AppShapes.circle)
           .border(1.dp, AppTheme.colors.borderDefault, AppShapes.circle)
           .background(AppTheme.colors.surfaceDefault, AppShapes.circle)
     )

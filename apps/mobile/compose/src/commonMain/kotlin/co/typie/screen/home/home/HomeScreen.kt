@@ -38,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -104,6 +103,7 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.AppTypography.title
 import co.typie.ui.theme.PaperlogyFontFamily
+import co.typie.ui.theme.shadow
 import dev.chrisbanes.haze.HazeLogger.enabled
 import kotlin.math.abs
 import kotlin.math.min
@@ -433,7 +433,6 @@ private fun ContinueWritingCard(doc: HomeScreen_ContinueWriting_document, active
   val breadcrumbSegments = doc.entity.ancestors.mapNotNull { it.node.onFolder?.name }
   val net = doc.characterCountChange.additions - doc.characterCountChange.deletions
   val shape = AppShapes.rounded(AppShapes.xl)
-  val shadowSpot = AppTheme.colors.shadowSpot
 
   val borderWidth = lerp(1.dp, 1.5.dp, activeness)
   val borderColor = lerp(AppTheme.colors.borderDefault, AppTheme.colors.textDefault, activeness)
@@ -442,11 +441,7 @@ private fun ContinueWritingCard(doc: HomeScreen_ContinueWriting_document, active
     Column(
       modifier =
         Modifier.fillMaxWidth()
-          .dropShadow(shape) {
-            color = shadowSpot.copy(alpha = shadowSpot.alpha * activeness)
-            offset = Offset(0f, 3f)
-            radius = 12f
-          }
+          .shadow(AppTheme.shadows.md, shape, alpha = { activeness })
           .background(AppTheme.colors.surfaceDefault, shape)
           .border(borderWidth, borderColor, shape)
           .clickable(onClick = { nav.navigate(Route.Editor(doc.entity.id)) })
@@ -723,8 +718,6 @@ private fun ContinueWritingNotification(
   val density = LocalDensity.current
   val scope = rememberCoroutineScope()
   val shape = AppShapes.rounded(AppShapes.lg)
-  val shadowAmbient = AppTheme.colors.shadowAmbient
-  val shadowSpot = AppTheme.colors.shadowSpot
 
   val offsetX = remember { Animatable(0f) }
   val alpha = remember { Animatable(1f) }
@@ -748,21 +741,8 @@ private fun ContinueWritingNotification(
           .height(ContinueWritingPinHeight)
           .onSizeChanged { pillWidthPx = it.width }
           .offset { IntOffset(x = offsetX.value.roundToInt(), y = 0) }
-          .dropShadow(shape) {
-            color = shadowAmbient
-            radius = 16f
-            this.alpha = alpha.value
-          }
-          .dropShadow(shape) {
-            color = shadowSpot
-            offset = Offset(0f, 12f)
-            radius = 24f
-            this.alpha = alpha.value
-          }
-          .graphicsLayer {
-            this.shape = shape
-            this.alpha = alpha.value
-          }
+          .shadow(AppTheme.shadows.lg, shape, alpha = { alpha.value })
+          .graphicsLayer { this.alpha = alpha.value }
           .draggable(
             state = dragState,
             orientation = Orientation.Horizontal,

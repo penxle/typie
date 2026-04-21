@@ -2,10 +2,8 @@ package co.typie.ui.component.topbar
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import co.typie.ui.component.SmootherstepEasing
@@ -50,17 +48,4 @@ object TopBarDefaults {
   @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceDefault
 
   @Composable fun controlBorderColor(): Color = AppTheme.colors.borderEmphasis
-
-  @Composable
-  fun controlShadowModifier(shape: Shape = AppShapes.circle): Modifier {
-    val ambient = AppTheme.colors.shadowAmbient
-    val spot = AppTheme.colors.shadowSpot
-    return Modifier.graphicsLayer {
-      shadowElevation = 4.dp.toPx()
-      this.shape = shape
-      clip = true
-      ambientShadowColor = ambient
-      spotShadowColor = spot
-    }
-  }
 }

@@ -82,6 +82,7 @@ import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 import kotlin.math.abs
 
 private val NoteCardShape = AppShapes.rounded(AppShapes.md)
@@ -169,20 +170,19 @@ internal fun NoteCard(
         if (isDragging) tween(durationMillis = 120)
         else spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
     )
-  val shadowAmbient = AppTheme.colors.shadowAmbient
-  val shadowSpot = AppTheme.colors.shadowSpot
   val cardModifier =
     modifier
       .fillMaxWidth()
+      .shadow(
+        AppTheme.shadows.lg,
+        NoteCardShape,
+        alpha = { ((baseShadowElevation + dragShadowElevation).value / 24f).coerceIn(0f, 1f) },
+      )
+      .clip(NoteCardShape)
       .graphicsLayer {
         scaleX = dragScale
         scaleY = dragScale
         rotationZ = dragRotation
-        shadowElevation = (baseShadowElevation + dragShadowElevation).toPx()
-        shape = NoteCardShape
-        clip = true
-        ambientShadowColor = shadowAmbient
-        spotShadowColor = shadowSpot
       }
       .background(containerColor, NoteCardShape)
       .border(1.dp, borderColor, NoteCardShape)

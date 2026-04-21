@@ -39,7 +39,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,6 +61,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 
 data class ActionMenuItem(
   val icon: IconData,
@@ -90,7 +90,6 @@ fun BottomBarActionButton(
   onClick: suspend () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
-  val colors = AppTheme.colors
   val actionInteractionSource = remember { MutableInteractionSource() }
   val actionScale = remember { Animatable(1f) }
   val isActionPressed by actionInteractionSource.collectIsPressedAsState()
@@ -171,12 +170,9 @@ fun BottomBarActionButton(
       ) {
         Box(
           modifier =
-            Modifier.dropShadow(AppShapes.squircle(AppShapes.xl)) {
-                color = colors.shadowSpot.copy(alpha = 0.08f)
-                radius = 8f
-              }
-              .background(AppTheme.colors.surfaceDefault, AppShapes.squircle(AppShapes.xl))
+            Modifier.shadow(AppTheme.shadows.md, AppShapes.squircle(AppShapes.xl))
               .border(1.dp, AppTheme.colors.borderDefault, AppShapes.squircle(AppShapes.xl))
+              .background(AppTheme.colors.surfaceDefault, AppShapes.squircle(AppShapes.xl))
         ) {
           SelectablePaneHost(
             acceptsInput = isMenuOpen,
@@ -223,15 +219,7 @@ fun BottomBarActionButton(
               scaleX = actionScale.value
               scaleY = actionScale.value
             }
-            .dropShadow(AppShapes.circle) {
-              color = colors.shadowAmbient
-              radius = 16f
-            }
-            .dropShadow(AppShapes.circle) {
-              color = colors.shadowSpot
-              offset = Offset(0f, 12f)
-              radius = 28f
-            }
+            .shadow(AppTheme.shadows.xl, AppShapes.circle)
             .background(AppTheme.colors.surfaceInverse, AppShapes.circle)
             .then(
               if (hasMenu) {

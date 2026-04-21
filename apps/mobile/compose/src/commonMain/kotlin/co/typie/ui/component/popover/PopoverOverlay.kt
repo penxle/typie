@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,6 +46,7 @@ import co.typie.ext.verticalScroll
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -325,7 +327,6 @@ private fun PopoverPaneSurface(
       progress,
     )
   val paneShape = AppShapes.squircle(cornerRadius.toDp(density))
-  val paneShadowElevation = (12f * progress).dp
 
   Box(
     modifier =
@@ -335,11 +336,8 @@ private fun PopoverPaneSurface(
       modifier =
         Modifier.offset { surfaceOffset }
           .size(width = animatedWidth.toDp(density), height = animatedHeight.toDp(density))
-          .graphicsLayer {
-            shadowElevation = paneShadowElevation.toPx()
-            shape = paneShape
-            clip = true
-          }
+          .shadow(AppTheme.shadows.md, paneShape, alpha = { progress })
+          .border(1.dp, AppTheme.colors.borderDefault, paneShape)
           .background(AppTheme.colors.surfaceDefault, paneShape)
           .then(
             if (interactive) {

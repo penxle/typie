@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,7 +34,6 @@ fun TopBarTitle(
   val shape = AppShapes.squircle(AppShapes.full)
   val bg = TopBarDefaults.controlBackgroundColor()
   val borderColor = TopBarDefaults.controlBorderColor()
-  val shadowMod = TopBarDefaults.controlShadowModifier(shape)
 
   Row(
     verticalAlignment = Alignment.CenterVertically,
@@ -43,10 +41,8 @@ fun TopBarTitle(
       modifier
         .fillMaxWidth()
         .height(TopBarDefaults.TitleHeight)
-        .then(shadowMod)
-        .clip(shape)
-        .background(bg, shape)
         .border(1.dp, borderColor, shape)
+        .background(bg, shape)
         .padding(horizontal = TopBarDefaults.TitleHorizontalPadding),
   ) {
     if (icon != null) {

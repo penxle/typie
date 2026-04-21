@@ -58,6 +58,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -213,10 +214,9 @@ internal fun FolderTopBarCapsule(
     modifier =
       modifier
         .height(TopBarDefaults.TitleHeight)
-        .then(TopBarDefaults.controlShadowModifier(shape))
-        .clip(shape)
-        .background(TopBarDefaults.controlBackgroundColor(), shape)
+        .shadow(AppTheme.shadows.sm, shape)
         .border(1.dp, TopBarDefaults.controlBorderColor(), shape)
+        .background(TopBarDefaults.controlBackgroundColor(), shape)
         .padding(horizontal = 14.dp),
   ) {
     EntityIcon(
@@ -407,7 +407,8 @@ private fun FolderTopBarCloseButton(onClick: () -> Unit, modifier: Modifier = Mo
         contentAlignment = Alignment.Center,
         modifier =
           Modifier.size(24.dp)
-            .then(TopBarDefaults.controlShadowModifier(AppShapes.circle))
+            .shadow(AppTheme.shadows.md, AppShapes.circle)
+            .clip(AppShapes.circle)
             .background(TopBarDefaults.controlBackgroundColor(), AppShapes.circle),
       ) {
         Icon(icon = Lucide.X, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textDefault)

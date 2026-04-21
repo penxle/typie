@@ -30,7 +30,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -57,6 +56,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -234,15 +234,7 @@ private fun SliderTrack(
       modifier =
         Modifier.graphicsLayer { translationX = thumbOffset.toPx() }
           .size(thumbSize)
-          .dropShadow(AppShapes.circle) {
-            color = colors.shadowAmbient
-            radius = 4f
-          }
-          .dropShadow(AppShapes.circle) {
-            color = colors.shadowSpot
-            radius = 8f
-            offset = Offset(0f, 1f)
-          }
+          .shadow(AppTheme.shadows.sm, AppShapes.circle)
           .border(1.dp, colors.borderDefault, AppShapes.circle)
           .background(colors.surfaceDefault, AppShapes.circle),
       contentAlignment = Alignment.Center,

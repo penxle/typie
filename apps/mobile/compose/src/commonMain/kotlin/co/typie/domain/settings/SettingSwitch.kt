@@ -20,8 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -35,6 +33,7 @@ import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.skeletonBone
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 
 internal fun resolveSettingSwitchNextChecked(checked: Boolean, indeterminate: Boolean): Boolean {
   return if (indeterminate) true else checked.not()
@@ -126,15 +125,7 @@ fun SettingSwitch(
           modifier =
             Modifier.graphicsLayer { translationX = thumbOffset.value.toPx() }
               .size(22.dp)
-              .dropShadow(AppShapes.circle) {
-                color = colors.shadowAmbient
-                radius = 4f
-              }
-              .dropShadow(AppShapes.circle) {
-                color = colors.shadowSpot
-                offset = Offset(0f, 2f)
-                radius = 8f
-              }
+              .shadow(AppTheme.shadows.sm, AppShapes.circle)
               .background(colors.surfaceDefault, AppShapes.circle),
           contentAlignment = Alignment.Center,
         ) {

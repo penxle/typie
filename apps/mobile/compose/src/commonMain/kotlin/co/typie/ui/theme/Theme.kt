@@ -64,10 +64,6 @@ data class AppColors(
   val textOnSuccess: Color,
   val textOnSuccessSubtle: Color,
 
-  // Shadow
-  val shadowSpot: Color,
-  val shadowAmbient: Color,
-
   // Skeleton
   val skeletonBase: Color,
   val skeletonShimmer: Color,
@@ -102,8 +98,6 @@ val LightColors =
     successSubtle = Color(0xFFD8F3E2),
     textOnSuccess = AppColor.white,
     textOnSuccessSubtle = Color(0xFF1A553D),
-    shadowSpot = Color(0x2218160F),
-    shadowAmbient = Color(0x0A18160F),
     skeletonBase = AppColor.light.gray.s100,
     skeletonShimmer = Color(0xFFE9E8DF),
     skeletonBaseInverse = AppColor.light.gray.s800,
@@ -133,8 +127,6 @@ val DarkColors =
     successSubtle = Color(0xFF1A3D2C),
     textOnSuccess = AppColor.dark.gray.s950,
     textOnSuccessSubtle = Color(0xFFCDE8D8),
-    shadowSpot = Color(0x66000000),
-    shadowAmbient = Color(0x1A000000),
     skeletonBase = AppColor.dark.gray.s800,
     skeletonShimmer = AppColor.dark.gray.s700,
     skeletonBaseInverse = AppColor.light.gray.s100,
@@ -188,6 +180,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 
   CompositionLocalProvider(
     LocalAppColors provides if (isDark) DarkColors else LightColors,
+    LocalAppShadows provides if (isDark) DarkAppShadows else LightAppShadows,
     LocalThemeMode provides if (isDark) ResolvedThemeMode.Dark else ResolvedThemeMode.Light,
     LocalHazeStyle provides HazeStyle(blurRadius = 20.dp, noiseFactor = 0f, tints = listOf()),
   ) {
@@ -198,6 +191,9 @@ fun AppTheme(content: @Composable () -> Unit) {
 object AppTheme {
   val colors: AppColors
     @Composable get() = LocalAppColors.current
+
+  val shadows: AppShadows
+    @Composable get() = LocalAppShadows.current
 
   val themeMode: ResolvedThemeMode
     @Composable get() = LocalThemeMode.current

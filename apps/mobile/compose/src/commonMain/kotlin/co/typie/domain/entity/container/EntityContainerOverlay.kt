@@ -24,8 +24,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -40,6 +38,7 @@ import co.typie.ui.component.toast.ToastAnchor
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 
 private val EntityContainerBottomOverlayHorizontalPadding = 16.dp
 private val EntityContainerSelectionBarShape = AppShapes.rounded(AppShapes.full)
@@ -175,20 +174,10 @@ fun EntityContainerSelectionBar(
   onClearSelection: suspend () -> Unit,
   onMoreClick: suspend () -> Unit,
 ) {
-  val colors = AppTheme.colors
-
   Row(
     modifier =
       modifier
-        .dropShadow(EntityContainerSelectionBarShape) {
-          color = colors.shadowAmbient
-          radius = 3f
-        }
-        .dropShadow(EntityContainerSelectionBarShape) {
-          color = colors.shadowSpot
-          offset = Offset(0f, 4f)
-          radius = 16f
-        }
+        .shadow(AppTheme.shadows.lg, EntityContainerSelectionBarShape)
         .background(AppTheme.colors.surfaceDefault, EntityContainerSelectionBarShape),
     verticalAlignment = Alignment.CenterVertically,
   ) {

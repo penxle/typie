@@ -34,6 +34,7 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.icon.IconData
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 
 object SheetBarDefaults {
   val SlotWidth: Dp = 44.dp
@@ -44,19 +45,6 @@ object SheetBarDefaults {
   @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceDefault
 
   @Composable fun controlBorderColor(): Color = AppTheme.colors.borderEmphasis
-
-  @Composable
-  fun controlShadowModifier(shape: Shape = ButtonShape): Modifier {
-    val ambient = AppTheme.colors.shadowAmbient
-    val spot = AppTheme.colors.shadowSpot
-    return Modifier.graphicsLayer {
-      shadowElevation = 4.dp.toPx()
-      this.shape = shape
-      clip = true
-      ambientShadowColor = ambient
-      spotShadowColor = spot
-    }
-  }
 }
 
 @Composable
@@ -120,7 +108,6 @@ fun SheetBarButton(
   val resolvedBackground = backgroundColor ?: SheetBarDefaults.controlBackgroundColor()
   val resolvedBorderColor = borderColor ?: SheetBarDefaults.controlBorderColor()
   val resolvedTint = tint ?: AppTheme.colors.textDefault
-  val shadowModifier = SheetBarDefaults.controlShadowModifier(SheetBarDefaults.ButtonShape)
 
   InteractionScope {
     Box(
@@ -128,9 +115,9 @@ fun SheetBarButton(
         modifier
           .size(SheetBarDefaults.ButtonSize)
           .graphicsLayer { this.alpha = alpha }
-          .then(shadowModifier)
-          .background(resolvedBackground, SheetBarDefaults.ButtonShape)
+          .shadow(AppTheme.shadows.md, SheetBarDefaults.ButtonShape)
           .border(1.dp, resolvedBorderColor, SheetBarDefaults.ButtonShape)
+          .background(resolvedBackground, SheetBarDefaults.ButtonShape)
           .clickable(enabled = enabled && !loading, onClick = onClick)
           .pressScale(0.94f),
       contentAlignment = Alignment.Center,

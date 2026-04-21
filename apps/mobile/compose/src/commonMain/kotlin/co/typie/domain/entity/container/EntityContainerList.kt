@@ -27,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -46,6 +45,7 @@ import co.typie.ui.component.reorder.reorderableItem
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 
 @Composable
 fun EntityContainerListContent(
@@ -215,7 +215,6 @@ private fun EntityContainerReorderRow(
       bottomStart = bottomStartRadius,
       bottomEnd = bottomEndRadius,
     )
-  val density = LocalDensity.current
   val animatedScale by
     animateFloatAsState(
       targetValue = if (isDragging) 1.008f else 1f,
@@ -241,12 +240,14 @@ private fun EntityContainerReorderRow(
     modifier =
       modifier
         .fillMaxWidth()
+        .shadow(
+          AppTheme.shadows.lg,
+          shape,
+          alpha = { (animatedElevation.value / 3f).coerceIn(0f, 1f) },
+        )
         .graphicsLayer {
           scaleX = animatedScale
           scaleY = animatedScale
-          shadowElevation = with(density) { animatedElevation.toPx() }
-          this.shape = shape
-          clip = false
         }
         .zIndex(if (isDragging) 1f else 0f),
     shape = shape,

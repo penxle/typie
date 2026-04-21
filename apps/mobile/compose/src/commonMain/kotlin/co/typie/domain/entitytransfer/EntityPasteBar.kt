@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -27,6 +25,7 @@ import co.typie.ui.component.Text
 import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
+import co.typie.ui.theme.shadow
 
 private val EntityPasteBarShape = AppShapes.rounded(AppShapes.full)
 
@@ -41,21 +40,12 @@ fun EntityPasteBar(
   onPaste: suspend () -> Unit,
 ) {
   val enabled = !loading
-  val colors = AppTheme.colors
 
   Box(modifier = modifier, contentAlignment = Alignment.Center) {
     Row(
       modifier =
         Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.72f }
-          .dropShadow(EntityPasteBarShape) {
-            color = colors.shadowAmbient
-            radius = 3f
-          }
-          .dropShadow(EntityPasteBarShape) {
-            color = colors.shadowSpot
-            offset = Offset(0f, 4f)
-            radius = 16f
-          }
+          .shadow(AppTheme.shadows.md, EntityPasteBarShape)
           .background(AppTheme.colors.textDefault, EntityPasteBarShape)
           .border(1.dp, AppTheme.colors.textDefault.copy(alpha = 0.14f), EntityPasteBarShape),
       verticalAlignment = Alignment.CenterVertically,
