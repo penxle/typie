@@ -22,18 +22,21 @@ fun Text(
   text: String,
   modifier: Modifier = Modifier,
   style: TextStyle = AppTheme.typography.body,
-  color: Color = AppTheme.colors.textDefault,
+  color: Color = Color.Unspecified,
   overflow: TextOverflow = TextOverflow.Clip,
   softWrap: Boolean = true,
   minLines: Int = 1,
   maxLines: Int = Int.MAX_VALUE,
-  textAlign: TextAlign = TextAlign.Start,
+  textAlign: TextAlign = TextAlign.Unspecified,
 ) {
   var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
   BasicText(
     text = text,
     modifier = modifier.skeletonTextBone { layoutResult },
-    style = style.copy(color = color, textAlign = textAlign),
+    style =
+      TextStyle(color = AppTheme.colors.textDefault, textAlign = TextAlign.Start)
+        .merge(style)
+        .merge(color = color, textAlign = textAlign),
     overflow = overflow,
     softWrap = softWrap,
     minLines = minLines,
@@ -59,7 +62,10 @@ fun Text(
   BasicText(
     text = text,
     modifier = modifier.skeletonTextBone { layoutResult },
-    style = style.copy(color = color, textAlign = textAlign),
+    style =
+      TextStyle(color = AppTheme.colors.textDefault, textAlign = TextAlign.Start)
+        .merge(style)
+        .merge(color = color, textAlign = textAlign),
     overflow = overflow,
     softWrap = softWrap,
     minLines = minLines,
