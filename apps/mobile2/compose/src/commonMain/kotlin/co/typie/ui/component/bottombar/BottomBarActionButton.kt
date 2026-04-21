@@ -79,7 +79,7 @@ data class BottomBarAction(
 private const val ACTION_SIZE = 56
 private const val ACTION_GAP = 8
 private const val ACTION_MENU_GAP = 10
-private const val ACTION_SELECTION_ARM_DELAY_MS = 150L
+private const val ACTION_SELECTION_ARM_DELAY_MS = 180L
 
 internal const val ACTION_BUTTON_TOTAL_WIDTH = ACTION_SIZE + ACTION_GAP
 

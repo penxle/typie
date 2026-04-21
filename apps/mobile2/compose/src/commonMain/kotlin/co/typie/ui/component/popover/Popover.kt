@@ -22,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -32,9 +34,11 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import co.typie.ext.LocalScrollGestureLockState
+import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.safeDrawing
 import co.typie.ext.toPx
 import co.typie.navigation.PlatformBackHandler
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun Popover(
@@ -199,20 +203,41 @@ fun Popover(
           }
 
           val anchorWindowOffset = Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
-          val scrollLockHandle = scrollGestureLockState.acquire()
+          val initialPositionInWindow = press.position + anchorWindowOffset
+          val openTrigger =
+            awaitPopoverOpenOrCancellation(
+              press = press,
+              initialPositionInWindow = initialPositionInWindow,
+              touchSlop = viewConfiguration.touchSlop,
+              armDelayMillis = PopoverDefaults.ArmDelayMs,
+              resolvePositionInWindow = { change -> change.position + anchorWindowOffset },
+            )
+
+          when (openTrigger) {
+            null -> return@awaitEachGesture
+            is PopoverOpenTrigger.Tap -> {
+              openTrigger.upChange.consume()
+              isExpanded = true
+              return@awaitEachGesture
+            }
+            PopoverOpenTrigger.Pressed -> {}
+          }
+
+          var scrollLockHandle: ScrollGestureLockHandle? = null
           var released = false
 
           try {
+            scrollLockHandle = scrollGestureLockState.acquire()
             isExpanded = true
-            press.consume()
-
             released =
               trackPressGestureSession(
                 pointerId = press.id,
-                initialPositionInWindow = press.position + anchorWindowOffset,
+                initialPositionInWindow = initialPositionInWindow,
                 downUptimeMillis = press.uptimeMillis,
                 armDelayMillis = PopoverDefaults.ArmDelayMs,
-                resolvePositionInWindow = { change, _ -> change.position + anchorWindowOffset },
+                resolvePositionInWindow = { nextChange, _ ->
+                  nextChange.position + anchorWindowOffset
+                },
               ) { session, change ->
                 scope.pressGestureSession = session
                 change?.consume()
@@ -221,11 +246,48 @@ fun Popover(
             if (!released) {
               scope.pressGestureSession = null
             }
-            scrollLockHandle.release()
+            scrollLockHandle?.release()
           }
         }
       }
   ) {
     Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
   }
+}
+
+private sealed interface PopoverOpenTrigger {
+  data class Tap(val upChange: PointerInputChange) : PopoverOpenTrigger
+
+  data object Pressed : PopoverOpenTrigger
+}
+
+private suspend fun AwaitPointerEventScope.awaitPopoverOpenOrCancellation(
+  press: PointerInputChange,
+  initialPositionInWindow: Offset,
+  touchSlop: Float,
+  armDelayMillis: Long,
+  resolvePositionInWindow: (PointerInputChange) -> Offset,
+): PopoverOpenTrigger? {
+  var elapsedMillis = 0L
+
+  while (elapsedMillis < armDelayMillis) {
+    val event = withTimeoutOrNull(armDelayMillis - elapsedMillis) { awaitPointerEvent() }
+    if (event == null) {
+      return PopoverOpenTrigger.Pressed
+    }
+
+    val change = event.changes.find { it.id == press.id } ?: return null
+    val currentPositionInWindow = resolvePositionInWindow(change)
+    elapsedMillis = change.uptimeMillis - press.uptimeMillis
+    val dragDistance = (currentPositionInWindow - initialPositionInWindow).getDistance()
+
+    if (dragDistance > touchSlop) {
+      return null
+    }
+    if (!change.pressed) {
+      return PopoverOpenTrigger.Tap(change)
+    }
+  }
+
+  return PopoverOpenTrigger.Pressed
 }

@@ -47,7 +47,7 @@ internal suspend fun AwaitPointerEventScope.trackPressGestureSession(
     (change: PointerInputChange, previousPositionInWindow: Offset) -> Offset?,
   onSession: (session: PressGestureSession, change: PointerInputChange?) -> Unit,
 ): Boolean {
-  var isArmed = false
+  var isArmed = armDelayMillis <= 0L
   var isPressed = true
   var currentPositionInWindow = initialPositionInWindow
   var elapsedMillis = 0L
