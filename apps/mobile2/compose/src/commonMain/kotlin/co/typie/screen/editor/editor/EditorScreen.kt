@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,8 +50,6 @@ fun EditorScreen(entityId: String) {
   val loading = model.query.state !is QueryState.Success
   val entity = model.query.data.entity
   val document = entity.node.onDocument
-
-  LaunchedEffect(entityId) { model.onScreenEntered() }
 
   ProvideTopBar(
     center = {

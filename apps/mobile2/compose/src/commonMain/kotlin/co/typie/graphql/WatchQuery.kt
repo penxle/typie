@@ -9,6 +9,9 @@ import co.typie.contract.Loadable
 import com.apollographql.apollo.ApolloClient
 import com.apollographql.apollo.api.Query
 import com.apollographql.apollo.exception.CacheMissException
+import com.apollographql.cache.normalized.FetchPolicy
+import com.apollographql.cache.normalized.fetchPolicy
+import com.apollographql.cache.normalized.refetchPolicyInterceptor
 import com.apollographql.cache.normalized.watch
 import io.sentry.kotlin.multiplatform.Sentry
 import kotlinx.coroutines.CancellationException
@@ -86,26 +89,31 @@ private constructor(
 
     job = scope.launch {
       try {
-        apolloClient.query(query).watch().collect { response ->
-          val data = response.data
-          if (data != null) {
-            state = QueryState.Success(data)
-            if (!initialized) {
-              initialized = true
-              onInitialData?.invoke(data)
-            }
-          } else if (response.exception is CacheMissException) {
-            // CacheAndNetwork 정책에서 캐시가 비어있을 때 — 네트워크 응답을 기다림
-          } else {
-            val error =
-              response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
-            if (error != null) {
-              Logger.e(error) { "GraphQL error (${query.name()})" }
-              Sentry.captureException(error)
-              state = QueryState.Error(error)
+        apolloClient
+          .query(query)
+          .fetchPolicy(FetchPolicy.CacheAndNetwork)
+          .refetchPolicyInterceptor(CacheFirstRefetchInterceptor)
+          .watch()
+          .collect { response ->
+            val data = response.data
+            if (data != null) {
+              state = QueryState.Success(data)
+              if (!initialized) {
+                initialized = true
+                onInitialData?.invoke(data)
+              }
+            } else if (response.exception is CacheMissException) {
+              // CacheAndNetwork 정책에서 캐시가 비어있을 때 — 네트워크 응답을 기다림
+            } else {
+              val error =
+                response.exception ?: response.errors?.firstOrNull()?.let { Exception(it.message) }
+              if (error != null) {
+                Logger.e(error) { "GraphQL error (${query.name()})" }
+                Sentry.captureException(error)
+                state = QueryState.Error(error)
+              }
             }
           }
-        }
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {

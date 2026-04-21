@@ -1,6 +1,11 @@
 query EditorScreen_Query($entityId: ID!) {
   entity(entityId: $entityId) @catch(to: THROW) {
     id
+
+    site {
+      id
+    }
+
     ...EntityIcon_entity
 
     node {
@@ -15,8 +20,16 @@ query EditorScreen_Query($entityId: ID!) {
   }
 }
 
-mutation EditorScreen_ViewEntity_Mutation($input: ViewEntityInput!) {
+mutation EditorScreen_ViewEntity_Mutation($input: ViewEntityInput!, $siteId: ID!) {
   viewEntity(input: $input) {
     id
+
+    user {
+      id
+
+      recentlyViewedEntities(siteId: $siteId) {
+        id
+      }
+    }
   }
 }

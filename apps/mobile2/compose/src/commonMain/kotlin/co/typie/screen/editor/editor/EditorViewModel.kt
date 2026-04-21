@@ -1,7 +1,5 @@
 package co.typie.screen.editor.editor
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.editor.EditorState
@@ -31,7 +29,11 @@ import kotlinx.coroutines.launch
 
 class EditorViewModel(val entityId: String) : ViewModel() {
   val query =
-    Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
+    Apollo.watchQuery(
+      scope = viewModelScope,
+      placeholderData = placeholderData(),
+      onInitialData = { data -> viewEntity(data.entity.site.id) },
+    ) {
       EditorScreen_Query(entityId = entityId)
     }
 
@@ -72,11 +74,14 @@ class EditorViewModel(val entityId: String) : ViewModel() {
 
   val selection = Selection(anchor = Position("4", 0), head = Position("4", 0))
 
-  fun onScreenEntered() {
+  private fun viewEntity(siteId: String) {
     viewModelScope.launch {
       try {
         Apollo.executeMutation(
-          EditorScreen_ViewEntity_Mutation(input = ViewEntityInput(entityId = entityId))
+          EditorScreen_ViewEntity_Mutation(
+            input = ViewEntityInput(entityId = entityId),
+            siteId = siteId,
+          )
         )
       } catch (e: CancellationException) {
         throw e
