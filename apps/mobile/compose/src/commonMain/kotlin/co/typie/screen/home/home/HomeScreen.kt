@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
@@ -51,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -104,6 +107,7 @@ import co.typie.ui.theme.PaperlogyFontFamily
 import dev.chrisbanes.haze.HazeLogger.enabled
 import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.coroutineScope
@@ -719,6 +723,7 @@ private fun ContinueWritingNotification(
   val density = LocalDensity.current
   val scope = rememberCoroutineScope()
   val shape = AppShapes.rounded(AppShapes.lg)
+  val shadowAmbient = AppTheme.colors.shadowAmbient
   val shadowSpot = AppTheme.colors.shadowSpot
 
   val offsetX = remember { Animatable(0f) }
@@ -742,8 +747,20 @@ private fun ContinueWritingNotification(
           .fillMaxWidth()
           .height(ContinueWritingPinHeight)
           .onSizeChanged { pillWidthPx = it.width }
+          .offset { IntOffset(x = offsetX.value.roundToInt(), y = 0) }
+          .dropShadow(shape) {
+            color = shadowAmbient
+            radius = 16f
+            this.alpha = alpha.value
+          }
+          .dropShadow(shape) {
+            color = shadowSpot
+            offset = Offset(0f, 12f)
+            radius = 24f
+            this.alpha = alpha.value
+          }
           .graphicsLayer {
-            translationX = offsetX.value
+            this.shape = shape
             this.alpha = alpha.value
           }
           .draggable(
@@ -773,11 +790,6 @@ private fun ContinueWritingNotification(
               }
             },
           )
-          .dropShadow(shape) {
-            color = shadowSpot
-            offset = Offset(0f, 16f)
-            radius = 32f
-          }
           .background(AppTheme.colors.surfaceInverse, shape)
           .clickable(onClick = { nav.navigate(Route.Editor(doc.entity.id)) })
           .padding(horizontal = 18.dp)

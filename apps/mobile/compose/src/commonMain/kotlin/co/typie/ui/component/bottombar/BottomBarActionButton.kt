@@ -224,9 +224,13 @@ fun BottomBarActionButton(
               scaleY = actionScale.value
             }
             .dropShadow(AppShapes.circle) {
-              color = colors.shadowSpot
-              offset = Offset(0f, 4f)
+              color = colors.shadowAmbient
               radius = 16f
+            }
+            .dropShadow(AppShapes.circle) {
+              color = colors.shadowSpot
+              offset = Offset(0f, 12f)
+              radius = 28f
             }
             .background(AppTheme.colors.surfaceInverse, AppShapes.circle)
             .then(
