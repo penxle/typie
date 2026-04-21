@@ -50,12 +50,12 @@ fun Text(
   text: AnnotatedString,
   modifier: Modifier = Modifier,
   style: TextStyle = AppTheme.typography.body,
-  color: Color = AppTheme.colors.textDefault,
+  color: Color = Color.Unspecified,
   overflow: TextOverflow = TextOverflow.Clip,
   softWrap: Boolean = true,
   minLines: Int = 1,
   maxLines: Int = Int.MAX_VALUE,
-  textAlign: TextAlign = TextAlign.Start,
+  textAlign: TextAlign = TextAlign.Unspecified,
   inlineContent: Map<String, InlineTextContent> = mapOf(),
 ) {
   var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
