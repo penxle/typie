@@ -125,6 +125,10 @@ private constructor(
   }
 
   override fun refetch() {
+    if (skip()) {
+      return
+    }
+
     execute(query())
   }
 }

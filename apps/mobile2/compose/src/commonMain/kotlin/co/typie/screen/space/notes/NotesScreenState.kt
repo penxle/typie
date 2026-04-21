@@ -22,23 +22,12 @@ internal class NotesScreenState(
   private val contentDebounceMillis: Long = 300L,
   private val colorDebounceMillis: Long = 180L,
 ) {
-  var filterStatus by mutableStateOf(NoteStatus.OPEN)
-    private set
-
   val expandedNoteId: String?
     get() = activeForm?.noteId
 
   private var activeForm: ActiveNoteFormState? by mutableStateOf(null)
   private val openSceneState = NotesSceneState(NoteStatus.OPEN)
   private val resolvedSceneState = NotesSceneState(NoteStatus.RESOLVED)
-
-  fun updateFilterStatus(status: NoteStatus) {
-    if (status == NoteStatus.UNKNOWN__ || filterStatus == status) {
-      return
-    }
-
-    filterStatus = status
-  }
 
   fun sceneState(status: NoteStatus): NotesSceneState =
     when (status) {

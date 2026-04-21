@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +25,6 @@ import co.typie.domain.note.NoteListActions
 import co.typie.domain.note.NoteListItem
 import co.typie.domain.note.rememberNoteColorOptions
 import co.typie.ext.navigationBarsPadding
-import co.typie.graphql.QueryState
 import co.typie.graphql.fragment.NoteCard_note
 import co.typie.graphql.fragment.NoteLinkedEntity_entity
 import co.typie.graphql.type.NoteStatus
@@ -43,7 +41,6 @@ import co.typie.ui.component.bottombar.ProvideBottomBar
 import co.typie.ui.component.dialog.DialogResult
 import co.typie.ui.component.dialog.LocalDialog
 import co.typie.ui.component.dialog.confirm
-import co.typie.ui.component.dialog.error
 import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.sheet.LocalSheet
 import co.typie.ui.component.toast.LocalToast
@@ -71,27 +68,6 @@ fun NotesScreen() {
   val sheet = LocalSheet.current
   val siteId = model.siteId
   val noteColorOptions = rememberNoteColorOptions()
-
-  LaunchedEffect(Unit) { model.refetch() }
-
-  LaunchedEffect(model.openQuery.state) {
-    if (model.openQuery.state is QueryState.Success<*>) {
-      screenState.syncScene(NoteStatus.OPEN, model.settledNotes(NoteStatus.OPEN))
-    }
-  }
-
-  LaunchedEffect(model.resolvedQuery.state) {
-    if (model.resolvedQuery.state is QueryState.Success<*>) {
-      screenState.syncScene(NoteStatus.RESOLVED, model.settledNotes(NoteStatus.RESOLVED))
-    }
-  }
-
-  val activeQuery = model.query(screenState.filterStatus)
-  LaunchedEffect(screenState.filterStatus, activeQuery.state) {
-    if (activeQuery.state is QueryState.Error) {
-      dialog.error(nav = nav, onRetry = { activeQuery.refetch() })
-    }
-  }
 
   DisposableEffect(screenState, model) {
     onDispose {
@@ -154,7 +130,7 @@ fun NotesScreen() {
   }
 
   suspend fun handleFilterSelection(nextStatus: NoteStatus) {
-    if (nextStatus == screenState.filterStatus || nextStatus == NoteStatus.UNKNOWN__) {
+    if (nextStatus == model.filterStatus || nextStatus == NoteStatus.UNKNOWN__) {
       return
     }
 
@@ -162,7 +138,7 @@ fun NotesScreen() {
       return
     }
 
-    screenState.updateFilterStatus(nextStatus)
+    model.updateFilterStatus(nextStatus)
     scrollState.scrollTo(0)
   }
 
@@ -175,8 +151,8 @@ fun NotesScreen() {
       return
     }
 
-    if (screenState.filterStatus == NoteStatus.RESOLVED) {
-      screenState.updateFilterStatus(NoteStatus.OPEN)
+    if (model.filterStatus == NoteStatus.RESOLVED) {
+      model.updateFilterStatus(NoteStatus.OPEN)
       scrollState.scrollTo(0)
     }
 
@@ -184,7 +160,7 @@ fun NotesScreen() {
       is Result.Ok -> {
         screenState.sceneState(NoteStatus.OPEN).markEntering(result.value)
         screenState.open(note = result.value)
-        model.refetch(NoteStatus.OPEN)
+        model.refetch()
       }
 
       is Result.Err,
@@ -213,7 +189,7 @@ fun NotesScreen() {
     when (model.deleteNote(note.id)) {
       is Result.Ok -> {
         screenState.remove(note.id)
-        model.refetch(sceneStatus)
+        model.refetch()
         toast.show(ToastType.Success, "노트를 삭제했어요.")
       }
 
@@ -238,8 +214,7 @@ fun NotesScreen() {
         screenState.commitServerSnapshot(result.value)
         screenState.clearExpanded(note.id)
         screenState.sceneState(nextStatus).expectEntry(result.value)
-        model.refetch(NoteStatus.OPEN)
-        model.refetch(NoteStatus.RESOLVED)
+        model.refetch()
       }
 
       is Result.Err,
@@ -335,7 +310,7 @@ fun NotesScreen() {
     trailingKey = NotesFilterTopBarTrailingKey,
     trailing = {
       NotesFilterPopover(
-        selectedStatus = screenState.filterStatus,
+        selectedStatus = model.filterStatus,
         onSelect = { nextStatus -> scope.launch { handleFilterSelection(nextStatus) } },
       )
     },
@@ -350,9 +325,9 @@ fun NotesScreen() {
       )
   )
 
-  Screen(background = AppTheme.colors.surfaceCanvas) { contentPadding ->
+  Screen(loadable = model.query, background = AppTheme.colors.surfaceCanvas) { contentPadding ->
     Crossfade(
-      targetState = screenState.filterStatus,
+      targetState = model.filterStatus,
       modifier = Modifier,
       animationSpec = tween(durationMillis = 200),
     ) { status ->
@@ -390,14 +365,14 @@ fun NotesScreen() {
 
       NoteList(
         emptyMessage = status.emptyMessage(),
-        queryState = model.query(status).state,
+        queryState = model.queryState(status),
         items = listItems,
         onEnterAnimationFinished = sceneState::finishEntering,
         onExitAnimationFinished = sceneState::finishExiting,
         scrollState = scrollState,
         contentPadding = contentPadding,
         noteColorOptions = noteColorOptions,
-        interactive = status == screenState.filterStatus,
+        interactive = status == model.filterStatus,
         actions = listActions,
       )
     }

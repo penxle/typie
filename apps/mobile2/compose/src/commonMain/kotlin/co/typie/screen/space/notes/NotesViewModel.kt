@@ -1,5 +1,10 @@
 package co.typie.screen.space.notes
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.typie.domain.note.DEFAULT_NOTE_COLOR
@@ -31,46 +36,69 @@ internal class NotesViewModel : ViewModel() {
   val siteId: String?
     get() = Preference.siteId
 
-  val openQuery =
+  var filterStatus by mutableStateOf(NoteStatus.OPEN)
+    private set
+
+  private var requestedStatus by mutableStateOf(NoteStatus.OPEN)
+  private var liveDataStatus by mutableStateOf(NoteStatus.OPEN)
+  private val settledNotesByStatus = mutableStateMapOf<NoteStatus, List<NoteCard_note>>()
+
+  val query =
     Apollo.watchQuery(
       scope = viewModelScope,
-      placeholderData = placeholderData(status = NoteStatus.OPEN),
       skip = { Preference.siteId == null },
+      resetOnChange = false,
     ) {
-      NotesScreen_Query(siteId = Preference.siteId!!, status = NoteStatus.OPEN)
+      NotesScreen_Query(siteId = Preference.siteId!!, status = filterStatus)
     }
 
-  val resolvedQuery =
-    Apollo.watchQuery(
-      scope = viewModelScope,
-      placeholderData = placeholderData(status = NoteStatus.RESOLVED),
-      skip = { Preference.siteId == null },
-    ) {
-      NotesScreen_Query(siteId = Preference.siteId!!, status = NoteStatus.RESOLVED)
+  init {
+    viewModelScope.launch {
+      snapshotFlow { query.state }
+        .collect { state ->
+          if (state is QueryState.Success) {
+            liveDataStatus = requestedStatus
+            val notes = state.data.notes()
+            settledNotesByStatus[liveDataStatus] = notes
+            screenState.syncScene(liveDataStatus, notes)
+          }
+        }
     }
-
-  fun query(status: NoteStatus) =
-    when (status) {
-      NoteStatus.RESOLVED -> resolvedQuery
-      else -> openQuery
-    }
-
-  fun notes(status: NoteStatus): List<NoteCard_note> = query(status).data.notes()
-
-  fun settledNotes(status: NoteStatus): List<NoteCard_note> =
-    (query(status).state as? QueryState.Success)?.data?.notes().orEmpty()
-
-  fun refetch() {
-    refetch(NoteStatus.OPEN)
-    refetch(NoteStatus.RESOLVED)
   }
 
-  fun refetch(status: NoteStatus) {
+  fun updateFilterStatus(status: NoteStatus) {
+    if (status == NoteStatus.UNKNOWN__ || filterStatus == status) {
+      return
+    }
+
+    requestedStatus = status
+    filterStatus = status
+  }
+
+  fun notes(status: NoteStatus): List<NoteCard_note> =
+    when {
+      status == liveDataStatus && query.state is QueryState.Success ->
+        (query.state as QueryState.Success).data.notes()
+      status in settledNotesByStatus -> settledNotesByStatus.getValue(status)
+      else -> placeholderNotes(status)
+    }
+
+  fun queryState(status: NoteStatus): QueryState<*> =
+    when {
+      status == requestedStatus &&
+        query.state is QueryState.Error &&
+        status !in settledNotesByStatus -> query.state as QueryState.Error
+      status == liveDataStatus && query.state is QueryState.Success -> QueryState.Success(Unit)
+      status in settledNotesByStatus -> QueryState.Success(Unit)
+      else -> QueryState.Loading
+    }
+
+  fun refetch() {
     if (siteId == null) {
       return
     }
 
-    query(status).refetch()
+    query.refetch()
   }
 
   suspend fun createNote(color: String = DEFAULT_NOTE_COLOR): Result<NoteCard_note, Nothing> =
@@ -109,6 +137,15 @@ internal class NotesViewModel : ViewModel() {
     viewModelScope.launch { updateNoteColor(noteId = noteId, color = color) }
   }
 }
+
+private val openPlaceholderNotes = placeholderData(status = NoteStatus.OPEN).notes()
+private val resolvedPlaceholderNotes = placeholderData(status = NoteStatus.RESOLVED).notes()
+
+private fun placeholderNotes(status: NoteStatus): List<NoteCard_note> =
+  when (status) {
+    NoteStatus.RESOLVED -> resolvedPlaceholderNotes
+    else -> openPlaceholderNotes
+  }
 
 private fun placeholderData(status: NoteStatus) =
   NotesScreen_Query.Data(PlaceholderResolver) {
