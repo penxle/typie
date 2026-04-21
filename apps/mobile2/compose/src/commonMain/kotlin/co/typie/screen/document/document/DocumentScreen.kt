@@ -50,6 +50,7 @@ import co.typie.domain.entity.EntityIconPickerStops
 import co.typie.domain.entity.EntityMoveSheet
 import co.typie.domain.entity.EntityMoveStops
 import co.typie.domain.entity.formatDocumentTitle
+import co.typie.domain.entitytransfer.EntityClipboardService
 import co.typie.domain.entitytransfer.EntityTransferSource
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
@@ -62,8 +63,10 @@ import co.typie.graphql.type.EntityVisibility
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.result.isOk
+import co.typie.result.onOk
 import co.typie.result.withDefaultExceptionHandler
 import co.typie.route.Route
+import co.typie.storage.Preference
 import co.typie.ui.component.CardDivider
 import co.typie.ui.component.CardRow
 import co.typie.ui.component.ResponsiveContainerDefaults
@@ -93,18 +96,6 @@ import kotlinx.coroutines.withContext
 private const val DocumentExpandableMetricAnimationDurationMillis = 220
 private const val DocumentCharacterCountPlaceholder = 9999
 
-private sealed interface DocumentPendingAction {
-  data object Copy : DocumentPendingAction
-
-  data object Cut : DocumentPendingAction
-
-  data object Export : DocumentPendingAction
-
-  data object Duplicate : DocumentPendingAction
-
-  data object ToggleLocked : DocumentPendingAction
-}
-
 @Composable
 fun DocumentScreen(entityId: String) {
   val nav = Nav.current
@@ -123,18 +114,8 @@ fun DocumentScreen(entityId: String) {
   var characterCountExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
   var todayRecordExpanded by rememberSaveable(entityId) { mutableStateOf(false) }
 
-  fun pendingActionLabel(action: DocumentPendingAction): String {
-    return when (action) {
-      DocumentPendingAction.Copy -> "복사"
-      DocumentPendingAction.Cut -> "잘라내기"
-      DocumentPendingAction.Export -> "파일로 내보내기"
-      DocumentPendingAction.Duplicate -> "복제하기"
-      DocumentPendingAction.ToggleLocked -> if (document?.locked == true) "편집 잠금 해제" else "편집 잠금"
-    }
-  }
-
-  fun showPendingAction(action: DocumentPendingAction) {
-    toast.show(ToastType.Notification, "${pendingActionLabel(action)} 기능은 아직 준비 중이에요.")
+  fun showPendingAction(label: String) {
+    toast.show(ToastType.Notification, "$label 기능은 아직 준비 중이에요.")
   }
 
   fun currentTransferSource(): EntityTransferSource.Document? {
@@ -146,19 +127,32 @@ fun DocumentScreen(entityId: String) {
     )
   }
 
-  suspend fun popAfterDelete() {
-    val stack = nav.stack
-    val previousRoute = stack.getOrNull(stack.lastIndex - 1)
-    val targetRoute = stack.getOrNull(stack.lastIndex - 2)
+  suspend fun popDocumentAndMatchingEditorIfPresent(): Boolean {
+    val previousRoute = nav.previous
+    if (previousRoute !is Route.Editor || previousRoute.entityId != entityId) return false
 
+    val targetRoute = nav.stack.getOrNull(nav.stack.lastIndex - 2)
+    if (targetRoute != null) {
+      nav.popTo(targetRoute)
+    } else {
+      nav.pop()
+    }
+    return true
+  }
+
+  suspend fun popAfterDelete() {
     withContext(NonCancellable) {
-      if (
-        previousRoute is Route.Editor && previousRoute.entityId == entityId && targetRoute != null
-      ) {
-        nav.popTo(targetRoute)
-      } else {
+      if (!popDocumentAndMatchingEditorIfPresent()) {
         nav.pop()
       }
+    }
+  }
+
+  suspend fun replaceWithDuplicatedEditor(duplicatedEntityId: String) {
+    withContext(NonCancellable) {
+      popDocumentAndMatchingEditorIfPresent()
+      nav.navigate(Route.Editor(duplicatedEntityId))
+      toast.success("문서를 복제했어요.")
     }
   }
 
@@ -294,6 +288,30 @@ fun DocumentScreen(entityId: String) {
             if (it.isOk) model.refetch()
           }
         }
+      }
+    }
+    val duplicateDocument: suspend () -> Unit = {
+      if (!loading) {
+        model.duplicateDocument(document.id).withDefaultExceptionHandler(toast).onOk {
+          duplicatedEntityId ->
+          replaceWithDuplicatedEditor(duplicatedEntityId)
+        }
+      }
+    }
+    val copyDocumentToClipboard: suspend () -> Unit = copyDocumentToClipboard@{
+      if (!loading) {
+        val transferSource = currentTransferSource() ?: return@copyDocumentToClipboard
+        val sourceSiteId = Preference.siteId ?: return@copyDocumentToClipboard
+        EntityClipboardService.setCopy(sourceSiteId = sourceSiteId, items = listOf(transferSource))
+        toast.success("문서를 복사했어요.\n원하는 폴더에 붙여넣을 수 있어요.")
+      }
+    }
+    val cutDocumentToClipboard: suspend () -> Unit = cutDocumentToClipboard@{
+      if (!loading) {
+        val transferSource = currentTransferSource() ?: return@cutDocumentToClipboard
+        val sourceSiteId = Preference.siteId ?: return@cutDocumentToClipboard
+        EntityClipboardService.setCut(sourceSiteId = sourceSiteId, items = listOf(transferSource))
+        toast.success("문서를 잘라냈어요.\n원하는 폴더에 붙여넣을 수 있어요.")
       }
     }
     val deleteDocument: suspend () -> Unit = {
@@ -438,7 +456,7 @@ fun DocumentScreen(entityId: String) {
       DocumentActionRow(
         icon = Lucide.FileDown,
         label = "파일로 내보내기",
-        onClick = { showPendingAction(DocumentPendingAction.Export) },
+        onClick = { showPendingAction("파일로 내보내기") },
       )
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)
@@ -446,7 +464,7 @@ fun DocumentScreen(entityId: String) {
       DocumentActionRow(
         icon = Lucide.LockKeyhole,
         label = if (document.locked) "편집 잠금 해제" else "편집 잠금",
-        onClick = { showPendingAction(DocumentPendingAction.ToggleLocked) },
+        onClick = { showPendingAction(if (document.locked) "편집 잠금 해제" else "편집 잠금") },
       )
       DocumentActionRow(
         icon = if (document.type == DocumentType.TEMPLATE) Lucide.File else Lucide.LayoutTemplate,
@@ -457,24 +475,16 @@ fun DocumentScreen(entityId: String) {
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)
 
       DocumentActionRow(icon = Lucide.FolderSymlink, label = "다른 폴더로 옮기기", onClick = moveDocument)
-      DocumentActionRow(
-        icon = Lucide.Copy,
-        label = "복제하기",
-        onClick = { showPendingAction(DocumentPendingAction.Duplicate) },
-      )
+      DocumentActionRow(icon = Lucide.Copy, label = "복제하기", onClick = duplicateDocument)
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)
 
       DocumentActionRow(
         icon = Lucide.ClipboardCopy,
         label = "복사",
-        onClick = { showPendingAction(DocumentPendingAction.Copy) },
+        onClick = copyDocumentToClipboard,
       )
-      DocumentActionRow(
-        icon = Lucide.Scissors,
-        label = "잘라내기",
-        onClick = { showPendingAction(DocumentPendingAction.Cut) },
-      )
+      DocumentActionRow(icon = Lucide.Scissors, label = "잘라내기", onClick = cutDocumentToClipboard)
 
       CardDivider(inset = 0.dp, color = AppTheme.colors.borderDefault)
 

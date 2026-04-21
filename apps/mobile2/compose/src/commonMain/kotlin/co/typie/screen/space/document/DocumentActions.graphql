@@ -5,6 +5,15 @@ mutation DocumentActions_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
   }
 }
 
+mutation DocumentActions_DuplicateDocument_Mutation($input: DuplicateDocumentInput!) {
+  duplicateDocument(input: $input) {
+    id
+    entity {
+      id
+    }
+  }
+}
+
 mutation DocumentActions_UpdateDocumentType_Mutation($input: UpdateDocumentTypeInput!) {
   updateDocumentType(input: $input) {
     id

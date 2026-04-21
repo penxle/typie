@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import co.typie.domain.entity.EntityIconPickerSheetModel
 import co.typie.graphql.Apollo
 import co.typie.graphql.DocumentActions_DeleteDocument_Mutation
+import co.typie.graphql.DocumentActions_DuplicateDocument_Mutation
 import co.typie.graphql.DocumentActions_UpdateDocumentType_Mutation
 import co.typie.graphql.DocumentActions_UpdateEntityIcon_Mutation
 import co.typie.graphql.DocumentScreen_Query
@@ -21,6 +22,7 @@ import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.DeleteDocumentInput
 import co.typie.graphql.type.DocumentType
+import co.typie.graphql.type.DuplicateDocumentInput
 import co.typie.graphql.type.EntityAvailability
 import co.typie.graphql.type.EntityType
 import co.typie.graphql.type.EntityVisibility
@@ -78,6 +80,17 @@ class DocumentViewModel : ViewModel(), EntityIconPickerSheetModel {
         )
       )
     }
+
+  suspend fun duplicateDocument(documentId: String): Result<String, Nothing> = result {
+    val response =
+      Apollo.executeMutation(
+        DocumentActions_DuplicateDocument_Mutation(
+          input = DuplicateDocumentInput(documentId = documentId)
+        )
+      )
+
+    response.duplicateDocument.entity.id
+  }
 
   suspend fun deleteDocument(documentId: String): Result<Unit, Nothing> = result {
     Apollo.executeMutation(
