@@ -15,16 +15,21 @@ import co.typie.editor.ffi.Position
 import co.typie.editor.ffi.Selection
 import co.typie.graphql.Apollo
 import co.typie.graphql.EditorScreen_Query
+import co.typie.graphql.EditorScreen_ViewEntity_Mutation
 import co.typie.graphql.PlaceholderResolver
 import co.typie.graphql.builder.Data
 import co.typie.graphql.builder.buildDocument
 import co.typie.graphql.builder.buildEntity
+import co.typie.graphql.executeMutation
 import co.typie.graphql.text
 import co.typie.graphql.type.EntityType
+import co.typie.graphql.type.ViewEntityInput
 import co.typie.graphql.watchQuery
+import io.sentry.kotlin.multiplatform.Sentry
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 class EditorViewModel(val entityId: String) : ViewModel() {
-
   val query =
     Apollo.watchQuery(scope = viewModelScope, placeholderData = placeholderData()) {
       EditorScreen_Query(entityId = entityId)
@@ -66,6 +71,20 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     )
 
   val selection = Selection(anchor = Position("4", 0), head = Position("4", 0))
+
+  fun onScreenEntered() {
+    viewModelScope.launch {
+      try {
+        Apollo.executeMutation(
+          EditorScreen_ViewEntity_Mutation(input = ViewEntityInput(entityId = entityId))
+        )
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        Sentry.captureException(e)
+      }
+    }
+  }
 }
 
 private fun placeholderData() =

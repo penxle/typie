@@ -14,3 +14,9 @@ query EditorScreen_Query($entityId: ID!) {
     }
   }
 }
+
+mutation EditorScreen_ViewEntity_Mutation($input: ViewEntityInput!) {
+  viewEntity(input: $input) {
+    id
+  }
+}
