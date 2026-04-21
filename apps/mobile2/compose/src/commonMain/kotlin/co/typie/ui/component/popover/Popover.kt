@@ -5,12 +5,15 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -33,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
+import co.typie.ext.LocalInteractionSource
 import co.typie.ext.LocalScrollGestureLockState
 import co.typie.ext.ScrollGestureLockHandle
 import co.typie.ext.safeDrawing
@@ -74,6 +78,7 @@ fun Popover(
 
   val overlayState = LocalPopoverOverlayState.current
   val overlayOwner = remember { Any() }
+  val anchorInteractionSource = remember { MutableInteractionSource() }
   var isExpanded by remember { mutableStateOf(false) }
   var isOverlayVisible by remember { mutableStateOf(false) }
   var anchorBounds by remember { mutableStateOf(IntRect.Zero) }
@@ -202,6 +207,9 @@ fun Popover(
             return@awaitEachGesture
           }
 
+          val pressInteraction = PressInteraction.Press(press.position)
+          anchorInteractionSource.tryEmit(pressInteraction)
+
           val anchorWindowOffset = Offset(anchorBounds.left.toFloat(), anchorBounds.top.toFloat())
           val initialPositionInWindow = press.position + anchorWindowOffset
           val openTrigger =
@@ -214,8 +222,12 @@ fun Popover(
             )
 
           when (openTrigger) {
-            null -> return@awaitEachGesture
+            null -> {
+              anchorInteractionSource.tryEmit(PressInteraction.Cancel(pressInteraction))
+              return@awaitEachGesture
+            }
             is PopoverOpenTrigger.Tap -> {
+              anchorInteractionSource.tryEmit(PressInteraction.Release(pressInteraction))
               openTrigger.upChange.consume()
               isExpanded = true
               return@awaitEachGesture
@@ -243,6 +255,13 @@ fun Popover(
                 change?.consume()
               }
           } finally {
+            anchorInteractionSource.tryEmit(
+              if (released) {
+                PressInteraction.Release(pressInteraction)
+              } else {
+                PressInteraction.Cancel(pressInteraction)
+              }
+            )
             if (!released) {
               scope.pressGestureSession = null
             }
@@ -251,7 +270,9 @@ fun Popover(
         }
       }
   ) {
-    Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
+    CompositionLocalProvider(LocalInteractionSource provides anchorInteractionSource) {
+      Box(modifier = Modifier.graphicsLayer { alpha = 1f - easedProgress }) { anchor() }
+    }
   }
 }
 

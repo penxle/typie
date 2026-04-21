@@ -98,7 +98,7 @@ internal fun FolderTopBarCenterMenu(
           title = title,
           subtitle = subtitle,
           entity = entity,
-          modifier = modifier,
+          modifier = modifier.pressScale(1.05f),
         )
       }
     },

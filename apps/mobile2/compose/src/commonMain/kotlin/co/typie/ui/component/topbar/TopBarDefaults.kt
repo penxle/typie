@@ -30,7 +30,7 @@ object TopBarDefaults {
 
   val ButtonShape: Shape = AppShapes.circle
   val ButtonSize: Dp = SlotWidth
-  val ButtonIconSize: Dp = 18.dp
+  val ButtonIconSize: Dp = 20.dp
 
   val TitleHeight: Dp = SlotWidth
   val TitleIconSize: Dp = 18.dp
