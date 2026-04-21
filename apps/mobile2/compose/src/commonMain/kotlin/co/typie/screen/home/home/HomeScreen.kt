@@ -56,8 +56,10 @@ import androidx.compose.ui.unit.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.datetime.timeAgo
 import co.typie.domain.entity.EntityIcon
+import co.typie.domain.entity.EntityRow
 import co.typie.domain.entity.formatDocumentTitle
 import co.typie.domain.entity.formatEntityExcerpt
+import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.comma
@@ -68,7 +70,8 @@ import co.typie.ext.separated
 import co.typie.ext.truncate
 import co.typie.ext.verticalScroll
 import co.typie.graphql.QueryState
-import co.typie.graphql.fragment.HomeRecentDocument_document
+import co.typie.graphql.fragment.HomeScreen_ContinueWriting_document
+import co.typie.graphql.fragment.HomeScreen_RecentDocumentRow_document
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.result.onOk
@@ -142,9 +145,14 @@ fun HomeScreen() {
       ),
   )
 
-  val documents =
+  val continueDocs =
     model.query.data.me.recentlyViewedEntities.mapNotNull {
-      it.node.onDocument?.homeRecentDocument_document
+      it.node.onDocument?.homeScreen_ContinueWriting_document
+    }
+
+  val recentDocs =
+    model.query.data.me.recentlyViewedEntities.mapNotNull {
+      it.node.onDocument?.homeScreen_RecentDocumentRow_document
     }
 
   val continueWritingDoc = model.continueWritingDocument
@@ -183,7 +191,7 @@ fun HomeScreen() {
         }
       },
   ) { contentPadding ->
-    if (documents.isEmpty()) {
+    if (recentDocs.isEmpty()) {
       EmptyHome(
         modifier =
           Modifier.fillMaxSize()
@@ -195,7 +203,8 @@ fun HomeScreen() {
     } else {
       FilledHome(
         scrollState = scrollState,
-        documents = documents,
+        continueDocs = continueDocs,
+        recentDocs = recentDocs,
         siteName = model.query.data.site.name,
         contentPadding =
           contentPadding +
@@ -221,7 +230,8 @@ fun HomeScreen() {
 @Composable
 private fun FilledHome(
   scrollState: ScrollState,
-  documents: List<HomeRecentDocument_document>,
+  continueDocs: List<HomeScreen_ContinueWriting_document>,
+  recentDocs: List<HomeScreen_RecentDocumentRow_document>,
   siteName: String,
   contentPadding: PaddingValues,
 ) {
@@ -229,8 +239,8 @@ private fun FilledHome(
 
   val now = remember { Clock.System.now() }
   val dayCutoff = remember(now) { now.minus(24.hours) }
-  val active = documents.filter { it.updatedAt > dayCutoff }
-  val rest = documents.filter { it.updatedAt <= dayCutoff }
+  val active = continueDocs.filter { it.updatedAt > dayCutoff }
+  val rest = recentDocs.filter { it.updatedAt <= dayCutoff }
 
   Column(
     Modifier.fillMaxSize()
@@ -371,7 +381,7 @@ private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
 }
 
 @Composable
-private fun ContinueWritingSection(docs: List<HomeRecentDocument_document>) {
+private fun ContinueWritingSection(docs: List<HomeScreen_ContinueWriting_document>) {
   Column {
     val pagerState = rememberPagerState(pageCount = { docs.size })
 
@@ -414,7 +424,7 @@ private fun ContinueWritingSection(docs: List<HomeRecentDocument_document>) {
 }
 
 @Composable
-private fun ContinueWritingCard(doc: HomeRecentDocument_document, activeness: Float) {
+private fun ContinueWritingCard(doc: HomeScreen_ContinueWriting_document, activeness: Float) {
   val nav = Nav.current
   val breadcrumbSegments = doc.entity.ancestors.mapNotNull { it.node.onFolder?.name }
   val net = doc.characterCountChange.additions - doc.characterCountChange.deletions
@@ -537,7 +547,8 @@ private enum class RecentDocumentSort(val label: String) {
 }
 
 @Composable
-private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
+private fun RecentDocumentsSection(docs: List<HomeScreen_RecentDocumentRow_document>) {
+  val nav = Nav.current
   val tabState = LocalTabState.current
 
   var sortMode by remember { mutableStateOf(RecentDocumentSort.Edited) }
@@ -586,7 +597,21 @@ private fun RecentDocumentsSection(docs: List<HomeRecentDocument_document>) {
 
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
       sorted.separated(separator = { Divider() }) { recentDocument ->
-        RecentDocumentRow(doc = recentDocument)
+        val entity = recentDocument.entity.entityRow_entity
+        val parent = recentDocument.entity.entityRowParent_entity.parentFolderMeta()
+        EntityRow(
+          entity = entity,
+          contentPadding = PaddingValues(vertical = 16.dp),
+          onClick = { nav.navigate(Route.Editor(entity.id)) },
+        ) {
+          parentMeta(parent)
+          title(
+            title = formatDocumentTitle(recentDocument.title),
+            subtitle = recentDocument.subtitle,
+            trailingText = recentDocument.updatedAt.timeAgo(),
+          )
+          supporting(text = formatEntityExcerpt(recentDocument.excerpt), maxLines = 2)
+        }
       }
     }
 
@@ -631,67 +656,6 @@ private fun SortToggle(mode: RecentDocumentSort, onToggle: suspend () -> Unit) {
       )
 
       Text(mode.label, style = AppTheme.typography.caption, color = AppTheme.colors.textHint)
-    }
-  }
-}
-
-@Composable
-private fun RecentDocumentRow(doc: HomeRecentDocument_document) {
-  val model = viewModel { HomeViewModel() }
-  val nav = Nav.current
-
-  val breadcrumbSegments =
-    doc.entity.ancestors
-      .mapNotNull { it.node.onFolder?.name }
-      .ifEmpty { listOf(model.query.data.site.name) }
-
-  InteractionScope {
-    Column(
-      modifier =
-        Modifier.fillMaxWidth()
-          .clickable(onClick = { nav.navigate(Route.Editor(doc.entity.id)) })
-          .padding(vertical = 16.dp)
-          .pressScale()
-    ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        BreadcrumbLine(segments = breadcrumbSegments, modifier = Modifier.weight(1f))
-
-        Spacer(Modifier.width(8.dp))
-
-        Text(
-          doc.updatedAt.timeAgo(),
-          style = AppTheme.typography.micro,
-          color = AppTheme.colors.textHint,
-          maxLines = 1,
-        )
-      }
-
-      Spacer(Modifier.height(6.dp))
-
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        EntityIcon(entity = doc.entity.entityIcon_entity, modifier = Modifier.size(16.dp))
-
-        Spacer(Modifier.width(4.dp))
-
-        Text(
-          formatDocumentTitle(doc.title),
-          style = AppTheme.typography.label,
-          color = AppTheme.colors.textDefault,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-
-      Spacer(Modifier.height(8.dp))
-
-      Text(
-        formatEntityExcerpt(doc.excerpt),
-        style = AppTheme.typography.caption,
-        color = AppTheme.colors.textMuted,
-        modifier = Modifier.padding(start = 20.dp),
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-      )
     }
   }
 }
@@ -747,7 +711,7 @@ private fun DashedDivider() {
 
 @Composable
 private fun ContinueWritingNotification(
-  doc: HomeRecentDocument_document,
+  doc: HomeScreen_ContinueWriting_document,
   onDismiss: () -> Unit,
   modifier: Modifier = Modifier,
 ) {

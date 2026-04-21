@@ -17,7 +17,7 @@ import co.typie.graphql.builder.buildFolder
 import co.typie.graphql.builder.buildSite
 import co.typie.graphql.builder.buildUser
 import co.typie.graphql.executeMutation
-import co.typie.graphql.fragment.HomeRecentDocument_document
+import co.typie.graphql.fragment.HomeScreen_ContinueWriting_document
 import co.typie.graphql.text
 import co.typie.graphql.type.CreateDocumentInput
 import co.typie.graphql.watchQuery
@@ -40,11 +40,11 @@ class HomeViewModel : ViewModel() {
 
   private var continueWritingDismissed by mutableStateOf(false)
 
-  val continueWritingDocument: HomeRecentDocument_document? by derivedStateOf {
+  val continueWritingDocument: HomeScreen_ContinueWriting_document? by derivedStateOf {
     if (continueWritingDismissed) null
     else
       query.data.me.recentlyViewedEntities.firstNotNullOfOrNull {
-        it.node.onDocument?.homeRecentDocument_document
+        it.node.onDocument?.homeScreen_ContinueWriting_document
       }
   }
 

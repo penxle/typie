@@ -1,7 +1,6 @@
-fragment HomeRecentDocument_document on Document {
+fragment HomeScreen_ContinueWriting_document on Document {
   id
   title
-  subtitle
   excerpt
   updatedAt
   characterCount
@@ -26,7 +25,22 @@ fragment HomeRecentDocument_document on Document {
   }
 }
 
-fragment HomeRecentFolder_folder on Folder {
+fragment HomeScreen_RecentDocumentRow_document on Document {
+  id
+  title
+  subtitle
+  excerpt
+  updatedAt
+
+  entity {
+    id
+
+    ...EntityRow_entity
+    ...EntityRowParent_entity
+  }
+}
+
+fragment HomeScreen_RecentFolder_folder on Folder {
   entity {
     ...EntityRow_entity
   }
@@ -55,11 +69,12 @@ query HomeScreen_Query($siteId: ID!) {
         __typename
 
         ... on Document {
-          ...HomeRecentDocument_document
+          ...HomeScreen_ContinueWriting_document
+          ...HomeScreen_RecentDocumentRow_document
         }
 
         ... on Folder {
-          ...HomeRecentFolder_folder
+          ...HomeScreen_RecentFolder_folder
         }
       }
     }

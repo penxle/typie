@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,11 +36,14 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.theme.AppTheme
 
 object EntityRowDefaults {
-  val ContentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+  val ContentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
   val ItemSpacing = 12.dp
   val MetaSpacing = 4.dp
   val MetaIconSize = 12.dp
-  val IconSize = 18.dp
+  val IconSize = 16.dp
+  val TitleGap = 8.dp
+  val BreadcrumbGap = 6.dp
+  val SupportingIndent = 24.dp
   val LineSpacing = 4.dp
 }
 
@@ -165,8 +170,12 @@ fun EntityRow(
 ) {
   val alpha = (if (enabled) 1f else 0.48f) * opacity
   val isInteractive = enabled && interactive
-  val iconAppearance = entity.entityIcon_entity.iconAppearance
   val entries = EntityRowScope().apply(content).entries
+
+  val parentMetaEntry = entries.filterIsInstance<EntityRowParentMetaEntry>().lastOrNull()
+  val titleEntry = entries.filterIsInstance<EntityRowTitleEntry>().lastOrNull()
+  val supportingEntries = entries.filterIsInstance<EntityRowSupportingEntry>()
+  val customEntries = entries.filterIsInstance<EntityRowCustomEntry>()
 
   InteractionScope {
     Row(
@@ -193,24 +202,32 @@ fun EntityRow(
         leading()
       }
 
-      Icon(
-        icon = iconAppearance.icon,
-        modifier = Modifier.size(EntityRowDefaults.IconSize),
-        tint = iconAppearance.tint,
-      )
-
       Column(modifier = Modifier.weight(1f)) {
-        entries.forEachIndexed { index, entry ->
-          if (index > 0) {
-            Spacer(Modifier.size(EntityRowDefaults.LineSpacing))
-          }
+        if (parentMetaEntry != null) {
+          EntityRowBreadcrumb(
+            folder = parentMetaEntry.folder,
+            trailingText = titleEntry?.trailingText,
+          )
+          Spacer(Modifier.height(EntityRowDefaults.BreadcrumbGap))
+        }
 
-          when (entry) {
-            is EntityRowParentMetaEntry -> EntityRowParentMeta(folder = entry.folder)
-            is EntityRowTitleEntry -> EntityRowTitle(entry)
-            is EntityRowSupportingEntry -> EntityRowSupporting(entry)
-            is EntityRowCustomEntry -> entry.content(this)
-          }
+        if (titleEntry != null) {
+          EntityRowTitle(
+            entity = entity,
+            entry = titleEntry,
+            showTrailingText = parentMetaEntry == null,
+          )
+        }
+
+        supportingEntries.forEachIndexed { index, entry ->
+          Spacer(Modifier.height(if (index == 0) 8.dp else EntityRowDefaults.LineSpacing))
+          EntityRowSupporting(entry = entry)
+        }
+
+        customEntries.forEachIndexed { index, entry ->
+          val isFirstBlock = supportingEntries.isEmpty() && index == 0
+          Spacer(Modifier.height(if (isFirstBlock) 8.dp else EntityRowDefaults.LineSpacing))
+          entry.content(this@Column)
         }
       }
 
@@ -222,8 +239,51 @@ fun EntityRow(
 }
 
 @Composable
-private fun EntityRowTitle(entry: EntityRowTitleEntry) {
+private fun EntityRowBreadcrumb(folder: EntityParentMeta_folder, trailingText: String?) {
+  Row(
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(EntityRowDefaults.MetaSpacing),
+  ) {
+    EntityIcon(
+      entity = folder.entity.entityIcon_entity,
+      modifier = Modifier.size(EntityRowDefaults.MetaIconSize),
+    )
+
+    Text(
+      text = formatFolderName(folder.name),
+      style = AppTheme.typography.micro,
+      color = AppTheme.colors.textHint,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      modifier = Modifier.weight(1f),
+    )
+
+    if (trailingText != null) {
+      Spacer(Modifier.width(8.dp))
+      Text(
+        text = trailingText,
+        style = AppTheme.typography.micro,
+        color = AppTheme.colors.textHint,
+        maxLines = 1,
+      )
+    }
+  }
+}
+
+@Composable
+private fun EntityRowTitle(
+  entity: EntityRow_entity,
+  entry: EntityRowTitleEntry,
+  showTrailingText: Boolean,
+) {
   Row(verticalAlignment = Alignment.CenterVertically) {
+    EntityIcon(
+      entity = entity.entityIcon_entity,
+      modifier = Modifier.size(EntityRowDefaults.IconSize),
+    )
+
+    Spacer(Modifier.width(EntityRowDefaults.TitleGap))
+
     Text(
       text = entry.buildText(),
       style = AppTheme.typography.label,
@@ -232,10 +292,10 @@ private fun EntityRowTitle(entry: EntityRowTitleEntry) {
       modifier = Modifier.weight(1f),
     )
 
-    entry.trailingText?.let { trailingText ->
-      Spacer(Modifier.size(8.dp))
+    if (showTrailingText && entry.trailingText != null) {
+      Spacer(Modifier.width(8.dp))
       Text(
-        text = trailingText,
+        text = entry.trailingText,
         style = AppTheme.typography.caption,
         color = AppTheme.colors.textHint,
       )
@@ -245,6 +305,7 @@ private fun EntityRowTitle(entry: EntityRowTitleEntry) {
 
 @Composable
 private fun EntityRowSupporting(entry: EntityRowSupportingEntry) {
+  val modifier = Modifier.padding(start = EntityRowDefaults.SupportingIndent)
   when (val text = entry.text) {
     is EntityRowText.Plain ->
       Text(
@@ -253,6 +314,7 @@ private fun EntityRowSupporting(entry: EntityRowSupportingEntry) {
         color = AppTheme.colors.textHint,
         maxLines = entry.maxLines,
         overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
       )
 
     is EntityRowText.Rich ->
@@ -262,6 +324,7 @@ private fun EntityRowSupporting(entry: EntityRowSupportingEntry) {
         color = AppTheme.colors.textHint,
         maxLines = entry.maxLines,
         overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
       )
   }
 }
