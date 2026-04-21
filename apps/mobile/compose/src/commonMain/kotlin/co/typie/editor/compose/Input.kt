@@ -118,7 +118,7 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
     }
 
     val ch = cp.toChar()
-    if (!ch.isDefined() || ch.isISOControl()) return false
+    if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
     editor.enqueue(Message.Insertion(InsertionOp.Text(ch.toString())))
     return true
