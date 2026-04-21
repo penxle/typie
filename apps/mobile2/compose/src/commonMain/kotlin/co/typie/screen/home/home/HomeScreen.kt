@@ -109,6 +109,7 @@ import kotlinx.coroutines.launch
 
 private val ContinueWritingPinHeight: Dp = 56.dp
 private val ContinueWritingPinGap: Dp = 12.dp
+private val HomeSearchBarHeight: Dp = 48.dp
 private const val ContinueWritingPinDragFadeStrength = 0.6f
 
 @Composable
@@ -240,7 +241,7 @@ private fun FilledHome(
   ) {
     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
       Skeleton.Bone(
-        modifier = Modifier.fillMaxWidth().height(44.dp),
+        modifier = Modifier.fillMaxWidth().height(HomeSearchBarHeight),
         shape = AppShapes.rounded(AppShapes.md),
       ) {
         SearchBar(
@@ -349,19 +350,19 @@ private fun SearchBar(placeholder: String, onClick: suspend () -> Unit) {
     verticalAlignment = Alignment.CenterVertically,
     modifier =
       Modifier.fillMaxWidth()
-        .height(44.dp)
+        .height(HomeSearchBarHeight)
         .background(AppTheme.colors.surfaceInset, AppShapes.rounded(AppShapes.md))
         .clickable(onClick = onClick)
-        .padding(horizontal = 14.dp),
+        .padding(horizontal = 16.dp),
   ) {
-    Icon(icon = Lucide.Search, modifier = Modifier.size(15.dp), tint = AppTheme.colors.textHint)
+    Icon(icon = Lucide.Search, modifier = Modifier.size(16.dp), tint = AppTheme.colors.textHint)
 
     Spacer(Modifier.width(10.dp))
 
     Text(
       placeholder,
       modifier = Modifier.weight(1f),
-      style = AppTheme.typography.caption,
+      style = AppTheme.typography.action,
       color = AppTheme.colors.textHint,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,

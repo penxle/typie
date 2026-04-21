@@ -1,10 +1,8 @@
 package co.typie.screen.home.search
 
-import androidx.compose.animation.core.EaseOutCubic
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,11 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +32,7 @@ import co.typie.domain.entity.parentFolderMeta
 import co.typie.ext.InteractionScope
 import co.typie.ext.clickable
 import co.typie.ext.imePadding
+import co.typie.ext.onlyTop
 import co.typie.ext.pressScale
 import co.typie.ext.separated
 import co.typie.ext.truncate
@@ -56,24 +51,20 @@ import co.typie.ui.component.LabelPosition
 import co.typie.ui.component.Screen
 import co.typie.ui.component.Text
 import co.typie.ui.component.TextField
+import co.typie.ui.component.scrollFog
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
+
+private val SearchListFadeHeight = 24.dp
 
 @Composable
 fun SearchScreen() {
   val model = viewModel { SearchViewModel() }
   val scrollState = rememberScrollState()
   val placeholder = "${model.query.data.site.name.truncate(10)}에서 검색..."
-  var didEnter by remember { mutableStateOf(false) }
-  val searchFieldTopOffset by
-    animateDpAsState(
-      targetValue = if (didEnter) 0.dp else 56.dp,
-      animationSpec = tween(durationMillis = 220, easing = EaseOutCubic),
-    )
-
-  LaunchedEffect(Unit) { didEnter = true }
+  val listFogInsets = remember { PaddingValues(vertical = SearchListFadeHeight) }
 
   ProvideTopBar()
 
@@ -82,11 +73,9 @@ fun SearchScreen() {
       modifier =
         Modifier.fillMaxSize()
           .imePadding()
-          .padding(contentPadding)
-          .padding(AppTheme.spacings.scrollBottomPadding)
+          .padding(contentPadding.onlyTop())
+          .padding(horizontal = 16.dp)
     ) {
-      Spacer(Modifier.height(searchFieldTopOffset))
-
       SearchInputField(
         value = model.inputKeyword,
         placeholder = placeholder,
@@ -97,43 +86,61 @@ fun SearchScreen() {
 
       Spacer(Modifier.height(16.dp))
 
-      Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(scrollState)) {
-        if (model.inputKeyword.isBlank()) {
-          RecentSearches(
-            onSelect = { model.submitKeyword(it) },
-            onRemove = { model.removeRecent(it) },
-          )
-        } else {
-          when (val state = model.searchQuery.state) {
-            is QueryState.Loading -> {
-              Text(
-                "검색 중...",
-                style = AppTheme.typography.action,
-                color = AppTheme.colors.textMuted,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
+      Box(
+        modifier =
+          Modifier.fillMaxWidth()
+            .weight(1f)
+            .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceCanvas)
+      ) {
+        Column(
+          modifier =
+            Modifier.fillMaxSize()
+              .verticalScroll(scrollState)
+              .padding(
+                top = SearchListFadeHeight,
+                bottom =
+                  SearchListFadeHeight +
+                    contentPadding.calculateBottomPadding() +
+                    AppTheme.spacings.scrollBottomPadding.calculateBottomPadding(),
               )
-            }
-
-            is QueryState.Success -> {
-              if (state.data.search.hits.isEmpty()) {
+        ) {
+          if (model.inputKeyword.isBlank()) {
+            RecentSearches(
+              onSelect = { model.submitKeyword(it) },
+              onRemove = { model.removeRecent(it) },
+            )
+          } else {
+            when (val state = model.searchQuery.state) {
+              is QueryState.Loading -> {
                 Text(
-                  "검색 결과가 없어요",
+                  "검색 중...",
                   style = AppTheme.typography.action,
                   color = AppTheme.colors.textMuted,
                   modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
-              } else {
-                SearchResults(data = state.data, onClick = { model.addRecent() })
               }
-            }
 
-            is QueryState.Error -> {
-              Text(
-                "검색 중 오류가 발생했어요",
-                style = AppTheme.typography.action,
-                color = AppTheme.colors.textMuted,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-              )
+              is QueryState.Success -> {
+                if (state.data.search.hits.isEmpty()) {
+                  Text(
+                    "검색 결과가 없어요",
+                    style = AppTheme.typography.action,
+                    color = AppTheme.colors.textMuted,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                  )
+                } else {
+                  SearchResults(data = state.data, onClick = { model.addRecent() })
+                }
+              }
+
+              is QueryState.Error -> {
+                Text(
+                  "검색 중 오류가 발생했어요",
+                  style = AppTheme.typography.action,
+                  color = AppTheme.colors.textMuted,
+                  modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+              }
             }
           }
         }
