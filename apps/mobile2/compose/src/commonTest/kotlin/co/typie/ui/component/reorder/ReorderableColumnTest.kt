@@ -172,6 +172,26 @@ class ReorderableColumnStateTest {
   }
 
   @Test
+  fun `slot bounds update can reorder without additional pointer movement`() = runTest {
+    val state = createState<String>()
+    state.inputKeys = listOf("a", "b", "c")
+    state.registerSlotBounds("a", Rect(0f, 0f, 100f, 50f))
+    state.registerSlotBounds("b", Rect(0f, 50f, 100f, 100f))
+    state.registerSlotBounds("c", Rect(0f, 100f, 100f, 150f))
+
+    state.beginDrag("a", Offset(0f, 25f))
+    state.updateDrag(Offset(0f, 40f))
+
+    assertEquals(listOf("a", "b", "c"), state.keys)
+
+    state.registerSlotBounds("a", Rect(0f, -20f, 100f, 30f))
+    state.registerSlotBounds("b", Rect(0f, 30f, 100f, 80f))
+    state.registerSlotBounds("c", Rect(0f, 80f, 100f, 130f))
+
+    assertEquals(listOf("b", "a", "c"), state.keys)
+  }
+
+  @Test
   fun `endDrag exposes release translation for dragged item handoff`() = runTest {
     val state = createState<String>()
     state.inputKeys = listOf("a", "b", "c")

@@ -97,7 +97,13 @@ internal constructor(internal val autoScrollController: AutoScrollController) {
     get() = activeDrag?.pointer
 
   internal fun registerSlotBounds(key: K, bounds: Rect?) {
-    if (bounds == null) slotBounds.remove(key) else slotBounds[key] = bounds
+    if (bounds == null) {
+      slotBounds.remove(key)
+      return
+    }
+    if (slotBounds[key] == bounds) return
+    slotBounds[key] = bounds
+    refreshDraggedOrder()
   }
 
   internal fun pruneSlotBoundsTo(validKeys: Set<K>) {
@@ -153,23 +159,11 @@ internal constructor(internal val autoScrollController: AutoScrollController) {
         else -> drag.direction
       }
 
-    val previousKeys = _keys
-    if (bounds != null) {
-      val top = pointer.y - drag.pointerOffsetInItemY
-      val draggedBounds =
-        Rect(left = bounds.left, top = top, right = bounds.right, bottom = top + bounds.height)
-      _keys =
-        reorderedKeysForDrag(
-          keys = _keys,
-          draggedKey = drag.key,
-          direction = newDirection,
-          slotBounds = slotBounds + (drag.key to draggedBounds),
-        ) ?: _keys
-    }
-
-    activeDrag =
+    val updatedDrag =
       drag.copy(pointer = pointer, comparisonY = newComparisonY, direction = newDirection)
-    return _keys != previousKeys
+    val reordered = refreshDraggedOrder(updatedDrag)
+    activeDrag = updatedDrag
+    return reordered
   }
 
   fun endDrag(): ReorderDrop<K>? {
@@ -198,6 +192,23 @@ internal constructor(internal val autoScrollController: AutoScrollController) {
     settling = null
     _keys = inputKeys
     autoScrollController.pointer = null
+  }
+
+  private fun refreshDraggedOrder(drag: ActiveDrag<K>? = activeDrag): Boolean {
+    val drag = drag ?: return false
+    val bounds = slotBounds[drag.key] ?: return false
+    val previousKeys = _keys
+    val top = drag.pointer.y - drag.pointerOffsetInItemY
+    val draggedBounds =
+      Rect(left = bounds.left, top = top, right = bounds.right, bottom = top + bounds.height)
+    _keys =
+      reorderedKeysForDrag(
+        keys = _keys,
+        draggedKey = drag.key,
+        direction = drag.direction,
+        slotBounds = slotBounds + (drag.key to draggedBounds),
+      ) ?: _keys
+    return _keys != previousKeys
   }
 }
 
