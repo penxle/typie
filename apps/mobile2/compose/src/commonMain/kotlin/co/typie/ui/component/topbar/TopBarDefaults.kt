@@ -1,5 +1,6 @@
 package co.typie.ui.component.topbar
 
+import androidx.compose.animation.core.Easing
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -7,6 +8,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import co.typie.ui.component.SmootherstepEasing
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import dev.chrisbanes.haze.HazeProgressive
@@ -22,6 +24,7 @@ object TopBarDefaults {
   val BlurFadeHeight: Dp = 16.dp
   val FadeOpacity: Float = 0.8f
   val ContentTopSpacing: Dp = 8.dp
+  val BlurFadeEasing: Easing = SmootherstepEasing
 
   val RevealAnimationDuration: Int = 200
   val RevealFadeDuration: Int = 150
@@ -38,7 +41,11 @@ object TopBarDefaults {
   val TitleIconGap: Dp = 10.dp
 
   fun hazeProgressive(): HazeProgressive =
-    HazeProgressive.verticalGradient(startIntensity = 1f, endIntensity = 0f)
+    HazeProgressive.verticalGradient(
+      easing = BlurFadeEasing,
+      startIntensity = 1f,
+      endIntensity = 0f,
+    )
 
   @Composable fun controlBackgroundColor(): Color = AppTheme.colors.surfaceDefault
 

@@ -175,15 +175,10 @@ private fun overlayFadeBrush(color: Color, reverse: Boolean): Brush {
   val stops =
     Array(OverlayFadeSamples + 1) { index ->
       val t = index / OverlayFadeSamples.toFloat()
-      val eased = overlayFadeEasing(t)
+      val eased = SmootherstepEasing.transform(t)
       val alpha = color.alpha * if (reverse) eased else 1f - eased
       t to color.copy(alpha = alpha)
     }
 
   return Brush.verticalGradient(colorStops = stops)
-}
-
-private fun overlayFadeEasing(t: Float): Float {
-  val x = t.coerceIn(0f, 1f)
-  return x * x * x * (x * (x * 6f - 15f) + 10f)
 }
