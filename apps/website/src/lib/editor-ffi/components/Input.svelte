@@ -2,6 +2,7 @@
   import { css } from '@typie/styled-system/css';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import { handle } from '../handlers';
+  import { handlePaste } from '../handlers/clipboard';
   import { handleBeforeInput, handleCompositionEnd, handleCompositionStart } from '../handlers/input';
   import { handleKeyDown } from '../handlers/keyboard';
 
@@ -16,5 +17,6 @@
     oncompositionend={handle(editor, handleCompositionEnd)}
     oncompositionstart={handle(editor, handleCompositionStart)}
     onkeydown={handle(editor, handleKeyDown)}
+    onpaste={handle(editor, handlePaste)}
   />
 {/if}
