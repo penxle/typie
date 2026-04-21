@@ -1,47 +1,23 @@
 default_platform(:android)
 
 platform :android do
-  desc "Sync certificates"
-  lane :certificates do
+  desc "Set up signing credentials"
+  lane :setup do
     sh "echo $KEYSTORE | base64 -d > ../keystore-release.jks"
   end
 
-  desc "Build and distribute the app for internal testing"
-  lane :internal do
+  desc "Build and upload to beta"
+  lane :beta do
     latest_build_number = google_play_track_version_codes(track: "internal")[0]
 
-    Dir.chdir("../..") do
-      sh "dart run ffigen --config ffigen.yaml"
-      sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build appbundle --build-number=#{latest_build_number + 1}"
-    end
-
-    upload_to_play_store(
-      aab: "../build/app/outputs/bundle/release/app-release.aab",
-      track: "internal",
+    gradle(
+      project_dir: "..",
+      task: "android:bundleRelease",
+      properties: { "versionCode" => latest_build_number + 1 }
     )
-  end
-
-  desc "Distribute the latest build for external testing"
-  lane :external do
-    latest_build_number = google_play_track_version_codes(track: "internal")[0]
 
     upload_to_play_store(
       track: "internal",
-      track_promote_to: "beta",
-      version_code: latest_build_number,
-    )
-  end
-
-  desc "Submit the latest build for review"
-  lane :submit do
-    latest_build_number = google_play_track_version_codes(track: "internal")[0]
-
-    upload_to_play_store(
-      track: "internal",
-      track_promote_to: "production",
-      track_promote_release_status: 'draft',
-      version_code: latest_build_number,
     )
   end
 end

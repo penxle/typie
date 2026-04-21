@@ -1,58 +1,33 @@
 default_platform(:ios)
 
 platform :ios do
-  desc "Sync certificates"
-  lane :certificates do
+  desc "Set up signing credentials"
+  lane :setup do
     app_store_connect_api_key
 
     match(type: "development")
     match(type: "appstore")
   end
 
-  desc "Build and distribute the app for internal testing"
-  lane :internal do
+  desc "Build and upload to beta"
+  lane :beta do
     app_store_connect_api_key
 
-    latest_build_number = latest_testflight_build_number 
+    match(type: "appstore", readonly: true)
 
-    Dir.chdir("../..") do
-      sh "dart run ffigen --config ffigen.yaml"
-      sh "dart run build_runner build --delete-conflicting-outputs"
-      sh "flutter build ipa --build-number=#{latest_build_number + 1} --export-options-plist=./ios/ExportOptions.AppStore.plist"
-    end
+    latest_build_number = latest_testflight_build_number
+
+    build_app(
+      project: "App.xcodeproj",
+      scheme: "iOS",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "build",
+      xcargs: "CURRENT_PROJECT_VERSION=#{latest_build_number + 1}",
+    )
 
     upload_to_testflight(
-      ipa: "../build/ios/ipa/Typie.ipa",
       notify_external_testers: false,
-    )
-  end
-
-  desc "Distribute the latest build for external testing"
-  lane :external do
-    app_store_connect_api_key
-
-    upload_to_testflight(
-      build_number: latest_testflight_build_number.to_s,
-      app_platform: "ios",
-      distribute_only: true,
-      distribute_external: true,
-      notify_external_testers: true,
-      reject_build_waiting_for_review: true,
-      groups: "Beta",
-    )
-  end
-
-  desc "Submit the latest build for review"
-  lane :submit do
-    app_store_connect_api_key
-
-    upload_to_app_store(
-      build_number: latest_testflight_build_number.to_s,
-      skip_binary_upload: true,
-      submit_for_review: false,
-      automatic_release: true,
-      run_precheck_before_submit: false,
-      force: true,
     )
   end
 end
