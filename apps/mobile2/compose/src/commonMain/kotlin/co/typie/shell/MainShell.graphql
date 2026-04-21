@@ -2,10 +2,26 @@ subscription MainShell_SiteUpdateStream_Subscription($siteId: ID!) {
   siteUpdateStream(siteId: $siteId) {
     ... on Site {
       id
+      name
+      folderCount
+      documentCount
+
+      entities {
+        ...EntityRow_entity
+      }
     }
 
     ... on Entity {
-      id
+      ...EntityDetails_entity
+
+      site {
+        id
+        name
+      }
+
+      children {
+        ...EntityRow_entity
+      }
     }
   }
 }
