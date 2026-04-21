@@ -31,7 +31,9 @@ val MainDrawerTriggerLeadingKey: Any = Any()
 
 private val TriggerHeight = 44.dp
 private val TriggerMaxWidth = 200.dp
-private val TriggerLogoSize = 24.dp
+private val TriggerLogoSize = 30.dp
+private val TriggerHorizontalPadding = (TriggerHeight - TriggerLogoSize) / 2
+private const val TriggerPressedScale = 1.1f
 
 @Composable
 fun MainDrawerTrigger() {
@@ -65,12 +67,12 @@ private fun TriggerContent(logo: Img_image, onClick: suspend () -> Unit) {
     modifier =
       Modifier.height(TriggerHeight)
         .widthIn(max = TriggerMaxWidth)
-        .pressScale()
+        .pressScale(TriggerPressedScale)
         .clip(shape)
         .background(TopBarDefaults.controlBackgroundColor(), shape)
         .border(1.dp, TopBarDefaults.controlBorderColor(), shape)
         .clickable(onClick = onClick)
-        .padding(horizontal = 10.dp),
+        .padding(horizontal = TriggerHorizontalPadding),
   ) {
     Img(image = logo, modifier = Modifier.size(TriggerLogoSize).clip(logoShape))
   }
