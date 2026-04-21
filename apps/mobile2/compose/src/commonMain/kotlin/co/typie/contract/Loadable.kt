@@ -7,6 +7,10 @@ interface Loadable<T> {
 }
 
 interface LoadableState<out T> {
+  interface Idle : LoadableState<Nothing> {
+    companion object : Idle
+  }
+
   interface Loading : LoadableState<Nothing> {
     companion object : Loading
   }

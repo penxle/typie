@@ -17,8 +17,6 @@ import co.typie.result.result
 import co.typie.storage.Preference
 
 class SpaceViewModel : ViewModel() {
-  private var hasEnteredScreen = false
-
   val siteId: String?
     get() = Preference.siteId
 
@@ -29,15 +27,6 @@ class SpaceViewModel : ViewModel() {
 
   fun refetch() {
     query.refetch()
-  }
-
-  fun onScreenEntered() {
-    if (hasEnteredScreen) {
-      refetch()
-      return
-    }
-
-    hasEnteredScreen = true
   }
 
   suspend fun moveRootEntity(

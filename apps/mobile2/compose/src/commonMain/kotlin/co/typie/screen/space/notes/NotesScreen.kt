@@ -72,7 +72,7 @@ fun NotesScreen() {
   val siteId = model.siteId
   val noteColorOptions = rememberNoteColorOptions()
 
-  LaunchedEffect(Unit) { model.onScreenEntered() }
+  LaunchedEffect(Unit) { model.refetch() }
 
   LaunchedEffect(model.openQuery.state) {
     if (model.openQuery.state is QueryState.Success<*>) {

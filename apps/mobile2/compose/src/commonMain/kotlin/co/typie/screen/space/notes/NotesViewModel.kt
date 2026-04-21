@@ -26,7 +26,6 @@ import co.typie.storage.Preference
 import kotlinx.coroutines.launch
 
 internal class NotesViewModel : ViewModel() {
-  private var hasEnteredScreen = false
   val screenState = NotesScreenState(scope = viewModelScope)
 
   val siteId: String?
@@ -72,15 +71,6 @@ internal class NotesViewModel : ViewModel() {
     }
 
     query(status).refetch()
-  }
-
-  fun onScreenEntered() {
-    if (hasEnteredScreen) {
-      refetch()
-      return
-    }
-
-    hasEnteredScreen = true
   }
 
   suspend fun createNote(color: String = DEFAULT_NOTE_COLOR): Result<NoteCard_note, Nothing> =

@@ -14,14 +14,10 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 
 internal class OssLicensesViewModel : ViewModel(), Loadable<List<OssLicenseEntry>> {
-  override var state by mutableStateOf<LoadableState<List<OssLicenseEntry>>>(LoadableState.Loading)
+  override var state by mutableStateOf<LoadableState<List<OssLicenseEntry>>>(LoadableState.Idle)
     private set
 
   val data by derivedStateOf { (state as? LoadableState.Success)?.data ?: emptyList() }
-
-  init {
-    refetch()
-  }
 
   override fun refetch() {
     viewModelScope.launch {

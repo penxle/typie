@@ -48,6 +48,7 @@ private const val OverlayFadeSamples = 48
 @Composable
 fun Screen(
   loadable: Loadable<*>? = null,
+  refetchOnMount: Boolean = true,
   background: Color = AppTheme.colors.surfaceCanvas,
   contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
   overlay: (@Composable BoxScope.() -> Unit)? = null,
@@ -73,10 +74,20 @@ fun Screen(
     } else {
       contentPadding + WindowInsets.navigationBars.asPaddingValues()
     }
+  val shouldRefetchOnMount =
+    remember(loadable) { loadable != null && loadable.state !is LoadableState.Loading }
 
   LaunchedEffect(loadable?.state) {
     if (loadable?.state is LoadableState.Error) {
       dialog.error(nav = nav, onRetry = { loadable.refetch() })
+    }
+  }
+
+  if (refetchOnMount && loadable != null) {
+    LaunchedEffect(loadable) {
+      if (shouldRefetchOnMount) {
+        loadable.refetch()
+      }
     }
   }
 

@@ -49,7 +49,6 @@ data class FolderThumbnailResult(val id: String, val url: String)
 class FolderViewModel :
   ViewModel(), DocumentRenameSheetModel, EntityIconPickerSheetModel, FolderRenameSheetModel {
   private val blobService = BlobService
-  private var hasEnteredScreen = false
   var entityId by mutableStateOf("")
 
   val query =
@@ -65,14 +64,6 @@ class FolderViewModel :
     if (entityId.isNotBlank()) {
       query.refetch()
     }
-  }
-
-  fun onScreenEntered() {
-    if (hasEnteredScreen) {
-      refetch()
-      return
-    }
-    hasEnteredScreen = true
   }
 
   suspend fun updateFolderVisibility(
