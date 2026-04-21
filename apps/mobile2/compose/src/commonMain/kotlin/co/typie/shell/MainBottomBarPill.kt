@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -31,9 +33,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -57,11 +60,9 @@ fun MainBottomBarPill() {
   val state = rememberMainBottomBarPillState(initialActiveTab = tabState.currentTab)
   val isPillPressed by state.interactionSource.collectIsPressedAsState()
 
-  // Single source for the label's TextStyle — both the TextMeasurer (which sizes
-  // the active-state tab box) and the rendered Text must use the same style or the
-  // measured width and the actual layout width will diverge.
   val labelStyle = AppTheme.typography.label
-  val tabWidthsConfig = rememberTabWidthsConfig(labelStyle)
+  val activeLabelWidthsPx = rememberActiveLabelWidthsPx(labelStyle)
+  val tabWidthsConfig = rememberTabWidthsConfig(activeLabelWidthsPx)
 
   MainBottomBarPillEffects(
     state = state,
@@ -316,10 +317,10 @@ private val Tab.presentation: TabPresentation
     }
 
 /**
- * Pre-computed tab box widths keyed by activation state. `inactiveWidthPx` is shared (icon-only
- * layout = padding × 2 + icon size); `activeWidthsPx` is per-tab since each label's text width
- * differs. Measured once via [rememberTabWidthsConfig] so later transition/indicator math never
- * needs to wait for layout.
+ * Tab box widths keyed by activation state. `inactiveWidthPx` is shared (icon-only layout = padding
+ * × 2 + icon size); `activeWidthsPx` is per-tab since each label's text width differs. Label widths
+ * come from [rememberActiveLabelWidthsPx] so the config rebuilds whenever the probe reports a new
+ * measurement (e.g. after async font resources finish loading).
  */
 private data class MainBottomBarPillTabWidthsConfig(
   val inactiveWidthPx: Float,
@@ -333,26 +334,49 @@ private data class MainBottomBarPillTabWidthsConfig(
 }
 
 @Composable
-private fun rememberTabWidthsConfig(labelStyle: TextStyle): MainBottomBarPillTabWidthsConfig {
+private fun rememberTabWidthsConfig(
+  activeLabelWidthsPx: Map<Tab, Float>
+): MainBottomBarPillTabWidthsConfig {
   val density = LocalDensity.current
-  val textMeasurer = rememberTextMeasurer()
-  return remember(textMeasurer, labelStyle, density) {
-    val paddingPx = with(density) { MainBottomBarPillTabHorizontalPadding.toPx() }
-    val iconPx = with(density) { MainBottomBarPillIconSize.toPx() }
-    val gapPx = with(density) { MainBottomBarPillTrackInlineLabelGap.toPx() }
-    val inactiveWidthPx = paddingPx * 2f + iconPx
+  return remember(activeLabelWidthsPx, density) {
+    // Int pixel values matching what the layout pipeline (Modifier.padding / .size / .width)
+    // derives via roundToPx. Using raw toPx Floats here and summing them produces a total that
+    // disagrees with the sum of the individually-rounded components, which eats a few pixels
+    // out of the Text's constraint at certain densities (e.g. 2.8125, which rounds padding
+    // 67.5→68 + icon 50.625→51 + spacer 22.5→23, costing ~2px vs. the Float sum).
+    val paddingPx = with(density) { MainBottomBarPillTabHorizontalPadding.roundToPx() }
+    val iconPx = with(density) { MainBottomBarPillIconSize.roundToPx() }
+    val gapPx = with(density) { MainBottomBarPillTrackInlineLabelGap.roundToPx() }
+    val inactiveWidthPx = (paddingPx * 2 + iconPx).toFloat()
     val activeWidthsPx =
       Tab.entries.associateWith { tab ->
-        val labelWidth =
-          textMeasurer
-            .measure(tab.presentation.label, labelStyle, maxLines = 1)
-            .size
-            .width
-            .toFloat()
-        paddingPx * 2f + iconPx + gapPx + labelWidth
+        paddingPx * 2f + iconPx + gapPx + (activeLabelWidthsPx[tab] ?: 0f)
       }
     MainBottomBarPillTabWidthsConfig(inactiveWidthPx, activeWidthsPx)
   }
+}
+
+/**
+ * Measures the actual Text composables the Track renders, so widths update when async-loaded fonts
+ * finish resolving (Android) instead of being pinned to fallback-font metrics captured once at
+ * first composition.
+ */
+@Composable
+private fun rememberActiveLabelWidthsPx(labelStyle: TextStyle): Map<Tab, Float> {
+  var widths by remember { mutableStateOf<Map<Tab, Float>>(emptyMap()) }
+  SubcomposeLayout { _ ->
+    val measured =
+      Tab.entries.associateWith { tab ->
+        subcompose(tab) { Text(text = tab.presentation.label, style = labelStyle, maxLines = 1) }
+          .single()
+          .measure(Constraints())
+          .width
+          .toFloat()
+      }
+    if (measured != widths) widths = measured
+    layout(0, 0) {}
+  }
+  return widths
 }
 
 internal fun cumulativeCenters(widths: Map<Tab, Float>): Map<Tab, Float> {
