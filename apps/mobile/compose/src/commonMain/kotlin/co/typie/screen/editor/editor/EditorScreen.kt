@@ -1,144 +1,150 @@
 package co.typie.screen.editor.editor
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.typie.domain.entity.EntityIcon
-import co.typie.domain.entity.UNTITLED_DOCUMENT_TEXT
-import co.typie.editor.LocalEditorState
-import co.typie.editor.compose.EditorView
-import co.typie.ext.InteractionScope
-import co.typie.ext.clickable
-import co.typie.ext.pressScale
+import co.typie.editor.body.EditorBody
+import co.typie.editor.runtime.EditorRuntime
+import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.runtime.LocalEditorRuntime
+import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.ext.ime
 import co.typie.graphql.QueryState
-import co.typie.graphql.fragment.EntityIcon_entity
-import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
+import co.typie.screen.editor.editor.header.EditorHeader
+import co.typie.screen.editor.editor.layout.EditorScreenLayout
+import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
+import co.typie.screen.editor.editor.state.rememberEditorScreenState
+import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
+import co.typie.screen.editor.editor.topbar.EditorDocumentButton
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
-import co.typie.ui.component.Text
 import co.typie.ui.component.topbar.ProvideTopBar
-import co.typie.ui.component.topbar.TopBarDefaults
-import co.typie.ui.icon.Icon
-import co.typie.ui.skeleton.Skeleton
 import co.typie.ui.theme.AppTheme
 
 @Composable
 fun EditorScreen(entityId: String) {
   val nav = Nav.current
   val model = viewModel { EditorViewModel(entityId) }
+  val runtime = remember(entityId) { EditorRuntime() }
+  val uiState = remember(entityId) { EditorUiState() }
+  val screenState = rememberEditorScreenState(key = entityId)
   val loading = model.query.state !is QueryState.Success
   val entity = model.query.data.entity
   val document = entity.node.onDocument
+  DisposableEffect(model) {
+    onDispose {
+      // TODO(editor-parity): Flush header drafts on app background/inactive transitions once
+      // the editor screen lifecycle is wired beyond composition disposal.
+      model.flushDraftsAsync()
+    }
+  }
+  LaunchedEffect(nav.current, entityId, runtime, screenState) {
+    screenState.updateSceneForeground(
+      isForeground = nav.current == Route.Editor(entityId),
+      runtime = runtime,
+      uiState = uiState,
+    )
+  }
+  LaunchedEffect(document?.nullableTitle, document?.subtitle, loading) {
+    model.syncDocument(
+      serverTitle = document?.nullableTitle,
+      serverSubtitle = document?.subtitle,
+      loading = loading,
+    )
+  }
 
   ProvideTopBar(
     center = {
-      document?.let { document ->
+      document?.let {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-          EditorTopBarDocumentButton(
+          EditorDocumentButton(
             entityIcon = entity.entityIcon_entity,
-            title = document.title.ifBlank { UNTITLED_DOCUMENT_TEXT },
-            subtitle = document.subtitle,
+            title = model.headingTitle,
+            subtitle = model.headingSubtitle,
             loading = loading,
-            onClick = { nav.navigate(Route.Document(entityId)) },
+            onClick = {
+              screenState.prepareToLeaveEditorScene(
+                runtime = runtime,
+                uiState = uiState,
+                flushDrafts = model::flushDrafts,
+              )
+              nav.navigate(Route.Document(entityId))
+            },
             modifier = Modifier.fillMaxWidth().widthIn(max = ResponsiveContainerDefaults.MaxWidth),
           )
         }
       }
-    }
+    },
+    scrollOffset = null,
   )
 
-  Screen(loadable = model.query, background = AppTheme.colors.surfaceDefault) { contentPadding ->
-    CompositionLocalProvider(LocalEditorState provides model.editorState) {
-      Box(Modifier.fillMaxSize().padding(contentPadding)) {
-        EditorView(doc = model.doc, selection = model.selection)
-      }
-    }
-  }
-}
+  Screen(
+    loadable = model.query,
+    background = AppTheme.colors.surfaceDefault,
+    contentPadding = PaddingValues(),
+  ) { contentPadding ->
+    val topInset = contentPadding.calculateTopPadding()
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val geometry =
+      screenState.resolveBodyGeometry(
+        topInset = topInset.value,
+        rawImeInset = imeBottom.value,
+        layoutSpec = model.documentLayoutSpec,
+        pageSizes = runtime.editor?.pageSizes.orEmpty(),
+      )
 
-@Composable
-private fun EditorTopBarDocumentButton(
-  entityIcon: EntityIcon_entity,
-  title: String,
-  subtitle: String?,
-  loading: Boolean,
-  onClick: suspend () -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  val resolvedSubtitle = subtitle?.takeIf(String::isNotBlank)
-
-  InteractionScope {
-    Skeleton.Passive(enabled = loading) {
-      Box(
-        modifier =
-          modifier
-            .fillMaxWidth()
-            .height(TopBarDefaults.TitleHeight)
-            .clickable(enabled = !loading, onClick = onClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.CenterStart,
-      ) {
-        Row(
-          modifier = Modifier.fillMaxWidth().pressScale(),
-          verticalAlignment = Alignment.CenterVertically,
+    EditorScreenLayout(
+      state = screenState,
+      header = {
+        EditorHeader(
+          title = model.titleDraft,
+          subtitle = model.subtitleDraft,
+          loading = loading,
+          topInset = topInset,
+          onTitleChange = model::updateTitleDraft,
+          onSubtitleChange = model::updateSubtitleDraft,
+          onHeightChanged = screenState::updateHeaderHeight,
+          onEnterDocument = {
+            model.flushDraftsAsync()
+            runtime.focus()
+          },
+        )
+      },
+      body = {
+        CompositionLocalProvider(
+          LocalEditorRuntime provides runtime,
+          LocalEditorUiState provides uiState,
         ) {
-          EntityIcon(entity = entityIcon, modifier = Modifier.size(21.dp))
-
-          Spacer(Modifier.width(12.dp))
-
-          Column(
-            modifier = Modifier.weight(1f, fill = false),
-            verticalArrangement =
-              if (resolvedSubtitle == null) Arrangement.Center else Arrangement.spacedBy(2.dp),
-          ) {
-            Text(
-              text = title,
-              style = AppTheme.typography.title.copy(fontSize = 16.sp),
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-
-            if (resolvedSubtitle != null) {
-              Text(
-                text = resolvedSubtitle,
-                style = AppTheme.typography.caption.copy(fontSize = 13.sp),
-                color = AppTheme.colors.textMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-              )
-            }
-          }
-
-          Spacer(Modifier.width(6.dp))
-
-          Icon(
-            icon = Lucide.ChevronRight,
-            modifier = Modifier.size(17.dp),
-            tint = AppTheme.colors.textMuted,
+          EditorBody(
+            doc = model.doc,
+            selection = model.selection,
+            geometry = geometry,
+            overlay = { EditorScreenOverlayHost(modifier = Modifier.fillMaxSize()) },
           )
         }
-      }
-    }
+      },
+      toolbar = {
+        EditorToolbarHost(
+          bodyFocused = screenState.shouldShowToolbar(bodyFocused = uiState.focused),
+          modifier = Modifier,
+          onHeightChanged = screenState::updateToolbarHeight,
+        )
+      },
+      modifier = Modifier,
+    )
   }
 }

@@ -1,12 +1,10 @@
 package co.typie.editor
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.CursorRect
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.EditorEvent
@@ -41,8 +39,6 @@ private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: Co
 
   internal val focusRequester = FocusRequester()
   internal var focusManager: FocusManager? = null
-
-  internal val pageOffsets = mutableStateMapOf<Int, Offset>()
 
   private var queued = false
   private var batching = false
@@ -104,9 +100,9 @@ private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: Co
     focusManager?.clearFocus()
   }
 
-  fun localToGlobal(page: Int, x: Float, y: Float): Offset? = localToGlobal(page, x, y, pageOffsets)
-
-  fun globalToLocal(x: Float, y: Float): PagePoint? = globalToLocal(x, y, pageOffsets, pageSizes)
+  fun deactivateScene() {
+    focusManager?.clearFocus()
+  }
 
   fun attachSurface(page: Int, handle: Long, width: Double, height: Double, scaleFactor: Double) =
     inner.attachSurface(page, handle, width, height, scaleFactor)
@@ -117,6 +113,12 @@ private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: Co
     inner.resizeSurface(page, width, height, scaleFactor)
 
   fun renderSurface(page: Int) = inner.renderSurface(page)
+
+  fun resizeViewport(width: Float, height: Float, scaleFactor: Double) {
+    enqueue(
+      Message.System(SystemEvent.Resize(width = width, height = height, scaleFactor = scaleFactor))
+    )
+  }
 
   fun inspectState(options: InspectStateOptions? = null): String = inner.inspectState(options)
 

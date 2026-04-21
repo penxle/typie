@@ -1,4 +1,4 @@
-package co.typie.editor.compose
+package co.typie.editor.input
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier

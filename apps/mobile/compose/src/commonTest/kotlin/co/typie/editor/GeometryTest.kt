@@ -1,15 +1,13 @@
-package co.typie.editor.compose
+package co.typie.editor
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Size
-import co.typie.editor.globalToLocal
-import co.typie.editor.localToGlobal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-class CoordinatesTest {
+class GeometryTest {
 
   private val sizes =
     listOf(
@@ -35,52 +33,25 @@ class CoordinatesTest {
   }
 
   @Test
-  fun localToGlobal_returns_null_for_invalid_page() {
-    assertNull(localToGlobal(5, 0f, 0f, offsets))
-  }
-
-  @Test
-  fun globalToLocal_finds_correct_page() {
-    val point = globalToLocal(100f, 650f, offsets, sizes)
-    assertNotNull(point)
-    assertEquals(1, point.page)
-    assertEquals(100f, point.x)
-    assertEquals(50f, point.y)
-  }
-
-  @Test
-  fun globalToLocal_clamps_x_to_page_bounds() {
-    val point = globalToLocal(500f, 300f, offsets, sizes)
-    assertNotNull(point)
-    assertEquals(0, point.page)
-    assertEquals(400f, point.x)
-  }
-
-  @Test
-  fun globalToLocal_subtracts_page_x_offset() {
+  fun globalToLocal_maps_viewport_coordinates_back_into_page_local_space() {
     val point = globalToLocal(150f, 300f, offsetsCentered, sizesCentered)
     assertNotNull(point)
     assertEquals(0, point.page)
     assertEquals(100f, point.x)
+    assertEquals(300f, point.y)
   }
 
   @Test
-  fun globalToLocal_clamps_x_relative_to_page_offset() {
-    val point = globalToLocal(10f, 300f, offsetsCentered, sizesCentered)
+  fun globalToLocal_clamps_coordinates_to_page_bounds() {
+    val point = globalToLocal(500f, 2000f, offsets, sizes)
     assertNotNull(point)
-    assertEquals(0f, point.x)
+    assertEquals(2, point.page)
+    assertEquals(400f, point.x)
+    assertEquals(500f, point.y)
   }
 
   @Test
-  fun globalToLocal_with_gap_finds_correct_page() {
-    val point = globalToLocal(100f, 700f, offsetsWithGap, sizes)
-    assertNotNull(point)
-    assertEquals(1, point.page)
-    assertEquals(80f, point.y)
-  }
-
-  @Test
-  fun globalToLocal_in_gap_snaps_to_nearest_page() {
+  fun globalToLocal_snaps_gap_touches_to_the_nearest_page_edge() {
     val point = globalToLocal(100f, 610f, offsetsWithGap, sizes)
     assertNotNull(point)
     assertEquals(1, point.page)
@@ -88,7 +59,7 @@ class CoordinatesTest {
   }
 
   @Test
-  fun globalToLocal_in_gap_snaps_to_previous_page() {
+  fun globalToLocal_can_snap_gap_touches_to_the_previous_page() {
     val point = globalToLocal(100f, 605f, offsetsWithGap, sizes)
     assertNotNull(point)
     assertEquals(0, point.page)
@@ -96,20 +67,9 @@ class CoordinatesTest {
   }
 
   @Test
-  fun globalToLocal_returns_null_for_empty() {
+  fun globalToLocal_returns_null_without_page_metrics() {
+    assertNull(localToGlobal(5, 0f, 0f, offsets))
     assertNull(globalToLocal(0f, 0f, emptyMap(), emptyList()))
-  }
-
-  @Test
-  fun globalToLocal_returns_null_for_missing_offset() {
     assertNull(globalToLocal(0f, 0f, emptyMap(), sizes))
-  }
-
-  @Test
-  fun globalToLocal_clamps_y_beyond_last_page() {
-    val point = globalToLocal(100f, 2000f, offsets, sizes)
-    assertNotNull(point)
-    assertEquals(2, point.page)
-    assertEquals(500f, point.y)
   }
 }

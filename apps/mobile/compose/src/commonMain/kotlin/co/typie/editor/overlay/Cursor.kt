@@ -1,4 +1,4 @@
-package co.typie.editor.compose
+package co.typie.editor.overlay
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun Cursor(offset: Offset, size: Size) {
+internal fun EditorCursorOverlay(offset: Offset, size: Size) {
   val alpha = remember { Animatable(1f) }
 
   LaunchedEffect(offset) {

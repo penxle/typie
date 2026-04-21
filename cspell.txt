@@ -8,12 +8,15 @@
 *outro+
 *start
 aapt
+affordances
 agentic
 aggs
+aisettings
 amazonses
 androidx
 anifantakis
 apollographql
+argb
 batang
 bbox
 bento
@@ -130,6 +133,7 @@ onissueclick
 onstatuschange
 oplog
 oslllo
+osslicenses
 penxle
 pgbouncer
 plpgsql
@@ -139,6 +143,7 @@ premul
 ptrs
 pwith
 rabbitmq
+rects
 remeda
 repaste
 resizer
@@ -214,7 +219,3 @@ zcard
 zeed
 zremrangebyscore
 zstd
-aisettings
-osslicenses
-argb
-rects

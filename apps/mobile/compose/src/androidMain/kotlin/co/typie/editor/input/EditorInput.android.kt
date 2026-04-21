@@ -1,4 +1,4 @@
-package co.typie.editor.compose
+package co.typie.editor.input
 
 import android.content.Context
 import android.text.InputType

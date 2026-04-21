@@ -1,4 +1,6 @@
-package co.typie.editor.compose
+@file:OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
+
+package co.typie.editor.input
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Rect
@@ -16,21 +18,17 @@ import androidx.compose.ui.text.input.TextEditorState
 import androidx.compose.ui.text.input.TextFieldValue
 import co.typie.editor.Editor
 import co.typie.editor.InputEditCommandHandler
-import co.typie.editor.ffi.CompositionOp
-import co.typie.editor.ffi.DeletionOp
-import co.typie.editor.ffi.Key
-import co.typie.editor.ffi.KeyEvent
-import co.typie.editor.ffi.Message
+import kotlinx.cinterop.ExperimentalForeignApi
 
-@OptIn(ExperimentalComposeUiApi::class)
 internal actual suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor
-): PlatformTextInputMethodRequest {
-  return object : PlatformTextInputMethodRequest {
-    override val value: () -> TextFieldValue = {
-      val ctx = editor.ime(Int.MAX_VALUE, Int.MAX_VALUE)
+): PlatformTextInputMethodRequest =
+  object : PlatformTextInputMethodRequest {
+    override val value: () -> TextFieldValue = value@{
+      val ctx = editor.ime ?: return@value TextFieldValue()
       val selectionStart = ctx.selection.start - ctx.windowStart
       val selectionEnd = ctx.selection.end - ctx.windowStart
+
       TextFieldValue(
         text = ctx.text,
         selection = TextRange(selectionStart, selectionEnd),
@@ -54,16 +52,11 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
 
     override val onImeAction: ((ImeAction) -> Unit)? = null
 
-    // Returning Rect.Zero until page→root coordinate translation is wired here.
-    // editor.cursor is a CursorRect whose `rect` is page-local; CMP requires
-    // editor-root coordinates so the desktop IME (macOS NSTextInputClient /
-    // Windows IMM / X11 XIM) can position candidate windows under the cursor.
-    // pageOffsets lives in View.kt and is not reachable from this session scope
-    // today — Rect.Zero makes the platform fall back to a default anchor.
-    override val focusedRectInRoot: () -> Rect? = { Rect.Zero }
+    override val focusedRectInRoot: () -> Rect? = { null }
 
     override val textLayoutResult: () -> TextLayoutResult? = { null }
 
+    // 커서 좌표 연동할 때 요거 써야 함 (snapshot flow로 reactive하게 추적됨)
     override val textFieldRectInRoot: () -> Rect? = { null }
 
     override val textClippingRectInRoot: () -> Rect? = { null }
@@ -85,43 +78,9 @@ internal actual suspend fun PlatformTextInputSessionScope.createEditorInputReque
           value().text.subSequence(startIndex, endIndex)
       }
 
-    override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { block ->
-      val scope =
-        object : TextEditingScope {
-          override fun commitText(text: CharSequence, newCursorPosition: Int) {
-            if (text.toString() == "\n") {
-              editor.enqueue(Message.Key(KeyEvent(Key.Enter)))
-            } else {
-              editor.enqueue(Message.Composition(CompositionOp.Commit(text.toString())))
-            }
-          }
-
-          override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
-            editor.enqueue(Message.Composition(CompositionOp.Update(text.toString(), null)))
-          }
-
-          override fun finishComposingText() {
-            editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
-          }
-
-          override fun deleteSurroundingTextInCodePoints(
-            lengthBeforeCursor: Int,
-            lengthAfterCursor: Int,
-          ) {
-            editor.enqueue(
-              Message.Deletion(
-                DeletionOp.SurroundingCodePoints(lengthBeforeCursor, lengthAfterCursor)
-              )
-            )
-          }
-        }
-
-      editor.batch { scope.block() }
-    }
+    override val editText: (block: TextEditingScope.() -> Unit) -> Unit = { _ -> }
   }
-}
 
-@OptIn(ExperimentalComposeUiApi::class)
 internal actual fun PlatformTextInputSessionScope.notifyImeSelectionChanged(editor: Editor) {
-  // Desktop Skiko: pull-based via request.value — no explicit notification needed.
+  // iOS: pull-based via request.value — no explicit notification needed
 }

@@ -3,14 +3,20 @@ package co.typie.editor
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Size
 
+// `global` here means coordinates in the editor viewport, not the app window/root.
 data class PagePoint(val page: Int, val x: Float, val y: Float)
 
-fun localToGlobal(page: Int, x: Float, y: Float, offsets: Map<Int, Offset>): Offset? {
-  val offset = offsets[page] ?: return null
+fun localToGlobal(page: Int, x: Float, y: Float, pageOffsets: Map<Int, Offset>): Offset? {
+  val offset = pageOffsets[page] ?: return null
   return Offset(offset.x + x, offset.y + y)
 }
 
-fun globalToLocal(x: Float, y: Float, offsets: Map<Int, Offset>, sizes: List<Size>): PagePoint? {
+fun globalToLocal(
+  x: Float,
+  y: Float,
+  pageOffsets: Map<Int, Offset>,
+  sizes: List<Size>,
+): PagePoint? {
   if (sizes.isEmpty()) return null
 
   var lo = 0
@@ -18,15 +24,15 @@ fun globalToLocal(x: Float, y: Float, offsets: Map<Int, Offset>, sizes: List<Siz
 
   while (lo < hi) {
     val mid = (lo + hi) ushr 1
-    val midOffset = offsets[mid] ?: return null
+    val midOffset = pageOffsets[mid] ?: return null
     if (midOffset.y + sizes[mid].height <= y) lo = mid + 1 else hi = mid
   }
 
-  val loOffset = offsets[lo] ?: return null
+  val loOffset = pageOffsets[lo] ?: return null
   var localY = y - loOffset.y
 
   if (localY < 0 && lo > 0) {
-    val prevOffset = offsets[lo - 1] ?: return null
+    val prevOffset = pageOffsets[lo - 1] ?: return null
     val prevBottom = prevOffset.y + sizes[lo - 1].height
     if (y < (prevBottom + loOffset.y) / 2) {
       lo--
@@ -36,7 +42,7 @@ fun globalToLocal(x: Float, y: Float, offsets: Map<Int, Offset>, sizes: List<Siz
     }
   }
 
-  val finalOffset = offsets[lo] ?: return null
+  val finalOffset = pageOffsets[lo] ?: return null
   val size = sizes[lo]
   val localX = (x - finalOffset.x).coerceIn(0f, size.width)
   localY = localY.coerceIn(0f, size.height)

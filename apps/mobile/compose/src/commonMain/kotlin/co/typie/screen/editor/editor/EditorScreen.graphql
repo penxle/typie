@@ -13,7 +13,7 @@ query EditorScreen_Query($entityId: ID!) {
 
       ... on Document {
         id
-        title
+        nullableTitle
         subtitle
       }
     }
@@ -31,5 +31,13 @@ mutation EditorScreen_ViewEntity_Mutation($input: ViewEntityInput!, $siteId: ID!
         id
       }
     }
+  }
+}
+
+mutation EditorScreen_UpdateDocument_Mutation($input: UpdateDocumentInput!) {
+  updateDocument(input: $input) {
+    id
+    nullableTitle
+    subtitle
   }
 }
