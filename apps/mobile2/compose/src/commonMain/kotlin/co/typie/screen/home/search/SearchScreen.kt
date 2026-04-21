@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -57,14 +56,13 @@ import co.typie.ui.icon.Icon
 import co.typie.ui.state.rememberScrollState
 import co.typie.ui.theme.AppTheme
 
-private val SearchListFadeHeight = 24.dp
+private val FogInsets = PaddingValues(vertical = 24.dp)
 
 @Composable
 fun SearchScreen() {
   val model = viewModel { SearchViewModel() }
   val scrollState = rememberScrollState()
   val placeholder = "${model.query.data.site.name.truncate(10)}에서 검색..."
-  val listFogInsets = remember { PaddingValues(vertical = SearchListFadeHeight) }
 
   ProvideTopBar()
 
@@ -84,25 +82,21 @@ fun SearchScreen() {
         modifier = Modifier.fillMaxWidth(),
       )
 
-      Spacer(Modifier.height(16.dp))
+      Spacer(Modifier.height(4.dp))
 
       Box(
         modifier =
           Modifier.fillMaxWidth()
             .weight(1f)
-            .scrollFog(padding = listFogInsets, color = AppTheme.colors.surfaceCanvas)
+            .scrollFog(padding = FogInsets, color = AppTheme.colors.surfaceCanvas)
       ) {
         Column(
           modifier =
             Modifier.fillMaxSize()
               .verticalScroll(scrollState)
-              .padding(
-                top = SearchListFadeHeight,
-                bottom =
-                  SearchListFadeHeight +
-                    contentPadding.calculateBottomPadding() +
-                    AppTheme.spacings.scrollBottomPadding.calculateBottomPadding(),
-              )
+              .padding(FogInsets)
+              .padding(bottom = contentPadding.calculateBottomPadding())
+              .padding(AppTheme.spacings.scrollBottomPadding)
         ) {
           if (model.inputKeyword.isBlank()) {
             RecentSearches(
