@@ -57,7 +57,7 @@ Future<void> main() async {
   final scriptDir = Directory.fromUri(Platform.script.resolve('.'));
   final mobileDir = scriptDir.parent.parent;
   final outputDir = Directory.fromUri(
-    mobileDir.uri.resolve('../mobile2/compose/src/commonTest/resources/legacy_migration/'),
+    mobileDir.uri.resolve('../mobile/compose/src/commonTest/resources/legacy_migration/'),
   );
   final tempDir = await Directory.systemTemp.createTemp('typie-legacy-migration-fixtures-');
 

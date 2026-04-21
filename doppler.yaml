@@ -7,10 +7,6 @@ setup:
     project: mobile
     config: dev_local
 
-  - path: apps/mobile2
-    project: mobile
-    config: dev_local
-
   - path: apps/website
     project: website
     config: dev_local

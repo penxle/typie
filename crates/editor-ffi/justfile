@@ -1,6 +1,6 @@
 workspace_dir := justfile_directory() / "../.."
 target_dir := workspace_dir / "target"
-mobile_dir := workspace_dir / "apps/mobile2"
+mobile_dir := workspace_dir / "apps/mobile"
 generated_dir := mobile_dir / "generated/uniffi"
 
 crate := "editor_ffi"

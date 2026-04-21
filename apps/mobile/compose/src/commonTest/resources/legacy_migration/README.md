@@ -1,6 +1,6 @@
 # Legacy Migration Fixtures
 
-These fixtures are generated from the legacy Flutter app code paths and are used by `apps/mobile2`
+These fixtures are generated from the legacy Flutter app code paths and are used by `apps/mobile`
 migration tests.
 
 Regenerate them

@@ -9,7 +9,7 @@ import co.typie.ui.theme.AppTheme
 
 data class EntityIconAppearance(val icon: IconData, val tint: Color)
 
-// Keep this in sync with the website picker so mobile2 renders the same entity icon names.
+// Keep this in sync with the website picker so mobile renders the same entity icon names.
 private val entityIconMap =
   mapOf(
     "file" to Lucide.File,
