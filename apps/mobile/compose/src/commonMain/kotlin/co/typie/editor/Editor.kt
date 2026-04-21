@@ -17,14 +17,18 @@ import co.typie.editor.ffi.StateField
 import co.typie.editor.ffi.SystemEvent
 import co.typie.editor.ffi.Viewport
 import co.typie.platform.PlatformModule
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.reflect.KClass
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 class Editor
-private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: CoroutineScope) {
+internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: CoroutineScope) {
   var cursor by mutableStateOf<CursorRect?>(null)
     private set
 
@@ -42,6 +46,7 @@ private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: Co
 
   private var queued = false
   private var batching = false
+  private val dispatches = mutableListOf<CancellableContinuation<Unit>>()
 
   @PublishedApi
   internal val listeners =
@@ -66,6 +71,15 @@ private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: Co
     }
   }
 
+  suspend fun dispatch(message: Message) =
+    withContext(Dispatchers.Main.immediate) {
+      suspendCancellableCoroutine { cont ->
+        dispatches.add(cont)
+        cont.invokeOnCancellation { scope.launch(Dispatchers.Main) { dispatches.remove(cont) } }
+        enqueue(message)
+      }
+    }
+
   internal inline fun batch(block: () -> Unit) {
     batching = true
     block()
@@ -75,10 +89,22 @@ private constructor(private val inner: co.typie.editor.ffi.Editor, val scope: Co
 
   private fun tick() {
     queued = false
-    val events = inner.tick()
+    val waiters = dispatches.toList()
+    dispatches.clear()
+
+    val events =
+      try {
+        inner.tick()
+      } catch (e: Throwable) {
+        waiters.forEach { it.resumeWithException(e) }
+        return
+      }
+
     for (event in events) {
       emit(event)
     }
+
+    waiters.forEach { it.resume(Unit) }
   }
 
   private val stateChangedHandler: EditorEventListener<EditorEvent.StateChanged> = { _, event ->
