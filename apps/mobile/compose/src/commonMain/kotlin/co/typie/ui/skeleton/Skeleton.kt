@@ -14,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,6 +24,8 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
 data class SkeletonColors(val bone: Color, val highlight: Color)
+
+private const val SkeletonAnimationFractionEpsilon = 0.001f
 
 class SkeletonState(val enabled: Boolean, val fraction: State<Float>, val boneColor: State<Color>) {
   companion object {
@@ -37,6 +40,14 @@ class SkeletonState(val enabled: Boolean, val fraction: State<Float>, val boneCo
 
 val LocalSkeleton = staticCompositionLocalOf { SkeletonState.Disabled }
 val LocalSkeletonUnite = staticCompositionLocalOf<SkeletonUniteGroup?> { null }
+
+internal fun shouldAnimateSkeleton(enabled: Boolean, fraction: Float): Boolean {
+  if (enabled) {
+    return true
+  }
+
+  return fraction.isFinite() && fraction > SkeletonAnimationFractionEpsilon
+}
 
 object SkeletonDefaults {
   @Composable
@@ -54,22 +65,26 @@ object SkeletonDefaults {
 
 @Composable
 private fun rememberSkeletonState(enabled: Boolean, colors: SkeletonColors): SkeletonState {
-  val transition = rememberInfiniteTransition()
   val fraction =
     animateFloatAsState(
       targetValue = if (enabled) 1f else 0f,
       animationSpec = if (enabled) snap() else tween(durationMillis = 200, easing = EaseInOut),
     )
-  val boneColor =
-    transition.animateColor(
-      initialValue = colors.bone,
-      targetValue = colors.highlight,
-      animationSpec =
-        infiniteRepeatable(
-          animation = tween(durationMillis = 800, easing = EaseInOut),
-          repeatMode = RepeatMode.Reverse,
-        ),
-    )
+  val boneColor: State<Color> =
+    if (shouldAnimateSkeleton(enabled = enabled, fraction = fraction.value)) {
+      val transition = rememberInfiniteTransition()
+      transition.animateColor(
+        initialValue = colors.bone,
+        targetValue = colors.highlight,
+        animationSpec =
+          infiniteRepeatable(
+            animation = tween(durationMillis = 800, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse,
+          ),
+      )
+    } else {
+      rememberUpdatedState(colors.bone)
+    }
   return SkeletonState(enabled = enabled, fraction = fraction, boneColor = boneColor)
 }
 
