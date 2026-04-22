@@ -1,4 +1,4 @@
-import defaultFontFamilies from '@typie/editor/font/defaults.json' with { type: 'json' };
+import fontFamiliesJson from '@typie/assets/fonts.json' with { type: 'json' };
 import { DocumentExportFormat, EntityVisibility } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
 import { and, asc, eq, inArray } from 'drizzle-orm';
@@ -19,6 +19,18 @@ import {
 import { generateDocument } from '#/export/index.ts';
 import { builder } from '../builder.ts';
 import type { ExportFontFamily, ExportFormat } from '#/export/index.ts';
+
+type FontFamilyEntry = {
+  source: 'DEFAULT' | 'FALLBACK';
+  familyName: string;
+  fonts: {
+    weight: number;
+    path: string;
+    postScriptName: string;
+    names: { nameId: number; platformId: number; languageId: number; value: string }[];
+  }[];
+};
+const fontFamilies = fontFamiliesJson as unknown as FontFamilyEntry[];
 
 /**
  * * Types
@@ -121,7 +133,7 @@ export async function buildExportFonts(userId: string): Promise<ExportFontFamily
   const families: ExportFontFamily[] = [];
 
   // 기본 폰트
-  for (const family of defaultFontFamilies) {
+  for (const family of fontFamilies.filter((f) => f.source === 'DEFAULT')) {
     families.push({
       family: family.familyName,
       weights: family.fonts.map((f) => ({

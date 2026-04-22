@@ -16,8 +16,9 @@ wasm = [
 editor-macros = { path = "../editor-macros" }
 editor-model = { path = "../editor-model" }
 editor-resource = { path = "../editor-resource" }
-bitcode.workspace = true
+rapidhash.workspace = true
 hashbrown.workspace = true
+hex.workspace = true
 ruzstd.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true

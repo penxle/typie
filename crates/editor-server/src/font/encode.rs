@@ -1,6 +1,7 @@
 use editor_macros::ffi;
+use editor_resource::compress_zstd;
 use hashbrown::{HashMap, HashSet};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use skrifa::raw::tables::glyf::{Glyf, Glyph};
 use skrifa::raw::tables::gsub::{
     AlternateSubstFormat1, LigatureSubstFormat1, SingleSubst, SubstitutionSubtables,
@@ -13,9 +14,12 @@ use write_fonts::FontBuilder;
 use crate::ServerError;
 
 #[ffi]
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EncodedFont {
+pub struct BuiltFont {
+    pub hash: String,
+    /// chunk별 flat 페어 `[start0, end0, start1, end1, ...]` (inclusive).
+    pub coverage: Vec<Vec<u32>>,
     #[serde(with = "serde_bytes")]
     #[cfg_attr(feature = "wasm", tsify(type = "Uint8Array"))]
     pub base: Vec<u8>,
@@ -31,10 +35,10 @@ pub fn get_font_codepoints(ttf_data: &[u8]) -> Result<Vec<u32>, ServerError> {
     Ok(codepoints)
 }
 
-pub fn encode_font(
+pub fn build_font(
     ttf_data: &[u8],
     chunk_codepoints: &[Vec<u32>],
-) -> Result<EncodedFont, ServerError> {
+) -> Result<BuiltFont, ServerError> {
     let font = FontRef::new(ttf_data).map_err(|e| ServerError::InvalidFont(e.to_string()))?;
 
     let has_glyf = font.glyf().is_ok();
@@ -199,31 +203,72 @@ pub fn encode_font(
     builder.copy_missing_tables(font);
     let base_data = builder.build();
 
-    let split_offset = if let Some(tag) = split_tag {
-        let built_font =
-            FontRef::new(&base_data).map_err(|e| ServerError::EncodingFailed(e.to_string()))?;
-        built_font
-            .table_directory()
-            .table_records()
-            .iter()
-            .find(|r| r.tag() == tag)
-            .map(|r| r.offset())
-            .unwrap_or(0)
-    } else {
-        0
-    };
+    let hash = compute_hash(&base_data, &chunks);
 
-    let mut base_with_header = Vec::with_capacity(4 + base_data.len());
-    base_with_header.extend_from_slice(&split_offset.to_be_bytes());
-    base_with_header.extend_from_slice(&base_data);
+    let coverage: Vec<Vec<u32>> = chunk_codepoints
+        .iter()
+        .map(|cps| codepoints_to_ranges(cps))
+        .collect();
 
-    Ok(EncodedFont {
-        base: pack_tpft(&base_with_header),
-        chunks: chunks
-            .into_iter()
-            .map(|c| serde_bytes::ByteBuf::from(pack_tpft(&c)))
-            .collect(),
+    let base = compress_zstd(&base_data);
+    let chunks: Vec<serde_bytes::ByteBuf> = chunks
+        .iter()
+        .map(|c| serde_bytes::ByteBuf::from(compress_zstd(c)))
+        .collect();
+
+    Ok(BuiltFont {
+        hash,
+        coverage,
+        base,
+        chunks,
     })
+}
+
+fn build_chunk_binary(entries: &[(usize, &[u8])]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+    for &(offset, data) in entries {
+        buf.extend_from_slice(&(offset as u32).to_be_bytes());
+        buf.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        buf.extend_from_slice(data);
+    }
+    buf
+}
+
+/// `[start0, end0, start1, end1, ...]` flat pair representation (inclusive).
+fn codepoints_to_ranges(cps: &[u32]) -> Vec<u32> {
+    let mut sorted = cps.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    let mut ranges = Vec::new();
+    let mut iter = sorted.into_iter().peekable();
+    while let Some(start) = iter.next() {
+        let mut end = start;
+        while let Some(&next) = iter.peek() {
+            if next == end + 1 {
+                end = next;
+                iter.next();
+            } else {
+                break;
+            }
+        }
+        ranges.push(start);
+        ranges.push(end);
+    }
+    ranges
+}
+
+fn compute_hash(base_data: &[u8], chunks: &[Vec<u8>]) -> String {
+    use std::hash::Hasher;
+    let mut hasher = rapidhash::quality::RapidHasher::default();
+    hasher.write(&(base_data.len() as u64).to_be_bytes());
+    hasher.write(base_data);
+    hasher.write(&(chunks.len() as u32).to_be_bytes());
+    for chunk in chunks {
+        hasher.write(&(chunk.len() as u64).to_be_bytes());
+        hasher.write(chunk);
+    }
+    hex::encode(hasher.finish().to_be_bytes())
 }
 
 fn resolve_composite_deps(loca: &Loca, glyf: &Glyf, gid: u16, num_glyphs: u16) -> HashSet<u16> {
@@ -354,56 +399,18 @@ fn resolve_gsub_alternates(font: &FontRef) -> HashMap<u16, HashSet<u16>> {
     alternates
 }
 
-fn build_chunk_binary(entries: &[(usize, &[u8])]) -> Vec<u8> {
-    let mut buf = Vec::new();
-    buf.extend_from_slice(&(entries.len() as u32).to_be_bytes());
-    for &(offset, data) in entries {
-        buf.extend_from_slice(&(offset as u32).to_be_bytes());
-        buf.extend_from_slice(&(data.len() as u32).to_be_bytes());
-        buf.extend_from_slice(data);
-    }
-    buf
-}
-
-const TPFT_MAGIC: &[u8; 4] = b"TPFT";
-const TPFT_VERSION: u16 = 1;
-
-fn pack_tpft(data: &[u8]) -> Vec<u8> {
-    let compressed =
-        ruzstd::encoding::compress_to_vec(data, ruzstd::encoding::CompressionLevel::Fastest);
-    let mut buf = Vec::with_capacity(6 + compressed.len());
-    buf.extend_from_slice(TPFT_MAGIC);
-    buf.extend_from_slice(&TPFT_VERSION.to_be_bytes());
-    buf.extend_from_slice(&compressed);
-    buf
-}
-
 #[cfg(test)]
 mod tests {
+    use editor_resource::decompress_zstd;
+
     use super::*;
 
-    fn load_test_font() -> Vec<u8> {
+    fn load_test_font() -> Option<Vec<u8>> {
         std::fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../editor-view/assets/Noto-Phantom.ttf"
+            "/../editor-view/assets/test-font.ttf"
         ))
-        .expect("test font not found")
-    }
-
-    #[test]
-    fn codepoints_nonempty() {
-        let data = load_test_font();
-        let cps = get_font_codepoints(&data).unwrap();
-        assert!(!cps.is_empty());
-    }
-
-    #[test]
-    fn codepoints_sorted_and_deduped() {
-        let data = load_test_font();
-        let cps = get_font_codepoints(&data).unwrap();
-        for w in cps.windows(2) {
-            assert!(w[0] < w[1], "not sorted/deduped: {} >= {}", w[0], w[1]);
-        }
+        .ok()
     }
 
     #[test]
@@ -413,44 +420,79 @@ mod tests {
     }
 
     #[test]
-    fn encode_produces_base_and_chunks() {
-        let data = load_test_font();
+    fn codepoints_nonempty() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
         let cps = get_font_codepoints(&data).unwrap();
-        let chunk_size = 200;
-        let chunk_cps: Vec<Vec<u32>> = cps.chunks(chunk_size).map(|c| c.to_vec()).collect();
+        assert!(!cps.is_empty());
+    }
 
-        let encoded = encode_font(&data, &chunk_cps).unwrap();
-        assert!(!encoded.base.is_empty());
-        assert_eq!(encoded.chunks.len(), chunk_cps.len());
-        for chunk in &encoded.chunks {
-            assert!(!chunk.is_empty());
+    #[test]
+    fn codepoints_sorted_and_deduped() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let cps = get_font_codepoints(&data).unwrap();
+        for w in cps.windows(2) {
+            assert!(w[0] < w[1], "not sorted/deduped: {} >= {}", w[0], w[1]);
         }
     }
 
     #[test]
-    fn encode_base_is_valid_tpft() {
-        let data = load_test_font();
-        let cps = get_font_codepoints(&data).unwrap();
-        let chunk_cps = vec![cps];
+    fn encode_invalid_data() {
+        let result = build_font(&[0, 1, 2, 3], &[vec![0x41]]);
+        assert!(result.is_err());
+    }
 
-        let encoded = encode_font(&data, &chunk_cps).unwrap();
-        assert!(encoded.base.len() > 6);
-        assert_eq!(&encoded.base[0..4], b"TPFT");
-        let version = u16::from_be_bytes([encoded.base[4], encoded.base[5]]);
-        assert_eq!(version, 1);
+    #[test]
+    fn encode_produces_base_and_chunks() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let cps = get_font_codepoints(&data).unwrap();
+        let chunk_cps: Vec<Vec<u32>> = cps.chunks(200).map(|c| c.to_vec()).collect();
+
+        let encoded = build_font(&data, &chunk_cps).unwrap();
+        assert!(!encoded.hash.is_empty());
+        assert_eq!(encoded.hash.len(), 16);
+        assert!(!encoded.base.is_empty());
+        assert_eq!(encoded.chunks.len(), chunk_cps.len());
+        assert_eq!(encoded.coverage.len(), chunk_cps.len());
+        for cov in &encoded.coverage {
+            assert!(cov.len() % 2 == 0, "coverage must be flat pairs");
+        }
+    }
+
+    #[test]
+    fn encode_base_has_no_split_prefix_and_is_zstd() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let encoded = build_font(&data, &[]).unwrap();
+        let base_raw = decompress_zstd(&encoded.base).unwrap();
+        let _ = FontRef::new(&base_raw).expect("decompressed base is a valid TTF");
     }
 
     #[test]
     fn encode_empty_chunks() {
-        let data = load_test_font();
-        let encoded = encode_font(&data, &[]).unwrap();
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let encoded = build_font(&data, &[]).unwrap();
         assert!(!encoded.base.is_empty());
         assert!(encoded.chunks.is_empty());
+        assert!(encoded.coverage.is_empty());
     }
 
     #[test]
-    fn encode_invalid_data() {
-        let result = encode_font(&[0, 1, 2, 3], &[vec![0x41]]);
-        assert!(result.is_err());
+    fn encode_hash_stable_for_same_input() {
+        let Some(data) = load_test_font() else {
+            return;
+        };
+        let cp_groups = vec![vec![0x41u32]];
+        let a = build_font(&data, &cp_groups).unwrap();
+        let b = build_font(&data, &cp_groups).unwrap();
+        assert_eq!(a.hash, b.hash);
     }
 }

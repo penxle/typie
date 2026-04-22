@@ -1,7 +1,11 @@
 <script lang="ts">
+  import { createFragment } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import { onDestroy, untrack } from 'svelte';
+  import { initWasm } from '$lib/wasm-ffi.svelte';
+  import { graphql } from '$mearie';
   import { Editor, getEditorContext } from '../editor.svelte';
+  import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
   import { handlePointerDown, handlePointerMove, handlePointerUp } from '../handlers/pointer';
   import Cursor from './Cursor.svelte';
@@ -10,16 +14,40 @@
   import Page from './Page.svelte';
   import type { Doc, Selection } from '@typie/editor-ffi/browser';
   import type { SystemStyleObject } from '@typie/styled-system/types';
+  import type { Editor_document$key } from '$mearie';
 
   type Props = {
+    document$key: Editor_document$key;
     doc: Doc;
     selection: Selection;
     style?: SystemStyleObject;
   };
 
-  let { doc, selection, style }: Props = $props();
+  let { document$key, doc, selection, style }: Props = $props();
 
   const ctx = getEditorContext();
+
+  const document = createFragment(
+    graphql(`
+      fragment Editor_document on Document {
+        id
+
+        fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
+          id
+          familyName
+          source
+          fonts {
+            id
+            weight
+            path
+            hash
+            chunks
+          }
+        }
+      }
+    `),
+    () => document$key,
+  );
 
   let status = $state<'uninitialized' | 'initializing' | 'initialized' | 'error'>('uninitialized');
   let clientWidth = $state<number>();
@@ -28,6 +56,8 @@
   const init = async (width: number, height: number) => {
     status = 'initializing';
     try {
+      await initWasm();
+      loadFonts(document.data.fontFamilies);
       ctx.editor = await Editor.create(doc, selection, { width, height, scale_factor: window.devicePixelRatio });
       status = 'initialized';
     } catch (err) {

@@ -448,7 +448,7 @@ builder.mutationFields((t) => ({
       });
 
       const fontName = postScriptName;
-      const { hash, manifest, base, chunks } = await processFont(fontName, buffer);
+      const { hash, coverages, base, chunks } = await processFont(fontName, buffer);
 
       const s3Base = `fonts/${filePath}`;
       const compressed = await compressZstd(buffer);
@@ -466,36 +466,18 @@ builder.mutationFields((t) => ({
         aws.s3.send(
           new PutObjectCommand({
             Bucket: 'typie-usercontents',
-            Key: `${s3Base}/manifest.bin`,
-            Body: manifest,
-            ContentType: 'application/octet-stream',
-            Tagging: tagging,
-          }),
-        ),
-        aws.s3.send(
-          new PutObjectCommand({
-            Bucket: 'typie-usercontents',
-            Key: `${s3Base}/hash.json`,
-            Body: JSON.stringify({ hash }),
-            ContentType: 'application/json',
-            Tagging: tagging,
-          }),
-        ),
-        aws.s3.send(
-          new PutObjectCommand({
-            Bucket: 'typie-usercontents',
-            Key: `${s3Base}/${hash}/base.bin`,
+            Key: `${s3Base}/${hash}/base`,
             Body: base,
             ContentType: 'application/octet-stream',
             Tagging: tagging,
           }),
         ),
-        ...chunks.map((chunk, i) =>
+        ...chunks.map((data, id) =>
           aws.s3.send(
             new PutObjectCommand({
               Bucket: 'typie-usercontents',
-              Key: `${s3Base}/${hash}/chunks/${i}.bin`,
-              Body: chunk,
+              Key: `${s3Base}/${hash}/chunks/${id}`,
+              Body: data,
               ContentType: 'application/octet-stream',
               Tagging: tagging,
             }),
@@ -549,6 +531,8 @@ builder.mutationFields((t) => ({
             weight: metadata.weight,
             size: buffer.length,
             path: filePath,
+            hash,
+            chunks: coverages,
           })
           .returning()
           .then(firstOrThrow);

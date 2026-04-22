@@ -1,0 +1,15 @@
+fragment FontLoader_Document on Document {
+  id
+  fontFamilies(sources: [DEFAULT, USER, FALLBACK]) {
+    id
+    familyName
+    source
+    fonts {
+      id
+      weight
+      path
+      hash
+      chunks
+    }
+  }
+}

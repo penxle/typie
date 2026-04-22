@@ -12,3 +12,4 @@ pub use error::*;
 pub use font::*;
 pub use resource::*;
 pub use segmentation::*;
+pub use zstd::*;

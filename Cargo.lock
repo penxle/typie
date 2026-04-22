@@ -740,7 +740,6 @@ dependencies = [
 name = "editor-resource"
 version = "0.0.1"
 dependencies = [
- "bitcode",
  "editor-common",
  "editor-macros",
  "editor-model",
@@ -753,6 +752,7 @@ dependencies = [
  "parley",
  "ruzstd",
  "serde",
+ "skrifa",
  "smallvec",
  "thiserror",
  "tsify",
@@ -780,11 +780,12 @@ dependencies = [
 name = "editor-server"
 version = "0.0.1"
 dependencies = [
- "bitcode",
  "editor-macros",
  "editor-model",
  "editor-resource",
  "hashbrown 0.16.1",
+ "hex",
+ "rapidhash",
  "ruzstd",
  "serde",
  "serde_bytes",
@@ -1193,6 +1194,12 @@ name = "hermit-abi"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "http"
@@ -2015,6 +2022,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f703f4665700daf5512dcca5f43afa6af89f09db47fb56be587f80636bda2d41"
 dependencies = [
  "rand_core 0.9.5",
+]
+
+[[package]]
+name = "rapidhash"
+version = "4.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5e48930979c155e2f33aa36ab3119b5ee81332beb6482199a8ecd6029b80b59"
+dependencies = [
+ "rustversion",
 ]
 
 [[package]]

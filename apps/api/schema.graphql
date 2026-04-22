@@ -177,7 +177,7 @@ type Document implements IDocument {
   createdAt: DateTime!
   entity: Entity!
   excerpt: String!
-  fontFamilies: [DocumentFontFamily!]!
+  fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   generation: Int!
   id: ID!
   layoutMode: JSON!
@@ -224,7 +224,10 @@ enum DocumentExportFormat {
 }
 
 type DocumentFont {
+  chunks: JSON!
+  hash: String!
   id: ID!
+  path: String!
   state: FontState!
   subfamilyDisplayName: String
   url: String!
@@ -317,7 +320,7 @@ type DocumentView implements IDocument {
   createdAt: DateTime!
   entity: EntityView!
   excerpt: String!
-  fontFamilies: [DocumentFontFamily!]!
+  fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   hasPassword: Boolean!
   id: ID!
   nullableTitle: String
@@ -515,6 +518,7 @@ type FontFamily {
 
 enum FontFamilySource {
   DEFAULT
+  FALLBACK
   USER
 }
 
@@ -538,7 +542,7 @@ interface IDocument {
   assets: [DocumentAsset!]!
   createdAt: DateTime!
   excerpt: String!
-  fontFamilies: [DocumentFontFamily!]!
+  fontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   id: ID!
   nullableTitle: String
   subtitle: String
@@ -1422,7 +1426,7 @@ type User implements IUser {
   createdAt: DateTime!
   credit: Int!
   documentCount: Int!
-  documentFontFamilies: [DocumentFontFamily!]!
+  documentFontFamilies(sources: [FontFamilySource!]! = [DEFAULT, USER]): [DocumentFontFamily!]!
   email: String!
   fontFamilies: [FontFamily!]!
   hasPassword: Boolean!

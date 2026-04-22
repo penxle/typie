@@ -26,7 +26,7 @@ pub fn build_layout(
         .map(|sr| {
             resource
                 .font_registry
-                .resolve_opt(sr.family)
+                .family_name_opt(sr.family)
                 .unwrap_or_default()
                 .to_owned()
         })

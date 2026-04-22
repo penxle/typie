@@ -9,9 +9,15 @@ pub enum ResourceError {
     #[error("failed to create segmenter: {0}")]
     IcuSegmenter(String),
 
+    #[error("unknown font: {0}")]
+    UnknownFont(String),
+
+    #[error("unknown subset: {0}")]
+    UnknownSubset(String),
+
+    #[error("invalid TTF: {0}")]
+    InvalidTtf(String),
+
     #[error("invalid font data: {0}")]
     InvalidFont(String),
-
-    #[error("invalid manifest data: {0}")]
-    InvalidManifest(String),
 }

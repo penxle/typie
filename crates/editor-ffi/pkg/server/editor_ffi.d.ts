@@ -130,6 +130,15 @@ export interface Selection {
 export type Affinity = "downstream" | "upstream";
 
 /**
+ * chunk별 flat 정수 배열 `[start0, end0, start1, end1, ...]` (inclusive).
+ */
+export interface FontWeight {
+    value: number;
+    hash: string;
+    chunks: number[][];
+}
+
+/**
  *Auto-generated discriminant enum variants
  */
 export type ModifierType = "bold" | "italic" | "underline" | "strikethrough" | "font_size" | "font_family" | "font_weight" | "text_color" | "background_color" | "letter_spacing" | "link" | "ruby" | "line_height" | "block_gap" | "paragraph_indent" | "alignment";
@@ -145,6 +154,16 @@ export interface ArchivedNode {
 
 export interface BlockquoteNode {
     variant?: BlockquoteVariant;
+}
+
+export interface BuiltFont {
+    hash: string;
+    /**
+     * chunk별 flat 페어 `[start0, end0, start1, end1, ...]` (inclusive).
+     */
+    coverage: number[][];
+    base: Uint8Array;
+    chunks: Uint8Array[];
 }
 
 export interface BulletListNode {}
@@ -166,11 +185,6 @@ export interface EmbedNode {
     id: string | undefined;
 }
 
-export interface EncodedFont {
-    base: Uint8Array;
-    chunks: Uint8Array[];
-}
-
 export interface FileNode {
     id: string | undefined;
 }
@@ -183,7 +197,8 @@ export interface FoldTitleNode {}
 
 export interface FontFamily {
     name: string;
-    weights: number[];
+    source: FontFamilySource;
+    weights: FontWeight[];
 }
 
 export interface FontMetadata {
@@ -319,13 +334,15 @@ export type DeletionOp = { type: "selection" } | { type: "move"; movement: Movem
 
 export type Direction = "forward" | "backward";
 
-export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_manifest_missing"; family: string; weight: number } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
+export type EditorEvent = { type: "state_changed"; fields: StateField[] } | { type: "render_invalidated" } | { type: "font_data_missing"; family: string; weight: number; required: FontData[]; prefetch: FontData[] } | { type: "cursor_exited_document_start" };
 
 export type Effect = { load_font: { family: string; weight: number; codepoints: number[] } };
 
 export type FlatImeOp = { type: "set_selection"; start: number; end: number } | { type: "replace_selection"; text: string } | { type: "compose"; text: string } | { type: "delete_surrounding"; before: number; after: number } | { type: "delete_surrounding_utf16"; before: number; after: number } | { type: "set_composition"; start: number; end: number } | { type: "clear_composition" } | { type: "move_cursor"; delta: number };
 
-export type FontData = { type: "base" } | { type: "chunk"; index: number };
+export type FontData = { type: "base" } | { type: "chunk"; id: number };
+
+export type FontFamilySource = "DEFAULT" | "USER" | "FALLBACK";
 
 export type HistoryOp = { type: "undo" } | { type: "redo" };
 
@@ -359,7 +376,7 @@ export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection 
 
 export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers";
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_manifest_loaded"; family: string; weight: number } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number } | { type: "set_external_height"; node_id: NodeId; height: number };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number };
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 
@@ -385,19 +402,14 @@ declare class EditorHost {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
-    build_fallback_font_manifests(entries: any): Uint8Array;
-    build_font_manifest(chunk_codepoints: any): Uint8Array;
+    add_font_base(family: string, weight: number, data: Uint8Array): void;
+    add_font_chunk(family: string, weight: number, chunk_id: number, data: Uint8Array): void;
+    build_font(ttf_data: Uint8Array, chunk_codepoints: any): BuiltFont;
     static create(icu_data: Uint8Array): EditorHost;
     create_editor(doc: Doc, selection: Selection, viewport: Viewport): Editor;
-    encode_font(ttf_data: Uint8Array, chunk_codepoints: any): EncodedFont;
     get_font_codepoints(ttf_data: Uint8Array): any;
     get_font_metadata(data: Uint8Array): FontMetadata;
-    load_fallback_font_manifests(data: Uint8Array): void;
-    load_font_base(family: string, weight: number, data: Uint8Array): void;
-    load_font_chunk(family: string, weight: number, data: Uint8Array): void;
-    load_font_manifest(family: string, weight: number, data: Uint8Array): void;
-    set_font_families(families: FontFamily[]): void;
-    set_phantom_font_families(families: string[]): void;
+    set_fonts(families: FontFamily[]): void;
 }
 
 export type { Editor, EditorHost };

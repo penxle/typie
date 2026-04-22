@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { optimize } from 'svgo';
 import { wasm as legacyWasm } from './wasm.ts';
 import { wasm } from './wasm-ffi.ts';
@@ -64,8 +63,9 @@ async function loadStrategies(): Promise<Record<string, number[][]>> {
 
 export type ProcessedFont = {
   hash: string;
-  manifest: Uint8Array;
   strategy: string | null;
+  /** chunk별 flat 페어 `[start0, end0, start1, end1, ...]` (inclusive). */
+  coverages: number[][];
   base: Uint8Array;
   chunks: Uint8Array[];
 };
@@ -150,18 +150,15 @@ function chunkCodepoints(
 export async function processFont(name: string, ttfData: Uint8Array): Promise<ProcessedFont> {
   const [codepoints, strategies] = await Promise.all([wasm.get_font_codepoints(ttfData), loadStrategies()]);
   const { chunks: chunkCps, strategy } = chunkCodepoints(name, codepoints, strategies);
-  const encoded = await wasm.encode_font(ttfData, chunkCps);
+  const output = await wasm.build_font(ttfData, chunkCps);
 
-  const hasher = createHash('sha256');
-  hasher.update(encoded.base);
-  for (const chunk of encoded.chunks) {
-    hasher.update(chunk);
-  }
-  const hash = hasher.digest('hex').slice(0, 8);
-
-  const manifest = await wasm.build_font_manifest(chunkCps);
-
-  return { hash, manifest, strategy, base: encoded.base, chunks: [...encoded.chunks] };
+  return {
+    hash: output.hash,
+    strategy,
+    coverages: output.coverage,
+    base: output.base,
+    chunks: output.chunks,
+  };
 }
 
 export async function outlineTextToSvg(fontData: Uint8Array, text: string): Promise<string> {

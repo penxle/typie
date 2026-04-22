@@ -3,11 +3,14 @@ package co.typie.editor
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.FontData
 import co.typie.editor.ffi.FontFamily
+import co.typie.editor.ffi.FontFamilySource
+import co.typie.editor.ffi.FontWeight
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.SystemEvent
-import co.typie.generated.resources.Res
+import co.typie.graphql.fragment.FontLoader_Document
 import co.typie.network.Http
 import co.typie.platform.PlatformModule
+import co.typie.serialization.json
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsBytes
 import kotlinx.coroutines.CompletableDeferred
@@ -16,87 +19,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
 
 private const val CDN_BASE = "https://cdn.typie.net/editor/fonts"
 private const val PRELOAD_CONCURRENCY = 4
 
-private data class FontPathEntry(val path: String, val hash: String)
-
-@Serializable
-private data class FallbackFamily(
-  @SerialName("familyName") val familyName: String,
-  @SerialName("fonts") val fonts: List<FallbackFont>,
-)
-
-@Serializable
-private data class FallbackFont(
-  @SerialName("weight") val weight: Int,
-  @SerialName("path") val path: String,
-  @SerialName("hash") val hash: String,
-)
-
-@Serializable private data class HashResponse(@SerialName("hash") val hash: String)
-
-/** CSS Fonts Level 4 §5.2 font-weight matching. `weights` must be sorted. */
-fun matchWeight(weights: List<Int>, target: Int): Int? {
-  if (weights.isEmpty()) return null
-
-  if (target in 400..500) {
-    weights
-      .firstOrNull { it in target..500 }
-      ?.let {
-        return it
-      }
-    weights
-      .lastOrNull { it < target }
-      ?.let {
-        return it
-      }
-    weights
-      .firstOrNull { it > 500 }
-      ?.let {
-        return it
-      }
-  } else if (target < 400) {
-    weights
-      .lastOrNull { it <= target }
-      ?.let {
-        return it
-      }
-    weights
-      .firstOrNull { it > target }
-      ?.let {
-        return it
-      }
-  } else {
-    weights
-      .firstOrNull { it >= target }
-      ?.let {
-        return it
-      }
-    weights
-      .lastOrNull { it < target }
-      ?.let {
-        return it
-      }
-  }
-
-  return null
-}
+private data class FontPathEntry(val cdnPath: String, val hash: String)
 
 object FontLoader {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-  private val primaryFontPaths = mapOf("Pretendard" to "Pretendard-Regular")
   private val fontPaths = mutableMapOf<String, FontPathEntry>()
 
   private val loaded = mutableSetOf<String>()
@@ -104,82 +41,26 @@ object FontLoader {
 
   private val preloadQueue = PreloadQueue()
 
-  private var initialized = false
-
   private fun fontKey(family: String, weight: Int): String = "$family:$weight"
 
-  suspend fun initFonts() {
-    if (initialized) return
-    initialized = true
-
-    withContext(Dispatchers.Default) {
-      val phantomFonts =
-        listOf(
-          "Noto (Phantom)" to "files/editor/Noto-Phantom.bin",
-          "Noto Emoji (Phantom)" to "files/editor/Noto-Phantom-Emoji.bin",
-        )
-
-      for ((familyName, path) in phantomFonts) {
-        val data = Res.readBytes(path)
-        PlatformModule.editorHost.loadFontBase(familyName, 400, data)
-      }
-
-      PlatformModule.editorHost.setPhantomFontFamilies(phantomFonts.map { it.first })
-
-      val fallbackManifestData = Res.readBytes("files/editor/fallbacks.bin")
-      PlatformModule.editorHost.loadFallbackFontManifests(fallbackManifestData)
-
-      val fallbackFamilies =
-        Json.decodeFromString<List<FallbackFamily>>(
-          Res.readBytes("files/editor/fallbacks.json").decodeToString()
-        )
-
-      for (family in fallbackFamilies) {
-        for (font in family.fonts) {
-          fontPaths[fontKey(family.familyName, font.weight)] = FontPathEntry(font.path, font.hash)
-        }
-      }
-
-      PlatformModule.editorHost.setFontFamilies(listOf(FontFamily("Pretendard", listOf(400))))
-    }
+  fun loadFonts(document: FontLoader_Document) {
+    updateFontPaths(document.fontFamilies)
+    PlatformModule.editorHost.setFonts(document.fontFamilies.map { it.toFfi() })
   }
 
-  val fontManifestMissingHandler: EditorEventListener<EditorEvent.FontManifestMissing> =
-    { editor, event ->
-      loadManifest(editor, event.family, event.weight)
+  private fun updateFontPaths(families: List<FontLoader_Document.FontFamily>) {
+    for (family in families) {
+      for (font in family.fonts) {
+        fontPaths[fontKey(family.familyName, font.weight)] = FontPathEntry(font.path, font.hash)
+      }
     }
+  }
 
   val fontDataMissingHandler: EditorEventListener<EditorEvent.FontDataMissing> = { editor, event ->
-    loadData(editor, event.family, event.weight, event.required, event.prefetch)
+    loadFontData(editor, event.family, event.weight, event.required, event.prefetch)
   }
 
-  private fun loadManifest(editor: Editor, family: String, weight: Int) {
-    val fontPath = primaryFontPaths[family] ?: return
-
-    editor.scope.launch(Dispatchers.Default) {
-      loadOnce("manifest:$family:$weight") {
-        coroutineScope {
-          val manifestDeferred = async {
-            Http.get("$CDN_BASE/$fontPath/manifest.bin").bodyAsBytes()
-          }
-          val hashDeferred = async {
-            val data = Http.get("$CDN_BASE/$fontPath/hash.json").bodyAsBytes()
-            Json.decodeFromString<HashResponse>(data.decodeToString()).hash
-          }
-
-          val manifest = manifestDeferred.await()
-          val hash = hashDeferred.await()
-
-          fontPaths[fontKey(family, weight)] = FontPathEntry(fontPath, hash)
-          PlatformModule.editorHost.loadFontManifest(family, weight, manifest)
-        }
-      }
-
-      editor.enqueue(Message.System(SystemEvent.FontManifestLoaded(family, weight)))
-    }
-  }
-
-  private fun loadData(
+  private fun loadFontData(
     editor: Editor,
     family: String,
     weight: Int,
@@ -187,46 +68,69 @@ object FontLoader {
     prefetch: List<FontData>,
   ) {
     val info = fontPaths[fontKey(family, weight)] ?: return
-    val baseUrl = "$CDN_BASE/${info.path}/${info.hash}"
+    val baseUrl = "$CDN_BASE/${info.cdnPath}/${info.hash}"
 
     editor.scope.launch(Dispatchers.Default) {
-      if (required.any { it is FontData.Base }) {
-        loadOnce("base:$family:$weight") {
-          val data = getOrFetch("$baseUrl/base.bin")
-          PlatformModule.editorHost.loadFontBase(family, weight, data)
-        }
-
-        editor.enqueue(Message.System(SystemEvent.FontBaseLoaded(family, weight)))
-      }
-
-      val requiredChunks = required.filterIsInstance<FontData.Chunk>()
-
       coroutineScope {
-        for (chunk in requiredChunks) {
+        for (fd in required) {
           launch {
-            loadOnce("chunk:$family:$weight:${chunk.index}") {
-              val data = getOrFetch("$baseUrl/chunks/${chunk.index}.bin")
-              PlatformModule.editorHost.loadFontChunk(family, weight, data)
+            loadOnce(keyOf(family, weight, fd)) {
+              val bytes = getOrFetch(urlOf(baseUrl, fd))
+              when (fd) {
+                FontData.Base -> PlatformModule.editorHost.addFontBase(family, weight, bytes)
+                is FontData.Chunk ->
+                  PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
+              }
             }
 
-            editor.enqueue(Message.System(SystemEvent.FontChunkLoaded(family, weight)))
+            val loadedEvent =
+              when (fd) {
+                FontData.Base -> SystemEvent.FontBaseLoaded(family, weight)
+                is FontData.Chunk -> SystemEvent.FontChunkLoaded(family, weight, fd.id)
+              }
+            editor.enqueue(Message.System(loadedEvent))
           }
         }
       }
 
-      val prefetchChunks = prefetch.filterIsInstance<FontData.Chunk>()
-      for (chunk in prefetchChunks) {
-        preloadQueue.enqueue("chunk:$family:$weight:${chunk.index}", chunk.index) {
-          loadOnce("chunk:$family:$weight:${chunk.index}") {
-            val data = getOrFetch("$baseUrl/chunks/${chunk.index}.bin")
-            PlatformModule.editorHost.loadFontChunk(family, weight, data)
+      for (fd in prefetch) {
+        val priority =
+          when (fd) {
+            FontData.Base -> -1
+            is FontData.Chunk -> fd.id
+          }
+        preloadQueue.enqueue(keyOf(family, weight, fd), priority) {
+          loadOnce(keyOf(family, weight, fd)) {
+            val bytes = getOrFetch(urlOf(baseUrl, fd))
+            when (fd) {
+              FontData.Base -> PlatformModule.editorHost.addFontBase(family, weight, bytes)
+              is FontData.Chunk ->
+                PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
+            }
           }
 
-          editor.enqueue(Message.System(SystemEvent.FontChunkLoaded(family, weight)))
+          val loadedEvent =
+            when (fd) {
+              FontData.Base -> SystemEvent.FontBaseLoaded(family, weight)
+              is FontData.Chunk -> SystemEvent.FontChunkLoaded(family, weight, fd.id)
+            }
+          editor.enqueue(Message.System(loadedEvent))
         }
       }
     }
   }
+
+  private fun keyOf(family: String, weight: Int, fd: FontData): String =
+    when (fd) {
+      FontData.Base -> "base:$family:$weight"
+      is FontData.Chunk -> "chunk:$family:$weight:${fd.id}"
+    }
+
+  private fun urlOf(baseUrl: String, fd: FontData): String =
+    when (fd) {
+      FontData.Base -> "$baseUrl/base"
+      is FontData.Chunk -> "$baseUrl/chunks/${fd.id}"
+    }
 
   private suspend fun loadOnce(key: String, block: suspend () -> Unit) {
     if (key in loaded) return
@@ -255,8 +159,10 @@ object FontLoader {
     PlatformModule.diskCache.get(url)?.let {
       return it
     }
+
     val data = Http.get(url).bodyAsBytes()
     PlatformModule.diskCache.put(url, data)
+
     return data
   }
 
@@ -305,3 +211,24 @@ object FontLoader {
     }
   }
 }
+
+private fun FontLoader_Document.FontFamily.toFfi(): FontFamily =
+  FontFamily(
+    name = familyName,
+    source =
+      when (source) {
+        co.typie.graphql.type.FontFamilySource.DEFAULT -> FontFamilySource.Default
+        co.typie.graphql.type.FontFamilySource.USER -> FontFamilySource.User
+        co.typie.graphql.type.FontFamilySource.FALLBACK -> FontFamilySource.Fallback
+        co.typie.graphql.type.FontFamilySource.UNKNOWN__ ->
+          error("Unknown FontFamilySource from server: $source")
+      },
+    weights =
+      fonts.map { f ->
+        FontWeight(
+          value = f.weight,
+          hash = f.hash,
+          chunks = json.decodeFromJsonElement<List<List<Int>>>(f.chunks),
+        )
+      },
+  )

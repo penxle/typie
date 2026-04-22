@@ -249,96 +249,85 @@ impl Editor {
                     weight,
                     codepoints,
                 } => {
-                    let has_manifest = {
-                        let resource = self.resource.lock().unwrap();
-                        resource
-                            .font_registry
-                            .intern_id(&family)
-                            .map(|id| resource.font_registry.has_manifest(id, weight))
-                            .unwrap_or(false)
-                    };
-
-                    if has_manifest {
-                        self.resolve_fonts(&family, weight, &codepoints);
-                    } else {
-                        self.push_event(EditorEvent::FontManifestMissing { family, weight });
-                    }
+                    self.resolve_fonts(&family, weight, &codepoints);
                 }
             }
         }
     }
 
     pub(crate) fn resolve_fonts(&mut self, family: &str, weight: u16, codepoints: &[u32]) {
+        use editor_resource::Resolution;
+
         let mut resource = self.resource.lock().unwrap();
-
         let family_id = resource.font_registry.intern(family);
-        let mappings = resource
-            .font_registry
-            .resolve_codepoint_mappings(family_id, weight, codepoints);
 
-        for mapping in &mappings {
-            for &cp in &mapping.codepoints {
-                resource.font_registry.add_codepoint_mapping(
-                    family_id,
-                    weight,
-                    cp,
-                    mapping.family_id,
-                    mapping.weight,
-                );
+        let mut grouped: HashMap<(u16, u16), HashSet<u16>> = HashMap::default();
+        for &cp in codepoints {
+            match resource.font_registry.resolve(family_id, weight, cp) {
+                Resolution::Pending { target, .. } => {
+                    grouped
+                        .entry((target.family_id, target.weight))
+                        .or_default()
+                        .insert(target.chunk_id);
+                }
+                Resolution::Ready(_) | Resolution::Missing => {}
             }
         }
 
-        let mut events = Vec::new();
-        for mapping in &mappings {
-            let resolved_family = resource
-                .font_registry
-                .resolve_opt(mapping.family_id)
-                .map(|s| s.to_string());
+        let events: Vec<_> = grouped
+            .into_iter()
+            .filter_map(|((fid, w), used_chunks)| {
+                let is_primary = fid == family_id;
+                let base_loaded = resource.font_registry.is_base_loaded(fid, w);
 
-            let is_primary = mapping.family_id == family_id;
-
-            let Some(manifest) = resource
-                .font_registry
-                .manifest(mapping.family_id, mapping.weight)
-            else {
-                continue;
-            };
-
-            let Some(resolved_family) = resolved_family else {
-                continue;
-            };
-
-            let required_chunks = manifest.chunk_indices(&mapping.codepoints);
-
-            let required: Vec<_> = itertools::chain!(
-                [FontData::Base],
-                required_chunks
+                let mut required: Vec<FontData> = Vec::new();
+                if !base_loaded {
+                    required.push(FontData::Base);
+                }
+                let mut unloaded_required: Vec<u16> = used_chunks
                     .iter()
-                    .map(|&i| FontData::Chunk { index: i }),
-            )
+                    .copied()
+                    .filter(|&cid| !resource.font_registry.is_chunk_loaded(fid, w, cid))
+                    .collect();
+                unloaded_required.sort_unstable();
+                for cid in &unloaded_required {
+                    required.push(FontData::Chunk { id: *cid });
+                }
+
+                let prefetch: Vec<FontData> = if is_primary {
+                    if let Some(manifest) = resource.font_registry.manifest(fid, w) {
+                        manifest
+                            .all_chunk_ids()
+                            .filter(|cid| !used_chunks.contains(cid))
+                            .filter(|cid| !resource.font_registry.is_chunk_loaded(fid, w, *cid))
+                            .map(|id| FontData::Chunk { id })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                if required.is_empty() && prefetch.is_empty() {
+                    return None;
+                }
+
+                let family_name = resource
+                    .font_registry
+                    .family_name_opt(fid)
+                    .unwrap_or("")
+                    .to_string();
+                Some(EditorEvent::FontDataMissing {
+                    family: family_name,
+                    weight: w,
+                    required,
+                    prefetch,
+                })
+            })
             .collect();
 
-            let prefetch = if is_primary {
-                let required_set: HashSet<u16> = required_chunks.iter().copied().collect();
-                manifest
-                    .all_chunk_indices()
-                    .filter(|i| !required_set.contains(i))
-                    .map(|i| FontData::Chunk { index: i })
-                    .collect()
-            } else {
-                vec![]
-            };
-
-            events.push(EditorEvent::FontDataMissing {
-                family: resolved_family,
-                weight: mapping.weight,
-                required,
-                prefetch,
-            });
-        }
-
         drop(resource);
-
         for event in events {
             self.push_event(event);
         }
@@ -349,19 +338,7 @@ impl Editor {
 impl Editor {
     pub fn new_test(state: State) -> Self {
         let resource = Arc::new(Mutex::new(Resource::new_test()));
-        Self {
-            state,
-            view: View::new_test(),
-            history: History::new(Duration::from_millis(300)),
-            renderer: Renderer::new(ThemeVariant::LightWhite, Arc::clone(&resource)),
-            resource,
-            is_dragging: false,
-            message_queue: Vec::new(),
-            pending_events: Vec::new(),
-            pending_steps: Vec::new(),
-            pending_effects: Vec::new(),
-            pending_fonts: HashMap::new(),
-        }
+        Self::new_test_with_resource(state, resource)
     }
 
     pub fn new_test_with_resource(state: State, resource: Arc<Mutex<Resource>>) -> Self {
@@ -492,8 +469,23 @@ mod tests {
     }
 
     #[test]
-    fn process_effects_converts_load_font_to_font_manifest_missing() {
+    fn process_effects_emits_font_data_missing() {
         let (mut editor, _) = test_editor();
+        // Configure Inter/400 so resolve_codepoint_mappings finds the primary.
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            let families = vec![editor_resource::FontFamily {
+                name: "Inter".into(),
+                source: editor_resource::FontFamilySource::Default,
+                weights: vec![editor_resource::FontWeight {
+                    value: 400,
+                    hash: "inter-400".into(),
+                    chunks: vec![vec![0x41, 0x42]],
+                }],
+            }];
+            resource.set_fonts(families);
+        }
+
         editor.process_effects(vec![Effect::LoadFont {
             family: "Inter".to_string(),
             weight: 400,
@@ -501,13 +493,18 @@ mod tests {
         }]);
         let events = std::mem::take(&mut editor.pending_events);
 
-        let has_manifest_missing = events.iter().any(|e| {
+        let has_data_missing = events.iter().any(|e| {
             matches!(
                 e,
-                EditorEvent::FontManifestMissing { family, weight } if family == "Inter" && *weight == 400
+                EditorEvent::FontDataMissing { family, weight, required, .. }
+                    if family == "Inter"
+                        && *weight == 400
+                        && required.len() == 2
+                        && matches!(required[0], FontData::Base)
+                        && matches!(required[1], FontData::Chunk { id: 0 })
             )
         });
-        assert!(has_manifest_missing);
+        assert!(has_data_missing);
     }
 
     #[test]

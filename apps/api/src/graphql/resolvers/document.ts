@@ -9,6 +9,7 @@ import {
   EntityState,
   EntityType,
   EntityVisibility,
+  FontFamilySource,
   NoteState,
 } from '@typie/lib/enums';
 import { NotFoundError, TypieError } from '@typie/lib/errors';
@@ -178,7 +179,13 @@ IDocument.implement({
 
     fontFamilies: t.field({
       type: [DocumentFontFamily],
-      resolve: async (self) => {
+      args: {
+        sources: t.arg({
+          type: [FontFamilySource],
+          defaultValue: [FontFamilySource.DEFAULT, FontFamilySource.USER],
+        }),
+      },
+      resolve: async (self, args, ctx) => {
         const entity = await db
           .select({ userId: Entities.userId })
           .from(Entities)
@@ -186,7 +193,7 @@ IDocument.implement({
           .where(eq(Documents.id, self.id))
           .then(firstOrThrow);
 
-        return await getDocumentFontFamilies(entity.userId);
+        return await getDocumentFontFamilies(entity.userId, ctx.session?.userId ?? null, args.sources);
       },
     }),
   }),

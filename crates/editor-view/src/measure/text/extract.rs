@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn segment_no_phantom_zero_codepoint_span() {
+    fn segment_no_zero_codepoint_span() {
         let spans = segment_graphemes("hello", 50.0, &segmenter());
         assert!(spans.iter().all(|s| s.codepoints > 0));
         assert_eq!(spans.len(), 5);
@@ -223,7 +223,7 @@ pub fn extract_lines(
                 let synthesis = resolve_synthesis(doc, node_id);
                 let (color, background_color) = resolve_text_colors(doc, node_id);
 
-                let (font_id, font_weight) = style_runs
+                let (family_id, weight) = style_runs
                     .iter()
                     .find(|sr| sr.byte_range.contains(&byte_start))
                     .map(|sr| (sr.family, sr.weight))
@@ -232,8 +232,8 @@ pub fn extract_lines(
                 let run_advance = glyph_run.advance();
 
                 glyph_runs.push(GlyphRun {
-                    font_id,
-                    font_weight,
+                    family_id,
+                    weight,
                     font_size,
                     synthesis,
                     color,

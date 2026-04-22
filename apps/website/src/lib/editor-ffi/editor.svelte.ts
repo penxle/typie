@@ -1,17 +1,15 @@
 import { createContext } from 'svelte';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
-import { fontDataMissingHandler, fontManifestMissingHandler, initFonts } from './fonts';
+import { fontDataMissingHandler } from './fonts';
 import type { CursorRect, Doc, Editor as WasmEditor, EditorEvent, Message, Selection, Size, Viewport } from '@typie/editor-ffi/browser';
 import type { EditorEventListener } from './types';
 
-let initPromise: Promise<void> | null = null;
+let wasmInitPromise: Promise<void> | null = null;
 
-function ensureInitialized(): Promise<void> {
-  return (initPromise ??= (async () => {
+function ensureWasmInitialized(): Promise<void> {
+  return (wasmInitPromise ??= (async () => {
     await initWasm();
-    await initFonts();
-    wasm.set_font_families([{ name: 'Pretendard', weights: [400] }]);
   })());
 }
 
@@ -47,7 +45,7 @@ export class Editor {
   }
 
   static async create(doc: Doc, selection: Selection, viewport: Viewport) {
-    await ensureInitialized();
+    await ensureWasmInitialized();
 
     const self = new this();
 
@@ -55,7 +53,6 @@ export class Editor {
     self.#viewport = viewport;
 
     self.on('state_changed', self.#stateChangedHandler);
-    self.on('font_manifest_missing', fontManifestMissingHandler);
     self.on('font_data_missing', fontDataMissingHandler);
 
     self.enqueue({ type: 'system', event: { type: 'initialize' } });

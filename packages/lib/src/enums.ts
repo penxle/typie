@@ -41,6 +41,7 @@ export type FontFamilySource = keyof typeof FontFamilySource;
 export const FontFamilySource = {
   DEFAULT: 'DEFAULT',
   USER: 'USER',
+  FALLBACK: 'FALLBACK',
 } as const;
 
 export type FontState = keyof typeof FontState;

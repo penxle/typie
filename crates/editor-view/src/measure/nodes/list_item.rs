@@ -43,7 +43,7 @@ fn shape_marker_label(measurer: &mut Measurer, node: &NodeRef<'_>, text: &str) -
     let font_id = resource.font_registry.intern(&base_style.font_family);
     let font_family_name = resource
         .font_registry
-        .resolve_opt(font_id)
+        .family_name_opt(font_id)
         .unwrap_or_default()
         .to_owned();
 
@@ -93,8 +93,8 @@ fn shape_marker_label(measurer: &mut Measurer, node: &NodeRef<'_>, text: &str) -
                 let font_size = run.font_size();
 
                 glyph_runs.push(GlyphRun {
-                    font_id,
-                    font_weight: 400,
+                    family_id: font_id,
+                    weight: 400,
                     font_size,
                     synthesis: Synthesis::default(),
                     color: String::new(),

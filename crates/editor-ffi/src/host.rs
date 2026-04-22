@@ -68,52 +68,32 @@ impl EditorHost {
         Ok(into_owned(crate::editor::Editor::new(core)))
     }
 
-    pub fn load_font_base(&self, family: String, weight: u16, data: Vec<u8>) -> EditorResult<()> {
+    pub fn set_fonts(
+        &self,
+        families: Vec<Complex<editor_resource::FontFamily>>,
+    ) -> EditorResult<()> {
+        self.with_resource(|resource| {
+            resource.set_fonts(families.from_ffi()?);
+            Ok(())
+        })
+    }
+
+    pub fn add_font_base(&self, family: String, weight: u16, data: Vec<u8>) -> EditorResult<()> {
         self.with_resource(|resource| {
             resource.add_font_base(&family, weight, &data)?;
             Ok(())
         })
     }
 
-    pub fn load_font_chunk(&self, family: String, weight: u16, data: Vec<u8>) -> EditorResult<()> {
-        self.with_resource(|resource| {
-            resource.add_font_chunk(&family, weight, &data)?;
-            Ok(())
-        })
-    }
-
-    pub fn load_font_manifest(
+    pub fn add_font_chunk(
         &self,
         family: String,
         weight: u16,
+        chunk_id: u16,
         data: Vec<u8>,
     ) -> EditorResult<()> {
         self.with_resource(|resource| {
-            resource.add_font_manifest(&family, weight, &data)?;
-            Ok(())
-        })
-    }
-
-    pub fn load_fallback_font_manifests(&self, data: Vec<u8>) -> EditorResult<()> {
-        self.with_resource(|resource| {
-            resource.add_fallback_font_manifests(&data)?;
-            Ok(())
-        })
-    }
-
-    pub fn set_font_families(
-        &self,
-        families: Vec<Complex<editor_resource::FontFamily>>,
-    ) -> EditorResult<()> {
-        self.with_resource(|resource| {
-            resource.set_font_families(families.from_ffi()?)?;
-            Ok(())
-        })
-    }
-
-    pub fn set_phantom_font_families(&self, families: Vec<String>) -> EditorResult<()> {
-        self.with_resource(|resource| {
-            resource.set_phantom_font_families(families)?;
+            resource.add_font_chunk(&family, weight, chunk_id, &data)?;
             Ok(())
         })
     }

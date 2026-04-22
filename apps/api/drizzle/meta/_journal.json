@@ -519,6 +519,20 @@
       "when": 1775640914395,
       "tag": "0073_ambitious_owl",
       "breakpoints": false
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1776799777375,
+      "tag": "0074_stiff_jazinda",
+      "breakpoints": false
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1776853763475,
+      "tag": "0075_lame_norrin_radd",
+      "breakpoints": false
     }
   ]
 }

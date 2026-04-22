@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.typie.editor.FontLoader
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.toEditorDocumentLayoutSpec
 import co.typie.editor.ffi.Doc
@@ -59,10 +60,14 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     Apollo.watchQuery(
       scope = viewModelScope,
       placeholderData = placeholderData(),
-      onInitialData = { data -> viewEntity(data.entity.site.id) },
+      onInitialData = { data ->
+        viewEntity(data.entity.site.id)
+        FontLoader.loadFonts(data.entity.node.onDocument!!.fontLoader_Document)
+      },
     ) {
       EditorScreen_Query(entityId = entityId)
     }
+
   val doc: Doc
     get() =
       Doc(

@@ -1,12 +1,12 @@
-use fontique::ScriptExt;
 use parley::{FontContext, LayoutContext};
 use std::sync::Arc;
 
-use crate::FontFamily;
 use crate::brush::TextBrush;
 use crate::error::ResourceError;
-use crate::font::{FallbackFontEntry, FontManifest, FontRegistry};
+use crate::font::{FontFamily, FontRegistry, PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT};
 use crate::segmentation::TextSegmenters;
+
+const PLACEHOLDER_TTF: &[u8] = include_bytes!("../assets/placeholder.ttf");
 
 pub struct Resource {
     pub font_registry: FontRegistry,
@@ -17,12 +17,30 @@ pub struct Resource {
 
 impl Resource {
     pub fn new(segmenters: Arc<TextSegmenters>) -> Self {
-        Self {
+        let mut resource = Self {
             font_registry: FontRegistry::new(),
             font_context: FontContext::new(),
             layout_context: LayoutContext::new(),
             segmenters,
-        }
+        };
+        resource.register_placeholder();
+        resource
+    }
+
+    fn register_placeholder(&mut self) {
+        self.font_registry.register_placeholder(PLACEHOLDER_TTF);
+        self.font_context.collection.register_fonts(
+            fontique::Blob::new(Arc::new(PLACEHOLDER_TTF.to_vec())),
+            Some(fontique::FontInfoOverride {
+                family_name: Some(PLACEHOLDER_FAMILY_NAME),
+                weight: Some(fontique::FontWeight::new(PLACEHOLDER_WEIGHT as f32)),
+                ..Default::default()
+            }),
+        );
+    }
+
+    pub fn set_fonts(&mut self, families: Vec<FontFamily>) {
+        self.font_registry.set_fonts(families);
     }
 
     pub fn add_font_base(
@@ -52,73 +70,12 @@ impl Resource {
         &mut self,
         family: &str,
         weight: u16,
+        chunk_id: u16,
         data: &[u8],
     ) -> Result<(), ResourceError> {
         let id = self.font_registry.intern(family);
-        self.font_registry.add_font_chunk(id, weight, data)?;
-        Ok(())
-    }
-
-    pub fn add_font_manifest(
-        &mut self,
-        family: &str,
-        weight: u16,
-        data: &[u8],
-    ) -> Result<(), ResourceError> {
-        let decompressed = crate::zstd::decompress_zstd(data)?;
-        let manifest: FontManifest = bitcode::decode(&decompressed)
-            .map_err(|e| ResourceError::InvalidManifest(format!("{e}")))?;
-
-        let id = self.font_registry.intern(family);
-        self.font_registry.add_manifest(id, weight, manifest);
-
-        Ok(())
-    }
-
-    pub fn add_fallback_font_manifests(&mut self, data: &[u8]) -> Result<(), ResourceError> {
-        let decompressed = crate::zstd::decompress_zstd(data)?;
-        let entries: Vec<FallbackFontEntry> = bitcode::decode(&decompressed)
-            .map_err(|e| ResourceError::InvalidManifest(format!("{e}")))?;
-
-        self.font_registry.set_fallback_entries(entries);
-
-        Ok(())
-    }
-
-    pub fn set_font_families(&mut self, families: Vec<FontFamily>) -> Result<(), ResourceError> {
-        self.font_registry.set_families(families);
-        Ok(())
-    }
-
-    pub fn set_phantom_font_families(
-        &mut self,
-        families: Vec<String>,
-    ) -> Result<(), ResourceError> {
-        let families: Vec<fontique::FamilyId> = families
-            .iter()
-            .filter_map(|name| {
-                self.font_context
-                    .collection
-                    .family_by_name(name)
-                    .map(|f| f.id())
-            })
-            .collect();
-
-        for script in fontique::Script::all_samples()
-            .iter()
-            .map(|(script, _)| script)
-            .chain(&[
-                fontique::Script::COMMON,
-                fontique::Script::INHERITED,
-                fontique::Script::UNKNOWN,
-            ])
-        {
-            self.font_context.collection.set_fallbacks(
-                fontique::FallbackKey::new(*script, None),
-                families.iter().copied(),
-            );
-        }
-
+        self.font_registry
+            .add_font_chunk(id, weight, chunk_id, data)?;
         Ok(())
     }
 }
@@ -127,5 +84,46 @@ impl Resource {
 impl Resource {
     pub fn new_test() -> Self {
         Self::new(Arc::new(TextSegmenters::new_test()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_fonts_accepts_empty() {
+        let mut resource = Resource::new_test();
+        resource.set_fonts(vec![]);
+    }
+
+    #[test]
+    fn placeholder_registered_on_new() {
+        use crate::font::{PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT};
+
+        let mut resource = Resource::new_test();
+
+        let id = resource
+            .font_registry
+            .placeholder_family_id()
+            .expect("placeholder family id must be set on Resource::new");
+        assert_eq!(
+            resource.font_registry.family_name_opt(id),
+            Some(PLACEHOLDER_FAMILY_NAME)
+        );
+        let bytes = resource
+            .font_registry
+            .font_data(id, PLACEHOLDER_WEIGHT)
+            .expect("placeholder bytes present");
+        assert!(!bytes.is_empty());
+
+        let family = resource
+            .font_context
+            .collection
+            .family_by_name(PLACEHOLDER_FAMILY_NAME);
+        assert!(
+            family.is_some(),
+            "placeholder must be registered with fontique"
+        );
     }
 }

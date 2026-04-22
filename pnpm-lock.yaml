@@ -119,6 +119,9 @@ importers:
       '@sindresorhus/string-hash':
         specifier: ^2.0.0
         version: 2.0.0
+      '@typie/assets':
+        specifier: workspace:*
+        version: link:../../assets
       '@typie/editor':
         specifier: workspace:*
         version: link:../../legacy/editor

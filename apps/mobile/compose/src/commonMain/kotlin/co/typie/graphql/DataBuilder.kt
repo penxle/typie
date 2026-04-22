@@ -10,7 +10,6 @@ import kotlin.math.absoluteValue
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
-import kotlinx.serialization.json.JsonNull
 
 object PlaceholderResolver : FakeResolver {
   private val delegate = DefaultFakeResolver()
@@ -21,7 +20,7 @@ object PlaceholderResolver : FakeResolver {
       "Binary" -> "AA=="
       "DateTime" ->
         context.adaptToJson(Clock.System.now() - (context.id.hashCode().absoluteValue % 30).days)
-      "JSON" -> JsonNull
+      "JSON" -> ""
       else -> delegate.resolveLeaf(context)
     }
   }

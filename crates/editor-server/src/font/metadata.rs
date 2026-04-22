@@ -84,7 +84,7 @@ mod tests {
     fn load_test_font() -> Vec<u8> {
         std::fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../editor-view/assets/Noto-Phantom.ttf"
+            "/../editor-view/assets/test-font.ttf"
         ))
         .expect("test font not found")
     }

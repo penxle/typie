@@ -8,10 +8,18 @@ import { wasm } from '#/utils/wasm-ffi.ts';
 const S3_BUCKET = 'typie-cdn';
 const S3_PREFIX = 'editor/fonts';
 
-// spell-checker:disable
-const DEFAULT_FONTS = [
+type FontEntry = { weight: number; path: string };
+type FamilyDef = {
+  familyName: string;
+  source: 'DEFAULT' | 'FALLBACK';
+  fonts: FontEntry[];
+};
+
+const FONTS: FamilyDef[] = [
+  // spell-checker:disable
   {
     familyName: 'Pretendard',
+    source: 'DEFAULT',
     fonts: [
       { weight: 100, path: 'Pretendard-Thin' },
       { weight: 200, path: 'Pretendard-ExtraLight' },
@@ -26,6 +34,7 @@ const DEFAULT_FONTS = [
   },
   {
     familyName: 'KoPubWorldDotum',
+    source: 'DEFAULT',
     fonts: [
       { weight: 300, path: 'KoPubWorldDotum-Light' },
       { weight: 500, path: 'KoPubWorldDotum-Medium' },
@@ -34,6 +43,7 @@ const DEFAULT_FONTS = [
   },
   {
     familyName: 'NanumBarunGothic',
+    source: 'DEFAULT',
     fonts: [
       { weight: 200, path: 'NanumBarunGothic-UltraLight' },
       { weight: 300, path: 'NanumBarunGothic-Light' },
@@ -43,10 +53,12 @@ const DEFAULT_FONTS = [
   },
   {
     familyName: 'RIDIBatang',
+    source: 'DEFAULT',
     fonts: [{ weight: 400, path: 'RIDIBatang-Regular' }],
   },
   {
     familyName: 'KoPubWorldBatang',
+    source: 'DEFAULT',
     fonts: [
       { weight: 300, path: 'KoPubWorldBatang-Light' },
       { weight: 500, path: 'KoPubWorldBatang-Medium' },
@@ -55,21 +67,74 @@ const DEFAULT_FONTS = [
   },
   {
     familyName: 'NanumMyeongjo',
+    source: 'DEFAULT',
     fonts: [
       { weight: 400, path: 'NanumMyeongjo-Regular' },
       { weight: 700, path: 'NanumMyeongjo-Bold' },
       { weight: 800, path: 'NanumMyeongjo-ExtraBold' },
     ],
   },
+  // spell-checker:enable
+  {
+    familyName: 'Twemoji',
+    source: 'FALLBACK',
+    fonts: [{ weight: 400, path: 'Twemoji' }],
+  },
+  {
+    familyName: 'Noto Sans',
+    source: 'FALLBACK',
+    fonts: [
+      { weight: 400, path: 'NotoSans-Regular' },
+      { weight: 700, path: 'NotoSans-Bold' },
+    ],
+  },
+  {
+    familyName: 'Noto Sans KR',
+    source: 'FALLBACK',
+    fonts: [
+      { weight: 400, path: 'NotoSansKR-Regular' },
+      { weight: 700, path: 'NotoSansKR-Bold' },
+    ],
+  },
+  {
+    familyName: 'Noto Sans JP',
+    source: 'FALLBACK',
+    fonts: [
+      { weight: 400, path: 'NotoSansJP-Regular' },
+      { weight: 700, path: 'NotoSansJP-Bold' },
+    ],
+  },
+  {
+    familyName: 'Noto Sans SC',
+    source: 'FALLBACK',
+    fonts: [
+      { weight: 400, path: 'NotoSansSC-Regular' },
+      { weight: 700, path: 'NotoSansSC-Bold' },
+    ],
+  },
+  {
+    familyName: 'Noto Sans Math',
+    source: 'FALLBACK',
+    fonts: [{ weight: 400, path: 'NotoSansMath-Regular' }],
+  },
+  {
+    familyName: 'Noto Sans Symbols',
+    source: 'FALLBACK',
+    fonts: [{ weight: 400, path: 'NotoSansSymbols-Regular' }],
+  },
+  {
+    familyName: 'Noto Sans Symbols 2',
+    source: 'FALLBACK',
+    fonts: [{ weight: 400, path: 'NotoSansSymbols2-Regular' }],
+  },
 ];
-// spell-checker:enable
 
 const sourceDir = process.argv[2];
 if (!sourceDir) {
-  throw new Error('Usage: bun run build-default-fonts.ts <source-dir>');
+  throw new Error('Usage: bun run build-fonts.ts <source-dir>');
 }
 
-const allFonts = DEFAULT_FONTS.flatMap((f) => f.fonts);
+const allFonts = FONTS.flatMap((f) => f.fonts);
 const total = allFonts.length;
 console.log(`${total} fonts to process\n`);
 
@@ -94,23 +159,32 @@ do {
 } while (token);
 console.log(`Found ${existingKeys.size} existing keys\n`);
 
-// Process fonts and upload to S3
-type DefaultFontEntry = {
+type FontRecord = {
   id: string;
   postScriptName: string;
   weight: number;
   path: string;
+  hash: string;
+  /** chunk별 flat 페어 `[start0, end0, start1, end1, ...]` (inclusive). */
+  chunks: number[][];
   names: { nameId: number; platformId: number; languageId: number; value: string }[];
 };
 
-const defaultsData: { id: string; familyName: string; fonts: DefaultFontEntry[] }[] = [];
+type FamilyRecord = {
+  id: string;
+  familyName: string;
+  source: 'DEFAULT' | 'FALLBACK';
+  fonts: FontRecord[];
+};
+
+const fontsData: FamilyRecord[] = [];
 let uploaded = 0;
 let skipped = 0;
 let done = 0;
 
-for (const family of DEFAULT_FONTS) {
-  const familyId = `!${family.familyName.toUpperCase()}`;
-  const fonts: DefaultFontEntry[] = [];
+for (const family of FONTS) {
+  const familyId = `!${family.source}:${family.familyName}`;
+  const fonts: FontRecord[] = [];
 
   for (const font of family.fonts) {
     done++;
@@ -118,11 +192,10 @@ for (const family of DEFAULT_FONTS) {
     const ttfData = new Uint8Array(await readFile(ttfPath));
 
     console.log(`[${done}/${total}] Processing ${font.path}...`);
-    const { hash, manifest, strategy, base, chunks } = await processFont(font.path, ttfData);
+    const { hash, strategy, coverages, base, chunks } = await processFont(font.path, ttfData);
 
-    const baseKB = (base.length / 1024).toFixed(1);
-    const chunksKB = (chunks.reduce((s, c) => s + c.length, 0) / 1024).toFixed(1);
-    console.log(`  base: ${baseKB}KB, ${chunks.length} chunks: ${chunksKB}KB, strategy: ${strategy ?? 'sequential'}`);
+    const totalKB = ((base.length + chunks.reduce((s, c) => s + c.length, 0)) / 1024).toFixed(1);
+    console.log(`  ${chunks.length} chunks: ${totalKB}KB, strategy: ${strategy ?? 'sequential'}`);
 
     // Extract font metadata
     const metadata = await wasm.get_font_metadata(ttfData);
@@ -132,38 +205,19 @@ for (const family of DEFAULT_FONTS) {
 
     const postScriptName = findName(6) ?? font.path;
 
+    const fontId = `${familyId}:${font.weight}`;
+
     fonts.push({
-      id: `${familyId}${font.weight}`,
+      id: fontId,
       postScriptName,
       weight: font.weight,
       path: font.path,
+      hash,
+      chunks: coverages,
       names: metadata.names.map((n) => ({ nameId: n.nameId, platformId: n.platformId, languageId: n.languageId, value: n.value })),
     });
 
-    // Upload manifest.bin (bitcode, for Rust runtime) and hash.json (for host fetch URLs)
-    const manifestBinKey = `${S3_PREFIX}/${font.path}/manifest.bin`;
-    const hashJsonKey = `${S3_PREFIX}/${font.path}/hash.json`;
-    console.log(`  PUT ${manifestBinKey}`);
-    console.log(`  PUT ${hashJsonKey}`);
-    await Promise.all([
-      s3.send(
-        new PutObjectCommand({
-          Bucket: S3_BUCKET,
-          Key: manifestBinKey,
-          Body: manifest,
-          ContentType: 'application/octet-stream',
-        }),
-      ),
-      s3.send(
-        new PutObjectCommand({
-          Bucket: S3_BUCKET,
-          Key: hashJsonKey,
-          Body: JSON.stringify({ hash }),
-          ContentType: 'application/json',
-        }),
-      ),
-    ]);
-
+    // Upload the raw TTF (compressed) for server-side specimen rendering.
     const originalKey = `${S3_PREFIX}/${font.path}/original.bin`;
     const compressed = await compressZstd(ttfData);
     console.log(`  PUT ${originalKey}`);
@@ -176,31 +230,38 @@ for (const family of DEFAULT_FONTS) {
       }),
     );
 
-    const s3Base = `${S3_PREFIX}/${font.path}/${hash}`;
-    const filesToUpload: { key: string; body: Uint8Array; contentType: string }[] = [
-      { key: `${s3Base}/base.bin`, body: base, contentType: 'application/octet-stream' },
-      ...chunks.map((chunk, i) => ({ key: `${s3Base}/chunks/${i}.bin`, body: chunk, contentType: 'application/octet-stream' })),
-    ];
-
-    for (const { key, body, contentType } of filesToUpload) {
+    // Upload encoded base + chunks keyed by hash.
+    const hashBase = `${S3_PREFIX}/${font.path}/${hash}`;
+    {
+      const key = `${hashBase}/base`;
       if (existingKeys.has(key)) {
         console.log(`  SKIP ${key}`);
         skipped++;
       } else {
         console.log(`  UPLOAD ${key}`);
-        await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: body, ContentType: contentType }));
+        await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: base, ContentType: 'application/octet-stream' }));
+        uploaded++;
+      }
+    }
+    for (const [id, chunk] of chunks.entries()) {
+      const key = `${hashBase}/chunks/${id}`;
+      if (existingKeys.has(key)) {
+        console.log(`  SKIP ${key}`);
+        skipped++;
+      } else {
+        console.log(`  UPLOAD ${key}`);
+        await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: chunk, ContentType: 'application/octet-stream' }));
         uploaded++;
       }
     }
   }
 
-  defaultsData.push({ id: familyId, familyName: family.familyName, fonts });
+  fontsData.push({ id: familyId, familyName: family.familyName, source: family.source, fonts });
 }
 
 console.log(`\nS3: ${uploaded} uploaded, ${skipped} skipped`);
 
-// Write defaults.json
 const workspaceDir = path.resolve(import.meta.dirname, '../../..');
-const defaultsPath = path.join(workspaceDir, 'assets/defaults.json');
-await writeFile(defaultsPath, JSON.stringify(defaultsData));
-console.log(`Written: ${defaultsPath}`);
+const fontsPath = path.join(workspaceDir, 'assets/fonts.json');
+await writeFile(fontsPath, JSON.stringify(fontsData));
+console.log(`Written: ${fontsPath}`);

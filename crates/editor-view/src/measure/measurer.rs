@@ -81,7 +81,7 @@ impl Measurer {
         use fontique::ScriptExt;
 
         let mut resource = Resource::new_test();
-        let font_data = include_bytes!("../../assets/Noto-Phantom.ttf");
+        let font_data = include_bytes!("../../assets/test-font.ttf");
         let families = resource.font_context.collection.register_fonts(
             fontique::Blob::new(Arc::new(font_data.to_vec())),
             Some(fontique::FontInfoOverride {

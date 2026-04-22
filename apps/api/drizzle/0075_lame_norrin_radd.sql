@@ -1,0 +1,1 @@
+ALTER TABLE "fonts" RENAME COLUMN "subsets" TO "chunks";

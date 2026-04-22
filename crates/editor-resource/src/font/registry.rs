@@ -1,37 +1,30 @@
-use editor_macros::ffi;
 use hashbrown::HashMap;
-use serde::{Deserialize, Serialize};
+use skrifa::Tag;
+use skrifa::raw::FontRef;
 use smallvec::SmallVec;
 use std::sync::Arc;
 
+use super::config::{FontFamily, FontFamilySource};
 use super::data::FontData;
-use super::fallback::FallbackFontEntry;
 use super::manifest::FontManifest;
-use super::resolve::resolve_codepoint_mappings;
-use super::tpft::decode_tpft;
 use crate::error::ResourceError;
+use crate::zstd::decompress_zstd;
 
-struct FontEntry {
-    data: Arc<FontData>,
-    split_offset: usize,
-}
-
-#[ffi]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FontFamily {
-    pub name: String,
-    pub weights: Vec<u16>,
+pub(super) struct FontEntry {
+    pub(super) data: Arc<FontData>,
+    pub(super) split_offset: usize,
 }
 
 pub struct FontRegistry {
     families: HashMap<String, SmallVec<[u16; 9]>>,
     family_names: Vec<String>,
     family_index: HashMap<String, u16>,
-    codepoint_mappings: HashMap<(u16, u16), HashMap<u32, (u16, u16)>>,
-    font_entries: HashMap<(u16, u16), FontEntry>,
-    font_versions: HashMap<(u16, u16), u64>,
+    family_source: HashMap<u16, FontFamilySource>,
+    pub(super) font_entries: HashMap<(u16, u16), FontEntry>,
+    pub(super) font_versions: HashMap<(u16, u16), u64>,
+    pub(super) loaded_chunks: HashMap<(u16, u16), Vec<bool>>,
     manifests: HashMap<(u16, u16), FontManifest>,
-    fallback_entries: Vec<FallbackFontEntry>,
+    placeholder_family_id: Option<u16>,
 }
 
 impl FontRegistry {
@@ -40,31 +33,49 @@ impl FontRegistry {
             families: HashMap::default(),
             family_names: Vec::new(),
             family_index: HashMap::default(),
-            codepoint_mappings: HashMap::default(),
+            family_source: HashMap::default(),
             font_entries: HashMap::default(),
             font_versions: HashMap::default(),
+            loaded_chunks: HashMap::default(),
             manifests: HashMap::default(),
-            fallback_entries: Vec::new(),
+            placeholder_family_id: None,
         }
     }
 
-    pub fn update(&mut self, families: HashMap<String, Vec<u16>>) {
+    pub fn set_fonts(&mut self, families: Vec<FontFamily>) {
         self.families.clear();
-        self.codepoint_mappings.clear();
-        for (name, mut weights) in families {
-            weights.sort_unstable();
-            weights.dedup();
-            self.families.insert(name, SmallVec::from_vec(weights));
-        }
-    }
+        self.family_source.clear();
+        self.manifests.clear();
+        self.loaded_chunks.clear();
 
-    pub fn set_families(&mut self, families: Vec<FontFamily>) {
-        self.families.clear();
-        self.codepoint_mappings.clear();
-        for FontFamily { name, mut weights } in families {
+        let placeholder_id = self.placeholder_family_id;
+        self.font_entries
+            .retain(|(fid, _), _| Some(*fid) == placeholder_id);
+        self.font_versions
+            .retain(|(fid, _), _| Some(*fid) == placeholder_id);
+
+        for family in families {
+            if family.name == super::placeholder::PLACEHOLDER_FAMILY_NAME {
+                continue;
+            }
+
+            let family_id = self.intern(&family.name);
+            self.family_source.insert(family_id, family.source);
+
+            let mut weights: Vec<u16> = Vec::with_capacity(family.weights.len());
+            for w in &family.weights {
+                weights.push(w.value);
+                let key = (family_id, w.value);
+                let manifest = FontManifest::from_coverages(&w.chunks);
+                let chunk_count = manifest.chunk_count as usize;
+                self.manifests.insert(key, manifest);
+                self.loaded_chunks.insert(key, vec![false; chunk_count]);
+                self.font_versions.insert(key, 0);
+            }
             weights.sort_unstable();
             weights.dedup();
-            self.families.insert(name, SmallVec::from_vec(weights));
+            self.families
+                .insert(family.name, SmallVec::from_vec(weights));
         }
     }
 
@@ -103,87 +114,121 @@ impl FontRegistry {
         self.family_index.get(family).copied()
     }
 
-    pub fn resolve(&self, id: u16) -> &str {
+    pub fn family_name(&self, id: u16) -> &str {
         &self.family_names[id as usize]
     }
 
-    pub fn resolve_opt(&self, id: u16) -> Option<&str> {
+    pub fn family_name_opt(&self, id: u16) -> Option<&str> {
         self.family_names.get(id as usize).map(|s| s.as_str())
     }
 
-    pub fn codepoint_map(&self, family_id: u16, weight: u16) -> Option<&HashMap<u32, (u16, u16)>> {
-        self.codepoint_mappings.get(&(family_id, weight))
+    pub fn family_source(&self, family_id: u16) -> Option<FontFamilySource> {
+        self.family_source.get(&family_id).copied()
     }
 
-    pub fn add_codepoint_mapping(
-        &mut self,
-        family_id: u16,
-        weight: u16,
-        codepoint: u32,
-        resolved_family_id: u16,
-        resolved_weight: u16,
-    ) {
-        self.codepoint_mappings
-            .entry((family_id, weight))
-            .or_default()
-            .insert(codepoint, (resolved_family_id, resolved_weight));
+    pub fn fallback_family_ids(&self) -> impl Iterator<Item = u16> + '_ {
+        let mut ids: Vec<u16> = self
+            .family_source
+            .iter()
+            .filter_map(|(&id, &src)| (src == FontFamilySource::Fallback).then_some(id))
+            .collect();
+        ids.sort();
+        ids.into_iter()
+    }
+
+    pub fn manifest(&self, family_id: u16, weight: u16) -> Option<&FontManifest> {
+        self.manifests.get(&(family_id, weight))
+    }
+
+    pub fn chunk_id_for_codepoint(&self, family_id: u16, weight: u16, cp: u32) -> Option<u16> {
+        self.manifests.get(&(family_id, weight))?.chunk_id(cp)
+    }
+
+    pub fn is_base_loaded(&self, family_id: u16, weight: u16) -> bool {
+        self.font_entries.contains_key(&(family_id, weight))
+    }
+
+    pub fn is_chunk_loaded(&self, family_id: u16, weight: u16, chunk_id: u16) -> bool {
+        self.loaded_chunks
+            .get(&(family_id, weight))
+            .and_then(|bv| bv.get(chunk_id as usize).copied())
+            .unwrap_or(false)
     }
 
     pub fn add_font_base(
         &mut self,
-        id: u16,
+        family_id: u16,
         weight: u16,
         data: &[u8],
     ) -> Result<(), ResourceError> {
-        let data = decode_tpft(data)?;
-        if data.len() < 4 {
-            return Err(ResourceError::InvalidFont(
-                "base font data too short".into(),
-            ));
-        }
+        let raw_ttf = decompress_zstd(data)?;
 
-        let split_offset = u32::from_be_bytes(data[0..4].try_into().unwrap()) as usize;
-        let sfnt = data[4..].to_vec();
+        let font = FontRef::new(&raw_ttf)
+            .map_err(|e| ResourceError::InvalidFont(format!("failed to parse TTF: {e:?}")))?;
 
-        let key = (id, weight);
+        let glyf_tag = Tag::new(b"glyf");
+        let cbdt_tag = Tag::new(b"CBDT");
+        let record = font
+            .table_directory()
+            .table_records()
+            .iter()
+            .find(|r| r.tag() == cbdt_tag)
+            .or_else(|| {
+                font.table_directory()
+                    .table_records()
+                    .iter()
+                    .find(|r| r.tag() == glyf_tag)
+            })
+            .ok_or_else(|| ResourceError::InvalidFont("glyf/CBDT table missing".into()))?;
+
+        let split_offset = record.offset() as usize;
+
+        let key = (family_id, weight);
         self.font_entries.insert(
             key,
             FontEntry {
-                data: Arc::new(FontData::new(sfnt)),
+                data: Arc::new(FontData::new(raw_ttf)),
                 split_offset,
             },
         );
         self.font_versions.insert(key, 0);
+        if let Some(manifest) = self.manifests.get(&key) {
+            self.loaded_chunks
+                .insert(key, vec![false; manifest.chunk_count as usize]);
+        } else {
+            self.loaded_chunks.insert(key, Vec::new());
+        }
 
         Ok(())
     }
 
     pub fn add_font_chunk(
         &mut self,
-        id: u16,
+        family_id: u16,
         weight: u16,
+        chunk_id: u16,
         data: &[u8],
     ) -> Result<(), ResourceError> {
-        let chunk_data = decode_tpft(data)?;
-        if chunk_data.len() < 4 {
+        let payload = decompress_zstd(data)?;
+        if payload.len() < 4 {
             return Err(ResourceError::InvalidFont("chunk data too short".into()));
         }
 
-        let key = (id, weight);
+        let key = (family_id, weight);
         let entry = self
             .font_entries
             .get(&key)
             .ok_or_else(|| ResourceError::InvalidFont("no base font registered".into()))?;
 
-        let num_entries = u32::from_be_bytes(chunk_data[0..4].try_into().unwrap()) as usize;
+        let num_entries = u32::from_be_bytes(payload[0..4].try_into().unwrap()) as usize;
 
-        // Safety: &mut self (or exclusive write lock) guarantees no concurrent readers.
+        // Safety: &mut self guarantees no concurrent readers of FontData.
         let sfnt = unsafe { &mut *entry.data.as_mut_ptr() };
         let mut pos = 4;
         for _ in 0..num_entries {
-            let offset = u32::from_be_bytes(chunk_data[pos..pos + 4].try_into().unwrap()) as usize;
-            let len = u32::from_be_bytes(chunk_data[pos + 4..pos + 8].try_into().unwrap()) as usize;
-            let src = &chunk_data[pos + 8..pos + 8 + len];
+            let offset = u32::from_be_bytes(payload[pos..pos + 4].try_into().unwrap()) as usize;
+            let len = u32::from_be_bytes(payload[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            let src = &payload[pos + 8..pos + 8 + len];
 
             let dst = entry.split_offset + offset;
             sfnt[dst..dst + len].copy_from_slice(src);
@@ -193,64 +238,62 @@ impl FontRegistry {
 
         *self.font_versions.entry(key).or_insert(0) += 1;
 
+        if let Some(bv) = self.loaded_chunks.get_mut(&key)
+            && (chunk_id as usize) < bv.len()
+        {
+            bv[chunk_id as usize] = true;
+        }
+
         Ok(())
     }
 
-    pub fn font_version(&self, id: u16, weight: u16) -> u64 {
-        self.font_versions.get(&(id, weight)).copied().unwrap_or(0)
+    pub fn font_version(&self, family_id: u16, weight: u16) -> u64 {
+        self.font_versions
+            .get(&(family_id, weight))
+            .copied()
+            .unwrap_or(0)
     }
 
-    pub fn font_data(&self, id: u16, weight: u16) -> Option<&[u8]> {
+    pub fn font_data(&self, family_id: u16, weight: u16) -> Option<&[u8]> {
         self.font_entries
-            .get(&(id, weight))
+            .get(&(family_id, weight))
             .map(|e| e.data.as_ref().as_ref())
     }
 
-    pub fn add_manifest(&mut self, family_id: u16, weight: u16, manifest: FontManifest) {
-        self.manifests.insert((family_id, weight), manifest);
+    pub fn register_placeholder(&mut self, data: &[u8]) {
+        let id = self.intern(super::placeholder::PLACEHOLDER_FAMILY_NAME);
+        let buffer: Vec<u8> = data.to_vec();
+        self.font_entries.insert(
+            (id, super::placeholder::PLACEHOLDER_WEIGHT),
+            FontEntry {
+                data: Arc::new(FontData::new(buffer)),
+                split_offset: 0,
+            },
+        );
+        self.font_versions
+            .insert((id, super::placeholder::PLACEHOLDER_WEIGHT), 0);
+        self.placeholder_family_id = Some(id);
     }
 
-    pub fn manifest(&self, family_id: u16, weight: u16) -> Option<&FontManifest> {
-        self.manifests.get(&(family_id, weight))
-    }
-
-    pub fn has_manifest(&self, family_id: u16, weight: u16) -> bool {
-        self.manifests.contains_key(&(family_id, weight))
-    }
-
-    pub fn set_fallback_entries(&mut self, entries: Vec<FallbackFontEntry>) {
-        for entry in &entries {
-            let id = self.intern(&entry.family_name);
-            for font in &entry.fonts {
-                self.manifests
-                    .insert((id, font.weight), font.manifest.clone());
-            }
-        }
-        self.fallback_entries = entries;
-    }
-
-    pub fn fallback_entries(&self) -> &[FallbackFontEntry] {
-        &self.fallback_entries
-    }
-
-    pub fn resolve_codepoint_mappings(
-        &self,
-        family_id: u16,
-        weight: u16,
-        codepoints: &[u32],
-    ) -> Vec<super::resolve::CodepointMapping> {
-        resolve_codepoint_mappings(self, family_id, weight, codepoints)
+    pub fn placeholder_family_id(&self) -> Option<u16> {
+        self.placeholder_family_id
     }
 }
 
 #[cfg(any(test, feature = "test-utils"))]
 impl FontRegistry {
-    pub fn from_families<S: Into<String>>(
-        families: impl IntoIterator<Item = (S, Vec<u16>)>,
-    ) -> Self {
-        let mut reg = Self::new();
-        reg.update(families.into_iter().map(|(k, v)| (k.into(), v)).collect());
-        reg
+    pub fn force_loaded_for_test(&mut self, family_id: u16, weight: u16, chunk_count: u16) {
+        let key = (family_id, weight);
+        self.font_entries.insert(
+            key,
+            FontEntry {
+                data: Arc::new(FontData::new(vec![0u8; 16])),
+                split_offset: 0,
+            },
+        );
+        self.font_versions.insert(key, 0);
+        self.loaded_chunks
+            .insert(key, vec![true; chunk_count as usize]);
     }
 }
 
@@ -262,34 +305,11 @@ impl Default for FontRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{TPFT_HEADER_SIZE, TPFT_MAGIC, TPFT_VERSION};
     use super::*;
+    use crate::font::config::FontWeight;
+    use crate::zstd::compress_zstd;
 
-    fn zstd_compress(data: &[u8]) -> Vec<u8> {
-        ruzstd::encoding::compress_to_vec(data, ruzstd::encoding::CompressionLevel::Fastest)
-    }
-
-    fn make_tpft(payload: &[u8]) -> Vec<u8> {
-        let compressed = zstd_compress(payload);
-        let mut buf = Vec::with_capacity(TPFT_HEADER_SIZE + compressed.len());
-        buf.extend_from_slice(TPFT_MAGIC);
-        buf.extend_from_slice(&TPFT_VERSION.to_be_bytes());
-        buf.extend_from_slice(&compressed);
-        buf
-    }
-
-    /// Build a TPFT-encoded base font.
-    /// Layout: [split_offset: u32][sfnt_bytes...]
-    fn make_base_tpft(split_offset: u32, sfnt: &[u8]) -> Vec<u8> {
-        let mut payload = Vec::with_capacity(4 + sfnt.len());
-        payload.extend_from_slice(&split_offset.to_be_bytes());
-        payload.extend_from_slice(sfnt);
-        make_tpft(&payload)
-    }
-
-    /// Build a TPFT-encoded chunk.
-    /// Layout: [num_entries: u32][offset: u32, len: u32, data...]...
-    fn make_chunk_tpft(entries: &[(u32, &[u8])]) -> Vec<u8> {
+    fn make_chunk_data(entries: &[(u32, &[u8])]) -> Vec<u8> {
         let mut payload = Vec::new();
         payload.extend_from_slice(&(entries.len() as u32).to_be_bytes());
         for &(offset, data) in entries {
@@ -297,176 +317,240 @@ mod tests {
             payload.extend_from_slice(&(data.len() as u32).to_be_bytes());
             payload.extend_from_slice(data);
         }
-        make_tpft(&payload)
+        compress_zstd(&payload)
     }
 
-    fn make_registry() -> FontRegistry {
+    /// Bypass skrifa TTF parsing by injecting a `FontEntry` directly.
+    /// Tests target `add_font_chunk` behaviour only; `add_font_base`'s TTF
+    /// parsing is covered by integration runs with real fonts.
+    fn inject_base(
+        reg: &mut FontRegistry,
+        family_id: u16,
+        weight: u16,
+        buffer: Vec<u8>,
+        split_offset: usize,
+    ) {
+        let key = (family_id, weight);
+        reg.font_entries.insert(
+            key,
+            FontEntry {
+                data: Arc::new(FontData::new(buffer)),
+                split_offset,
+            },
+        );
+        reg.font_versions.insert(key, 0);
+        if let Some(manifest) = reg.manifests.get(&key) {
+            reg.loaded_chunks
+                .insert(key, vec![false; manifest.chunk_count as usize]);
+        } else {
+            reg.loaded_chunks.insert(key, Vec::new());
+        }
+    }
+
+    fn make_registry_with_family(name: &str, weights: &[u16]) -> FontRegistry {
         let mut reg = FontRegistry::new();
-        let mut families = HashMap::default();
-        families.insert("Pretendard".into(), vec![100, 300, 400, 500, 700, 900]);
-        families.insert("Mono".into(), vec![400, 700]);
-        reg.update(families);
+        let families = vec![FontFamily {
+            name: name.into(),
+            source: FontFamilySource::Default,
+            weights: weights
+                .iter()
+                .map(|&w| FontWeight {
+                    value: w,
+                    hash: format!("h{w}"),
+                    chunks: vec![vec![0x41, 0x41]],
+                })
+                .collect(),
+        }];
+        reg.set_fonts(families);
         reg
     }
 
     #[test]
     fn has_family() {
-        let reg = make_registry();
+        let reg = make_registry_with_family("Pretendard", &[400, 700]);
         assert!(reg.has_family("Pretendard"));
         assert!(!reg.has_family("Unknown"));
     }
 
     #[test]
     fn weights() {
-        let reg = make_registry();
-        assert_eq!(
-            reg.weights("Pretendard"),
-            Some(&[100, 300, 400, 500, 700, 900][..])
-        );
+        let reg = make_registry_with_family("Pretendard", &[700, 400, 100]);
+        assert_eq!(reg.weights("Pretendard"), Some(&[100, 400, 700][..]));
         assert_eq!(reg.weights("Unknown"), None);
     }
 
     #[test]
     fn has_weight() {
-        let reg = make_registry();
+        let reg = make_registry_with_family("Pretendard", &[400, 700]);
         assert!(reg.has_weight("Pretendard", 400));
         assert!(!reg.has_weight("Pretendard", 200));
     }
 
     #[test]
-    fn nearest_weight_exact() {
-        let reg = make_registry();
-        assert_eq!(reg.nearest_weight("Pretendard", 400), Some(400));
-    }
-
-    #[test]
     fn nearest_weight_between() {
-        let reg = make_registry();
+        let reg = make_registry_with_family("Pretendard", &[400, 700]);
         assert_eq!(reg.nearest_weight("Pretendard", 600), Some(700));
-    }
-
-    #[test]
-    fn nearest_weight_below_min() {
-        let reg = make_registry();
-        assert_eq!(reg.nearest_weight("Pretendard", 50), Some(100));
-    }
-
-    #[test]
-    fn nearest_weight_above_max() {
-        let reg = make_registry();
-        assert_eq!(reg.nearest_weight("Pretendard", 950), Some(900));
-    }
-
-    #[test]
-    fn nearest_weight_unknown_family() {
-        let reg = make_registry();
-        assert_eq!(reg.nearest_weight("Unknown", 400), None);
-    }
-
-    #[test]
-    fn update_replaces_all() {
-        let mut reg = make_registry();
-        let mut families = HashMap::default();
-        families.insert("NewFont".into(), vec![400]);
-        reg.update(families);
-        assert!(!reg.has_family("Pretendard"));
-        assert!(reg.has_family("NewFont"));
-    }
-
-    #[test]
-    fn update_deduplicates_and_sorts() {
-        let mut reg = FontRegistry::new();
-        let mut families = HashMap::default();
-        families.insert("Test".into(), vec![700, 400, 700, 100, 400]);
-        reg.update(families);
-        assert_eq!(reg.weights("Test"), Some(&[100, 400, 700][..]));
     }
 
     #[test]
     fn intern_and_resolve() {
         let mut reg = FontRegistry::new();
         let id = reg.intern("Arial");
-        assert_eq!(reg.resolve(id), "Arial");
+        assert_eq!(reg.family_name(id), "Arial");
         assert_eq!(reg.intern("Arial"), id);
     }
 
     #[test]
-    fn codepoint_mapping() {
+    fn set_fonts_records_source() {
         let mut reg = FontRegistry::new();
-        let arial_id = reg.intern("Arial");
-        let noto_id = reg.intern("NotoSansCJK");
-        reg.add_codepoint_mapping(arial_id, 400, '한' as u32, noto_id, 400);
-
-        let map = reg.codepoint_map(arial_id, 400).unwrap();
-        assert_eq!(map.get(&('한' as u32)), Some(&(noto_id, 400)));
-        assert!(reg.codepoint_map(arial_id, 700).is_none());
+        reg.set_fonts(vec![FontFamily {
+            name: "F".into(),
+            source: FontFamilySource::Fallback,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h".into(),
+                chunks: vec![],
+            }],
+        }]);
+        let fid = reg.intern_id("F").unwrap();
+        assert_eq!(reg.family_source(fid), Some(FontFamilySource::Fallback));
     }
 
     #[test]
-    fn add_font_base_stores_data() {
-        let mut reg = FontRegistry::new();
-        // 20 bytes of sfnt, split_offset=8
-        let sfnt = vec![0u8; 20];
-        let tpft = make_base_tpft(8, &sfnt);
-
-        reg.add_font_base(0, 400, &tpft).unwrap();
-
-        let data = reg.font_data(0, 400).unwrap();
-        assert_eq!(data, &sfnt[..]);
-        assert_eq!(reg.font_version(0, 400), 0);
-    }
-
-    #[test]
-    fn add_font_base_different_weights() {
-        let mut reg = FontRegistry::new();
-        let sfnt_400 = vec![0u8; 20];
-        let sfnt_700 = vec![1u8; 20];
-        reg.add_font_base(0, 400, &make_base_tpft(8, &sfnt_400))
-            .unwrap();
-        reg.add_font_base(0, 700, &make_base_tpft(8, &sfnt_700))
-            .unwrap();
-
-        assert_eq!(reg.font_data(0, 400).unwrap(), &sfnt_400[..]);
-        assert_eq!(reg.font_data(0, 700).unwrap(), &sfnt_700[..]);
+    fn font_version_initial_is_zero() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+        assert_eq!(reg.font_version(fid, 400), 0);
     }
 
     #[test]
     fn add_font_chunk_patches_data() {
-        let mut reg = FontRegistry::new();
-        let sfnt = vec![0u8; 20];
-        let tpft = make_base_tpft(8, &sfnt);
-        reg.add_font_base(0, 400, &tpft).unwrap();
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
 
-        // Patch 3 bytes at offset 4 (relative to split_offset)
-        let chunk = make_chunk_tpft(&[(4, &[0xAA, 0xBB, 0xCC])]);
-        reg.add_font_chunk(0, 400, &chunk).unwrap();
+        let chunk = make_chunk_data(&[(4, &[0xAA, 0xBB, 0xCC])]);
+        reg.add_font_chunk(fid, 400, 0, &chunk).unwrap();
 
-        let data = reg.font_data(0, 400).unwrap();
+        let data = reg.font_data(fid, 400).unwrap();
         // split_offset(8) + chunk_offset(4) = byte 12..15
         assert_eq!(&data[12..15], &[0xAA, 0xBB, 0xCC]);
-        assert_eq!(reg.font_version(0, 400), 1);
+        assert_eq!(reg.font_version(fid, 400), 1);
     }
 
     #[test]
     fn add_font_chunk_increments_version() {
-        let mut reg = FontRegistry::new();
-        let sfnt = vec![0u8; 20];
-        reg.add_font_base(0, 400, &make_base_tpft(8, &sfnt))
-            .unwrap();
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
 
-        reg.add_font_chunk(0, 400, &make_chunk_tpft(&[(0, &[1])]))
+        reg.add_font_chunk(fid, 400, 0, &make_chunk_data(&[(0, &[1])]))
             .unwrap();
-        assert_eq!(reg.font_version(0, 400), 1);
+        assert_eq!(reg.font_version(fid, 400), 1);
 
-        reg.add_font_chunk(0, 400, &make_chunk_tpft(&[(1, &[2])]))
+        reg.add_font_chunk(fid, 400, 0, &make_chunk_data(&[(1, &[2])]))
             .unwrap();
-        assert_eq!(reg.font_version(0, 400), 2);
+        assert_eq!(reg.font_version(fid, 400), 2);
     }
 
     #[test]
     fn add_font_chunk_without_base_errors() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        let chunk = make_chunk_data(&[(0, &[1])]);
+        assert!(matches!(
+            reg.add_font_chunk(fid, 400, 0, &chunk),
+            Err(ResourceError::InvalidFont(_))
+        ));
+    }
+
+    #[test]
+    fn add_font_chunk_marks_loaded_chunk() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+
+        assert!(!reg.is_chunk_loaded(fid, 400, 0));
+        reg.add_font_chunk(fid, 400, 0, &make_chunk_data(&[(0, &[1])]))
+            .unwrap();
+        assert!(reg.is_chunk_loaded(fid, 400, 0));
+    }
+
+    #[test]
+    fn is_chunk_loaded_returns_false_before_load() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+        assert!(!reg.is_chunk_loaded(fid, 400, 0));
+    }
+
+    #[test]
+    fn is_base_loaded_tracks_font_entry() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        assert!(!reg.is_base_loaded(fid, 400));
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+        assert!(reg.is_base_loaded(fid, 400));
+    }
+
+    use super::super::placeholder::{PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT};
+
+    #[test]
+    fn placeholder_unset_initially() {
+        let reg = FontRegistry::new();
+        assert!(reg.placeholder_family_id().is_none());
+    }
+
+    #[test]
+    fn register_placeholder_sets_id_and_stores_bytes() {
         let mut reg = FontRegistry::new();
-        let chunk = make_chunk_tpft(&[(0, &[1])]);
-        assert!(reg.add_font_chunk(5, 400, &chunk).is_err());
+        let bytes = vec![0u8; 16]; // dummy payload; real registration validated in later tasks
+        reg.register_placeholder(&bytes);
+
+        let id = reg.placeholder_family_id().expect("placeholder id set");
+        assert_eq!(reg.family_name_opt(id), Some(PLACEHOLDER_FAMILY_NAME));
+        assert_eq!(
+            reg.font_data(id, PLACEHOLDER_WEIGHT).map(|s| s.len()),
+            Some(16)
+        );
+    }
+
+    #[test]
+    fn set_fonts_preserves_placeholder_entry() {
+        let mut reg = FontRegistry::new();
+        reg.register_placeholder(&vec![0u8; 8]);
+        let placeholder_id = reg.placeholder_family_id().unwrap();
+
+        reg.set_fonts(vec![FontFamily {
+            name: "Pretendard".into(),
+            source: FontFamilySource::Default,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h".into(),
+                chunks: vec![],
+            }],
+        }]);
+
+        assert!(reg.font_data(placeholder_id, PLACEHOLDER_WEIGHT).is_some());
+        assert_eq!(reg.placeholder_family_id(), Some(placeholder_id));
+    }
+
+    #[test]
+    fn set_fonts_rejects_reserved_name() {
+        let mut reg = FontRegistry::new();
+        reg.register_placeholder(&vec![0u8; 8]);
+
+        reg.set_fonts(vec![FontFamily {
+            name: PLACEHOLDER_FAMILY_NAME.into(),
+            source: FontFamilySource::User,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h".into(),
+                chunks: vec![],
+            }],
+        }]);
+
+        assert!(!reg.has_family(PLACEHOLDER_FAMILY_NAME));
     }
 }

@@ -15,6 +15,7 @@ query EditorScreen_Query($entityId: ID!) {
         id
         nullableTitle
         subtitle
+        ...FontLoader_Document
       }
     }
   }

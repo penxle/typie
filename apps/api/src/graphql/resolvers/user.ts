@@ -5,6 +5,7 @@ import {
   CreditCodeState,
   EntityState,
   EntityType,
+  FontFamilySource,
   FontFamilyState,
   PaymentInvoiceState,
   PlanAvailability,
@@ -400,8 +401,14 @@ User.implement({
 
     documentFontFamilies: t.field({
       type: [DocumentFontFamily],
-      resolve: async (self) => {
-        return await getDocumentFontFamilies(self.id);
+      args: {
+        sources: t.arg({
+          type: [FontFamilySource],
+          defaultValue: [FontFamilySource.DEFAULT, FontFamilySource.USER],
+        }),
+      },
+      resolve: async (self, args, ctx) => {
+        return await getDocumentFontFamilies(self.id, ctx.session?.userId ?? null, args.sources);
       },
     }),
 

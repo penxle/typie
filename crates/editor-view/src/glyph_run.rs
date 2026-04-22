@@ -23,8 +23,8 @@ pub struct GraphemeSpan {
 
 #[derive(Debug, Clone)]
 pub struct GlyphRun {
-    pub font_id: FontId,
-    pub font_weight: u16,
+    pub family_id: FontId,
+    pub weight: u16,
     pub font_size: f32,
     pub synthesis: Synthesis,
     pub color: String,
@@ -50,8 +50,8 @@ impl GlyphRun {
     ) -> Self {
         let width = graphemes.iter().map(|g| g.advance).sum();
         Self {
-            font_id: 0,
-            font_weight: 400,
+            family_id: 0,
+            weight: 400,
             font_size: 16.0,
             synthesis: Synthesis::default(),
             color: String::new(),

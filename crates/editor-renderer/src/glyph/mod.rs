@@ -52,10 +52,10 @@ pub fn rasterize(
     scale_factor: f32,
     base_transform: RenderTransform,
 ) -> Vec<PositionedGlyph> {
-    let Some(font_data) = fonts.font_data(run.font_id, run.font_weight) else {
+    let Some(font_data) = fonts.font_data(run.family_id, run.weight) else {
         return Vec::new();
     };
-    let font_version = fonts.font_version(run.font_id, run.font_weight);
+    let font_version = fonts.font_version(run.family_id, run.weight);
     let scaled_font_size = run.font_size * scale_factor;
     let has_skew = run.synthesis.skew.is_some();
     let embolden = run.synthesis.embolden;
@@ -75,7 +75,8 @@ pub fn rasterize(
         let subpixel_x = ((snapped_x - snapped_x.floor()) * 4.0) as u8;
 
         let key = GlyphCacheKey::new(
-            run.font_id,
+            run.family_id,
+            run.weight,
             g.id,
             scaled_font_size,
             has_skew,

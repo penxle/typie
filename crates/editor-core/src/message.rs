@@ -198,10 +198,6 @@ pub enum SystemEvent {
     SetFocused {
         focused: bool,
     },
-    FontManifestLoaded {
-        family: String,
-        weight: u16,
-    },
     FontBaseLoaded {
         family: String,
         weight: u16,
@@ -209,6 +205,7 @@ pub enum SystemEvent {
     FontChunkLoaded {
         family: String,
         weight: u16,
+        chunk_id: u16,
     },
     SetExternalHeight {
         node_id: NodeId,

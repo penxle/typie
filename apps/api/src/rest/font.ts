@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import defaultFontFamilies from '@typie/editor/font/defaults.json' with { type: 'json' };
+import fontFamiliesJson from '@typie/assets/fonts.json' with { type: 'json' };
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -14,7 +14,12 @@ import { outlineTextToSvg } from '#/utils/font.ts';
 import { normalizeSpecimenFallbacks, renderFontSpecimenSvg } from './font-specimen.ts';
 import type { Env } from '#/context.ts';
 
-const defaultFontMap = new Map(defaultFontFamilies.flatMap((f) => f.fonts.map((v) => [v.id, v.path] as const)));
+type FontFamilyEntry = { source: 'DEFAULT' | 'FALLBACK'; fonts: { id: string; path: string }[] };
+const fontFamilies = fontFamiliesJson as unknown as FontFamilyEntry[];
+
+const defaultFontMap = new Map(
+  fontFamilies.filter((f) => f.source === 'DEFAULT').flatMap((f) => f.fonts.map((v) => [v.id, v.path] as const)),
+);
 
 export const font = new Hono<Env>();
 

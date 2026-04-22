@@ -171,13 +171,10 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
       scope: CoroutineScope,
     ): Editor =
       withContext(Dispatchers.Default) {
-        FontLoader.initFonts()
-
         val inner = PlatformModule.editorHost.createEditor(doc, selection, viewport)
         val editor = Editor(inner, scope)
 
         editor.on<EditorEvent.StateChanged>(editor.stateChangedHandler)
-        editor.on<EditorEvent.FontManifestMissing>(FontLoader.fontManifestMissingHandler)
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
 
         editor.enqueue(Message.System(SystemEvent.Initialize))

@@ -123,6 +123,9 @@ export const DocumentFont = builder.simpleObject('DocumentFont', {
     subfamilyDisplayName: t.string({ nullable: true }),
     url: t.string(),
     state: t.field({ type: FontState }),
+    path: t.string(),
+    hash: t.string(),
+    chunks: t.field({ type: 'JSON' }),
   }),
 });
 

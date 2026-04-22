@@ -4,7 +4,8 @@ use crate::glyph::RasterizedGlyph;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GlyphCacheKey {
-    pub font_id: u16,
+    pub family_id: u16,
+    pub weight: u16,
     pub glyph_id: u32,
     pub size_q4: u32,
     pub has_skew: bool,
@@ -14,7 +15,8 @@ pub struct GlyphCacheKey {
 
 impl GlyphCacheKey {
     pub fn new(
-        font_id: u16,
+        family_id: u16,
+        weight: u16,
         glyph_id: u32,
         font_size: f32,
         has_skew: bool,
@@ -23,7 +25,8 @@ impl GlyphCacheKey {
     ) -> Self {
         debug_assert!(subpixel_x < 4);
         Self {
-            font_id,
+            family_id,
+            weight,
             glyph_id,
             size_q4: (font_size * 4.0).round() as u32,
             has_skew,
@@ -49,8 +52,8 @@ impl GlyphCache {
         }
     }
 
-    /// Look up a cached glyph result; `None` entries are only valid when `font_version` matches
-    /// because a new font chunk may have populated the glyph data since the miss was recorded.
+    /// `None` 엔트리는 font_version 이 일치할 때만 유효하다. 새 폰트 청크가 들어오면
+    /// miss 가 기록된 이후 glyph 데이터가 채워졌을 수 있으므로 재시도한다.
     pub fn get(
         &self,
         key: &GlyphCacheKey,

@@ -1,15 +1,16 @@
+mod config;
 mod data;
-mod fallback;
 mod manifest;
+mod placeholder;
 mod registry;
+mod resolution;
 mod resolve;
-mod tpft;
 mod weight;
 
+pub use config::*;
 pub use data::*;
-pub use fallback::*;
 pub use manifest::*;
+pub use placeholder::{PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT};
 pub use registry::*;
-pub use resolve::*;
-pub use tpft::*;
+pub use resolution::{Resolution, Target};
 pub use weight::*;

@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use bitcode::{Decode, Encode};
-
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug)]
 pub struct FontManifest {
     pub chunk_count: u16,
     chunk_map: Vec<u8>,
@@ -16,6 +14,21 @@ impl FontManifest {
             chunk_map,
             chunk_map_sup,
         }
+    }
+
+    /// `coverages[i]` — chunk `i`의 flat 페어 `[start, end, start, end, ...]` (inclusive).
+    pub fn from_coverages(coverages: &[Vec<u32>]) -> Self {
+        let chunk_count = coverages.len() as u16;
+        let mut per_chunk: Vec<Vec<u32>> = vec![Vec::new(); chunk_count as usize];
+        for (idx, ranges) in coverages.iter().enumerate() {
+            let bucket = &mut per_chunk[idx];
+            for pair in ranges.chunks_exact(2) {
+                for cp in pair[0]..=pair[1] {
+                    bucket.push(cp);
+                }
+            }
+        }
+        Self::from_chunk_codepoints(&per_chunk)
     }
 
     pub fn from_chunk_codepoints(chunk_codepoints: &[Vec<u32>]) -> Self {
@@ -81,7 +94,7 @@ impl FontManifest {
         entries.iter().flat_map(|&(cp, idx)| [cp, idx]).collect()
     }
 
-    pub fn chunk_index(&self, cp: u32) -> Option<u16> {
+    pub fn chunk_id(&self, cp: u32) -> Option<u16> {
         if cp <= 0xFFFF {
             self.bmp_lookup(cp)
         } else {
@@ -90,14 +103,14 @@ impl FontManifest {
     }
 
     pub fn has_codepoint(&self, cp: u32) -> bool {
-        self.chunk_index(cp).is_some()
+        self.chunk_id(cp).is_some()
     }
 
-    pub fn chunk_indices(&self, codepoints: &[u32]) -> Vec<u16> {
+    pub fn chunk_ids(&self, codepoints: &[u32]) -> Vec<u16> {
         let mut seen = hashbrown::HashSet::new();
         let mut result = Vec::new();
         for &cp in codepoints {
-            if let Some(idx) = self.chunk_index(cp)
+            if let Some(idx) = self.chunk_id(cp)
                 && seen.insert(idx)
             {
                 result.push(idx);
@@ -106,7 +119,7 @@ impl FontManifest {
         result
     }
 
-    pub fn all_chunk_indices(&self) -> std::ops::Range<u16> {
+    pub fn all_chunk_ids(&self) -> std::ops::Range<u16> {
         0..self.chunk_count
     }
 
@@ -159,15 +172,15 @@ impl FontManifest {
 mod tests {
     use super::*;
 
-    /// Build a chunk_map where block `hi` maps low byte `lo` to `chunk_idx`.
+    /// Build a chunk_map where block `hi` maps low byte `lo` to `chunk_id`.
     /// 0xff means "not covered".
     fn make_manifest(entries: &[(u8, u8, u8)], sup: &[u32], chunk_count: u16) -> FontManifest {
         let mut chunk_map = vec![0xffu8; 256];
         let mut l2_blocks: BTreeMap<u8, [u8; 256]> = BTreeMap::new();
 
-        for &(hi, lo, chunk_idx) in entries {
+        for &(hi, lo, chunk_id) in entries {
             let l2 = l2_blocks.entry(hi).or_insert([0xff; 256]);
-            l2[lo as usize] = chunk_idx;
+            l2[lo as usize] = chunk_id;
         }
 
         for (i, (&hi, _)) in l2_blocks.iter().enumerate() {
@@ -186,39 +199,39 @@ mod tests {
     }
 
     #[test]
-    fn chunk_index_bmp_exists() {
+    fn chunk_id_bmp_exists() {
         let m = make_manifest(&[(0x00, 0x41, 3)], &[], 8);
-        assert_eq!(m.chunk_index(0x0041), Some(3));
+        assert_eq!(m.chunk_id(0x0041), Some(3));
     }
 
     #[test]
-    fn chunk_index_bmp_l1_unmapped() {
+    fn chunk_id_bmp_l1_unmapped() {
         let m = make_manifest(&[(0x00, 0x41, 3)], &[], 8);
-        assert_eq!(m.chunk_index(0x0100), None);
+        assert_eq!(m.chunk_id(0x0100), None);
     }
 
     #[test]
-    fn chunk_index_bmp_l2_unmapped() {
+    fn chunk_id_bmp_l2_unmapped() {
         let m = make_manifest(&[(0x00, 0x41, 3)], &[], 8);
-        assert_eq!(m.chunk_index(0x0042), None);
+        assert_eq!(m.chunk_id(0x0042), None);
     }
 
     #[test]
-    fn chunk_index_supplementary_exists() {
+    fn chunk_id_supplementary_exists() {
         let m = make_manifest(&[], &[0x1F600, 5], 8);
-        assert_eq!(m.chunk_index(0x1F600), Some(5));
+        assert_eq!(m.chunk_id(0x1F600), Some(5));
     }
 
     #[test]
-    fn chunk_index_supplementary_missing() {
+    fn chunk_id_supplementary_missing() {
         let m = make_manifest(&[], &[0x1F600, 5], 8);
-        assert_eq!(m.chunk_index(0x1F601), None);
+        assert_eq!(m.chunk_id(0x1F601), None);
     }
 
     #[test]
-    fn chunk_index_supplementary_empty_sup() {
+    fn chunk_id_supplementary_empty_sup() {
         let m = make_manifest(&[], &[], 8);
-        assert_eq!(m.chunk_index(0x10000), None);
+        assert_eq!(m.chunk_id(0x10000), None);
     }
 
     #[test]
@@ -234,96 +247,117 @@ mod tests {
     }
 
     #[test]
-    fn chunk_indices_deduplicates() {
+    fn chunk_ids_deduplicates() {
         let m = make_manifest(&[(0x00, 0x41, 3), (0x00, 0x42, 3)], &[], 8);
-        let result = m.chunk_indices(&[0x0041, 0x0042]);
+        let result = m.chunk_ids(&[0x0041, 0x0042]);
         assert_eq!(result, vec![3]);
     }
 
     #[test]
-    fn chunk_indices_multiple_chunks() {
+    fn chunk_ids_multiple_subsets() {
         let m = make_manifest(&[(0x00, 0x41, 3), (0x00, 0x42, 5)], &[], 8);
-        let mut result = m.chunk_indices(&[0x0041, 0x0042]);
+        let mut result = m.chunk_ids(&[0x0041, 0x0042]);
         result.sort();
         assert_eq!(result, vec![3, 5]);
     }
 
     #[test]
-    fn chunk_indices_mixed_existing_and_missing() {
+    fn chunk_ids_mixed_existing_and_missing() {
         let m = make_manifest(&[(0x00, 0x41, 3)], &[], 8);
-        let result = m.chunk_indices(&[0x0041, 0x0099]);
+        let result = m.chunk_ids(&[0x0041, 0x0099]);
         assert_eq!(result, vec![3]);
     }
 
     #[test]
-    fn chunk_indices_empty_input() {
+    fn chunk_ids_empty_input() {
         let m = make_manifest(&[(0x00, 0x41, 3)], &[], 8);
-        let result = m.chunk_indices(&[]);
+        let result = m.chunk_ids(&[]);
         assert!(result.is_empty());
     }
 
     #[test]
-    fn chunk_indices_empty_chunk_map() {
+    fn chunk_ids_empty_chunk_map() {
         let m = FontManifest::new(0, vec![], vec![]);
-        let result = m.chunk_indices(&[0x0041]);
+        let result = m.chunk_ids(&[0x0041]);
         assert!(result.is_empty());
     }
 
     #[test]
-    fn from_chunk_codepoints_bmp_single_chunk() {
+    fn from_chunk_codepoints_bmp_single_subset() {
         let m = FontManifest::from_chunk_codepoints(&[vec![0x0041, 0x0042]]);
         assert_eq!(m.chunk_count, 1);
-        assert_eq!(m.chunk_index(0x0041), Some(0));
-        assert_eq!(m.chunk_index(0x0042), Some(0));
-        assert_eq!(m.chunk_index(0x0043), None);
+        assert_eq!(m.chunk_id(0x0041), Some(0));
+        assert_eq!(m.chunk_id(0x0042), Some(0));
+        assert_eq!(m.chunk_id(0x0043), None);
     }
 
     #[test]
-    fn from_chunk_codepoints_bmp_multiple_chunks() {
+    fn from_chunk_codepoints_bmp_multiple_subsets() {
         let m = FontManifest::from_chunk_codepoints(&[
             vec![0x0041],
             vec![0x0100, 0x0101],
             vec![0xAC00],
         ]);
         assert_eq!(m.chunk_count, 3);
-        assert_eq!(m.chunk_index(0x0041), Some(0));
-        assert_eq!(m.chunk_index(0x0100), Some(1));
-        assert_eq!(m.chunk_index(0x0101), Some(1));
-        assert_eq!(m.chunk_index(0xAC00), Some(2));
+        assert_eq!(m.chunk_id(0x0041), Some(0));
+        assert_eq!(m.chunk_id(0x0100), Some(1));
+        assert_eq!(m.chunk_id(0x0101), Some(1));
+        assert_eq!(m.chunk_id(0xAC00), Some(2));
     }
 
     #[test]
     fn from_chunk_codepoints_supplementary() {
         let m = FontManifest::from_chunk_codepoints(&[vec![0x0041], vec![0x1F600, 0x1F601]]);
-        assert_eq!(m.chunk_index(0x0041), Some(0));
-        assert_eq!(m.chunk_index(0x1F600), Some(1));
-        assert_eq!(m.chunk_index(0x1F601), Some(1));
-        assert_eq!(m.chunk_index(0x1F602), None);
+        assert_eq!(m.chunk_id(0x0041), Some(0));
+        assert_eq!(m.chunk_id(0x1F600), Some(1));
+        assert_eq!(m.chunk_id(0x1F601), Some(1));
+        assert_eq!(m.chunk_id(0x1F602), None);
     }
 
     #[test]
     fn from_chunk_codepoints_mixed_bmp_and_supplementary() {
         let m =
             FontManifest::from_chunk_codepoints(&[vec![0x0041, 0x1F600], vec![0xAC00, 0x20000]]);
-        assert_eq!(m.chunk_index(0x0041), Some(0));
-        assert_eq!(m.chunk_index(0x1F600), Some(0));
-        assert_eq!(m.chunk_index(0xAC00), Some(1));
-        assert_eq!(m.chunk_index(0x20000), Some(1));
+        assert_eq!(m.chunk_id(0x0041), Some(0));
+        assert_eq!(m.chunk_id(0x1F600), Some(0));
+        assert_eq!(m.chunk_id(0xAC00), Some(1));
+        assert_eq!(m.chunk_id(0x20000), Some(1));
     }
 
     #[test]
     fn from_chunk_codepoints_empty() {
         let m = FontManifest::from_chunk_codepoints(&[]);
         assert_eq!(m.chunk_count, 0);
-        assert_eq!(m.chunk_index(0x0041), None);
+        assert_eq!(m.chunk_id(0x0041), None);
     }
 
     #[test]
-    fn from_chunk_codepoints_bitcode_roundtrip() {
-        let m = FontManifest::from_chunk_codepoints(&[vec![0x0041, 0x0042], vec![0x1F600]]);
-        let encoded = bitcode::encode(&m);
-        let decoded: FontManifest = bitcode::decode(&encoded).unwrap();
-        assert_eq!(decoded.chunk_index(0x0041), Some(0));
-        assert_eq!(decoded.chunk_index(0x1F600), Some(1));
+    fn from_coverages_basic() {
+        let coverages = vec![vec![0x41, 0x43], vec![0x1F600, 0x1F600]];
+        let m = FontManifest::from_coverages(&coverages);
+        assert_eq!(m.chunk_count, 2);
+        assert_eq!(m.chunk_id(0x41), Some(0));
+        assert_eq!(m.chunk_id(0x42), Some(0));
+        assert_eq!(m.chunk_id(0x43), Some(0));
+        assert_eq!(m.chunk_id(0x44), None);
+        assert_eq!(m.chunk_id(0x1F600), Some(1));
+        assert_eq!(m.chunk_id(0x1F601), None);
+    }
+
+    #[test]
+    fn from_coverages_empty() {
+        let coverages: Vec<Vec<u32>> = vec![];
+        let m = FontManifest::from_coverages(&coverages);
+        assert_eq!(m.chunk_count, 0);
+        assert_eq!(m.chunk_id(0x41), None);
+    }
+
+    #[test]
+    fn from_coverages_sparse_ids() {
+        // chunk 0, 1은 비어 있고 chunk 2에만 coverage — empty inner Vec로 표현.
+        let coverages = vec![vec![], vec![], vec![0x41, 0x41]];
+        let m = FontManifest::from_coverages(&coverages);
+        assert_eq!(m.chunk_count, 3);
+        assert_eq!(m.chunk_id(0x41), Some(2));
     }
 }

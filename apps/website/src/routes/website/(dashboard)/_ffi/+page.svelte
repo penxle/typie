@@ -1,12 +1,34 @@
 <script lang="ts">
+  import { createQuery } from '@mearie/svelte';
   import { css } from '@typie/styled-system/css';
   import Editor from '$lib/editor-ffi/components/Editor.svelte';
   import { setupEditorContext } from '$lib/editor-ffi/editor.svelte';
+  import { graphql } from '$mearie';
   import BottomToolbar from './BottomToolbar.svelte';
   import TopToolbar from './TopToolbar.svelte';
   import type { Doc, Selection } from '@typie/editor-ffi/browser';
 
   const ctx = setupEditorContext();
+
+  const query = createQuery(
+    graphql(`
+      query FfiPage_Query($entityId: ID!) {
+        entity(entityId: $entityId) {
+          id
+          node {
+            __typename
+            ... on Document {
+              id
+              ...Editor_document
+            }
+          }
+        }
+      }
+    `),
+    () => ({ entityId: 'E0AAAAAAAAAA' }),
+  );
+
+  const document$key = $derived(query.data?.entity?.node.__typename === 'Document' ? query.data.entity.node : null);
 
   const doc: Doc = {
     nodes: {
@@ -74,5 +96,7 @@
 <div class={css({ display: 'flex', flexDirection: 'column', size: 'full' })}>
   <TopToolbar />
   <BottomToolbar />
-  <Editor style={css.raw({ flex: '1', overflow: 'auto' })} {doc} {selection} />
+  {#if document$key}
+    <Editor style={css.raw({ flex: '1', overflow: 'auto' })} {doc} {document$key} {selection} />
+  {/if}
 </div>

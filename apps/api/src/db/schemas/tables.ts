@@ -265,6 +265,8 @@ export const Fonts = pgTable(
     weight: integer('weight').notNull(),
     size: bigint('size', { mode: 'number' }).notNull(),
     path: text('path').notNull(),
+    hash: text('hash').notNull().default(''),
+    chunks: jsonb('chunks').notNull().default([]),
     state: E._FontState('state').notNull().default('ACTIVE'),
     createdAt: datetime('created_at')
       .notNull()

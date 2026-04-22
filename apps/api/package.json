@@ -43,6 +43,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@sentry/node": "^10.47.0",
     "@sindresorhus/string-hash": "^2.0.0",
+    "@typie/assets": "workspace:*",
     "@typie/editor": "workspace:*",
     "@typie/editor-ffi": "workspace:*",
     "@typie/lib": "workspace:*",

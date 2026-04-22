@@ -10,7 +10,8 @@ edition = "2024"
 android_logger = "0.15"
 base62 = "2"
 bitcode = "0.6"
-bytecount = { version = "0.6", features = ["generic-simd"] }
+rapidhash = "4"
+bytecount = { version = "0.6", features = ["runtime-dispatch-simd"] }
 cfg-if = "1"
 console_error_panic_hook = { version = "0.1" }
 console_log = "1"
@@ -21,6 +22,7 @@ fontique = { version = "0.8", default-features = false }
 getrandom = { version = "0.4", features = ["wasm_js"] }
 hashbrown = "0.16"
 heck = "0.5"
+hex = "0.4"
 itertools = "0.14"
 icu_provider = { version = "2", default-features = false, features = [
   "serde",

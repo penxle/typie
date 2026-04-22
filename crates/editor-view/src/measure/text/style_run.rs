@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use editor_model::NodeId;
-use editor_resource::FontRegistry;
+use editor_resource::{FontRegistry, PLACEHOLDER_WEIGHT, Resolution};
 
 use super::text_run::TextRun;
 
@@ -22,11 +22,13 @@ pub fn resolve_style_runs(
 ) -> Vec<StyleRun> {
     let mut style_runs: Vec<StyleRun> = Vec::new();
 
-    for run in runs {
-        let family_id = font_registry.intern(&run.style.font_family);
-        let weight = run.style.font_weight;
+    let placeholder_id = font_registry
+        .placeholder_family_id()
+        .expect("placeholder family must be registered before resolving style runs");
 
-        let cp_map = font_registry.codepoint_map(family_id, weight);
+    for run in runs {
+        let requested_family_id = font_registry.intern(&run.style.font_family);
+        let weight = run.style.font_weight;
 
         let run_text = &text[run.byte_range.clone()];
         let mut byte_offset = run.byte_range.start;
@@ -35,14 +37,18 @@ pub fn resolve_style_runs(
             let char_bytes = ch.len_utf8();
             let char_byte_end = byte_offset + char_bytes;
 
-            let (resolved_family, resolved_weight) = cp_map
-                .and_then(|m| m.get(&(ch as u32)).copied())
-                .unwrap_or_else(|| {
-                    let w = font_registry
-                        .nearest_weight(&run.style.font_family, weight)
-                        .unwrap_or(weight);
-                    (family_id, w)
-                });
+            let (resolved_family, resolved_weight) =
+                match font_registry.resolve(requested_family_id, weight, ch as u32) {
+                    Resolution::Ready(target) => (target.family_id, target.weight),
+                    Resolution::Pending {
+                        target,
+                        needs_base: false,
+                    } => (target.family_id, target.weight),
+                    Resolution::Pending {
+                        needs_base: true, ..
+                    }
+                    | Resolution::Missing => (placeholder_id, PLACEHOLDER_WEIGHT),
+                };
 
             let can_merge = style_runs.last().is_some_and(|last: &StyleRun| {
                 last.family == resolved_family
@@ -78,86 +84,153 @@ pub fn resolve_style_runs(
 #[cfg(test)]
 mod tests {
     use editor_macros::doc;
-    use editor_resource::FontRegistry;
+    use editor_resource::{
+        FontFamily, FontFamilySource, FontRegistry, FontWeight, PLACEHOLDER_WEIGHT,
+    };
 
     use super::*;
     use crate::measure::text::text_run::collect_text_runs;
 
-    fn registry_with_families(families: &[&str]) -> FontRegistry {
-        FontRegistry::from_families(families.iter().map(|f| (f.to_string(), vec![400, 700])))
+    fn family(name: &str, source: FontFamilySource, weights: &[u16]) -> FontFamily {
+        FontFamily {
+            name: name.into(),
+            source,
+            weights: weights
+                .iter()
+                .map(|&w| FontWeight {
+                    value: w,
+                    hash: format!("h{}_{}", name, w),
+                    chunks: vec![vec![0x0000, 0xFFFF]],
+                })
+                .collect(),
+        }
+    }
+
+    fn registry_with_families(families: &[(&str, &[u16])]) -> FontRegistry {
+        let mut reg = FontRegistry::new();
+        reg.register_placeholder(&vec![0u8; 16]);
+        let families: Vec<FontFamily> = families
+            .iter()
+            .map(|(n, w)| family(n, FontFamilySource::Default, w))
+            .collect();
+        reg.set_fonts(families);
+        reg
     }
 
     #[test]
-    fn single_run_known_family() {
+    fn ready_uses_target_family() {
         let (doc, p1) = doc! {
             root [font_family("Arial".to_string())] {
-                p1: paragraph { text("hello") }
+                p1: paragraph { text("A") }
             }
         };
         let node = doc.node(p1).unwrap();
         let (text, runs) = collect_text_runs(&doc, &node);
-        let mut registry = registry_with_families(&["Arial"]);
+        let mut registry = registry_with_families(&[("Arial", &[400])]);
+        let arial_id = registry.intern_id("Arial").unwrap();
+        registry.force_loaded_for_test(arial_id, 400, 1);
+
         let style_runs = resolve_style_runs(&text, &runs, &mut registry);
+
         assert_eq!(style_runs.len(), 1);
-        assert_eq!(registry.resolve(style_runs[0].family), "Arial");
-        assert_eq!(style_runs[0].byte_range, 0..5);
-        assert_eq!(style_runs[0].font_size, runs[0].style.font_size);
-        assert_eq!(style_runs[0].node_id, runs[0].node_id);
+        assert_eq!(style_runs[0].family, arial_id);
+        assert_eq!(style_runs[0].weight, 400);
     }
 
     #[test]
-    fn unknown_family_uses_fallback() {
+    fn pending_chunk_only_uses_target_family() {
+        // base loaded but chunk not loaded → still use the target family; renderer blanks at rasterize.
         let (doc, p1) = doc! {
-            root [font_family("UnknownFont".to_string())] {
-                p1: paragraph { text("hello") }
+            root [font_family("Arial".to_string())] {
+                p1: paragraph { text("A") }
             }
         };
         let node = doc.node(p1).unwrap();
         let (text, runs) = collect_text_runs(&doc, &node);
-        let mut registry = FontRegistry::new();
+        let mut registry = registry_with_families(&[("Arial", &[400])]);
+        let arial_id = registry.intern_id("Arial").unwrap();
+        // base loaded, chunk 0 not loaded
+        registry.force_loaded_for_test(arial_id, 400, 0);
+
         let style_runs = resolve_style_runs(&text, &runs, &mut registry);
+
         assert_eq!(style_runs.len(), 1);
-        assert_eq!(style_runs[0].byte_range, 0..5);
-        assert_eq!(registry.resolve(style_runs[0].family), "UnknownFont");
+        assert_eq!(style_runs[0].family, arial_id);
+    }
+
+    #[test]
+    fn pending_needs_base_uses_placeholder() {
+        // base not loaded at all → placeholder.
+        let (doc, p1) = doc! {
+            root [font_family("Arial".to_string())] {
+                p1: paragraph { text("A") }
+            }
+        };
+        let node = doc.node(p1).unwrap();
+        let (text, runs) = collect_text_runs(&doc, &node);
+        let mut registry = registry_with_families(&[("Arial", &[400])]);
+
+        let style_runs = resolve_style_runs(&text, &runs, &mut registry);
+
+        let placeholder_id = registry.placeholder_family_id().unwrap();
+        assert_eq!(style_runs.len(), 1);
+        assert_eq!(style_runs[0].family, placeholder_id);
+        assert_eq!(style_runs[0].weight, PLACEHOLDER_WEIGHT);
+    }
+
+    #[test]
+    fn missing_uses_placeholder() {
+        // "Arial" registered, but cp outside its coverage (covered family has range 0x0000..=0x00FF only).
+        let (doc, p1) = doc! {
+            root [font_family("Arial".to_string())] {
+                p1: paragraph { text("\u{4E2D}") } // Chinese char outside our narrow coverage
+            }
+        };
+        let node = doc.node(p1).unwrap();
+        let (text, runs) = collect_text_runs(&doc, &node);
+
+        // Build a registry where Arial only covers 0x0000..=0x00FF and there is no fallback.
+        let mut registry = FontRegistry::new();
+        registry.register_placeholder(&vec![0u8; 16]);
+        registry.set_fonts(vec![FontFamily {
+            name: "Arial".into(),
+            source: FontFamilySource::Default,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h".into(),
+                chunks: vec![vec![0x0000, 0x00FF]],
+            }],
+        }]);
+        let arial_id = registry.intern_id("Arial").unwrap();
+        registry.force_loaded_for_test(arial_id, 400, 1);
+
+        let style_runs = resolve_style_runs(&text, &runs, &mut registry);
+
+        let placeholder_id = registry.placeholder_family_id().unwrap();
+        assert_eq!(style_runs.len(), 1);
+        assert_eq!(style_runs[0].family, placeholder_id);
     }
 
     #[test]
     fn adjacent_runs_same_family_merged() {
         let (doc, p1) = doc! {
             root [font_family("Arial".to_string())] {
-                p1: paragraph { text("hello") text(" world") }
+                p1: paragraph { text("A") text("B") }
             }
         };
         let node = doc.node(p1).unwrap();
         let (text, runs) = collect_text_runs(&doc, &node);
-        let mut registry = registry_with_families(&["Arial"]);
+        let mut registry = registry_with_families(&[("Arial", &[400])]);
+        let arial_id = registry.intern_id("Arial").unwrap();
+        registry.force_loaded_for_test(arial_id, 400, 1);
+
         let style_runs = resolve_style_runs(&text, &runs, &mut registry);
-        // Two text nodes have different node_ids, so they won't merge
+
+        // Two text nodes have different node_ids, so they won't merge.
         assert_eq!(style_runs.len(), 2);
-        assert_eq!(style_runs[0].byte_range, 0..5);
-        assert_eq!(style_runs[1].byte_range, 5..11);
-    }
-
-    #[test]
-    fn codepoint_mapping_splits_run() {
-        let (doc, p1) = doc! {
-            root [font_family("Pretendard".to_string())] {
-                p1: paragraph { text("A\u{D55C}B") }
-            }
-        };
-        let node = doc.node(p1).unwrap();
-        let (text, runs) = collect_text_runs(&doc, &node);
-
-        let mut registry = registry_with_families(&["Pretendard", "Paperlogy"]);
-        let pretendard_id = registry.intern("Pretendard");
-        let paperlogy_id = registry.intern("Paperlogy");
-        registry.add_codepoint_mapping(pretendard_id, 400, '\u{D55C}' as u32, paperlogy_id, 700);
-
-        let style_runs = resolve_style_runs(&text, &runs, &mut registry);
-        assert_eq!(style_runs.len(), 3);
-        assert_eq!(registry.resolve(style_runs[0].family), "Pretendard"); // "A"
-        assert_eq!(registry.resolve(style_runs[1].family), "Paperlogy"); // "한"
-        assert_eq!(style_runs[1].weight, 700);
-        assert_eq!(registry.resolve(style_runs[2].family), "Pretendard"); // "B"
+        assert_eq!(style_runs[0].byte_range, 0..1);
+        assert_eq!(style_runs[1].byte_range, 1..2);
+        assert_eq!(style_runs[0].family, arial_id);
+        assert_eq!(style_runs[1].family, arial_id);
     }
 }

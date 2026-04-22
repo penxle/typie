@@ -1,28 +1,40 @@
-import fallbackManifestUrl from '@typie/assets/fallbacks.bin?url';
-import fallbackFontFamilies from '@typie/assets/fallbacks.json' with { type: 'json' };
-import notoPhantomUrl from '@typie/assets/Noto-Phantom.bin?url';
-import notoPhantomEmojiUrl from '@typie/assets/Noto-Phantom-Emoji.bin?url';
 import { wasm } from '$lib/wasm-ffi.svelte';
-import type { FontData } from '@typie/editor-ffi/browser';
+import type { FontFamilySource } from '$mearie';
 import type { EditorEventListener } from './types';
-
-const PRIMARY_FONT_PATHS: Record<string, string> = {
-  Pretendard: 'Pretendard-Regular',
-};
 
 const CDN_BASE = 'https://cdn.typie.net/editor/fonts';
 const CACHE_NAME = 'typie-fonts';
 const PRELOAD_CONCURRENCY = 4;
 
-const phantomFontFamilies = [
-  { familyName: 'Noto (Phantom)', url: notoPhantomUrl },
-  { familyName: 'Noto Emoji (Phantom)', url: notoPhantomEmojiUrl },
-];
+type FontFamily = { familyName: string; source: FontFamilySource; fonts: readonly Font[] };
+type Font = { weight: number; path: string; hash: string; chunks: unknown };
+type FontData = { type: 'base' } | { type: 'chunk'; id: number };
 
-const fontPaths = new Map<string, { path: string; hash: string }>();
+type FontPathEntry = { path: string; hash: string };
+const fontPaths = new Map<string, FontPathEntry>();
 
 function fontKey(family: string, weight: number): string {
   return `${family}:${weight}`;
+}
+
+export function loadFonts(families: readonly FontFamily[]): void {
+  for (const family of families) {
+    for (const font of family.fonts) {
+      fontPaths.set(fontKey(family.familyName, font.weight), { path: font.path, hash: font.hash });
+    }
+  }
+
+  wasm.set_fonts(
+    families.map((family) => ({
+      name: family.familyName,
+      source: family.source,
+      weights: family.fonts.map((font) => ({
+        value: font.weight,
+        hash: font.hash,
+        chunks: font.chunks as never,
+      })),
+    })),
+  );
 }
 
 const loaded = new Set<string>();
@@ -131,115 +143,51 @@ class PreloadQueue {
 
 const preloadQueue = new PreloadQueue();
 
-export async function initFonts(): Promise<void> {
-  await Promise.allSettled(
-    phantomFontFamilies.map(async ({ familyName, url }) => {
-      const response = await fetch(url);
-      const data = new Uint8Array(await response.arrayBuffer());
-      wasm.load_font_base(familyName, 400, data);
-    }),
-  );
-
-  wasm.set_phantom_font_families(phantomFontFamilies.map((v) => v.familyName));
-
-  // Load fallback manifests (binary → Rust)
-  const response = await fetch(fallbackManifestUrl);
-  const fallbackData = new Uint8Array(await response.arrayBuffer());
-  wasm.load_fallback_font_manifests(fallbackData);
-
-  // Populate host-side path/hash registry from JSON (for CDN URL construction)
-  for (const family of fallbackFontFamilies) {
-    for (const font of family.fonts) {
-      fontPaths.set(fontKey(family.familyName, font.weight), {
-        path: font.path,
-        hash: font.hash,
-      });
-    }
-  }
+function keyOf(family: string, weight: number, fd: FontData): string {
+  return fd.type === 'base' ? `base:${family}:${weight}` : `chunk:${family}:${weight}:${fd.id}`;
 }
 
-const loadFontManifest = async (family: string, weight: number, fontPath: string) => {
-  const [manifest, hash] = await Promise.all([
-    fetch(`${CDN_BASE}/${fontPath}/manifest.bin`)
-      .then((r) => r.arrayBuffer())
-      .then((r) => new Uint8Array(r)),
-    fetch(`${CDN_BASE}/${fontPath}/hash.json`)
-      .then((r) => r.json())
-      .then((r) => r as { hash: string }),
-  ]);
+function urlOf(baseUrl: string, fd: FontData): string {
+  return fd.type === 'base' ? `${baseUrl}/base` : `${baseUrl}/chunks/${fd.id}`;
+}
 
-  fontPaths.set(fontKey(family, weight), { path: fontPath, hash: hash.hash });
-
-  return manifest;
-};
-
-const loadFontData = async (
+async function load(
+  editor: Parameters<EditorEventListener<'font_data_missing'>>[0],
   family: string,
   weight: number,
-  required: FontData[],
-  prefetch: FontData[],
-  handlers: {
-    onBaseLoaded: (data: Uint8Array) => void;
-    onChunkLoaded: (data: Uint8Array) => void;
-  },
-) => {
+  fd: FontData,
+  baseUrl: string,
+): Promise<void> {
+  await loadOnce(keyOf(family, weight, fd), async () => {
+    const data = await getOrFetch(urlOf(baseUrl, fd));
+    if (fd.type === 'base') {
+      wasm.add_font_base(family, weight, data);
+      editor.enqueue({ type: 'system', event: { type: 'font_base_loaded', family, weight } });
+    } else {
+      wasm.add_font_chunk(family, weight, fd.id, data);
+      editor.enqueue({ type: 'system', event: { type: 'font_chunk_loaded', family, weight, chunk_id: fd.id } });
+    }
+  });
+}
+
+export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = async (editor, { family, weight, required, prefetch }) => {
   const info = fontPaths.get(fontKey(family, weight));
   if (!info) {
     console.warn(`No font path registered for ${family}:${weight}`);
     return;
   }
-
   const baseUrl = `${CDN_BASE}/${info.path}/${info.hash}`;
-  const base = required.find((item) => item.type === 'base');
-  const chunks = required.filter((item) => item.type === 'chunk');
 
-  if (base) {
-    await loadOnce(`base:${family}:${weight}`, async () => {
-      const data = await getOrFetch(`${baseUrl}/base.bin`);
-      handlers.onBaseLoaded(data);
+  await Promise.allSettled(required.map((fd) => load(editor, family, weight, fd, baseUrl)));
+
+  for (const fd of prefetch) {
+    const priority = fd.type === 'base' ? -1 : fd.id;
+    preloadQueue.enqueue(keyOf(family, weight, fd), priority, async () => {
+      try {
+        await load(editor, family, weight, fd, baseUrl);
+      } catch {
+        // best-effort
+      }
     });
   }
-
-  const loadChunk = (idx: number) =>
-    loadOnce(`chunk:${family}:${weight}:${idx}`, async () => {
-      const data = await getOrFetch(`${baseUrl}/chunks/${idx}.bin`);
-      handlers.onChunkLoaded(data);
-    });
-
-  await Promise.allSettled(chunks.map((item) => loadChunk(item.index)));
-
-  for (const item of prefetch) {
-    if (item.type === 'chunk') {
-      const idx = item.index;
-      preloadQueue.enqueue(`chunk:${family}:${weight}:${idx}`, idx, async () => {
-        try {
-          await loadChunk(idx);
-        } catch {
-          // best-effort
-        }
-      });
-    }
-  }
-};
-
-export const fontManifestMissingHandler: EditorEventListener<'font_manifest_missing'> = async (editor, { family, weight }) => {
-  const path = PRIMARY_FONT_PATHS[family];
-  if (path) {
-    const manifest = await loadFontManifest(family, weight, path);
-    wasm.load_font_manifest(family, weight, manifest);
-    editor.enqueue({ type: 'system', event: { type: 'font_manifest_loaded', family, weight } });
-  }
-};
-
-export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = async (editor, { family, weight, required, prefetch }) => {
-  await loadFontData(family, weight, required, prefetch, {
-    onBaseLoaded: (data) => {
-      wasm.load_font_base(family, weight, data);
-      editor.enqueue({ type: 'system', event: { type: 'font_base_loaded', family, weight } });
-    },
-    onChunkLoaded: (data) => {
-      wasm.load_font_chunk(family, weight, data);
-      editor.enqueue({ type: 'system', event: { type: 'font_chunk_loaded', family, weight } });
-    },
-  });
 };
