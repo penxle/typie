@@ -23,6 +23,10 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.screen.editor.editor.scroll.EditorScrollController
+import co.typie.screen.editor.editor.scroll.EditorScrollTarget
+import co.typie.screen.editor.editor.scroll.LocalEditorScrollController
+import kotlinx.coroutines.launch
 
 private val DebugExtensionAreaColor = Color(0x2200D97A)
 private const val ExtensionTapSlopDp = 8f
@@ -35,13 +39,19 @@ internal fun EditorExtensionArea(
   val density = LocalDensity.current
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
+  val scrollController = LocalEditorScrollController.current
 
   Box(
     modifier =
       modifier
         .fillMaxWidth()
         .background(DebugExtensionAreaColor)
-        .editorExtensionForwarding(runtime = runtime, uiState = uiState, density = density.density),
+        .editorExtensionForwarding(
+          runtime = runtime,
+          uiState = uiState,
+          density = density.density,
+          scrollController = scrollController,
+        ),
     content = content,
   )
 }
@@ -50,22 +60,35 @@ private fun Modifier.editorExtensionForwarding(
   runtime: EditorRuntime,
   uiState: EditorUiState,
   density: Float,
+  scrollController: EditorScrollController?,
 ): Modifier =
   this then
-    EditorExtensionForwardingElement(runtime = runtime, uiState = uiState, density = density)
+    EditorExtensionForwardingElement(
+      runtime = runtime,
+      uiState = uiState,
+      density = density,
+      scrollController = scrollController,
+    )
 
 private data class EditorExtensionForwardingElement(
   private val runtime: EditorRuntime,
   private val uiState: EditorUiState,
   private val density: Float,
+  private val scrollController: EditorScrollController?,
 ) : ModifierNodeElement<EditorExtensionForwardingNode>() {
   override fun create(): EditorExtensionForwardingNode =
-    EditorExtensionForwardingNode(runtime = runtime, uiState = uiState, density = density)
+    EditorExtensionForwardingNode(
+      runtime = runtime,
+      uiState = uiState,
+      density = density,
+      scrollController = scrollController,
+    )
 
   override fun update(node: EditorExtensionForwardingNode) {
     node.runtime = runtime
     node.uiState = uiState
     node.density = density
+    node.scrollController = scrollController
   }
 }
 
@@ -73,6 +96,7 @@ private class EditorExtensionForwardingNode(
   var runtime: EditorRuntime,
   var uiState: EditorUiState,
   var density: Float,
+  var scrollController: EditorScrollController?,
 ) : Modifier.Node(), PointerInputModifierNode {
   private var activePointerId: PointerId? = null
   private var downPositionInNode = Offset.Zero
@@ -115,19 +139,21 @@ private class EditorExtensionForwardingNode(
         }
 
         change.consume()
+        runtime.focus()
         val globalX = xDp - editorBounds.x
         val globalY = yDp - editorBounds.y
         val point =
           uiState.globalToLocal(x = globalX, y = globalY, pageSizes = editor.pageSizes)
             ?: return resetPointerState()
-
-        runtime.focus()
-        editor.enqueue(
-          Message.Pointer(
-            EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
+        coroutineScope.launch {
+          editor.dispatch(
+            Message.Pointer(
+              EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
+            ),
+            Message.Pointer(EditorPointerEvent.Up),
           )
-        )
-        editor.enqueue(Message.Pointer(EditorPointerEvent.Up))
+          scrollController?.request(target = EditorScrollTarget.CurrentCursor)
+        }
         // TODO(editor-parity): Forward full down/move/up gesture sequences from extension areas
         // once the Compose interaction runtime matches web/flutter behavior.
       }
@@ -150,5 +176,10 @@ private class EditorExtensionForwardingNode(
     activePointerId = null
     downPositionInNode = Offset.Zero
     movedPastTapSlop = false
+  }
+
+  override fun onDetach() {
+    scrollController = null
+    super.onDetach()
   }
 }

@@ -13,6 +13,7 @@ import co.typie.screen.editor.editor.state.EditorScreenState
 
 private enum class EditorScreenLayoutSlot {
   ScrollContent,
+  Overlay,
   Toolbar,
 }
 
@@ -21,6 +22,7 @@ internal fun EditorScreenLayout(
   state: EditorScreenState,
   header: @Composable () -> Unit,
   body: @Composable () -> Unit,
+  overlay: @Composable () -> Unit = {},
   toolbar: @Composable () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -59,9 +61,21 @@ internal fun EditorScreenLayout(
       subcompose(EditorScreenLayoutSlot.Toolbar, toolbar).map {
         it.measure(constraints.copy(minWidth = 0, minHeight = 0))
       }
+    val overlayPlaceables =
+      subcompose(EditorScreenLayoutSlot.Overlay, overlay).map {
+        it.measure(
+          constraints.copy(
+            minWidth = constraints.maxWidth,
+            maxWidth = constraints.maxWidth,
+            minHeight = constraints.maxHeight,
+            maxHeight = constraints.maxHeight,
+          )
+        )
+      }
 
     layout(width = constraints.maxWidth, height = constraints.maxHeight) {
       scrollContentPlaceables.forEach { it.place(x = 0, y = 0) }
+      overlayPlaceables.forEach { it.place(x = 0, y = 0) }
       toolbarPlaceables.forEach { it.place(x = 0, y = constraints.maxHeight - it.height) }
     }
   }

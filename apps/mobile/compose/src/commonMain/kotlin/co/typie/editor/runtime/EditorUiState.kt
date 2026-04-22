@@ -43,6 +43,10 @@ class EditorUiState {
     globalToLocal(x, y, pageOffsets, pageSizes)
 
   internal fun updatePageOffset(page: Int, offset: Offset) {
+    if (pageOffsets[page] == offset) {
+      return
+    }
+
     pageOffsets[page] = offset
   }
 

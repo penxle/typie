@@ -71,14 +71,19 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
     }
   }
 
-  suspend fun dispatch(message: Message) =
+  suspend fun dispatch(vararg messages: Message) {
+    if (messages.isEmpty()) {
+      return
+    }
+
     withContext(Dispatchers.Main.immediate) {
       suspendCancellableCoroutine { cont ->
         dispatches.add(cont)
         cont.invokeOnCancellation { scope.launch(Dispatchers.Main) { dispatches.remove(cont) } }
-        enqueue(message)
+        messages.forEach(::enqueue)
       }
     }
+  }
 
   internal inline fun batch(block: () -> Unit) {
     batching = true
@@ -128,6 +133,12 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
 
   fun deactivateScene() {
     focusManager?.clearFocus()
+  }
+
+  fun dispose() {
+    val waiters = dispatches.toList()
+    dispatches.clear()
+    waiters.forEach { it.cancel() }
   }
 
   fun attachSurface(page: Int, handle: Long, width: Double, height: Double, scaleFactor: Double) =

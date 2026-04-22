@@ -29,33 +29,54 @@ import co.typie.ext.TextInputKey
 import co.typie.ext.notifyTextInputFocusChanged
 import co.typie.ext.registerTextInputClient
 import co.typie.platform.Platform
+import co.typie.screen.editor.editor.scroll.EditorScrollController
+import co.typie.screen.editor.editor.scroll.EditorScrollTarget
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 
-fun Modifier.editorInput(editor: Editor, platform: Platform): Modifier =
-  this then EditorInputElement(editor, platform)
+internal fun Modifier.editorInput(
+  editor: Editor,
+  platform: Platform,
+  scrollController: EditorScrollController?,
+): Modifier = this then EditorInputElement(editor, platform, scrollController)
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal expect suspend fun PlatformTextInputSessionScope.createEditorInputRequest(
   editor: Editor
 ): PlatformTextInputMethodRequest
 
-private data class EditorInputElement(private val editor: Editor, private val platform: Platform) :
-  ModifierNodeElement<EditorInputNode>() {
-  override fun create(): EditorInputNode = EditorInputNode(editor, platform)
+private data class EditorInputElement(
+  private val editor: Editor,
+  private val platform: Platform,
+  private val scrollController: EditorScrollController?,
+) : ModifierNodeElement<EditorInputNode>() {
+  override fun create(): EditorInputNode = EditorInputNode(editor, platform, scrollController)
 
   override fun update(node: EditorInputNode) {
     node.editor = editor
     node.platform = platform
+    node.scrollController = scrollController
   }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-internal class EditorInputNode(var editor: Editor, var platform: Platform) :
-  Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
+internal class EditorInputNode(
+  var editor: Editor,
+  var platform: Platform,
+  var scrollController: EditorScrollController?,
+) : Modifier.Node(), FocusEventModifierNode, PlatformTextInputModifierNode, KeyInputModifierNode {
   private var focusedJob: Job? = null
   private val bindings by lazy { createBindings(platform) }
+
+  private fun dispatchForCurrentCursor(vararg messages: Message) {
+    val controller = scrollController
+    coroutineScope.launch {
+      editor.dispatch(*messages)
+      controller?.request(target = EditorScrollTarget.CurrentCursor)
+    }
+  }
+
   private val textInputClient =
     object : TextInputClient {
       override val hasActiveComposition: Boolean
@@ -66,24 +87,24 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
       }
 
       override fun insertText(text: String): Boolean {
-        editor.enqueue(Message.Insertion(InsertionOp.Text(text)))
+        dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text(text)))
         return true
       }
 
       override fun commitText(text: String) {
         if (text == "\n") {
-          editor.enqueue(Message.Insertion(InsertionOp.Text("\n")))
+          dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text("\n")))
         } else {
-          editor.enqueue(Message.Composition(CompositionOp.Commit(text)))
+          dispatchForCurrentCursor(Message.Composition(CompositionOp.Commit(text)))
         }
       }
 
       override fun setComposingText(text: String) {
-        editor.enqueue(Message.Composition(CompositionOp.Update(text, null)))
+        dispatchForCurrentCursor(Message.Composition(CompositionOp.Update(text, null)))
       }
 
       override fun finishComposition() {
-        editor.enqueue(Message.Composition(CompositionOp.CommitAsIs))
+        dispatchForCurrentCursor(Message.Composition(CompositionOp.CommitAsIs))
       }
 
       override fun pressKey(key: TextInputKey): Boolean {
@@ -92,7 +113,7 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
             TextInputKey.Enter -> FfiKey.Enter
             TextInputKey.Backspace -> FfiKey.Backspace
           }
-        editor.enqueue(Message.Key(FfiKeyEvent(ffiKey)))
+        dispatchForCurrentCursor(Message.Key(FfiKeyEvent(ffiKey)))
         return true
       }
 
@@ -103,7 +124,9 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
 
   override fun onKeyEvent(event: KeyEvent): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
-    if (handleKeyDown(editor, platform, bindings, event)) return true
+    if (handleKeyDown(editor, platform, bindings, scrollController, coroutineScope, event)) {
+      return true
+    }
 
     val cp = event.utf16CodePoint
     if (cp > 0xFFFF) {
@@ -113,14 +136,14 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
             (((cp - 0x10000) and 0x3FF) + 0xDC00).toChar(),
           )
           .concatToString()
-      editor.enqueue(Message.Insertion(InsertionOp.Text(text)))
+      dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text(text)))
       return true
     }
 
     val ch = cp.toChar()
     if (!ch.isDefined() || ch.isISOControl() || ch.isSurrogate()) return false
 
-    editor.enqueue(Message.Insertion(InsertionOp.Text(ch.toString())))
+    dispatchForCurrentCursor(Message.Insertion(InsertionOp.Text(ch.toString())))
     return true
   }
 
@@ -160,6 +183,7 @@ internal class EditorInputNode(var editor: Editor, var platform: Platform) :
   }
 
   override fun onDetach() {
+    scrollController = null
     notifyTextInputFocusChanged(this, false)
     registerTextInputClient(this, null)
     focusedJob?.cancel()

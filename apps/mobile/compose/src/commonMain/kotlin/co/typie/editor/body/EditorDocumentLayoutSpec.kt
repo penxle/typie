@@ -13,3 +13,11 @@ internal fun LayoutMode.toEditorDocumentLayoutSpec(): EditorDocumentLayoutSpec =
     is LayoutMode.Continuous -> EditorDocumentLayoutSpec.Continuous(maxWidth = maxWidth)
     is LayoutMode.Paginated -> EditorDocumentLayoutSpec.Paginated(pageWidth = pageWidth)
   }
+
+internal fun EditorDocumentLayoutSpec.resolveIntrinsicBottomSpace(): Float =
+  when (this) {
+    is EditorDocumentLayoutSpec.Continuous -> 20f
+    is EditorDocumentLayoutSpec.Paginated ->
+      40f // TODO(editor-parity): Replace with engine-provided page bottom spacing once FFI exposes
+          // it.
+  }

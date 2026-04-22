@@ -15,9 +15,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import co.typie.editor.EditorView
@@ -37,7 +39,6 @@ internal fun EditorBody(
 ) {
   val density = LocalDensity.current
   val uiState = LocalEditorUiState.current
-  val activeBottomPadding = max(geometry.defaultBottomPadding, geometry.typewriterBottomPadding)
   var coreTrackHeight by remember { mutableFloatStateOf(0f) }
   val extensionFillHeight =
     remember(geometry.minimumBodyHeight, coreTrackHeight) {
@@ -52,7 +53,7 @@ internal fun EditorBody(
       modifier =
         Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
           uiState.updateExtensionAreaBounds(
-            boundsInRoot = coordinates.boundsInRoot(),
+            boundsInRoot = coordinates.unclippedBoundsInRoot(),
             density = density.density,
           )
         }
@@ -82,7 +83,7 @@ internal fun EditorBody(
               modifier =
                 Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
                   uiState.updateEditorBounds(
-                    boundsInRoot = coordinates.boundsInRoot(),
+                    boundsInRoot = coordinates.unclippedBoundsInRoot(),
                     density = density.density,
                   )
                 }
@@ -96,8 +97,8 @@ internal fun EditorBody(
               )
             }
 
-            if (activeBottomPadding > 0f) {
-              Spacer(modifier = Modifier.fillMaxWidth().height(activeBottomPadding.dp))
+            if (geometry.activeBottomPadding > 0f) {
+              Spacer(modifier = Modifier.fillMaxWidth().height(geometry.activeBottomPadding.dp))
             }
           }
 
@@ -114,3 +115,13 @@ internal fun EditorBody(
 
 internal fun resolveEditorBodyFillHeight(minimumHeight: Float, coreTrackHeight: Float): Float =
   max(0f, minimumHeight - coreTrackHeight)
+
+private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect {
+  val position = positionInRoot()
+  return Rect(
+    left = position.x,
+    top = position.y,
+    right = position.x + size.width,
+    bottom = position.y + size.height,
+  )
+}

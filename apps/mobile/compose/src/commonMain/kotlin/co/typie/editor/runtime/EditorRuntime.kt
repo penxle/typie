@@ -17,6 +17,7 @@ class EditorRuntime {
       return
     }
 
+    this.editor?.dispose()
     this.editor = editor
   }
 
@@ -25,6 +26,7 @@ class EditorRuntime {
       return
     }
 
+    this.editor?.dispose()
     this.editor = null
   }
 

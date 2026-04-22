@@ -17,6 +17,10 @@ import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
 import co.typie.platform.Platform
+import co.typie.screen.editor.editor.scroll.EditorScrollController
+import co.typie.screen.editor.editor.scroll.EditorScrollTarget
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 internal enum class KeyModifier {
   Shift,
@@ -29,7 +33,8 @@ internal data class KeyBinding(
   val key: ComposeKey,
   val modifiers: Set<KeyModifier> = emptySet(),
   val predicate: (() -> Boolean)? = null,
-  val action: (Editor) -> Unit,
+  val scrollTarget: EditorScrollTarget? = EditorScrollTarget.CurrentCursor,
+  val action: Editor.() -> List<Message>,
 )
 
 private fun move(movement: Movement, extend: Boolean): Message =
@@ -41,47 +46,78 @@ internal fun createBindings(platform: Platform): List<KeyBinding> {
   val isMac = platform != Platform.Android
 
   return listOf(
-    KeyBinding(ComposeKey.DirectionLeft) {
-      it.enqueue(move(Movement.Grapheme(Direction.Backward), false))
+    KeyBinding(
+      ComposeKey.DirectionLeft,
+      action = { listOf(move(Movement.Grapheme(Direction.Backward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionLeft,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Grapheme(Direction.Backward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      action = { listOf(move(Movement.Grapheme(Direction.Forward), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionRight,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Grapheme(Direction.Forward), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionUp,
+      action = { listOf(move(Movement.Line(Direction.Backward, Axis.Vertical), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionUp,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Line(Direction.Backward, Axis.Vertical), true)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionDown,
+      action = { listOf(move(Movement.Line(Direction.Forward, Axis.Vertical), false)) },
+    ),
+    KeyBinding(
+      ComposeKey.DirectionDown,
+      setOf(KeyModifier.Shift),
+      action = { listOf(move(Movement.Line(Direction.Forward, Axis.Vertical), true)) },
+    ),
+    KeyBinding(ComposeKey.Enter, action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Enter))) }),
+    KeyBinding(
+      ComposeKey.Backspace,
+      action = { listOf(Message.Key(FfiKeyEvent(FfiKey.Backspace))) },
+    ),
+    KeyBinding(
+      ComposeKey.B,
+      setOf(KeyModifier.Mod),
+      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      action = { listOf(toggleModifier(ModifierType.Bold)) },
+    ),
+    KeyBinding(
+      ComposeKey.I,
+      setOf(KeyModifier.Mod),
+      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      action = { listOf(toggleModifier(ModifierType.Italic)) },
+    ),
+    KeyBinding(
+      ComposeKey.S,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      action = { listOf(toggleModifier(ModifierType.Strikethrough)) },
+    ),
+    KeyBinding(
+      ComposeKey.U,
+      setOf(KeyModifier.Mod, KeyModifier.Shift),
+      scrollTarget = EditorScrollTarget.CurrentSelectionHead,
+      action = { listOf(toggleModifier(ModifierType.Underline)) },
+    ),
+    KeyBinding(ComposeKey.Q, setOf(KeyModifier.Ctrl), predicate = { isMac }, scrollTarget = null) {
+      inspectState()
+      emptyList()
     },
-    KeyBinding(ComposeKey.DirectionLeft, setOf(KeyModifier.Shift)) {
-      it.enqueue(move(Movement.Grapheme(Direction.Backward), true))
-    },
-    KeyBinding(ComposeKey.DirectionRight) {
-      it.enqueue(move(Movement.Grapheme(Direction.Forward), false))
-    },
-    KeyBinding(ComposeKey.DirectionRight, setOf(KeyModifier.Shift)) {
-      it.enqueue(move(Movement.Grapheme(Direction.Forward), true))
-    },
-    KeyBinding(ComposeKey.DirectionUp) {
-      it.enqueue(move(Movement.Line(Direction.Backward, Axis.Vertical), false))
-    },
-    KeyBinding(ComposeKey.DirectionUp, setOf(KeyModifier.Shift)) {
-      it.enqueue(move(Movement.Line(Direction.Backward, Axis.Vertical), true))
-    },
-    KeyBinding(ComposeKey.DirectionDown) {
-      it.enqueue(move(Movement.Line(Direction.Forward, Axis.Vertical), false))
-    },
-    KeyBinding(ComposeKey.DirectionDown, setOf(KeyModifier.Shift)) {
-      it.enqueue(move(Movement.Line(Direction.Forward, Axis.Vertical), true))
-    },
-    KeyBinding(ComposeKey.Enter) { it.enqueue(Message.Key(FfiKeyEvent(FfiKey.Enter))) },
-    KeyBinding(ComposeKey.Backspace) { it.enqueue(Message.Key(FfiKeyEvent(FfiKey.Backspace))) },
-    KeyBinding(ComposeKey.B, setOf(KeyModifier.Mod)) {
-      it.enqueue(toggleModifier(ModifierType.Bold))
-    },
-    KeyBinding(ComposeKey.I, setOf(KeyModifier.Mod)) {
-      it.enqueue(toggleModifier(ModifierType.Italic))
-    },
-    KeyBinding(ComposeKey.S, setOf(KeyModifier.Mod, KeyModifier.Shift)) {
-      it.enqueue(toggleModifier(ModifierType.Strikethrough))
-    },
-    KeyBinding(ComposeKey.U, setOf(KeyModifier.Mod, KeyModifier.Shift)) {
-      it.enqueue(toggleModifier(ModifierType.Underline))
-    },
-    KeyBinding(ComposeKey.Q, setOf(KeyModifier.Ctrl), predicate = { isMac }) { it.inspectState() },
-    KeyBinding(ComposeKey.W, setOf(KeyModifier.Ctrl), predicate = { isMac }) {
-      it.inspectStateAsMacro()
+    KeyBinding(ComposeKey.W, setOf(KeyModifier.Ctrl), predicate = { isMac }, scrollTarget = null) {
+      inspectStateAsMacro()
+      emptyList()
     },
   )
 }
@@ -111,9 +147,17 @@ internal fun handleKeyDown(
   editor: Editor,
   platform: Platform,
   bindings: List<KeyBinding>,
+  scrollController: EditorScrollController?,
+  coroutineScope: CoroutineScope,
   event: KeyEvent,
 ): Boolean {
   val binding = bindings.find { matchBinding(it, platform, event) } ?: return false
-  binding.action(editor)
+  val messages = binding.action(editor)
+  if (messages.isNotEmpty()) {
+    coroutineScope.launch {
+      editor.dispatch(*messages.toTypedArray())
+      binding.scrollTarget?.let { scrollController?.request(target = it) }
+    }
+  }
   return true
 }

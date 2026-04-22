@@ -1,24 +1,129 @@
 package co.typie.editor.input
 
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.PointerInputModifierNode
+import androidx.compose.ui.unit.IntSize
 import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
-import co.typie.editor.ffi.PointerEvent
+import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.runtime.EditorUiState
+import co.typie.screen.editor.editor.scroll.EditorScrollController
+import co.typie.screen.editor.editor.scroll.EditorScrollTarget
+import kotlinx.coroutines.launch
 
-internal fun Modifier.editorGestures(editor: Editor, uiState: EditorUiState): Modifier =
-  this.pointerInput(editor, uiState, editor.pageSizes) {
-    detectTapGestures { offset ->
-      editor.focus()
+private const val EditorTapSlopDp = 8f
 
-      val xDp = offset.x / density
-      val yDp = offset.y / density
-      val point = uiState.globalToLocal(xDp, yDp, editor.pageSizes) ?: return@detectTapGestures
+internal fun Modifier.editorGestures(
+  editor: Editor,
+  uiState: EditorUiState,
+  density: Float,
+  scrollController: EditorScrollController?,
+): Modifier =
+  this then
+    EditorGesturesElement(
+      editor = editor,
+      uiState = uiState,
+      density = density,
+      scrollController = scrollController,
+    )
 
-      editor.enqueue(
-        Message.Pointer(PointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1))
-      )
+private data class EditorGesturesElement(
+  private val editor: Editor,
+  private val uiState: EditorUiState,
+  private val density: Float,
+  private val scrollController: EditorScrollController?,
+) : ModifierNodeElement<EditorGesturesNode>() {
+  override fun create(): EditorGesturesNode =
+    EditorGesturesNode(
+      editor = editor,
+      uiState = uiState,
+      density = density,
+      scrollController = scrollController,
+    )
+
+  override fun update(node: EditorGesturesNode) {
+    node.editor = editor
+    node.uiState = uiState
+    node.density = density
+    node.scrollController = scrollController
+  }
+}
+
+private class EditorGesturesNode(
+  var editor: Editor,
+  var uiState: EditorUiState,
+  var density: Float,
+  var scrollController: EditorScrollController?,
+) : Modifier.Node(), PointerInputModifierNode {
+  private var activePointerId: PointerId? = null
+  private var downPositionInNode = Offset.Zero
+  private var movedPastTapSlop = false
+
+  override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
+    if (pass != PointerEventPass.Main) {
+      return
+    }
+
+    if (density <= 0f) {
+      return
+    }
+
+    val activePointerId = activePointerId
+    val tapSlopPx = EditorTapSlopDp * density
+
+    if (activePointerId == null) {
+      val down = pointerEvent.changes.firstOrNull { it.pressed && !it.previousPressed } ?: return
+      this.activePointerId = down.id
+      downPositionInNode = down.position
+      movedPastTapSlop = false
+      return
+    }
+
+    val change = pointerEvent.changes.firstOrNull { it.id == activePointerId } ?: return
+    if ((change.position - downPositionInNode).getDistance() > tapSlopPx) {
+      movedPastTapSlop = true
+    }
+
+    if (!change.pressed) {
+      if (change.changedToUp() && !movedPastTapSlop) {
+        editor.focus()
+        change.consume()
+        val xDp = downPositionInNode.x / density
+        val yDp = downPositionInNode.y / density
+        val point = uiState.globalToLocal(xDp, yDp, editor.pageSizes)
+        if (point != null) {
+          coroutineScope.launch {
+            editor.dispatch(
+              Message.Pointer(
+                EditorPointerEvent.Down(page = point.page, x = point.x, y = point.y, count = 1)
+              )
+            )
+            scrollController?.request(target = EditorScrollTarget.CurrentCursor)
+          }
+        }
+      }
+      resetPointerState()
     }
   }
+
+  override fun onCancelPointerInput() {
+    resetPointerState()
+  }
+
+  private fun resetPointerState() {
+    activePointerId = null
+    downPositionInNode = Offset.Zero
+    movedPastTapSlop = false
+  }
+
+  override fun onDetach() {
+    scrollController = null
+    super.onDetach()
+  }
+}

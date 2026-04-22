@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,7 @@ private class FakeFfiEditor(var onTick: () -> List<EditorEvent> = { emptyList() 
 }
 
 private val sampleMessage: Message = Message.System(SystemEvent.Initialize)
+private val nextMessage: Message = Message.System(SystemEvent.FontManifestLoaded("Pretendard", 400))
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorDispatchTest {
@@ -101,6 +103,28 @@ class EditorDispatchTest {
       dispatcher.scheduler.advanceUntilIdle()
 
       assertEquals(listOf(sampleMessage), fake.enqueued)
+      assertEquals(1, fake.tickCount)
+      assertTrue(completed.isCompleted)
+    }
+
+  @Test
+  fun `dispatch batches multiple messages into one tick`() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this)
+
+      val completed = CompletableDeferred<Unit>()
+      launch(Dispatchers.Main.immediate) {
+        editor.dispatch(sampleMessage, nextMessage)
+        completed.complete(Unit)
+      }
+
+      assertEquals(0, fake.tickCount)
+      assertFalse(completed.isCompleted)
+
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals(listOf(sampleMessage, nextMessage), fake.enqueued)
       assertEquals(1, fake.tickCount)
       assertTrue(completed.isCompleted)
     }
@@ -146,5 +170,27 @@ class EditorDispatchTest {
       assertEquals(listOf(sampleMessage), fake.enqueued)
       assertEquals(1, fake.tickCount)
       assertTrue(job.isCancelled)
+    }
+
+  @Test
+  fun `dispose cancels pending dispatch`() =
+    runTest(dispatcher) {
+      val fake = FakeFfiEditor()
+      val editor = Editor(fake, this)
+
+      val thrown = CompletableDeferred<Throwable>()
+      launch(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) {
+        try {
+          editor.dispatch(sampleMessage)
+        } catch (e: Throwable) {
+          thrown.complete(e)
+        }
+      }
+
+      editor.dispose()
+      dispatcher.scheduler.advanceUntilIdle()
+
+      assertTrue(thrown.isCompleted)
+      assertIs<CancellationException>(thrown.getCompleted())
     }
 }

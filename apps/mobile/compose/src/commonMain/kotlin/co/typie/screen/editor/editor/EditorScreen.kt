@@ -12,8 +12,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.body.EditorBody
 import co.typie.editor.runtime.EditorRuntime
@@ -27,6 +29,8 @@ import co.typie.route.Route
 import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
+import co.typie.screen.editor.editor.scroll.LocalEditorScrollController
+import co.typie.screen.editor.editor.scroll.rememberEditorScrollController
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
@@ -34,6 +38,7 @@ import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.theme.AppTheme
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun EditorScreen(entityId: String) {
@@ -97,8 +102,11 @@ fun EditorScreen(entityId: String) {
     background = AppTheme.colors.surfaceDefault,
     contentPadding = PaddingValues(),
   ) { contentPadding ->
+    val density = LocalDensity.current.density
     val topInset = contentPadding.calculateTopPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val visibleArea =
+      screenState.resolveVisibleArea(topInset = topInset.value, rawImeInset = imeBottom.value)
     val geometry =
       screenState.resolveBodyGeometry(
         topInset = topInset.value,
@@ -106,6 +114,34 @@ fun EditorScreen(entityId: String) {
         layoutSpec = model.documentLayoutSpec,
         pageSizes = runtime.editor?.pageSizes.orEmpty(),
       )
+    val scrollController =
+      rememberEditorScrollController(
+        editorProvider = { runtime.editor },
+        uiState = uiState,
+        screenState = screenState,
+        visibleArea = visibleArea,
+        scrollPolicy = geometry.scrollPolicy,
+        density = density,
+      )
+
+    LaunchedEffect(scrollController, screenState.scrollState) {
+      snapshotFlow { screenState.scrollState.isScrollInProgress }
+        .collectLatest { inProgress ->
+          if (inProgress) {
+            scrollController.cancel()
+          }
+        }
+    }
+    LaunchedEffect(
+      scrollController,
+      uiState.focused,
+      screenState.sceneInForeground,
+      runtime.editor,
+    ) {
+      if (!uiState.focused || !screenState.sceneInForeground || runtime.editor == null) {
+        scrollController.cancel()
+      }
+    }
 
     EditorScreenLayout(
       state = screenState,
@@ -124,24 +160,27 @@ fun EditorScreen(entityId: String) {
           },
         )
       },
+      overlay = {
+        EditorScreenOverlayHost(
+          visibleArea = visibleArea,
+          scrollPolicy = geometry.scrollPolicy,
+          modifier = Modifier.fillMaxSize(),
+        )
+      },
       body = {
         CompositionLocalProvider(
           LocalEditorRuntime provides runtime,
           LocalEditorUiState provides uiState,
+          LocalEditorScrollController provides scrollController,
         ) {
-          EditorBody(
-            doc = model.doc,
-            selection = model.selection,
-            geometry = geometry,
-            overlay = { EditorScreenOverlayHost(modifier = Modifier.fillMaxSize()) },
-          )
+          EditorBody(doc = model.doc, selection = model.selection, geometry = geometry)
         }
       },
       toolbar = {
         EditorToolbarHost(
           bodyFocused = screenState.shouldShowToolbar(bodyFocused = uiState.focused),
           modifier = Modifier,
-          onHeightChanged = screenState::updateToolbarHeight,
+          onVisibleTopChanged = screenState::updateToolbarTop,
         )
       },
       modifier = Modifier,

@@ -17,7 +17,7 @@ class EditorBodyGeometryTest {
             headerHeight = 180f,
             topInset = 120f,
             imeInset = 100f,
-            toolbarHeight = 44f,
+            toolbarTop = 756f,
           ),
         layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
         pageSizes = listOf(Size(width = 600f, height = 800f)),
@@ -26,7 +26,8 @@ class EditorBodyGeometryTest {
     assertEquals(600f, geometry.pageColumnWidth)
     assertEquals(576f, geometry.minimumBodyHeight)
     assertEquals(40f, geometry.defaultTopPadding)
-    assertEquals(168f, geometry.defaultBottomPadding)
+    assertEquals(184f, geometry.defaultBottomPadding)
+    assertEquals(184f, geometry.activeBottomPadding)
   }
 
   @Test
@@ -46,19 +47,33 @@ class EditorBodyGeometryTest {
     assertEquals(360f, geometry.pageColumnWidth)
     assertEquals(568f, geometry.minimumBodyHeight)
     assertEquals(40f, geometry.defaultTopPadding)
-    assertEquals(48f, geometry.defaultBottomPadding)
+    assertEquals(40f, geometry.defaultBottomPadding)
+    assertEquals(40f, geometry.activeBottomPadding)
+  }
+
+  @Test
+  fun `geometry reserves only the keep-visible cursor margin when bottom occlusion is absent`() {
+    val geometry =
+      resolveEditorBodyGeometry(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = EditorMeasuredSize(width = 360f, height = 640f),
+            headerHeight = 72f,
+            topInset = 72f,
+          ),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+        pageSizes = emptyList(),
+      )
+
+    assertEquals(40f, geometry.defaultBottomPadding)
+    assertEquals(40f, geometry.activeBottomPadding)
   }
 
   @Test
   fun `minimum body height is clamped to zero`() {
     assertEquals(
       0f,
-      resolveMinimumBodyHeight(
-        viewportHeight = 400f,
-        headerHeight = 320f,
-        imeInset = 80f,
-        toolbarHeight = 40f,
-      ),
+      resolveMinimumBodyHeight(viewportHeight = 400f, headerHeight = 320f, bottomOcclusion = 120f),
     )
   }
 
@@ -83,5 +98,6 @@ class EditorBodyGeometryTest {
       )
 
     assertEquals(720f, geometry.pageColumnWidth)
+    assertEquals(20f, geometry.activeBottomPadding)
   }
 }

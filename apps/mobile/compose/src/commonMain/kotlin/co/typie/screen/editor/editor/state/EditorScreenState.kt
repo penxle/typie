@@ -27,7 +27,7 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
   var headerHeight by mutableFloatStateOf(0f)
     private set
 
-  var toolbarHeight by mutableFloatStateOf(0f)
+  var toolbarTop by mutableFloatStateOf(Float.NaN)
     private set
 
   fun updateViewport(size: EditorMeasuredSize) {
@@ -46,12 +46,19 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
     headerHeight = height
   }
 
-  fun updateToolbarHeight(height: Float) {
-    if (toolbarHeight == height) {
+  fun updateToolbarTop(top: Float?) {
+    val normalizedTop = top ?: Float.NaN
+    val unchanged =
+      if (toolbarTop.isNaN() && normalizedTop.isNaN()) {
+        true
+      } else {
+        toolbarTop == normalizedTop
+      }
+    if (unchanged) {
       return
     }
 
-    toolbarHeight = height
+    toolbarTop = normalizedTop
   }
 
   fun updateSceneForeground(isForeground: Boolean, runtime: EditorRuntime, uiState: EditorUiState) {
@@ -63,7 +70,7 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
     if (!isForeground) {
       uiState.updateFocus(false)
       runtime.deactivateScene()
-      updateToolbarHeight(0f)
+      updateToolbarTop(null)
     }
   }
 
@@ -86,7 +93,7 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
       headerHeight = headerHeight,
       topInset = topInset,
       imeInset = if (sceneInForeground) rawImeInset else 0f,
-      toolbarHeight = toolbarHeight,
+      toolbarTop = toolbarTop.takeUnless { it.isNaN() },
     )
 
   fun resolveBodyGeometry(

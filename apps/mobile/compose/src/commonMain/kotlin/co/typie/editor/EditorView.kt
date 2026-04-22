@@ -24,9 +24,10 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.platform.PlatformModule
+import co.typie.screen.editor.editor.scroll.LocalEditorScrollController
 
 @Composable
-fun EditorView(
+internal fun EditorView(
   doc: Doc,
   selection: Selection,
   viewportWidth: Float,
@@ -38,6 +39,7 @@ fun EditorView(
   val scope = rememberCoroutineScope()
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
+  val scrollController = LocalEditorScrollController.current
 
   LaunchedEffect(doc, selection, viewportWidth, viewportHeight, density.density) {
     if (viewportWidth <= 0f || viewportHeight <= 0f) {
@@ -81,9 +83,14 @@ fun EditorView(
       Modifier.fillMaxWidth()
         .focusRequester(editor.focusRequester)
         .onFocusChanged { uiState.updateFocus(it.isFocused) }
-        .editorInput(editor, platform)
+        .editorInput(editor, platform, scrollController)
         .focusable()
-        .editorGestures(editor = editor, uiState = uiState)
+        .editorGestures(
+          editor = editor,
+          uiState = uiState,
+          density = density.density,
+          scrollController = scrollController,
+        )
     ) {
       Column {
         editor.pageSizes.forEachIndexed { index, size ->
