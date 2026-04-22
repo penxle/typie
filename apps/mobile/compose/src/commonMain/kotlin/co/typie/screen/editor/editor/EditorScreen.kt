@@ -22,6 +22,8 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.editor.scroll.LocalEditorScrollController
+import co.typie.editor.scroll.rememberEditorScrollController
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.navigation.Nav
@@ -29,11 +31,10 @@ import co.typie.route.Route
 import co.typie.screen.editor.editor.header.EditorHeader
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
-import co.typie.screen.editor.editor.scroll.LocalEditorScrollController
-import co.typie.screen.editor.editor.scroll.rememberEditorScrollController
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
+import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
@@ -52,8 +53,8 @@ fun EditorScreen(entityId: String) {
   val document = entity.node.onDocument
   DisposableEffect(model) {
     onDispose {
-      // TODO(editor-parity): Flush header drafts on app background/inactive transitions once
-      // the editor screen lifecycle is wired beyond composition disposal.
+      // TODO(editor-parity): 에디터 스크린 생명주기가 composition dispose 밖까지 연결되면,
+      // app background/inactive 전환에서도 header draft를 flush해야 한다.
       model.flushDraftsAsync()
     }
   }
@@ -105,6 +106,13 @@ fun EditorScreen(entityId: String) {
     val density = LocalDensity.current.density
     val topInset = contentPadding.calculateTopPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val typewriterEnabled = Preference.typewriterEnabled
+    val typewriterPosition = Preference.typewriterPosition.toFloat()
+    // TODO(editor-parity): 현재는 cursor 높이만 scroll policy에 넘기고 있다. collapsed
+    // selection에서는 이 값이 실제 selection head 표시 높이보다 작아서 typewriter 하단
+    // 여백과 일반 cursor guard 둘 다 몇 dp씩 모자라게 계산되고, non-collapsed selection도
+    // head bounds를 쓰지 못하고 있다.
+    val cursorHeight = runtime.editor?.cursor?.rect?.height ?: 0f
     val visibleArea =
       screenState.resolveVisibleArea(topInset = topInset.value, rawImeInset = imeBottom.value)
     val geometry =
@@ -113,14 +121,18 @@ fun EditorScreen(entityId: String) {
         rawImeInset = imeBottom.value,
         layoutSpec = model.documentLayoutSpec,
         pageSizes = runtime.editor?.pageSizes.orEmpty(),
+        typewriterEnabled = typewriterEnabled,
+        typewriterPosition = typewriterPosition,
+        cursorHeight = cursorHeight,
       )
     val scrollController =
       rememberEditorScrollController(
         editorProvider = { runtime.editor },
         uiState = uiState,
-        screenState = screenState,
+        scrollState = screenState.scrollState,
         visibleArea = visibleArea,
         scrollPolicy = geometry.scrollPolicy,
+        headerHeight = screenState.headerHeight,
         density = density,
       )
 

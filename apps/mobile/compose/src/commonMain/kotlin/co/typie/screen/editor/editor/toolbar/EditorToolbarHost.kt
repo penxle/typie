@@ -72,8 +72,8 @@ internal fun EditorToolbarHost(
             .border(1.dp, AppTheme.colors.borderDefault, AppShapes.rounded(AppShapes.md)),
         contentAlignment = Alignment.Center,
       ) {
-        // TODO(editor-parity): Replace the placeholder bar with bottom/floating/secondary toolbars
-        // that react to editor selection state and keyboard visibility.
+        // TODO(editor-parity): 이 placeholder bar를 에디터 selection 상태와 키보드 표시
+        // 여부에 반응하는 bottom/floating/secondary toolbar로 교체해야 한다.
         Text(
           text = "편집 도구 준비 중",
           style = AppTheme.typography.caption,

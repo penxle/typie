@@ -1,7 +1,7 @@
-package co.typie.screen.editor.editor.scroll
+package co.typie.editor.scroll
 
-import co.typie.screen.editor.editor.layout.EditorMeasuredSize
-import co.typie.screen.editor.editor.layout.EditorVisibleArea
+import co.typie.editor.body.EditorMeasuredSize
+import co.typie.editor.body.EditorVisibleArea
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -48,7 +48,7 @@ class EditorScrollPolicyTest {
   }
 
   @Test
-  fun `resolved policy keeps typewriter padding separate from active keep-visible mode`() {
+  fun `resolved policy keeps keep-visible mode active when typewriter is disabled`() {
     val policy =
       resolveEditorScrollPolicy(
         visibleArea =
@@ -58,14 +58,49 @@ class EditorScrollPolicyTest {
             imeInset = 100f,
             toolbarTop = 756f,
           ),
-        defaultBottomPadding = 168f,
+        intrinsicBottomSpace = 20f,
+        typewriterEnabled = false,
+        typewriterPosition = 0.5f,
+        cursorHeight = 20f,
       )
 
     assertEquals(EditorScrollMode.KeepCursorVisible, policy.mode)
+    assertEquals(0.5f, policy.typewriterPosition, FloatTolerance)
     assertEquals(EditorScrollRange(top = 180f, bottom = 696f), policy.keepVisibleRange)
-    assertEquals(368.72f, policy.typewriterRange.top, FloatTolerance)
-    assertEquals(424.72f, policy.typewriterRange.bottom, FloatTolerance)
-    assertEquals(299.28f, policy.typewriterBottomPadding, FloatTolerance)
+    assertEquals(428f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
+    assertEquals(448f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
+    assertEquals(432f, policy.typewriterBottomPadding, FloatTolerance)
+  }
+
+  @Test
+  fun `typewriter policy scrolls cursor top to the configured viewport position`() {
+    val target =
+      resolveTypewriterScrollTarget(
+        currentScroll = 400f,
+        cursorTopInContent = 1068f,
+        cursorBottomInContent = 1100f,
+        visibleArea = testVisibleArea(),
+        position = 0.5f,
+      )
+
+    assertEquals(666f, requireNotNull(target), FloatTolerance)
+  }
+
+  @Test
+  fun `resolved policy switches to typewriter mode when enabled`() {
+    val policy =
+      resolveEditorScrollPolicy(
+        visibleArea = testVisibleArea(),
+        intrinsicBottomSpace = 20f,
+        typewriterEnabled = true,
+        typewriterPosition = 0.25f,
+        cursorHeight = 32f,
+      )
+
+    assertEquals(EditorScrollMode.Typewriter, policy.mode)
+    assertEquals(0.25f, policy.typewriterPosition, FloatTolerance)
+    assertEquals(241f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
+    assertEquals(273f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
   }
 
   private fun testVisibleArea(): EditorVisibleArea =

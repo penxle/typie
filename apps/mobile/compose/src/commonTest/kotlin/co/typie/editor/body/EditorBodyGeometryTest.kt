@@ -1,7 +1,5 @@
-package co.typie.screen.editor.editor.layout
+package co.typie.editor.body
 
-import co.typie.editor.body.EditorDocumentLayoutSpec
-import co.typie.editor.body.resolveEditorBodyFillHeight
 import co.typie.editor.ffi.Size
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -67,6 +65,31 @@ class EditorBodyGeometryTest {
 
     assertEquals(40f, geometry.defaultBottomPadding)
     assertEquals(40f, geometry.activeBottomPadding)
+  }
+
+  @Test
+  fun `geometry expands bottom padding for typewriter mode based on cursor height and position`() {
+    val geometry =
+      resolveEditorBodyGeometry(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = EditorMeasuredSize(width = 720f, height = 900f),
+            headerHeight = 180f,
+            topInset = 120f,
+            imeInset = 100f,
+            toolbarTop = 756f,
+          ),
+        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
+        pageSizes = listOf(Size(width = 600f, height = 800f)),
+        typewriterEnabled = true,
+        typewriterPosition = 0.5f,
+        cursorHeight = 20f,
+      )
+
+    assertEquals(184f, geometry.defaultBottomPadding)
+    assertEquals(432f, geometry.activeBottomPadding)
+    assertEquals(428f, requireNotNull(geometry.scrollPolicy.typewriterTargetTop))
+    assertEquals(448f, requireNotNull(geometry.scrollPolicy.typewriterTargetBottom))
   }
 
   @Test

@@ -1,13 +1,10 @@
-package co.typie.screen.editor.editor.layout
+package co.typie.editor.body
 
-import co.typie.editor.body.EditorDocumentLayoutSpec
-import co.typie.editor.body.resolveEditorBodyLayoutPolicy
-import co.typie.editor.body.resolveIntrinsicBottomSpace
 import co.typie.editor.ffi.Size
-import co.typie.screen.editor.editor.scroll.CursorVisibleMargin
-import co.typie.screen.editor.editor.scroll.EditorScrollMode
-import co.typie.screen.editor.editor.scroll.EditorScrollPolicy
-import co.typie.screen.editor.editor.scroll.resolveEditorScrollPolicy
+import co.typie.editor.scroll.CursorVisibleMargin
+import co.typie.editor.scroll.EditorScrollMode
+import co.typie.editor.scroll.EditorScrollPolicy
+import co.typie.editor.scroll.resolveEditorScrollPolicy
 import kotlin.math.max
 
 private const val DefaultExtensionPadding = 40f
@@ -27,6 +24,9 @@ internal fun resolveEditorBodyGeometry(
   visibleArea: EditorVisibleArea,
   layoutSpec: EditorDocumentLayoutSpec,
   pageSizes: List<Size>,
+  typewriterEnabled: Boolean = false,
+  typewriterPosition: Float = 0.5f,
+  cursorHeight: Float = 0f,
 ): EditorBodyGeometry {
   val visibleBodyRect = visibleArea.visibleBodyRect
   val visibleExtensionRect = visibleArea.visibleExtensionRect
@@ -48,16 +48,15 @@ internal fun resolveEditorBodyGeometry(
   val scrollPolicy =
     resolveEditorScrollPolicy(
       visibleArea = visibleArea,
-      defaultBottomPadding = defaultBottomPadding,
+      intrinsicBottomSpace = intrinsicBottomSpace,
+      typewriterEnabled = typewriterEnabled,
+      typewriterPosition = typewriterPosition,
+      cursorHeight = cursorHeight,
     )
   val activeBottomPadding =
     when (scrollPolicy.mode) {
       EditorScrollMode.KeepCursorVisible -> defaultBottomPadding
-      EditorScrollMode.Typewriter ->
-        max(
-          defaultBottomPadding,
-          max(0f, scrollPolicy.typewriterBottomPadding - intrinsicBottomSpace),
-        )
+      EditorScrollMode.Typewriter -> scrollPolicy.typewriterBottomPadding
     }
 
   return EditorBodyGeometry(

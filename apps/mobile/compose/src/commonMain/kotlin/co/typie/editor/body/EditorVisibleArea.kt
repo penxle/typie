@@ -1,4 +1,4 @@
-package co.typie.screen.editor.editor.layout
+package co.typie.editor.body
 
 import kotlin.math.max
 import kotlin.math.min

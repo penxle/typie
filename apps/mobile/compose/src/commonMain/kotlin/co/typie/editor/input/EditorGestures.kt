@@ -13,8 +13,8 @@ import co.typie.editor.Editor
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.PointerEvent as EditorPointerEvent
 import co.typie.editor.runtime.EditorUiState
-import co.typie.screen.editor.editor.scroll.EditorScrollController
-import co.typie.screen.editor.editor.scroll.EditorScrollTarget
+import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorScrollTarget
 import kotlinx.coroutines.launch
 
 private const val EditorTapSlopDp = 8f

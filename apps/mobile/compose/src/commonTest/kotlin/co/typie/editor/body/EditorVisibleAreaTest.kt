@@ -1,4 +1,4 @@
-package co.typie.screen.editor.editor.layout
+package co.typie.editor.body
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

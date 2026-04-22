@@ -26,7 +26,6 @@ import co.typie.editor.EditorView
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.screen.editor.editor.layout.EditorBodyGeometry
 import kotlin.math.max
 
 @Composable

@@ -23,8 +23,8 @@ fun EditorOverlayHost() {
     }
   }
 
-  // TODO(editor-parity): Populate editor-local overlays such as selection rects,
-  // composition rects, inline spellcheck highlights, and inline remark highlights.
+  // TODO(editor-parity): selection rect, composition rect, 인라인 맞춤법 하이라이트,
+  // 인라인 리마크 하이라이트 같은 에디터 로컬 오버레이를 채워 넣어야 한다.
 }
 
 internal fun shouldShowEditorCursorOverlay(focused: Boolean, hasCursor: Boolean): Boolean =

@@ -221,8 +221,8 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      // TODO(editor-parity): Surface header save failures in-screen once editor error UX is
-      // designed.
+      // TODO(editor-parity): 에디터 에러 UX가 정리되면 header 저장 실패를 화면 안에서
+      // 노출해야 한다.
       Sentry.captureException(e)
       null
     }

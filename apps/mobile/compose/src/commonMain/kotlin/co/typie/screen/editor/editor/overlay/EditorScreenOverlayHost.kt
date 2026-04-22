@@ -10,8 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import co.typie.screen.editor.editor.layout.EditorVisibleArea
-import co.typie.screen.editor.editor.scroll.EditorScrollPolicy
+import co.typie.editor.body.EditorVisibleArea
+import co.typie.editor.scroll.EditorScrollMode
+import co.typie.editor.scroll.EditorScrollPolicy
 
 @Composable
 internal fun EditorScreenOverlayHost(
@@ -22,11 +23,25 @@ internal fun EditorScreenOverlayHost(
   Box(modifier = modifier.fillMaxSize()) {
     DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
     DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))
-    DebugViewportLine(y = scrollPolicy.keepVisibleRange.top, color = Color(0xFFFFAB00))
-    DebugViewportLine(y = scrollPolicy.keepVisibleRange.bottom, color = Color(0xFFFFAB00))
 
-    // TODO(editor-parity): Populate screen/body overlays such as selection handles,
-    // magnifier, scrollbar, and extension-area anchored affordances.
+    when (scrollPolicy.mode) {
+      EditorScrollMode.KeepCursorVisible -> {
+        DebugViewportLine(y = scrollPolicy.keepVisibleRange.top, color = Color(0xFFFFAB00))
+        DebugViewportLine(y = scrollPolicy.keepVisibleRange.bottom, color = Color(0xFFFFAB00))
+      }
+
+      EditorScrollMode.Typewriter -> {
+        scrollPolicy.typewriterTargetTop?.let {
+          DebugViewportLine(y = it, color = Color(0xFFFFAB00))
+        }
+        scrollPolicy.typewriterTargetBottom
+          ?.takeIf { scrollPolicy.typewriterCursorHeight > 0f }
+          ?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
+      }
+    }
+
+    // TODO(editor-parity): selection handle, magnifier, scrollbar, extension area 기준
+    // affordance 같은 screen/body 오버레이를 채워 넣어야 한다.
   }
 }
 

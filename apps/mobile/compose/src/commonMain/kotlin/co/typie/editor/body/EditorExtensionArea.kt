@@ -23,9 +23,9 @@ import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
-import co.typie.screen.editor.editor.scroll.EditorScrollController
-import co.typie.screen.editor.editor.scroll.EditorScrollTarget
-import co.typie.screen.editor.editor.scroll.LocalEditorScrollController
+import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorScrollTarget
+import co.typie.editor.scroll.LocalEditorScrollController
 import kotlinx.coroutines.launch
 
 private val DebugExtensionAreaColor = Color(0x2200D97A)
@@ -154,8 +154,8 @@ private class EditorExtensionForwardingNode(
           )
           scrollController?.request(target = EditorScrollTarget.CurrentCursor)
         }
-        // TODO(editor-parity): Forward full down/move/up gesture sequences from extension areas
-        // once the Compose interaction runtime matches web/flutter behavior.
+        // TODO(editor-parity): Compose 상호작용 런타임이 웹/플러터 수준으로 맞춰지면,
+        // extension area에서도 down/move/up 전체 제스처 시퀀스를 포워딩해야 한다.
       }
       resetPointerState()
     }

@@ -16,9 +16,9 @@ import co.typie.editor.ffi.ModifierOp
 import co.typie.editor.ffi.ModifierType
 import co.typie.editor.ffi.Movement
 import co.typie.editor.ffi.NavigationOp
+import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorScrollTarget
 import co.typie.platform.Platform
-import co.typie.screen.editor.editor.scroll.EditorScrollController
-import co.typie.screen.editor.editor.scroll.EditorScrollTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -33,6 +33,8 @@ internal data class KeyBinding(
   val key: ComposeKey,
   val modifiers: Set<KeyModifier> = emptySet(),
   val predicate: (() -> Boolean)? = null,
+  // TODO(editor-parity): movement/selection shortcut은 키별 고정 target보다, dispatch 이후의
+  // 실제 scroll anchor(selection head 또는 cursor)를 따라가도록 정리해야 한다.
   val scrollTarget: EditorScrollTarget? = EditorScrollTarget.CurrentCursor,
   val action: Editor.() -> List<Message>,
 )

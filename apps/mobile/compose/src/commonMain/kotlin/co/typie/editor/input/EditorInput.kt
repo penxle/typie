@@ -24,13 +24,13 @@ import co.typie.editor.ffi.KeyEvent as FfiKeyEvent
 import co.typie.editor.ffi.Message
 import co.typie.editor.ffi.StateField
 import co.typie.editor.handleKeyDown
+import co.typie.editor.scroll.EditorScrollController
+import co.typie.editor.scroll.EditorScrollTarget
 import co.typie.ext.TextInputClient
 import co.typie.ext.TextInputKey
 import co.typie.ext.notifyTextInputFocusChanged
 import co.typie.ext.registerTextInputClient
 import co.typie.platform.Platform
-import co.typie.screen.editor.editor.scroll.EditorScrollController
-import co.typie.screen.editor.editor.scroll.EditorScrollTarget
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
@@ -70,6 +70,9 @@ internal class EditorInputNode(
   private val bindings by lazy { createBindings(platform) }
 
   private fun dispatchForCurrentCursor(vararg messages: Message) {
+    // TODO(editor-parity): 입력 후 스크롤 요청 대상을 현재 cursor로 고정하지 말고,
+    // dispatch 결과의 실제 scroll anchor(selection head 또는 cursor)를 기준으로 정해야
+    // 확장 selection/IME 조합에서도 웹·플러터와 같은 동작이 나온다.
     val controller = scrollController
     coroutineScope.launch {
       editor.dispatch(*messages)

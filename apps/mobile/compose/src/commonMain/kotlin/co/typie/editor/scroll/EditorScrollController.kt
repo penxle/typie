@@ -1,4 +1,4 @@
-package co.typie.screen.editor.editor.scroll
+package co.typie.editor.scroll
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
@@ -6,9 +6,8 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import co.typie.editor.Editor
+import co.typie.editor.body.EditorVisibleArea
 import co.typie.editor.runtime.EditorUiState
-import co.typie.screen.editor.editor.layout.EditorVisibleArea
-import co.typie.screen.editor.editor.state.EditorScreenState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -18,26 +17,23 @@ import kotlinx.coroutines.launch
 internal fun rememberEditorScrollController(
   editorProvider: () -> Editor?,
   uiState: EditorUiState,
-  screenState: EditorScreenState,
+  scrollState: ScrollState,
   visibleArea: EditorVisibleArea,
   scrollPolicy: EditorScrollPolicy,
+  headerHeight: Float,
   density: Float,
 ): EditorScrollController {
   val scope = rememberCoroutineScope()
   val controller =
-    remember(scope, uiState, screenState.scrollState) {
-      EditorScrollController(
-        scope = scope,
-        uiState = uiState,
-        scrollState = screenState.scrollState,
-      )
+    remember(scope, uiState, scrollState) {
+      EditorScrollController(scope = scope, uiState = uiState, scrollState = scrollState)
     }
 
   controller.update(
     editorProvider = editorProvider,
     visibleArea = visibleArea,
     scrollPolicy = scrollPolicy,
-    headerHeight = screenState.headerHeight,
+    headerHeight = headerHeight,
     density = density,
   )
 
@@ -76,8 +72,10 @@ internal class EditorScrollController(
   private var scrollPolicy: EditorScrollPolicy =
     EditorScrollPolicy(
       mode = EditorScrollMode.KeepCursorVisible,
+      typewriterPosition = 0.5f,
       keepVisibleRange = EditorScrollRange(),
-      typewriterRange = EditorScrollRange(),
+      typewriterTargetTop = null,
+      typewriterCursorHeight = 0f,
       typewriterBottomPadding = 0f,
     )
   private var headerHeight: Float = 0f
@@ -192,8 +190,9 @@ private fun resolveScrollTargetRect(
     }
 
     EditorScrollTarget.CurrentSelectionHead -> {
-      // TODO(editor-parity): Resolve the true selection-head bounds once the KMP selection
-      // model exposes them distinctly from the current cursor snapshot.
+      // TODO(editor-parity): KMP selection 모델/FFI가 실제 selection head bounds를 노출하면
+      // 그 값을 써야 한다. 지금은 CurrentSelectionHead가 CurrentCursor로 fallback 되어
+      // non-collapsed selection의 typewriter/keep-visible 기준이 웹/플러터와 다르다.
       resolveScrollTargetRect(
         editor = editor,
         uiState = uiState,
@@ -241,11 +240,12 @@ private fun resolveScrollTargetOffset(
       )
 
     EditorScrollMode.Typewriter ->
-      resolveEditorScrollTarget(
+      resolveTypewriterScrollTarget(
         currentScroll = currentScroll,
         cursorTopInContent = rect.topInContent,
         cursorBottomInContent = rect.bottomInContent,
-        range = scrollPolicy.typewriterRange,
+        visibleArea = visibleArea,
+        position = scrollPolicy.typewriterPosition,
       )
   }
 

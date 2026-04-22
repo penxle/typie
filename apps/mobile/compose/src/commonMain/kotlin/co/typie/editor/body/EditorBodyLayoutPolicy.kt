@@ -26,7 +26,7 @@ internal fun resolveEditorBodyLayoutPolicy(
       else -> availableBodyWidth
     }
 
-  // TODO(editor-parity): Source this layout spec from the live engine/runtime once the editor
-  // session exposes authoritative layout state instead of relying on the initial document attrs.
+  // TODO(editor-parity): 초기 document attrs를 믿지 말고, 에디터 세션이 실제 layout 상태를
+  // 권위 있게 노출하면 그 값을 기준으로 layout spec을 잡아야 한다.
   return EditorBodyLayoutPolicy(pageColumnWidth = pageColumnWidth)
 }

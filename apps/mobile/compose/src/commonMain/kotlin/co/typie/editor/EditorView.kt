@@ -21,10 +21,10 @@ import co.typie.editor.input.editorInput
 import co.typie.editor.overlay.EditorOverlayHost
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.editor.scroll.LocalEditorScrollController
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.platform.PlatformModule
-import co.typie.screen.editor.editor.scroll.LocalEditorScrollController
 
 @Composable
 internal fun EditorView(
@@ -64,8 +64,8 @@ internal fun EditorView(
         height = viewportHeight,
         scaleFactor = scaleFactor,
       )
-      // TODO(editor-parity): Apply document and selection deltas to the live editor session
-      // once the engine exposes incremental sync hooks instead of recreate-or-ignore behavior.
+      // TODO(editor-parity): recreate-or-ignore 대신 엔진이 incremental sync 훅을 노출하면,
+      // 문서/selection delta를 기존 에디터 세션에 적용해야 한다.
     }
   }
 
