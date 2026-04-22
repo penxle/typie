@@ -2,10 +2,7 @@ package co.typie.editor.body
 
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.ffi.Size as PageSize
-import co.typie.editor.scroll.CursorVisibleMargin
-import co.typie.editor.scroll.EditorScrollMode
-import co.typie.editor.scroll.EditorScrollPolicy
-import co.typie.editor.scroll.resolveEditorScrollPolicy
+import co.typie.editor.scroll.EditorVisibleArea
 import kotlin.math.max
 import kotlin.math.min
 
@@ -17,18 +14,12 @@ internal data class EditorBodyGeometry(
   val visibleExtensionSize: Size,
   val minimumBodyHeight: Float,
   val defaultTopPadding: Float,
-  val defaultBottomPadding: Float,
-  val activeBottomPadding: Float,
-  val scrollPolicy: EditorScrollPolicy,
 )
 
 internal fun resolveEditorBodyGeometry(
   visibleArea: EditorVisibleArea,
   layoutSpec: EditorDocumentLayoutSpec,
   pageSizes: List<PageSize>,
-  typewriterEnabled: Boolean = false,
-  typewriterPosition: Float = 0.5f,
-  cursorHeight: Float = 0f,
 ): EditorBodyGeometry {
   val visibleBodySize = visibleArea.visibleBodySize
   val visibleExtensionSize = visibleArea.visibleExtensionSize
@@ -48,28 +39,12 @@ internal fun resolveEditorBodyGeometry(
       maxPageWidth > 0f -> maxPageWidth
       else -> visibleExtensionSize.width
     }
-  val intrinsicBottomSpace = layoutSpec.resolveIntrinsicBottomSpace()
-  val defaultBottomPadding =
-    max(0f, visibleArea.bottomOcclusion + CursorVisibleMargin - intrinsicBottomSpace)
   val minimumBodyHeight =
     resolveMinimumBodyHeight(
       viewportHeight = visibleArea.viewport.height,
       headerHeight = visibleArea.headerHeight,
       bottomOcclusion = visibleArea.bottomOcclusion,
     )
-  val scrollPolicy =
-    resolveEditorScrollPolicy(
-      visibleArea = visibleArea,
-      intrinsicBottomSpace = intrinsicBottomSpace,
-      typewriterEnabled = typewriterEnabled,
-      typewriterPosition = typewriterPosition,
-      cursorHeight = cursorHeight,
-    )
-  val activeBottomPadding =
-    when (scrollPolicy.mode) {
-      EditorScrollMode.KeepCursorVisible -> defaultBottomPadding
-      EditorScrollMode.Typewriter -> scrollPolicy.typewriterBottomPadding
-    }
 
   return EditorBodyGeometry(
     pageColumnWidth = pageColumnWidth,
@@ -77,9 +52,6 @@ internal fun resolveEditorBodyGeometry(
     visibleExtensionSize = visibleExtensionSize,
     minimumBodyHeight = minimumBodyHeight,
     defaultTopPadding = DefaultExtensionPadding,
-    defaultBottomPadding = defaultBottomPadding,
-    activeBottomPadding = activeBottomPadding,
-    scrollPolicy = scrollPolicy,
   )
 }
 

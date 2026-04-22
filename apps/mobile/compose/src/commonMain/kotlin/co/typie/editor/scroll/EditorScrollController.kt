@@ -7,7 +7,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import co.typie.editor.Editor
 import co.typie.editor.VerticalSpan
-import co.typie.editor.body.EditorVisibleArea
 import co.typie.editor.runtime.EditorUiState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -71,7 +70,7 @@ internal class EditorScrollController(
       keepVisibleRange = VerticalSpan(),
       typewriterTargetTop = null,
       typewriterCursorHeight = 0f,
-      typewriterBottomPadding = 0f,
+      bottomPadding = 0f,
     )
   private var headerHeight: Float = 0f
   private var density: Float = 1f

@@ -10,9 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import co.typie.editor.body.EditorVisibleArea
 import co.typie.editor.scroll.EditorScrollMode
 import co.typie.editor.scroll.EditorScrollPolicy
+import co.typie.editor.scroll.EditorVisibleArea
 
 @Composable
 internal fun EditorScreenOverlayHost(

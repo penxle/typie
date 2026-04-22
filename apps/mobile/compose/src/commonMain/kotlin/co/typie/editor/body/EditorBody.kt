@@ -26,6 +26,7 @@ import co.typie.editor.EditorView
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.editor.scroll.EditorScrollPolicy
 import kotlin.math.max
 
 @Composable
@@ -33,6 +34,8 @@ internal fun EditorBody(
   doc: Doc,
   selection: Selection,
   geometry: EditorBodyGeometry,
+  layoutSpec: EditorDocumentLayoutSpec,
+  scrollPolicy: EditorScrollPolicy,
   modifier: Modifier = Modifier,
   overlay: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -90,14 +93,15 @@ internal fun EditorBody(
               EditorView(
                 doc = doc,
                 selection = selection,
+                layoutSpec = layoutSpec,
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,
                 modifier = Modifier.fillMaxWidth(),
               )
             }
 
-            if (geometry.activeBottomPadding > 0f) {
-              Spacer(modifier = Modifier.fillMaxWidth().height(geometry.activeBottomPadding.dp))
+            if (scrollPolicy.bottomPadding > 0f) {
+              Spacer(modifier = Modifier.fillMaxWidth().height(scrollPolicy.bottomPadding.dp))
             }
           }
 

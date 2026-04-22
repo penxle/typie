@@ -2,7 +2,6 @@ package co.typie.editor.scroll
 
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.VerticalSpan
-import co.typie.editor.body.EditorVisibleArea
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -70,7 +69,7 @@ class EditorScrollPolicyTest {
     assertEquals(VerticalSpan(top = 180f, bottom = 696f), policy.keepVisibleRange)
     assertEquals(428f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
     assertEquals(448f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
-    assertEquals(432f, policy.typewriterBottomPadding, FloatTolerance)
+    assertEquals(184f, policy.bottomPadding, FloatTolerance)
   }
 
   @Test
@@ -102,6 +101,20 @@ class EditorScrollPolicyTest {
     assertEquals(0.25f, policy.typewriterPosition, FloatTolerance)
     assertEquals(241f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
     assertEquals(273f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
+    assertEquals(607f, policy.bottomPadding, FloatTolerance)
+  }
+
+  @Test
+  fun `keep-visible bottom padding respects paginated intrinsic bottom space`() {
+    val policy =
+      resolveEditorScrollPolicy(
+        visibleArea =
+          EditorVisibleArea(viewport = Size(width = 720f, height = 900f), topInset = 120f),
+        intrinsicBottomSpace = 40f,
+      )
+
+    assertEquals(EditorScrollMode.KeepCursorVisible, policy.mode)
+    assertEquals(20f, policy.bottomPadding, FloatTolerance)
   }
 
   private fun testVisibleArea(): EditorVisibleArea =

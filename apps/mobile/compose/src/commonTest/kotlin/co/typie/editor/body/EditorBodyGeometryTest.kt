@@ -2,12 +2,13 @@ package co.typie.editor.body
 
 import androidx.compose.ui.geometry.Size
 import co.typie.editor.ffi.Size as PageSize
+import co.typie.editor.scroll.EditorVisibleArea
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class EditorBodyGeometryTest {
   @Test
-  fun `geometry respects visible occlusion when resolving body height and bottom padding`() {
+  fun `geometry respects visible occlusion when resolving body height and page column width`() {
     val geometry =
       resolveEditorBodyGeometry(
         visibleArea =
@@ -25,8 +26,6 @@ class EditorBodyGeometryTest {
     assertEquals(600f, geometry.pageColumnWidth)
     assertEquals(576f, geometry.minimumBodyHeight)
     assertEquals(40f, geometry.defaultTopPadding)
-    assertEquals(184f, geometry.defaultBottomPadding)
-    assertEquals(184f, geometry.activeBottomPadding)
   }
 
   @Test
@@ -46,51 +45,6 @@ class EditorBodyGeometryTest {
     assertEquals(360f, geometry.pageColumnWidth)
     assertEquals(568f, geometry.minimumBodyHeight)
     assertEquals(40f, geometry.defaultTopPadding)
-    assertEquals(40f, geometry.defaultBottomPadding)
-    assertEquals(40f, geometry.activeBottomPadding)
-  }
-
-  @Test
-  fun `geometry reserves only the keep-visible cursor margin when bottom occlusion is absent`() {
-    val geometry =
-      resolveEditorBodyGeometry(
-        visibleArea =
-          EditorVisibleArea(
-            viewport = Size(width = 360f, height = 640f),
-            headerHeight = 72f,
-            topInset = 72f,
-          ),
-        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
-        pageSizes = emptyList(),
-      )
-
-    assertEquals(40f, geometry.defaultBottomPadding)
-    assertEquals(40f, geometry.activeBottomPadding)
-  }
-
-  @Test
-  fun `geometry expands bottom padding for typewriter mode based on cursor height and position`() {
-    val geometry =
-      resolveEditorBodyGeometry(
-        visibleArea =
-          EditorVisibleArea(
-            viewport = Size(width = 720f, height = 900f),
-            headerHeight = 180f,
-            topInset = 120f,
-            imeInset = 100f,
-            toolbarTop = 756f,
-          ),
-        layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
-        pageSizes = listOf(PageSize(width = 600f, height = 800f)),
-        typewriterEnabled = true,
-        typewriterPosition = 0.5f,
-        cursorHeight = 20f,
-      )
-
-    assertEquals(184f, geometry.defaultBottomPadding)
-    assertEquals(432f, geometry.activeBottomPadding)
-    assertEquals(428f, requireNotNull(geometry.scrollPolicy.typewriterTargetTop))
-    assertEquals(448f, requireNotNull(geometry.scrollPolicy.typewriterTargetBottom))
   }
 
   @Test
@@ -117,11 +71,18 @@ class EditorBodyGeometryTest {
             headerHeight = 120f,
             topInset = 120f,
           ),
-        layoutSpec = EditorDocumentLayoutSpec.Paginated(pageWidth = 720f),
+        layoutSpec =
+          EditorDocumentLayoutSpec.Paginated(
+            pageWidth = 720f,
+            pageHeight = 960f,
+            pageMarginTop = 72f,
+            pageMarginBottom = 72f,
+            pageMarginLeft = 64f,
+            pageMarginRight = 64f,
+          ),
         pageSizes = listOf(PageSize(width = 700f, height = 960f)),
       )
 
     assertEquals(720f, geometry.pageColumnWidth)
-    assertEquals(20f, geometry.activeBottomPadding)
   }
 }

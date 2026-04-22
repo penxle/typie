@@ -1,7 +1,6 @@
 package co.typie.editor.scroll
 
 import co.typie.editor.VerticalSpan
-import co.typie.editor.body.EditorVisibleArea
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -19,7 +18,7 @@ internal data class EditorScrollPolicy(
   val keepVisibleRange: VerticalSpan,
   val typewriterTargetTop: Float?,
   val typewriterCursorHeight: Float,
-  val typewriterBottomPadding: Float,
+  val bottomPadding: Float,
 ) {
   val typewriterTargetBottom: Float?
     get() = typewriterTargetTop?.plus(typewriterCursorHeight)
@@ -41,6 +40,11 @@ internal fun resolveEditorScrollPolicy(
       position = resolvedTypewriterPosition,
       cursorHeight = resolvedCursorHeight,
     )
+  val keepVisibleBottomPadding =
+    resolveKeepVisibleBottomPadding(
+      visibleArea = visibleArea,
+      intrinsicBottomSpace = intrinsicBottomSpace,
+    )
 
   return EditorScrollPolicy(
     mode =
@@ -49,13 +53,17 @@ internal fun resolveEditorScrollPolicy(
     keepVisibleRange = keepVisibleRange,
     typewriterTargetTop = typewriterTargetTop,
     typewriterCursorHeight = resolvedCursorHeight,
-    typewriterBottomPadding =
-      resolveTypewriterBottomPadding(
-        visibleArea = visibleArea,
-        intrinsicBottomSpace = intrinsicBottomSpace,
-        position = resolvedTypewriterPosition,
-        cursorHeight = resolvedCursorHeight,
-      ),
+    bottomPadding =
+      if (typewriterEnabled) {
+        resolveTypewriterBottomPadding(
+          visibleArea = visibleArea,
+          intrinsicBottomSpace = intrinsicBottomSpace,
+          position = resolvedTypewriterPosition,
+          cursorHeight = resolvedCursorHeight,
+        )
+      } else {
+        keepVisibleBottomPadding
+      },
   )
 }
 
@@ -126,6 +134,13 @@ private fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): VerticalSpa
   } else {
     VerticalSpan(top = top, bottom = bottom)
   }
+}
+
+private fun resolveKeepVisibleBottomPadding(
+  visibleArea: EditorVisibleArea,
+  intrinsicBottomSpace: Float,
+): Float {
+  return max(0f, visibleArea.bottomOcclusion + CursorVisibleMargin - intrinsicBottomSpace)
 }
 
 internal fun resolveTypewriterTargetTop(

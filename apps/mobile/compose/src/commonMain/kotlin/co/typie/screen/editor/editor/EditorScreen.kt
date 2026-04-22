@@ -19,14 +19,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.body.EditorBody
 import co.typie.editor.body.resolveEditorBodyGeometry
+import co.typie.editor.body.resolveIntrinsicBottomSpace
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.LocalEditorScrollController
 import co.typie.editor.scroll.rememberEditorScrollController
+import co.typie.editor.scroll.resolveEditorScrollPolicy
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
+import co.typie.icons.Lucide
 import co.typie.navigation.Nav
 import co.typie.route.Route
 import co.typie.screen.editor.editor.header.EditorHeader
@@ -39,6 +42,7 @@ import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
 import co.typie.ui.component.topbar.ProvideTopBar
+import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.theme.AppTheme
 import kotlinx.coroutines.flow.collectLatest
 
@@ -96,6 +100,12 @@ fun EditorScreen(entityId: String) {
         }
       }
     },
+    trailing = {
+      TopBarButton(
+        icon = if (model.isPaginatedDebugLayout) Lucide.ScrollText else Lucide.LayoutTemplate,
+        onClick = { model.toggleDebugLayoutMode() },
+      )
+    },
     scrollOffset = null,
   )
 
@@ -121,14 +131,19 @@ fun EditorScreen(entityId: String) {
         rawBottomSafeInset = bottomSafeInset.value,
         rawImeInset = imeBottom.value,
       )
+    val scrollPolicy =
+      resolveEditorScrollPolicy(
+        visibleArea = visibleArea,
+        intrinsicBottomSpace = model.documentLayoutSpec.resolveIntrinsicBottomSpace(),
+        typewriterEnabled = typewriterEnabled,
+        typewriterPosition = typewriterPosition,
+        cursorHeight = cursorHeight,
+      )
     val bodyGeometry =
       resolveEditorBodyGeometry(
         visibleArea = visibleArea,
         layoutSpec = model.documentLayoutSpec,
         pageSizes = runtime.editor?.pageSizes.orEmpty(),
-        typewriterEnabled = typewriterEnabled,
-        typewriterPosition = typewriterPosition,
-        cursorHeight = cursorHeight,
       )
     val scrollController =
       rememberEditorScrollController(
@@ -136,7 +151,7 @@ fun EditorScreen(entityId: String) {
         uiState = uiState,
         scrollState = screenState.scrollState,
         visibleArea = visibleArea,
-        scrollPolicy = bodyGeometry.scrollPolicy,
+        scrollPolicy = scrollPolicy,
         headerHeight = screenState.headerHeight,
         density = density,
       )
@@ -180,7 +195,7 @@ fun EditorScreen(entityId: String) {
       overlay = {
         EditorScreenOverlayHost(
           visibleArea = visibleArea,
-          scrollPolicy = bodyGeometry.scrollPolicy,
+          scrollPolicy = scrollPolicy,
           modifier = Modifier.fillMaxSize(),
         )
       },
@@ -190,7 +205,13 @@ fun EditorScreen(entityId: String) {
           LocalEditorUiState provides uiState,
           LocalEditorScrollController provides scrollController,
         ) {
-          EditorBody(doc = model.doc, selection = model.selection, geometry = bodyGeometry)
+          EditorBody(
+            doc = model.doc,
+            selection = model.selection,
+            geometry = bodyGeometry,
+            layoutSpec = model.documentLayoutSpec,
+            scrollPolicy = scrollPolicy,
+          )
         }
       },
       toolbar = {

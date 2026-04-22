@@ -1,4 +1,4 @@
-package co.typie.editor.body
+package co.typie.editor.scroll
 
 import androidx.compose.ui.geometry.Size
 import kotlin.math.max

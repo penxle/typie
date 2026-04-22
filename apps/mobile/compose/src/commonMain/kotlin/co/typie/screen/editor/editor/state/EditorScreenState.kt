@@ -8,9 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Size
-import co.typie.editor.body.EditorVisibleArea
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
+import co.typie.editor.scroll.EditorVisibleArea
 
 @Stable
 internal class EditorScreenState internal constructor(val scrollState: ScrollState) {

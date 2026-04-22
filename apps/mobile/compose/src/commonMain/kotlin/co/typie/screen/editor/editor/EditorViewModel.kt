@@ -37,6 +37,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private enum class DebugDocumentLayoutMode {
+  Continuous,
+  Paginated,
+}
+
 class EditorViewModel(val entityId: String) : ViewModel() {
   var titleDraft by mutableStateOf("")
     private set
@@ -47,6 +52,7 @@ class EditorViewModel(val entityId: String) : ViewModel() {
   private var loadingState by mutableStateOf(true)
   private var serverTitle by mutableStateOf("")
   private var serverSubtitle by mutableStateOf("")
+  private var debugDocumentLayoutMode by mutableStateOf(DebugDocumentLayoutMode.Continuous)
   private val headerSaveController = EditorHeaderSaveController(scope = viewModelScope)
 
   val query =
@@ -57,43 +63,47 @@ class EditorViewModel(val entityId: String) : ViewModel() {
     ) {
       EditorScreen_Query(entityId = entityId)
     }
-  val doc =
-    Doc(
-      nodes =
-        mapOf(
-          "0" to
-            NodeEntry(
-              node = Node.Root,
-              modifiers =
-                listOf(
-                  Modifier.FontFamily("Pretendard"),
-                  Modifier.FontWeight(400),
-                  Modifier.FontSize(1200),
-                  Modifier.LineHeight(160),
-                  Modifier.LetterSpacing(0),
-                  Modifier.TextColor("black"),
-                  Modifier.ParagraphIndent(100),
-                  Modifier.BlockGap(100),
-                ),
-              children = listOf("10", "7"),
-            ),
-          "10" to
-            NodeEntry(node = Node.Blockquote(), parent = "0", children = listOf("1", "3", "5")),
-          "1" to NodeEntry(node = Node.Paragraph, parent = "10", children = listOf("2")),
-          "2" to NodeEntry(node = Node.Text("ABC"), parent = "1"),
-          "3" to NodeEntry(node = Node.Paragraph, parent = "10", children = listOf("4")),
-          "4" to NodeEntry(node = Node.Text("Hello, World!"), parent = "3"),
-          "5" to NodeEntry(node = Node.Paragraph, parent = "10", children = listOf("6")),
-          "6" to NodeEntry(node = Node.Text("안녕하세요!"), parent = "5"),
-          "7" to NodeEntry(node = Node.Paragraph, parent = "0"),
-        ),
-      attrs = DocumentAttrs(layoutMode = LayoutMode.Continuous(maxWidth = 600f)),
-    )
+  val doc: Doc
+    get() =
+      Doc(
+        nodes =
+          mapOf(
+            "0" to
+              NodeEntry(
+                node = Node.Root,
+                modifiers =
+                  listOf(
+                    Modifier.FontFamily("Pretendard"),
+                    Modifier.FontWeight(400),
+                    Modifier.FontSize(1200),
+                    Modifier.LineHeight(160),
+                    Modifier.LetterSpacing(0),
+                    Modifier.TextColor("black"),
+                    Modifier.ParagraphIndent(100),
+                    Modifier.BlockGap(100),
+                  ),
+                children = listOf("10", "7"),
+              ),
+            "10" to
+              NodeEntry(node = Node.Blockquote(), parent = "0", children = listOf("1", "3", "5")),
+            "1" to NodeEntry(node = Node.Paragraph, parent = "10", children = listOf("2")),
+            "2" to NodeEntry(node = Node.Text("ABC"), parent = "1"),
+            "3" to NodeEntry(node = Node.Paragraph, parent = "10", children = listOf("4")),
+            "4" to NodeEntry(node = Node.Text("Hello, World!"), parent = "3"),
+            "5" to NodeEntry(node = Node.Paragraph, parent = "10", children = listOf("6")),
+            "6" to NodeEntry(node = Node.Text("안녕하세요!"), parent = "5"),
+            "7" to NodeEntry(node = Node.Paragraph, parent = "0"),
+          ),
+        attrs = DocumentAttrs(layoutMode = resolveDebugLayoutMode(debugDocumentLayoutMode)),
+      )
 
   val selection = Selection(anchor = Position("4", 0), head = Position("4", 0))
 
   internal val documentLayoutSpec: EditorDocumentLayoutSpec
     get() = doc.attrs.layoutMode.toEditorDocumentLayoutSpec()
+
+  internal val isPaginatedDebugLayout: Boolean
+    get() = debugDocumentLayoutMode == DebugDocumentLayoutMode.Paginated
 
   val headingTitle: String
     get() = if (loadingState && serverTitle.isEmpty() && !isTitleDirty) "" else titleDraft
@@ -133,6 +143,14 @@ class EditorViewModel(val entityId: String) : ViewModel() {
 
     subtitleDraft = text
     scheduleSubtitleSave()
+  }
+
+  fun toggleDebugLayoutMode() {
+    debugDocumentLayoutMode =
+      when (debugDocumentLayoutMode) {
+        DebugDocumentLayoutMode.Continuous -> DebugDocumentLayoutMode.Paginated
+        DebugDocumentLayoutMode.Paginated -> DebugDocumentLayoutMode.Continuous
+      }
   }
 
   suspend fun flushDrafts() {
@@ -270,6 +288,22 @@ private fun placeholderData() =
   }
 
 private data class EditorHeaderSnapshot(val title: String, val subtitle: String)
+
+private fun resolveDebugLayoutMode(mode: DebugDocumentLayoutMode): LayoutMode =
+  when (mode) {
+    DebugDocumentLayoutMode.Continuous -> LayoutMode.Continuous(maxWidth = 600f)
+    DebugDocumentLayoutMode.Paginated ->
+      LayoutMode.Paginated(
+        pageWidth = 360f,
+        pageHeight = 520f,
+        pageMarginTop = 40f,
+        pageMarginBottom = 40f,
+        pageMarginLeft = 32f,
+        pageMarginRight = 32f,
+      )
+  // TODO(editor-parity): 실제 paginated 문서 source가 연결되면 이 임시 토글용 attrs를
+  // 제거하고 서버/엔진이 주는 canonical layout mode를 그대로 써야 한다.
+  }
 
 private class EditorHeaderSaveController(
   private val scope: CoroutineScope,
