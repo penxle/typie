@@ -26,7 +26,6 @@ import co.typie.editor.render.RenderCanvas
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
-import kotlin.math.max
 import kotlin.math.round
 
 private val DebugRustSurfaceTint = Color(0x220096FF)
@@ -54,10 +53,10 @@ internal fun EditorPageSurface(
   val displayHeightPx = round(heightDouble * density.density.toDouble() * displayZoom.toDouble())
   val renderWidthPx = round(widthDouble * density.density.toDouble() * renderZoom.toDouble())
   val renderHeightPx = round(heightDouble * density.density.toDouble() * renderZoom.toDouble())
-  val displayWidthPxInt = max(1, displayWidthPx.toInt())
-  val displayHeightPxInt = max(1, displayHeightPx.toInt())
-  val renderWidthPxInt = max(1, renderWidthPx.toInt())
-  val renderHeightPxInt = max(1, renderHeightPx.toInt())
+  val displayWidthPxInt = displayWidthPx.toInt().coerceAtLeast(1)
+  val displayHeightPxInt = displayHeightPx.toInt().coerceAtLeast(1)
+  val renderWidthPxInt = renderWidthPx.toInt().coerceAtLeast(1)
+  val renderHeightPxInt = renderHeightPx.toInt().coerceAtLeast(1)
   val displayBottomMarginPx =
     round(debugBottomMarginHeight.toDouble() * density.density.toDouble() * displayZoom.toDouble())
       .toInt()

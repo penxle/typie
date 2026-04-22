@@ -96,7 +96,10 @@ private class EditorGesturesNode(
         change.consume()
         val xDp = downPositionInNode.x / density
         val yDp = downPositionInNode.y / density
-        val point = uiState.globalToLocal(xDp, yDp, editor.pageSizes)
+        val point =
+          uiState
+            .resolveViewportTransform(pageSizes = editor.pageSizes)
+            .globalToLocal(x = xDp, y = yDp)
         if (point != null) {
           coroutineScope.launch {
             editor.dispatch(

@@ -26,7 +26,7 @@ class GeometryTest {
 
   @Test
   fun localToGlobal_adds_page_offset() {
-    val result = localToGlobal(1, 100f, 50f, offsets)
+    val result = EditorViewportTransform(pageOffsets = offsets).localToGlobal(1, 100f, 50f)
     assertNotNull(result)
     assertEquals(100f, result.x)
     assertEquals(650f, result.y)
@@ -34,7 +34,9 @@ class GeometryTest {
 
   @Test
   fun localToGlobal_scales_page_local_coordinates_with_display_zoom() {
-    val result = localToGlobal(page = 1, x = 100f, y = 50f, pageOffsets = offsets, displayZoom = 2f)
+    val result =
+      EditorViewportTransform(pageOffsets = offsets, displayZoom = 2f)
+        .localToGlobal(page = 1, x = 100f, y = 50f)
     assertNotNull(result)
     assertEquals(200f, result.x)
     assertEquals(700f, result.y)
@@ -42,7 +44,9 @@ class GeometryTest {
 
   @Test
   fun globalToLocal_maps_viewport_coordinates_back_into_page_local_space() {
-    val point = globalToLocal(150f, 300f, offsetsCentered, sizesCentered)
+    val point =
+      EditorViewportTransform(pageOffsets = offsetsCentered, pageSizes = sizesCentered)
+        .globalToLocal(150f, 300f)
     assertNotNull(point)
     assertEquals(0, point.page)
     assertEquals(100f, point.x)
@@ -52,13 +56,12 @@ class GeometryTest {
   @Test
   fun globalToLocal_maps_display_coordinates_back_into_page_local_space_with_zoom() {
     val point =
-      globalToLocal(
-        x = 250f,
-        y = 600f,
-        pageOffsets = offsetsCentered,
-        sizes = sizesCentered,
-        displayZoom = 2f,
-      )
+      EditorViewportTransform(
+          pageOffsets = offsetsCentered,
+          pageSizes = sizesCentered,
+          displayZoom = 2f,
+        )
+        .globalToLocal(x = 250f, y = 600f)
     assertNotNull(point)
     assertEquals(0, point.page)
     assertEquals(100f, point.x)
@@ -71,21 +74,19 @@ class GeometryTest {
     val focalY = 600f
 
     val pointBeforeZoom =
-      globalToLocal(
-        x = focalX,
-        y = focalY,
-        pageOffsets = offsetsCentered,
-        sizes = sizesCentered,
-        displayZoom = 2f,
-      )
+      EditorViewportTransform(
+          pageOffsets = offsetsCentered,
+          pageSizes = sizesCentered,
+          displayZoom = 2f,
+        )
+        .globalToLocal(x = focalX, y = focalY)
     val pointAfterZoom =
-      globalToLocal(
-        x = focalX,
-        y = focalY,
-        pageOffsets = offsetsCentered,
-        sizes = sizesCentered,
-        displayZoom = 1.5f,
-      )
+      EditorViewportTransform(
+          pageOffsets = offsetsCentered,
+          pageSizes = sizesCentered,
+          displayZoom = 1.5f,
+        )
+        .globalToLocal(x = focalX, y = focalY)
 
     assertNotNull(pointBeforeZoom)
     assertNotNull(pointAfterZoom)
@@ -97,7 +98,8 @@ class GeometryTest {
 
   @Test
   fun globalToLocal_clamps_coordinates_to_page_bounds() {
-    val point = globalToLocal(500f, 2000f, offsets, sizes)
+    val point =
+      EditorViewportTransform(pageOffsets = offsets, pageSizes = sizes).globalToLocal(500f, 2000f)
     assertNotNull(point)
     assertEquals(2, point.page)
     assertEquals(400f, point.x)
@@ -106,7 +108,9 @@ class GeometryTest {
 
   @Test
   fun globalToLocal_snaps_gap_touches_to_the_nearest_page_edge() {
-    val point = globalToLocal(100f, 610f, offsetsWithGap, sizes)
+    val point =
+      EditorViewportTransform(pageOffsets = offsetsWithGap, pageSizes = sizes)
+        .globalToLocal(100f, 610f)
     assertNotNull(point)
     assertEquals(1, point.page)
     assertEquals(0f, point.y)
@@ -114,7 +118,9 @@ class GeometryTest {
 
   @Test
   fun globalToLocal_can_snap_gap_touches_to_the_previous_page() {
-    val point = globalToLocal(100f, 605f, offsetsWithGap, sizes)
+    val point =
+      EditorViewportTransform(pageOffsets = offsetsWithGap, pageSizes = sizes)
+        .globalToLocal(100f, 605f)
     assertNotNull(point)
     assertEquals(0, point.page)
     assertEquals(600f, point.y)
@@ -122,8 +128,13 @@ class GeometryTest {
 
   @Test
   fun globalToLocal_returns_null_without_page_metrics() {
-    assertNull(localToGlobal(5, 0f, 0f, offsets))
-    assertNull(globalToLocal(0f, 0f, emptyMap(), emptyList()))
-    assertNull(globalToLocal(0f, 0f, emptyMap(), sizes))
+    assertNull(EditorViewportTransform(pageOffsets = offsets).localToGlobal(5, 0f, 0f))
+    assertNull(
+      EditorViewportTransform(pageOffsets = emptyMap(), pageSizes = emptyList())
+        .globalToLocal(0f, 0f)
+    )
+    assertNull(
+      EditorViewportTransform(pageOffsets = emptyMap(), pageSizes = sizes).globalToLocal(0f, 0f)
+    )
   }
 }

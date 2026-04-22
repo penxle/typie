@@ -12,9 +12,10 @@ fun EditorOverlayHost() {
   val editor = runtime.editor ?: return
   val cursor = editor.cursor
   val displayZoom = uiState.displayZoom
+  val viewportTransform = uiState.resolveViewportTransform()
   if (shouldShowEditorCursorOverlay(focused = uiState.focused, hasCursor = cursor != null)) {
     val cursorOffsetInViewport =
-      uiState.localToGlobal(page = cursor!!.pageIdx, x = cursor.rect.x, y = cursor.rect.y)
+      viewportTransform.localToGlobal(page = cursor!!.pageIdx, x = cursor.rect.x, y = cursor.rect.y)
 
     if (cursorOffsetInViewport != null) {
       EditorCursorOverlay(

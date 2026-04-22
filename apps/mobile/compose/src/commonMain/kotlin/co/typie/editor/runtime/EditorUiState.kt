@@ -9,10 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import co.typie.editor.EditorViewportTransform
-import co.typie.editor.PagePoint
 import co.typie.editor.ffi.Size
-import co.typie.editor.globalToLocal
-import co.typie.editor.localToGlobal
 
 @Stable
 class EditorUiState {
@@ -56,12 +53,6 @@ class EditorUiState {
     this.displayZoom = normalized
   }
 
-  fun localToGlobal(page: Int, x: Float, y: Float): Offset? =
-    localToGlobal(page, x, y, pageOffsets, displayZoom = displayZoom)
-
-  fun globalToLocal(x: Float, y: Float, pageSizes: List<Size>): PagePoint? =
-    globalToLocal(x, y, pageOffsets, pageSizes, displayZoom = displayZoom)
-
   fun containerToEditorLocal(x: Float, y: Float): Offset? {
     val bounds = editorBoundsInContainer
     if (!bounds.isValid) {
@@ -71,7 +62,7 @@ class EditorUiState {
     return Offset(x - bounds.x, y - bounds.y)
   }
 
-  fun resolveViewportTransform(pageSizes: List<Size>): EditorViewportTransform =
+  fun resolveViewportTransform(pageSizes: List<Size> = emptyList()): EditorViewportTransform =
     EditorViewportTransform(
       pageOffsets = pageOffsets,
       pageSizes = pageSizes,

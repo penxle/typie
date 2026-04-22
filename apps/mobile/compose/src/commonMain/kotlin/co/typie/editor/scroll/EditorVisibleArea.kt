@@ -19,10 +19,10 @@ internal data class EditorVisibleArea(
     get() = max(safeBottomInset, imeInset)
 
   private val keyboardViewportBottom: Float
-    get() = max(0f, viewport.height - effectiveBottomInset)
+    get() = (viewport.height - effectiveBottomInset).coerceAtLeast(0f)
 
   val bottomOcclusion: Float
-    get() = max(0f, viewport.height - visibleViewportBottom)
+    get() = (viewport.height - visibleViewportBottom).coerceAtLeast(0f)
 
   val visibleViewportTop: Float
     get() = topOcclusion
@@ -30,13 +30,10 @@ internal data class EditorVisibleArea(
   val visibleViewportBottom: Float
     get() = keyboardViewportBottom.coerceAtLeast(visibleViewportTop)
 
-  fun resolveVisibleEditorViewportTop(editorTopInViewport: Float): Float =
-    max(visibleViewportTop, editorTopInViewport)
-
   val visibleBodySize: Size
     get() =
-      Size(width = viewport.width, height = max(0f, visibleViewportBottom - visibleViewportTop))
-
-  val visibleExtensionSize: Size
-    get() = visibleBodySize
+      Size(
+        width = viewport.width,
+        height = (visibleViewportBottom - visibleViewportTop).coerceAtLeast(0f),
+      )
 }

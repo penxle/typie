@@ -15,18 +15,17 @@ class EditorUiStateTest {
     val state = EditorUiState()
     state.updatePageOffset(page = 0, offset = Offset(40f, 0f))
     state.updatePageOffset(page = 1, offset = Offset(40f, 600f))
+    val viewportTransform =
+      state.resolveViewportTransform(
+        pageSizes = listOf(Size(width = 300f, height = 600f), Size(width = 300f, height = 800f))
+      )
 
-    val global = state.localToGlobal(page = 1, x = 100f, y = 50f)
+    val global = viewportTransform.localToGlobal(page = 1, x = 100f, y = 50f)
     assertNotNull(global)
     assertEquals(140f, global.x)
     assertEquals(650f, global.y)
 
-    val local =
-      state.globalToLocal(
-        x = 90f,
-        y = 620f,
-        pageSizes = listOf(Size(width = 300f, height = 600f), Size(width = 300f, height = 800f)),
-      )
+    val local = viewportTransform.globalToLocal(x = 90f, y = 620f)
     assertNotNull(local)
     assertEquals(1, local.page)
     assertEquals(50f, local.x)
@@ -39,18 +38,17 @@ class EditorUiStateTest {
     state.updatePageOffset(page = 0, offset = Offset(40f, 0f))
     state.updatePageOffset(page = 1, offset = Offset(40f, 1200f))
     state.updateDisplayZoom(2f)
+    val viewportTransform =
+      state.resolveViewportTransform(
+        pageSizes = listOf(Size(width = 300f, height = 600f), Size(width = 300f, height = 800f))
+      )
 
-    val global = state.localToGlobal(page = 1, x = 100f, y = 50f)
+    val global = viewportTransform.localToGlobal(page = 1, x = 100f, y = 50f)
     assertNotNull(global)
     assertEquals(240f, global.x)
     assertEquals(1300f, global.y)
 
-    val local =
-      state.globalToLocal(
-        x = 140f,
-        y = 1240f,
-        pageSizes = listOf(Size(width = 300f, height = 600f), Size(width = 300f, height = 800f)),
-      )
+    val local = viewportTransform.globalToLocal(x = 140f, y = 1240f)
     assertNotNull(local)
     assertEquals(1, local.page)
     assertEquals(50f, local.x)
@@ -68,7 +66,7 @@ class EditorUiStateTest {
     state.clear()
 
     assertFalse(state.focused)
-    assertNull(state.localToGlobal(page = 0, x = 0f, y = 0f))
+    assertNull(state.resolveViewportTransform().localToGlobal(page = 0, x = 0f, y = 0f))
     assertFalse(state.editorBoundsInContainer.isValid)
   }
 

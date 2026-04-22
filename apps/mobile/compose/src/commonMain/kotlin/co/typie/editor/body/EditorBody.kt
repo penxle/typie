@@ -29,7 +29,6 @@ import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.Selection
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorScrollPolicy
-import kotlin.math.max
 
 private val DebugTopPaddingColor = Color(0x22FF5ACD)
 private val DebugBottomPaddingColor = Color(0x22FF8A00)
@@ -143,7 +142,7 @@ internal fun EditorBody(
 internal fun resolveExtensionAreaFillSpacerHeight(
   minimumHeight: Float,
   bodyContentHeight: Float,
-): Float = max(0f, minimumHeight - bodyContentHeight)
+): Float = (minimumHeight - bodyContentHeight).coerceAtLeast(0f)
 
 private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect {
   val position = positionInRoot()

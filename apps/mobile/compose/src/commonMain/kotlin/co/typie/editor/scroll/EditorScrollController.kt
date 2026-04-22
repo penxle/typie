@@ -6,6 +6,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import co.typie.editor.Editor
+import co.typie.editor.EditorViewportTransform
 import co.typie.editor.VerticalSpan
 import co.typie.editor.runtime.EditorUiState
 import kotlin.math.roundToInt
@@ -97,11 +98,18 @@ internal class EditorScrollController(
       }
 
       val editor = editorProvider() ?: return@launchScroll
+      val editorBounds = uiState.editorBoundsInContainer
+      if (!editorBounds.isValid) {
+        return@launchScroll
+      }
+      val viewportTransform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
       val rect =
         resolveScrollTargetRect(
           editor = editor,
-          uiState = uiState,
+          viewportTransform = viewportTransform,
           headerHeight = headerHeight,
+          editorTopInContainer = editorBounds.y,
+          displayZoom = uiState.displayZoom,
           target = target,
         ) ?: return@launchScroll
       if (density <= 0f) {
@@ -161,6 +169,7 @@ internal fun resolveDistanceToPagesBottom(
   bottomOcclusion: Float,
   target: EditorScrollTarget,
 ): Float? {
+  val viewportTransform = uiState.resolveViewportTransform(pageSizes = editor.pageSizes)
   val editorBounds = uiState.editorBoundsInContainer
   if (!editorBounds.isValid) {
     return null
@@ -168,8 +177,10 @@ internal fun resolveDistanceToPagesBottom(
   val rect =
     resolveScrollTargetRect(
       editor = editor,
-      uiState = uiState,
+      viewportTransform = viewportTransform,
       headerHeight = headerHeight,
+      editorTopInContainer = editorBounds.y,
+      displayZoom = uiState.displayZoom,
       target = target,
     ) ?: return null
   val contentBottomInContent = headerHeight + editorBounds.y + pagesContentHeight
@@ -178,23 +189,19 @@ internal fun resolveDistanceToPagesBottom(
 
 private fun resolveScrollTargetRect(
   editor: Editor,
-  uiState: EditorUiState,
+  viewportTransform: EditorViewportTransform,
   headerHeight: Float,
+  editorTopInContainer: Float,
+  displayZoom: Float,
   target: EditorScrollTarget,
 ): VerticalSpan? {
-  val editorBounds = uiState.editorBoundsInContainer
-  if (!editorBounds.isValid) {
-    return null
-  }
-  val displayZoom = uiState.displayZoom
-
   return when (target) {
     EditorScrollTarget.CurrentCursor -> {
       val cursor = editor.cursor ?: return null
       val cursorOffset =
-        uiState.localToGlobal(page = cursor.pageIdx, x = cursor.rect.x, y = cursor.rect.y)
+        viewportTransform.localToGlobal(page = cursor.pageIdx, x = cursor.rect.x, y = cursor.rect.y)
           ?: return null
-      val contentTop = headerHeight + editorBounds.y + cursorOffset.y
+      val contentTop = headerHeight + editorTopInContainer + cursorOffset.y
       VerticalSpan(top = contentTop, bottom = contentTop + cursor.rect.height * displayZoom)
     }
 
@@ -205,16 +212,19 @@ private fun resolveScrollTargetRect(
       // collapsed selection에서는 표시 높이 부족분이 displayZoom만큼 확대된다.
       resolveScrollTargetRect(
         editor = editor,
-        uiState = uiState,
+        viewportTransform = viewportTransform,
         headerHeight = headerHeight,
+        editorTopInContainer = editorTopInContainer,
+        displayZoom = displayZoom,
         target = EditorScrollTarget.CurrentCursor,
       )
     }
 
     is EditorScrollTarget.OverlayRect -> {
       val overlayOffset =
-        uiState.localToGlobal(page = target.pageIdx, x = target.left, y = target.top) ?: return null
-      val contentTop = headerHeight + editorBounds.y + overlayOffset.y
+        viewportTransform.localToGlobal(page = target.pageIdx, x = target.left, y = target.top)
+          ?: return null
+      val contentTop = headerHeight + editorTopInContainer + overlayOffset.y
       VerticalSpan(top = contentTop, bottom = contentTop + target.height * displayZoom)
     }
   }

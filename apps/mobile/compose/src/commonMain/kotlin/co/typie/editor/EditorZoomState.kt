@@ -10,7 +10,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import co.typie.editor.body.EditorDocumentLayoutSpec
 import kotlin.math.abs
-import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,7 +24,7 @@ private const val RenderZoomDebounceMs = 120L
 
 @Stable
 internal class EditorZoomController(
-  private var scope: CoroutineScope? = null,
+  private val scope: CoroutineScope? = null,
   private val renderZoomDebounceMs: Long = RenderZoomDebounceMs,
 ) {
   var displayZoom by mutableFloatStateOf(1f)
@@ -41,10 +40,6 @@ internal class EditorZoomController(
   private var currentLayoutSpec: EditorDocumentLayoutSpec = EditorDocumentLayoutSpec.Continuous(0f)
   private var currentViewportWidth: Float = 0f
   private var renderZoomJob: Job? = null
-
-  fun bind(scope: CoroutineScope) {
-    this.scope = scope
-  }
 
   fun syncLayout(layoutSpec: EditorDocumentLayoutSpec, viewportWidth: Float) {
     currentLayoutSpec = layoutSpec
@@ -229,7 +224,8 @@ internal fun computePaginatedFitWidthZoom(pageWidth: Float, viewportWidth: Float
 }
 
 internal fun computeInitialPaginatedZoom(pageWidth: Float, viewportWidth: Float): Float =
-  min(computePaginatedFitWidthZoom(pageWidth = pageWidth, viewportWidth = viewportWidth), 1f)
+  computePaginatedFitWidthZoom(pageWidth = pageWidth, viewportWidth = viewportWidth)
+    .coerceAtMost(1f)
 
 internal fun clampPaginatedZoom(zoom: Float, pageWidth: Float, viewportWidth: Float): Float {
   val bounds = computePaginatedZoomBounds(pageWidth)
@@ -270,9 +266,7 @@ internal fun zoomDiffers(a: Float, b: Float): Boolean = !zoomEquals(a, b)
 @Composable
 internal fun rememberEditorZoomController(key: Any): EditorZoomController {
   val scope = rememberCoroutineScope()
-  val controller = remember(key) { EditorZoomController(scope = scope) }
-  controller.bind(scope)
-  return controller
+  return remember(key) { EditorZoomController(scope = scope) }
 }
 
 internal val LocalEditorZoomController =

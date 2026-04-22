@@ -2,7 +2,6 @@ package co.typie.editor
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Size
-import kotlin.math.max
 
 data class PagePoint(val page: Int, val x: Float, val y: Float)
 
@@ -11,14 +10,14 @@ data class VerticalSpan(val top: Float = 0f, val bottom: Float = 0f) {
     get() = bottom > top
 
   val height: Float
-    get() = max(0f, bottom - top)
+    get() = (bottom - top).coerceAtLeast(0f)
 }
 
 data class EditorViewportAnchor(val page: Int, val x: Float, val y: Float)
 
 data class EditorViewportTransform(
   val pageOffsets: Map<Int, Offset>,
-  val pageSizes: List<Size>,
+  val pageSizes: List<Size> = emptyList(),
   val displayZoom: Float = 1f,
 ) {
   private val effectiveDisplayZoom = normalizeDisplayZoom(displayZoom)
@@ -71,30 +70,6 @@ data class EditorViewportTransform(
   fun positionOf(anchor: EditorViewportAnchor): Offset? =
     localToGlobal(anchor.page, anchor.x, anchor.y)
 }
-
-fun localToGlobal(
-  page: Int,
-  x: Float,
-  y: Float,
-  pageOffsets: Map<Int, Offset>,
-  displayZoom: Float = 1f,
-): Offset? =
-  EditorViewportTransform(
-      pageOffsets = pageOffsets,
-      pageSizes = emptyList(),
-      displayZoom = displayZoom,
-    )
-    .localToGlobal(page = page, x = x, y = y)
-
-fun globalToLocal(
-  x: Float,
-  y: Float,
-  pageOffsets: Map<Int, Offset>,
-  sizes: List<Size>,
-  displayZoom: Float = 1f,
-): PagePoint? =
-  EditorViewportTransform(pageOffsets = pageOffsets, pageSizes = sizes, displayZoom = displayZoom)
-    .globalToLocal(x = x, y = y)
 
 private fun normalizeDisplayZoom(displayZoom: Float): Float =
   if (displayZoom.isFinite() && displayZoom > 0f) {

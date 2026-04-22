@@ -144,8 +144,9 @@ private class EditorExtensionForwardingNode(
         val globalX = xDp - editorBounds.x
         val globalY = yDp - editorBounds.y
         val point =
-          uiState.globalToLocal(x = globalX, y = globalY, pageSizes = editor.pageSizes)
-            ?: return resetPointerState()
+          uiState
+            .resolveViewportTransform(pageSizes = editor.pageSizes)
+            .globalToLocal(x = globalX, y = globalY) ?: return resetPointerState()
         coroutineScope.launch {
           editor.dispatch(
             Message.Pointer(
