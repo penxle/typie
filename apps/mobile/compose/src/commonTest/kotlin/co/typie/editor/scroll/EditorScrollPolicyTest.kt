@@ -1,6 +1,7 @@
 package co.typie.editor.scroll
 
-import co.typie.editor.body.EditorMeasuredSize
+import androidx.compose.ui.geometry.Size
+import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorVisibleArea
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -53,7 +54,7 @@ class EditorScrollPolicyTest {
       resolveEditorScrollPolicy(
         visibleArea =
           EditorVisibleArea(
-            viewport = EditorMeasuredSize(width = 720f, height = 900f),
+            viewport = Size(width = 720f, height = 900f),
             topInset = 120f,
             imeInset = 100f,
             toolbarTop = 756f,
@@ -66,7 +67,7 @@ class EditorScrollPolicyTest {
 
     assertEquals(EditorScrollMode.KeepCursorVisible, policy.mode)
     assertEquals(0.5f, policy.typewriterPosition, FloatTolerance)
-    assertEquals(EditorScrollRange(top = 180f, bottom = 696f), policy.keepVisibleRange)
+    assertEquals(VerticalSpan(top = 180f, bottom = 696f), policy.keepVisibleRange)
     assertEquals(428f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
     assertEquals(448f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
     assertEquals(432f, policy.typewriterBottomPadding, FloatTolerance)
@@ -105,7 +106,7 @@ class EditorScrollPolicyTest {
 
   private fun testVisibleArea(): EditorVisibleArea =
     EditorVisibleArea(
-      viewport = EditorMeasuredSize(width = 720f, height = 900f),
+      viewport = Size(width = 720f, height = 900f),
       topInset = 80f,
       imeInset = 100f,
       toolbarTop = 756f,

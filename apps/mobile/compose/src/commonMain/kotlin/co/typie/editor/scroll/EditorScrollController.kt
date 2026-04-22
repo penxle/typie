@@ -6,6 +6,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import co.typie.editor.Editor
+import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorVisibleArea
 import co.typie.editor.runtime.EditorUiState
 import kotlin.math.roundToInt
@@ -40,12 +41,6 @@ internal fun rememberEditorScrollController(
   return controller
 }
 
-internal enum class EditorScrollRequestMode {
-  Preferred,
-  KeepVisible,
-  Typewriter,
-}
-
 internal sealed interface EditorScrollTarget {
   data object CurrentCursor : EditorScrollTarget
 
@@ -73,7 +68,7 @@ internal class EditorScrollController(
     EditorScrollPolicy(
       mode = EditorScrollMode.KeepCursorVisible,
       typewriterPosition = 0.5f,
-      keepVisibleRange = EditorScrollRange(),
+      keepVisibleRange = VerticalSpan(),
       typewriterTargetTop = null,
       typewriterCursorHeight = 0f,
       typewriterBottomPadding = 0f,
@@ -96,10 +91,7 @@ internal class EditorScrollController(
     this.density = density
   }
 
-  fun request(
-    mode: EditorScrollRequestMode = EditorScrollRequestMode.Preferred,
-    target: EditorScrollTarget = EditorScrollTarget.CurrentCursor,
-  ) {
+  fun request(target: EditorScrollTarget = EditorScrollTarget.CurrentCursor) {
     launchScroll {
       if (scrollState.isScrollInProgress) {
         return@launchScroll
@@ -119,10 +111,9 @@ internal class EditorScrollController(
 
       val currentScrollPx = scrollState.value
       val currentScroll = resolveScrollViewportOffset(scrollPx = currentScrollPx, density = density)
-      val resolvedMode = resolveRequestMode(mode, scrollPolicy.mode)
       val targetScroll =
         resolveScrollTargetOffset(
-          mode = resolvedMode,
+          mode = scrollPolicy.mode,
           currentScroll = currentScroll,
           rect = rect,
           visibleArea = visibleArea,
@@ -163,14 +154,12 @@ internal class EditorScrollController(
   }
 }
 
-private data class EditorScrollTargetRect(val topInContent: Float, val bottomInContent: Float)
-
 private fun resolveScrollTargetRect(
   editor: Editor,
   uiState: EditorUiState,
   headerHeight: Float,
   target: EditorScrollTarget,
-): EditorScrollTargetRect? {
+): VerticalSpan? {
   val editorBounds = uiState.editorBoundsInContainer
   if (!editorBounds.isValid) {
     return null
@@ -183,10 +172,7 @@ private fun resolveScrollTargetRect(
         uiState.localToGlobal(page = cursor.pageIdx, x = cursor.rect.x, y = cursor.rect.y)
           ?: return null
       val contentTop = headerHeight + editorBounds.y + cursorOffset.y
-      EditorScrollTargetRect(
-        topInContent = contentTop,
-        bottomInContent = contentTop + cursor.rect.height,
-      )
+      VerticalSpan(top = contentTop, bottom = contentTop + cursor.rect.height)
     }
 
     EditorScrollTarget.CurrentSelectionHead -> {
@@ -205,28 +191,15 @@ private fun resolveScrollTargetRect(
       val overlayOffset =
         uiState.localToGlobal(page = target.pageIdx, x = target.left, y = target.top) ?: return null
       val contentTop = headerHeight + editorBounds.y + overlayOffset.y
-      EditorScrollTargetRect(
-        topInContent = contentTop,
-        bottomInContent = contentTop + target.height,
-      )
+      VerticalSpan(top = contentTop, bottom = contentTop + target.height)
     }
   }
 }
 
-private fun resolveRequestMode(
-  requestedMode: EditorScrollRequestMode,
-  policyMode: EditorScrollMode,
-): EditorScrollMode =
-  when (requestedMode) {
-    EditorScrollRequestMode.Preferred -> policyMode
-    EditorScrollRequestMode.KeepVisible -> EditorScrollMode.KeepCursorVisible
-    EditorScrollRequestMode.Typewriter -> EditorScrollMode.Typewriter
-  }
-
 private fun resolveScrollTargetOffset(
   mode: EditorScrollMode,
   currentScroll: Float,
-  rect: EditorScrollTargetRect,
+  rect: VerticalSpan,
   visibleArea: EditorVisibleArea,
   scrollPolicy: EditorScrollPolicy,
 ): Float? =
@@ -234,16 +207,16 @@ private fun resolveScrollTargetOffset(
     EditorScrollMode.KeepCursorVisible ->
       resolveKeepVisibleScrollTarget(
         currentScroll = currentScroll,
-        cursorTopInContent = rect.topInContent,
-        cursorBottomInContent = rect.bottomInContent,
+        cursorTopInContent = rect.top,
+        cursorBottomInContent = rect.bottom,
         visibleArea = visibleArea,
       )
 
     EditorScrollMode.Typewriter ->
       resolveTypewriterScrollTarget(
         currentScroll = currentScroll,
-        cursorTopInContent = rect.topInContent,
-        cursorBottomInContent = rect.bottomInContent,
+        cursorTopInContent = rect.top,
+        cursorBottomInContent = rect.bottom,
         visibleArea = visibleArea,
         position = scrollPolicy.typewriterPosition,
       )

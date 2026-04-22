@@ -90,8 +90,8 @@ internal fun EditorBody(
               EditorView(
                 doc = doc,
                 selection = selection,
-                viewportWidth = geometry.visibleBodyRect.width,
-                viewportHeight = geometry.visibleBodyRect.height,
+                viewportWidth = geometry.visibleBodySize.width,
+                viewportHeight = geometry.visibleBodySize.height,
                 modifier = Modifier.fillMaxWidth(),
               )
             }

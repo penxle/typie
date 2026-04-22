@@ -5,10 +5,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import co.typie.editor.body.EditorMeasuredSize
 import co.typie.ext.verticalScroll
 import co.typie.screen.editor.editor.state.EditorScreenState
 
@@ -28,11 +28,9 @@ internal fun EditorScreenLayout(
   modifier: Modifier = Modifier,
 ) {
   val density = LocalDensity.current
-  val resolveSize: (Int, Int) -> EditorMeasuredSize =
+  val resolveSize: (Int, Int) -> Size =
     remember(density) {
-      { width, height ->
-        EditorMeasuredSize(width = width / density.density, height = height / density.density)
-      }
+      { width, height -> Size(width = width / density.density, height = height / density.density) }
     }
 
   SubcomposeLayout(

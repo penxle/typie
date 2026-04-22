@@ -1,6 +1,7 @@
 package co.typie.editor.body
 
-import co.typie.editor.ffi.Size
+import androidx.compose.ui.geometry.Size
+import co.typie.editor.ffi.Size as PageSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -11,14 +12,14 @@ class EditorBodyGeometryTest {
       resolveEditorBodyGeometry(
         visibleArea =
           EditorVisibleArea(
-            viewport = EditorMeasuredSize(width = 720f, height = 900f),
+            viewport = Size(width = 720f, height = 900f),
             headerHeight = 180f,
             topInset = 120f,
             imeInset = 100f,
             toolbarTop = 756f,
           ),
         layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
-        pageSizes = listOf(Size(width = 600f, height = 800f)),
+        pageSizes = listOf(PageSize(width = 600f, height = 800f)),
       )
 
     assertEquals(600f, geometry.pageColumnWidth)
@@ -34,7 +35,7 @@ class EditorBodyGeometryTest {
       resolveEditorBodyGeometry(
         visibleArea =
           EditorVisibleArea(
-            viewport = EditorMeasuredSize(width = 360f, height = 640f),
+            viewport = Size(width = 360f, height = 640f),
             headerHeight = 72f,
             topInset = 72f,
           ),
@@ -55,7 +56,7 @@ class EditorBodyGeometryTest {
       resolveEditorBodyGeometry(
         visibleArea =
           EditorVisibleArea(
-            viewport = EditorMeasuredSize(width = 360f, height = 640f),
+            viewport = Size(width = 360f, height = 640f),
             headerHeight = 72f,
             topInset = 72f,
           ),
@@ -73,14 +74,14 @@ class EditorBodyGeometryTest {
       resolveEditorBodyGeometry(
         visibleArea =
           EditorVisibleArea(
-            viewport = EditorMeasuredSize(width = 720f, height = 900f),
+            viewport = Size(width = 720f, height = 900f),
             headerHeight = 180f,
             topInset = 120f,
             imeInset = 100f,
             toolbarTop = 756f,
           ),
         layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
-        pageSizes = listOf(Size(width = 600f, height = 800f)),
+        pageSizes = listOf(PageSize(width = 600f, height = 800f)),
         typewriterEnabled = true,
         typewriterPosition = 0.5f,
         cursorHeight = 20f,
@@ -112,12 +113,12 @@ class EditorBodyGeometryTest {
       resolveEditorBodyGeometry(
         visibleArea =
           EditorVisibleArea(
-            viewport = EditorMeasuredSize(width = 960f, height = 900f),
+            viewport = Size(width = 960f, height = 900f),
             headerHeight = 120f,
             topInset = 120f,
           ),
         layoutSpec = EditorDocumentLayoutSpec.Paginated(pageWidth = 720f),
-        pageSizes = listOf(Size(width = 700f, height = 960f)),
+        pageSizes = listOf(PageSize(width = 700f, height = 960f)),
       )
 
     assertEquals(720f, geometry.pageColumnWidth)

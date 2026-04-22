@@ -1,14 +1,11 @@
 package co.typie.editor.body
 
+import androidx.compose.ui.geometry.Size
 import kotlin.math.max
 import kotlin.math.min
 
-internal data class EditorMeasuredSize(val width: Float = 0f, val height: Float = 0f)
-
-internal data class EditorVisibleRect(val width: Float = 0f, val height: Float = 0f)
-
 internal data class EditorVisibleArea(
-  val viewport: EditorMeasuredSize = EditorMeasuredSize(),
+  val viewport: Size = Size.Zero,
   val headerHeight: Float = 0f,
   val topInset: Float = 0f,
   val safeBottomInset: Float = 0f,
@@ -41,13 +38,10 @@ internal data class EditorVisibleArea(
   fun resolveVisibleEditorViewportTop(editorTopInViewport: Float): Float =
     max(visibleViewportTop, editorTopInViewport)
 
-  val visibleBodyRect: EditorVisibleRect
+  val visibleBodySize: Size
     get() =
-      EditorVisibleRect(
-        width = viewport.width,
-        height = max(0f, visibleViewportBottom - visibleViewportTop),
-      )
+      Size(width = viewport.width, height = max(0f, visibleViewportBottom - visibleViewportTop))
 
-  val visibleExtensionRect: EditorVisibleRect
-    get() = visibleBodyRect
+  val visibleExtensionSize: Size
+    get() = visibleBodySize
 }

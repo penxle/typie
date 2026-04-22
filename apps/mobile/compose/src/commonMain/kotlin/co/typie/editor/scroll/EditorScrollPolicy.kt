@@ -1,5 +1,6 @@
 package co.typie.editor.scroll
 
+import co.typie.editor.VerticalSpan
 import co.typie.editor.body.EditorVisibleArea
 import kotlin.math.abs
 import kotlin.math.max
@@ -12,15 +13,10 @@ internal enum class EditorScrollMode {
   Typewriter,
 }
 
-internal data class EditorScrollRange(val top: Float = 0f, val bottom: Float = 0f) {
-  val isValid: Boolean
-    get() = bottom > top
-}
-
 internal data class EditorScrollPolicy(
   val mode: EditorScrollMode,
   val typewriterPosition: Float,
-  val keepVisibleRange: EditorScrollRange,
+  val keepVisibleRange: VerticalSpan,
   val typewriterTargetTop: Float?,
   val typewriterCursorHeight: Float,
   val typewriterBottomPadding: Float,
@@ -67,7 +63,7 @@ internal fun resolveEditorScrollTarget(
   currentScroll: Float,
   cursorTopInContent: Float,
   cursorBottomInContent: Float,
-  range: EditorScrollRange,
+  range: VerticalSpan,
 ): Float? {
   // TODO(editor-parity): keep-visible(cursor guard)도 현재 cursor rect의 top/bottom만 기준으로
   // 계산하고 있다. collapsed selection에서는 이 rect 높이가 실제 selection head 표시 높이보다
@@ -122,13 +118,13 @@ internal fun resolveTypewriterScrollTarget(
   }
 }
 
-private fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): EditorScrollRange {
+private fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): VerticalSpan {
   val top = visibleArea.visibleViewportTop + CursorVisibleMargin
   val bottom = visibleArea.visibleViewportBottom - CursorVisibleMargin
   return if (bottom <= top) {
-    EditorScrollRange()
+    VerticalSpan()
   } else {
-    EditorScrollRange(top = top, bottom = bottom)
+    VerticalSpan(top = top, bottom = bottom)
   }
 }
 

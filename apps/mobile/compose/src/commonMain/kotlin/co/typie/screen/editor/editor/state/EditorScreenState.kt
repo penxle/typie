@@ -7,14 +7,14 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import co.typie.editor.body.EditorMeasuredSize
+import androidx.compose.ui.geometry.Size
 import co.typie.editor.body.EditorVisibleArea
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 
 @Stable
 internal class EditorScreenState internal constructor(val scrollState: ScrollState) {
-  var viewport by mutableStateOf(EditorMeasuredSize())
+  var viewport by mutableStateOf(Size.Zero)
     private set
 
   var sceneInForeground by mutableStateOf(true)
@@ -26,7 +26,7 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
   var toolbarTop by mutableFloatStateOf(Float.NaN)
     private set
 
-  fun updateViewport(size: EditorMeasuredSize) {
+  fun updateViewport(size: Size) {
     if (viewport == size) {
       return
     }

@@ -1,18 +1,20 @@
 package co.typie.editor.body
 
-import co.typie.editor.ffi.Size
+import androidx.compose.ui.geometry.Size
+import co.typie.editor.ffi.Size as PageSize
 import co.typie.editor.scroll.CursorVisibleMargin
 import co.typie.editor.scroll.EditorScrollMode
 import co.typie.editor.scroll.EditorScrollPolicy
 import co.typie.editor.scroll.resolveEditorScrollPolicy
 import kotlin.math.max
+import kotlin.math.min
 
 private const val DefaultExtensionPadding = 40f
 
 internal data class EditorBodyGeometry(
   val pageColumnWidth: Float,
-  val visibleBodyRect: EditorVisibleRect,
-  val visibleExtensionRect: EditorVisibleRect,
+  val visibleBodySize: Size,
+  val visibleExtensionSize: Size,
   val minimumBodyHeight: Float,
   val defaultTopPadding: Float,
   val defaultBottomPadding: Float,
@@ -23,19 +25,29 @@ internal data class EditorBodyGeometry(
 internal fun resolveEditorBodyGeometry(
   visibleArea: EditorVisibleArea,
   layoutSpec: EditorDocumentLayoutSpec,
-  pageSizes: List<Size>,
+  pageSizes: List<PageSize>,
   typewriterEnabled: Boolean = false,
   typewriterPosition: Float = 0.5f,
   cursorHeight: Float = 0f,
 ): EditorBodyGeometry {
-  val visibleBodyRect = visibleArea.visibleBodyRect
-  val visibleExtensionRect = visibleArea.visibleExtensionRect
-  val layoutPolicy =
-    resolveEditorBodyLayoutPolicy(
-      availableBodyWidth = visibleExtensionRect.width,
-      layoutSpec = layoutSpec,
-      pageSizes = pageSizes,
-    )
+  val visibleBodySize = visibleArea.visibleBodySize
+  val visibleExtensionSize = visibleArea.visibleExtensionSize
+  val maxPageWidth = pageSizes.maxOfOrNull(PageSize::width) ?: 0f
+  val preferredPageWidth =
+    when (layoutSpec) {
+      is EditorDocumentLayoutSpec.Continuous -> layoutSpec.maxWidth
+      is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageWidth
+    }
+  val pageColumnWidth =
+    when {
+      preferredPageWidth > 0f && visibleExtensionSize.width > 0f ->
+        min(preferredPageWidth, visibleExtensionSize.width)
+      preferredPageWidth > 0f -> preferredPageWidth
+      maxPageWidth > 0f && visibleExtensionSize.width > 0f ->
+        min(maxPageWidth, visibleExtensionSize.width)
+      maxPageWidth > 0f -> maxPageWidth
+      else -> visibleExtensionSize.width
+    }
   val intrinsicBottomSpace = layoutSpec.resolveIntrinsicBottomSpace()
   val defaultBottomPadding =
     max(0f, visibleArea.bottomOcclusion + CursorVisibleMargin - intrinsicBottomSpace)
@@ -60,9 +72,9 @@ internal fun resolveEditorBodyGeometry(
     }
 
   return EditorBodyGeometry(
-    pageColumnWidth = layoutPolicy.pageColumnWidth,
-    visibleBodyRect = visibleBodyRect,
-    visibleExtensionRect = visibleExtensionRect,
+    pageColumnWidth = pageColumnWidth,
+    visibleBodySize = visibleBodySize,
+    visibleExtensionSize = visibleExtensionSize,
     minimumBodyHeight = minimumBodyHeight,
     defaultTopPadding = DefaultExtensionPadding,
     defaultBottomPadding = defaultBottomPadding,

@@ -2,9 +2,18 @@ package co.typie.editor
 
 import androidx.compose.ui.geometry.Offset
 import co.typie.editor.ffi.Size
+import kotlin.math.max
 
 // `global` here means coordinates in the editor viewport, not the app window/root.
 data class PagePoint(val page: Int, val x: Float, val y: Float)
+
+data class VerticalSpan(val top: Float = 0f, val bottom: Float = 0f) {
+  val isValid: Boolean
+    get() = bottom > top
+
+  val height: Float
+    get() = max(0f, bottom - top)
+}
 
 fun localToGlobal(page: Int, x: Float, y: Float, pageOffsets: Map<Int, Offset>): Offset? {
   val offset = pageOffsets[page] ?: return null
