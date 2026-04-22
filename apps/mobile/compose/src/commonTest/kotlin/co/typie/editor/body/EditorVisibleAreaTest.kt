@@ -5,6 +5,20 @@ import kotlin.test.assertEquals
 
 class EditorVisibleAreaTest {
   @Test
+  fun `visible viewport bottom follows bottom safe area when keyboard is closed`() {
+    val visibleArea =
+      EditorVisibleArea(
+        viewport = EditorMeasuredSize(width = 720f, height = 900f),
+        topInset = 120f,
+        safeBottomInset = 34f,
+      )
+
+    assertEquals(866f, visibleArea.visibleViewportBottom)
+    assertEquals(34f, visibleArea.bottomOcclusion)
+    assertEquals(EditorVisibleRect(width = 720f, height = 746f), visibleArea.visibleBodyRect)
+  }
+
+  @Test
   fun `visible viewport bottom uses the higher occlusion between keyboard and toolbar`() {
     val visibleArea =
       EditorVisibleArea(

@@ -11,14 +11,18 @@ internal data class EditorVisibleArea(
   val viewport: EditorMeasuredSize = EditorMeasuredSize(),
   val headerHeight: Float = 0f,
   val topInset: Float = 0f,
+  val safeBottomInset: Float = 0f,
   val imeInset: Float = 0f,
   val toolbarTop: Float? = null,
 ) {
   val topOcclusion: Float
     get() = topInset
 
+  private val effectiveBottomInset: Float
+    get() = max(safeBottomInset, imeInset)
+
   private val keyboardViewportBottom: Float
-    get() = max(0f, viewport.height - imeInset)
+    get() = max(0f, viewport.height - effectiveBottomInset)
 
   private val toolbarViewportBottom: Float
     get() =

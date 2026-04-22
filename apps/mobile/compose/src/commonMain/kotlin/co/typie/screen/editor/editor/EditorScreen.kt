@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.typie.editor.body.EditorBody
+import co.typie.editor.body.resolveEditorBodyGeometry
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
@@ -105,6 +106,7 @@ fun EditorScreen(entityId: String) {
   ) { contentPadding ->
     val density = LocalDensity.current.density
     val topInset = contentPadding.calculateTopPadding()
+    val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
@@ -114,11 +116,14 @@ fun EditorScreen(entityId: String) {
     // head bounds를 쓰지 못하고 있다.
     val cursorHeight = runtime.editor?.cursor?.rect?.height ?: 0f
     val visibleArea =
-      screenState.resolveVisibleArea(topInset = topInset.value, rawImeInset = imeBottom.value)
-    val geometry =
-      screenState.resolveBodyGeometry(
+      screenState.resolveVisibleArea(
         topInset = topInset.value,
+        rawBottomSafeInset = bottomSafeInset.value,
         rawImeInset = imeBottom.value,
+      )
+    val bodyGeometry =
+      resolveEditorBodyGeometry(
+        visibleArea = visibleArea,
         layoutSpec = model.documentLayoutSpec,
         pageSizes = runtime.editor?.pageSizes.orEmpty(),
         typewriterEnabled = typewriterEnabled,
@@ -131,7 +136,7 @@ fun EditorScreen(entityId: String) {
         uiState = uiState,
         scrollState = screenState.scrollState,
         visibleArea = visibleArea,
-        scrollPolicy = geometry.scrollPolicy,
+        scrollPolicy = bodyGeometry.scrollPolicy,
         headerHeight = screenState.headerHeight,
         density = density,
       )
@@ -175,7 +180,7 @@ fun EditorScreen(entityId: String) {
       overlay = {
         EditorScreenOverlayHost(
           visibleArea = visibleArea,
-          scrollPolicy = geometry.scrollPolicy,
+          scrollPolicy = bodyGeometry.scrollPolicy,
           modifier = Modifier.fillMaxSize(),
         )
       },
@@ -185,7 +190,7 @@ fun EditorScreen(entityId: String) {
           LocalEditorUiState provides uiState,
           LocalEditorScrollController provides scrollController,
         ) {
-          EditorBody(doc = model.doc, selection = model.selection, geometry = geometry)
+          EditorBody(doc = model.doc, selection = model.selection, geometry = bodyGeometry)
         }
       },
       toolbar = {

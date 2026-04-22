@@ -7,12 +7,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import co.typie.editor.body.EditorBodyGeometry
-import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.editor.body.EditorMeasuredSize
 import co.typie.editor.body.EditorVisibleArea
-import co.typie.editor.body.resolveEditorBodyGeometry
-import co.typie.editor.ffi.Size
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 
@@ -87,30 +83,17 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
 
   fun shouldShowToolbar(bodyFocused: Boolean): Boolean = sceneInForeground && bodyFocused
 
-  fun resolveVisibleArea(topInset: Float, rawImeInset: Float): EditorVisibleArea =
+  fun resolveVisibleArea(
+    topInset: Float,
+    rawBottomSafeInset: Float,
+    rawImeInset: Float,
+  ): EditorVisibleArea =
     EditorVisibleArea(
       viewport = viewport,
       headerHeight = headerHeight,
       topInset = topInset,
+      safeBottomInset = if (sceneInForeground) rawBottomSafeInset else 0f,
       imeInset = if (sceneInForeground) rawImeInset else 0f,
       toolbarTop = toolbarTop.takeUnless { it.isNaN() },
-    )
-
-  fun resolveBodyGeometry(
-    topInset: Float,
-    rawImeInset: Float,
-    layoutSpec: EditorDocumentLayoutSpec,
-    pageSizes: List<Size>,
-    typewriterEnabled: Boolean = false,
-    typewriterPosition: Float = 0.5f,
-    cursorHeight: Float = 0f,
-  ): EditorBodyGeometry =
-    resolveEditorBodyGeometry(
-      visibleArea = resolveVisibleArea(topInset = topInset, rawImeInset = rawImeInset),
-      layoutSpec = layoutSpec,
-      pageSizes = pageSizes,
-      typewriterEnabled = typewriterEnabled,
-      typewriterPosition = typewriterPosition,
-      cursorHeight = cursorHeight,
     )
 }
