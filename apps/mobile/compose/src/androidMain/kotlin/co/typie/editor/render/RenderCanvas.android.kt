@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.core.graphics.createBitmap
 import com.sun.jna.Pointer
 import java.nio.ByteBuffer
@@ -43,7 +45,15 @@ internal actual fun RenderCanvas(
         }
       }
   ) {
-    imageBitmap?.let { drawImage(image = it) }
+    imageBitmap?.let {
+      drawImage(
+        image = it,
+        srcOffset = IntOffset.Zero,
+        srcSize = IntSize(it.width, it.height),
+        dstOffset = IntOffset.Zero,
+        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+      )
+    }
   }
 
   LaunchedEffect(bufferHandle) {

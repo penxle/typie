@@ -17,15 +17,15 @@ class EditorBodyGeometryTest {
             headerHeight = 180f,
             topInset = 120f,
             imeInset = 100f,
-            toolbarTop = 756f,
           ),
         layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
         pageSizes = listOf(PageSize(width = 600f, height = 800f)),
+        displayZoom = 1f,
       )
 
     assertEquals(600f, geometry.pageColumnWidth)
-    assertEquals(576f, geometry.minimumBodyHeight)
-    assertEquals(40f, geometry.defaultTopPadding)
+    assertEquals(620f, geometry.minimumBodyHeight)
+    assertEquals(40f, geometry.topSpacerHeight)
   }
 
   @Test
@@ -40,11 +40,12 @@ class EditorBodyGeometryTest {
           ),
         layoutSpec = EditorDocumentLayoutSpec.Continuous(maxWidth = 600f),
         pageSizes = emptyList(),
+        displayZoom = 1f,
       )
 
     assertEquals(360f, geometry.pageColumnWidth)
     assertEquals(568f, geometry.minimumBodyHeight)
-    assertEquals(40f, geometry.defaultTopPadding)
+    assertEquals(40f, geometry.topSpacerHeight)
   }
 
   @Test
@@ -57,8 +58,14 @@ class EditorBodyGeometryTest {
 
   @Test
   fun `body fill height covers the remaining viewport below the core track`() {
-    assertEquals(312f, resolveEditorBodyFillHeight(minimumHeight = 400f, coreTrackHeight = 88f))
-    assertEquals(0f, resolveEditorBodyFillHeight(minimumHeight = 400f, coreTrackHeight = 420f))
+    assertEquals(
+      312f,
+      resolveExtensionAreaFillSpacerHeight(minimumHeight = 400f, bodyContentHeight = 88f),
+    )
+    assertEquals(
+      0f,
+      resolveExtensionAreaFillSpacerHeight(minimumHeight = 400f, bodyContentHeight = 420f),
+    )
   }
 
   @Test
@@ -81,8 +88,35 @@ class EditorBodyGeometryTest {
             pageMarginRight = 64f,
           ),
         pageSizes = listOf(PageSize(width = 700f, height = 960f)),
+        displayZoom = 1f,
       )
 
     assertEquals(720f, geometry.pageColumnWidth)
+  }
+
+  @Test
+  fun `paginated geometry scales the page column width by display zoom`() {
+    val geometry =
+      resolveEditorBodyGeometry(
+        visibleArea =
+          EditorVisibleArea(
+            viewport = Size(width = 960f, height = 900f),
+            headerHeight = 120f,
+            topInset = 120f,
+          ),
+        layoutSpec =
+          EditorDocumentLayoutSpec.Paginated(
+            pageWidth = 720f,
+            pageHeight = 960f,
+            pageMarginTop = 72f,
+            pageMarginBottom = 72f,
+            pageMarginLeft = 64f,
+            pageMarginRight = 64f,
+          ),
+        pageSizes = listOf(PageSize(width = 700f, height = 960f)),
+        displayZoom = 1.25f,
+      )
+
+    assertEquals(900f, geometry.pageColumnWidth)
   }
 }

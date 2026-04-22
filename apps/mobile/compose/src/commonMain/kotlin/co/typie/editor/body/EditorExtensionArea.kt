@@ -33,6 +33,7 @@ private const val ExtensionTapSlopDp = 8f
 
 @Composable
 internal fun EditorExtensionArea(
+  forwardingEnabled: Boolean,
   modifier: Modifier = Modifier,
   content: @Composable BoxScope.() -> Unit,
 ) {
@@ -40,20 +41,20 @@ internal fun EditorExtensionArea(
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
   val scrollController = LocalEditorScrollController.current
-
-  Box(
-    modifier =
-      modifier
-        .fillMaxWidth()
-        .background(DebugExtensionAreaColor)
+  val extensionAreaModifier =
+    if (forwardingEnabled) {
+      Modifier.background(DebugExtensionAreaColor)
         .editorExtensionForwarding(
           runtime = runtime,
           uiState = uiState,
           density = density.density,
           scrollController = scrollController,
-        ),
-    content = content,
-  )
+        )
+    } else {
+      Modifier
+    }
+
+  Box(modifier = modifier.fillMaxWidth().then(extensionAreaModifier), content = content)
 }
 
 private fun Modifier.editorExtensionForwarding(

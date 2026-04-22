@@ -13,8 +13,8 @@ class EditorScrollPolicyTest {
     val target =
       resolveKeepVisibleScrollTarget(
         currentScroll = 400f,
-        cursorTopInContent = 1068f,
-        cursorBottomInContent = 1100f,
+        cursorTopInContent = 1112f,
+        cursorBottomInContent = 1144f,
         visibleArea = testVisibleArea(),
       )
 
@@ -56,9 +56,8 @@ class EditorScrollPolicyTest {
             viewport = Size(width = 720f, height = 900f),
             topInset = 120f,
             imeInset = 100f,
-            toolbarTop = 756f,
           ),
-        intrinsicBottomSpace = 20f,
+        baseBottomSpace = 20f,
         typewriterEnabled = false,
         typewriterPosition = 0.5f,
         cursorHeight = 20f,
@@ -66,10 +65,10 @@ class EditorScrollPolicyTest {
 
     assertEquals(EditorScrollMode.KeepCursorVisible, policy.mode)
     assertEquals(0.5f, policy.typewriterPosition, FloatTolerance)
-    assertEquals(VerticalSpan(top = 180f, bottom = 696f), policy.keepVisibleRange)
-    assertEquals(428f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
-    assertEquals(448f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
-    assertEquals(184f, policy.bottomPadding, FloatTolerance)
+    assertEquals(VerticalSpan(top = 180f, bottom = 740f), policy.keepVisibleRange)
+    assertEquals(450f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
+    assertEquals(470f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
+    assertEquals(140f, policy.bottomSpacerHeight, FloatTolerance)
   }
 
   @Test
@@ -83,7 +82,7 @@ class EditorScrollPolicyTest {
         position = 0.5f,
       )
 
-    assertEquals(666f, requireNotNull(target), FloatTolerance)
+    assertEquals(644f, requireNotNull(target), FloatTolerance)
   }
 
   @Test
@@ -91,7 +90,7 @@ class EditorScrollPolicyTest {
     val policy =
       resolveEditorScrollPolicy(
         visibleArea = testVisibleArea(),
-        intrinsicBottomSpace = 20f,
+        baseBottomSpace = 20f,
         typewriterEnabled = true,
         typewriterPosition = 0.25f,
         cursorHeight = 32f,
@@ -99,9 +98,25 @@ class EditorScrollPolicyTest {
 
     assertEquals(EditorScrollMode.Typewriter, policy.mode)
     assertEquals(0.25f, policy.typewriterPosition, FloatTolerance)
-    assertEquals(241f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
-    assertEquals(273f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
-    assertEquals(607f, policy.bottomPadding, FloatTolerance)
+    assertEquals(252f, requireNotNull(policy.typewriterTargetTop), FloatTolerance)
+    assertEquals(284f, requireNotNull(policy.typewriterTargetBottom), FloatTolerance)
+    assertEquals(596f, policy.bottomSpacerHeight, FloatTolerance)
+  }
+
+  @Test
+  fun `typewriter bottom padding can use actual space available below the cursor top`() {
+    val policy =
+      resolveEditorScrollPolicy(
+        visibleArea = testVisibleArea(),
+        baseBottomSpace = 20f,
+        distanceToPagesBottom = 520f,
+        typewriterEnabled = true,
+        typewriterPosition = 0.25f,
+        cursorHeight = 32f,
+      )
+
+    assertEquals(EditorScrollMode.Typewriter, policy.mode)
+    assertEquals(128f, policy.bottomSpacerHeight, FloatTolerance)
   }
 
   @Test
@@ -110,18 +125,26 @@ class EditorScrollPolicyTest {
       resolveEditorScrollPolicy(
         visibleArea =
           EditorVisibleArea(viewport = Size(width = 720f, height = 900f), topInset = 120f),
-        intrinsicBottomSpace = 40f,
+        baseBottomSpace = 40f,
       )
 
     assertEquals(EditorScrollMode.KeepCursorVisible, policy.mode)
-    assertEquals(20f, policy.bottomPadding, FloatTolerance)
+    assertEquals(20f, policy.bottomSpacerHeight, FloatTolerance)
+  }
+
+  @Test
+  fun `page edge reveal bottom padding can exceed cursor policy padding`() {
+    val policy =
+      resolveEditorScrollPolicy(
+        visibleArea = testVisibleArea(),
+        baseBottomSpace = 180f,
+        pageBottomRevealSpacerHeight = 100f,
+      )
+
+    assertEquals(EditorScrollMode.KeepCursorVisible, policy.mode)
+    assertEquals(100f, policy.bottomSpacerHeight, FloatTolerance)
   }
 
   private fun testVisibleArea(): EditorVisibleArea =
-    EditorVisibleArea(
-      viewport = Size(width = 720f, height = 900f),
-      topInset = 80f,
-      imeInset = 100f,
-      toolbarTop = 756f,
-    )
+    EditorVisibleArea(viewport = Size(width = 720f, height = 900f), topInset = 80f, imeInset = 100f)
 }

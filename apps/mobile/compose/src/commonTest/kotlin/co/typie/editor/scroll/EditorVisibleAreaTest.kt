@@ -20,29 +20,27 @@ class EditorVisibleAreaTest {
   }
 
   @Test
-  fun `visible viewport bottom uses the higher occlusion between keyboard and toolbar`() {
+  fun `toolbar top does not affect visible area because viewport already excludes the toolbar`() {
     val visibleArea =
       EditorVisibleArea(
         viewport = Size(width = 720f, height = 900f),
         topInset = 120f,
         imeInset = 80f,
-        toolbarTop = 756f,
       )
 
     assertEquals(120f, visibleArea.visibleViewportTop)
-    assertEquals(756f, visibleArea.visibleViewportBottom)
-    assertEquals(144f, visibleArea.bottomOcclusion)
-    assertEquals(Size(width = 720f, height = 636f), visibleArea.visibleBodySize)
+    assertEquals(820f, visibleArea.visibleViewportBottom)
+    assertEquals(80f, visibleArea.bottomOcclusion)
+    assertEquals(Size(width = 720f, height = 700f), visibleArea.visibleBodySize)
   }
 
   @Test
-  fun `visible viewport bottom follows keyboard when it occludes more than the toolbar`() {
+  fun `visible viewport bottom follows keyboard inset`() {
     val visibleArea =
       EditorVisibleArea(
         viewport = Size(width = 720f, height = 900f),
         topInset = 120f,
         imeInset = 240f,
-        toolbarTop = 756f,
       )
 
     assertEquals(660f, visibleArea.visibleViewportBottom)

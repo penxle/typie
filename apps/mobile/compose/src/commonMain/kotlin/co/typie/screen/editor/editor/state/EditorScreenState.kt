@@ -13,7 +13,8 @@ import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.scroll.EditorVisibleArea
 
 @Stable
-internal class EditorScreenState internal constructor(val scrollState: ScrollState) {
+internal class EditorScreenState
+internal constructor(val scrollState: ScrollState, val horizontalScrollState: ScrollState) {
   var viewport by mutableStateOf(Size.Zero)
     private set
 
@@ -21,9 +22,6 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
     private set
 
   var headerHeight by mutableFloatStateOf(0f)
-    private set
-
-  var toolbarTop by mutableFloatStateOf(Float.NaN)
     private set
 
   fun updateViewport(size: Size) {
@@ -42,21 +40,6 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
     headerHeight = height
   }
 
-  fun updateToolbarTop(top: Float?) {
-    val normalizedTop = top ?: Float.NaN
-    val unchanged =
-      if (toolbarTop.isNaN() && normalizedTop.isNaN()) {
-        true
-      } else {
-        toolbarTop == normalizedTop
-      }
-    if (unchanged) {
-      return
-    }
-
-    toolbarTop = normalizedTop
-  }
-
   fun updateSceneForeground(isForeground: Boolean, runtime: EditorRuntime, uiState: EditorUiState) {
     if (sceneInForeground == isForeground) {
       return
@@ -66,7 +49,6 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
     if (!isForeground) {
       uiState.updateFocus(false)
       runtime.deactivateScene()
-      updateToolbarTop(null)
     }
   }
 
@@ -94,6 +76,5 @@ internal class EditorScreenState internal constructor(val scrollState: ScrollSta
       topInset = topInset,
       safeBottomInset = if (sceneInForeground) rawBottomSafeInset else 0f,
       imeInset = if (sceneInForeground) rawImeInset else 0f,
-      toolbarTop = toolbarTop.takeUnless { it.isNaN() },
     )
 }

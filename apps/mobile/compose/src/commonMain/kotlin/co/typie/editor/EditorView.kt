@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolvePaginatedPageGap
 import co.typie.editor.ffi.Doc
 import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Viewport
@@ -48,9 +49,11 @@ internal fun EditorView(
   val scope = rememberCoroutineScope()
   val runtime = LocalEditorRuntime.current
   val uiState = LocalEditorUiState.current
+  val zoomController = LocalEditorZoomController.current
   val scrollController = LocalEditorScrollController.current
   var appliedDoc by remember { mutableStateOf<Doc?>(null) }
   var appliedSelection by remember { mutableStateOf<Selection?>(null) }
+  val displayZoom = zoomController.displayZoom
 
   LaunchedEffect(doc, selection, viewportWidth, viewportHeight, density.density) {
     if (viewportWidth <= 0f || viewportHeight <= 0f) {
@@ -109,7 +112,7 @@ internal fun EditorView(
       val pageSpacing =
         when (layoutSpec) {
           is EditorDocumentLayoutSpec.Continuous -> 0.dp
-          is EditorDocumentLayoutSpec.Paginated -> 24.dp
+          is EditorDocumentLayoutSpec.Paginated -> resolvePaginatedPageGap(displayZoom).dp
         // TODO(editor-parity): 실제 paginated page gap과 paper chrome 감각은
         // Flutter/Web 기준으로 더 정교하게 맞춰야 한다.
         }
@@ -124,6 +127,11 @@ internal fun EditorView(
             width = size.width,
             height = size.height,
             showChrome = showPageChrome,
+            debugBottomMarginHeight =
+              when (layoutSpec) {
+                is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageMarginBottom
+                is EditorDocumentLayoutSpec.Continuous -> 0f
+              },
             modifier =
               Modifier.editorPagePositionTracker(
                 uiState = uiState,

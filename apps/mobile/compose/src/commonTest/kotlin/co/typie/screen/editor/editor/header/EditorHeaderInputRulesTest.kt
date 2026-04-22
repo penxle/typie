@@ -26,4 +26,18 @@ class EditorHeaderInputRulesTest {
     assertEquals(100, sanitized.text.length)
     assertEquals(TextRange(start = 96, end = 100), sanitized.selection)
   }
+
+  @Test
+  fun `paginated header track width keeps a fixed minimum when zoomed out`() {
+    val width = resolvePaginatedHeaderTrackWidth(trackWidth = 180f, displayZoom = 0.5f)
+
+    assertEquals(240f, width)
+  }
+
+  @Test
+  fun `paginated header track width follows the zoomed minimum when zoomed in`() {
+    val width = resolvePaginatedHeaderTrackWidth(trackWidth = 400f, displayZoom = 1.5f)
+
+    assertEquals(480f, width)
+  }
 }

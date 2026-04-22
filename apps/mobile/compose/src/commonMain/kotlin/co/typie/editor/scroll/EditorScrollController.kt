@@ -70,7 +70,7 @@ internal class EditorScrollController(
       keepVisibleRange = VerticalSpan(),
       typewriterTargetTop = null,
       typewriterCursorHeight = 0f,
-      bottomPadding = 0f,
+      bottomSpacerHeight = 0f,
     )
   private var headerHeight: Float = 0f
   private var density: Float = 1f
@@ -153,6 +153,29 @@ internal class EditorScrollController(
   }
 }
 
+internal fun resolveDistanceToPagesBottom(
+  editor: Editor,
+  uiState: EditorUiState,
+  headerHeight: Float,
+  pagesContentHeight: Float,
+  bottomOcclusion: Float,
+  target: EditorScrollTarget,
+): Float? {
+  val editorBounds = uiState.editorBoundsInContainer
+  if (!editorBounds.isValid) {
+    return null
+  }
+  val rect =
+    resolveScrollTargetRect(
+      editor = editor,
+      uiState = uiState,
+      headerHeight = headerHeight,
+      target = target,
+    ) ?: return null
+  val contentBottomInContent = headerHeight + editorBounds.y + pagesContentHeight
+  return (contentBottomInContent - rect.top + bottomOcclusion).coerceAtLeast(0f)
+}
+
 private fun resolveScrollTargetRect(
   editor: Editor,
   uiState: EditorUiState,
@@ -163,6 +186,7 @@ private fun resolveScrollTargetRect(
   if (!editorBounds.isValid) {
     return null
   }
+  val displayZoom = uiState.displayZoom
 
   return when (target) {
     EditorScrollTarget.CurrentCursor -> {
@@ -171,13 +195,14 @@ private fun resolveScrollTargetRect(
         uiState.localToGlobal(page = cursor.pageIdx, x = cursor.rect.x, y = cursor.rect.y)
           ?: return null
       val contentTop = headerHeight + editorBounds.y + cursorOffset.y
-      VerticalSpan(top = contentTop, bottom = contentTop + cursor.rect.height)
+      VerticalSpan(top = contentTop, bottom = contentTop + cursor.rect.height * displayZoom)
     }
 
     EditorScrollTarget.CurrentSelectionHead -> {
       // TODO(editor-parity): KMP selection 모델/FFI가 실제 selection head bounds를 노출하면
       // 그 값을 써야 한다. 지금은 CurrentSelectionHead가 CurrentCursor로 fallback 되어
-      // non-collapsed selection의 typewriter/keep-visible 기준이 웹/플러터와 다르다.
+      // non-collapsed selection의 typewriter/keep-visible 기준이 웹/플러터와 다르고,
+      // collapsed selection에서는 표시 높이 부족분이 displayZoom만큼 확대된다.
       resolveScrollTargetRect(
         editor = editor,
         uiState = uiState,
@@ -190,7 +215,7 @@ private fun resolveScrollTargetRect(
       val overlayOffset =
         uiState.localToGlobal(page = target.pageIdx, x = target.left, y = target.top) ?: return null
       val contentTop = headerHeight + editorBounds.y + overlayOffset.y
-      VerticalSpan(top = contentTop, bottom = contentTop + target.height)
+      VerticalSpan(top = contentTop, bottom = contentTop + target.height * displayZoom)
     }
   }
 }

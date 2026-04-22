@@ -18,7 +18,7 @@ internal data class EditorScrollPolicy(
   val keepVisibleRange: VerticalSpan,
   val typewriterTargetTop: Float?,
   val typewriterCursorHeight: Float,
-  val bottomPadding: Float,
+  val bottomSpacerHeight: Float,
 ) {
   val typewriterTargetBottom: Float?
     get() = typewriterTargetTop?.plus(typewriterCursorHeight)
@@ -26,7 +26,9 @@ internal data class EditorScrollPolicy(
 
 internal fun resolveEditorScrollPolicy(
   visibleArea: EditorVisibleArea,
-  intrinsicBottomSpace: Float = 0f,
+  baseBottomSpace: Float = 0f,
+  distanceToPagesBottom: Float? = null,
+  pageBottomRevealSpacerHeight: Float = 0f,
   typewriterEnabled: Boolean = false,
   typewriterPosition: Float = 0.5f,
   cursorHeight: Float = 0f,
@@ -40,11 +42,23 @@ internal fun resolveEditorScrollPolicy(
       position = resolvedTypewriterPosition,
       cursorHeight = resolvedCursorHeight,
     )
-  val keepVisibleBottomPadding =
-    resolveKeepVisibleBottomPadding(
+  val keepVisibleBottomSpacerHeight =
+    resolveKeepVisibleBottomSpacerHeight(
       visibleArea = visibleArea,
-      intrinsicBottomSpace = intrinsicBottomSpace,
+      baseBottomSpace = baseBottomSpace,
     )
+  val cursorPolicyBottomSpacerHeight =
+    if (typewriterEnabled) {
+      resolveTypewriterBottomSpacerHeight(
+        visibleArea = visibleArea,
+        baseBottomSpace = baseBottomSpace,
+        distanceToPagesBottom = distanceToPagesBottom,
+        position = resolvedTypewriterPosition,
+        cursorHeight = resolvedCursorHeight,
+      )
+    } else {
+      keepVisibleBottomSpacerHeight
+    }
 
   return EditorScrollPolicy(
     mode =
@@ -53,17 +67,7 @@ internal fun resolveEditorScrollPolicy(
     keepVisibleRange = keepVisibleRange,
     typewriterTargetTop = typewriterTargetTop,
     typewriterCursorHeight = resolvedCursorHeight,
-    bottomPadding =
-      if (typewriterEnabled) {
-        resolveTypewriterBottomPadding(
-          visibleArea = visibleArea,
-          intrinsicBottomSpace = intrinsicBottomSpace,
-          position = resolvedTypewriterPosition,
-          cursorHeight = resolvedCursorHeight,
-        )
-      } else {
-        keepVisibleBottomPadding
-      },
+    bottomSpacerHeight = max(cursorPolicyBottomSpacerHeight, max(0f, pageBottomRevealSpacerHeight)),
   )
 }
 
@@ -75,7 +79,8 @@ internal fun resolveEditorScrollTarget(
 ): Float? {
   // TODO(editor-parity): keep-visible(cursor guard)도 현재 cursor rect의 top/bottom만 기준으로
   // 계산하고 있다. collapsed selection에서는 이 rect 높이가 실제 selection head 표시 높이보다
-  // 작아서 guard 기준선 근처에서 몇 dp의 여유 스크롤이 남을 수 있다.
+  // 작아서 guard 기준선 근처에서 여유 스크롤이 남고, 부족분은 displayZoom이 커질수록 같이
+  // 커진다.
   if (!range.isValid) {
     return null
   }
@@ -136,11 +141,11 @@ private fun resolveKeepVisibleRange(visibleArea: EditorVisibleArea): VerticalSpa
   }
 }
 
-private fun resolveKeepVisibleBottomPadding(
+private fun resolveKeepVisibleBottomSpacerHeight(
   visibleArea: EditorVisibleArea,
-  intrinsicBottomSpace: Float,
+  baseBottomSpace: Float,
 ): Float {
-  return max(0f, visibleArea.bottomOcclusion + CursorVisibleMargin - intrinsicBottomSpace)
+  return max(0f, visibleArea.bottomOcclusion + CursorVisibleMargin - baseBottomSpace)
 }
 
 internal fun resolveTypewriterTargetTop(
@@ -163,24 +168,26 @@ internal fun resolveTypewriterTargetTop(
   return visibleArea.visibleViewportTop + availableRange * clampedPosition
 }
 
-private fun resolveTypewriterBottomPadding(
+private fun resolveTypewriterBottomSpacerHeight(
   visibleArea: EditorVisibleArea,
-  intrinsicBottomSpace: Float,
+  baseBottomSpace: Float,
+  distanceToPagesBottom: Float?,
   position: Float,
   cursorHeight: Float,
 ): Float {
   // TODO(editor-parity): collapsed selection에서는 실제 selection head 표시 높이보다 작은
   // cursor 높이만 써서 typewriter bottom padding이 부족하게 계산되고, 그 결과 문서 끝에서
-  // 몇 dp의 추가 스크롤이 남는다. 같은 높이 차이 때문에 일반 keep-visible(cursor guard)도
-  // guard 기준선에서 약간의 여유 스크롤이 남는다. 웹/플러터처럼 selection-head leading과
-  // presented height를 반영하도록 맞춰야 한다.
+  // 추가 스크롤이 남는다. 이 부족분도 displayZoom이 커질수록 같이 커진다. 같은 높이 차이
+  // 때문에 일반 keep-visible(cursor guard)도 guard 기준선에서 여유 스크롤이 남는다.
+  // 웹/플러터처럼 selection-head leading과 presented height를 반영하도록 맞춰야 한다.
   val clampedCursorHeight = max(0f, cursorHeight)
   val usableViewportHeight =
     max(0f, visibleArea.visibleViewportBottom - visibleArea.visibleViewportTop)
   val availableRange = max(0f, usableViewportHeight - clampedCursorHeight)
   val spaceNeededBelowCursorTop =
     visibleArea.bottomOcclusion + (1f - position) * availableRange + clampedCursorHeight
-  val intrinsicSpaceBelowLastLine = intrinsicBottomSpace + clampedCursorHeight
-  val requiredPadding = spaceNeededBelowCursorTop - intrinsicSpaceBelowLastLine
+  val resolvedDistanceToPagesBottom =
+    distanceToPagesBottom?.coerceAtLeast(0f) ?: (baseBottomSpace + clampedCursorHeight)
+  val requiredPadding = spaceNeededBelowCursorTop - resolvedDistanceToPagesBottom
   return max(TypewriterMinBottomPadding, max(requiredPadding, 0f))
 }

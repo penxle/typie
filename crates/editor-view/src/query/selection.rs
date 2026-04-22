@@ -24,7 +24,8 @@ pub fn selection_rects(
         // TODO(editor-parity): FFI 소비자를 위한 collapsed selection 전용 head-bounds query를
         // 따로 추가해야 한다. highlight 페인팅용으로는 빈 rect가 맞지만, KMP는 실제
         // selection head 표시 높이를 받아야 typewriter 하단 여백과 keep-visible(cursor
-        // guard)를 정확히 계산할 수 있다.
+        // guard)를 정확히 계산할 수 있다. 지금처럼 cursor rect만 쓰면 높이 부족분이
+        // zoom과 함께 커진다.
         return vec![];
     }
 

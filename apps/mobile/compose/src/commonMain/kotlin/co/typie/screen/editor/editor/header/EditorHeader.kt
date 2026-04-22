@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.typie.editor.body.EditorDocumentLayoutSpec
 import co.typie.ext.TextInputState
 import co.typie.ext.rememberTextInputState
 import co.typie.ext.textInputFocusable
@@ -40,17 +41,22 @@ import co.typie.ui.component.Text
 import co.typie.ui.skeleton.LocalSkeleton
 import co.typie.ui.skeleton.SkeletonTextBone
 import co.typie.ui.theme.AppTheme
+import kotlin.math.max
 
 private val TitleHorizontalPadding = 20.dp
 private val TitleTopPadding = 12.dp
 private val TitleBlockSpacing = 40.dp
 private val TitleBetweenSpacing = 8.dp
 private val SubtitleDividerWidth = 120.dp
+private const val PaginatedHeaderMinWidth = 320f
+private const val PaginatedHeaderMinScale = 0.75f
 
 @Composable
 internal fun EditorHeader(
   title: String,
   subtitle: String,
+  layoutSpec: EditorDocumentLayoutSpec,
+  trackWidth: Float,
   loading: Boolean,
   topInset: Dp,
   modifier: Modifier = Modifier,
@@ -80,15 +86,20 @@ internal fun EditorHeader(
       modifier.fillMaxWidth().onSizeChanged { size -> onHeightChanged(resolveHeight(size.height)) },
     contentAlignment = Alignment.TopCenter,
   ) {
+    val contentModifier = Modifier.run {
+      when {
+        layoutSpec is EditorDocumentLayoutSpec.Paginated && trackWidth > 0f -> width(trackWidth.dp)
+        else -> widthIn(max = ResponsiveContainerDefaults.MaxWidth).fillMaxWidth()
+      }
+    }
+
     Column(
       modifier =
-        Modifier.widthIn(max = ResponsiveContainerDefaults.MaxWidth)
-          .fillMaxWidth()
-          .padding(
-            top = topInset + TitleTopPadding,
-            start = TitleHorizontalPadding,
-            end = TitleHorizontalPadding,
-          )
+        contentModifier.padding(
+          top = topInset + TitleTopPadding,
+          start = TitleHorizontalPadding,
+          end = TitleHorizontalPadding,
+        )
     ) {
       Spacer(Modifier.height(TitleBlockSpacing))
 
@@ -152,8 +163,10 @@ internal fun EditorHeader(
 
       Spacer(Modifier.height(TitleBlockSpacing))
 
-      Box(modifier = Modifier.width(SubtitleDividerWidth)) {
-        Divider(color = AppTheme.colors.borderDefault)
+      if (layoutSpec !is EditorDocumentLayoutSpec.Paginated) {
+        Box(modifier = Modifier.width(SubtitleDividerWidth)) {
+          Divider(color = AppTheme.colors.borderDefault)
+        }
       }
     }
   }
@@ -242,4 +255,16 @@ private fun EditorHeaderField(
       }
     },
   )
+}
+
+internal fun resolvePaginatedHeaderTrackWidth(trackWidth: Float, displayZoom: Float): Float {
+  val effectiveZoom =
+    if (displayZoom.isFinite() && displayZoom > 0f) {
+      displayZoom
+    } else {
+      1f
+    }
+  val minimumWidth =
+    max(PaginatedHeaderMinWidth * effectiveZoom, PaginatedHeaderMinWidth * PaginatedHeaderMinScale)
+  return max(trackWidth, minimumWidth)
 }

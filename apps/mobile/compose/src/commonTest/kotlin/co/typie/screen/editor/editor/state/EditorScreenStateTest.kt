@@ -17,7 +17,11 @@ import kotlinx.coroutines.test.runTest
 class EditorScreenStateTest {
   @Test
   fun `prepareToLeaveEditorScene waits for header flush before returning`() = runTest {
-    val state = EditorScreenState(scrollState = ScrollState(initial = 0))
+    val state =
+      EditorScreenState(
+        scrollState = ScrollState(initial = 0),
+        horizontalScrollState = ScrollState(initial = 0),
+      )
     val runtime = EditorRuntime()
     val uiState = EditorUiState()
     val events = mutableListOf<String>()

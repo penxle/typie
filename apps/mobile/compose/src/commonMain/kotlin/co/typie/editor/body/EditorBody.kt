@@ -1,5 +1,6 @@
 package co.typie.editor.body
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -29,6 +31,10 @@ import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.EditorScrollPolicy
 import kotlin.math.max
 
+private val DebugTopPaddingColor = Color(0x22FF5ACD)
+private val DebugBottomPaddingColor = Color(0x22FF8A00)
+private val DebugExtensionFillColor = Color(0x2200B8D4)
+
 @Composable
 internal fun EditorBody(
   doc: Doc,
@@ -41,24 +47,27 @@ internal fun EditorBody(
 ) {
   val density = LocalDensity.current
   val uiState = LocalEditorUiState.current
-  var coreTrackHeight by remember { mutableFloatStateOf(0f) }
-  val extensionFillHeight =
-    remember(geometry.minimumBodyHeight, coreTrackHeight) {
-      resolveEditorBodyFillHeight(
+  val extensionForwardingEnabled = layoutSpec is EditorDocumentLayoutSpec.Continuous
+  var bodyContentHeight by remember { mutableFloatStateOf(0f) }
+  val extensionAreaFillSpacerHeight =
+    remember(geometry.minimumBodyHeight, bodyContentHeight) {
+      resolveExtensionAreaFillSpacerHeight(
         minimumHeight = geometry.minimumBodyHeight,
-        coreTrackHeight = coreTrackHeight,
+        bodyContentHeight = bodyContentHeight,
+      )
+    }
+  val containerModifier =
+    Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
+      uiState.updateExtensionAreaBounds(
+        boundsInRoot = coordinates.unclippedBoundsInRoot(),
+        density = density.density,
       )
     }
 
   Box(modifier = modifier.fillMaxWidth()) {
     EditorExtensionArea(
-      modifier =
-        Modifier.fillMaxWidth().onGloballyPositioned { coordinates ->
-          uiState.updateExtensionAreaBounds(
-            boundsInRoot = coordinates.unclippedBoundsInRoot(),
-            density = density.density,
-          )
-        }
+      forwardingEnabled = extensionForwardingEnabled,
+      modifier = containerModifier,
     ) {
       Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -74,11 +83,16 @@ internal fun EditorBody(
           Column(
             modifier =
               Modifier.fillMaxWidth().onSizeChanged { size ->
-                coreTrackHeight = size.height / density.density
+                bodyContentHeight = size.height / density.density
               }
           ) {
-            if (geometry.defaultTopPadding > 0f) {
-              Spacer(modifier = Modifier.fillMaxWidth().height(geometry.defaultTopPadding.dp))
+            if (geometry.topSpacerHeight > 0f) {
+              Spacer(
+                modifier =
+                  Modifier.fillMaxWidth()
+                    .height(geometry.topSpacerHeight.dp)
+                    .background(DebugTopPaddingColor)
+              )
             }
 
             Box(
@@ -100,13 +114,23 @@ internal fun EditorBody(
               )
             }
 
-            if (scrollPolicy.bottomPadding > 0f) {
-              Spacer(modifier = Modifier.fillMaxWidth().height(scrollPolicy.bottomPadding.dp))
+            if (scrollPolicy.bottomSpacerHeight > 0f) {
+              Spacer(
+                modifier =
+                  Modifier.fillMaxWidth()
+                    .height(scrollPolicy.bottomSpacerHeight.dp)
+                    .background(DebugBottomPaddingColor)
+              )
             }
           }
 
-          if (extensionFillHeight > 0f) {
-            Spacer(modifier = Modifier.fillMaxWidth().height(extensionFillHeight.dp))
+          if (extensionAreaFillSpacerHeight > 0f) {
+            Spacer(
+              modifier =
+                Modifier.fillMaxWidth()
+                  .height(extensionAreaFillSpacerHeight.dp)
+                  .background(DebugExtensionFillColor)
+            )
           }
         }
       }
@@ -116,8 +140,10 @@ internal fun EditorBody(
   }
 }
 
-internal fun resolveEditorBodyFillHeight(minimumHeight: Float, coreTrackHeight: Float): Float =
-  max(0f, minimumHeight - coreTrackHeight)
+internal fun resolveExtensionAreaFillSpacerHeight(
+  minimumHeight: Float,
+  bodyContentHeight: Float,
+): Float = max(0f, minimumHeight - bodyContentHeight)
 
 private fun LayoutCoordinates.unclippedBoundsInRoot(): Rect {
   val position = positionInRoot()

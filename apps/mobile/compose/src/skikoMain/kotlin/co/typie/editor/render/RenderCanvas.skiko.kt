@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
@@ -43,7 +45,15 @@ internal actual fun RenderCanvas(
         }
       }
   ) {
-    bitmap?.let { drawImage(image = it) }
+    bitmap?.let {
+      drawImage(
+        image = it,
+        srcOffset = IntOffset.Zero,
+        srcSize = IntSize(it.width, it.height),
+        dstOffset = IntOffset.Zero,
+        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+      )
+    }
   }
 
   LaunchedEffect(bufferHandle) {

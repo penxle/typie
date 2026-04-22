@@ -6,38 +6,52 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import co.typie.editor.LocalEditorZoomController
 import co.typie.editor.body.EditorBody
+import co.typie.editor.body.EditorDocumentLayoutSpec
+import co.typie.editor.body.resolveBaseBottomSpace
 import co.typie.editor.body.resolveEditorBodyGeometry
-import co.typie.editor.body.resolveIntrinsicBottomSpace
+import co.typie.editor.body.resolvePagesContentHeight
+import co.typie.editor.rememberEditorZoomController
 import co.typie.editor.runtime.EditorRuntime
 import co.typie.editor.runtime.EditorUiState
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
+import co.typie.editor.scroll.EditorScrollTarget
 import co.typie.editor.scroll.LocalEditorScrollController
 import co.typie.editor.scroll.rememberEditorScrollController
+import co.typie.editor.scroll.resolveDistanceToPagesBottom
 import co.typie.editor.scroll.resolveEditorScrollPolicy
 import co.typie.ext.ime
 import co.typie.graphql.QueryState
 import co.typie.icons.Lucide
 import co.typie.navigation.Nav
+import co.typie.platform.PlatformModule
 import co.typie.route.Route
 import co.typie.screen.editor.editor.header.EditorHeader
+import co.typie.screen.editor.editor.header.resolvePaginatedHeaderTrackWidth
 import co.typie.screen.editor.editor.layout.EditorScreenLayout
 import co.typie.screen.editor.editor.overlay.EditorScreenOverlayHost
 import co.typie.screen.editor.editor.state.rememberEditorScreenState
 import co.typie.screen.editor.editor.toolbar.EditorToolbarHost
 import co.typie.screen.editor.editor.topbar.EditorDocumentButton
+import co.typie.screen.editor.editor.zoom.EditorZoomOverlay
+import co.typie.screen.editor.editor.zoom.rememberEditorDebugWheelZoomModifier
+import co.typie.screen.editor.editor.zoom.rememberEditorTouchPinchZoomModifier
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
@@ -52,6 +66,7 @@ fun EditorScreen(entityId: String) {
   val model = viewModel { EditorViewModel(entityId) }
   val runtime = remember(entityId) { EditorRuntime() }
   val uiState = remember(entityId) { EditorUiState() }
+  val zoomController = rememberEditorZoomController(key = entityId)
   val screenState = rememberEditorScreenState(key = entityId)
   val loading = model.query.state !is QueryState.Success
   val entity = model.query.data.entity
@@ -114,27 +129,60 @@ fun EditorScreen(entityId: String) {
     background = AppTheme.colors.surfaceDefault,
     contentPadding = PaddingValues(),
   ) { contentPadding ->
+    val layoutSpec = model.documentLayoutSpec
+    val editor = runtime.editor
+    val pageSizes = editor?.pageSizes.orEmpty()
     val density = LocalDensity.current.density
     val topInset = contentPadding.calculateTopPadding()
     val bottomSafeInset = contentPadding.calculateBottomPadding()
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
+    val displayZoom = zoomController.displayZoom
     // TODO(editor-parity): 현재는 cursor 높이만 scroll policy에 넘기고 있다. collapsed
     // selection에서는 이 값이 실제 selection head 표시 높이보다 작아서 typewriter 하단
-    // 여백과 일반 cursor guard 둘 다 몇 dp씩 모자라게 계산되고, non-collapsed selection도
-    // head bounds를 쓰지 못하고 있다.
-    val cursorHeight = runtime.editor?.cursor?.rect?.height ?: 0f
+    // 여백과 일반 cursor guard 둘 다 부족하게 계산된다. 이 높이 차이는 displayZoom과 함께
+    // 같이 커지므로, 확대할수록 문서 끝에서 남는 추가 스크롤도 더 커진다. non-collapsed
+    // selection도 아직 head bounds를 쓰지 못하고 있다.
+    val cursorHeight = (editor?.cursor?.rect?.height ?: 0f) * displayZoom
     val visibleArea =
       screenState.resolveVisibleArea(
         topInset = topInset.value,
         rawBottomSafeInset = bottomSafeInset.value,
         rawImeInset = imeBottom.value,
       )
+    LaunchedEffect(layoutSpec, visibleArea.visibleBodySize.width) {
+      zoomController.syncLayout(
+        layoutSpec = layoutSpec,
+        viewportWidth = visibleArea.visibleBodySize.width,
+      )
+    }
+    SideEffect { uiState.updateDisplayZoom(displayZoom) }
+    val pageBottomRevealSpacerHeight =
+      when (layoutSpec) {
+        is EditorDocumentLayoutSpec.Paginated -> visibleArea.bottomOcclusion
+        is EditorDocumentLayoutSpec.Continuous -> 0f
+      }
+    val pagesContentHeight = layoutSpec.resolvePagesContentHeight(pageSizes, displayZoom)
+    val distanceToPagesBottom =
+      if (typewriterEnabled && editor != null) {
+        resolveDistanceToPagesBottom(
+          editor = editor,
+          uiState = uiState,
+          headerHeight = screenState.headerHeight,
+          pagesContentHeight = pagesContentHeight,
+          bottomOcclusion = visibleArea.bottomOcclusion,
+          target = EditorScrollTarget.CurrentSelectionHead,
+        )
+      } else {
+        null
+      }
     val scrollPolicy =
       resolveEditorScrollPolicy(
         visibleArea = visibleArea,
-        intrinsicBottomSpace = model.documentLayoutSpec.resolveIntrinsicBottomSpace(),
+        baseBottomSpace = layoutSpec.resolveBaseBottomSpace(displayZoom),
+        distanceToPagesBottom = distanceToPagesBottom,
+        pageBottomRevealSpacerHeight = pageBottomRevealSpacerHeight,
         typewriterEnabled = typewriterEnabled,
         typewriterPosition = typewriterPosition,
         cursorHeight = cursorHeight,
@@ -142,9 +190,19 @@ fun EditorScreen(entityId: String) {
     val bodyGeometry =
       resolveEditorBodyGeometry(
         visibleArea = visibleArea,
-        layoutSpec = model.documentLayoutSpec,
-        pageSizes = runtime.editor?.pageSizes.orEmpty(),
+        layoutSpec = layoutSpec,
+        pageSizes = pageSizes,
+        displayZoom = displayZoom,
       )
+    val headerTrackWidth =
+      when (layoutSpec) {
+        is EditorDocumentLayoutSpec.Paginated ->
+          resolvePaginatedHeaderTrackWidth(
+            trackWidth = bodyGeometry.pageColumnWidth,
+            displayZoom = displayZoom,
+          )
+        is EditorDocumentLayoutSpec.Continuous -> bodyGeometry.pageColumnWidth
+      }
     val scrollController =
       rememberEditorScrollController(
         editorProvider = { runtime.editor },
@@ -155,6 +213,24 @@ fun EditorScreen(entityId: String) {
         headerHeight = screenState.headerHeight,
         density = density,
       )
+    val touchPinchZoomModifier =
+      rememberEditorTouchPinchZoomModifier(
+        state = screenState,
+        layoutSpec = layoutSpec,
+        zoomController = zoomController,
+        uiState = uiState,
+        pageSizes = pageSizes,
+        density = density,
+      )
+    val debugWheelZoomModifier =
+      rememberEditorDebugWheelZoomModifier(
+        enabled = PlatformModule.platform == co.typie.platform.Platform.Desktop,
+        state = screenState,
+        layoutSpec = layoutSpec,
+        zoomController = zoomController,
+        uiState = uiState,
+        pageSizes = pageSizes,
+      )
 
     LaunchedEffect(scrollController, screenState.scrollState) {
       snapshotFlow { screenState.scrollState.isScrollInProgress }
@@ -164,64 +240,71 @@ fun EditorScreen(entityId: String) {
           }
         }
     }
-    LaunchedEffect(
-      scrollController,
-      uiState.focused,
-      screenState.sceneInForeground,
-      runtime.editor,
-    ) {
-      if (!uiState.focused || !screenState.sceneInForeground || runtime.editor == null) {
+    LaunchedEffect(scrollController, uiState.focused, screenState.sceneInForeground, editor) {
+      if (!uiState.focused || !screenState.sceneInForeground || editor == null) {
         scrollController.cancel()
       }
     }
 
-    EditorScreenLayout(
-      state = screenState,
-      header = {
-        EditorHeader(
-          title = model.titleDraft,
-          subtitle = model.subtitleDraft,
-          loading = loading,
-          topInset = topInset,
-          onTitleChange = model::updateTitleDraft,
-          onSubtitleChange = model::updateSubtitleDraft,
-          onHeightChanged = screenState::updateHeaderHeight,
-          onEnterDocument = {
-            model.flushDraftsAsync()
-            runtime.focus()
-          },
-        )
-      },
-      overlay = {
-        EditorScreenOverlayHost(
-          visibleArea = visibleArea,
-          scrollPolicy = scrollPolicy,
-          modifier = Modifier.fillMaxSize(),
-        )
-      },
-      body = {
-        CompositionLocalProvider(
-          LocalEditorRuntime provides runtime,
-          LocalEditorUiState provides uiState,
-          LocalEditorScrollController provides scrollController,
-        ) {
+    CompositionLocalProvider(
+      LocalEditorRuntime provides runtime,
+      LocalEditorUiState provides uiState,
+      LocalEditorZoomController provides zoomController,
+      LocalEditorScrollController provides scrollController,
+    ) {
+      EditorScreenLayout(
+        state = screenState,
+        horizontalScrollEnabled = layoutSpec is EditorDocumentLayoutSpec.Paginated,
+        horizontalScrollContentWidth = headerTrackWidth,
+        header = {
+          EditorHeader(
+            title = model.titleDraft,
+            subtitle = model.subtitleDraft,
+            layoutSpec = layoutSpec,
+            trackWidth = headerTrackWidth,
+            loading = loading,
+            topInset = topInset,
+            onTitleChange = model::updateTitleDraft,
+            onSubtitleChange = model::updateSubtitleDraft,
+            onHeightChanged = screenState::updateHeaderHeight,
+            onEnterDocument = {
+              model.flushDraftsAsync()
+              runtime.focus()
+            },
+          )
+        },
+        viewportOverlay = {
+          EditorZoomOverlay(
+            modifier =
+              Modifier.align(Alignment.BottomStart)
+                .padding(start = 20.dp, bottom = 20.dp + imeBottom)
+          )
+        },
+        overlay = {
+          EditorScreenOverlayHost(
+            visibleArea = visibleArea,
+            scrollPolicy = scrollPolicy,
+            modifier = Modifier.fillMaxSize(),
+          )
+        },
+        body = {
           EditorBody(
             doc = model.doc,
             selection = model.selection,
             geometry = bodyGeometry,
-            layoutSpec = model.documentLayoutSpec,
+            layoutSpec = layoutSpec,
             scrollPolicy = scrollPolicy,
+            modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
           )
-        }
-      },
-      toolbar = {
-        EditorToolbarHost(
-          bodyFocused = screenState.shouldShowToolbar(bodyFocused = uiState.focused),
-          modifier = Modifier,
-          onVisibleTopChanged = screenState::updateToolbarTop,
-        )
-      },
-      modifier = Modifier,
-    )
+        },
+        toolbar = {
+          EditorToolbarHost(
+            bodyFocused = screenState.shouldShowToolbar(bodyFocused = uiState.focused),
+            modifier = Modifier,
+          )
+        },
+        modifier = Modifier,
+      )
+    }
   }
 }

@@ -10,40 +10,28 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import co.typie.ext.ime
-import co.typie.ext.imePadding
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Text
 import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 
-private val ToolbarOuterVerticalPadding = 12.dp
+private val ToolbarBottomPadding = 12.dp
+private const val ToolbarSurfaceAlpha = 0.4f
 
 @Composable
-internal fun EditorToolbarHost(
-  bodyFocused: Boolean,
-  modifier: Modifier = Modifier,
-  onVisibleTopChanged: (Float?) -> Unit,
-) {
-  val density = LocalDensity.current
-  val imeVisible = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
+internal fun EditorToolbarHost(bodyFocused: Boolean, modifier: Modifier = Modifier) {
+  val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+  val imeVisible = imeBottom > 0.dp
   val visible = shouldShowEditorToolbar(bodyFocused = bodyFocused, imeVisible = imeVisible)
-
-  LaunchedEffect(visible) {
-    if (!visible) {
-      onVisibleTopChanged(null)
-    }
-  }
 
   AnimatedVisibility(
     visible = visible,
@@ -54,13 +42,8 @@ internal fun EditorToolbarHost(
     Box(
       modifier =
         Modifier.fillMaxWidth()
-          .imePadding()
-          .padding(horizontal = 16.dp, vertical = ToolbarOuterVerticalPadding)
-          .onGloballyPositioned { coordinates ->
-            if (visible) {
-              onVisibleTopChanged(coordinates.boundsInRoot().top / density.density)
-            }
-          },
+          .offset { IntOffset(x = 0, y = -imeBottom.roundToPx()) }
+          .padding(start = 16.dp, end = 16.dp, bottom = ToolbarBottomPadding),
       contentAlignment = Alignment.BottomCenter,
     ) {
       Box(
@@ -68,7 +51,10 @@ internal fun EditorToolbarHost(
           Modifier.widthIn(max = ResponsiveContainerDefaults.MaxWidth)
             .fillMaxWidth()
             .height(48.dp)
-            .background(AppTheme.colors.surfaceDefault, AppShapes.rounded(AppShapes.md))
+            .background(
+              AppTheme.colors.surfaceDefault.copy(alpha = ToolbarSurfaceAlpha),
+              AppShapes.rounded(AppShapes.md),
+            )
             .border(1.dp, AppTheme.colors.borderDefault, AppShapes.rounded(AppShapes.md)),
         contentAlignment = Alignment.Center,
       ) {
