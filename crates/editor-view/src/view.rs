@@ -17,6 +17,7 @@ use crate::viewport::Viewport;
 pub struct View {
     measurer: Measurer,
     layout: Option<LayoutResult>,
+    fingerprint: Option<LayoutFingerprint>,
     viewport: Viewport,
     view_state: ViewState,
 }
@@ -27,6 +28,12 @@ struct LayoutResult {
     pages: Vec<LayoutPage>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct LayoutFingerprint {
+    layout_mode: LayoutMode,
+    effective_viewport_width: f32,
+}
+
 impl View {
     pub fn new(viewport: Viewport, resource: Arc<Mutex<Resource>>) -> Self {
         Self {
@@ -34,11 +41,14 @@ impl View {
             viewport,
             view_state: ViewState::new(),
             layout: None,
+            fingerprint: None,
         }
     }
 
     pub fn reconcile(&mut self, old_doc: &Doc, new_doc: &Doc, steps: &[Step]) -> bool {
-        if self.measurer.invalidate_with_steps(old_doc, new_doc, steps) {
+        let nodes_invalidated = self.measurer.invalidate_with_steps(old_doc, new_doc, steps);
+        let attrs_changed = steps.iter().any(|s| s.is_doc_attr_step());
+        if nodes_invalidated || attrs_changed {
             self.compute(new_doc);
             self.view_state.preferred_x = None;
             true
@@ -69,8 +79,9 @@ impl View {
         self.view_state.preferred_x = None;
     }
 
-    fn compute(&mut self, doc: &Doc) {
-        let paginator = match doc.attrs().layout_mode {
+    fn build_paginator(&self, doc: &Doc) -> (Paginator, LayoutFingerprint) {
+        let layout_mode = doc.attrs().layout_mode;
+        let (paginator, effective_viewport_width) = match layout_mode {
             LayoutMode::Paginated {
                 page_width,
                 page_height,
@@ -78,22 +89,42 @@ impl View {
                 page_margin_bottom,
                 page_margin_left,
                 page_margin_right,
-            } => Paginator::paginated(
-                page_width,
-                page_height,
-                EdgeInsets {
-                    top: page_margin_top,
-                    bottom: page_margin_bottom,
-                    left: page_margin_left,
-                    right: page_margin_right,
-                },
+            } => (
+                Paginator::paginated(
+                    page_width,
+                    page_height,
+                    EdgeInsets {
+                        top: page_margin_top,
+                        bottom: page_margin_bottom,
+                        left: page_margin_left,
+                        right: page_margin_right,
+                    },
+                ),
+                // Paginated layout is viewport-independent; 0.0 keeps the fingerprint
+                // stable across resizes so self-heal treats them as no-ops.
+                0.0,
             ),
-            LayoutMode::Continuous { max_width } => Paginator::continuous(
-                max_width.min(self.viewport.width),
-                1024.0,
-                EdgeInsets::all(20.0),
-            ),
+            LayoutMode::Continuous { max_width } => {
+                let effective = max_width.min(self.viewport.width);
+                (
+                    Paginator::continuous(effective, 1024.0, EdgeInsets::all(20.0)),
+                    effective,
+                )
+            }
         };
+        let fingerprint = LayoutFingerprint {
+            layout_mode,
+            effective_viewport_width,
+        };
+        (paginator, fingerprint)
+    }
+
+    fn compute(&mut self, doc: &Doc) {
+        let (paginator, new_fingerprint) = self.build_paginator(doc);
+        if self.fingerprint.as_ref() != Some(&new_fingerprint) {
+            self.measurer.clear_cache();
+            self.fingerprint = Some(new_fingerprint);
+        }
 
         let content_width = paginator.content_width();
 
@@ -189,8 +220,15 @@ impl View {
         &self.viewport
     }
 
-    pub fn resize(&mut self, viewport: Viewport) {
+    pub fn resize(&mut self, viewport: Viewport, doc: &Doc) -> bool {
+        let old_fingerprint = self.fingerprint.clone();
         self.viewport = viewport;
+        self.compute(doc);
+        let changed = self.fingerprint.as_ref() != old_fingerprint.as_ref();
+        if changed {
+            self.view_state.preferred_x = None;
+        }
+        changed
     }
 
     pub fn set_fold_state(&mut self, node_id: NodeId, expanded: bool) {
@@ -214,6 +252,7 @@ impl View {
             viewport: Viewport::new(800.0, 600.0, 1.0),
             view_state: ViewState::new(),
             layout: None,
+            fingerprint: None,
         }
     }
 }
@@ -249,5 +288,234 @@ mod tests {
         let (doc,) = doc! { root { paragraph { text("hello") } } };
         let mut view = View::new_test();
         assert!(!view.invalidate_nodes(&doc, &[]));
+    }
+
+    #[test]
+    fn page_width_change_triggers_reflow() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_transaction::Step;
+
+        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let mut view = View::new_test();
+        let initial_attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 400.0,
+                page_height: 600.0,
+                page_margin_top: 20.0,
+                page_margin_bottom: 20.0,
+                page_margin_left: 20.0,
+                page_margin_right: 20.0,
+            },
+        };
+        let doc = doc.with_attrs(initial_attrs.clone());
+        view.layout(&doc);
+        assert_eq!(view.pages()[0].size.width, 400.0);
+
+        let new_attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 600.0,
+                page_height: 600.0,
+                page_margin_top: 20.0,
+                page_margin_bottom: 20.0,
+                page_margin_left: 20.0,
+                page_margin_right: 20.0,
+            },
+        };
+        let new_doc = doc.with_attrs(new_attrs.clone());
+        let steps = vec![Step::SetDocumentAttrs {
+            old: initial_attrs,
+            new: new_attrs,
+        }];
+        let changed = view.reconcile(&doc, &new_doc, &steps);
+        assert!(changed, "reconcile should return true for attrs change");
+        assert_eq!(view.pages()[0].size.width, 600.0);
+    }
+
+    #[test]
+    fn set_attrs_with_same_layout_mode_produces_same_layout() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_transaction::Step;
+
+        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 400.0,
+                page_height: 600.0,
+                page_margin_top: 20.0,
+                page_margin_bottom: 20.0,
+                page_margin_left: 20.0,
+                page_margin_right: 20.0,
+            },
+        };
+        let doc = doc.with_attrs(attrs.clone());
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let steps = vec![Step::SetDocumentAttrs {
+            old: attrs.clone(),
+            new: attrs,
+        }];
+        let changed = view.reconcile(&doc, &doc, &steps);
+        assert!(changed, "attrs_changed branch returns true");
+        assert_eq!(view.pages()[0].size.width, 400.0);
+    }
+
+    #[test]
+    fn paginated_viewport_resize_is_noop() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+
+        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 400.0,
+                page_height: 600.0,
+                page_margin_top: 20.0,
+                page_margin_bottom: 20.0,
+                page_margin_left: 20.0,
+                page_margin_right: 20.0,
+            },
+        };
+        let doc = doc.with_attrs(attrs);
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let new_viewport = Viewport::new(1200.0, 800.0, 1.0);
+        let changed = view.resize(new_viewport, &doc);
+        assert!(
+            !changed,
+            "paginated mode must not reflow on viewport change"
+        );
+        assert_eq!(view.pages()[0].size.width, 400.0);
+    }
+
+    #[test]
+    fn continuous_viewport_shrink_triggers_reflow() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+
+        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Continuous { max_width: 800.0 },
+        };
+        let doc = doc.with_attrs(attrs);
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let new_viewport = Viewport::new(500.0, 600.0, 1.0);
+        let changed = view.resize(new_viewport, &doc);
+        assert!(
+            changed,
+            "continuous mode must reflow when effective width shrinks"
+        );
+    }
+
+    #[test]
+    fn continuous_viewport_growth_above_max_is_noop() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+
+        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Continuous { max_width: 400.0 },
+        };
+        let doc = doc.with_attrs(attrs);
+        let mut view = View::new_test();
+        view.resize(Viewport::new(800.0, 600.0, 1.0), &doc);
+        view.layout(&doc);
+
+        let changed = view.resize(Viewport::new(2000.0, 600.0, 1.0), &doc);
+        assert!(!changed, "growth above max_width must not reflow");
+    }
+
+    #[test]
+    fn mode_switch_paginated_to_continuous_triggers_reflow() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_transaction::Step;
+
+        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let old_attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 400.0,
+                page_height: 600.0,
+                page_margin_top: 20.0,
+                page_margin_bottom: 20.0,
+                page_margin_left: 20.0,
+                page_margin_right: 20.0,
+            },
+        };
+        let doc_old = doc.clone().with_attrs(old_attrs.clone());
+        let mut view = View::new_test();
+        view.layout(&doc_old);
+        let old_page_width = view.pages()[0].size.width;
+
+        let new_attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Continuous { max_width: 600.0 },
+        };
+        let doc_new = doc.with_attrs(new_attrs.clone());
+        let steps = vec![Step::SetDocumentAttrs {
+            old: old_attrs,
+            new: new_attrs,
+        }];
+        let changed = view.reconcile(&doc_old, &doc_new, &steps);
+        assert!(changed);
+        assert_ne!(view.pages()[0].size.width, old_page_width);
+    }
+
+    #[test]
+    fn mode_switch_continuous_to_paginated_triggers_reflow() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+        use editor_transaction::Step;
+
+        let (doc,) = doc! { root { paragraph { text("hello") } } };
+        let old_attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Continuous { max_width: 500.0 },
+        };
+        let doc_old = doc.clone().with_attrs(old_attrs.clone());
+        let mut view = View::new_test();
+        view.layout(&doc_old);
+
+        let new_attrs = DocumentAttrs {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 700.0,
+                page_height: 900.0,
+                page_margin_top: 20.0,
+                page_margin_bottom: 20.0,
+                page_margin_left: 20.0,
+                page_margin_right: 20.0,
+            },
+        };
+        let doc_new = doc.with_attrs(new_attrs.clone());
+        let steps = vec![Step::SetDocumentAttrs {
+            old: old_attrs,
+            new: new_attrs,
+        }];
+        let changed = view.reconcile(&doc_old, &doc_new, &steps);
+        assert!(changed);
+        assert_eq!(view.pages()[0].size.width, 700.0);
+    }
+
+    #[test]
+    fn layout_fingerprint_distinguishes_modes() {
+        // Guards against a regression where the fingerprint is reduced to a scalar
+        // (e.g. content_width). LayoutMode variant must remain part of the fingerprint
+        // so mode switches always invalidate the cache, regardless of whether the
+        // resulting numeric widths happen to coincide.
+        let paginated_fp = LayoutFingerprint {
+            layout_mode: LayoutMode::Paginated {
+                page_width: 440.0,
+                page_height: 600.0,
+                page_margin_top: 20.0,
+                page_margin_bottom: 20.0,
+                page_margin_left: 20.0,
+                page_margin_right: 20.0,
+            },
+            effective_viewport_width: 0.0,
+        };
+        let continuous_fp = LayoutFingerprint {
+            layout_mode: LayoutMode::Continuous { max_width: 400.0 },
+            // Match paginated's value so layout_mode is the only discriminator.
+            // Realism of this synthetic value vs. what build_paginator would produce is irrelevant —
+            // we are unit-testing the type's discrimination contract, not the producer.
+            effective_viewport_width: 0.0,
+        };
+        assert_ne!(paginated_fp, continuous_fp);
     }
 }

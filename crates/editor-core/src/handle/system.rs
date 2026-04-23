@@ -27,9 +27,16 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
             height,
             scale_factor,
         } => {
-            editor
-                .view
-                .resize(Viewport::new(width, height, scale_factor));
+            let changed = editor.view.resize(
+                Viewport::new(width, height, scale_factor),
+                &editor.state.doc,
+            );
+            if changed {
+                editor.push_event(EditorEvent::StateChanged {
+                    fields: vec![StateField::PageSizes],
+                });
+                editor.push_event(EditorEvent::RenderInvalidated);
+            }
         }
 
         SystemEvent::SetFocused { .. } => {
@@ -974,6 +981,98 @@ mod tests {
         assert!(
             !has_missing,
             "FontsChanged must not emit FontDataMissing when all required bytes are loaded"
+        );
+    }
+
+    #[test]
+    fn resize_paginated_emits_no_render_invalidated() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+
+        let (state, _t1) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    paragraph { t1: text("hello") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Doc {
+            op: DocOp::SetAttrs {
+                attrs: DocumentAttrs {
+                    layout_mode: LayoutMode::Paginated {
+                        page_width: 400.0,
+                        page_height: 600.0,
+                        page_margin_top: 20.0,
+                        page_margin_bottom: 20.0,
+                        page_margin_left: 20.0,
+                        page_margin_right: 20.0,
+                    },
+                },
+            },
+        });
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 1200.0,
+                height: 800.0,
+                scale_factor: 1.0,
+            },
+        });
+
+        let has_render_invalidated = events
+            .iter()
+            .any(|e| matches!(e, EditorEvent::RenderInvalidated));
+        assert!(
+            !has_render_invalidated,
+            "paginated mode must not emit RenderInvalidated on resize"
+        );
+    }
+
+    #[test]
+    fn resize_continuous_width_change_emits_render_invalidated() {
+        use editor_model::{DocumentAttrs, LayoutMode};
+
+        let (state, _t1) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    paragraph { t1: text("hello") }
+                }
+            }
+            selection: (t1, 0)
+        };
+        let mut editor = Editor::new_test(state);
+        editor.apply(Message::Doc {
+            op: DocOp::SetAttrs {
+                attrs: DocumentAttrs {
+                    layout_mode: LayoutMode::Continuous { max_width: 800.0 },
+                },
+            },
+        });
+        // First resize matches the fingerprint established by SetAttrs (effective stays 800) — no-op.
+        editor.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 1000.0,
+                height: 600.0,
+                scale_factor: 1.0,
+            },
+        });
+
+        // Shrink viewport to 500 → effective_viewport_width becomes min(800, 500) = 500 → fingerprint changes.
+        let events = editor.apply(Message::System {
+            event: SystemEvent::Resize {
+                width: 500.0,
+                height: 600.0,
+                scale_factor: 1.0,
+            },
+        });
+
+        let has_render_invalidated = events
+            .iter()
+            .any(|e| matches!(e, EditorEvent::RenderInvalidated));
+        assert!(
+            has_render_invalidated,
+            "continuous mode must emit RenderInvalidated when effective width shrinks"
         );
     }
 }

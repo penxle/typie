@@ -138,7 +138,6 @@ impl Editor {
         if steps.iter().any(|s| s.is_doc_attr_step()) {
             fields.insert(StateField::Doc);
             fields.insert(StateField::DocAttrs);
-            self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if steps.iter().any(|s| s.is_selection_step()) {
