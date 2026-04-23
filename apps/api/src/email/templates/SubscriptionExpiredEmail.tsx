@@ -26,7 +26,7 @@ const Email = ({ userName, planName, expiredAt }: Props) => {
 
       <Text className="text-[14px] text-zinc-500 leading-[1.5]">
         궁금한 점이 있으시면{' '}
-        <Link href="https://typie.link/help" className="text-zinc-500 underline">
+        <Link href="https://penxle.channel.io" className="text-zinc-500 underline">
           고객센터
         </Link>
         로 문의해 주세요.

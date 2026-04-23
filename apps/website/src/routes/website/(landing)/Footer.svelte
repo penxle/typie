@@ -188,7 +188,7 @@
                 color: 'dark.gray.200',
               },
             })}
-            href="https://typie.link/help"
+            href="https://penxle.channel.io"
             rel="noopener noreferrer"
             target="_blank"
           >

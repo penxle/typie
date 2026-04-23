@@ -9,7 +9,6 @@
   import CheckIcon from '~icons/lucide/check';
   import ChevronDownIcon from '~icons/lucide/chevron-down';
   import { browser } from '$app/environment';
-  import { page } from '$app/state';
   import { inview } from '../(index)/inview';
 
   let selectedInterval = $state<'monthly' | 'yearly'>('monthly');
@@ -354,7 +353,7 @@
                 backgroundColor: 'dark.gray.900',
               },
             })}
-            href={page.data.startUrl}
+            href="/start"
           >
             무료로 시작하기
           </a>
@@ -497,7 +496,7 @@
                 },
               }),
             )}
-            href={page.data.startUrl}
+            href="/start"
           >
             지금 시작하기
             <Icon
@@ -768,7 +767,7 @@
               },
             }),
           )}
-          href={page.data.startUrl}
+          href="/start"
         >
           무료로 시작하기
           <Icon

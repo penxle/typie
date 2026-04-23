@@ -2,7 +2,6 @@
   import { css, cx } from '@typie/styled-system/css';
   import { Icon } from '@typie/ui/components';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
-  import { page } from '$app/state';
   import { inview } from './inview';
 </script>
 
@@ -113,7 +112,7 @@
             },
           }),
         )}
-        href={page.data.startUrl}
+        href="/start"
       >
         시작하기
         <Icon

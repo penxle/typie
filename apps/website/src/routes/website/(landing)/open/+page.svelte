@@ -4,7 +4,6 @@
   import { grid } from '@typie/styled-system/patterns';
   import { Helmet, Icon } from '@typie/ui/components';
   import ArrowRightIcon from '~icons/lucide/arrow-right';
-  import { page } from '$app/state';
   import { graphql } from '$mearie';
   import { inview } from '../(index)/inview';
   import StatCard from './StatCard.svelte';
@@ -739,7 +738,7 @@
               },
             }),
           )}
-          href={page.data.startUrl}
+          href="/start"
         >
           타이피 시작하기
           <Icon

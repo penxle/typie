@@ -30,6 +30,9 @@ export const defaultPlanRules: PlanRules = {
 export const SUBSCRIPTION_GRACE_DAYS = 7;
 export const TRIAL_DURATION_DAYS = 14;
 
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6745595771';
+export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=co.typie';
+
 export const defaultValues = {
   fontFamily: 'Pretendard',
   fontSize: 1200,

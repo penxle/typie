@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createFragment } from '@mearie/svelte';
+  import { APP_STORE_URL, PLAY_STORE_URL } from '@typie/lib/const';
   import { css } from '@typie/styled-system/css';
   import { center, flex } from '@typie/styled-system/patterns';
   import { HorizontalDivider, Icon, Modal } from '@typie/ui/components';
@@ -69,7 +70,13 @@
 
   let panelEl = $state<HTMLDivElement>();
   let mobileQrOpen = $state(false);
-  const qrSvg = toSvgSource(generate('https://typie.link'), { on: 'currentColor', off: 'transparent', pad: 0, width: 200, height: 200 });
+  const qrSvg = toSvgSource(generate(`${env.PUBLIC_WEBSITE_URL}/app`), {
+    on: 'currentColor',
+    off: 'transparent',
+    pad: 0,
+    width: 200,
+    height: 200,
+  });
 
   const close = () => {
     open = false;
@@ -304,7 +311,7 @@
               transition: 'common',
               _hover: { backgroundColor: 'surface.muted' },
             })}
-            href="https://typie.link/help"
+            href="https://penxle.channel.io"
             rel="noopener noreferrer"
             target="_blank"
           >
@@ -527,7 +534,7 @@
           transition: 'common',
           _hover: { backgroundColor: 'surface.muted' },
         })}
-        href="https://typie.link/community"
+        href="https://discord.gg/MteQ9AMa4B"
         rel="noopener noreferrer"
         target="_blank"
       >
@@ -647,7 +654,7 @@
           transition: 'common',
           _hover: { backgroundColor: 'interactive.hover' },
         })}
-        href="https://apps.apple.com/app/id6745595771"
+        href={APP_STORE_URL}
         rel="noopener noreferrer"
         target="_blank"
       >
@@ -669,7 +676,7 @@
           transition: 'common',
           _hover: { backgroundColor: 'interactive.hover' },
         })}
-        href="https://play.google.com/store/apps/details?id=co.typie"
+        href={PLAY_STORE_URL}
         rel="noopener noreferrer"
         target="_blank"
       >

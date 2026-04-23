@@ -7,7 +7,6 @@
   import MenuIcon from '~icons/lucide/menu';
   import XIcon from '~icons/lucide/x';
   import { afterNavigate } from '$app/navigation';
-  import { page } from '$app/state';
   import WordmarkWhite from '$assets/logos/wordmark-white.svg?component';
   import { EnvironmentBanner } from '$lib/components';
 
@@ -111,7 +110,7 @@
             },
           }),
         )}
-        href={page.data.startUrl}
+        href="/start"
       >
         시작하기
         <Icon
@@ -244,7 +243,7 @@
             },
           }),
         )}
-        href={page.data.startUrl}
+        href="/start"
       >
         시작하기
         <Icon icon={ArrowRightIcon} size={14} />

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createQuery } from '@mearie/svelte';
   import NumberFlow from '@number-flow/svelte';
+  import { APP_STORE_URL, PLAY_STORE_URL } from '@typie/lib/const';
   import { css, cx } from '@typie/styled-system/css';
   import { Icon } from '@typie/ui/components';
   import { onMount } from 'svelte';
@@ -9,7 +10,7 @@
   import AppStoreIcon from '~icons/simple-icons/appstore';
   import GooglePlayIcon from '~icons/simple-icons/googleplay';
   import { browser } from '$app/environment';
-  import { page } from '$app/state';
+  import { env } from '$env/dynamic/public';
   import { graphql } from '$mearie';
   import heroImage from './images/hero.webp';
   import { inview } from './inview';
@@ -187,7 +188,7 @@
                 },
               }),
             )}
-            href={page.data.startUrl}
+            href="/start"
           >
             시작하기
             <Icon
@@ -226,7 +227,7 @@
                   transition: '[color 0.2s ease-out]',
                   _hover: { color: 'dark.gray.200' },
                 })}
-                href={page.data.startUrl}
+                href={env.PUBLIC_AUTH_URL}
               >
                 <Icon icon={GlobeIcon} size={20} />
               </a>
@@ -236,7 +237,7 @@
                   transition: '[color 0.2s ease-out]',
                   _hover: { color: 'dark.gray.200' },
                 })}
-                href="https://apps.apple.com/app/id6745595771"
+                href={APP_STORE_URL}
                 rel="noopener noreferrer"
                 target="_blank"
               >
@@ -248,7 +249,7 @@
                   transition: '[color 0.2s ease-out]',
                   _hover: { color: 'dark.gray.200' },
                 })}
-                href="https://play.google.com/store/apps/details?id=co.typie"
+                href={PLAY_STORE_URL}
                 rel="noopener noreferrer"
                 target="_blank"
               >

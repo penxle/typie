@@ -22,7 +22,7 @@ const Email = ({ code }: Props) => {
         <Column align="center">
           <Button
             className="bg-zinc-950 text-white py-[15px] px-[30px] rounded-[4px] font-medium text-[15px] no-underline text-center box-border"
-            href="https://typie.link/community"
+            href="https://typie.co"
           >
             타이피 바로가기
           </Button>

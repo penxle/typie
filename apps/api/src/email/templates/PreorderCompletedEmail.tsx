@@ -32,7 +32,7 @@ const Email = () => {
         <Column align="center">
           <Button
             className="bg-zinc-950 text-white py-[15px] px-[30px] rounded-[4px] font-medium text-[15px] no-underline text-center box-border"
-            href="https://typie.link/community"
+            href="https://discord.gg/MteQ9AMa4B"
           >
             커뮤니티 가입하기
           </Button>
