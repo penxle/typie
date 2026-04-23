@@ -17,12 +17,23 @@
   const scaleFactor = $derived(ctx.editor?.scaleFactor ?? 1);
   const cssWidth = $derived(Math.round(width * scaleFactor) / scaleFactor);
   const cssHeight = $derived(Math.round(height * scaleFactor) / scaleFactor);
+  const isPaginated = $derived(ctx.editor?.documentAttrs?.layout_mode.type === 'paginated');
 </script>
 
 <div
   style:width={`${cssWidth}px`}
   style:height={`${cssHeight}px`}
-  class={css({ position: 'relative', flexShrink: '0' })}
+  class={css({
+    position: 'relative',
+    isolation: 'isolate',
+    flexShrink: '0',
+    ...(isPaginated && {
+      backgroundColor: 'surface.default',
+      boxShadow: '[0_2px_8px_rgba(0,0,0,0.1)]',
+      ringWidth: '1px',
+      ringColor: 'black/5',
+    }),
+  })}
   {@attach (el) => {
     if (editor) {
       editor.pageEls[page] = el;

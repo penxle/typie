@@ -14,7 +14,7 @@
   const point = $derived.by(() => {
     if (editor?.cursor) {
       const local = editor.cursor.rect;
-      return editor.localToGlobal(editor.cursor.page_idx, local.x, local.y);
+      return editor.localToOffset(editor.cursor.page_idx, local.x, local.y);
     }
   });
 </script>

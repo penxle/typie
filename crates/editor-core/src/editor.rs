@@ -123,27 +123,35 @@ impl Editor {
         }
 
         let steps = std::mem::take(&mut self.pending_steps);
-        let mut fields = Vec::new();
+        let mut fields = HashSet::new();
 
         if !steps.is_empty() && self.view.reconcile(&old_doc, &self.state.doc, &steps) {
-            fields.push(StateField::PageSizes);
+            fields.insert(StateField::PageSizes);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if steps.iter().any(|s| s.is_doc_step()) {
-            fields.push(StateField::Doc);
-            fields.push(StateField::Ime);
+            fields.insert(StateField::Doc);
+            fields.insert(StateField::Ime);
+        }
+
+        if steps.iter().any(|s| s.is_doc_attr_step()) {
+            fields.insert(StateField::Doc);
+            fields.insert(StateField::DocAttrs);
+            self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if steps.iter().any(|s| s.is_selection_step()) {
-            fields.push(StateField::Cursor);
-            fields.push(StateField::Selection);
-            fields.push(StateField::Ime);
+            fields.insert(StateField::Cursor);
+            fields.insert(StateField::Selection);
+            fields.insert(StateField::Ime);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
         if !fields.is_empty() {
-            self.push_event(EditorEvent::StateChanged { fields });
+            self.push_event(EditorEvent::StateChanged {
+                fields: fields.iter().copied().collect(),
+            });
         }
 
         Ok(std::mem::take(&mut self.pending_events))
@@ -203,6 +211,7 @@ impl Editor {
             Message::Deletion { op } => handle::handle_deletion_op(self, op)?,
             Message::Modifier { op } => handle::handle_modifier_op(self, op)?,
             Message::Selection { op } => handle::handle_selection_op(self, op)?,
+            Message::Doc { op } => handle::handle_doc_op(self, op)?,
             Message::Node { op } => handle::handle_node_op(self, op)?,
             Message::Clipboard { op } => handle::handle_clipboard_op(self, op)?,
             Message::Composition { op } => handle::handle_composition_op(self, op)?,

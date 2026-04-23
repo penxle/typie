@@ -55,6 +55,10 @@ impl Editor {
         self.with_inner(|inner| Ok(inner.editor.state().selection.into_ffi()?))
     }
 
+    pub fn document_attrs(&self) -> EditorResult<Complex<editor_model::DocumentAttrs>> {
+        self.with_inner(|inner| Ok(inner.editor.state().doc.attrs().clone().into_ffi()?))
+    }
+
     pub fn inspect_state(
         &self,
         options: Option<Complex<editor_introspection::InspectStateOptions>>,

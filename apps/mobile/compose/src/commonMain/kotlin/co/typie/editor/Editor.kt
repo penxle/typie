@@ -7,6 +7,7 @@ import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import co.typie.editor.ffi.CursorRect
 import co.typie.editor.ffi.Doc
+import co.typie.editor.ffi.DocumentAttrs
 import co.typie.editor.ffi.EditorEvent
 import co.typie.editor.ffi.Ime
 import co.typie.editor.ffi.InspectStateOptions
@@ -29,6 +30,9 @@ import kotlinx.coroutines.withContext
 
 class Editor
 internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: CoroutineScope) {
+  var documentAttrs by mutableStateOf<DocumentAttrs?>(null)
+    private set
+
   var cursor by mutableStateOf<CursorRect?>(null)
     private set
 
@@ -116,6 +120,7 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
     for (field in event.fields) {
       when (field) {
         StateField.Doc -> {}
+        StateField.DocAttrs -> documentAttrs = inner.documentAttrs()
         StateField.Cursor -> cursor = inner.cursor()
         StateField.Selection -> selection = inner.selection()
         StateField.PageSizes -> pageSizes = inner.pageSizes()

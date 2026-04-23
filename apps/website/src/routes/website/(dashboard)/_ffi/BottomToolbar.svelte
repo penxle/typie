@@ -10,7 +10,7 @@
   import { values } from '$lib/editor/values';
   import { getEditorContext } from '$lib/editor-ffi/editor.svelte';
   import ToolbarButton from './ToolbarButton.svelte';
-  import type { Message, Modifier, ModifierType } from '@typie/editor-ffi/browser';
+  import type { LayoutMode, Message, Modifier, ModifierType } from '@typie/editor-ffi/browser';
 
   const ctx = getEditorContext();
 
@@ -25,6 +25,22 @@
 
   const setModifier = (modifier: Modifier) => {
     enqueue({ type: 'modifier', op: { type: 'set', modifier } });
+  };
+
+  const setLayoutMode = (type: LayoutMode['type']) => {
+    const layout_mode: LayoutMode =
+      type === 'paginated'
+        ? {
+            type: 'paginated',
+            page_width: 794,
+            page_height: 1123,
+            page_margin_top: 94,
+            page_margin_bottom: 94,
+            page_margin_left: 94,
+            page_margin_right: 94,
+          }
+        : { type: 'continuous', max_width: 600 };
+    enqueue({ type: 'doc', op: { type: 'set_attrs', attrs: { layout_mode } } });
   };
 
   const selectStyle = css.raw({
@@ -113,4 +129,15 @@
   <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
 
   <ToolbarButton icon={RemoveFormattingIcon} label="서식 지우기" onclick={() => enqueue({ type: 'modifier', op: { type: 'clear_all' } })} />
+
+  <div class={css({ width: '1px', height: '16px', backgroundColor: 'border.subtle' })}></div>
+
+  <select
+    class={css(selectStyle)}
+    onchange={(e) => setLayoutMode(e.currentTarget.value as LayoutMode['type'])}
+    value={ctx.editor?.documentAttrs?.layout_mode.type ?? 'continuous'}
+  >
+    <option value="paginated">페이지</option>
+    <option value="continuous">연속</option>
+  </select>
 </div>

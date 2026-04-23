@@ -2,9 +2,7 @@ import type { Editor } from '../editor.svelte';
 import type { EditorEventHandler } from '../types';
 
 export const handlePointerDown: EditorEventHandler<HTMLElement, PointerEvent> = (editor, e) => {
-  const rect = e.currentTarget.getBoundingClientRect();
-  const global = { x: e.clientX - rect.x, y: e.clientY - rect.y };
-  const local = editor.globalToLocal(global.x, global.y);
+  const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) {
     return;
   }
@@ -22,9 +20,7 @@ export const handlePointerMove: EditorEventHandler<HTMLElement, PointerEvent> = 
     return;
   }
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  const global = { x: e.clientX - rect.x, y: e.clientY - rect.y };
-  const local = editor.globalToLocal(global.x, global.y);
+  const local = editor.clientToLocal(e.clientX, e.clientY);
   if (!local) {
     return;
   }

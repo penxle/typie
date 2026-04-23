@@ -4,6 +4,7 @@
   import { onDestroy, untrack } from 'svelte';
   import { initWasm } from '$lib/wasm-ffi.svelte';
   import { graphql } from '$mearie';
+  import { PAGE_GAP } from '../constants';
   import { Editor, getEditorContext } from '../editor.svelte';
   import { loadFonts } from '../fonts';
   import { handle } from '../handlers';
@@ -11,7 +12,9 @@
   import Cursor from './Cursor.svelte';
   import CursorPositioned from './CursorPositioned.svelte';
   import Input from './Input.svelte';
+  import LineHighlight from './LineHighlight.svelte';
   import Page from './Page.svelte';
+  import Scrollbar from './Scrollbar.svelte';
   import type { Doc, Selection } from '@typie/editor-ffi/browser';
   import type { SystemStyleObject } from '@typie/styled-system/types';
   import type { Editor_document$key } from '$mearie';
@@ -53,6 +56,8 @@
   let clientWidth = $state<number>();
   let clientHeight = $state<number>();
 
+  const isPaginated = $derived(ctx.editor?.documentAttrs?.layout_mode.type === 'paginated');
+
   const init = async (width: number, height: number) => {
     status = 'initializing';
     try {
@@ -80,7 +85,31 @@
 </script>
 
 <div
-  class={css({ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', userSelect: 'none' }, style)}
+  style:--page-gap={isPaginated ? `${PAGE_GAP}px` : undefined}
+  class={css(
+    {
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      overflow: 'auto',
+      scrollbar: 'hidden',
+      userSelect: 'none',
+      ...(isPaginated && {
+        rowGap: 'var(--page-gap)',
+        paddingY: 'var(--page-gap)',
+        backgroundColor: 'surface.subtle',
+      }),
+    },
+    style,
+  )}
+  {@attach (el) => {
+    if (!ctx.editor) return;
+    ctx.editor.scrollContainerEl = el;
+    return () => {
+      if (ctx.editor) ctx.editor.scrollContainerEl = undefined;
+    };
+  }}
   onfocusin={() => ctx.editor?.focus()}
   onfocusout={() => ctx.editor?.blur()}
   onpointerdown={handle(ctx.editor, handlePointerDown)}
@@ -100,5 +129,9 @@
       <Cursor />
       <Input />
     </CursorPositioned>
+
+    <LineHighlight />
+
+    <Scrollbar />
   {/if}
 </div>

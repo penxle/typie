@@ -104,6 +104,10 @@ impl Step {
         )
     }
 
+    pub fn is_doc_attr_step(&self) -> bool {
+        matches!(self, Step::SetDocumentAttrs { .. })
+    }
+
     pub fn is_selection_step(&self) -> bool {
         matches!(self, Step::SetSelection { .. })
     }

@@ -76,8 +76,17 @@
     attrs: {
       layout_mode: {
         type: 'continuous',
-        max_width: 400,
+        max_width: 600,
       },
+      // layout_mode: {
+      //   type: 'paginated',
+      //   page_width: 794,
+      //   page_height: 1123,
+      //   page_margin_top: 94,
+      //   page_margin_bottom: 94,
+      //   page_margin_left: 94,
+      //   page_margin_right: 94,
+      // },
     },
   };
 
@@ -96,7 +105,8 @@
 <div class={css({ display: 'flex', flexDirection: 'column', size: 'full' })}>
   <TopToolbar />
   <BottomToolbar />
+
   {#if document$key}
-    <Editor style={css.raw({ flex: '1', overflow: 'auto' })} {doc} {document$key} {selection} />
+    <Editor style={css.raw({ flex: '1' })} {doc} {document$key} {selection} />
   {/if}
 </div>

@@ -47,7 +47,8 @@ fn exact_hit_node(node: &LayoutNode, x: f32, y: f32) -> Option<Selection> {
     }
 }
 
-/// Closest hit: returns the nearest navigable by euclidean edge distance.
+/// Closest hit: returns the nearest navigable by euclidean edge distance,
+/// restricted to navigables owned by the given page (by `rect.y` range).
 pub fn closest_hit_test(
     tree: &LayoutTree,
     page: &LayoutPage,
@@ -55,35 +56,54 @@ pub fn closest_hit_test(
     page_y: f32,
 ) -> Option<Selection> {
     let abs_y = page_y + page.y_start;
-    let nav = closest_navigable(&tree.root, x, abs_y)?;
+    let nav = closest_navigable(&tree.root, x, abs_y, page.y_start, page.y_end)?;
     Some(navigate_to_node(nav, x))
 }
 
 /// Find the closest navigable node by squared euclidean rect-edge distance.
 /// Descends into the innermost containing box first, then falls back to all children.
-fn closest_navigable(node: &LayoutNode, x: f32, y: f32) -> Option<&LayoutNode> {
+/// Leaves (Line/Atom) are only considered if their `rect.y` lies within `[y_start, y_end)`.
+fn closest_navigable(
+    node: &LayoutNode,
+    x: f32,
+    y: f32,
+    y_start: f32,
+    y_end: f32,
+) -> Option<&LayoutNode> {
     match &node.content {
         LayoutContent::Box(b) => {
             for child in &b.children {
                 if child.rect.contains(x, y)
-                    && let Some(found) = closest_navigable(child, x, y)
+                    && let Some(found) = closest_navigable(child, x, y, y_start, y_end)
                 {
                     return Some(found);
                 }
             }
             // No containing child found; search all children by edge distance
-            closest_navigable_in_children(&b.children, x, y)
+            closest_navigable_in_children(&b.children, x, y, y_start, y_end)
         }
-        LayoutContent::Line(_) | LayoutContent::Atom(_) => Some(node),
+        LayoutContent::Line(_) | LayoutContent::Atom(_) => {
+            if node.rect.y >= y_start && node.rect.y < y_end {
+                Some(node)
+            } else {
+                None
+            }
+        }
         LayoutContent::Spacing(_) => None,
     }
 }
 
-fn closest_navigable_in_children(children: &[LayoutNode], x: f32, y: f32) -> Option<&LayoutNode> {
+fn closest_navigable_in_children(
+    children: &[LayoutNode],
+    x: f32,
+    y: f32,
+    y_start: f32,
+    y_end: f32,
+) -> Option<&LayoutNode> {
     children
         .iter()
         .filter_map(|child| {
-            find_any_navigable(child).map(|nav| {
+            find_any_navigable_in_range(child, y_start, y_end).map(|nav| {
                 let dist_sq = rect_distance_sq(&nav.rect, x, y);
                 (dist_sq, nav)
             })
@@ -92,11 +112,21 @@ fn closest_navigable_in_children(children: &[LayoutNode], x: f32, y: f32) -> Opt
         .map(|(_, nav)| nav)
 }
 
-/// Find ANY navigable descendant (first Line or Atom found).
-fn find_any_navigable(node: &LayoutNode) -> Option<&LayoutNode> {
+/// Find ANY navigable descendant (first Line or Atom found) whose `rect.y`
+/// lies within `[y_start, y_end)`.
+fn find_any_navigable_in_range(node: &LayoutNode, y_start: f32, y_end: f32) -> Option<&LayoutNode> {
     match &node.content {
-        LayoutContent::Box(b) => b.children.iter().find_map(find_any_navigable),
-        LayoutContent::Line(_) | LayoutContent::Atom(_) => Some(node),
+        LayoutContent::Box(b) => b
+            .children
+            .iter()
+            .find_map(|c| find_any_navigable_in_range(c, y_start, y_end)),
+        LayoutContent::Line(_) | LayoutContent::Atom(_) => {
+            if node.rect.y >= y_start && node.rect.y < y_end {
+                Some(node)
+            } else {
+                None
+            }
+        }
         LayoutContent::Spacing(_) => None,
     }
 }
@@ -328,6 +358,37 @@ mod tests {
         let rect = Rect::from_xywh(10.0, 10.0, 100.0, 50.0);
         // Point at (0, 0) -- dx=10, dy=10 -> dist_sq=200
         assert_eq!(rect_distance_sq(&rect, 0.0, 0.0), 200.0);
+    }
+
+    #[test]
+    fn closest_hit_stays_within_page() {
+        // Two pages, each 1123 tall.
+        // Page 0 has a short line near the top (y=0..20).
+        // Page 1 has a line right at its top (y=1123..1143).
+        // A click at page_y=1000 (near bottom of page 0) is abs_y=1000:
+        //   - distance to page 0 line bottom (y=20): 980
+        //   - distance to page 1 line top (y=1123): 123
+        // Without the fix, closest_hit_test returns page 1's line.
+        // With the fix, it must return page 0's line (only candidate in page).
+        let id_p0 = NodeId::new();
+        let id_p1 = NodeId::new();
+        let tree = LayoutTree {
+            root: make_box_node(
+                NodeId::ROOT,
+                0.0,
+                0.0,
+                200.0,
+                2246.0,
+                vec![
+                    make_line_node(id_p0, 0.0, 0.0, "hi", 10.0),
+                    make_line_node(id_p1, 0.0, 1123.0, "lo", 10.0),
+                ],
+            ),
+        };
+        let page_0 = make_page(0.0, 1123.0);
+
+        let sel = closest_hit_test(&tree, &page_0, 5.0, 1000.0).unwrap();
+        assert_eq!(sel.head.node_id, id_p0);
     }
 
     #[test]
