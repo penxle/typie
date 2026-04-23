@@ -1,10 +1,14 @@
 use editor_common::{EdgeInsets, Movement};
-use editor_model::{Doc, LayoutMode, NodeId};
+use editor_model::{Doc, LayoutMode, Modifier, NodeId};
 use editor_resource::Resource;
-use editor_state::{Position, ResolvedPosition, ResolvedSelection, Selection};
+use editor_state::{
+    PendingModifier, PendingModifiers, Position, ResolvedPosition, ResolvedSelection, Selection,
+};
 use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
+use crate::measure::text::resolve::{ResolvedTextStyle, resolve_text_style};
+use crate::measure::text::strut::compute_strut;
 use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
@@ -189,9 +193,30 @@ impl View {
         selection
     }
 
-    pub fn cursor_rect(&self, pos: &Position) -> Option<CursorRect> {
+    pub fn cursor_rect(
+        &self,
+        doc: &Doc,
+        pos: &Position,
+        pending: &PendingModifiers,
+    ) -> Option<CursorRect> {
         let result = self.layout.as_ref()?;
-        query::cursor_rect(&result.tree, &result.pages, pos)
+        let metrics_override = self.cursor_metrics_at(doc, pos, pending);
+        query::cursor_rect(&result.tree, &result.pages, pos, metrics_override)
+    }
+
+    fn cursor_metrics_at(
+        &self,
+        doc: &Doc,
+        pos: &Position,
+        pending: &PendingModifiers,
+    ) -> Option<(f32, f32)> {
+        let node = doc.node(pos.node_id)?;
+        let mut style = resolve_text_style(&node);
+        apply_pending_to_style(&mut style, pending);
+
+        let mut resource = self.measurer.resource.lock().unwrap();
+        let strut = compute_strut(&mut resource, &style)?;
+        Some((strut.ascent, strut.descent))
     }
 
     pub fn selection_rects(&self, selection: &ResolvedSelection) -> Vec<SelectionRect> {
@@ -244,6 +269,23 @@ impl View {
     }
 }
 
+fn apply_pending_to_style(style: &mut ResolvedTextStyle, pending: &PendingModifiers) {
+    for p in pending {
+        if let PendingModifier::Set(m) = p {
+            match m {
+                Modifier::FontFamily { value } => style.font_family = value.clone(),
+                Modifier::FontWeight { value } => style.font_weight = *value,
+                Modifier::FontSize { value } => {
+                    // Match resolve_text_style conversion: centipoints → pixels.
+                    const PT_TO_PX: f32 = 96.0 / 72.0;
+                    style.font_size = (*value as f32 / 100.0) * PT_TO_PX;
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 #[cfg(any(test, feature = "test-utils"))]
 impl View {
     pub fn new_test() -> Self {
@@ -288,6 +330,75 @@ mod tests {
         let (doc,) = doc! { root { paragraph { text("hello") } } };
         let mut view = View::new_test();
         assert!(!view.invalidate_nodes(&doc, &[]));
+    }
+
+    #[test]
+    fn cursor_rect_matches_strut_ignoring_pending_when_empty() {
+        let (doc, p1) = doc! { root { p1: paragraph } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let pos = Position::new(p1, 0);
+        let empty_pending = PendingModifiers::new();
+
+        let default_rect = view.cursor_rect(&doc, &pos, &empty_pending).unwrap();
+
+        // With no pending modifiers, cursor uses stored strut metrics.
+        assert!(default_rect.rect.height > 0.0);
+    }
+
+    #[test]
+    fn cursor_rect_matches_adjacent_text_font_size() {
+        // Text node with its own FontSize modifier (24pt) alongside default text.
+        // Cursor inside the big-sized text should reflect that text's style, not
+        // the paragraph default.
+        let (doc, t1, t2) = doc! {
+            root {
+                paragraph {
+                    t1: text("hi")
+                    t2: text("HI") [font_size(2400)]
+                }
+            }
+        };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let empty_pending = PendingModifiers::new();
+        let r1 = view
+            .cursor_rect(&doc, &Position::new(t1, 0), &empty_pending)
+            .unwrap();
+        let r2 = view
+            .cursor_rect(&doc, &Position::new(t2, 0), &empty_pending)
+            .unwrap();
+
+        assert!(
+            r2.rect.height > r1.rect.height,
+            "cursor inside bigger-sized text should match the text's size \
+             (r1.height={}, r2.height={})",
+            r1.rect.height,
+            r2.rect.height
+        );
+    }
+
+    #[test]
+    fn cursor_rect_grows_with_pending_font_size() {
+        let (doc, p1) = doc! { root { p1: paragraph } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+
+        let pos = Position::new(p1, 0);
+        let empty_pending = PendingModifiers::new();
+        let default_rect = view.cursor_rect(&doc, &pos, &empty_pending).unwrap();
+
+        // Pending FontSize 24pt (2400 centipoints) → taller cursor than default (16px ≈ 12pt).
+        let mut pending = PendingModifiers::new();
+        pending.push(PendingModifier::Set(Modifier::FontSize { value: 2400 }));
+        let pending_rect = view.cursor_rect(&doc, &pos, &pending).unwrap();
+
+        assert!(
+            pending_rect.rect.height > default_rect.rect.height,
+            "cursor should grow when pending FontSize is larger than base style"
+        );
     }
 
     #[test]

@@ -38,6 +38,8 @@ pub struct MeasuredLine {
     pub baseline: f32,
     pub ascent: f32,
     pub descent: f32,
+    pub cursor_ascent: f32,
+    pub cursor_descent: f32,
     pub glyph_runs: Vec<GlyphRun>,
     pub text_indent: f32,
 }

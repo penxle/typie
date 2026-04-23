@@ -286,6 +286,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(id, 0, text, 0.0, gs(n))],
             text_indent: 0.0,
         }
@@ -299,6 +301,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![
                 GlyphRun::make_test_run(id1, 0, "hello ", 0.0, gs(6)),
                 GlyphRun::make_test_run(id2, 0, "world", 60.0, gs(5)),
@@ -398,6 +402,8 @@ mod tests {
                 baseline: 16.0,
                 ascent: 14.0,
                 descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(
                     text_id,
                     0,
@@ -518,6 +524,8 @@ mod tests {
                 baseline: 16.0,
                 ascent: 14.0,
                 descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
                 glyph_runs: vec![],
                 text_indent: 0.0,
             }),

@@ -200,6 +200,8 @@ mod tests {
                 baseline: 16.0,
                 ascent: 14.0,
                 descent: 4.0,
+                cursor_ascent: 14.0,
+                cursor_descent: 4.0,
                 glyph_runs: vec![GlyphRun::make_test_run(
                     id,
                     0,

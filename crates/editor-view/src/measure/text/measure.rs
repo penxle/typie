@@ -43,6 +43,8 @@ pub fn measure_inline_text(
                 baseline,
                 ascent,
                 descent,
+                cursor_ascent: strut.ascent,
+                cursor_descent: strut.descent,
                 glyph_runs: vec![],
                 text_indent: indent,
             }),
@@ -69,6 +71,8 @@ pub fn measure_inline_text(
         &segmenters.grapheme,
     );
 
+    let cursor_ascent = strut.ascent;
+    let cursor_descent = strut.descent;
     let children: Vec<Arc<MeasuredNode>> = lines
         .into_iter()
         .map(|line| {
@@ -80,6 +84,8 @@ pub fn measure_inline_text(
                     baseline: line.baseline,
                     ascent: line.ascent,
                     descent: line.descent,
+                    cursor_ascent,
+                    cursor_descent,
                     glyph_runs: line.glyph_runs,
                     text_indent: indent,
                 }),

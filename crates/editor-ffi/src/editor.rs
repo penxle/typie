@@ -34,7 +34,8 @@ impl Editor {
 
     pub fn cursor(&self) -> EditorResult<Option<Complex<editor_view::CursorRect>>> {
         self.with_inner(|inner| {
-            let selection = inner.editor.state().selection;
+            let state = inner.editor.state();
+            let selection = state.selection;
             if selection.is_collapsed() {
                 // TODO(editor-parity): collapsed selection의 head/composition bounds도 FFI로
                 // 노출해야 한다. KMP는 지금 cursor rect만 받아서 실제 selection head 표시
@@ -43,7 +44,7 @@ impl Editor {
                 Ok(inner
                     .editor
                     .view()
-                    .cursor_rect(&selection.head)
+                    .cursor_rect(&state.doc, &selection.head, &state.pending_modifiers)
                     .into_ffi()?)
             } else {
                 Ok(None)

@@ -10,7 +10,12 @@ use super::search;
 #[ffi]
 pub type CursorRect = PageRect;
 
-pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> Option<CursorRect> {
+pub fn cursor_rect(
+    tree: &LayoutTree,
+    pages: &[LayoutPage],
+    pos: &Position,
+    metrics_override: Option<(f32, f32)>,
+) -> Option<CursorRect> {
     let line_node = search::find_line_at(tree, pos)?;
     let line = match &line_node.content {
         LayoutContent::Line(l) => l,
@@ -36,13 +41,18 @@ pub fn cursor_rect(tree: &LayoutTree, pages: &[LayoutPage], pos: &Position) -> O
         .iter()
         .position(|p| line_node.rect.y >= p.y_start && line_node.rect.y < p.y_end)?;
 
+    let (cursor_ascent, cursor_descent) =
+        metrics_override.unwrap_or((line.cursor_ascent, line.cursor_descent));
+    let cursor_height = cursor_ascent + cursor_descent;
+    let leading = (line_node.rect.height - cursor_height).max(0.0);
+
     Some(CursorRect::new(
         page_idx,
         Rect::from_xywh(
             line_node.rect.x + x,
-            line_node.rect.y + (line.baseline - line.ascent) - pages[page_idx].y_start,
+            line_node.rect.y + leading / 2.0 - pages[page_idx].y_start,
             1.0,
-            line.ascent + line.descent,
+            cursor_height,
         ),
     ))
 }
@@ -91,6 +101,8 @@ mod tests {
                             baseline: 16.0,
                             ascent: 14.0,
                             descent: 4.0,
+                            cursor_ascent: 14.0,
+                            cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
                         }),
@@ -110,11 +122,12 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 0);
-        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
 
+        // Cursor is centered in the line box: leading = 20 - (14+4) = 2, leading/2 = 1.
         assert_eq!(page_idx, 0);
         assert_eq!(rect.x, 0.0);
-        assert_eq!(rect.y, 2.0);
+        assert_eq!(rect.y, 1.0);
         assert_eq!(rect.height, 18.0);
     }
 
@@ -128,7 +141,7 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 3);
-        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
 
         assert_eq!(rect.x, 30.0);
     }
@@ -157,6 +170,8 @@ mod tests {
                             baseline: 16.0,
                             ascent: 14.0,
                             descent: 4.0,
+                            cursor_ascent: 14.0,
+                            cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
                         }),
@@ -170,7 +185,7 @@ mod tests {
             size: Size::new(240.0, 800.0),
         }];
         let pos = Position::new(id, 2);
-        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
 
         // x = line.rect.x(20) + run.x(0) + advances[0..2](20) = 40
         assert_eq!(rect.x, 40.0);
@@ -201,6 +216,8 @@ mod tests {
                             baseline: 16.0,
                             ascent: 14.0,
                             descent: 4.0,
+                            cursor_ascent: 14.0,
+                            cursor_descent: 4.0,
                             glyph_runs: vec![GlyphRun::make_test_run(id, 0, "hello", 0.0, gs(5))],
                             text_indent: 0.0,
                         }),
@@ -221,11 +238,12 @@ mod tests {
             },
         ];
         let pos = Position::new(id, 0);
-        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { page_idx, rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
 
         assert_eq!(page_idx, 1);
-        // y should be relative to page start: 500 + (16 - 14) - 400 = 102
-        assert_eq!(rect.y, 102.0);
+        // y is relative to page start: 500 + leading/2 - 400 = 500 + 1 - 400 = 101
+        // where leading = line_height(20) - cursor_height(14+4) = 2.
+        assert_eq!(rect.y, 101.0);
     }
 
     #[test]
@@ -252,6 +270,8 @@ mod tests {
                             baseline: 16.0,
                             ascent: 14.0,
                             descent: 4.0,
+                            cursor_ascent: 14.0,
+                            cursor_descent: 4.0,
                             glyph_runs: vec![],
                             text_indent: 32.0,
                         }),
@@ -265,7 +285,7 @@ mod tests {
             size: Size::new(200.0, 800.0),
         }];
         let pos = Position::new(id, 0);
-        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos).unwrap();
+        let CursorRect { rect, .. } = cursor_rect(&tree, &pages, &pos, None).unwrap();
 
         assert_eq!(rect.x, 32.0);
     }

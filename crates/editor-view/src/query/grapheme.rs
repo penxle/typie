@@ -126,6 +126,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -146,6 +148,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -166,6 +170,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -186,6 +192,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -211,6 +219,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -231,6 +241,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -253,6 +265,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -275,6 +289,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -300,6 +316,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -328,6 +346,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![],
             text_indent: 0.0,
         };
@@ -344,6 +364,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![GlyphRun::make_test_run(
                 id,
                 0,
@@ -366,6 +388,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![],
             text_indent: 0.0,
         };
@@ -383,6 +407,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![
                 GlyphRun::make_test_run(id1, 0, "ab", 0.0, ascii_spans(2, 10.0)),
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
@@ -401,6 +427,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![
                 GlyphRun::make_test_run(id1, 0, "ab", 0.0, ascii_spans(2, 10.0)),
                 GlyphRun::make_test_run(id2, 0, "cd", 20.0, ascii_spans(2, 10.0)),
@@ -420,6 +448,8 @@ mod tests {
             baseline: 16.0,
             ascent: 14.0,
             descent: 4.0,
+            cursor_ascent: 14.0,
+            cursor_descent: 4.0,
             glyph_runs: vec![],
             text_indent: 32.0,
         };

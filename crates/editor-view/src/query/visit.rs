@@ -154,6 +154,8 @@ mod tests {
                 baseline: height * 0.8,
                 ascent: height * 0.7,
                 descent: height * 0.1,
+                cursor_ascent: height * 0.7,
+                cursor_descent: height * 0.1,
                 glyph_runs: vec![],
                 text_indent: 0.0,
             }),
