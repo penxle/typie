@@ -211,6 +211,7 @@ pub enum SystemEvent {
         node_id: NodeId,
         height: f32,
     },
+    FontsChanged,
 }
 
 #[ffi]

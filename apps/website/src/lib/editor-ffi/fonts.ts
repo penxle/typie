@@ -1,10 +1,18 @@
 import { wasm } from '$lib/wasm-ffi.svelte';
+import { snapshot } from './registry';
 import type { FontFamilySource } from '$mearie';
 import type { EditorEventListener } from './types';
 
 const CDN_BASE = 'https://cdn.typie.net/editor/fonts';
 const CACHE_NAME = 'typie-fonts';
 const PRELOAD_CONCURRENCY = 4;
+const REQUIRED_LOAD_ATTEMPTS = 3;
+const PREFETCH_LOAD_ATTEMPTS = 1;
+const LOAD_RETRY_BASE_MS = 200;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 type FontFamily = { familyName: string; source: FontFamilySource; fonts: readonly Font[] };
 type Font = { weight: number; path: string; hash: string; chunks: unknown };
@@ -35,6 +43,10 @@ export function loadFonts(families: readonly FontFamily[]): void {
       })),
     })),
   );
+
+  for (const editor of snapshot()) {
+    editor.enqueue({ type: 'system', event: { type: 'fonts_changed' } });
+  }
 }
 
 const loaded = new Set<string>();
@@ -157,17 +169,34 @@ async function load(
   weight: number,
   fd: FontData,
   baseUrl: string,
+  attempts: number,
 ): Promise<void> {
   await loadOnce(keyOf(family, weight, fd), async () => {
-    const data = await getOrFetch(urlOf(baseUrl, fd));
-    if (fd.type === 'base') {
-      wasm.add_font_base(family, weight, data);
-      editor.enqueue({ type: 'system', event: { type: 'font_base_loaded', family, weight } });
-    } else {
-      wasm.add_font_chunk(family, weight, fd.id, data);
-      editor.enqueue({ type: 'system', event: { type: 'font_chunk_loaded', family, weight, chunk_id: fd.id } });
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const data = await getOrFetch(urlOf(baseUrl, fd));
+        if (fd.type === 'base') {
+          wasm.add_font_base(family, weight, data);
+        } else {
+          wasm.add_font_chunk(family, weight, fd.id, data);
+        }
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < attempts) {
+          await sleep(LOAD_RETRY_BASE_MS * Math.pow(2, attempt - 1));
+        }
+      }
     }
+    throw lastErr;
   });
+
+  if (fd.type === 'base') {
+    editor.enqueue({ type: 'system', event: { type: 'font_base_loaded', family, weight } });
+  } else {
+    editor.enqueue({ type: 'system', event: { type: 'font_chunk_loaded', family, weight, chunk_id: fd.id } });
+  }
 }
 
 export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = async (editor, { family, weight, required, prefetch }) => {
@@ -178,13 +207,17 @@ export const fontDataMissingHandler: EditorEventListener<'font_data_missing'> = 
   }
   const baseUrl = `${CDN_BASE}/${info.path}/${info.hash}`;
 
-  await Promise.allSettled(required.map((fd) => load(editor, family, weight, fd, baseUrl)));
+  const baseRequired = required.filter((fd): fd is Extract<FontData, { type: 'base' }> => fd.type === 'base');
+  const chunkRequired = required.filter((fd): fd is Extract<FontData, { type: 'chunk' }> => fd.type === 'chunk');
+
+  await Promise.allSettled(baseRequired.map((fd) => load(editor, family, weight, fd, baseUrl, REQUIRED_LOAD_ATTEMPTS)));
+  await Promise.allSettled(chunkRequired.map((fd) => load(editor, family, weight, fd, baseUrl, REQUIRED_LOAD_ATTEMPTS)));
 
   for (const fd of prefetch) {
     const priority = fd.type === 'base' ? -1 : fd.id;
     preloadQueue.enqueue(keyOf(family, weight, fd), priority, async () => {
       try {
-        await load(editor, family, weight, fd, baseUrl);
+        await load(editor, family, weight, fd, baseUrl, PREFETCH_LOAD_ATTEMPTS);
       } catch {
         // best-effort
       }

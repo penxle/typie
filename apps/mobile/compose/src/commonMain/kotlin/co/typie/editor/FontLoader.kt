@@ -20,6 +20,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,6 +29,9 @@ import kotlinx.serialization.json.decodeFromJsonElement
 
 private const val CDN_BASE = "https://cdn.typie.net/editor/fonts"
 private const val PRELOAD_CONCURRENCY = 4
+private const val REQUIRED_LOAD_ATTEMPTS = 3
+private const val PREFETCH_LOAD_ATTEMPTS = 1
+private const val LOAD_RETRY_BASE_MS = 200L
 
 private data class FontPathEntry(val cdnPath: String, val hash: String)
 
@@ -43,9 +47,12 @@ object FontLoader {
 
   private fun fontKey(family: String, weight: Int): String = "$family:$weight"
 
-  fun loadFonts(document: FontLoader_Document) {
+  suspend fun loadFonts(document: FontLoader_Document) {
     updateFontPaths(document.fontFamilies)
     PlatformModule.editorHost.setFonts(document.fontFamilies.map { it.toFfi() })
+    for (editor in EditorRegistry.snapshot()) {
+      editor.enqueue(Message.System(SystemEvent.FontsChanged))
+    }
   }
 
   private fun updateFontPaths(families: List<FontLoader_Document.FontFamily>) {
@@ -71,24 +78,25 @@ object FontLoader {
     val baseUrl = "$CDN_BASE/${info.cdnPath}/${info.hash}"
 
     editor.scope.launch(Dispatchers.Default) {
-      coroutineScope {
-        for (fd in required) {
-          launch {
-            loadOnce(keyOf(family, weight, fd)) {
-              val bytes = getOrFetch(urlOf(baseUrl, fd))
-              when (fd) {
-                FontData.Base -> PlatformModule.editorHost.addFontBase(family, weight, bytes)
-                is FontData.Chunk ->
-                  PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
-              }
-            }
+      val hasBase = required.any { it is FontData.Base }
+      val chunks = required.filterIsInstance<FontData.Chunk>()
 
-            val loadedEvent =
-              when (fd) {
-                FontData.Base -> SystemEvent.FontBaseLoaded(family, weight)
-                is FontData.Chunk -> SystemEvent.FontChunkLoaded(family, weight, fd.id)
-              }
-            editor.enqueue(Message.System(loadedEvent))
+      if (hasBase) {
+        try {
+          load(editor, family, weight, FontData.Base, baseUrl, REQUIRED_LOAD_ATTEMPTS)
+        } catch (_: Exception) {
+          // best-effort
+        }
+      }
+
+      coroutineScope {
+        for (fd in chunks) {
+          launch {
+            try {
+              load(editor, family, weight, fd, baseUrl, REQUIRED_LOAD_ATTEMPTS)
+            } catch (_: Exception) {
+              // best-effort
+            }
           }
         }
       }
@@ -100,24 +108,51 @@ object FontLoader {
             is FontData.Chunk -> fd.id
           }
         preloadQueue.enqueue(keyOf(family, weight, fd), priority) {
-          loadOnce(keyOf(family, weight, fd)) {
-            val bytes = getOrFetch(urlOf(baseUrl, fd))
-            when (fd) {
-              FontData.Base -> PlatformModule.editorHost.addFontBase(family, weight, bytes)
-              is FontData.Chunk ->
-                PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
-            }
+          try {
+            load(editor, family, weight, fd, baseUrl, PREFETCH_LOAD_ATTEMPTS)
+          } catch (_: Exception) {
+            // best-effort
           }
-
-          val loadedEvent =
-            when (fd) {
-              FontData.Base -> SystemEvent.FontBaseLoaded(family, weight)
-              is FontData.Chunk -> SystemEvent.FontChunkLoaded(family, weight, fd.id)
-            }
-          editor.enqueue(Message.System(loadedEvent))
         }
       }
     }
+  }
+
+  private suspend fun load(
+    editor: Editor,
+    family: String,
+    weight: Int,
+    fd: FontData,
+    baseUrl: String,
+    attempts: Int,
+  ) {
+    loadOnce(keyOf(family, weight, fd)) {
+      var lastErr: Throwable? = null
+      for (attempt in 1..attempts) {
+        try {
+          val bytes = getOrFetch(urlOf(baseUrl, fd))
+          when (fd) {
+            FontData.Base -> PlatformModule.editorHost.addFontBase(family, weight, bytes)
+            is FontData.Chunk ->
+              PlatformModule.editorHost.addFontChunk(family, weight, fd.id, bytes)
+          }
+          return@loadOnce
+        } catch (e: Exception) {
+          lastErr = e
+          if (attempt < attempts) {
+            delay(LOAD_RETRY_BASE_MS * (1L shl (attempt - 1)))
+          }
+        }
+      }
+      throw lastErr ?: IllegalStateException("load failed without recorded error")
+    }
+
+    val loadedEvent =
+      when (fd) {
+        FontData.Base -> SystemEvent.FontBaseLoaded(family, weight)
+        is FontData.Chunk -> SystemEvent.FontChunkLoaded(family, weight, fd.id)
+      }
+    editor.enqueue(Message.System(loadedEvent))
   }
 
   private fun keyOf(family: String, weight: Int, fd: FontData): String =

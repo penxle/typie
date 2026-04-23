@@ -353,7 +353,7 @@ export type SelectionOp = { type: "all" } | { type: "set"; selection: Selection 
 
 export type StateField = "doc" | "selection" | "cursor" | "page_sizes" | "ime" | "modifiers";
 
-export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number };
+export type SystemEvent = { type: "initialize" } | { type: "resize"; width: number; height: number; scale_factor: number } | { type: "set_focused"; focused: boolean } | { type: "font_base_loaded"; family: string; weight: number } | { type: "font_chunk_loaded"; family: string; weight: number; chunk_id: number } | { type: "set_external_height"; node_id: NodeId; height: number } | { type: "fonts_changed" };
 
 export type TableBorderStyle = "solid" | "dashed" | "dotted" | "none";
 

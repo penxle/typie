@@ -26,7 +26,7 @@ private constructor(
   private val apolloClient: ApolloClient,
   private val query: () -> Query<D>,
   private val placeholderData: D?,
-  private val onInitialData: ((D) -> Unit)?,
+  private val onInitialData: (suspend (D) -> Unit)?,
   private val skip: () -> Boolean = { false },
   private val resetOnChange: Boolean = true,
 ) : Loadable<D> {
@@ -42,7 +42,7 @@ private constructor(
       scope: CoroutineScope,
       apolloClient: ApolloClient,
       query: () -> Query<D>,
-      onInitialData: ((D) -> Unit)? = null,
+      onInitialData: (suspend (D) -> Unit)? = null,
       skip: () -> Boolean = { false },
       resetOnChange: Boolean = true,
     ): WatchQuery<D, D?> =
@@ -53,7 +53,7 @@ private constructor(
       apolloClient: ApolloClient,
       query: () -> Query<D>,
       placeholderData: D,
-      onInitialData: ((D) -> Unit)? = null,
+      onInitialData: (suspend (D) -> Unit)? = null,
       skip: () -> Boolean = { false },
       resetOnChange: Boolean = true,
     ): WatchQuery<D, D> =
@@ -135,7 +135,7 @@ private constructor(
 
 fun <D : Query.Data> ApolloClient.watchQuery(
   scope: CoroutineScope,
-  onInitialData: ((D) -> Unit)? = null,
+  onInitialData: (suspend (D) -> Unit)? = null,
   skip: () -> Boolean = { false },
   resetOnChange: Boolean = true,
   query: () -> Query<D>,
@@ -152,7 +152,7 @@ fun <D : Query.Data> ApolloClient.watchQuery(
 fun <D : Query.Data> ApolloClient.watchQuery(
   scope: CoroutineScope,
   placeholderData: D,
-  onInitialData: ((D) -> Unit)? = null,
+  onInitialData: (suspend (D) -> Unit)? = null,
   skip: () -> Boolean = { false },
   resetOnChange: Boolean = true,
   query: () -> Query<D>,

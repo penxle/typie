@@ -1,4 +1,4 @@
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use skrifa::Tag;
 use skrifa::raw::FontRef;
 use smallvec::SmallVec;
@@ -24,6 +24,7 @@ pub struct FontRegistry {
     pub(super) font_versions: HashMap<(u16, u16), u64>,
     pub(super) loaded_chunks: HashMap<(u16, u16), Vec<bool>>,
     manifests: HashMap<(u16, u16), FontManifest>,
+    font_hashes: HashMap<(u16, u16), String>,
     placeholder_family_id: Option<u16>,
 }
 
@@ -38,21 +39,53 @@ impl FontRegistry {
             font_versions: HashMap::default(),
             loaded_chunks: HashMap::default(),
             manifests: HashMap::default(),
+            font_hashes: HashMap::default(),
             placeholder_family_id: None,
         }
     }
 
     pub fn set_fonts(&mut self, families: Vec<FontFamily>) {
+        // Phase 1: intern names and build the target (family_id, weight) -> hash map.
+        let mut new_hashes: HashMap<(u16, u16), String> = HashMap::default();
+        for family in &families {
+            if family.name == super::placeholder::PLACEHOLDER_FAMILY_NAME {
+                continue;
+            }
+            let family_id = self.intern(&family.name);
+            for w in &family.weights {
+                new_hashes.insert((family_id, w.value), w.hash.clone());
+            }
+        }
+
+        // Phase 2: compute which keys survive. Placeholder weights always stay;
+        // non-placeholder weights stay only if their hash is unchanged.
+        let placeholder_id = self.placeholder_family_id;
+        let surviving: HashSet<(u16, u16)> = self
+            .font_hashes
+            .iter()
+            .filter(|(key, old_hash)| {
+                new_hashes
+                    .get(*key)
+                    .map_or(false, |new_hash| new_hash == *old_hash)
+            })
+            .map(|(&key, _)| key)
+            .chain(
+                self.font_entries
+                    .keys()
+                    .filter(|key| Some(key.0) == placeholder_id)
+                    .copied(),
+            )
+            .collect();
+
+        // Phase 3: rebuild maps. Retain surviving byte-level state; drop the rest.
+        self.font_entries.retain(|key, _| surviving.contains(key));
+        self.font_versions.retain(|key, _| surviving.contains(key));
+        self.loaded_chunks.retain(|key, _| surviving.contains(key));
+        self.font_hashes.retain(|key, _| surviving.contains(key));
+
         self.families.clear();
         self.family_source.clear();
         self.manifests.clear();
-        self.loaded_chunks.clear();
-
-        let placeholder_id = self.placeholder_family_id;
-        self.font_entries
-            .retain(|(fid, _), _| Some(*fid) == placeholder_id);
-        self.font_versions
-            .retain(|(fid, _), _| Some(*fid) == placeholder_id);
 
         for family in families {
             if family.name == super::placeholder::PLACEHOLDER_FAMILY_NAME {
@@ -69,8 +102,15 @@ impl FontRegistry {
                 let manifest = FontManifest::from_coverages(&w.chunks);
                 let chunk_count = manifest.chunk_count as usize;
                 self.manifests.insert(key, manifest);
-                self.loaded_chunks.insert(key, vec![false; chunk_count]);
-                self.font_versions.insert(key, 0);
+
+                if !surviving.contains(&key) {
+                    self.loaded_chunks.insert(key, vec![false; chunk_count]);
+                    self.font_versions.insert(key, 0);
+                }
+                // If surviving, loaded_chunks bitmap and font_versions stay as-is;
+                // identical hash implies identical chunks layout.
+
+                self.font_hashes.insert(key, w.hash.clone());
             }
             weights.sort_unstable();
             weights.dedup();
@@ -552,5 +592,107 @@ mod tests {
         }]);
 
         assert!(!reg.has_family(PLACEHOLDER_FAMILY_NAME));
+    }
+
+    #[test]
+    fn set_fonts_preserves_bytes_when_hash_unchanged() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+        reg.add_font_chunk(fid, 400, 0, &make_chunk_data(&[(0, &[1])]))
+            .unwrap();
+
+        // Re-register with the SAME hash ("h400") and identical chunks layout.
+        reg.set_fonts(vec![FontFamily {
+            name: "T".into(),
+            source: FontFamilySource::Default,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h400".into(),
+                chunks: vec![vec![0x41, 0x41]],
+            }],
+        }]);
+
+        assert!(
+            reg.is_base_loaded(fid, 400),
+            "base bytes must survive set_fonts when hash is unchanged"
+        );
+        assert!(
+            reg.is_chunk_loaded(fid, 400, 0),
+            "chunk bitmap must survive set_fonts when hash is unchanged"
+        );
+    }
+
+    #[test]
+    fn set_fonts_drops_bytes_when_hash_changes() {
+        let mut reg = make_registry_with_family("T", &[400]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+        reg.add_font_chunk(fid, 400, 0, &make_chunk_data(&[(0, &[1])]))
+            .unwrap();
+
+        // Re-register with a DIFFERENT hash.
+        reg.set_fonts(vec![FontFamily {
+            name: "T".into(),
+            source: FontFamilySource::Default,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h400-v2".into(),
+                chunks: vec![vec![0x41, 0x41]],
+            }],
+        }]);
+
+        assert!(
+            !reg.is_base_loaded(fid, 400),
+            "base bytes must be dropped when hash changes"
+        );
+        assert!(
+            !reg.is_chunk_loaded(fid, 400, 0),
+            "chunk bitmap must be dropped when hash changes"
+        );
+    }
+
+    #[test]
+    fn set_fonts_drops_bytes_when_weight_removed() {
+        let mut reg = FontRegistry::new();
+        reg.set_fonts(vec![FontFamily {
+            name: "T".into(),
+            source: FontFamilySource::Default,
+            weights: vec![
+                FontWeight {
+                    value: 400,
+                    hash: "h400".into(),
+                    chunks: vec![vec![0x41, 0x41]],
+                },
+                FontWeight {
+                    value: 700,
+                    hash: "h700".into(),
+                    chunks: vec![vec![0x41, 0x41]],
+                },
+            ],
+        }]);
+        let fid = reg.intern_id("T").unwrap();
+        inject_base(&mut reg, fid, 400, vec![0u8; 20], 8);
+        inject_base(&mut reg, fid, 700, vec![0u8; 20], 8);
+
+        // Re-register without weight 700.
+        reg.set_fonts(vec![FontFamily {
+            name: "T".into(),
+            source: FontFamilySource::Default,
+            weights: vec![FontWeight {
+                value: 400,
+                hash: "h400".into(),
+                chunks: vec![vec![0x41, 0x41]],
+            }],
+        }]);
+
+        assert!(
+            reg.is_base_loaded(fid, 400),
+            "retained weight keeps its bytes"
+        );
+        assert!(
+            !reg.is_base_loaded(fid, 700),
+            "removed weight drops its bytes"
+        );
     }
 }

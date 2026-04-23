@@ -13,34 +13,7 @@ use crate::state_field::StateField;
 pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<(), EditorError> {
     match event {
         SystemEvent::Initialize => {
-            editor.pending_fonts = collect_font_requests(&editor.state.doc);
-
-            let requests: Vec<_> = editor
-                .pending_fonts
-                .iter()
-                .map(|((family, weight), nodes)| {
-                    let all_cps: Vec<u32> = nodes
-                        .values()
-                        .flatten()
-                        .copied()
-                        .collect::<HashSet<u32>>()
-                        .into_iter()
-                        .collect();
-                    (family.clone(), *weight, all_cps)
-                })
-                .collect();
-
-            editor.transact(|tr| {
-                for (family, weight, codepoints) in requests {
-                    tr.push_effect(Effect::LoadFont {
-                        family,
-                        weight,
-                        codepoints,
-                    });
-                }
-                Ok(())
-            })?;
-
+            reresolve_fonts(editor)?;
             editor.view.layout(&editor.state.doc);
             editor.push_event(EditorEvent::StateChanged {
                 fields: StateField::iter().collect(),
@@ -75,6 +48,10 @@ pub fn handle_system_event(editor: &mut Editor, event: SystemEvent) -> Result<()
 
         SystemEvent::SetExternalHeight { node_id, height } => {
             editor.view.set_external_height(node_id, height);
+        }
+
+        SystemEvent::FontsChanged => {
+            reresolve_fonts(editor)?;
         }
     }
     Ok(())
@@ -120,6 +97,36 @@ fn retry_pending_on_load(editor: &mut Editor, family: &str) {
     {
         editor.push_event(EditorEvent::RenderInvalidated);
     }
+}
+
+fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
+    editor.pending_fonts = collect_font_requests(&editor.state.doc);
+
+    let requests: Vec<_> = editor
+        .pending_fonts
+        .iter()
+        .map(|((family, weight), nodes)| {
+            let all_cps: Vec<u32> = nodes
+                .values()
+                .flatten()
+                .copied()
+                .collect::<HashSet<u32>>()
+                .into_iter()
+                .collect();
+            (family.clone(), *weight, all_cps)
+        })
+        .collect();
+
+    editor.transact(|tr| {
+        for (family, weight, codepoints) in requests {
+            tr.push_effect(Effect::LoadFont {
+                family,
+                weight,
+                codepoints,
+            });
+        }
+        Ok(())
+    })
 }
 
 pub(crate) fn collect_font_requests(
@@ -793,6 +800,101 @@ mod tests {
             !events
                 .iter()
                 .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+    }
+
+    #[test]
+    fn fonts_changed_emits_font_data_missing_after_late_set_fonts() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+
+        let initial_events = editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let has_missing_on_initialize = initial_events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, .. } if family == "TestFont"
+            )
+        });
+        assert!(
+            !has_missing_on_initialize,
+            "Initialize must not emit FontDataMissing when family is absent from registry"
+        );
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h1", 0x41, 0x41));
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontsChanged,
+        });
+
+        let has_missing = events.iter().any(|e| {
+            matches!(
+                e,
+                EditorEvent::FontDataMissing { family, weight, required, .. }
+                    if family == "TestFont"
+                        && *weight == 400
+                        && required.len() == 2
+                        && matches!(required[0], FontData::Base)
+                        && matches!(required[1], FontData::Chunk { id: 0 })
+            )
+        });
+        assert!(
+            has_missing,
+            "FontsChanged after set_fonts must emit FontDataMissing for the newly registered family"
+        );
+    }
+
+    #[test]
+    fn fonts_changed_is_idempotent_when_ready() {
+        let (state, ..) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    paragraph { t1: text("A") }
+                }
+            }
+            selection: (t1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h1", 0x41, 0x41));
+            resource
+                .add_font_base("TestFont", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontsChanged,
+        });
+
+        let has_missing = events.iter().any(
+            |e| matches!(e, EditorEvent::FontDataMissing { family, .. } if family == "TestFont"),
+        );
+        assert!(
+            !has_missing,
+            "FontsChanged must not emit FontDataMissing when all required bytes are loaded"
         );
     }
 }

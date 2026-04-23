@@ -69,7 +69,7 @@ private class FakeFfiEditor(var onTick: () -> List<EditorEvent> = { emptyList() 
 }
 
 private val sampleMessage: Message = Message.System(SystemEvent.Initialize)
-private val nextMessage: Message = Message.System(SystemEvent.FontManifestLoaded("Pretendard", 400))
+private val nextMessage: Message = Message.System(SystemEvent.FontBaseLoaded("Pretendard", 400))
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EditorDispatchTest {

@@ -136,6 +136,7 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
   }
 
   fun dispose() {
+    EditorRegistry.unregisterAsync(this)
     val waiters = dispatches.toList()
     dispatches.clear()
     waiters.forEach { it.cancel() }
@@ -176,6 +177,8 @@ internal constructor(private val inner: co.typie.editor.ffi.Editor, val scope: C
 
         editor.on<EditorEvent.StateChanged>(editor.stateChangedHandler)
         editor.on<EditorEvent.FontDataMissing>(FontLoader.fontDataMissingHandler)
+
+        EditorRegistry.register(editor)
 
         editor.enqueue(Message.System(SystemEvent.Initialize))
 

@@ -2,6 +2,7 @@ import { createContext } from 'svelte';
 import { match } from 'ts-pattern';
 import { initWasm, wasm } from '$lib/wasm-ffi.svelte';
 import { fontDataMissingHandler } from './fonts';
+import { register, unregister } from './registry';
 import type { CursorRect, Doc, Editor as WasmEditor, EditorEvent, Message, Selection, Size, Viewport } from '@typie/editor-ffi/browser';
 import type { EditorEventListener } from './types';
 
@@ -54,6 +55,8 @@ export class Editor {
 
     self.on('state_changed', self.#stateChangedHandler);
     self.on('font_data_missing', fontDataMissingHandler);
+
+    register(self);
 
     self.enqueue({ type: 'system', event: { type: 'initialize' } });
 
@@ -239,6 +242,8 @@ export class Editor {
   };
 
   destroy(): void {
+    unregister(this);
+
     if (this.#rafId !== null) {
       cancelAnimationFrame(this.#rafId);
       this.#rafId = null;
