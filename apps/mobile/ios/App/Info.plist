@@ -48,9 +48,9 @@
 	<key>NAVER_CLIENT_SECRET</key>
 	<string>$(NAVER_CLIENT_SECRET)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Allow access to your photo library to add post images and update your profile picture.</string>
+	<string>Allow access to your photo library to use photos in your documents, profile, and spaces.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Allow Typie to save your activity image to the photo library.</string>
+	<string>Allow access to save photos to your photo library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
