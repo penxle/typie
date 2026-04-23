@@ -1,4 +1,6 @@
 use editor_model::{Doc, Modifier, Node, NodeId};
+use editor_resource::Resolution;
+use editor_schema::NodeSpecExt;
 use editor_transaction::Effect;
 use editor_view::Viewport;
 use hashbrown::{HashMap, HashSet};
@@ -100,7 +102,10 @@ fn retry_pending_on_load(editor: &mut Editor, family: &str) {
 }
 
 fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
-    editor.pending_fonts = collect_font_requests(&editor.state.doc);
+    {
+        let resource = editor.resource.lock().unwrap();
+        editor.pending_fonts = collect_font_requests(&editor.state.doc, &resource.font_registry);
+    }
 
     let requests: Vec<_> = editor
         .pending_fonts
@@ -131,51 +136,68 @@ fn reresolve_fonts(editor: &mut Editor) -> Result<(), EditorError> {
 
 pub(crate) fn collect_font_requests(
     doc: &Doc,
+    font_registry: &editor_resource::FontRegistry,
 ) -> HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>> {
     let mut result: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>> = HashMap::new();
 
     for descendant in doc.root().descendants() {
-        let Node::Text(text_node) = descendant.node() else {
-            continue;
-        };
+        let (family, weight) = resolve_font_for_node(&descendant);
 
-        let mut family: Option<String> = None;
-        let mut weight: Option<u16> = None;
-
-        for ancestor in descendant.ancestors() {
-            for m in ancestor.modifiers() {
-                match m {
-                    Modifier::FontFamily { value } if family.is_none() => {
-                        family = Some(value.clone());
-                    }
-                    Modifier::FontWeight { value } if weight.is_none() => {
-                        weight = Some(*value);
-                    }
-                    _ => {}
-                }
+        if let Node::Text(text_node) = descendant.node() {
+            let codepoints: HashSet<u32> = text_node.text.chars().map(|c| c as u32).collect();
+            if !codepoints.is_empty() {
+                result
+                    .entry((family, weight))
+                    .or_default()
+                    .entry(descendant.id())
+                    .or_default()
+                    .extend(codepoints);
             }
-
-            if family.is_some() && weight.is_some() {
-                break;
+        } else if descendant.spec().is_textblock() {
+            let Some(family_id) = font_registry.intern_id(&family) else {
+                continue;
+            };
+            if matches!(
+                font_registry.resolve(family_id, weight, ' ' as u32),
+                Resolution::Pending { .. }
+            ) {
+                result
+                    .entry((family, weight))
+                    .or_default()
+                    .entry(descendant.id())
+                    .or_default()
+                    .insert(' ' as u32);
             }
-        }
-
-        // Root invariant: FontFamily/FontWeight always present
-        let family = family.unwrap();
-        let weight = weight.unwrap();
-
-        let codepoints: HashSet<u32> = text_node.text.chars().map(|c| c as u32).collect();
-        if !codepoints.is_empty() {
-            result
-                .entry((family, weight))
-                .or_default()
-                .entry(descendant.id())
-                .or_default()
-                .extend(codepoints);
         }
     }
 
     result
+}
+
+fn resolve_font_for_node(node: &editor_model::NodeRef<'_>) -> (String, u16) {
+    let mut family: Option<String> = None;
+    let mut weight: Option<u16> = None;
+
+    for ancestor in node.ancestors() {
+        for m in ancestor.modifiers() {
+            match m {
+                Modifier::FontFamily { value } if family.is_none() => {
+                    family = Some(value.clone());
+                }
+                Modifier::FontWeight { value } if weight.is_none() => {
+                    weight = Some(*value);
+                }
+                _ => {}
+            }
+        }
+
+        if family.is_some() && weight.is_some() {
+            break;
+        }
+    }
+
+    // Root invariant: FontFamily/FontWeight always present
+    (family.unwrap(), weight.unwrap())
 }
 
 #[cfg(test)]
@@ -222,7 +244,7 @@ mod tests {
             }
         };
 
-        let result = collect_font_requests(&doc);
+        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
 
         let key = ("Arial".to_string(), 400u16);
         assert!(result.contains_key(&key));
@@ -246,7 +268,7 @@ mod tests {
             }
         };
 
-        let result = collect_font_requests(&doc);
+        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
 
         assert!(result.contains_key(&("Pretendard".to_string(), 400)));
         assert!(result.contains_key(&("Pretendard".to_string(), 700)));
@@ -263,7 +285,7 @@ mod tests {
             }
         };
 
-        let result = collect_font_requests(&doc);
+        let result = collect_font_requests(&doc, &editor_resource::FontRegistry::new());
         let nodes = &result[&("Arial".to_string(), 400)];
 
         assert_eq!(nodes.len(), 2);
@@ -469,6 +491,63 @@ mod tests {
                 .is_some_and(|n| n.contains_key(&t2))
         );
 
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, EditorEvent::RenderInvalidated))
+        );
+    }
+
+    #[test]
+    fn empty_paragraph_tracked_and_invalidated_on_font_load() {
+        let (state, p1, p2) = state! {
+            doc {
+                root [font_family("TestFont".to_string()), font_weight(400)] {
+                    p1: paragraph
+                    p2: paragraph
+                }
+            }
+            selection: (p1, 0)
+        };
+
+        let mut editor = Editor::new_test(state);
+        // Config covers ' ' (space) so strut resolves Pending before load.
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource.set_fonts(test_config_single_chunk("TestFont", 400, "h", 0x20, 0x20));
+        }
+        editor.apply(Message::System {
+            event: SystemEvent::Initialize,
+        });
+
+        let key = ("TestFont".to_string(), 400u16);
+        assert!(
+            editor.pending_fonts[&key].contains_key(&p1),
+            "empty paragraph must be in pending_fonts before font load"
+        );
+        assert!(editor.pending_fonts[&key].contains_key(&p2));
+
+        {
+            let mut resource = editor.resource.lock().unwrap();
+            resource
+                .add_font_base("TestFont", 400, &fake_base_bytes())
+                .unwrap();
+            resource
+                .add_font_chunk("TestFont", 400, 0, &fake_chunk_bytes())
+                .unwrap();
+        }
+
+        let events = editor.apply(Message::System {
+            event: SystemEvent::FontBaseLoaded {
+                family: "TestFont".to_string(),
+                weight: 400,
+            },
+        });
+
+        assert!(
+            !editor.pending_fonts.contains_key(&key),
+            "all entries should clear once the space codepoint becomes Ready"
+        );
         assert!(
             events
                 .iter()
