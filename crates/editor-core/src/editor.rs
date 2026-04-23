@@ -26,9 +26,9 @@ pub struct Editor {
     pub(crate) resource: Arc<Mutex<Resource>>,
     pub(crate) is_dragging: bool,
     message_queue: Vec<Message>,
-    pending_events: Vec<EditorEvent>,
+    pending_events: HashSet<EditorEvent>,
     pending_steps: Vec<Step>,
-    pending_effects: Vec<Effect>,
+    pending_effects: HashSet<Effect>,
     pub(crate) pending_fonts: HashMap<(String, u16), HashMap<NodeId, HashSet<u32>>>,
 }
 
@@ -42,9 +42,9 @@ impl Editor {
             resource,
             is_dragging: false,
             message_queue: Vec::new(),
-            pending_events: Vec::new(),
+            pending_events: HashSet::new(),
             pending_steps: Vec::new(),
-            pending_effects: Vec::new(),
+            pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
         }
     }
@@ -153,7 +153,9 @@ impl Editor {
             });
         }
 
-        Ok(std::mem::take(&mut self.pending_events))
+        Ok(std::mem::take(&mut self.pending_events)
+            .into_iter()
+            .collect())
     }
 
     pub fn render_page(&mut self, page_idx: u32, sink: &mut dyn RenderSink, scale_factor: f32) {
@@ -246,10 +248,17 @@ impl Editor {
     }
 
     pub(crate) fn push_event(&mut self, event: EditorEvent) {
-        self.pending_events.push(event);
+        let event = match event {
+            EditorEvent::StateChanged { mut fields } => {
+                fields.sort_unstable();
+                EditorEvent::StateChanged { fields }
+            }
+            other => other,
+        };
+        self.pending_events.insert(event);
     }
 
-    fn process_effects(&mut self, effects: Vec<Effect>) {
+    fn process_effects(&mut self, effects: HashSet<Effect>) {
         for effect in effects {
             match effect {
                 Effect::LoadFont {
@@ -358,9 +367,9 @@ impl Editor {
             resource,
             is_dragging: false,
             message_queue: Vec::new(),
-            pending_events: Vec::new(),
+            pending_events: HashSet::new(),
             pending_steps: Vec::new(),
-            pending_effects: Vec::new(),
+            pending_effects: HashSet::new(),
             pending_fonts: HashMap::new(),
         }
     }
@@ -494,11 +503,11 @@ mod tests {
             resource.set_fonts(families);
         }
 
-        editor.process_effects(vec![Effect::LoadFont {
+        editor.process_effects(HashSet::from([Effect::LoadFont {
             family: "Inter".to_string(),
             weight: 400,
             codepoints: vec![65, 66],
-        }]);
+        }]));
         let events = std::mem::take(&mut editor.pending_events);
 
         let has_data_missing = events.iter().any(|e| {
@@ -593,5 +602,110 @@ mod tests {
 
         let cursor_in_window = ctx.selection.start - ctx.window_start;
         assert!(cursor_in_window > 0, "cursor should be after Open tokens");
+    }
+
+    #[test]
+    fn tick_dedups_render_invalidated() {
+        let (mut editor, _) = test_editor();
+        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.push_event(EditorEvent::RenderInvalidated);
+        editor.push_event(EditorEvent::RenderInvalidated);
+
+        let events = editor.tick().unwrap();
+
+        let count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::RenderInvalidated))
+            .count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn tick_dedups_identical_state_changed() {
+        let (mut editor, _) = test_editor();
+        let ev = EditorEvent::StateChanged {
+            fields: vec![StateField::Doc],
+        };
+        editor.push_event(ev.clone());
+        editor.push_event(ev);
+
+        let events = editor.tick().unwrap();
+
+        let count = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    EditorEvent::StateChanged { fields } if fields == &vec![StateField::Doc]
+                )
+            })
+            .count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn tick_keeps_state_changed_with_different_fields() {
+        let (mut editor, _) = test_editor();
+        editor.push_event(EditorEvent::StateChanged {
+            fields: vec![StateField::Doc],
+        });
+        editor.push_event(EditorEvent::StateChanged {
+            fields: vec![StateField::Selection],
+        });
+
+        let events = editor.tick().unwrap();
+
+        let count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::StateChanged { .. }))
+            .count();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn pending_effects_dedups_identical_load_font() {
+        let (mut editor, _) = test_editor();
+
+        editor
+            .transact(|tr| {
+                tr.push_effect(Effect::LoadFont {
+                    family: "X".into(),
+                    weight: 400,
+                    codepoints: vec![65],
+                });
+                Ok(())
+            })
+            .unwrap();
+        editor
+            .transact(|tr| {
+                tr.push_effect(Effect::LoadFont {
+                    family: "X".into(),
+                    weight: 400,
+                    codepoints: vec![65],
+                });
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(editor.pending_effects.len(), 1);
+    }
+
+    #[test]
+    fn state_changed_dedups_regardless_of_fields_order() {
+        let (mut editor, _) = test_editor();
+        editor.push_event(EditorEvent::StateChanged {
+            fields: vec![StateField::Doc, StateField::Selection],
+        });
+        editor.push_event(EditorEvent::StateChanged {
+            fields: vec![StateField::Selection, StateField::Doc],
+        });
+
+        let events = editor.tick().unwrap();
+
+        let count = events
+            .iter()
+            .filter(|e| matches!(e, EditorEvent::StateChanged { .. }))
+            .count();
+        assert_eq!(count, 1);
     }
 }

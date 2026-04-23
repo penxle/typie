@@ -2,7 +2,7 @@ use editor_macros::ffi;
 use serde::{Deserialize, Serialize};
 
 #[ffi]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Effect {
     LoadFont {

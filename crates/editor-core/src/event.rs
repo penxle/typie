@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::state_field::StateField;
 
 #[ffi]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FontData {
     Base,
@@ -12,7 +12,7 @@ pub enum FontData {
 }
 
 #[ffi]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EditorEvent {
     StateChanged {
