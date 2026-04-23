@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use editor_resource::{PLACEHOLDER_FAMILY_NAME, Resource};
+use editor_resource::{PLACEHOLDER_FAMILY_NAME, PLACEHOLDER_WEIGHT, Resolution, Resource};
 use parley::style::{FontFamily, FontFamilyName, FontWeight, LineHeight, TextStyle};
 
 use super::resolve::ResolvedTextStyle;
@@ -11,15 +11,38 @@ pub struct StrutMetrics {
 }
 
 pub fn compute_strut(resource: &mut Resource, style: &ResolvedTextStyle) -> Option<StrutMetrics> {
-    if let Some(m) = strut_for_family(resource, style, &style.font_family) {
-        return Some(m);
-    }
-    strut_for_family(resource, style, PLACEHOLDER_FAMILY_NAME)
+    let requested_family_id = resource.font_registry.intern(&style.font_family);
+    let placeholder_id = resource.font_registry.placeholder_family_id()?;
+
+    let (family_id, weight) =
+        match resource
+            .font_registry
+            .resolve(requested_family_id, style.font_weight, ' ' as u32)
+        {
+            Resolution::Ready(target) => (target.family_id, target.weight),
+            Resolution::Pending {
+                target,
+                needs_base: false,
+            } => (target.family_id, target.weight),
+            Resolution::Pending {
+                needs_base: true, ..
+            }
+            | Resolution::Missing => (placeholder_id, PLACEHOLDER_WEIGHT),
+        };
+
+    let family_name = resource
+        .font_registry
+        .family_name_opt(family_id)
+        .unwrap_or(PLACEHOLDER_FAMILY_NAME)
+        .to_owned();
+
+    strut_for_family(resource, style.font_size, weight, &family_name)
 }
 
 fn strut_for_family(
     resource: &mut Resource,
-    style: &ResolvedTextStyle,
+    font_size: f32,
+    weight: u16,
     family_name: &str,
 ) -> Option<StrutMetrics> {
     let text = " ";
@@ -29,10 +52,10 @@ fn strut_for_family(
             .style_run_builder(&mut resource.font_context, text, 1.0, true);
 
     let parley_style = TextStyle {
-        font_size: style.font_size,
-        font_weight: FontWeight::new(style.font_weight as f32),
+        font_size,
+        font_weight: FontWeight::new(weight as f32),
         font_family: FontFamily::Single(FontFamilyName::Named(Cow::Owned(family_name.to_string()))),
-        line_height: LineHeight::Absolute(style.font_size),
+        line_height: LineHeight::Absolute(font_size),
         ..TextStyle::default()
     };
 

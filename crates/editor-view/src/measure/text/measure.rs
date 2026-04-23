@@ -29,21 +29,25 @@ pub fn measure_inline_text(
 
     if text.is_empty() {
         drop(resource);
-        let height =
-            (base_style.font_size * base_style.line_height).max(strut.ascent + strut.descent);
+        let ascent = strut.ascent;
+        let descent = strut.descent;
+        let content_height = ascent + descent;
+        let line_box_height = (base_style.font_size * base_style.line_height).max(content_height);
+        let leading = (line_box_height - content_height).max(0.0);
+        let baseline = leading / 2.0 + ascent;
         let line = Arc::new(MeasuredNode {
             width,
-            height,
+            height: line_box_height,
             content: MeasuredContent::Line(MeasuredLine {
                 node_id,
-                baseline: strut.ascent,
-                ascent: strut.ascent,
-                descent: strut.descent,
+                baseline,
+                ascent,
+                descent,
                 glyph_runs: vec![],
                 text_indent: indent,
             }),
         });
-        return (vec![line], height);
+        return (vec![line], line_box_height);
     }
 
     let style_runs = resolve_style_runs(&text, &runs, &mut resource.font_registry);
