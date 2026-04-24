@@ -85,7 +85,7 @@ internal fun EditorZoomOverlay(modifier: Modifier = Modifier) {
       modifier =
         Modifier.clip(ZoomOverlayShape)
           .border(1.dp, AppTheme.colors.borderEmphasis, ZoomOverlayShape)
-          .background(AppTheme.colors.surfaceInset.copy(alpha = 0.95f), ZoomOverlayShape)
+          .background(AppTheme.colors.surfaceDefault.copy(alpha = 0.95f), ZoomOverlayShape)
           .width(ZoomOverlayWidth)
           .padding(vertical = 8.dp),
       contentAlignment = Alignment.Center,

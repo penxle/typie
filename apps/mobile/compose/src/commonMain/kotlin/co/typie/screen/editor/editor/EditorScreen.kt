@@ -122,12 +122,15 @@ fun EditorScreen(entityId: String) {
     scrollOffset = null,
   )
 
-  Screen(
-    loadable = model.query,
-    background = AppTheme.colors.surfaceDefault,
-    contentPadding = PaddingValues(),
-  ) { contentPadding ->
-    val layoutSpec = model.documentLayoutSpec
+  val layoutSpec = model.documentLayoutSpec
+  val background =
+    when (layoutSpec) {
+      is EditorDocumentLayoutSpec.Paginated -> AppTheme.colors.surfaceCanvas
+      is EditorDocumentLayoutSpec.Continuous -> AppTheme.colors.surfaceDefault
+    }
+
+  Screen(loadable = model.query, background = background, contentPadding = PaddingValues()) {
+    contentPadding ->
     val editor = runtime.editor
     val pageSizes = editor?.pageSizes.orEmpty()
     val density = LocalDensity.current.density
