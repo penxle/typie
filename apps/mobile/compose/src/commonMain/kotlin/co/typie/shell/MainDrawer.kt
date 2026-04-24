@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,16 +28,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.zIndex
@@ -84,6 +85,7 @@ import co.typie.ui.theme.AppShapes
 import co.typie.ui.theme.AppTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 @Composable
@@ -403,21 +405,27 @@ fun MainDrawerOverlay(drawer: Drawer) {
       )
     }
 
-    val rawOffset = if (drawer.state.offset.isNaN()) -panelWidthPx else drawer.state.offset
-    val progress =
-      if (panelWidthPx == 0f) 0f else ((rawOffset + panelWidthPx) / panelWidthPx).coerceIn(0f, 1f)
+    var drawerVisible by
+      remember(drawer, panelWidthPx) { mutableStateOf(drawer.visibleProgress(panelWidthPx) > 0f) }
+    LaunchedEffect(drawer, panelWidthPx) {
+      snapshotFlow { drawer.visibleProgress(panelWidthPx) > 0f }
+        .distinctUntilChanged()
+        .collect { drawerVisible = it }
+    }
 
-    if (progress > 0f) {
-      // Drawer가 열리는 중/열린 상태에서 아래 화면으로 터치(스크롤 등)가 새지 않도록 차단.
-      // scrim보다 먼저 composed → scrim이 top-drawn → Main pass에서 scrim이 먼저 click/cancel 판정 후
-      // 이 overlay가 나머지 drag 이벤트를 consume한다. scrim의 clickable(close)은 유지.
-      Box(Modifier.fillMaxSize().pointerIgnore())
+    if (drawerVisible) {
       Box(
-        modifier =
-          Modifier.fillMaxSize()
-            .background(AppTheme.colors.scrim.copy(alpha = progress * DrawerDefaults.ScrimAlpha))
-            .clickable { drawer.close() }
+        Modifier.fillMaxSize()
+          .graphicsLayer {
+            alpha = drawer.visibleProgress(panelWidthPx) * DrawerDefaults.ScrimAlpha
+          }
+          .background(AppTheme.colors.scrim)
       )
+      // Drawer가 열리는 중/열린 상태에서 아래 화면으로 터치(스크롤 등)가 새지 않도록 차단.
+      // blocker보다 click layer가 나중에 composed되어 tap-close 판정을 먼저 받고,
+      // blocker는 나머지 drag 이벤트가 아래 화면으로 새지 않도록 consume한다.
+      Box(Modifier.fillMaxSize().pointerIgnore())
+      Box(modifier = Modifier.fillMaxSize().clickable { drawer.close() })
     }
 
     PlatformBackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
@@ -430,7 +438,12 @@ fun MainDrawerOverlay(drawer: Drawer) {
           .zIndex(1f)
           .fillMaxHeight()
           .width(panelWidthDp)
-          .offset { IntOffset(rawOffset.roundToInt(), 0) }
+          .layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            layout(placeable.width, placeable.height) {
+              placeable.placeWithLayer(drawer.offsetOrClosed(panelWidthPx).roundToInt(), 0)
+            }
+          }
           .anchoredDraggable(
             state = drawer.state,
             orientation = Orientation.Horizontal,
@@ -444,6 +457,15 @@ fun MainDrawerOverlay(drawer: Drawer) {
     }
   }
 }
+
+private fun Drawer.offsetOrClosed(panelWidthPx: Float): Float {
+  val offset = state.offset
+  return if (offset.isNaN()) -panelWidthPx else offset
+}
+
+private fun Drawer.visibleProgress(panelWidthPx: Float): Float =
+  if (panelWidthPx == 0f) 0f
+  else ((offsetOrClosed(panelWidthPx) + panelWidthPx) / panelWidthPx).coerceIn(0f, 1f)
 
 @Composable
 fun mainDrawerSwipeToOpenModifier(drawer: Drawer, enabled: Boolean): Modifier {
