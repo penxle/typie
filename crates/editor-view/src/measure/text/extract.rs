@@ -161,7 +161,14 @@ pub fn extract_lines(
         let descent = metrics.descent.max(strut.descent);
         let content_height = ascent + descent;
 
-        let line_box_height = (base_font_size * line_height_ratio).max(content_height);
+        let max_run_font_size = line
+            .items()
+            .filter_map(|item| match item {
+                parley::PositionedLayoutItem::GlyphRun(gr) => Some(gr.run().font_size()),
+                _ => None,
+            })
+            .fold(base_font_size, f32::max);
+        let line_box_height = (max_run_font_size * line_height_ratio).max(content_height);
         let leading = (line_box_height - content_height).max(0.0);
         let baseline = leading / 2.0 + ascent;
 

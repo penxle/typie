@@ -8,12 +8,14 @@ use crate::measure::text::measure::measure_inline_text;
 use crate::measure::text::resolve::resolve_paragraph_indent;
 use crate::measure::{MeasuredBox, MeasuredContent, MeasuredNode};
 use crate::style::{BorderMode, BoxStyle, Direction};
+use crate::view_state::ViewState;
 
 pub fn measure_paragraph(
     measurer: &mut Measurer,
     doc: &Doc,
     node: &NodeRef<'_>,
     width: f32,
+    view_state: &ViewState,
 ) -> MeasuredNode {
     let indent = resolve_paragraph_indent(node);
     let align = node
@@ -25,7 +27,8 @@ pub fn measure_paragraph(
         })
         .unwrap_or_default();
 
-    let (children, total_height) = measure_inline_text(measurer, doc, node, width, align, indent);
+    let (children, total_height) =
+        measure_inline_text(measurer, doc, node, width, align, indent, view_state);
     let alignment = align_to_layout(align);
 
     MeasuredNode {

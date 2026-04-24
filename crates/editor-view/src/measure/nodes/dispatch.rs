@@ -25,7 +25,7 @@ pub(crate) fn measure_node(
     view_state: &ViewState,
 ) -> MeasuredNode {
     match node.node() {
-        Node::Paragraph(_) => measure_paragraph(measurer, doc, node, width),
+        Node::Paragraph(_) => measure_paragraph(measurer, doc, node, width, view_state),
         Node::ListItem(_) => measure_list_item(measurer, doc, node, width, view_state),
         Node::Blockquote(_) => measure_blockquote(measurer, doc, node, width, view_state),
         Node::Callout(_) => measure_callout(measurer, doc, node, width, view_state),

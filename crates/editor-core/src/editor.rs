@@ -1,12 +1,11 @@
 use editor_common::time::Duration;
-use editor_model::NodeId;
+use editor_model::{Node, NodeId};
 use editor_renderer::{Mark, MarkData, RenderSink, Renderer, ThemeVariant};
 use editor_resource::Resource;
-use editor_schema::{DocFlatExt, ResolvedPositionFlatExt};
+use editor_schema::{DocFlatExt, NodeSpecExt, ResolvedPositionFlatExt};
 use editor_state::{Position, ResolvedPosition, State};
 use editor_transaction::{Effect, HistoryMeta, Step, Transaction};
-use editor_view::View;
-use editor_view::Viewport;
+use editor_view::{PendingStyle, View, Viewport};
 use hashbrown::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -17,6 +16,27 @@ use crate::history::History;
 use crate::ime::{Ime, ImeRange};
 use crate::message::*;
 use crate::state_field::StateField;
+
+fn normalize_pending_style(state: &State) -> Option<PendingStyle> {
+    if state.pending_modifiers.is_empty() {
+        return None;
+    }
+    let textblock = state
+        .doc
+        .node(state.selection.head.node_id)?
+        .ancestors()
+        .find(|n| n.spec().is_textblock())?;
+    let is_empty = textblock
+        .children()
+        .all(|c| matches!(c.node(), Node::Text(t) if t.text.is_empty()));
+    if !is_empty {
+        return None;
+    }
+    Some(PendingStyle {
+        node_id: textblock.id(),
+        modifiers: state.pending_modifiers.clone(),
+    })
+}
 
 pub struct Editor {
     pub(crate) state: State,
@@ -125,7 +145,13 @@ impl Editor {
         let steps = std::mem::take(&mut self.pending_steps);
         let mut fields = HashSet::new();
 
-        if !steps.is_empty() && self.view.reconcile(&old_doc, &self.state.doc, &steps) {
+        let pending_style = normalize_pending_style(&self.state);
+        if !steps.is_empty()
+            && self
+                .view
+                .reconcile(&old_doc, &self.state.doc, &steps, pending_style)
+        {
+            fields.insert(StateField::Cursor);
             fields.insert(StateField::PageSizes);
             self.push_event(EditorEvent::RenderInvalidated);
         }
@@ -142,8 +168,8 @@ impl Editor {
 
         if steps.iter().any(|s| s.is_selection_step()) {
             fields.insert(StateField::Cursor);
-            fields.insert(StateField::Selection);
             fields.insert(StateField::Ime);
+            fields.insert(StateField::Selection);
             self.push_event(EditorEvent::RenderInvalidated);
         }
 
@@ -382,11 +408,53 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
-    use editor_macros::state;
-    use editor_model::NodeId;
-    use editor_state::{Position, Selection};
+    use editor_macros::{doc, state};
+    use editor_model::{Modifier, NodeId};
+    use editor_state::{PendingModifier, PendingModifiers, Position, Selection};
 
     use super::*;
+
+    fn build_state(doc: editor_model::Doc, head: Position, pending: PendingModifiers) -> State {
+        let mut s = State::new(doc, Selection::collapsed(head));
+        s.pending_modifiers = pending;
+        s
+    }
+
+    #[test]
+    fn normalize_empty_pending_returns_none() {
+        let (doc, p1) = doc! { root { p1: paragraph } };
+        let s = build_state(doc, Position::new(p1, 0), PendingModifiers::new());
+        assert!(normalize_pending_style(&s).is_none());
+    }
+
+    #[test]
+    fn normalize_non_empty_paragraph_returns_none() {
+        let (doc, p1) = doc! { root { p1: paragraph { text("hi") } } };
+        let mut pending = PendingModifiers::new();
+        pending.push(PendingModifier::Set(Modifier::Bold));
+        let s = build_state(doc, Position::new(p1, 0), pending);
+        assert!(normalize_pending_style(&s).is_none());
+    }
+
+    #[test]
+    fn normalize_empty_paragraph_returns_some_with_container_id() {
+        let (doc, p1) = doc! { root { p1: paragraph } };
+        let mut pending = PendingModifiers::new();
+        pending.push(PendingModifier::Set(Modifier::FontSize { value: 9600 }));
+        let s = build_state(doc, Position::new(p1, 0), pending.clone());
+        let ps = normalize_pending_style(&s).expect("Some");
+        assert_eq!(ps.node_id, p1);
+        assert_eq!(ps.modifiers, pending);
+    }
+
+    #[test]
+    fn normalize_head_on_text_child_ascends_to_textblock() {
+        let (doc, _p1, t1) = doc! { root { _p1: paragraph { t1: text("hi") } } };
+        let mut pending = PendingModifiers::new();
+        pending.push(PendingModifier::Set(Modifier::Bold));
+        let s = build_state(doc, Position::new(t1, 0), pending);
+        assert!(normalize_pending_style(&s).is_none());
+    }
 
     fn test_editor() -> (Editor, NodeId) {
         let (state, t) = state! {

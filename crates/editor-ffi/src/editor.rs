@@ -40,7 +40,7 @@ impl Editor {
                 Ok(inner
                     .editor
                     .view()
-                    .cursor_metrics(&state.doc, &selection.head, &state.pending_modifiers)
+                    .cursor_metrics(&state.doc, &selection.head)
                     .into_ffi()?)
             } else {
                 Ok(None)

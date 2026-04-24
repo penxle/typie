@@ -1,20 +1,18 @@
 use editor_common::{EdgeInsets, Movement};
-use editor_model::{Doc, LayoutMode, Modifier, NodeId};
+use editor_model::{Doc, LayoutMode, Node, NodeId};
 use editor_resource::Resource;
-use editor_state::{
-    PendingModifier, PendingModifiers, Position, ResolvedPosition, ResolvedSelection, Selection,
-};
+use editor_state::{Position, ResolvedPosition, ResolvedSelection, Selection};
 use editor_transaction::Step;
 use std::sync::{Arc, Mutex};
 
-use crate::measure::text::resolve::{ResolvedTextStyle, resolve_text_style};
+use crate::measure::text::resolve::resolve_text_style;
 use crate::measure::text::strut::compute_strut;
 use crate::measure::{MeasuredTree, Measurer};
 use crate::page::LayoutPage;
 use crate::paginate::{LayoutTree, Paginator};
 use crate::query;
 use crate::query::{CursorMetrics, SelectionRect};
-use crate::view_state::ViewState;
+use crate::view_state::{PendingStyle, ViewState};
 use crate::viewport::Viewport;
 
 #[derive(Debug)]
@@ -49,16 +47,42 @@ impl View {
         }
     }
 
-    pub fn reconcile(&mut self, old_doc: &Doc, new_doc: &Doc, steps: &[Step]) -> bool {
+    pub fn reconcile(
+        &mut self,
+        old_doc: &Doc,
+        new_doc: &Doc,
+        steps: &[Step],
+        new_pending_style: Option<PendingStyle>,
+    ) -> bool {
         let nodes_invalidated = self.measurer.invalidate_with_steps(old_doc, new_doc, steps);
         let attrs_changed = steps.iter().any(|s| s.is_doc_attr_step());
-        if nodes_invalidated || attrs_changed {
+
+        let pending_changed = self.view_state.pending_style != new_pending_style;
+        if pending_changed {
+            let old_node_id = self.view_state.pending_style.as_ref().map(|ps| ps.node_id);
+            let new_node_id = new_pending_style.as_ref().map(|ps| ps.node_id);
+
+            if let Some(id) = old_node_id {
+                self.measurer.invalidate_with_ancestors(new_doc, id);
+                if new_doc.node(id).is_none() {
+                    self.measurer.invalidate_with_ancestors(old_doc, id);
+                }
+            }
+            if let Some(id) = new_node_id
+                && old_node_id != Some(id)
+            {
+                self.measurer.invalidate_with_ancestors(new_doc, id);
+            }
+        }
+
+        let dirty = nodes_invalidated || attrs_changed || pending_changed;
+        // IMPORTANT: assign pending_style before compute — compute reads view_state.pending_style.
+        self.view_state.pending_style = new_pending_style;
+        if dirty {
             self.compute(new_doc);
             self.view_state.preferred_x = None;
-            true
-        } else {
-            false
         }
+        dirty
     }
 
     pub fn invalidate_nodes(&mut self, doc: &Doc, node_ids: &[NodeId]) -> bool {
@@ -79,6 +103,7 @@ impl View {
 
     pub fn layout(&mut self, doc: &Doc) {
         self.measurer.clear_cache();
+        self.view_state.pending_style = None;
         self.compute(doc);
         self.view_state.preferred_x = None;
     }
@@ -193,27 +218,18 @@ impl View {
         selection
     }
 
-    pub fn cursor_metrics(
-        &self,
-        doc: &Doc,
-        pos: &Position,
-        pending: &PendingModifiers,
-    ) -> Option<CursorMetrics> {
+    pub fn cursor_metrics(&self, doc: &Doc, pos: &Position) -> Option<CursorMetrics> {
         let result = self.layout.as_ref()?;
-        let metrics_override = self.cursor_metrics_at(doc, pos, pending);
+        let metrics_override = self.cursor_metrics_at(doc, pos);
         query::cursor_metrics(&result.tree, &result.pages, pos, metrics_override)
     }
 
-    fn cursor_metrics_at(
-        &self,
-        doc: &Doc,
-        pos: &Position,
-        pending: &PendingModifiers,
-    ) -> Option<(f32, f32)> {
+    fn cursor_metrics_at(&self, doc: &Doc, pos: &Position) -> Option<(f32, f32)> {
         let node = doc.node(pos.node_id)?;
-        let mut style = resolve_text_style(&node);
-        apply_pending_to_style(&mut style, pending);
-
+        if !matches!(node.node(), Node::Text(_)) {
+            return None;
+        }
+        let style = resolve_text_style(&node);
         let mut resource = self.measurer.resource.lock().unwrap();
         let strut = compute_strut(&mut resource, &style)?;
         Some((strut.ascent, strut.descent))
@@ -269,23 +285,6 @@ impl View {
     }
 }
 
-fn apply_pending_to_style(style: &mut ResolvedTextStyle, pending: &PendingModifiers) {
-    for p in pending {
-        if let PendingModifier::Set(m) = p {
-            match m {
-                Modifier::FontFamily { value } => style.font_family = value.clone(),
-                Modifier::FontWeight { value } => style.font_weight = *value,
-                Modifier::FontSize { value } => {
-                    // Match resolve_text_style conversion: centipoints → pixels.
-                    const PT_TO_PX: f32 = 96.0 / 72.0;
-                    style.font_size = (*value as f32 / 100.0) * PT_TO_PX;
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
 #[cfg(any(test, feature = "test-utils"))]
 impl View {
     pub fn new_test() -> Self {
@@ -322,7 +321,7 @@ mod tests {
             offset: 5,
             text: " world".into(),
         }];
-        assert!(view.reconcile(&doc, &doc, &steps));
+        assert!(view.reconcile(&doc, &doc, &steps, None));
     }
 
     #[test]
@@ -339,9 +338,7 @@ mod tests {
         view.layout(&doc);
 
         let pos = Position::new(p1, 0);
-        let empty_pending = PendingModifiers::new();
-
-        let default_rect = view.cursor_metrics(&doc, &pos, &empty_pending).unwrap();
+        let default_rect = view.cursor_metrics(&doc, &pos).unwrap();
 
         // With no pending modifiers, cursor uses stored strut metrics.
         assert!(default_rect.caret.height > 0.0);
@@ -363,13 +360,8 @@ mod tests {
         let mut view = View::new_test();
         view.layout(&doc);
 
-        let empty_pending = PendingModifiers::new();
-        let r1 = view
-            .cursor_metrics(&doc, &Position::new(t1, 0), &empty_pending)
-            .unwrap();
-        let r2 = view
-            .cursor_metrics(&doc, &Position::new(t2, 0), &empty_pending)
-            .unwrap();
+        let r1 = view.cursor_metrics(&doc, &Position::new(t1, 0)).unwrap();
+        let r2 = view.cursor_metrics(&doc, &Position::new(t2, 0)).unwrap();
 
         assert!(
             r2.caret.height > r1.caret.height,
@@ -381,24 +373,52 @@ mod tests {
     }
 
     #[test]
-    fn cursor_rect_grows_with_pending_font_size() {
+    fn cursor_metrics_pending_grows_line_on_empty_paragraph() {
+        use crate::view_state::PendingStyle;
+        use editor_model::Modifier;
+        use editor_state::PendingModifier;
+        use smallvec::smallvec;
+
         let (doc, p1) = doc! { root { p1: paragraph } };
         let mut view = View::new_test();
         view.layout(&doc);
-
         let pos = Position::new(p1, 0);
-        let empty_pending = PendingModifiers::new();
-        let default_rect = view.cursor_metrics(&doc, &pos, &empty_pending).unwrap();
+        let baseline = view.cursor_metrics(&doc, &pos).unwrap();
 
-        // Pending FontSize 24pt (2400 centipoints) → taller cursor than default (16px ≈ 12pt).
-        let mut pending = PendingModifiers::new();
-        pending.push(PendingModifier::Set(Modifier::FontSize { value: 2400 }));
-        let pending_rect = view.cursor_metrics(&doc, &pos, &pending).unwrap();
+        let pending_style = Some(PendingStyle {
+            node_id: p1,
+            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+        });
+        view.reconcile(&doc, &doc, &[], pending_style);
+        let pending = view.cursor_metrics(&doc, &pos).unwrap();
 
-        assert!(
-            pending_rect.caret.height > default_rect.caret.height,
-            "cursor should grow when pending FontSize is larger than base style"
-        );
+        assert!(pending.caret.height > baseline.caret.height);
+        assert!(pending.line.height > baseline.line.height);
+        assert!(pending.line.height >= pending.caret.height);
+    }
+
+    #[test]
+    fn cursor_metrics_pending_on_non_empty_paragraph_unchanged() {
+        use crate::view_state::PendingStyle;
+        use editor_model::Modifier;
+        use editor_state::PendingModifier;
+        use smallvec::smallvec;
+
+        let (doc, p1, t1) = doc! { root { p1: paragraph { t1: text("hi") } } };
+        let mut view = View::new_test();
+        view.layout(&doc);
+        let pos = Position::new(t1, 0);
+        let baseline = view.cursor_metrics(&doc, &pos).unwrap();
+
+        let pending_style = Some(PendingStyle {
+            node_id: p1,
+            modifiers: smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })],
+        });
+        view.reconcile(&doc, &doc, &[], pending_style);
+        let after = view.cursor_metrics(&doc, &pos).unwrap();
+
+        assert!((after.caret.height - baseline.caret.height).abs() < 0.01);
+        assert!((after.line.height - baseline.line.height).abs() < 0.01);
     }
 
     #[test]
@@ -437,7 +457,7 @@ mod tests {
             old: initial_attrs,
             new: new_attrs,
         }];
-        let changed = view.reconcile(&doc, &new_doc, &steps);
+        let changed = view.reconcile(&doc, &new_doc, &steps, None);
         assert!(changed, "reconcile should return true for attrs change");
         assert_eq!(view.pages()[0].size.width, 600.0);
     }
@@ -466,7 +486,7 @@ mod tests {
             old: attrs.clone(),
             new: attrs,
         }];
-        let changed = view.reconcile(&doc, &doc, &steps);
+        let changed = view.reconcile(&doc, &doc, &steps, None);
         assert!(changed, "attrs_changed branch returns true");
         assert_eq!(view.pages()[0].size.width, 400.0);
     }
@@ -565,7 +585,7 @@ mod tests {
             old: old_attrs,
             new: new_attrs,
         }];
-        let changed = view.reconcile(&doc_old, &doc_new, &steps);
+        let changed = view.reconcile(&doc_old, &doc_new, &steps, None);
         assert!(changed);
         assert_ne!(view.pages()[0].size.width, old_page_width);
     }
@@ -598,7 +618,7 @@ mod tests {
             old: old_attrs,
             new: new_attrs,
         }];
-        let changed = view.reconcile(&doc_old, &doc_new, &steps);
+        let changed = view.reconcile(&doc_old, &doc_new, &steps, None);
         assert!(changed);
         assert_eq!(view.pages()[0].size.width, 700.0);
     }

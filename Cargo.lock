@@ -847,6 +847,7 @@ dependencies = [
  "log",
  "parley",
  "serde",
+ "smallvec",
  "tsify",
  "uniffi",
  "wasm-bindgen",

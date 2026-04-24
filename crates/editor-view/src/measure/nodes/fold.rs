@@ -38,8 +38,15 @@ pub fn measure_fold_title(
         .unwrap_or(true);
 
     let inner_width = width - padding.left - padding.right;
-    let (children, children_height) =
-        measure_inline_text(measurer, doc, node, inner_width, Alignment::Left, 0.0);
+    let (children, children_height) = measure_inline_text(
+        measurer,
+        doc,
+        node,
+        inner_width,
+        Alignment::Left,
+        0.0,
+        view_state,
+    );
 
     MeasuredNode {
         width,

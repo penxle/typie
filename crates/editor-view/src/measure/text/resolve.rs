@@ -1,4 +1,5 @@
 use editor_model::{Modifier, ModifierType, NodeRef};
+use editor_state::{PendingModifier, PendingModifiers};
 
 use crate::measure::resolve::resolve_inherited;
 
@@ -69,6 +70,22 @@ pub fn resolve_text_style(node: &NodeRef<'_>) -> ResolvedTextStyle {
     }
 }
 
+pub fn apply_pending_to_style(style: &mut ResolvedTextStyle, pending: &PendingModifiers) {
+    for p in pending {
+        if let PendingModifier::Set(m) = p {
+            match m {
+                Modifier::FontFamily { value } => style.font_family = value.clone(),
+                Modifier::FontWeight { value } => style.font_weight = *value,
+                Modifier::FontSize { value } => {
+                    // centipoints → pixels (resolve_text_style과 동일 변환).
+                    style.font_size = (*value as f32 / 100.0) * PT_TO_PX;
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 pub fn resolve_paragraph_indent(node: &NodeRef<'_>) -> f32 {
     match resolve_inherited(node, ModifierType::ParagraphIndent) {
         Some(Modifier::ParagraphIndent { value }) => *value as f32 / 100.0 * DEFAULT_FONT_SIZE_PX,
@@ -133,5 +150,22 @@ mod tests {
         assert!((style.font_size - 16.0).abs() < 0.01);
         assert!((style.line_height - 1.6).abs() < 0.01);
         assert!((style.letter_spacing - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn apply_pending_font_size_overrides_base() {
+        use smallvec::smallvec;
+        let mut style = ResolvedTextStyle {
+            font_family: "test".into(),
+            font_weight: 400,
+            font_size: 16.0,
+            letter_spacing: 0.0,
+            line_height: 1.5,
+        };
+        let pending: PendingModifiers =
+            smallvec![PendingModifier::Set(Modifier::FontSize { value: 9600 })];
+        apply_pending_to_style(&mut style, &pending);
+        // 96pt * (96/72) = 128px
+        assert!((style.font_size - 128.0).abs() < 0.01);
     }
 }
