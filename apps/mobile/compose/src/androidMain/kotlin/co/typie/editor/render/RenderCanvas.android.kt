@@ -10,7 +10,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -20,10 +19,12 @@ import androidx.compose.ui.unit.IntSize
 import androidx.core.graphics.createBitmap
 import com.sun.jna.Pointer
 import java.nio.ByteBuffer
+import kotlinx.coroutines.flow.SharedFlow
 
 @Composable
 internal actual fun RenderCanvas(
   modifier: Modifier,
+  trigger: SharedFlow<Unit>,
   onAttach: (handle: Long) -> Unit,
   onDetach: () -> Unit,
   onResize: () -> Unit,
@@ -65,16 +66,15 @@ internal actual fun RenderCanvas(
     var cachedBytes: ByteArray? = null
     var cachedAndroidBitmap: Bitmap? = null
 
-    while (true) {
-      withFrameNanos {}
-      if (!RenderBuffer.beginRead(handle)) continue
+    trigger.collect {
+      if (!RenderBuffer.beginRead(handle)) return@collect
 
       val w = RenderBuffer.getPixelWidth(handle)
       val h = RenderBuffer.getPixelHeight(handle)
       val dataAddr = RenderBuffer.getDataPointer(handle)
       if (w <= 0 || h <= 0 || dataAddr == 0L) {
         RenderBuffer.endRead(handle)
-        continue
+        return@collect
       }
 
       val byteCount = w * h * 4

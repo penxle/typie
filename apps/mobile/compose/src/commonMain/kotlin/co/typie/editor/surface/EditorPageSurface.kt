@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -27,6 +28,8 @@ import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.ui.theme.AppTheme
 import co.typie.ui.theme.shadow
 import kotlin.math.round
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 private val DebugRustSurfaceTint = Color(0x220096FF)
 private val DebugPageBottomMarginTint = Color(0x22FFD600)
@@ -46,6 +49,17 @@ internal fun EditorPageSurface(
   val renderZoom = zoomController.renderZoom
   val scaleFactor = density.density.toDouble() * renderZoom.toDouble()
   val editor = LocalEditorRuntime.current.editor ?: return
+
+  val trigger = remember {
+    MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+  }
+  val render =
+    remember(editor, page) {
+      {
+        editor.renderSurface(page)
+        trigger.tryEmit(Unit)
+      }
+    }
 
   val widthDouble = width.toDouble()
   val heightDouble = height.toDouble()
@@ -102,14 +116,15 @@ internal fun EditorPageSurface(
               scaleY = renderScale,
               transformOrigin = TransformOrigin(0f, 0f),
             ),
+          trigger = trigger,
           onAttach = { handle ->
             editor.attachSurface(page, handle, widthDouble, heightDouble, scaleFactor)
-            editor.renderSurface(page)
+            render()
           },
           onDetach = { editor.detachSurface(page) },
           onResize = {
             editor.resizeSurface(page, widthDouble, heightDouble, scaleFactor)
-            editor.renderSurface(page)
+            render()
           },
         )
       }
@@ -131,7 +146,7 @@ internal fun EditorPageSurface(
   }
 
   DisposableEffect(editor, page) {
-    val off = editor.on<EditorEvent.RenderInvalidated> { ed, _ -> ed.renderSurface(page) }
+    val off = editor.on<EditorEvent.RenderInvalidated> { _, _ -> render() }
 
     onDispose { off() }
   }
