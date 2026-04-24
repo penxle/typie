@@ -1,13 +1,11 @@
 package co.typie.editor.body
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerId
@@ -28,7 +26,6 @@ import co.typie.editor.scroll.EditorScrollTarget
 import co.typie.editor.scroll.LocalEditorAutoScrollController
 import kotlinx.coroutines.launch
 
-private val DebugExtensionAreaColor = Color(0x2200D97A)
 private const val ExtensionTapSlopDp = 8f
 
 @Composable
@@ -43,13 +40,12 @@ internal fun EditorExtensionArea(
   val autoScrollController = LocalEditorAutoScrollController.current
   val extensionAreaModifier =
     if (forwardingEnabled) {
-      Modifier.background(DebugExtensionAreaColor)
-        .editorExtensionForwarding(
-          runtime = runtime,
-          uiState = uiState,
-          density = density.density,
-          autoScrollController = autoScrollController,
-        )
+      Modifier.editorExtensionForwarding(
+        runtime = runtime,
+        uiState = uiState,
+        density = density.density,
+        autoScrollController = autoScrollController,
+      )
     } else {
       Modifier
     }

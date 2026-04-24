@@ -41,7 +41,10 @@ internal fun EditorPageSurface(
   height: Float,
   showChrome: Boolean,
   debugBottomMarginHeight: Float = 0f,
+  showDebugOverlay: Boolean = false,
   modifier: Modifier = Modifier,
+  backgroundOverlay: @Composable () -> Unit = {},
+  foregroundOverlay: @Composable () -> Unit = {},
 ) {
   val density = LocalDensity.current
   val zoomController = LocalEditorZoomController.current
@@ -92,10 +95,9 @@ internal fun EditorPageSurface(
     } else {
       Modifier
     }
-
-  Box(
-    modifier =
-      modifier.width(displayWidthDp).height(displayHeightDp).then(chromeModifier).drawWithContent {
+  val debugOverlayModifier =
+    if (showDebugOverlay) {
+      Modifier.drawWithContent {
         drawContent()
         drawRect(DebugRustSurfaceTint)
         if (displayBottomMarginPx > 0) {
@@ -106,7 +108,20 @@ internal fun EditorPageSurface(
           )
         }
       }
+    } else {
+      Modifier
+    }
+
+  Box(
+    modifier =
+      modifier
+        .width(displayWidthDp)
+        .height(displayHeightDp)
+        .then(chromeModifier)
+        .then(debugOverlayModifier)
   ) {
+    backgroundOverlay()
+
     Layout(
       content = {
         RenderCanvas(
@@ -143,6 +158,8 @@ internal fun EditorPageSurface(
         placeable.place(x = 0, y = 0)
       }
     }
+
+    foregroundOverlay()
   }
 
   DisposableEffect(editor, page) {

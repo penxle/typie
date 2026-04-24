@@ -27,13 +27,15 @@ import co.typie.editor.ffi.Selection
 import co.typie.editor.ffi.Viewport
 import co.typie.editor.input.editorGestures
 import co.typie.editor.input.editorInput
-import co.typie.editor.overlay.EditorOverlayHost
+import co.typie.editor.overlay.EditorCursorOverlay
+import co.typie.editor.overlay.EditorLineHighlightOverlay
 import co.typie.editor.runtime.LocalEditorRuntime
 import co.typie.editor.runtime.LocalEditorUiState
 import co.typie.editor.scroll.LocalEditorAutoScrollController
 import co.typie.editor.surface.EditorPageSurface
 import co.typie.editor.surface.editorPagePositionTracker
 import co.typie.platform.PlatformModule
+import co.typie.storage.Preference
 
 @Composable
 internal fun EditorView(
@@ -43,6 +45,7 @@ internal fun EditorView(
   viewportWidth: Float,
   viewportHeight: Float,
   modifier: Modifier = Modifier,
+  showDebugSurfaceOverlay: Boolean = false,
 ) {
   val platform = PlatformModule.platform
   val density = LocalDensity.current
@@ -122,6 +125,7 @@ internal fun EditorView(
         verticalArrangement = Arrangement.spacedBy(pageSpacing),
       ) {
         editor.pageSizes.forEachIndexed { index, size ->
+          val pageCursor = editor.cursor?.takeIf { it.pageIdx == index }
           EditorPageSurface(
             page = index,
             width = size.width,
@@ -132,6 +136,25 @@ internal fun EditorView(
                 is EditorDocumentLayoutSpec.Paginated -> layoutSpec.pageMarginBottom
                 is EditorDocumentLayoutSpec.Continuous -> 0f
               },
+            showDebugOverlay = showDebugSurfaceOverlay,
+            backgroundOverlay = {
+              EditorLineHighlightOverlay(
+                cursor = pageCursor,
+                focused = uiState.focused,
+                displayZoom = displayZoom,
+                pageWidth = size.width,
+                enabled = Preference.lineHighlightEnabled,
+              )
+            },
+            foregroundOverlay = {
+              EditorCursorOverlay(
+                cursor = pageCursor,
+                focused = uiState.focused,
+                displayZoom = displayZoom,
+              )
+              // TODO(editor-parity): selection rect, composition rect, 인라인 맞춤법 하이라이트,
+              // 인라인 리마크 하이라이트 같은 foreground overlay도 surface-local로 채워 넣어야 한다.
+            },
             modifier =
               Modifier.editorPagePositionTracker(
                 uiState = uiState,
@@ -141,8 +164,6 @@ internal fun EditorView(
           )
         }
       }
-
-      EditorOverlayHost()
     }
   }
 }

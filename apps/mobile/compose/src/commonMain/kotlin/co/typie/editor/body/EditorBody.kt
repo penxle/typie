@@ -42,6 +42,8 @@ internal fun EditorBody(
   layoutSpec: EditorDocumentLayoutSpec,
   autoScrollPolicy: EditorAutoScrollPolicy,
   modifier: Modifier = Modifier,
+  showDebugBodyOverlay: Boolean = false,
+  showDebugSurfaceOverlay: Boolean = false,
   overlay: @Composable BoxScope.() -> Unit = {},
 ) {
   val density = LocalDensity.current
@@ -90,7 +92,7 @@ internal fun EditorBody(
                 modifier =
                   Modifier.fillMaxWidth()
                     .height(geometry.topSpacerHeight.dp)
-                    .background(DebugTopPaddingColor)
+                    .debugBackground(enabled = showDebugBodyOverlay, color = DebugTopPaddingColor)
               )
             }
 
@@ -110,6 +112,7 @@ internal fun EditorBody(
                 viewportWidth = geometry.visibleBodySize.width,
                 viewportHeight = geometry.visibleBodySize.height,
                 modifier = Modifier.fillMaxWidth(),
+                showDebugSurfaceOverlay = showDebugSurfaceOverlay,
               )
             }
 
@@ -118,7 +121,10 @@ internal fun EditorBody(
                 modifier =
                   Modifier.fillMaxWidth()
                     .height(autoScrollPolicy.bottomSpacerHeight.dp)
-                    .background(DebugBottomPaddingColor)
+                    .debugBackground(
+                      enabled = showDebugBodyOverlay,
+                      color = DebugBottomPaddingColor,
+                    )
               )
             }
           }
@@ -128,7 +134,7 @@ internal fun EditorBody(
               modifier =
                 Modifier.fillMaxWidth()
                   .height(extensionAreaFillSpacerHeight.dp)
-                  .background(DebugExtensionFillColor)
+                  .debugBackground(enabled = showDebugBodyOverlay, color = DebugExtensionFillColor)
             )
           }
         }
@@ -138,6 +144,13 @@ internal fun EditorBody(
     Box(modifier = Modifier.fillMaxSize(), content = overlay)
   }
 }
+
+private fun Modifier.debugBackground(enabled: Boolean, color: Color): Modifier =
+  if (enabled) {
+    background(color)
+  } else {
+    this
+  }
 
 internal fun resolveExtensionAreaFillSpacerHeight(
   minimumHeight: Float,

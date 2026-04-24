@@ -57,6 +57,7 @@ import co.typie.screen.editor.editor.viewport.rememberEditorTouchPinchZoomModifi
 import co.typie.storage.Preference
 import co.typie.ui.component.ResponsiveContainerDefaults
 import co.typie.ui.component.Screen
+import co.typie.ui.component.popover.PopoverMenu
 import co.typie.ui.component.topbar.ProvideTopBar
 import co.typie.ui.component.topbar.TopBarButton
 import co.typie.ui.theme.AppTheme
@@ -117,12 +118,7 @@ fun EditorScreen(entityId: String) {
         }
       }
     },
-    trailing = {
-      TopBarButton(
-        icon = if (model.isPaginatedDebugLayout) Lucide.ScrollText else Lucide.LayoutTemplate,
-        onClick = { model.toggleDebugLayoutMode() },
-      )
-    },
+    trailing = { EditorTopBarMenu(model = model) },
     scrollOffset = null,
   )
 
@@ -140,6 +136,7 @@ fun EditorScreen(entityId: String) {
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val typewriterEnabled = Preference.typewriterEnabled
     val typewriterPosition = Preference.typewriterPosition.toFloat()
+    val devMode = Preference.devMode
     val displayZoom = zoomController.displayZoom
     val cursorLineHeight = (editor?.cursor?.line?.height ?: 0f) * displayZoom
     val visibleArea =
@@ -309,6 +306,7 @@ fun EditorScreen(entityId: String) {
             layoutSpec = layoutSpec,
             pageSizes = pageSizes,
             displayZoom = displayZoom,
+            showDebugOverlay = devMode && model.debugViewportOverlayVisible,
             modifier = Modifier.fillMaxSize(),
           )
         },
@@ -320,6 +318,8 @@ fun EditorScreen(entityId: String) {
             layoutSpec = layoutSpec,
             autoScrollPolicy = autoScrollPolicy,
             modifier = Modifier.then(touchPinchZoomModifier).then(debugWheelZoomModifier),
+            showDebugBodyOverlay = devMode && model.debugBodyOverlayVisible,
+            showDebugSurfaceOverlay = devMode && model.debugSurfaceOverlayVisible,
           )
         },
         toolbar = {
@@ -333,3 +333,44 @@ fun EditorScreen(entityId: String) {
     }
   }
 }
+
+@Composable
+private fun EditorTopBarMenu(model: EditorViewModel) {
+  val noop = {}
+
+  PopoverMenu(anchor = { TopBarButton(icon = Lucide.PanelBottom) }) {
+    item(icon = Lucide.Search, label = "찾기", onClick = noop)
+    item(icon = Lucide.StickyNote, label = "노트", onClick = noop)
+    item(icon = Lucide.MessageSquareText, label = "코멘트", onClick = noop)
+    item(icon = Lucide.SpellCheck, label = "맞춤법 검사", onClick = noop)
+    item(icon = Lucide.Lightbulb, label = "AI 피드백", onClick = noop)
+    item(icon = Lucide.History, label = "타임라인", onClick = noop)
+    item(icon = Lucide.Settings, label = "본문 설정", onClick = noop)
+    if (Preference.devMode) {
+      item(icon = Lucide.Send, label = "입력 로그 보내기", onClick = noop)
+      divider()
+      item(
+        icon = if (model.isPaginatedDebugLayout) Lucide.ScrollText else Lucide.LayoutTemplate,
+        label = "[디버그] 레이아웃 토글",
+        onClick = { model.toggleDebugLayoutMode() },
+      )
+      item(
+        icon = Lucide.PanelTop,
+        label = model.debugViewportOverlayVisible.debugToggleLabel("[디버그] 뷰포트 기준선"),
+        onClick = { model.toggleDebugViewportOverlay() },
+      )
+      item(
+        icon = Lucide.PanelBottom,
+        label = model.debugBodyOverlayVisible.debugToggleLabel("[디버그] 바디 영역"),
+        onClick = { model.toggleDebugBodyOverlay() },
+      )
+      item(
+        icon = Lucide.InspectionPanel,
+        label = model.debugSurfaceOverlayVisible.debugToggleLabel("[디버그] 페이지 표면"),
+        onClick = { model.toggleDebugSurfaceOverlay() },
+      )
+    }
+  }
+}
+
+private fun Boolean.debugToggleLabel(label: String): String = "$label ${if (this) "끄기" else "켜기"}"

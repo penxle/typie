@@ -25,6 +25,7 @@ internal fun EditorScreenOverlayHost(
   layoutSpec: EditorDocumentLayoutSpec,
   pageSizes: List<PageSize>,
   displayZoom: Float,
+  showDebugOverlay: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
   Box(modifier = modifier.fillMaxSize()) {
@@ -37,20 +38,22 @@ internal fun EditorScreenOverlayHost(
       modifier = Modifier.fillMaxSize(),
     )
 
-    DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
-    DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))
+    if (showDebugOverlay) {
+      DebugViewportLine(y = visibleArea.visibleViewportTop, color = Color(0xFF00C853))
+      DebugViewportLine(y = visibleArea.visibleViewportBottom, color = Color(0xFF00C853))
 
-    when (autoScrollPolicy.mode) {
-      EditorAutoScrollMode.KeepCursorVisible -> {
-        DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.top, color = Color(0xFFFFAB00))
-        DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.bottom, color = Color(0xFFFFAB00))
-      }
+      when (autoScrollPolicy.mode) {
+        EditorAutoScrollMode.KeepCursorVisible -> {
+          DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.top, color = Color(0xFFFFAB00))
+          DebugViewportLine(y = autoScrollPolicy.keepVisibleRange.bottom, color = Color(0xFFFFAB00))
+        }
 
-      EditorAutoScrollMode.Typewriter -> {
-        autoScrollPolicy.targetTop?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
-        autoScrollPolicy.targetBottom
-          ?.takeIf { autoScrollPolicy.targetLineHeight > 0f }
-          ?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
+        EditorAutoScrollMode.Typewriter -> {
+          autoScrollPolicy.targetTop?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
+          autoScrollPolicy.targetBottom
+            ?.takeIf { autoScrollPolicy.targetLineHeight > 0f }
+            ?.let { DebugViewportLine(y = it, color = Color(0xFFFFAB00)) }
+        }
       }
     }
 

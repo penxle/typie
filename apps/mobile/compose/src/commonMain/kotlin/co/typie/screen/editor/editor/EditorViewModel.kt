@@ -54,6 +54,15 @@ class EditorViewModel(val entityId: String) : ViewModel() {
   private var serverTitle by mutableStateOf("")
   private var serverSubtitle by mutableStateOf("")
   private var debugDocumentLayoutMode by mutableStateOf(DebugDocumentLayoutMode.Continuous)
+  var debugViewportOverlayVisible by mutableStateOf(false)
+    private set
+
+  var debugBodyOverlayVisible by mutableStateOf(false)
+    private set
+
+  var debugSurfaceOverlayVisible by mutableStateOf(false)
+    private set
+
   private val headerSaveController = EditorHeaderSaveController(scope = viewModelScope)
 
   val query =
@@ -156,6 +165,18 @@ class EditorViewModel(val entityId: String) : ViewModel() {
         DebugDocumentLayoutMode.Continuous -> DebugDocumentLayoutMode.Paginated
         DebugDocumentLayoutMode.Paginated -> DebugDocumentLayoutMode.Continuous
       }
+  }
+
+  fun toggleDebugViewportOverlay() {
+    debugViewportOverlayVisible = !debugViewportOverlayVisible
+  }
+
+  fun toggleDebugBodyOverlay() {
+    debugBodyOverlayVisible = !debugBodyOverlayVisible
+  }
+
+  fun toggleDebugSurfaceOverlay() {
+    debugSurfaceOverlayVisible = !debugSurfaceOverlayVisible
   }
 
   suspend fun flushDrafts() {
